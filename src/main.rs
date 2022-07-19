@@ -153,6 +153,9 @@ fn main() {
     println!("Hello, world!");
 }
 
+// data List a = () -> [] | (a, List a) と定義する。Lazy b = () -> b + キャッシュ、なら、data List a = Lazy ([] | (a, List a))
+// このときfixと組み合わせて無限リストが正常動作すると思う。fix (\l -> 1:2:l) で、1,2,1,2,... など。
+
  */
 
 use inkwell::context::Context;
