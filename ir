@@ -1,0 +1,20 @@
+; ModuleID = 'main'
+source_filename = "main"
+
+@hw = private unnamed_addr constant [14 x i8] c"Hello, world!\00", align 1
+
+declare i32 @printf(i8*, ...)
+
+define i32 @main() {
+entry:
+  %malloccall = tail call i8* @malloc(i32 trunc (i64 mul nuw (i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64), i64 2) to i32))
+  %ptr = bitcast i8* %malloccall to { i64, i64 }*
+  %pte = load { i64, i64 }, { i64, i64 }* %ptr, align 4
+  %pte1 = insertvalue { i64, i64 } %pte, i64 0, 0
+  %pte2 = insertvalue { i64, i64 } %pte1, i64 -42, 1
+  store { i64, i64 } %pte2, { i64, i64 }* %ptr, align 4
+  %call = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([14 x i8], [14 x i8]* @hw, i32 0, i32 0))
+  ret i32 0
+}
+
+declare noalias i8* @malloc(i32)

@@ -1,6 +1,11 @@
-/*
-
+use inkwell::builder::Builder;
+use inkwell::context::Context;
+use inkwell::module::Module;
+use inkwell::types::PointerType;
+use inkwell::values::PointerValue;
+use inkwell::OptimizationLevel;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::vec::Vec;
 
@@ -22,8 +27,6 @@ use std::vec::Vec;
 //   | TyConApp TyCon [Type]
 //   | FunTy Type Type
 //   | ForAllTy Var Type
-
-// TODO: まず総称型を削除する（テンプレートを展開する）フェーズが入りそう
 
 enum Expr {
     Var(Arc<Var>),
@@ -72,6 +75,10 @@ enum TyCon {
 fn mk_lit_expr(value: &str, ty: Arc<Type>) -> Arc<Expr> {
     let value = String::from(value);
     Arc::new(Expr::Lit(Arc::new(Literal { value, ty })))
+}
+
+fn mk_int_expr(val: i32) -> Arc<Expr> {
+    mk_lit_expr(val.to_string().as_str(), mk_lit_type("Int"))
 }
 
 fn mk_lit_type(value: &str) -> Arc<Type> {
@@ -149,56 +156,127 @@ mod tests {
     }
 }
 
-fn main() {
-    println!("Hello, world!");
-}
-
+// memo
 // data List a = () -> [] | (a, List a) と定義する。Lazy b = () -> b + キャッシュ、なら、data List a = Lazy ([] | (a, List a))
 // このときfixと組み合わせて無限リストが正常動作すると思う。fix (\l -> 1:2:l) で、1,2,1,2,... など。
+// フィボナッチ数列を計算する有名なコードはどうか？？
 
- */
+static INT_CODE: Lazy<Arc<Expr>> = Lazy::new(|| mk_int_expr(-42));
 
-use inkwell::context::Context;
-use inkwell::OptimizationLevel;
+#[derive(Default)]
+struct Scope<'ctx> {
+    // map to variable name to pointer value.
+    data: HashMap<String, Vec<PointerValue<'ctx>>>,
+}
+
+fn generate_code<'a>(
+    expr: Arc<Expr>,
+    context: &'a Context,
+    module: &'a Module,
+    builder: &'a Builder,
+    scope: &'a mut Scope,
+) -> PointerValue<'a> {
+    // enum Expr {
+    //     Var(Arc<Var>),
+    //     Lit(Arc<Literal>),
+    //     App(Arc<Expr>, Arc<Expr>),
+    //     Lam(Arc<Var>, Arc<Expr>),
+    //     Let(Arc<Var>, Arc<Expr>, Arc<Expr>),
+    //     // Caseはあとで
+    //     If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
+    //     Type(Arc<Type>),
+    // }
+    match &*expr {
+        Expr::Var(var) => {
+            todo!();
+            // TODO: term variable のとき、scopeからポインタを取り出して返す
+            // TODO: type variable のコード生成はエラーにする。
+        }
+        Expr::Lit(lit) => generate_code_literal(lit.clone(), context, module, builder),
+        Expr::App(_, _) => todo!(),
+        Expr::Lam(_, _) => todo!(),
+        Expr::Let(_, _, _) => todo!(),
+        Expr::If(_, _, _) => todo!(),
+        Expr::Type(_) => todo!(),
+    }
+}
+
+fn generate_code_literal<'a>(
+    lit: Arc<Literal>,
+    context: &'a Context,
+    module: &'a Module,
+    builder: &'a Builder,
+) -> PointerValue<'a> {
+    match &*lit.ty {
+        Type::LitTy(ty) => match ty.value.as_str() {
+            "Int" => {
+                let ty = context.struct_type(
+                    &[context.i64_type().into(), context.i64_type().into()],
+                    false,
+                );
+                let ptr = builder.build_malloc(ty, "ptr").unwrap();
+                // TODO: 値埋めをする。構造体の第一フィールドへのポインタを取得しstoreする。
+                let pte = builder.build_load(ptr, "pte").into_struct_value();
+                let ref_cnt_zero = context.i64_type().const_zero();
+                let pte = builder
+                    .build_insert_value(pte, ref_cnt_zero, 0, "pte")
+                    .unwrap()
+                    .into_struct_value();
+                let value = lit.value.parse::<i64>().unwrap();
+                let value = context.i64_type().const_int(value as u64, false);
+                let pte = builder
+                    .build_insert_value(pte, value, 1, "pte")
+                    .unwrap()
+                    .into_struct_value();
+                builder.build_store(ptr, pte);
+                ptr
+            }
+            _ => {
+                panic!(
+                    "Cannot generate literal value {} of type {}.",
+                    lit.value, ty.value,
+                )
+            }
+        },
+        Type::TyVar(_) => panic!("Type of given Literal is TyVar (should be TyLit)."),
+        Type::AppTy(_, _) => panic!("Type of given Literal is AppTy (should be TyLit)."),
+        Type::TyConApp(_, _) => panic!("Type of given Literal is TyConApp (should be TyLit)."),
+        Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."),
+        Type::ForAllTy(_, _) => panic!("Type of given Literal is ForAllTy (should be TyLit)."),
+    }
+}
 
 fn main() {
     let context = Context::create();
-    // moduleを作成
     let module = context.create_module("main");
-    // builderを作成
     let builder = context.create_builder();
 
-    // 型関係の変数
     let i32_type = context.i32_type();
     let i8_type = context.i8_type();
     let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::Generic);
 
-    // printf関数を宣言
     let printf_fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
     let printf_function = module.add_function("printf", printf_fn_type, None);
 
-    // main関数を宣言
     let main_fn_type = i32_type.fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
 
-    // main関数にBasic Blockを追加
     let entry_basic_block = context.append_basic_block(main_function, "entry");
-    // builderのpositionをentry Basic Blockに設定
     builder.position_at_end(entry_basic_block);
 
-    // ここからmain関数に命令をビルドしていく
-    // globalに文字列を宣言
+    let mut scope: Scope = Default::default();
+    generate_code(INT_CODE.clone(), &context, &module, &builder, &mut scope);
+
     let hw_string_ptr = builder.build_global_string_ptr("Hello, world!", "hw");
-    // printfをcall
     builder.build_call(
         printf_function,
         &[hw_string_ptr.as_pointer_value().into()],
         "call",
     );
-    // main関数は0を返す
     builder.build_return(Some(&i32_type.const_int(0, false)));
 
-    // JIT実行エンジンを作成し、main関数を実行
+    module.print_to_file("ir").unwrap();
+
     let execution_engine = module
         .create_jit_execution_engine(OptimizationLevel::Aggressive)
         .unwrap();
