@@ -1,7 +1,7 @@
 ; ModuleID = 'main'
 source_filename = "main"
 
-@hw = private unnamed_addr constant [14 x i8] c"Hello, world!\00", align 1
+@ptinr_int_literal = private unnamed_addr constant [6 x i8] c"%lld\0A\00", align 1
 
 declare i32 @printf(i8*, ...)
 
@@ -13,7 +13,9 @@ entry:
   store i64 0, i64* %ptr_to_refcnt, align 4
   %ptr_to_int_value = getelementptr inbounds { i64, i64 }, { i64, i64 }* %ptr, i32 0, i32 1
   store i64 -42, i64* %ptr_to_int_value, align 4
-  %call = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([14 x i8], [14 x i8]* @hw, i32 0, i32 0))
+  %ptr1 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %ptr, i32 0, i32 1
+  %val = load i64, i64* %ptr1, align 4
+  %call_print_int = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @ptinr_int_literal, i32 0, i32 0), i64 %val)
   ret i32 0
 }
 

@@ -248,11 +248,13 @@ fn generate_code_print_int<'ctx>(
     builder: &'ctx Builder,
     printf_function: FunctionValue<'ctx>,
 ) {
-    let string_ptr = builder.build_global_string_ptr("%lld", "hw");
+    let ptr = builder.build_struct_gep(int_ptr, 1, "ptr").unwrap();
+    let val = builder.build_load(ptr, "val").into_int_value();
+    let string_ptr = builder.build_global_string_ptr("%lld\n", "ptinr_int_literal");
     builder.build_call(
         printf_function,
-        &[string_ptr.as_pointer_value().into()],
-        "print_int",
+        &[string_ptr.as_pointer_value().into(), val.into()],
+        "call_print_int",
     );
 }
 
@@ -275,14 +277,9 @@ fn main() {
     builder.position_at_end(entry_basic_block);
 
     let mut scope: Scope = Default::default();
-    generate_code(INT_CODE.clone(), &context, &module, &builder, &mut scope);
+    let result = generate_code(INT_CODE.clone(), &context, &module, &builder, &mut scope);
+    generate_code_print_int(result, &context, &module, &builder, printf_function);
 
-    let hw_string_ptr = builder.build_global_string_ptr("Hello, world!", "hw");
-    builder.build_call(
-        printf_function,
-        &[hw_string_ptr.as_pointer_value().into()],
-        "call",
-    );
     builder.build_return(Some(&i32_type.const_int(0, false)));
 
     module.print_to_file("ir").unwrap();
