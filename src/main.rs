@@ -215,20 +215,14 @@ fn generate_code_literal<'a>(
                     false,
                 );
                 let ptr = builder.build_malloc(ty, "ptr").unwrap();
-                // TODO: 値埋めをする。構造体の第一フィールドへのポインタを取得しstoreする。
-                let pte = builder.build_load(ptr, "pte").into_struct_value();
-                let ref_cnt_zero = context.i64_type().const_zero();
-                let pte = builder
-                    .build_insert_value(pte, ref_cnt_zero, 0, "pte")
-                    .unwrap()
-                    .into_struct_value();
+                let ptr_to_refcnt = builder.build_struct_gep(ptr, 0, "ptr_to_refcnt").unwrap();
+                builder.build_store(ptr_to_refcnt, context.i64_type().const_zero());
+                let ptr_to_int_value = builder
+                    .build_struct_gep(ptr, 1, "ptr_to_int_value")
+                    .unwrap();
                 let value = lit.value.parse::<i64>().unwrap();
                 let value = context.i64_type().const_int(value as u64, false);
-                let pte = builder
-                    .build_insert_value(pte, value, 1, "pte")
-                    .unwrap()
-                    .into_struct_value();
-                builder.build_store(ptr, pte);
+                builder.build_store(ptr_to_int_value, value);
                 ptr
             }
             _ => {
