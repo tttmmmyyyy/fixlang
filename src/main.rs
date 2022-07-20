@@ -2,7 +2,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::PointerType;
-use inkwell::values::PointerValue;
+use inkwell::values::{FunctionValue, PointerValue};
 use inkwell::OptimizationLevel;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -214,6 +214,7 @@ fn generate_code_literal<'a>(
                     &[context.i64_type().into(), context.i64_type().into()],
                     false,
                 );
+                // NOTE: Only once allocation is needed since we don't implement weak_ptr
                 let ptr = builder.build_malloc(ty, "ptr").unwrap();
                 let ptr_to_refcnt = builder.build_struct_gep(ptr, 0, "ptr_to_refcnt").unwrap();
                 builder.build_store(ptr_to_refcnt, context.i64_type().const_zero());
@@ -238,6 +239,21 @@ fn generate_code_literal<'a>(
         Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."),
         Type::ForAllTy(_, _) => panic!("Type of given Literal is ForAllTy (should be TyLit)."),
     }
+}
+
+fn generate_code_print_int<'ctx>(
+    int_ptr: PointerValue<'ctx>,
+    context: &'ctx Context,
+    module: &'ctx Module,
+    builder: &'ctx Builder,
+    printf_function: FunctionValue<'ctx>,
+) {
+    let string_ptr = builder.build_global_string_ptr("%lld", "hw");
+    builder.build_call(
+        printf_function,
+        &[string_ptr.as_pointer_value().into()],
+        "print_int",
+    );
 }
 
 fn main() {
@@ -272,7 +288,7 @@ fn main() {
     module.print_to_file("ir").unwrap();
 
     let execution_engine = module
-        .create_jit_execution_engine(OptimizationLevel::Aggressive)
+        .create_jit_execution_engine(OptimizationLevel::None)
         .unwrap();
     unsafe {
         execution_engine
