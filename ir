@@ -20,3 +20,5 @@ entry:
 }
 
 declare noalias i8* @malloc(i32)
+
+; test
