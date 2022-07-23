@@ -1,15 +1,18 @@
+use either::Either;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::{BasicTypeEnum, IntType, PointerType, StructType};
+use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructType};
 use inkwell::values::{BasicValue, CallableValue, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, OptimizationLevel};
 use once_cell::sync::Lazy;
 use std::alloc::System;
 use std::collections::HashMap;
+use std::fmt::Pointer;
 use std::sync::Arc;
 use std::vec::Vec;
+use Either::Right;
 
 // data Expr
 //   = Var Var
@@ -165,7 +168,6 @@ static FIX_A_TO_B: Lazy<Arc<Expr>> = Lazy::new(|| {
 
 struct ExprCode<'ctx> {
     ptr: PointerValue<'ctx>,
-    dtor: FunctionValue<'ctx>,
 }
 
 #[derive(Default)]
@@ -219,18 +221,22 @@ fn generate_code_literal<'ctx>(
     match &*lit.ty {
         Type::LitTy(ty) => match ty.value.as_str() {
             "Int" => {
-                let int_obj_type = ObjectType::int_obj_type().to_struct_type(context);
-                // NOTE: Only once allocation is needed since we don't implement weak_ptr
-                let ptr_int_obj = builder.build_malloc(int_obj_type, "int_obj_type").unwrap();
-                generate_code_clear_ref_cnt(context, builder, ptr_int_obj);
+                let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(
+                    context,
+                    module,
+                    builder,
+                    system_functions,
+                );
                 let value = lit.value.parse::<i64>().unwrap();
                 let value = context.i64_type().const_int(value as u64, false);
-                generate_code_set_field(context, builder, ptr_int_obj, 0, value);
+                let ptr_to_int_obj = ptr_to_int_obj.const_cast(
+                    ObjectType::int_obj_type()
+                        .to_struct_type(context)
+                        .ptr_type(AddressSpace::Generic),
+                );
+                build_set_field(context, builder, ptr_to_int_obj, 0, value);
                 ExprCode {
-                    ptr: ptr_int_obj,
-                    dtor: *system_functions
-                        .get(&SystemFunctions::EmptyDestructor)
-                        .unwrap(),
+                    ptr: ptr_to_int_obj,
                 }
             }
             _ => {
@@ -248,7 +254,7 @@ fn generate_code_literal<'ctx>(
     }
 }
 
-fn generate_code_clear_ref_cnt<'ctx>(
+fn generate_clear_object<'ctx>(
     context: &'ctx Context,
     builder: &Builder<'ctx>,
     obj: PointerValue<'ctx>,
@@ -257,7 +263,7 @@ fn generate_code_clear_ref_cnt<'ctx>(
     builder.build_store(ptr_to_refcnt, context.i64_type().const_zero());
 }
 
-fn generate_code_set_field<'ctx, V>(
+fn build_set_field<'ctx, V>(
     context: &'ctx Context,
     builder: &Builder<'ctx>,
     obj: PointerValue<'ctx>,
@@ -272,39 +278,162 @@ fn generate_code_set_field<'ctx, V>(
     builder.build_store(ptr_to_field, value);
 }
 
+#[derive(Eq, Hash, PartialEq, Clone)]
 enum ObjectFieldType {
+    ControlBlock,
     Int,
     SubObject,
+    Function, // for lambda
 }
 
 impl ObjectFieldType {
     fn to_basic_type<'ctx>(&self, context: &'ctx Context) -> BasicTypeEnum<'ctx> {
         match self {
+            ObjectFieldType::ControlBlock => control_block_type(context).into(),
             ObjectFieldType::Int => context.i64_type().into(),
-            ObjectFieldType::SubObject => context.i64_type().ptr_type(AddressSpace::Generic).into(),
+            ObjectFieldType::SubObject => refcnt_type(context).into(),
+            ObjectFieldType::Function => unimplemented!(),
         }
     }
 }
 
+#[derive(Eq, Hash, PartialEq, Clone)]
 struct ObjectType {
     field_types: Vec<ObjectFieldType>,
 }
 
 impl ObjectType {
     fn to_struct_type<'ctx>(&self, context: &'ctx Context) -> StructType<'ctx> {
-        let refcnt_type = context.i64_type();
-        let mut fields: Vec<BasicTypeEnum<'ctx>> = vec![refcnt_type.into()];
+        let mut fields: Vec<BasicTypeEnum<'ctx>> = vec![];
         for field_type in &self.field_types {
             fields.push(field_type.to_basic_type(context));
         }
         context.struct_type(&fields, false)
     }
 
-    fn int_obj_type() -> Self {
-        ObjectType {
-            field_types: vec![ObjectFieldType::Int],
+    fn shared_obj_type(mut field_types: Vec<ObjectFieldType>) -> Self {
+        let mut fields = vec![ObjectFieldType::ControlBlock];
+        fields.append(&mut field_types);
+        Self {
+            field_types: fields,
         }
     }
+
+    fn int_obj_type() -> Self {
+        Self::shared_obj_type(vec![ObjectFieldType::Int])
+    }
+
+    fn generate_func_dtor<'ctx>(
+        &self,
+        context: &'ctx Context,
+        module: &Module<'ctx>,
+        system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
+    ) -> FunctionValue<'ctx> {
+        if system_functions.contains_key(&SystemFunctions::Dtor(self.clone())) {
+            return *system_functions
+                .get(&SystemFunctions::Dtor(self.clone()))
+                .unwrap();
+        }
+        let struct_type = self.to_struct_type(context);
+        let void_type = context.void_type();
+        let ptr_to_obj_type = ptr_to_refcnt_type(context);
+        let func_type = dtor_type(context);
+        let func = module.add_function("dtor", func_type, None);
+        let bb = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(bb);
+        let ptr_to_obj = func
+            .get_first_param()
+            .unwrap()
+            .into_pointer_value()
+            .const_cast(struct_type.ptr_type(AddressSpace::Generic));
+        for (i, ft) in self.field_types.iter().enumerate() {
+            match ft {
+                ObjectFieldType::SubObject => {
+                    let ptr_to_field = builder
+                        .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_field")
+                        .unwrap()
+                        .const_cast(ptr_to_obj_type);
+                    let release_func = *system_functions.get(&SystemFunctions::ReleaseObj).unwrap();
+                    builder.build_call(release_func, &[ptr_to_field.into()], "release_subobj");
+                }
+                ObjectFieldType::ControlBlock => {}
+                ObjectFieldType::Int => {}
+                ObjectFieldType::Function => {}
+            }
+        }
+        builder.build_return(None);
+        system_functions.insert(SystemFunctions::Dtor(self.clone()), func);
+        func
+    }
+
+    fn build_allocate_shared_obj<'ctx>(
+        &self,
+        context: &'ctx Context,
+        module: &Module<'ctx>,
+        builder: &Builder<'ctx>,
+        system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
+    ) -> PointerValue<'ctx> {
+        let struct_type = self.to_struct_type(context);
+        // NOTE: Only once allocation is needed since we don't implement weak_ptr
+        let ptr_to_obj = builder.build_malloc(struct_type, "ptr_to_obj").unwrap();
+        for (i, ft) in self.field_types.iter().enumerate() {
+            match ft {
+                ObjectFieldType::ControlBlock => {
+                    let ptr_to_control_block = builder
+                        .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_control_block")
+                        .unwrap();
+                    let ptr_to_refcnt = builder
+                        .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
+                        .unwrap();
+                    builder.build_store(ptr_to_refcnt, refcnt_type(context).const_zero());
+                    let ptr_to_dtor_field = builder
+                        .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_field")
+                        .unwrap();
+                    let dtor = self.generate_func_dtor(context, module, system_functions);
+                    builder
+                        .build_store(ptr_to_dtor_field, dtor.as_global_value().as_pointer_value());
+                }
+                ObjectFieldType::Int => {}
+                ObjectFieldType::SubObject => {}
+                ObjectFieldType::Function => {}
+            }
+        }
+        ptr_to_obj.const_cast(ptr_to_refcnt_type(context))
+    }
+}
+
+fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
+    context.i64_type()
+}
+
+fn ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
+    refcnt_type(context).ptr_type(AddressSpace::Generic)
+}
+
+fn dtor_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
+    context.void_type().fn_type(
+        &[refcnt_type(context).ptr_type(AddressSpace::Generic).into()],
+        false,
+    )
+}
+
+fn ptr_to_dtor_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
+    dtor_type(context).ptr_type(AddressSpace::Generic)
+}
+
+fn control_block_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
+    context.struct_type(
+        &[
+            refcnt_type(context).into(),
+            ptr_to_dtor_type(context).into(),
+        ],
+        false,
+    )
+}
+
+fn ptr_to_control_block_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
+    control_block_type(context).ptr_type(AddressSpace::Generic)
 }
 
 #[derive(Eq, Hash, PartialEq)]
@@ -314,7 +443,7 @@ enum SystemFunctions {
     RetainObj,
     ReleaseObj,
     EmptyDestructor,
-    Dtor(String),
+    Dtor(ObjectType),
 }
 
 fn generate_func_printf<'ctx>(
@@ -396,16 +525,18 @@ fn generate_func_release_obj<'ctx>(
     system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
 ) -> FunctionValue<'ctx> {
     let void_type = context.void_type();
-    let ptr_to_refcnt_type = context.i64_type().ptr_type(AddressSpace::Generic);
-    let dtor_type = void_type.fn_type(&[ptr_to_refcnt_type.into()], false);
-    let ptr_to_dtor_type = dtor_type.ptr_type(AddressSpace::Generic);
-    let func_type = void_type.fn_type(&[ptr_to_refcnt_type.into(), ptr_to_dtor_type.into()], false);
+    let ptr_to_refcnt_type = ptr_to_refcnt_type(context);
+    let func_type = void_type.fn_type(&[ptr_to_refcnt_type.into()], false);
     let release_func = module.add_function("release_obj", func_type, None);
     let mut bb = context.append_basic_block(release_func, "entry");
 
     let builder = context.create_builder();
     builder.position_at_end(bb);
-    let ptr_to_refcnt = release_func.get_first_param().unwrap().into_pointer_value();
+    let ptr_to_obj = release_func.get_first_param().unwrap().into_pointer_value();
+    let ptr_to_control_block = ptr_to_obj.const_cast(ptr_to_control_block_type(context));
+    let ptr_to_refcnt = builder
+        .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
+        .unwrap();
     let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
 
     if DEBUG_MEMORY {
@@ -448,9 +579,25 @@ fn generate_func_release_obj<'ctx>(
     builder.build_conditional_branch(is_refcnt_zero, then_bb, cont_bb);
 
     builder.position_at_end(then_bb);
-    let ptr_to_dtor = release_func.get_nth_param(1).unwrap().into_pointer_value();
-    let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
-    builder.build_call(dtor_func, &[ptr_to_refcnt.into()], "call dtor");
+    let ptr_to_dtor = builder
+        .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor")
+        .unwrap();
+    // let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
+    // In the above naive code, unwrap fails since in CallableValue::try_from ptr_to_dtor is required to be a valid (already defined) function pointer.
+    // As a workaround,
+    struct MyCallableValue<'ctx>(Either<FunctionValue<'ctx>, PointerValue<'ctx>>);
+    let dtor_func = MyCallableValue(Right(ptr_to_dtor));
+    let dtor_func =
+        unsafe { std::mem::transmute::<MyCallableValue<'ctx>, CallableValue<'ctx>>(dtor_func) };
+
+    // let ptr_to_dtor = system_functions
+    //     .get(&SystemFunctions::EmptyDestructor)
+    //     .unwrap()
+    //     .as_global_value()
+    //     .as_pointer_value();
+    // let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
+
+    builder.build_call(dtor_func, &[ptr_to_obj.into()], "call_dtor");
     builder.build_free(ptr_to_refcnt);
     builder.build_unconditional_branch(cont_bb);
 
@@ -504,6 +651,10 @@ fn generate_system_functions<'ctx>(
 ) -> HashMap<SystemFunctions, FunctionValue<'ctx>> {
     let mut ret: HashMap<SystemFunctions, FunctionValue<'ctx>> = Default::default();
     ret.insert(
+        SystemFunctions::EmptyDestructor,
+        generate_func_empty_destructor(context, module, &ret),
+    );
+    ret.insert(
         SystemFunctions::Printf,
         generate_func_printf(context, module, &ret),
     );
@@ -519,10 +670,6 @@ fn generate_system_functions<'ctx>(
         SystemFunctions::ReleaseObj,
         generate_func_release_obj(context, module, &ret),
     );
-    ret.insert(
-        SystemFunctions::EmptyDestructor,
-        generate_func_empty_destructor(context, module, &ret),
-    );
     ret
 }
 
@@ -531,10 +678,10 @@ fn execute_main_module<'ctx>(module: &Module<'ctx>) {
         .create_jit_execution_engine(OptimizationLevel::None)
         .unwrap();
     unsafe {
-        execution_engine
+        let func = execution_engine
             .get_function::<unsafe extern "C" fn()>("main")
-            .unwrap()
-            .call();
+            .unwrap();
+        func.call();
     }
 }
 
