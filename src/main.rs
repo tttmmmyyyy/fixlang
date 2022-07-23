@@ -169,13 +169,13 @@ struct LocalVariables<'ctx> {
     data: HashMap<String, Vec<PointerValue<'ctx>>>,
 }
 
-fn generate_code<'a>(
+fn generate_code<'ctx>(
     expr: Arc<Expr>,
-    context: &'a Context,
-    module: &'a Module,
-    builder: &'a Builder,
-    scope: &'a mut LocalVariables,
-) -> PointerValue<'a> {
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    builder: &Builder<'ctx>,
+    scope: &mut LocalVariables<'ctx>,
+) -> PointerValue<'ctx> {
     // enum Expr {
     //     Var(Arc<Var>),
     //     Lit(Arc<Literal>),
@@ -201,12 +201,12 @@ fn generate_code<'a>(
     }
 }
 
-fn generate_code_literal<'a>(
+fn generate_code_literal<'ctx>(
     lit: Arc<Literal>,
-    context: &'a Context,
-    module: &'a Module,
-    builder: &'a Builder,
-) -> PointerValue<'a> {
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    builder: &Builder<'ctx>,
+) -> PointerValue<'ctx> {
     match &*lit.ty {
         Type::LitTy(ty) => match ty.value.as_str() {
             "Int" => {
@@ -233,10 +233,12 @@ fn generate_code_literal<'a>(
         Type::TyVar(_) => panic!("Type of given Literal is TyVar (should be TyLit)."),
         Type::AppTy(_, _) => panic!("Type of given Literal is AppTy (should be TyLit)."),
         Type::TyConApp(_, _) => panic!("Type of given Literal is TyConApp (should be TyLit)."),
-        Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."),
+        Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."), // e.g., fix
         Type::ForAllTy(_, _) => panic!("Type of given Literal is ForAllTy (should be TyLit)."),
     }
 }
+
+fn clear_ref_cnt<'ctx>(obj: PointerValue<'ctx>) {}
 
 fn object_type<'ctx>(
     context: &'ctx Context,
