@@ -219,7 +219,7 @@ fn generate_code_literal<'ctx>(
     match &*lit.ty {
         Type::LitTy(ty) => match ty.value.as_str() {
             "Int" => {
-                let int_obj_type = int_object_type(context);
+                let int_obj_type = ObjectType::int_obj_type().to_struct_type(context);
                 // NOTE: Only once allocation is needed since we don't implement weak_ptr
                 let ptr_int_obj = builder.build_malloc(int_obj_type, "int_obj_type").unwrap();
                 generate_code_clear_ref_cnt(context, builder, ptr_int_obj);
@@ -272,20 +272,41 @@ fn generate_code_set_field<'ctx, V>(
     builder.build_store(ptr_to_field, value);
 }
 
-fn object_type<'ctx>(
-    context: &'ctx Context,
-    field_types: &[BasicTypeEnum<'ctx>],
-) -> StructType<'ctx> {
-    let mut fields: Vec<BasicTypeEnum<'ctx>> = vec![context.i64_type().into()];
-    fields.append(&mut field_types.to_vec());
-    context.struct_type(&fields, false)
+enum ObjectFieldType {
+    Int,
+    SubObject,
 }
 
-fn int_object_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
-    object_type(context, &[context.i64_type().into()])
+impl ObjectFieldType {
+    fn to_basic_type<'ctx>(&self, context: &'ctx Context) -> BasicTypeEnum<'ctx> {
+        match self {
+            ObjectFieldType::Int => context.i64_type().into(),
+            ObjectFieldType::SubObject => context.i64_type().ptr_type(AddressSpace::Generic).into(),
+        }
+    }
 }
 
-type SystemFunctionId = i32;
+struct ObjectType {
+    field_types: Vec<ObjectFieldType>,
+}
+
+impl ObjectType {
+    fn to_struct_type<'ctx>(&self, context: &'ctx Context) -> StructType<'ctx> {
+        let refcnt_type = context.i64_type();
+        let mut fields: Vec<BasicTypeEnum<'ctx>> = vec![refcnt_type.into()];
+        for field_type in &self.field_types {
+            fields.push(field_type.to_basic_type(context));
+        }
+        context.struct_type(&fields, false)
+    }
+
+    fn int_obj_type() -> Self {
+        ObjectType {
+            field_types: vec![ObjectFieldType::Int],
+        }
+    }
+}
+
 #[derive(Eq, Hash, PartialEq)]
 enum SystemFunctions {
     Printf,
@@ -293,6 +314,7 @@ enum SystemFunctions {
     RetainObj,
     ReleaseObj,
     EmptyDestructor,
+    Dtor(String),
 }
 
 fn generate_func_printf<'ctx>(
@@ -316,7 +338,7 @@ fn generate_func_print_int_obj<'ctx>(
     system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
 ) -> FunctionValue<'ctx> {
     let void_type = context.void_type();
-    let int_obj_type = int_object_type(&context);
+    let int_obj_type = ObjectType::int_obj_type().to_struct_type(context);
     let int_obj_ptr_type = int_obj_type.ptr_type(AddressSpace::Generic);
     let fn_type = void_type.fn_type(&[int_obj_ptr_type.into()], false);
     let func = module.add_function("print_int_obj", fn_type, None);
@@ -451,6 +473,26 @@ fn generate_func_empty_destructor<'ctx>(
     let bb = context.append_basic_block(func, "entry");
     let builder = context.create_builder();
     builder.position_at_end(bb);
+    builder.build_return(None);
+
+    func
+}
+
+fn generate_func_dtor<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+    obj_type: StructType<'ctx>,
+    subobj_indices: &[i32],
+) -> FunctionValue<'ctx> {
+    let void_type = context.void_type();
+    let ptr_to_obj_type = obj_type.ptr_type(AddressSpace::Generic);
+    let func_type = void_type.fn_type(&[ptr_to_obj_type.into()], false);
+    let func = module.add_function("destructor", func_type, None); // TODO: give appropriate name
+    let bb = context.append_basic_block(func, "entry");
+    let builder = context.create_builder();
+    builder.position_at_end(bb);
+
     builder.build_return(None);
 
     func
