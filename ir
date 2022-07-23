@@ -31,9 +31,8 @@ entry:
 error_refcnt_already_leq_zero:                    ; preds = %entry
   %print_error_in_release = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([45 x i8], [45 x i8]* @release_error_msg, i32 0, i32 0), i64 %refcnt)
   unreachable
-  br label %refcnt_positive
 
-refcnt_positive:                                  ; preds = %error_refcnt_already_leq_zero, %entry
+refcnt_positive:                                  ; preds = %entry
   %refcnt1 = sub i64 %refcnt, 1
   %is_refcnt_zero = icmp eq i64 %refcnt1, 0
   br i1 %is_refcnt_zero, label %refcnt_zero_after_release, label %end
