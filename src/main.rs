@@ -150,23 +150,28 @@ static FIX_A_TO_B: Lazy<Arc<Expr>> = Lazy::new(|| {
 // Lazy組み込み型を導入して、fix : (Lazy a -> a) -> Lazy aとするべきではないか。
 // fix : ((() -> a) -> (() -> a)) -> (() -> a) と等価で、FIX_A_TO_Bで表せるのでとりあえず良いけど。Lazyにはキャッシュ機能を付けたほうが良い。
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     #[test]
+//     fn it_works() {
+//         assert_eq!(2 + 2, 4);
+//     }
+// }
 
 // memo
 // data List a = () -> [] | (a, List a) と定義する。Lazy b = () -> b + キャッシュ、なら、data List a = Lazy ([] | (a, List a))
 // このときfixと組み合わせて無限リストが正常動作すると思う。fix (\l -> 1:2:l) で、1,2,1,2,... など。
 // フィボナッチ数列を計算する有名なコードはどうか？？
 
+struct ExprCode<'ctx> {
+    ptr: PointerValue<'ctx>,
+    dtor: FunctionValue<'ctx>,
+}
+
 #[derive(Default)]
 struct LocalVariables<'ctx> {
     // map to variable name to pointer value.
-    data: HashMap<String, Vec<PointerValue<'ctx>>>,
+    data: HashMap<String, Vec<ExprCode<'ctx>>>,
 }
 
 fn generate_code<'ctx>(
@@ -175,7 +180,7 @@ fn generate_code<'ctx>(
     module: &Module<'ctx>,
     builder: &Builder<'ctx>,
     scope: &mut LocalVariables<'ctx>,
-) -> PointerValue<'ctx> {
+) -> ExprCode<'ctx> {
     // enum Expr {
     //     Var(Arc<Var>),
     //     Lit(Arc<Literal>),
@@ -206,7 +211,7 @@ fn generate_code_literal<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
     builder: &Builder<'ctx>,
-) -> PointerValue<'ctx> {
+) -> ExprCode<'ctx> {
     match &*lit.ty {
         Type::LitTy(ty) => match ty.value.as_str() {
             "Int" => {
@@ -217,7 +222,8 @@ fn generate_code_literal<'ctx>(
                 let value = lit.value.parse::<i64>().unwrap();
                 let value = context.i64_type().const_int(value as u64, false);
                 generate_code_set_field(context, builder, ptr_int_obj, 0, value);
-                ptr_int_obj
+                ptr_int_obj;
+                unimplemented!()
             }
             _ => {
                 panic!(
@@ -276,27 +282,30 @@ type SystemFunctionId = i32;
 enum SystemFunctions {
     Printf,
     PrintIntObj,
+    RetainObj,
+    ReleaseObj,
 }
 
 fn generate_code_printf<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
-    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) {
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) -> FunctionValue<'ctx> {
     let i32_type = context.i32_type();
     let i8_type = context.i8_type();
     let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::Generic);
 
     let fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
     let func = module.add_function("printf", fn_type, None);
-    system_functions.insert(SystemFunctions::Printf, func);
+
+    func
 }
 
 fn generate_code_print_int_obj<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
-    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) {
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) -> FunctionValue<'ctx> {
     let builder = context.create_builder();
 
     let void_type = context.void_type();
@@ -323,16 +332,23 @@ fn generate_code_print_int_obj<'ctx>(
     );
     builder.build_return(None);
 
-    system_functions.insert(SystemFunctions::PrintIntObj, func);
+    func
 }
 
 fn generate_code_system_functions<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
-    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) {
-    generate_code_printf(context, module, system_functions);
-    generate_code_print_int_obj(context, module, system_functions);
+) -> HashMap<SystemFunctions, FunctionValue<'ctx>> {
+    let mut ret: HashMap<SystemFunctions, FunctionValue<'ctx>> = Default::default();
+    ret.insert(
+        SystemFunctions::Printf,
+        generate_code_printf(context, module, &ret),
+    );
+    ret.insert(
+        SystemFunctions::PrintIntObj,
+        generate_code_print_int_obj(context, module, &ret),
+    );
+    ret
 }
 
 fn execute_main_module<'ctx>(module: &Module<'ctx>) {
@@ -353,8 +369,7 @@ fn main() {
     let context = Context::create();
     let module = context.create_module("main");
 
-    let mut system_functions = Default::default();
-    generate_code_system_functions(&context, &module, &mut system_functions);
+    let mut system_functions = generate_code_system_functions(&context, &module);
 
     let i32_type = context.i32_type();
     let main_fn_type = i32_type.fn_type(&[], false);
@@ -370,7 +385,7 @@ fn main() {
     let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
     builder.build_call(
         print_int_obj,
-        &[program_result.into()],
+        &[program_result.ptr.into()],
         "print_program_result",
     );
 
