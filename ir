@@ -1,9 +1,17 @@
 ; ModuleID = 'main'
 source_filename = "main"
 
-@ptinr_int_literal = private unnamed_addr constant [6 x i8] c"%lld\0A\00", align 1
+@int_placefolder = private unnamed_addr constant [6 x i8] c"%lld\0A\00", align 1
 
 declare i32 @printf(i8*, ...)
+
+define void @print_int_obj({ i64, i64 }* %0) {
+entry:
+  %int_field_ptr = getelementptr inbounds { i64, i64 }, { i64, i64 }* %0, i32 0, i32 1
+  %int_val = load i64, i64* %int_field_ptr, align 4
+  %call_print_int = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @int_placefolder, i32 0, i32 0), i64 %int_val)
+  ret void
+}
 
 define i32 @main() {
 entry:
@@ -13,12 +21,8 @@ entry:
   store i64 0, i64* %ptr_to_refcnt, align 4
   %ptr_to_int_value = getelementptr inbounds { i64, i64 }, { i64, i64 }* %ptr, i32 0, i32 1
   store i64 -42, i64* %ptr_to_int_value, align 4
-  %ptr1 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %ptr, i32 0, i32 1
-  %val = load i64, i64* %ptr1, align 4
-  %call_print_int = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @ptinr_int_literal, i32 0, i32 0), i64 %val)
+  call void @print_int_obj({ i64, i64 }* %ptr)
   ret i32 0
 }
 
 declare noalias i8* @malloc(i32)
-
-; test

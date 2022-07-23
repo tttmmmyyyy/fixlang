@@ -1,10 +1,12 @@
+use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::PointerType;
+use inkwell::types::{BasicTypeEnum, IntType, PointerType, StructType};
 use inkwell::values::{FunctionValue, PointerValue};
-use inkwell::OptimizationLevel;
+use inkwell::{AddressSpace, OptimizationLevel};
 use once_cell::sync::Lazy;
+use std::alloc::System;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::vec::Vec;
@@ -161,10 +163,8 @@ mod tests {
 // このときfixと組み合わせて無限リストが正常動作すると思う。fix (\l -> 1:2:l) で、1,2,1,2,... など。
 // フィボナッチ数列を計算する有名なコードはどうか？？
 
-static INT_CODE: Lazy<Arc<Expr>> = Lazy::new(|| mk_int_expr(-42));
-
 #[derive(Default)]
-struct Scope<'ctx> {
+struct LocalVariables<'ctx> {
     // map to variable name to pointer value.
     data: HashMap<String, Vec<PointerValue<'ctx>>>,
 }
@@ -174,7 +174,7 @@ fn generate_code<'a>(
     context: &'a Context,
     module: &'a Module,
     builder: &'a Builder,
-    scope: &'a mut Scope,
+    scope: &'a mut LocalVariables,
 ) -> PointerValue<'a> {
     // enum Expr {
     //     Var(Arc<Var>),
@@ -210,10 +210,7 @@ fn generate_code_literal<'a>(
     match &*lit.ty {
         Type::LitTy(ty) => match ty.value.as_str() {
             "Int" => {
-                let ty = context.struct_type(
-                    &[context.i64_type().into(), context.i64_type().into()],
-                    false,
-                );
+                let ty = int_object_type(context);
                 // NOTE: Only once allocation is needed since we don't implement weak_ptr
                 let ptr = builder.build_malloc(ty, "ptr").unwrap();
                 let ptr_to_refcnt = builder.build_struct_gep(ptr, 0, "ptr_to_refcnt").unwrap();
@@ -241,49 +238,84 @@ fn generate_code_literal<'a>(
     }
 }
 
-fn generate_code_print_int<'ctx>(
-    int_ptr: PointerValue<'ctx>,
+fn object_type<'ctx>(
     context: &'ctx Context,
-    module: &'ctx Module,
-    builder: &'ctx Builder,
-    printf_function: FunctionValue<'ctx>,
-) {
-    let ptr = builder.build_struct_gep(int_ptr, 1, "ptr").unwrap();
-    let val = builder.build_load(ptr, "val").into_int_value();
-    let string_ptr = builder.build_global_string_ptr("%lld\n", "ptinr_int_literal");
-    builder.build_call(
-        printf_function,
-        &[string_ptr.as_pointer_value().into(), val.into()],
-        "call_print_int",
-    );
+    field_types: &[BasicTypeEnum<'ctx>],
+) -> StructType<'ctx> {
+    let mut fields: Vec<BasicTypeEnum<'ctx>> = vec![context.i64_type().into()];
+    fields.append(&mut field_types.to_vec());
+    context.struct_type(&fields, false)
 }
 
-fn main() {
-    let context = Context::create();
-    let module = context.create_module("main");
-    let builder = context.create_builder();
+fn int_object_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
+    object_type(context, &[context.i64_type().into()])
+}
 
+type SystemFunctionId = i32;
+#[derive(Eq, Hash, PartialEq)]
+enum SystemFunctions {
+    Printf,
+    PrintIntObj,
+}
+
+fn generate_code_printf<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) {
     let i32_type = context.i32_type();
     let i8_type = context.i8_type();
     let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::Generic);
 
-    let printf_fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
-    let printf_function = module.add_function("printf", printf_fn_type, None);
+    let fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
+    let func = module.add_function("printf", fn_type, None);
+    system_functions.insert(SystemFunctions::Printf, func);
+}
 
-    let main_fn_type = i32_type.fn_type(&[], false);
-    let main_function = module.add_function("main", main_fn_type, None);
+fn generate_code_print_int_obj<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) {
+    let builder = context.create_builder();
 
-    let entry_basic_block = context.append_basic_block(main_function, "entry");
-    builder.position_at_end(entry_basic_block);
+    let void_type = context.void_type();
+    let int_obj_type = int_object_type(&context);
+    let int_obj_ptr_type = int_obj_type.ptr_type(AddressSpace::Generic);
+    let fn_type = void_type.fn_type(&[int_obj_ptr_type.into()], false);
+    let func = module.add_function("print_int_obj", fn_type, None);
 
-    let mut scope: Scope = Default::default();
-    let result = generate_code(INT_CODE.clone(), &context, &module, &builder, &mut scope);
-    generate_code_print_int(result, &context, &module, &builder, printf_function);
+    let entry_bb = context.append_basic_block(func, "entry");
+    builder.position_at_end(entry_bb);
+    let int_obj_ptr = func.get_first_param().unwrap().into_pointer_value();
+    let int_field_ptr = builder
+        .build_struct_gep(int_obj_ptr, 1, "int_field_ptr")
+        .unwrap();
+    let int_val = builder
+        .build_load(int_field_ptr, "int_val")
+        .into_int_value();
+    let string_ptr = builder.build_global_string_ptr("%lld\n", "int_placefolder");
+    let printf_func = *system_functions.get(&SystemFunctions::Printf).unwrap();
+    builder.build_call(
+        printf_func,
+        &[string_ptr.as_pointer_value().into(), int_val.into()],
+        "call_print_int",
+    );
+    builder.build_return(None);
 
-    builder.build_return(Some(&i32_type.const_int(0, false)));
+    system_functions.insert(SystemFunctions::PrintIntObj, func);
+}
 
-    module.print_to_file("ir").unwrap();
+fn generate_code_system_functions<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) {
+    generate_code_printf(context, module, system_functions);
+    generate_code_print_int_obj(context, module, system_functions);
+}
 
+fn execute_main_module<'ctx>(module: &Module<'ctx>) {
     let execution_engine = module
         .create_jit_execution_engine(OptimizationLevel::None)
         .unwrap();
@@ -293,4 +325,37 @@ fn main() {
             .unwrap()
             .call();
     }
+}
+
+fn main() {
+    let program = mk_int_expr(-42);
+
+    let context = Context::create();
+    let module = context.create_module("main");
+
+    let mut system_functions = Default::default();
+    generate_code_system_functions(&context, &module, &mut system_functions);
+
+    let i32_type = context.i32_type();
+    let main_fn_type = i32_type.fn_type(&[], false);
+    let main_function = module.add_function("main", main_fn_type, None);
+
+    let builder = context.create_builder();
+    let entry_bb = context.append_basic_block(main_function, "entry");
+    builder.position_at_end(entry_bb);
+
+    let mut local_variables: LocalVariables = Default::default();
+    let program_result = generate_code(program, &context, &module, &builder, &mut local_variables);
+
+    let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
+    builder.build_call(
+        print_int_obj,
+        &[program_result.into()],
+        "print_program_result",
+    );
+
+    builder.build_return(Some(&i32_type.const_int(0, false)));
+
+    module.print_to_file("ir").unwrap();
+    execute_main_module(&module);
 }
