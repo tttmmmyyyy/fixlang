@@ -16,12 +16,12 @@ entry:
 define i32 @main() {
 entry:
   %malloccall = tail call i8* @malloc(i32 trunc (i64 mul nuw (i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64), i64 2) to i32))
-  %ptr = bitcast i8* %malloccall to { i64, i64 }*
-  %ptr_to_refcnt = getelementptr inbounds { i64, i64 }, { i64, i64 }* %ptr, i32 0, i32 0
+  %int_obj_type = bitcast i8* %malloccall to { i64, i64 }*
+  %ptr_to_refcnt = getelementptr inbounds { i64, i64 }, { i64, i64 }* %int_obj_type, i32 0, i32 0
   store i64 0, i64* %ptr_to_refcnt, align 4
-  %ptr_to_int_value = getelementptr inbounds { i64, i64 }, { i64, i64 }* %ptr, i32 0, i32 1
-  store i64 -42, i64* %ptr_to_int_value, align 4
-  call void @print_int_obj({ i64, i64 }* %ptr)
+  %ptr_to_field = getelementptr inbounds { i64, i64 }, { i64, i64 }* %int_obj_type, i32 0, i32 1
+  store i64 -42, i64* %ptr_to_field, align 4
+  call void @print_int_obj({ i64, i64 }* %int_obj_type)
   ret i32 0
 }
 

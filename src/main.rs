@@ -3,7 +3,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicTypeEnum, IntType, PointerType, StructType};
-use inkwell::values::{FunctionValue, PointerValue};
+use inkwell::values::{BasicValue, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, OptimizationLevel};
 use once_cell::sync::Lazy;
 use std::alloc::System;
@@ -210,18 +210,14 @@ fn generate_code_literal<'ctx>(
     match &*lit.ty {
         Type::LitTy(ty) => match ty.value.as_str() {
             "Int" => {
-                let ty = int_object_type(context);
+                let int_obj_type = int_object_type(context);
                 // NOTE: Only once allocation is needed since we don't implement weak_ptr
-                let ptr = builder.build_malloc(ty, "ptr").unwrap();
-                let ptr_to_refcnt = builder.build_struct_gep(ptr, 0, "ptr_to_refcnt").unwrap();
-                builder.build_store(ptr_to_refcnt, context.i64_type().const_zero());
-                let ptr_to_int_value = builder
-                    .build_struct_gep(ptr, 1, "ptr_to_int_value")
-                    .unwrap();
+                let ptr_int_obj = builder.build_malloc(int_obj_type, "int_obj_type").unwrap();
+                generate_code_clear_ref_cnt(context, builder, ptr_int_obj);
                 let value = lit.value.parse::<i64>().unwrap();
                 let value = context.i64_type().const_int(value as u64, false);
-                builder.build_store(ptr_to_int_value, value);
-                ptr
+                generate_code_set_field(context, builder, ptr_int_obj, 0, value);
+                ptr_int_obj
             }
             _ => {
                 panic!(
@@ -238,7 +234,29 @@ fn generate_code_literal<'ctx>(
     }
 }
 
-fn clear_ref_cnt<'ctx>(obj: PointerValue<'ctx>) {}
+fn generate_code_clear_ref_cnt<'ctx>(
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    obj: PointerValue<'ctx>,
+) {
+    let ptr_to_refcnt = builder.build_struct_gep(obj, 0, "ptr_to_refcnt").unwrap();
+    builder.build_store(ptr_to_refcnt, context.i64_type().const_zero());
+}
+
+fn generate_code_set_field<'ctx, V>(
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    obj: PointerValue<'ctx>,
+    index: u32,
+    value: V,
+) where
+    V: BasicValue<'ctx>,
+{
+    let ptr_to_field = builder
+        .build_struct_gep(obj, index + 1, "ptr_to_field")
+        .unwrap();
+    builder.build_store(ptr_to_field, value);
+}
 
 fn object_type<'ctx>(
     context: &'ctx Context,
