@@ -2,6 +2,7 @@
 source_filename = "main"
 
 @int_placefolder = private unnamed_addr constant [6 x i8] c"%lld\0A\00", align 1
+@release_error_msg = private unnamed_addr constant [45 x i8] c"Release object whose refcnt is already %lld\0A\00", align 1
 
 declare i32 @printf(i8*, ...)
 
@@ -10,6 +11,47 @@ entry:
   %int_field_ptr = getelementptr inbounds { i64, i64 }, { i64, i64 }* %0, i32 0, i32 1
   %int_val = load i64, i64* %int_field_ptr, align 4
   %call_print_int = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @int_placefolder, i32 0, i32 0), i64 %int_val)
+  ret void
+}
+
+define void @retain_obj(i64* %0) {
+entry:
+  %refcnt = load i64, i64* %0, align 4
+  %refcnt1 = add i64 %refcnt, 1
+  store i64 %refcnt1, i64* %0, align 4
+  ret void
+}
+
+define void @release_obj(i64* %0, void (i64*)* %1) {
+entry:
+  %refcnt = load i64, i64* %0, align 4
+  %is_refcnt_positive = icmp ule i64 %refcnt, 0
+  br i1 %is_refcnt_positive, label %error_refcnt_already_leq_zero, label %refcnt_positive
+
+error_refcnt_already_leq_zero:                    ; preds = %entry
+  %print_error_in_release = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([45 x i8], [45 x i8]* @release_error_msg, i32 0, i32 0), i64 %refcnt)
+  unreachable
+  br label %refcnt_positive
+
+refcnt_positive:                                  ; preds = %error_refcnt_already_leq_zero, %entry
+  %refcnt1 = sub i64 %refcnt, 1
+  %is_refcnt_zero = icmp eq i64 %refcnt1, 0
+  br i1 %is_refcnt_zero, label %refcnt_zero_after_release, label %end
+
+refcnt_zero_after_release:                        ; preds = %refcnt_positive
+  call void %1(i64* %0)
+  %2 = bitcast i64* %0 to i8*
+  tail call void @free(i8* %2)
+  br label %end
+
+end:                                              ; preds = %refcnt_zero_after_release, %refcnt_positive
+  ret void
+}
+
+declare void @free(i8*)
+
+define void @empty_destructor(i64* %0) {
+entry:
   ret void
 }
 

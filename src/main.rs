@@ -3,7 +3,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicTypeEnum, IntType, PointerType, StructType};
-use inkwell::values::{BasicValue, FunctionValue, PointerValue};
+use inkwell::values::{BasicValue, CallableValue, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, OptimizationLevel};
 use once_cell::sync::Lazy;
 use std::alloc::System;
@@ -180,6 +180,7 @@ fn generate_code<'ctx>(
     module: &Module<'ctx>,
     builder: &Builder<'ctx>,
     scope: &mut LocalVariables<'ctx>,
+    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
 ) -> ExprCode<'ctx> {
     // enum Expr {
     //     Var(Arc<Var>),
@@ -197,7 +198,9 @@ fn generate_code<'ctx>(
             // TODO: term variable のとき、scopeからポインタを取り出して返す
             // TODO: type variable のコード生成はエラーにする。
         }
-        Expr::Lit(lit) => generate_code_literal(lit.clone(), context, module, builder),
+        Expr::Lit(lit) => {
+            generate_code_literal(lit.clone(), context, module, builder, system_functions)
+        }
         Expr::App(_, _) => todo!(),
         Expr::Lam(_, _) => todo!(),
         Expr::Let(_, _, _) => todo!(),
@@ -211,6 +214,7 @@ fn generate_code_literal<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
     builder: &Builder<'ctx>,
+    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
 ) -> ExprCode<'ctx> {
     match &*lit.ty {
         Type::LitTy(ty) => match ty.value.as_str() {
@@ -222,8 +226,12 @@ fn generate_code_literal<'ctx>(
                 let value = lit.value.parse::<i64>().unwrap();
                 let value = context.i64_type().const_int(value as u64, false);
                 generate_code_set_field(context, builder, ptr_int_obj, 0, value);
-                ptr_int_obj;
-                unimplemented!()
+                ExprCode {
+                    ptr: ptr_int_obj,
+                    dtor: *system_functions
+                        .get(&SystemFunctions::EmptyDestructor)
+                        .unwrap(),
+                }
             }
             _ => {
                 panic!(
@@ -284,9 +292,10 @@ enum SystemFunctions {
     PrintIntObj,
     RetainObj,
     ReleaseObj,
+    EmptyDestructor,
 }
 
-fn generate_code_printf<'ctx>(
+fn generate_func_printf<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
     system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
@@ -301,13 +310,11 @@ fn generate_code_printf<'ctx>(
     func
 }
 
-fn generate_code_print_int_obj<'ctx>(
+fn generate_func_print_int_obj<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
     system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
 ) -> FunctionValue<'ctx> {
-    let builder = context.create_builder();
-
     let void_type = context.void_type();
     let int_obj_type = int_object_type(&context);
     let int_obj_ptr_type = int_obj_type.ptr_type(AddressSpace::Generic);
@@ -315,6 +322,7 @@ fn generate_code_print_int_obj<'ctx>(
     let func = module.add_function("print_int_obj", fn_type, None);
 
     let entry_bb = context.append_basic_block(func, "entry");
+    let builder = context.create_builder();
     builder.position_at_end(entry_bb);
     let int_obj_ptr = func.get_first_param().unwrap().into_pointer_value();
     let int_field_ptr = builder
@@ -335,18 +343,143 @@ fn generate_code_print_int_obj<'ctx>(
     func
 }
 
-fn generate_code_system_functions<'ctx>(
+fn generate_func_retain_obj<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) -> FunctionValue<'ctx> {
+    let void_type = context.void_type();
+    let ptr_to_refcnt_type = context.i64_type().ptr_type(AddressSpace::Generic);
+    let func_type = void_type.fn_type(&[ptr_to_refcnt_type.into()], false);
+    let retain_func = module.add_function("retain_obj", func_type, None);
+    let bb = context.append_basic_block(retain_func, "entry");
+
+    let builder = context.create_builder();
+    builder.position_at_end(bb);
+    let ptr_to_refcnt = retain_func.get_first_param().unwrap().into_pointer_value();
+    let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
+    let one = context.i64_type().const_int(1, false);
+    let refcnt = builder.build_int_add(refcnt, one, "refcnt");
+    builder.build_store(ptr_to_refcnt, refcnt);
+    builder.build_return(None);
+
+    retain_func
+    // TODO: Add fence instruction for incrementing refcnt
+    // TODO: Add code for leak detector
+}
+
+fn generate_func_release_obj<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) -> FunctionValue<'ctx> {
+    let void_type = context.void_type();
+    let ptr_to_refcnt_type = context.i64_type().ptr_type(AddressSpace::Generic);
+    let dtor_type = void_type.fn_type(&[ptr_to_refcnt_type.into()], false);
+    let ptr_to_dtor_type = dtor_type.ptr_type(AddressSpace::Generic);
+    let func_type = void_type.fn_type(&[ptr_to_refcnt_type.into(), ptr_to_dtor_type.into()], false);
+    let release_func = module.add_function("release_obj", func_type, None);
+    let mut bb = context.append_basic_block(release_func, "entry");
+
+    let builder = context.create_builder();
+    builder.position_at_end(bb);
+    let ptr_to_refcnt = release_func.get_first_param().unwrap().into_pointer_value();
+    let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
+
+    if DEBUG_MEMORY {
+        // check if refcnt is positive
+        let zero = context.i64_type().const_zero();
+        let is_positive = builder.build_int_compare(
+            inkwell::IntPredicate::ULE,
+            refcnt,
+            zero,
+            "is_refcnt_positive",
+        );
+        let then_bb = context.append_basic_block(release_func, "error_refcnt_already_leq_zero");
+        let cont_bb = context.append_basic_block(release_func, "refcnt_positive");
+        builder.build_conditional_branch(is_positive, then_bb, cont_bb);
+
+        builder.position_at_end(then_bb);
+        let string_ptr = builder.build_global_string_ptr(
+            "Release object whose refcnt is already %lld\n",
+            "release_error_msg",
+        );
+        builder.build_call(
+            *system_functions.get(&SystemFunctions::Printf).unwrap(),
+            &[string_ptr.as_pointer_value().into(), refcnt.into()],
+            "print_error_in_release",
+        );
+        builder.build_unreachable();
+        // builder.build_unconditional_branch(cont_bb);
+
+        bb = cont_bb;
+        builder.position_at_end(bb);
+    }
+
+    let one = context.i64_type().const_int(1, false);
+    let refcnt = builder.build_int_sub(refcnt, one, "refcnt");
+    let zero = context.i64_type().const_zero();
+    let is_refcnt_zero =
+        builder.build_int_compare(inkwell::IntPredicate::EQ, refcnt, zero, "is_refcnt_zero");
+    let then_bb = context.append_basic_block(release_func, "refcnt_zero_after_release");
+    let cont_bb = context.append_basic_block(release_func, "end");
+    builder.build_conditional_branch(is_refcnt_zero, then_bb, cont_bb);
+
+    builder.position_at_end(then_bb);
+    let ptr_to_dtor = release_func.get_nth_param(1).unwrap().into_pointer_value();
+    let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
+    builder.build_call(dtor_func, &[ptr_to_refcnt.into()], "call dtor");
+    builder.build_free(ptr_to_refcnt);
+    builder.build_unconditional_branch(cont_bb);
+
+    builder.position_at_end(cont_bb);
+    builder.build_return(None);
+    release_func
+    // TODO: Add fence instruction for incrementing refcnt
+    // TODO: Add code for leak detector
+}
+
+fn generate_func_empty_destructor<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) -> FunctionValue<'ctx> {
+    let void_type = context.void_type();
+    let ptr_to_obj_type = context.i64_type().ptr_type(AddressSpace::Generic);
+    let func_type = void_type.fn_type(&[ptr_to_obj_type.into()], false);
+    let func = module.add_function("empty_destructor", func_type, None);
+    let bb = context.append_basic_block(func, "entry");
+    let builder = context.create_builder();
+    builder.position_at_end(bb);
+    builder.build_return(None);
+
+    func
+}
+
+fn generate_system_functions<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
 ) -> HashMap<SystemFunctions, FunctionValue<'ctx>> {
     let mut ret: HashMap<SystemFunctions, FunctionValue<'ctx>> = Default::default();
     ret.insert(
         SystemFunctions::Printf,
-        generate_code_printf(context, module, &ret),
+        generate_func_printf(context, module, &ret),
     );
     ret.insert(
         SystemFunctions::PrintIntObj,
-        generate_code_print_int_obj(context, module, &ret),
+        generate_func_print_int_obj(context, module, &ret),
+    );
+    ret.insert(
+        SystemFunctions::RetainObj,
+        generate_func_retain_obj(context, module, &ret),
+    );
+    ret.insert(
+        SystemFunctions::ReleaseObj,
+        generate_func_release_obj(context, module, &ret),
+    );
+    ret.insert(
+        SystemFunctions::EmptyDestructor,
+        generate_func_empty_destructor(context, module, &ret),
     );
     ret
 }
@@ -363,13 +496,15 @@ fn execute_main_module<'ctx>(module: &Module<'ctx>) {
     }
 }
 
+const DEBUG_MEMORY: bool = true;
+
 fn main() {
     let program = mk_int_expr(-42);
 
     let context = Context::create();
     let module = context.create_module("main");
 
-    let mut system_functions = generate_code_system_functions(&context, &module);
+    let mut system_functions = generate_system_functions(&context, &module);
 
     let i32_type = context.i32_type();
     let main_fn_type = i32_type.fn_type(&[], false);
@@ -380,7 +515,14 @@ fn main() {
     builder.position_at_end(entry_bb);
 
     let mut local_variables: LocalVariables = Default::default();
-    let program_result = generate_code(program, &context, &module, &builder, &mut local_variables);
+    let program_result = generate_code(
+        program,
+        &context,
+        &module,
+        &builder,
+        &mut local_variables,
+        &mut system_functions,
+    );
 
     let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
     builder.build_call(
