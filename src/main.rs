@@ -581,22 +581,9 @@ fn generate_func_release_obj<'ctx>(
     builder.position_at_end(then_bb);
     let ptr_to_dtor = builder
         .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor")
-        .unwrap();
-    // let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
-    // In the above naive code, unwrap fails since in CallableValue::try_from ptr_to_dtor is required to be a valid (already defined) function pointer.
-    // As a workaround,
-    struct MyCallableValue<'ctx>(Either<FunctionValue<'ctx>, PointerValue<'ctx>>);
-    let dtor_func = MyCallableValue(Right(ptr_to_dtor));
-    let dtor_func =
-        unsafe { std::mem::transmute::<MyCallableValue<'ctx>, CallableValue<'ctx>>(dtor_func) };
-
-    // let ptr_to_dtor = system_functions
-    //     .get(&SystemFunctions::EmptyDestructor)
-    //     .unwrap()
-    //     .as_global_value()
-    //     .as_pointer_value();
-    // let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
-
+        .unwrap()
+        .const_cast(ptr_to_dtor_type(context)); // NOTE: this const_cast is required for the success of unwrap() in the next line.
+    let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
     builder.build_call(dtor_func, &[ptr_to_obj.into()], "call_dtor");
     builder.build_free(ptr_to_refcnt);
     builder.build_unconditional_branch(cont_bb);

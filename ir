@@ -43,7 +43,7 @@ refcnt_positive:                                  ; preds = %entry
   br i1 %is_refcnt_zero, label %refcnt_zero_after_release, label %end
 
 refcnt_zero_after_release:                        ; preds = %refcnt_positive
-  %call_dtor = call void (i64*) getelementptr inbounds ({ i64, void (i64*)* }, { i64, void (i64*)* }* bitcast (i64* %0 to { i64, void (i64*)* }*), i32 0, i32 1)(i64* %0)
+  call void bitcast (void (i64*)** getelementptr inbounds ({ i64, void (i64*)* }, { i64, void (i64*)* }* bitcast (i64* %0 to { i64, void (i64*)* }*), i32 0, i32 1) to void (i64*)*)(i64* %0)
   %1 = bitcast i64* getelementptr inbounds ({ i64, void (i64*)* }, { i64, void (i64*)* }* bitcast (i64* %0 to { i64, void (i64*)* }*), i32 0, i32 0) to i8*
   tail call void @free(i8* %1)
   br label %end
