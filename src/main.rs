@@ -173,7 +173,7 @@ struct ExprCode<'ctx> {
 #[derive(Default)]
 struct LocalVariables<'ctx> {
     // map to variable name to pointer value.
-    data: HashMap<String, Vec<ExprCode<'ctx>>>,
+    data: HashMap<String, Vec<(ExprCode<'ctx>, Arc<Type>)>>,
 }
 
 fn generate_code<'ctx>(
@@ -205,7 +205,47 @@ fn generate_code<'ctx>(
         }
         Expr::App(_, _) => todo!(),
         Expr::Lam(_, _) => todo!(),
-        Expr::Let(_, _, _) => todo!(),
+        Expr::Let(var, bound, expr) => {
+            let bound_val = generate_code(
+                bound.clone(),
+                context,
+                module,
+                builder,
+                scope,
+                system_functions,
+            );
+            let Var::TermVar {
+                name: var_name,
+                ty: ver_type,
+            } = **var;
+            if !scope.data.contains_key(&var_name) {
+                scope.data.insert(var_name.clone(), Default::default());
+            }
+            scope
+                .data
+                .get_mut(&var_name)
+                .unwrap()
+                .push((bound_val, ver_type));
+            builder.build_call(
+                system_functions.get(&SystemFunctions::RetainObj).unwrap(),
+                &[bound_val.ptr.into()],
+                "retain_bound",
+            );
+            let expr_val = generate_code(
+                expr.clone(),
+                context,
+                module,
+                builder,
+                scope,
+                system_functions,
+            );
+            builder.build_call(
+                system_functions.get(&SystemFunctions::ReleaseObj),
+                &[bound_val.ptr.into()],
+                "release_bound",
+            );
+            expr_val
+        }
         Expr::If(_, _, _) => todo!(),
         Expr::Type(_) => todo!(),
     }
