@@ -210,11 +210,13 @@ fn generate_code<'ctx>(
     //     Type(Arc<Type>),
     // }
     match &*expr {
-        Expr::Var(var) => {
-            todo!();
-            // TODO: term variable のとき、scopeからポインタを取り出して返す
-            // TODO: type variable のコード生成はエラーにする。
-        }
+        Expr::Var(var) => match &**var {
+            Var::TermVar { name, ty: _ } => {
+                let (code, _) = scope.data.get(name).unwrap().last().unwrap();
+                code.clone()
+            }
+            Var::TyVar { name: _, kind: _ } => unreachable!(),
+        },
         Expr::Lit(lit) => {
             generate_code_literal(lit.clone(), context, module, builder, system_functions)
         }
