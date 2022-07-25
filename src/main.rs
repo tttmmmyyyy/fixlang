@@ -115,6 +115,21 @@ fn mk_forall_type(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::ForAllTy(mk_tyvar_var("a"), ty))
 }
 
+fn mk_termvar(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
+    Arc::new(Var::TermVar {
+        name: String::from(var_name),
+        ty: ty,
+    })
+}
+
+fn mk_intvar(var_name: &str) -> Arc<Var> {
+    mk_termvar(var_name, mk_lit_type("Int"))
+}
+
+fn mk_let(var: Arc<Var>, bound: Arc<Expr>, expr: Arc<Expr>) -> Arc<Expr> {
+    Arc::new(Expr::Let(var, bound, expr))
+}
+
 static INT_TYPE: Lazy<Arc<Type>> = Lazy::new(|| mk_lit_type("Int"));
 
 static FIX_INT_INT: Lazy<Arc<Expr>> = Lazy::new(|| {
@@ -624,10 +639,12 @@ fn generate_func_release_obj<'ctx>(
     builder.build_conditional_branch(is_refcnt_zero, then_bb, cont_bb);
 
     builder.position_at_end(then_bb);
+    let ptr_to_dtor_ptr = builder
+        .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_ptr")
+        .unwrap();
     let ptr_to_dtor = builder
-        .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor")
-        .unwrap()
-        .const_cast(ptr_to_dtor_type(context)); // NOTE: this const_cast is required for the success of unwrap() in the next line.
+        .build_load(ptr_to_dtor_ptr, "ptr_to_dtor")
+        .into_pointer_value();
     let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
     builder.build_call(dtor_func, &[ptr_to_obj.into()], "call_dtor");
     builder.build_free(ptr_to_refcnt);
@@ -761,14 +778,14 @@ fn test_program(program: Arc<Expr>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn int_literal() {
-        let program = mk_int_expr(-42);
-        test_program(program);
-    }
+    // #[test]
+    // fn int_literal() {
+    //     let program = mk_int_expr(-42);
+    //     test_program(program);
+    // }
     #[test]
     fn let0() {
-        let program = mk_int_expr(42);
+        let program = mk_let(mk_intvar("x"), mk_int_expr(-42), mk_int_expr(42));
         test_program(program);
     }
 }
