@@ -166,13 +166,13 @@ static FIX_A_TO_B: Lazy<Arc<Expr>> = Lazy::new(|| {
 // このときfixと組み合わせて無限リストが正常動作すると思う。fix (\l -> 1:2:l) で、1,2,1,2,... など。
 // フィボナッチ数列を計算する有名なコードはどうか？？
 
+#[derive(Clone)]
 struct ExprCode<'ctx> {
     ptr: PointerValue<'ctx>,
 }
 
 #[derive(Default)]
 struct LocalVariables<'ctx> {
-    // map to variable name to pointer value.
     data: HashMap<String, Vec<(ExprCode<'ctx>, Arc<Type>)>>,
 }
 
@@ -214,10 +214,15 @@ fn generate_code<'ctx>(
                 scope,
                 system_functions,
             );
-            let Var::TermVar {
-                name: var_name,
-                ty: ver_type,
-            } = **var;
+            let var_name;
+            let var_type;
+            match &**var {
+                Var::TermVar { name, ty } => {
+                    var_name = name.clone();
+                    var_type = ty.clone();
+                }
+                Var::TyVar { name: _, kind: _ } => unimplemented!(),
+            }
             if !scope.data.contains_key(&var_name) {
                 scope.data.insert(var_name.clone(), Default::default());
             }
@@ -225,10 +230,10 @@ fn generate_code<'ctx>(
                 .data
                 .get_mut(&var_name)
                 .unwrap()
-                .push((bound_val, ver_type));
+                .push((bound_val.clone(), var_type));
             builder.build_call(
-                system_functions.get(&SystemFunctions::RetainObj).unwrap(),
-                &[bound_val.ptr.into()],
+                *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
+                &[bound_val.ptr.clone().into()],
                 "retain_bound",
             );
             let expr_val = generate_code(
@@ -240,7 +245,7 @@ fn generate_code<'ctx>(
                 system_functions,
             );
             builder.build_call(
-                system_functions.get(&SystemFunctions::ReleaseObj),
+                *system_functions.get(&SystemFunctions::ReleaseObj).unwrap(),
                 &[bound_val.ptr.into()],
                 "release_bound",
             );
@@ -714,8 +719,8 @@ fn execute_main_module<'ctx>(module: &Module<'ctx>) {
 
 const DEBUG_MEMORY: bool = true;
 
-fn main() {
-    let program = mk_int_expr(-42);
+fn test_program(program: Arc<Expr>) {
+    // let program = mk_int_expr(-42);
 
     let context = Context::create();
     let module = context.create_module("main");
@@ -752,3 +757,20 @@ fn main() {
     module.print_to_file("ir").unwrap();
     execute_main_module(&module);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn int_literal() {
+        let program = mk_int_expr(-42);
+        test_program(program);
+    }
+    #[test]
+    fn let0() {
+        let program = mk_int_expr(42);
+        test_program(program);
+    }
+}
+
+fn main() {}
