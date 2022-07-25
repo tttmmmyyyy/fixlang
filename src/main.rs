@@ -115,19 +115,27 @@ fn mk_forall_type(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::ForAllTy(mk_tyvar_var("a"), ty))
 }
 
-fn mk_termvar(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
+fn mk_termvar_var(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
     Arc::new(Var::TermVar {
         name: String::from(var_name),
         ty: ty,
     })
 }
 
-fn mk_intvar(var_name: &str) -> Arc<Var> {
-    mk_termvar(var_name, mk_lit_type("Int"))
+fn mk_intvar_var(var_name: &str) -> Arc<Var> {
+    mk_termvar_var(var_name, mk_lit_type("Int"))
 }
 
 fn mk_let(var: Arc<Var>, bound: Arc<Expr>, expr: Arc<Expr>) -> Arc<Expr> {
     Arc::new(Expr::Let(var, bound, expr))
+}
+
+fn mk_var_expr(var_name: &str, ty: Arc<Type>) -> Arc<Expr> {
+    Arc::new(Expr::Var(mk_termvar_var(var_name, ty)))
+}
+
+fn mk_intvar_expr(var_name: &str) -> Arc<Expr> {
+    mk_var_expr(var_name, mk_lit_type("Int"))
 }
 
 static INT_TYPE: Lazy<Arc<Type>> = Lazy::new(|| mk_lit_type("Int"));
@@ -735,8 +743,6 @@ fn execute_main_module<'ctx>(module: &Module<'ctx>) {
 const DEBUG_MEMORY: bool = true;
 
 fn test_program(program: Arc<Expr>) {
-    // let program = mk_int_expr(-42);
-
     let context = Context::create();
     let module = context.create_module("main");
 
@@ -783,7 +789,39 @@ mod tests {
     }
     #[test]
     fn let0() {
-        let program = mk_let(mk_intvar("x"), mk_int_expr(-42), mk_int_expr(42));
+        let program = mk_let(mk_intvar_var("x"), mk_int_expr(-42), mk_int_expr(42));
+        test_program(program);
+    }
+    #[test]
+    fn let1() {
+        let program = mk_let(mk_intvar_var("x"), mk_int_expr(-42), mk_intvar_expr("x"));
+        test_program(program);
+    }
+    #[test]
+    fn let2() {
+        let program = mk_let(
+            mk_intvar_var("n"),
+            mk_int_expr(-42),
+            mk_let(mk_intvar_var("p"), mk_int_expr(42), mk_intvar_expr("n")),
+        );
+        test_program(program);
+    }
+    #[test]
+    fn let3() {
+        let program = mk_let(
+            mk_intvar_var("n"),
+            mk_int_expr(-42),
+            mk_let(mk_intvar_var("p"), mk_int_expr(42), mk_intvar_expr("p")),
+        );
+        test_program(program);
+    }
+    #[test]
+    fn let4() {
+        let program = mk_let(
+            mk_intvar_var("x"),
+            mk_int_expr(-42),
+            mk_let(mk_intvar_var("x"), mk_int_expr(42), mk_intvar_expr("x")),
+        );
         test_program(program);
     }
 }

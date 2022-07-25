@@ -76,6 +76,8 @@ entry:
   store void (i64*)* @dtor, void (i64*)** %ptr_to_dtor_field5, align 8
   %ptr_to_field6 = getelementptr inbounds { { i64, void (i64*)* }, i64 }, { { i64, void (i64*)* }, i64 }* %ptr_to_obj2, i32 0, i32 1
   store i64 42, i64* %ptr_to_field6, align 4
+  call void @retain_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj2)
+  call void @release_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj2)
   call void @release_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj)
   call void @print_int_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj2)
   ret i32 0
