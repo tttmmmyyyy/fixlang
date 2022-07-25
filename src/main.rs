@@ -229,6 +229,11 @@ fn generate_code<'ctx>(
                 scope,
                 system_functions,
             );
+            builder.build_call(
+                *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
+                &[bound_val.ptr.clone().into()],
+                "retain_bound",
+            );
             let var_name;
             let var_type;
             match &**var {
@@ -246,11 +251,6 @@ fn generate_code<'ctx>(
                 .get_mut(&var_name)
                 .unwrap()
                 .push((bound_val.clone(), var_type));
-            builder.build_call(
-                *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
-                &[bound_val.ptr.clone().into()],
-                "retain_bound",
-            );
             let expr_val = generate_code(
                 expr.clone(),
                 context,
@@ -259,6 +259,7 @@ fn generate_code<'ctx>(
                 scope,
                 system_functions,
             );
+            scope.data.get_mut(&var_name).unwrap().pop();
             builder.build_call(
                 *system_functions.get(&SystemFunctions::ReleaseObj).unwrap(),
                 &[bound_val.ptr.into()],
