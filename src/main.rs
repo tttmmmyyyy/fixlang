@@ -289,11 +289,6 @@ fn generate_code_literal<'ctx>(
                 );
                 let value = lit.value.parse::<i64>().unwrap();
                 let value = context.i64_type().const_int(value as u64, false);
-                let ptr_to_int_obj = ptr_to_int_obj.const_cast(
-                    ObjectType::int_obj_type()
-                        .to_struct_type(context)
-                        .ptr_type(AddressSpace::Generic),
-                );
                 build_set_field(context, builder, ptr_to_int_obj, 0, value);
                 ExprCode {
                     ptr: ptr_to_int_obj,
@@ -412,8 +407,7 @@ impl ObjectType {
                 ObjectFieldType::SubObject => {
                     let ptr_to_field = builder
                         .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_field")
-                        .unwrap()
-                        .const_cast(ptr_to_obj_type);
+                        .unwrap();
                     let release_func = *system_functions.get(&SystemFunctions::ReleaseObj).unwrap();
                     builder.build_call(release_func, &[ptr_to_field.into()], "release_subobj");
                 }
@@ -459,7 +453,7 @@ impl ObjectType {
                 ObjectFieldType::Function => {}
             }
         }
-        ptr_to_obj.const_cast(ptr_to_refcnt_type(context))
+        ptr_to_obj
     }
 }
 
@@ -645,6 +639,7 @@ fn generate_func_release_obj<'ctx>(
     let ptr_to_dtor = builder
         .build_load(ptr_to_dtor_ptr, "ptr_to_dtor")
         .into_pointer_value();
+
     let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
     builder.build_call(dtor_func, &[ptr_to_obj.into()], "call_dtor");
     builder.build_free(ptr_to_refcnt);
@@ -778,11 +773,11 @@ fn test_program(program: Arc<Expr>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // #[test]
-    // fn int_literal() {
-    //     let program = mk_int_expr(-42);
-    //     test_program(program);
-    // }
+    #[test]
+    fn int_literal() {
+        let program = mk_int_expr(-42);
+        test_program(program);
+    }
     #[test]
     fn let0() {
         let program = mk_let(mk_intvar("x"), mk_int_expr(-42), mk_int_expr(42));
