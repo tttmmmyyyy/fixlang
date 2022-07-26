@@ -213,6 +213,12 @@ fn generate_expr<'ctx>(
         Expr::Var(var) => match &**var {
             Var::TermVar { name, ty: _ } => {
                 let (code, _) = scope.data.get(name).unwrap().last().unwrap();
+                // We need to retain here since the pointer value is cloned.
+                builder.build_call(
+                    *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
+                    &[code.ptr.clone().into()],
+                    "retain_bound",
+                );
                 code.clone()
             }
             Var::TyVar { name: _, kind: _ } => unreachable!(),
@@ -299,6 +305,7 @@ fn generate_let<'ctx>(
     scope: &mut LocalVariables<'ctx>,
     system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
 ) -> ExprCode<'ctx> {
+    // We don't retain here because the result of generate_expr is considered to be "moved into" the variable.
     let bound_val = generate_expr(
         bound.clone(),
         context,
@@ -306,11 +313,6 @@ fn generate_let<'ctx>(
         builder,
         scope,
         system_functions,
-    );
-    builder.build_call(
-        *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
-        &[bound_val.ptr.clone().into()],
-        "retain_bound",
     );
     let var_name;
     let var_type;
@@ -489,7 +491,8 @@ impl ObjectType {
                     let ptr_to_refcnt = builder
                         .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
                         .unwrap();
-                    builder.build_store(ptr_to_refcnt, refcnt_type(context).const_zero());
+                    // Like to make_shared, the initial value of refcnt should be one.
+                    builder.build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
                     let ptr_to_dtor_field = builder
                         .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_field")
                         .unwrap();
@@ -732,9 +735,7 @@ fn generate_func_dtor<'ctx>(
     let bb = context.append_basic_block(func, "entry");
     let builder = context.create_builder();
     builder.position_at_end(bb);
-
     builder.build_return(None);
-
     func
 }
 
