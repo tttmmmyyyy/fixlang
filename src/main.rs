@@ -201,7 +201,7 @@ struct LocalVariables<'ctx> {
     data: HashMap<String, Vec<(ExprCode<'ctx>, Arc<Type>)>>,
 }
 
-fn generate_code<'ctx>(
+fn generate_expr<'ctx>(
     expr: Arc<Expr>,
     context: &'ctx Context,
     module: &Module<'ctx>,
@@ -231,7 +231,7 @@ fn generate_code<'ctx>(
         Expr::App(_, _) => todo!(),
         Expr::Lam(_, _) => todo!(),
         Expr::Let(var, bound, expr) => {
-            let bound_val = generate_code(
+            let bound_val = generate_expr(
                 bound.clone(),
                 context,
                 module,
@@ -261,7 +261,7 @@ fn generate_code<'ctx>(
                 .get_mut(&var_name)
                 .unwrap()
                 .push((bound_val.clone(), var_type));
-            let expr_val = generate_code(
+            let expr_val = generate_expr(
                 expr.clone(),
                 context,
                 module,
@@ -769,7 +769,7 @@ fn test_int_program(program: Arc<Expr>, answer: i32) {
     builder.position_at_end(entry_bb);
 
     let mut local_variables: LocalVariables = Default::default();
-    let program_result = generate_code(
+    let program_result = generate_expr(
         program,
         &context,
         &module,
