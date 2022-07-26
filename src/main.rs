@@ -201,85 +201,62 @@ struct LocalVariables<'ctx> {
     data: HashMap<String, Vec<(ExprCode<'ctx>, Arc<Type>)>>,
 }
 
-fn generate_expr<'ctx>(
+struct GenerationContext<'c, 'm, 'b> {
+    context: &'c Context,
+    module: &'m Module<'c>,
+    builder: &'b Builder<'c>,
+    scope: LocalVariables<'c>,
+    system_functions: HashMap<SystemFunctions, FunctionValue<'c>>,
+}
+
+fn generate_expr<'c, 'm, 'b>(
     expr: Arc<Expr>,
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    builder: &Builder<'ctx>,
-    scope: &mut LocalVariables<'ctx>,
-    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> ExprCode<'ctx> {
+    context: &mut GenerationContext<'c, 'm, 'b>,
+) -> ExprCode<'c> {
     match &*expr {
         Expr::Var(var) => match &**var {
             Var::TermVar { name, ty: _ } => {
-                let (code, _) = scope.data.get(name).unwrap().last().unwrap();
+                let (code, _) = context.scope.data.get(name).unwrap().last().unwrap();
                 // We need to retain here since the pointer value is cloned.
-                build_retain(code.ptr, context, builder, system_functions);
+                build_retain(code.ptr, context);
                 code.clone()
             }
             Var::TyVar { name: _, kind: _ } => unreachable!(),
         },
-        Expr::Lit(lit) => generate_literal(lit.clone(), context, module, builder, system_functions),
-        Expr::App(lambda, arg) => generate_app(
-            lambda.clone(),
-            arg.clone(),
-            context,
-            module,
-            builder,
-            scope,
-            system_functions,
-        ),
+        Expr::Lit(lit) => generate_literal(lit.clone(), context),
+        Expr::App(lambda, arg) => generate_app(lambda.clone(), arg.clone(), context),
         Expr::Lam(_, _) => todo!(),
-        Expr::Let(var, bound, expr) => generate_let(
-            var.clone(),
-            bound.clone(),
-            expr.clone(),
-            context,
-            module,
-            builder,
-            scope,
-            system_functions,
-        ),
+        Expr::Let(var, bound, expr) => {
+            generate_let(var.clone(), bound.clone(), expr.clone(), context)
+        }
         Expr::If(_, _, _) => todo!(),
         Expr::Type(_) => todo!(),
     }
 }
 
-fn generate_app<'ctx>(
+fn generate_app<'c, 'm, 'b>(
     lambda: Arc<Expr>,
     arg: Arc<Expr>,
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    builder: &Builder<'ctx>,
-    scope: &mut LocalVariables<'ctx>,
-    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> ExprCode<'ctx> {
-    let lambda = generate_expr(lambda, context, module, builder, scope, system_functions);
-    let arg = generate_expr(arg, context, module, builder, scope, system_functions);
-    build_release(arg.ptr, context, builder, system_functions);
-    build_release(lambda.ptr, context, builder, system_functions);
+    context: &mut GenerationContext<'c, 'm, 'b>,
+) -> ExprCode<'c> {
+    let lambda = generate_expr(lambda, context);
+    let arg = generate_expr(arg, context);
+    build_release(arg.ptr, context);
+    build_release(lambda.ptr, context);
     todo!()
 }
 
-fn generate_literal<'ctx>(
+fn generate_literal<'c, 'm, 'b>(
     lit: Arc<Literal>,
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    builder: &Builder<'ctx>,
-    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> ExprCode<'ctx> {
+    gc: &mut GenerationContext<'c, 'm, 'b>,
+) -> ExprCode<'c> {
     match &*lit.ty {
         Type::LitTy(ty) => match ty.value.as_str() {
             "Int" => {
-                let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(
-                    context,
-                    module,
-                    builder,
-                    system_functions,
-                );
+                let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
                 let value = lit.value.parse::<i64>().unwrap();
-                let value = context.i64_type().const_int(value as u64, false);
-                build_set_field(context, builder, ptr_to_int_obj, 0, value);
+                let value = gc.context.i64_type().const_int(value as u64, false);
+                build_set_field(ptr_to_int_obj, 0, value, gc);
                 ExprCode {
                     ptr: ptr_to_int_obj,
                 }
@@ -299,25 +276,14 @@ fn generate_literal<'ctx>(
     }
 }
 
-fn generate_let<'ctx>(
+fn generate_let<'c, 'm, 'b>(
     var: Arc<Var>,
     bound: Arc<Expr>,
     expr: Arc<Expr>,
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    builder: &Builder<'ctx>,
-    scope: &mut LocalVariables<'ctx>,
-    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> ExprCode<'ctx> {
+    gc: &mut GenerationContext<'c, 'm, 'b>,
+) -> ExprCode<'c> {
     // We don't retain here because the result of generate_expr is considered to be "moved into" the variable.
-    let bound_val = generate_expr(
-        bound.clone(),
-        context,
-        module,
-        builder,
-        scope,
-        system_functions,
-    );
+    let bound_val = generate_expr(bound.clone(), gc);
     let var_name;
     let var_type;
     match &*var {
@@ -327,84 +293,70 @@ fn generate_let<'ctx>(
         }
         Var::TyVar { name: _, kind: _ } => unimplemented!(),
     }
-    if !scope.data.contains_key(&var_name) {
-        scope.data.insert(var_name.clone(), Default::default());
+    if !gc.scope.data.contains_key(&var_name) {
+        gc.scope.data.insert(var_name.clone(), Default::default());
     }
-    scope
+    gc.scope
         .data
         .get_mut(&var_name)
         .unwrap()
         .push((bound_val.clone(), var_type));
-    let expr_val = generate_expr(
-        expr.clone(),
-        context,
-        module,
-        builder,
-        scope,
-        system_functions,
-    );
-    scope.data.get_mut(&var_name).unwrap().pop();
-    build_release(bound_val.ptr, context, builder, system_functions);
+    let expr_val = generate_expr(expr.clone(), gc);
+    gc.scope.data.get_mut(&var_name).unwrap().pop();
+    build_release(bound_val.ptr, gc);
     expr_val
 }
 
-fn generate_clear_object<'ctx>(
-    context: &'ctx Context,
-    builder: &Builder<'ctx>,
-    obj: PointerValue<'ctx>,
-) {
+fn generate_clear_object<'c, 'm, 'b>(obj: PointerValue<'c>, gc: &GenerationContext<'c, 'm, 'b>) {
+    let builder = gc.builder;
     let ptr_to_refcnt = builder.build_struct_gep(obj, 0, "ptr_to_refcnt").unwrap();
-    builder.build_store(ptr_to_refcnt, context.i64_type().const_zero());
+    builder.build_store(ptr_to_refcnt, gc.context.i64_type().const_zero());
 }
 
-fn build_set_field<'ctx, V>(
-    context: &'ctx Context,
-    builder: &Builder<'ctx>,
-    obj: PointerValue<'ctx>,
+fn build_set_field<'c, 'm, 'b, V>(
+    obj: PointerValue<'c>,
     index: u32,
     value: V,
+    gc: &GenerationContext<'c, 'm, 'b>,
 ) where
-    V: BasicValue<'ctx>,
+    V: BasicValue<'c>,
 {
+    let builder = gc.builder;
     let ptr_to_field = builder
         .build_struct_gep(obj, index + 1, "ptr_to_field")
         .unwrap();
     builder.build_store(ptr_to_field, value);
 }
 
-fn build_get_field<'ctx>(
-    context: &'ctx Context,
-    builder: &Builder<'ctx>,
-    obj: PointerValue<'ctx>,
+fn build_get_field<'c, 'm, 'b>(
+    obj: PointerValue<'c>,
     index: u32,
-) -> BasicValueEnum<'ctx> {
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> BasicValueEnum<'c> {
+    let builder = gc.builder;
     let ptr_to_field = builder
         .build_struct_gep(obj, index + 1, "ptr_to_field")
         .unwrap();
     builder.build_load(ptr_to_field, "field_value")
 }
 
-fn build_retain<'ctx>(
-    ptr_to_obj: PointerValue,
-    context: &'ctx Context,
-    builder: &Builder<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) {
-    builder.build_call(
-        *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
+fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, context: &GenerationContext<'c, 'm, 'b>) {
+    context.builder.build_call(
+        *context
+            .system_functions
+            .get(&SystemFunctions::RetainObj)
+            .unwrap(),
         &[ptr_to_obj.clone().into()],
         "retain",
     );
 }
 
-fn build_release<'ctx>(
-    ptr_to_obj: PointerValue,
-    context: &'ctx Context,
-    builder: &Builder<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) {
-    builder.build_call(
-        *system_functions.get(&SystemFunctions::ReleaseObj).unwrap(),
+fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, context: &GenerationContext<'c, 'm, 'b>) {
+    context.builder.build_call(
+        *context
+            .system_functions
+            .get(&SystemFunctions::ReleaseObj)
+            .unwrap(),
         &[ptr_to_obj.clone().into()],
         "release",
     );
@@ -455,24 +407,26 @@ impl ObjectType {
         Self::shared_obj_type(vec![ObjectFieldType::Int])
     }
 
-    fn generate_func_dtor<'ctx>(
+    fn generate_func_dtor<'c, 'm, 'b>(
         &self,
-        context: &'ctx Context,
-        module: &Module<'ctx>,
-        system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-    ) -> FunctionValue<'ctx> {
-        if system_functions.contains_key(&SystemFunctions::Dtor(self.clone())) {
-            return *system_functions
+        gc: &mut GenerationContext<'c, 'm, 'b>,
+    ) -> FunctionValue<'c> {
+        if gc
+            .system_functions
+            .contains_key(&SystemFunctions::Dtor(self.clone()))
+        {
+            return *gc
+                .system_functions
                 .get(&SystemFunctions::Dtor(self.clone()))
                 .unwrap();
         }
-        let struct_type = self.to_struct_type(context);
-        let void_type = context.void_type();
-        let ptr_to_obj_type = ptr_to_refcnt_type(context);
-        let func_type = dtor_type(context);
-        let func = module.add_function("dtor", func_type, None);
-        let bb = context.append_basic_block(func, "entry");
-        let builder = context.create_builder();
+        let struct_type = self.to_struct_type(gc.context);
+        let void_type = gc.context.void_type();
+        let ptr_to_obj_type = ptr_to_refcnt_type(gc.context);
+        let func_type = dtor_type(gc.context);
+        let func = gc.module.add_function("dtor", func_type, None);
+        let bb = gc.context.append_basic_block(func, "entry");
+        let builder = gc.context.create_builder();
         builder.position_at_end(bb);
         let ptr_to_obj = func
             .get_first_param()
@@ -485,7 +439,7 @@ impl ObjectType {
                     let ptr_to_field = builder
                         .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_field")
                         .unwrap();
-                    build_release(ptr_to_field, context, &builder, system_functions);
+                    build_release(ptr_to_field, &gc);
                 }
                 ObjectFieldType::ControlBlock => {}
                 ObjectFieldType::Int => {}
@@ -493,17 +447,17 @@ impl ObjectType {
             }
         }
         builder.build_return(None);
-        system_functions.insert(SystemFunctions::Dtor(self.clone()), func);
+        gc.system_functions
+            .insert(SystemFunctions::Dtor(self.clone()), func);
         func
     }
 
-    fn build_allocate_shared_obj<'ctx>(
+    fn build_allocate_shared_obj<'c, 'm, 'b>(
         &self,
-        context: &'ctx Context,
-        module: &Module<'ctx>,
-        builder: &Builder<'ctx>,
-        system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
-    ) -> PointerValue<'ctx> {
+        gc: &mut GenerationContext<'c, 'm, 'b>,
+    ) -> PointerValue<'c> {
+        let context = gc.context;
+        let builder = gc.builder;
         let struct_type = self.to_struct_type(context);
         // NOTE: Only once allocation is needed since we don't implement weak_ptr
         let ptr_to_obj = builder.build_malloc(struct_type, "ptr_to_obj").unwrap();
@@ -521,7 +475,7 @@ impl ObjectType {
                     let ptr_to_dtor_field = builder
                         .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_field")
                         .unwrap();
-                    let dtor = self.generate_func_dtor(context, module, system_functions);
+                    let dtor = self.generate_func_dtor(gc);
                     builder
                         .build_store(ptr_to_dtor_field, dtor.as_global_value().as_pointer_value());
                 }
@@ -597,11 +551,10 @@ enum SystemFunctions {
     Dtor(ObjectType),
 }
 
-fn generate_func_printf<'ctx>(
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> FunctionValue<'ctx> {
+fn generate_func_printf<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+    let context = gc.context;
+    let module = gc.module;
+
     let i32_type = context.i32_type();
     let i8_type = context.i8_type();
     let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::Generic);
@@ -612,11 +565,12 @@ fn generate_func_printf<'ctx>(
     func
 }
 
-fn generate_func_print_int_obj<'ctx>(
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> FunctionValue<'ctx> {
+fn generate_func_print_int_obj<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> FunctionValue<'c> {
+    let context = gc.context;
+    let module = gc.module;
+    let system_functions = &gc.system_functions;
     let void_type = context.void_type();
     let int_obj_type = ObjectType::int_obj_type().to_struct_type(context);
     let int_obj_ptr_type = int_obj_type.ptr_type(AddressSpace::Generic);
@@ -645,11 +599,9 @@ fn generate_func_print_int_obj<'ctx>(
     func
 }
 
-fn generate_func_retain_obj<'ctx>(
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> FunctionValue<'ctx> {
+fn generate_func_retain_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+    let context = gc.context;
+    let module = gc.module;
     let void_type = context.void_type();
     let ptr_to_refcnt_type = context.i64_type().ptr_type(AddressSpace::Generic);
     let func_type = void_type.fn_type(&[ptr_to_refcnt_type.into()], false);
@@ -671,11 +623,10 @@ fn generate_func_retain_obj<'ctx>(
     // TODO: Raise error when trying to retain object of refcnt is zero (which implies use of deallocate memory).
 }
 
-fn generate_func_release_obj<'ctx>(
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> FunctionValue<'ctx> {
+fn generate_func_release_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+    let context = gc.context;
+    let module = gc.module;
+    let system_functions = &gc.system_functions;
     let void_type = context.void_type();
     let ptr_to_refcnt_type = ptr_to_refcnt_type(context);
     let func_type = void_type.fn_type(&[ptr_to_refcnt_type.into()], false);
@@ -750,11 +701,11 @@ fn generate_func_release_obj<'ctx>(
     // TODO: Add code for leak detector
 }
 
-fn generate_func_empty_destructor<'ctx>(
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
-) -> FunctionValue<'ctx> {
+fn generate_func_empty_destructor<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> FunctionValue<'c> {
+    let context = gc.context;
+    let module = gc.module;
     let void_type = context.void_type();
     let ptr_to_obj_type = context.i64_type().ptr_type(AddressSpace::Generic);
     let func_type = void_type.fn_type(&[ptr_to_obj_type.into()], false);
@@ -767,13 +718,13 @@ fn generate_func_empty_destructor<'ctx>(
     func
 }
 
-fn generate_func_dtor<'ctx>(
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
-    obj_type: StructType<'ctx>,
+fn generate_func_dtor<'c, 'm, 'b>(
+    obj_type: StructType<'c>,
     subobj_indices: &[i32],
-) -> FunctionValue<'ctx> {
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> FunctionValue<'c> {
+    let context = gc.context;
+    let module = gc.module;
     let void_type = context.void_type();
     let ptr_to_obj_type = obj_type.ptr_type(AddressSpace::Generic);
     let func_type = void_type.fn_type(&[ptr_to_obj_type.into()], false);
@@ -785,32 +736,21 @@ fn generate_func_dtor<'ctx>(
     func
 }
 
-fn generate_system_functions<'ctx>(
-    context: &'ctx Context,
-    module: &Module<'ctx>,
-) -> HashMap<SystemFunctions, FunctionValue<'ctx>> {
-    let mut ret: HashMap<SystemFunctions, FunctionValue<'ctx>> = Default::default();
-    ret.insert(
+fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) {
+    gc.system_functions.insert(
         SystemFunctions::EmptyDestructor,
-        generate_func_empty_destructor(context, module, &ret),
+        generate_func_empty_destructor(gc),
     );
-    ret.insert(
-        SystemFunctions::Printf,
-        generate_func_printf(context, module, &ret),
-    );
-    ret.insert(
+    gc.system_functions
+        .insert(SystemFunctions::Printf, generate_func_printf(gc));
+    gc.system_functions.insert(
         SystemFunctions::PrintIntObj,
-        generate_func_print_int_obj(context, module, &ret),
+        generate_func_print_int_obj(gc),
     );
-    ret.insert(
-        SystemFunctions::RetainObj,
-        generate_func_retain_obj(context, module, &ret),
-    );
-    ret.insert(
-        SystemFunctions::ReleaseObj,
-        generate_func_release_obj(context, module, &ret),
-    );
-    ret
+    gc.system_functions
+        .insert(SystemFunctions::RetainObj, generate_func_retain_obj(gc));
+    gc.system_functions
+        .insert(SystemFunctions::ReleaseObj, generate_func_release_obj(gc));
 }
 
 fn execute_main_module<'ctx>(module: &Module<'ctx>) -> i32 {
@@ -830,33 +770,33 @@ const DEBUG_MEMORY: bool = true;
 fn test_int_program(program: Arc<Expr>, answer: i32) {
     let context = Context::create();
     let module = context.create_module("main");
-
-    let mut system_functions = generate_system_functions(&context, &module);
+    let builder = context.create_builder();
+    let mut scope: LocalVariables = Default::default();
+    let mut system_functions = Default::default();
+    let mut gc = GenerationContext {
+        context: &context,
+        module: &module,
+        builder: &builder,
+        scope,
+        system_functions,
+    };
+    generate_system_functions(&mut gc);
 
     let i32_type = context.i32_type();
     let main_fn_type = i32_type.fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
 
-    let builder = context.create_builder();
     let entry_bb = context.append_basic_block(main_function, "entry");
     builder.position_at_end(entry_bb);
 
-    let mut local_variables: LocalVariables = Default::default();
-    let program_result = generate_expr(
-        program,
-        &context,
-        &module,
-        &builder,
-        &mut local_variables,
-        &mut system_functions,
-    );
+    let program_result = generate_expr(program, &mut gc);
     // let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
     // builder.build_call(
     //     print_int_obj,
     //     &[program_result.ptr.into()],
     //     "print_program_result",
     // );
-    let value = build_get_field(&context, &builder, program_result.ptr, 0);
+    let value = build_get_field(program_result.ptr, 0, &gc);
     if let BasicValueEnum::IntValue(value) = value {
         builder.build_return(Some(&value));
     } else {
