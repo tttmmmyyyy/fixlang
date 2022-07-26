@@ -218,7 +218,13 @@ fn generate_expr<'ctx>(
             Var::TyVar { name: _, kind: _ } => unreachable!(),
         },
         Expr::Lit(lit) => generate_literal(lit.clone(), context, module, builder, system_functions),
-        Expr::App(_, _) => todo!(),
+        Expr::App(func, arg) => generate_app(
+            func.clone(),
+            arg.clone(),
+            context,
+            builder,
+            system_functions,
+        ),
         Expr::Lam(_, _) => todo!(),
         Expr::Let(var, bound, expr) => generate_let(
             var.clone(),
@@ -233,6 +239,16 @@ fn generate_expr<'ctx>(
         Expr::If(_, _, _) => todo!(),
         Expr::Type(_) => todo!(),
     }
+}
+
+fn generate_app<'ctx>(
+    func: Arc<Expr>,
+    arg: Arc<Expr>,
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) -> ExprCode<'ctx> {
+    todo!()
 }
 
 fn generate_literal<'ctx>(
