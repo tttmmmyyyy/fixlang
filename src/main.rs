@@ -214,21 +214,19 @@ fn generate_expr<'ctx>(
             Var::TermVar { name, ty: _ } => {
                 let (code, _) = scope.data.get(name).unwrap().last().unwrap();
                 // We need to retain here since the pointer value is cloned.
-                builder.build_call(
-                    *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
-                    &[code.ptr.clone().into()],
-                    "retain_bound",
-                );
+                build_retain(code.ptr, context, builder, system_functions);
                 code.clone()
             }
             Var::TyVar { name: _, kind: _ } => unreachable!(),
         },
         Expr::Lit(lit) => generate_literal(lit.clone(), context, module, builder, system_functions),
-        Expr::App(func, arg) => generate_app(
-            func.clone(),
+        Expr::App(lambda, arg) => generate_app(
+            lambda.clone(),
             arg.clone(),
             context,
+            module,
             builder,
+            scope,
             system_functions,
         ),
         Expr::Lam(_, _) => todo!(),
@@ -248,12 +246,18 @@ fn generate_expr<'ctx>(
 }
 
 fn generate_app<'ctx>(
-    func: Arc<Expr>,
+    lambda: Arc<Expr>,
     arg: Arc<Expr>,
     context: &'ctx Context,
+    module: &Module<'ctx>,
     builder: &Builder<'ctx>,
-    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+    scope: &mut LocalVariables<'ctx>,
+    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
 ) -> ExprCode<'ctx> {
+    let lambda = generate_expr(lambda, context, module, builder, scope, system_functions);
+    let arg = generate_expr(arg, context, module, builder, scope, system_functions);
+    build_release(arg.ptr, context, builder, system_functions);
+    build_release(lambda.ptr, context, builder, system_functions);
     todo!()
 }
 
@@ -340,11 +344,7 @@ fn generate_let<'ctx>(
         system_functions,
     );
     scope.data.get_mut(&var_name).unwrap().pop();
-    builder.build_call(
-        *system_functions.get(&SystemFunctions::ReleaseObj).unwrap(),
-        &[bound_val.ptr.into()],
-        "release_bound",
-    );
+    build_release(bound_val.ptr, context, builder, system_functions);
     expr_val
 }
 
@@ -384,21 +384,47 @@ fn build_get_field<'ctx>(
     builder.build_load(ptr_to_field, "field_value")
 }
 
+fn build_retain<'ctx>(
+    ptr_to_obj: PointerValue,
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) {
+    builder.build_call(
+        *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
+        &[ptr_to_obj.clone().into()],
+        "retain",
+    );
+}
+
+fn build_release<'ctx>(
+    ptr_to_obj: PointerValue,
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    system_functions: &HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) {
+    builder.build_call(
+        *system_functions.get(&SystemFunctions::ReleaseObj).unwrap(),
+        &[ptr_to_obj.clone().into()],
+        "release",
+    );
+}
+
 #[derive(Eq, Hash, PartialEq, Clone)]
 enum ObjectFieldType {
     ControlBlock,
-    Int,
+    LambdaFunction,
     SubObject,
-    Function, // for lambda
+    Int,
 }
 
 impl ObjectFieldType {
     fn to_basic_type<'ctx>(&self, context: &'ctx Context) -> BasicTypeEnum<'ctx> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(context).into(),
-            ObjectFieldType::Int => context.i64_type().into(),
+            ObjectFieldType::LambdaFunction => ptr_to_lambda_function_type(context).into(),
             ObjectFieldType::SubObject => refcnt_type(context).into(),
-            ObjectFieldType::Function => unimplemented!(),
+            ObjectFieldType::Int => context.i64_type().into(),
         }
     }
 }
@@ -459,12 +485,11 @@ impl ObjectType {
                     let ptr_to_field = builder
                         .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_field")
                         .unwrap();
-                    let release_func = *system_functions.get(&SystemFunctions::ReleaseObj).unwrap();
-                    builder.build_call(release_func, &[ptr_to_field.into()], "release_subobj");
+                    build_release(ptr_to_field, context, &builder, system_functions);
                 }
                 ObjectFieldType::ControlBlock => {}
                 ObjectFieldType::Int => {}
-                ObjectFieldType::Function => {}
+                ObjectFieldType::LambdaFunction => {}
             }
         }
         builder.build_return(None);
@@ -491,7 +516,7 @@ impl ObjectType {
                     let ptr_to_refcnt = builder
                         .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
                         .unwrap();
-                    // Like to make_shared, the initial value of refcnt should be one.
+                    // The initial value of refcnt should be one (as std::make_shared of C++ does).
                     builder.build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
                     let ptr_to_dtor_field = builder
                         .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_field")
@@ -502,7 +527,7 @@ impl ObjectType {
                 }
                 ObjectFieldType::Int => {}
                 ObjectFieldType::SubObject => {}
-                ObjectFieldType::Function => {}
+                ObjectFieldType::LambdaFunction => {}
             }
         }
         ptr_to_obj
@@ -515,6 +540,11 @@ fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
 
 fn ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     refcnt_type(context).ptr_type(AddressSpace::Generic)
+}
+
+// TODO: Change some use of "ptr_to_refcnt_type" to "ptr_to_object_type"
+fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
+    context.i8_type().ptr_type(AddressSpace::Generic)
 }
 
 fn dtor_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
@@ -540,6 +570,21 @@ fn control_block_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
 
 fn ptr_to_control_block_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     control_block_type(context).ptr_type(AddressSpace::Generic)
+}
+
+fn lambda_function_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
+    // A function that takes argument and context (=lambda object itself).
+    ptr_to_object_type(context).fn_type(
+        &[
+            ptr_to_object_type(context).into(),
+            ptr_to_object_type(context).into(),
+        ],
+        false,
+    )
+}
+
+fn ptr_to_lambda_function_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
+    lambda_function_type(context).ptr_type(AddressSpace::Generic)
 }
 
 #[derive(Eq, Hash, PartialEq)]
