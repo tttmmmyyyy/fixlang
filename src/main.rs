@@ -4,7 +4,9 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructType};
-use inkwell::values::{BasicValue, CallableValue, FunctionValue, PointerValue};
+use inkwell::values::{
+    BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
+};
 use inkwell::{AddressSpace, OptimizationLevel};
 use once_cell::sync::Lazy;
 use std::alloc::System;
@@ -342,6 +344,18 @@ fn build_set_field<'ctx, V>(
         .build_struct_gep(obj, index + 1, "ptr_to_field")
         .unwrap();
     builder.build_store(ptr_to_field, value);
+}
+
+fn build_get_field<'ctx>(
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    obj: PointerValue<'ctx>,
+    index: u32,
+) -> BasicValueEnum<'ctx> {
+    let ptr_to_field = builder
+        .build_struct_gep(obj, index + 1, "ptr_to_field")
+        .unwrap();
+    builder.build_load(ptr_to_field, "field_value")
 }
 
 #[derive(Eq, Hash, PartialEq, Clone)]
@@ -728,21 +742,21 @@ fn generate_system_functions<'ctx>(
     ret
 }
 
-fn execute_main_module<'ctx>(module: &Module<'ctx>) {
+fn execute_main_module<'ctx>(module: &Module<'ctx>) -> i32 {
     let execution_engine = module
         .create_jit_execution_engine(OptimizationLevel::None)
         .unwrap();
     unsafe {
         let func = execution_engine
-            .get_function::<unsafe extern "C" fn()>("main")
+            .get_function::<unsafe extern "C" fn() -> i32>("main")
             .unwrap();
-        func.call();
+        func.call()
     }
 }
 
 const DEBUG_MEMORY: bool = true;
 
-fn test_program(program: Arc<Expr>) {
+fn test_int_program(program: Arc<Expr>, answer: i32) {
     let context = Context::create();
     let module = context.create_module("main");
 
@@ -765,18 +779,22 @@ fn test_program(program: Arc<Expr>) {
         &mut local_variables,
         &mut system_functions,
     );
-
-    let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
-    builder.build_call(
-        print_int_obj,
-        &[program_result.ptr.into()],
-        "print_program_result",
-    );
-
-    builder.build_return(Some(&i32_type.const_int(0, false)));
+    // let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
+    // builder.build_call(
+    //     print_int_obj,
+    //     &[program_result.ptr.into()],
+    //     "print_program_result",
+    // );
+    let value = build_get_field(&context, &builder, program_result.ptr, 0);
+    if let BasicValueEnum::IntValue(value) = value {
+        builder.build_return(Some(&value));
+    } else {
+        unreachable!()
+        // builder.build_return(Some(&i32_type.const_int(0, false)));
+    }
 
     module.print_to_file("ir").unwrap();
-    execute_main_module(&module);
+    assert_eq!(execute_main_module(&module), answer);
 }
 
 #[cfg(test)]
@@ -785,17 +803,17 @@ mod tests {
     #[test]
     fn int_literal() {
         let program = mk_int_expr(-42);
-        test_program(program);
+        test_int_program(program, -42);
     }
     #[test]
     fn let0() {
         let program = mk_let(mk_intvar_var("x"), mk_int_expr(-42), mk_int_expr(42));
-        test_program(program);
+        test_int_program(program, 42);
     }
     #[test]
     fn let1() {
         let program = mk_let(mk_intvar_var("x"), mk_int_expr(-42), mk_intvar_expr("x"));
-        test_program(program);
+        test_int_program(program, -42);
     }
     #[test]
     fn let2() {
@@ -804,7 +822,7 @@ mod tests {
             mk_int_expr(-42),
             mk_let(mk_intvar_var("p"), mk_int_expr(42), mk_intvar_expr("n")),
         );
-        test_program(program);
+        test_int_program(program, -42);
     }
     #[test]
     fn let3() {
@@ -813,7 +831,7 @@ mod tests {
             mk_int_expr(-42),
             mk_let(mk_intvar_var("p"), mk_int_expr(42), mk_intvar_expr("p")),
         );
-        test_program(program);
+        test_int_program(program, 42);
     }
     #[test]
     fn let4() {
@@ -822,7 +840,7 @@ mod tests {
             mk_int_expr(-42),
             mk_let(mk_intvar_var("x"), mk_int_expr(42), mk_intvar_expr("x")),
         );
-        test_program(program);
+        test_int_program(program, 42);
     }
 }
 

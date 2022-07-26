@@ -79,8 +79,9 @@ entry:
   call void @retain_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj2)
   call void @release_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj2)
   call void @release_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj)
-  call void @print_int_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj2)
-  ret i32 0
+  %ptr_to_field7 = getelementptr inbounds { { i64, void (i64*)* }, i64 }, { { i64, void (i64*)* }, i64 }* %ptr_to_obj2, i32 0, i32 1
+  %field_value = load i64, i64* %ptr_to_field7, align 4
+  ret i64 %field_value
 }
 
 declare noalias i8* @malloc(i32)
