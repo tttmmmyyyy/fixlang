@@ -866,6 +866,15 @@ mod tests {
         );
         test_int_program(program, 42);
     }
+    #[test]
+    fn let5() {
+        let program = mk_let(
+            mk_intvar_var("x"),
+            mk_let(mk_intvar_var("y"), mk_int_expr(42), mk_intvar_expr("y")),
+            mk_intvar_expr("x"),
+        );
+        test_int_program(program, 42);
+    }
 }
 
 fn main() {}

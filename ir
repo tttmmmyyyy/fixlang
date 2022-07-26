@@ -65,22 +65,13 @@ entry:
   %ptr_to_dtor_field = getelementptr inbounds { i64, void (i64*)* }, { i64, void (i64*)* }* %ptr_to_control_block, i32 0, i32 1
   store void (i64*)* @dtor, void (i64*)** %ptr_to_dtor_field, align 8
   %ptr_to_field = getelementptr inbounds { { i64, void (i64*)* }, i64 }, { { i64, void (i64*)* }, i64 }* %ptr_to_obj, i32 0, i32 1
-  store i64 -42, i64* %ptr_to_field, align 4
+  store i64 42, i64* %ptr_to_field, align 4
   call void @retain_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj)
-  %malloccall1 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i64*)* }, i64 }* getelementptr ({ { i64, void (i64*)* }, i64 }, { { i64, void (i64*)* }, i64 }* null, i32 1) to i32))
-  %ptr_to_obj2 = bitcast i8* %malloccall1 to { { i64, void (i64*)* }, i64 }*
-  %ptr_to_control_block3 = getelementptr inbounds { { i64, void (i64*)* }, i64 }, { { i64, void (i64*)* }, i64 }* %ptr_to_obj2, i32 0, i32 0
-  %ptr_to_refcnt4 = getelementptr inbounds { i64, void (i64*)* }, { i64, void (i64*)* }* %ptr_to_control_block3, i32 0, i32 0
-  store i64 0, i64* %ptr_to_refcnt4, align 4
-  %ptr_to_dtor_field5 = getelementptr inbounds { i64, void (i64*)* }, { i64, void (i64*)* }* %ptr_to_control_block3, i32 0, i32 1
-  store void (i64*)* @dtor, void (i64*)** %ptr_to_dtor_field5, align 8
-  %ptr_to_field6 = getelementptr inbounds { { i64, void (i64*)* }, i64 }, { { i64, void (i64*)* }, i64 }* %ptr_to_obj2, i32 0, i32 1
-  store i64 42, i64* %ptr_to_field6, align 4
-  call void @retain_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj2)
-  call void @release_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj2)
   call void @release_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj)
-  %ptr_to_field7 = getelementptr inbounds { { i64, void (i64*)* }, i64 }, { { i64, void (i64*)* }, i64 }* %ptr_to_obj2, i32 0, i32 1
-  %field_value = load i64, i64* %ptr_to_field7, align 4
+  call void @retain_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj)
+  call void @release_obj({ { i64, void (i64*)* }, i64 }* %ptr_to_obj)
+  %ptr_to_field1 = getelementptr inbounds { { i64, void (i64*)* }, i64 }, { { i64, void (i64*)* }, i64 }* %ptr_to_obj, i32 0, i32 1
+  %field_value = load i64, i64* %ptr_to_field1, align 4
   ret i64 %field_value
 }
 
