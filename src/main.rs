@@ -771,14 +771,12 @@ fn test_int_program(program: Arc<Expr>, answer: i32) {
     let context = Context::create();
     let module = context.create_module("main");
     let builder = context.create_builder();
-    let mut scope: LocalVariables = Default::default();
-    let mut system_functions = Default::default();
     let mut gc = GenerationContext {
         context: &context,
         module: &module,
         builder: &builder,
-        scope,
-        system_functions,
+        scope: Default::default(),
+        system_functions: Default::default(),
     };
     generate_system_functions(&mut gc);
 
