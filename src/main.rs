@@ -227,9 +227,7 @@ fn generate_code<'ctx>(
             }
             Var::TyVar { name: _, kind: _ } => unreachable!(),
         },
-        Expr::Lit(lit) => {
-            generate_code_literal(lit.clone(), context, module, builder, system_functions)
-        }
+        Expr::Lit(lit) => generate_literal(lit.clone(), context, module, builder, system_functions),
         Expr::App(_, _) => todo!(),
         Expr::Lam(_, _) => todo!(),
         Expr::Let(var, bound, expr) => {
@@ -284,7 +282,7 @@ fn generate_code<'ctx>(
     }
 }
 
-fn generate_code_literal<'ctx>(
+fn generate_literal<'ctx>(
     lit: Arc<Literal>,
     context: &'ctx Context,
     module: &Module<'ctx>,
