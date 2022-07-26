@@ -209,16 +209,6 @@ fn generate_expr<'ctx>(
     scope: &mut LocalVariables<'ctx>,
     system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
 ) -> ExprCode<'ctx> {
-    // enum Expr {
-    //     Var(Arc<Var>),
-    //     Lit(Arc<Literal>),
-    //     App(Arc<Expr>, Arc<Expr>),
-    //     Lam(Arc<Var>, Arc<Expr>),
-    //     Let(Arc<Var>, Arc<Expr>, Arc<Expr>),
-    //     // Caseはあとで
-    //     If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
-    //     Type(Arc<Type>),
-    // }
     match &*expr {
         Expr::Var(var) => match &**var {
             Var::TermVar { name, ty: _ } => {
@@ -230,53 +220,16 @@ fn generate_expr<'ctx>(
         Expr::Lit(lit) => generate_literal(lit.clone(), context, module, builder, system_functions),
         Expr::App(_, _) => todo!(),
         Expr::Lam(_, _) => todo!(),
-        Expr::Let(var, bound, expr) => {
-            let bound_val = generate_expr(
-                bound.clone(),
-                context,
-                module,
-                builder,
-                scope,
-                system_functions,
-            );
-            builder.build_call(
-                *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
-                &[bound_val.ptr.clone().into()],
-                "retain_bound",
-            );
-            let var_name;
-            let var_type;
-            match &**var {
-                Var::TermVar { name, ty } => {
-                    var_name = name.clone();
-                    var_type = ty.clone();
-                }
-                Var::TyVar { name: _, kind: _ } => unimplemented!(),
-            }
-            if !scope.data.contains_key(&var_name) {
-                scope.data.insert(var_name.clone(), Default::default());
-            }
-            scope
-                .data
-                .get_mut(&var_name)
-                .unwrap()
-                .push((bound_val.clone(), var_type));
-            let expr_val = generate_expr(
-                expr.clone(),
-                context,
-                module,
-                builder,
-                scope,
-                system_functions,
-            );
-            scope.data.get_mut(&var_name).unwrap().pop();
-            builder.build_call(
-                *system_functions.get(&SystemFunctions::ReleaseObj).unwrap(),
-                &[bound_val.ptr.into()],
-                "release_bound",
-            );
-            expr_val
-        }
+        Expr::Let(var, bound, expr) => generate_let(
+            var.clone(),
+            bound.clone(),
+            expr.clone(),
+            context,
+            module,
+            builder,
+            scope,
+            system_functions,
+        ),
         Expr::If(_, _, _) => todo!(),
         Expr::Type(_) => todo!(),
     }
@@ -318,6 +271,63 @@ fn generate_literal<'ctx>(
         Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."), // e.g., fix
         Type::ForAllTy(_, _) => panic!("Type of given Literal is ForAllTy (should be TyLit)."),
     }
+}
+
+fn generate_let<'ctx>(
+    var: Arc<Var>,
+    bound: Arc<Expr>,
+    expr: Arc<Expr>,
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    builder: &Builder<'ctx>,
+    scope: &mut LocalVariables<'ctx>,
+    system_functions: &mut HashMap<SystemFunctions, FunctionValue<'ctx>>,
+) -> ExprCode<'ctx> {
+    let bound_val = generate_expr(
+        bound.clone(),
+        context,
+        module,
+        builder,
+        scope,
+        system_functions,
+    );
+    builder.build_call(
+        *system_functions.get(&SystemFunctions::RetainObj).unwrap(),
+        &[bound_val.ptr.clone().into()],
+        "retain_bound",
+    );
+    let var_name;
+    let var_type;
+    match &*var {
+        Var::TermVar { name, ty } => {
+            var_name = name.clone();
+            var_type = ty.clone();
+        }
+        Var::TyVar { name: _, kind: _ } => unimplemented!(),
+    }
+    if !scope.data.contains_key(&var_name) {
+        scope.data.insert(var_name.clone(), Default::default());
+    }
+    scope
+        .data
+        .get_mut(&var_name)
+        .unwrap()
+        .push((bound_val.clone(), var_type));
+    let expr_val = generate_expr(
+        expr.clone(),
+        context,
+        module,
+        builder,
+        scope,
+        system_functions,
+    );
+    scope.data.get_mut(&var_name).unwrap().pop();
+    builder.build_call(
+        *system_functions.get(&SystemFunctions::ReleaseObj).unwrap(),
+        &[bound_val.ptr.into()],
+        "release_bound",
+    );
+    expr_val
 }
 
 fn generate_clear_object<'ctx>(
