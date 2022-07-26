@@ -623,6 +623,7 @@ fn generate_func_retain_obj<'ctx>(
     retain_func
     // TODO: Add fence instruction for incrementing refcnt
     // TODO: Add code for leak detector
+    // TODO: Raise error when trying to retain object of refcnt is zero (which implies use of deallocate memory).
 }
 
 fn generate_func_release_obj<'ctx>(
