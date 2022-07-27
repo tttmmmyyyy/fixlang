@@ -237,13 +237,22 @@ fn generate_expr<'c, 'm, 'b>(
 fn generate_app<'c, 'm, 'b>(
     lambda: Arc<Expr>,
     arg: Arc<Expr>,
-    context: &mut GenerationContext<'c, 'm, 'b>,
+    gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    let lambda = generate_expr(lambda, context);
-    let arg = generate_expr(arg, context);
-    build_release(arg.ptr, context);
-    build_release(lambda.ptr, context);
-    todo!()
+    let builder = gc.builder;
+    let lambda = generate_expr(lambda, gc);
+    let arg = generate_expr(arg, gc);
+    let ptr_to_func = build_ptr_to_func_of_lambda(lambda.ptr, gc);
+    let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
+    let ret = builder.build_call(
+        lambda_func,
+        &[arg.ptr.into(), lambda.ptr.into()],
+        "call_lambda",
+    );
+    let ret = ret.try_as_basic_value().unwrap_left().into_pointer_value();
+    // TODO: convert ret into appropriate type.
+    ExprCode { ptr: ret }
+    // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
 }
 
 fn generate_literal<'c, 'm, 'b>(
@@ -338,6 +347,13 @@ fn build_get_field<'c, 'm, 'b>(
         .build_struct_gep(obj, index + 1, "ptr_to_field")
         .unwrap();
     builder.build_load(ptr_to_field, "field_value")
+}
+
+fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
+    obj: PointerValue<'c>,
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> PointerValue<'c> {
+    build_get_field(obj, 0, gc).into_pointer_value()
 }
 
 fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, context: &GenerationContext<'c, 'm, 'b>) {
@@ -496,7 +512,7 @@ fn ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     refcnt_type(context).ptr_type(AddressSpace::Generic)
 }
 
-// TODO: Change some use of "ptr_to_refcnt_type" to "ptr_to_object_type"
+// TODO: reomve use of this
 fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     context.i8_type().ptr_type(AddressSpace::Generic)
 }
