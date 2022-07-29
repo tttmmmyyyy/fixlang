@@ -51,21 +51,25 @@ struct Literal {
     ty: Arc<Type>,
 }
 
+#[derive(Eq, PartialEq)]
 enum Var {
     TermVar { name: String, ty: Arc<Type> },
     TyVar { name: String, kind: Arc<Kind> },
 }
 
+#[derive(Eq, PartialEq)]
 enum Kind {
     Star,
     Arrow(Arc<Kind>, Arc<Kind>),
 }
 
+#[derive(Eq, PartialEq)]
 struct TyLit {
     value: String,
     kind: Arc<Kind>,
 }
 
+#[derive(Eq, PartialEq)]
 enum Type {
     TyVar(Arc<Var>),
     LitTy(Arc<TyLit>),
@@ -75,6 +79,7 @@ enum Type {
     ForAllTy(Arc<Var>, Arc<Type>),
 }
 
+#[derive(Eq, PartialEq)]
 enum TyCon {
     Pair,
 }
@@ -250,7 +255,6 @@ fn generate_app<'c, 'm, 'b>(
         "call_lambda",
     );
     let ret = ret.try_as_basic_value().unwrap_left().into_pointer_value();
-    // TODO: convert ret into appropriate type.
     ExprCode { ptr: ret }
     // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
 }
