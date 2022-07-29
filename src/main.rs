@@ -84,16 +84,7 @@ enum TyCon {
     Pair,
 }
 
-fn mk_lit_expr(value: &str, ty: Arc<Type>) -> Arc<Expr> {
-    let value = String::from(value);
-    Arc::new(Expr::Lit(Arc::new(Literal { value, ty })))
-}
-
-fn mk_int_expr(val: i32) -> Arc<Expr> {
-    mk_lit_expr(val.to_string().as_str(), mk_lit_type("Int"))
-}
-
-fn mk_lit_type(value: &str) -> Arc<Type> {
+fn lit_ty(value: &str) -> Arc<Type> {
     let value = String::from(value);
     Arc::new(Type::LitTy(Arc::new(TyLit {
         value,
@@ -101,78 +92,87 @@ fn mk_lit_type(value: &str) -> Arc<Type> {
     })))
 }
 
-fn mk_arrow_type(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
+fn lambda_ty(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::FunTy(src, dst))
 }
 
-static KIND_STAR: Lazy<Arc<Kind>> = Lazy::new(|| Arc::new(Kind::Star));
-
-fn mk_tyvar_var(var_name: &str) -> Arc<Var> {
+fn tyvar_var(var_name: &str) -> Arc<Var> {
     Arc::new(Var::TyVar {
         name: String::from(var_name),
         kind: KIND_STAR.clone(),
     })
 }
 
-fn mk_tyvar_type(var_name: &str) -> Arc<Type> {
-    Arc::new(Type::TyVar(mk_tyvar_var(var_name)))
+fn tyvar_ty(var_name: &str) -> Arc<Type> {
+    Arc::new(Type::TyVar(tyvar_var(var_name)))
 }
 
-fn mk_forall_type(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::ForAllTy(mk_tyvar_var("a"), ty))
+fn forall_ty(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
+    Arc::new(Type::ForAllTy(tyvar_var("a"), ty))
 }
 
-fn mk_termvar_var(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
+fn termvar_var(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
     Arc::new(Var::TermVar {
         name: String::from(var_name),
         ty: ty,
     })
 }
 
-fn mk_intvar_var(var_name: &str) -> Arc<Var> {
-    mk_termvar_var(var_name, mk_lit_type("Int"))
+fn intvar_var(var_name: &str) -> Arc<Var> {
+    termvar_var(var_name, INT_TYPE.clone())
 }
 
-fn mk_let(var: Arc<Var>, bound: Arc<Expr>, expr: Arc<Expr>) -> Arc<Expr> {
+fn lit(value: &str, ty: Arc<Type>) -> Arc<Expr> {
+    let value = String::from(value);
+    Arc::new(Expr::Lit(Arc::new(Literal { value, ty })))
+}
+
+fn int(val: i32) -> Arc<Expr> {
+    lit(val.to_string().as_str(), INT_TYPE.clone())
+}
+
+fn let_in(var: Arc<Var>, bound: Arc<Expr>, expr: Arc<Expr>) -> Arc<Expr> {
     Arc::new(Expr::Let(var, bound, expr))
 }
 
-fn mk_var_expr(var_name: &str, ty: Arc<Type>) -> Arc<Expr> {
-    Arc::new(Expr::Var(mk_termvar_var(var_name, ty)))
+fn var(var_name: &str, ty: Arc<Type>) -> Arc<Expr> {
+    Arc::new(Expr::Var(termvar_var(var_name, ty)))
 }
 
-fn mk_intvar_expr(var_name: &str) -> Arc<Expr> {
-    mk_var_expr(var_name, mk_lit_type("Int"))
+fn intvar(var_name: &str) -> Arc<Expr> {
+    var(var_name, INT_TYPE.clone())
 }
 
-static INT_TYPE: Lazy<Arc<Type>> = Lazy::new(|| mk_lit_type("Int"));
+static KIND_STAR: Lazy<Arc<Kind>> = Lazy::new(|| Arc::new(Kind::Star));
+
+static INT_TYPE: Lazy<Arc<Type>> = Lazy::new(|| lit_ty("Int"));
 
 static FIX_INT_INT: Lazy<Arc<Expr>> = Lazy::new(|| {
-    mk_lit_expr(
+    lit(
         "fixIntInt",
-        mk_arrow_type(
-            mk_arrow_type(
-                mk_arrow_type(INT_TYPE.clone(), INT_TYPE.clone()),
-                mk_arrow_type(INT_TYPE.clone(), INT_TYPE.clone()),
+        lambda_ty(
+            lambda_ty(
+                lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
+                lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
             ),
-            mk_arrow_type(INT_TYPE.clone(), INT_TYPE.clone()),
+            lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
         ),
     )
 });
 
 static FIX_A_TO_B: Lazy<Arc<Expr>> = Lazy::new(|| {
-    mk_lit_expr(
+    lit(
         "fix",
-        mk_forall_type(
+        forall_ty(
             "a",
-            mk_forall_type(
+            forall_ty(
                 "b",
-                mk_arrow_type(
-                    mk_arrow_type(
-                        mk_arrow_type(mk_tyvar_type("a"), mk_tyvar_type("b")),
-                        mk_arrow_type(mk_tyvar_type("a"), mk_tyvar_type("b")),
+                lambda_ty(
+                    lambda_ty(
+                        lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
+                        lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
                     ),
-                    mk_arrow_type(mk_tyvar_type("a"), mk_tyvar_type("b")),
+                    lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
                 ),
             ),
         ),
@@ -831,52 +831,52 @@ mod tests {
     use super::*;
     #[test]
     fn int_literal() {
-        let program = mk_int_expr(-42);
+        let program = int(-42);
         test_int_program(program, -42);
     }
     #[test]
     fn let0() {
-        let program = mk_let(mk_intvar_var("x"), mk_int_expr(-42), mk_int_expr(42));
+        let program = let_in(intvar_var("x"), int(-42), int(42));
         test_int_program(program, 42);
     }
     #[test]
     fn let1() {
-        let program = mk_let(mk_intvar_var("x"), mk_int_expr(-42), mk_intvar_expr("x"));
+        let program = let_in(intvar_var("x"), int(-42), intvar("x"));
         test_int_program(program, -42);
     }
     #[test]
     fn let2() {
-        let program = mk_let(
-            mk_intvar_var("n"),
-            mk_int_expr(-42),
-            mk_let(mk_intvar_var("p"), mk_int_expr(42), mk_intvar_expr("n")),
+        let program = let_in(
+            intvar_var("n"),
+            int(-42),
+            let_in(intvar_var("p"), int(42), intvar("n")),
         );
         test_int_program(program, -42);
     }
     #[test]
     fn let3() {
-        let program = mk_let(
-            mk_intvar_var("n"),
-            mk_int_expr(-42),
-            mk_let(mk_intvar_var("p"), mk_int_expr(42), mk_intvar_expr("p")),
+        let program = let_in(
+            intvar_var("n"),
+            int(-42),
+            let_in(intvar_var("p"), int(42), intvar("p")),
         );
         test_int_program(program, 42);
     }
     #[test]
     fn let4() {
-        let program = mk_let(
-            mk_intvar_var("x"),
-            mk_int_expr(-42),
-            mk_let(mk_intvar_var("x"), mk_int_expr(42), mk_intvar_expr("x")),
+        let program = let_in(
+            intvar_var("x"),
+            int(-42),
+            let_in(intvar_var("x"), int(42), intvar("x")),
         );
         test_int_program(program, 42);
     }
     #[test]
     fn let5() {
-        let program = mk_let(
-            mk_intvar_var("x"),
-            mk_let(mk_intvar_var("y"), mk_int_expr(42), mk_intvar_expr("y")),
-            mk_intvar_expr("x"),
+        let program = let_in(
+            intvar_var("x"),
+            let_in(intvar_var("y"), int(42), intvar("y")),
+            intvar("x"),
         );
         test_int_program(program, 42);
     }
