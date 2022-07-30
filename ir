@@ -114,7 +114,8 @@ entry:
 
 define i8* @lambda.1(i8* %0, i8* %1) {
 entry:
-  %field_value = load i64, i64* getelementptr inbounds ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* bitcast (i8** getelementptr inbounds ({ { i64, void (i8*)* }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8* }* bitcast (i8* %1 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8* }*), i32 0, i32 2) to { { i64, void (i8*)* }, i64 }*), i32 0, i32 1), align 4
+  %ptr_to_captured_obj = load i8*, i8** getelementptr inbounds ({ { i64, void (i8*)* }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8* }* bitcast (i8* %1 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8* }*), i32 0, i32 2), align 8
+  %field_value = load i64, i64* getelementptr inbounds ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* bitcast (i8* %ptr_to_captured_obj to { { i64, void (i8*)* }, i64 }*), i32 0, i32 1), align 4
   %field_value1 = load i64, i64* getelementptr inbounds ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* bitcast (i8* %0 to { { i64, void (i8*)* }, i64 }*), i32 0, i32 1), align 4
   %add = add i64 %field_value, %field_value1
   %malloccall = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i64 }* getelementptr ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* null, i32 1) to i32))

@@ -521,9 +521,12 @@ fn generate_lam<'c, 'm, 'b>(
         let closure_obj_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
         let closure_ptr = closure_obj_ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
         for (i, cap_name) in captured_names.iter().enumerate() {
-            let cap_ptr = builder
+            let ptr_to_cap_ptr = builder
                 .build_struct_gep(closure_ptr, i as u32 + 2, "ptr_to_captured_field")
                 .unwrap();
+            let cap_ptr = builder
+                .build_load(ptr_to_cap_ptr, "ptr_to_captured_obj")
+                .into_pointer_value();
             let (_, cap_ty) = gc.scope.get(cap_name);
             scope.push(cap_name, &ExprCode { ptr: cap_ptr }, &cap_ty);
         }
@@ -1202,13 +1205,13 @@ mod tests {
 
 fn main() {
     tests::test9();
-    // tests::test8();
-    // tests::test7();
-    // tests::test6();
-    // tests::test5();
-    // tests::test4();
-    // tests::test3();
-    // tests::test2();
-    // tests::test1();
-    // tests::test0();
+    tests::test8();
+    tests::test7();
+    tests::test6();
+    // tests::test5(); // fail
+    // tests::test4(); // fail
+    tests::test3();
+    // tests::test2(); // fail
+    // tests::test1(); // fail
+    tests::test0();
 }
