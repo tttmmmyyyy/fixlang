@@ -388,8 +388,8 @@ fn generate_let<'c, 'm, 'b>(
     expr: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    // We don't retain here because the result of generate_expr is considered to be "moved into" the variable.
     let bound_val = generate_expr(bound.clone(), gc);
+    // We don't retain here because the result of generate_expr is considered to be "moved into" the variable.
     let var_name = var.name();
     let var_type = var.ty();
     gc.scope.push(&var_name, &bound_val, &var_type);
