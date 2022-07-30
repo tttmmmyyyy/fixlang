@@ -297,6 +297,9 @@ impl<'ctx> LocalVariables<'ctx> {
             self.data.remove(var_name);
         }
     }
+    fn get(self: &Self, var_name: &str) -> (ExprCode<'ctx>, Arc<Type>) {
+        self.data.get(var_name).unwrap().last().unwrap().clone()
+    }
 }
 
 struct GenerationContext<'c, 'm, 'b> {
@@ -309,26 +312,28 @@ struct GenerationContext<'c, 'm, 'b> {
 
 fn generate_expr<'c, 'm, 'b>(
     expr: Arc<ExprInfo>,
-    context: &mut GenerationContext<'c, 'm, 'b>,
+    gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
     match &*expr.expr {
-        Expr::Var(var) => match &**var {
-            Var::TermVar { name, ty: _ } => {
-                let (code, _) = context.scope.data.get(name).unwrap().last().unwrap();
-                // We need to retain here since the pointer value is cloned.
-                build_retain(code.ptr, context);
-                code.clone()
-            }
-            Var::TyVar { name: _, kind: _ } => unreachable!(),
-        },
-        Expr::Lit(lit) => generate_literal(lit.clone(), context),
-        Expr::App(lambda, arg) => generate_app(lambda.clone(), arg.clone(), context),
-        Expr::Lam(_, _) => todo!(),
-        Expr::Let(var, bound, expr) => {
-            generate_let(var.clone(), bound.clone(), expr.clone(), context)
-        }
+        Expr::Var(var) => generate_var(var.clone(), gc),
+        Expr::Lit(lit) => generate_literal(lit.clone(), gc),
+        Expr::App(lambda, arg) => generate_app(lambda.clone(), arg.clone(), gc),
+        Expr::Lam(arg, val) => generate_lam(arg.clone(), val.clone(), gc),
+        Expr::Let(var, bound, expr) => generate_let(var.clone(), bound.clone(), expr.clone(), gc),
         Expr::If(_, _, _) => todo!(),
         Expr::Type(_) => todo!(),
+    }
+}
+
+fn generate_var<'c, 'm, 'b>(var: Arc<Var>, gc: &mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c> {
+    match &*var {
+        Var::TermVar { name, ty: _ } => {
+            let (code, _) = gc.scope.get(name);
+            // We need to retain here since the pointer value is cloned.
+            build_retain(code.ptr, gc);
+            code.clone()
+        }
+        Var::TyVar { name: _, kind: _ } => unreachable!(),
     }
 }
 
@@ -380,6 +385,40 @@ fn generate_literal<'c, 'm, 'b>(
         Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."), // e.g., fix
         Type::ForAllTy(_, _) => panic!("Type of given Literal is ForAllTy (should be TyLit)."),
     }
+}
+
+fn generate_lam<'c, 'm, 'b>(
+    arg: Arc<Var>,
+    val: Arc<ExprInfo>,
+    gc: &mut GenerationContext<'c, 'm, 'b>,
+) -> ExprCode<'c> {
+    let context = gc.context;
+    let module = gc.module;
+    // Fix ordering of captured names
+    let captured_names: Vec<String> = val.free_vars.clone().into_iter().collect();
+    // Determine the type of closure
+    let mut field_types = vec![
+        ObjectFieldType::ControlBlock,
+        ObjectFieldType::LambdaFunction,
+    ];
+    for _ in captured_names {
+        field_types.push(ObjectFieldType::SubObject);
+    }
+    let obj_type = ObjectType { field_types };
+    let closure_ty = obj_type.to_struct_type(context);
+    // Declare lambda function
+    let lam_fn_ty = lambda_function_type(context);
+    let lam_fn = module.add_function("lambda", lam_fn_ty, None);
+    // Implement lambda function
+    todo!();
+    // Allocate and set up closure
+    let obj = obj_type.build_allocate_shared_obj(gc);
+    build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
+    for (i, cap) in captured_names.iter().enumerate() {
+        let idx = i + 2;
+    }
+    // Return closure object
+    ExprCode { ptr: obj }
 }
 
 fn generate_let<'c, 'm, 'b>(
