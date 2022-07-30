@@ -1130,26 +1130,26 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
 static Add: Lazy<Arc<ExprInfo>> =
     Lazy::new(|| lam(intvar_var("lhs"), lam(intvar_var("rhs"), add("lhs", "rhs"))));
 
-#[cfg(test)]
+// #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn int_literal() {
+    // #[test]
+    pub fn test0() {
         let program = int(-42);
         test_int_program(program, -42);
     }
-    #[test]
-    fn let0() {
+    // #[test]
+    pub fn test1() {
         let program = let_in(intvar_var("x"), int(-42), int(42));
         test_int_program(program, 42);
     }
-    #[test]
-    fn let1() {
+    // #[test]
+    pub fn test2() {
         let program = let_in(intvar_var("x"), int(-42), intvar("x"));
         test_int_program(program, -42);
     }
-    #[test]
-    fn let2() {
+    // #[test]
+    pub fn test3() {
         let program = let_in(
             intvar_var("n"),
             int(-42),
@@ -1157,8 +1157,8 @@ mod tests {
         );
         test_int_program(program, -42);
     }
-    #[test]
-    fn let3() {
+    // #[test]
+    pub fn test4() {
         let program = let_in(
             intvar_var("n"),
             int(-42),
@@ -1166,8 +1166,8 @@ mod tests {
         );
         test_int_program(program, 42);
     }
-    #[test]
-    fn let4() {
+    // #[test]
+    pub fn test5() {
         let program = let_in(
             intvar_var("x"),
             int(-42),
@@ -1175,8 +1175,8 @@ mod tests {
         );
         test_int_program(program, 42);
     }
-    #[test]
-    fn let5() {
+    // #[test]
+    pub fn test6() {
         let program = let_in(
             intvar_var("x"),
             let_in(intvar_var("y"), int(42), intvar("y")),
@@ -1184,24 +1184,32 @@ mod tests {
         );
         test_int_program(program, 42);
     }
-    #[test]
-    fn lam0() {
+    // #[test]
+    pub fn test7() {
         let program = app(lam(intvar_var("x"), int(0)), int(1));
         test_int_program(program, 0);
     }
-    #[test]
-    fn lam1() {
+    // #[test]
+    pub fn test8() {
         let program = app(lam(intvar_var("x"), intvar("x")), int(1));
         test_int_program(program, 1);
     }
     // #[test]
-    // fn add0() {
-    //     let program = app(app((*Add).clone(), int(2)), int(3));
-    //     test_int_program(program, 5);
-    // }
+    pub fn test9() {
+        let program = app(app((*Add).clone(), int(2)), int(3));
+        test_int_program(program, 5);
+    }
 }
 
 fn main() {
-    let program = let_in(intvar_var("add"), (*Add).clone(), int(3));
-    test_int_program(program, 3);
+    tests::test9();
+    tests::test8();
+    tests::test7();
+    tests::test6();
+    tests::test5();
+    tests::test4();
+    tests::test3();
+    tests::test2();
+    tests::test1();
+    tests::test0();
 }
