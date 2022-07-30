@@ -751,10 +751,9 @@ impl ObjectType {
             for (i, ft) in self.field_types.iter().enumerate() {
                 match ft {
                     ObjectFieldType::SubObject => {
-                        let ptr_to_field = builder
-                            .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_field")
-                            .unwrap();
-                        build_release(ptr_to_field, &gc);
+                        let ptr_to_subobj =
+                            build_get_field(ptr_to_obj, i as u32 - 1, &gc).into_pointer_value();
+                        build_release(ptr_to_subobj, &gc);
                     }
                     ObjectFieldType::ControlBlock => {}
                     ObjectFieldType::Int => {}
@@ -1203,13 +1202,13 @@ mod tests {
 
 fn main() {
     tests::test9();
-    tests::test8();
-    tests::test7();
-    tests::test6();
-    tests::test5();
-    tests::test4();
-    tests::test3();
-    tests::test2();
-    tests::test1();
-    tests::test0();
+    // tests::test8();
+    // tests::test7();
+    // tests::test6();
+    // tests::test5();
+    // tests::test4();
+    // tests::test3();
+    // tests::test2();
+    // tests::test1();
+    // tests::test0();
 }
