@@ -65,8 +65,10 @@ impl Expr {
 }
 
 struct Literal {
-    value: String,
-    args: Vec<String>, // e.g. "+" literal has two args.
+    generator: Arc<
+        dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>,
+    >,
+    free_vars: Vec<String>, // e.g. "+" literal has two free variables.
     ty: Arc<Type>,
 }
 
@@ -169,14 +171,68 @@ fn intvar_var(var_name: &str) -> Arc<Var> {
     termvar_var(var_name, INT_TYPE.clone())
 }
 
-fn lit(value: &str, ty: Arc<Type>) -> Arc<ExprInfo> {
-    let value = String::from(value);
-    let args = vec![];
-    Arc::new(Expr::Lit(Arc::new(Literal { value, args, ty }))).into_expr_info()
+fn lit(
+    generator: Arc<
+        dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>,
+    >,
+    ty: Arc<Type>,
+    free_vars: Vec<String>,
+) -> Arc<ExprInfo> {
+    Arc::new(Expr::Lit(Arc::new(Literal {
+        generator,
+        free_vars,
+        ty,
+    })))
+    .into_expr_info()
 }
 
 fn int(val: i32) -> Arc<ExprInfo> {
-    lit(val.to_string().as_str(), INT_TYPE.clone())
+    let generator: Arc<
+        dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>,
+    > = Arc::new(move |gc| {
+        let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
+        let value = gc.context.i64_type().const_int(val as u64, false);
+        build_set_field(ptr_to_int_obj, 0, value, gc);
+        ExprCode {
+            ptr: ptr_to_int_obj,
+        }
+    });
+    lit(generator, INT_TYPE.clone(), vec![])
+}
+
+fn add(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
+    let lhs_str = String::from(lhs);
+    let rhs_str = String::from(rhs);
+    let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
+    let generator: Arc<
+        dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>,
+    > = Arc::new(move |gc| {
+        let lhs_val = gc
+            .scope
+            .get_field(
+                &lhs_str,
+                0,
+                ObjectType::int_obj_type().to_struct_type(gc.context),
+                gc,
+            )
+            .into_int_value();
+        let rhs_val = gc
+            .scope
+            .get_field(
+                &rhs_str,
+                0,
+                ObjectType::int_obj_type().to_struct_type(gc.context),
+                gc,
+            )
+            .into_int_value();
+        let value = gc.builder.build_int_add(lhs_val, rhs_val, "add");
+        let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
+        build_set_field(ptr_to_int_obj, 0, value, gc);
+        ExprCode {
+            ptr: ptr_to_int_obj,
+        }
+    });
+    lit(generator, INT_TYPE.clone(), free_vars)
 }
 
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
@@ -203,37 +259,37 @@ static KIND_STAR: Lazy<Arc<Kind>> = Lazy::new(|| Arc::new(Kind::Star));
 
 static INT_TYPE: Lazy<Arc<Type>> = Lazy::new(|| lit_ty("Int"));
 
-static FIX_INT_INT: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
-    lit(
-        "fixIntInt",
-        lambda_ty(
-            lambda_ty(
-                lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
-                lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
-            ),
-            lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
-        ),
-    )
-});
+// static FIX_INT_INT: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
+//     lit(
+//         "fixIntInt",
+//         lambda_ty(
+//             lambda_ty(
+//                 lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
+//                 lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
+//             ),
+//             lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
+//         ),
+//     )
+// });
 
-static FIX_A_TO_B: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
-    lit(
-        "fix",
-        forall_ty(
-            "a",
-            forall_ty(
-                "b",
-                lambda_ty(
-                    lambda_ty(
-                        lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
-                        lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
-                    ),
-                    lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
-                ),
-            ),
-        ),
-    )
-});
+// static FIX_A_TO_B: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
+//     lit(
+//         "fix",
+//         forall_ty(
+//             "a",
+//             forall_ty(
+//                 "b",
+//                 lambda_ty(
+//                     lambda_ty(
+//                         lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
+//                         lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
+//                     ),
+//                     lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
+//                 ),
+//             ),
+//         ),
+//     )
+// });
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
 fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
@@ -243,33 +299,41 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             ei.expr.into_expr_info_with(free_vars)
         }
         Expr::Lit(lit) => {
-            let free_vars = lit.args.clone().into_iter().collect();
+            let free_vars = lit.free_vars.clone().into_iter().collect();
             ei.expr.into_expr_info_with(free_vars)
         }
         Expr::App(func, arg) => {
+            let func = calculate_aux_info(func.clone());
+            let arg = calculate_aux_info(arg.clone());
             let mut free_vars = func.free_vars.clone();
             free_vars.extend(arg.free_vars.clone());
-            ei.expr.into_expr_info_with(free_vars)
+            app(func, arg).expr.into_expr_info_with(free_vars)
         }
         Expr::Lam(arg, val) => {
+            let val = calculate_aux_info(val.clone());
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(arg.name());
-            ei.expr.into_expr_info_with(free_vars)
+            lam(arg.clone(), val).expr.into_expr_info_with(free_vars)
         }
         Expr::Let(var, bound, val) => {
             // NOTE: Our Let is non-recursive let, i.e.,
             // "let x = f x in g x" is equal to "let y = f x in g y",
             // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
+            let bound = calculate_aux_info(bound.clone());
+            let val = calculate_aux_info(val.clone());
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(var.name());
             free_vars.extend(bound.free_vars.clone());
-            ei.expr.into_expr_info_with(free_vars)
+            let_in(var.clone(), bound, val)
+                .expr
+                .into_expr_info_with(free_vars)
         }
         Expr::If(cond, then_expr, else_expr) => {
-            let mut free_vars = cond.free_vars.clone();
-            free_vars.extend(then_expr.free_vars.clone());
-            free_vars.extend(else_expr.free_vars.clone());
-            ei.expr.into_expr_info_with(free_vars)
+            unimplemented!()
+            // let mut free_vars = cond.free_vars.clone();
+            // free_vars.extend(then_expr.free_vars.clone());
+            // free_vars.extend(else_expr.free_vars.clone());
+            // ei.expr.into_expr_info_with(free_vars)
         }
         Expr::Type(_) => ei.clone(),
     }
@@ -302,8 +366,8 @@ struct LocalVariables<'ctx> {
     data: HashMap<String, Vec<(ExprCode<'ctx>, Arc<Type>)>>,
 }
 
-impl<'ctx> LocalVariables<'ctx> {
-    fn push(self: &mut Self, var_name: &str, code: &ExprCode<'ctx>, ty: &Arc<Type>) {
+impl<'c> LocalVariables<'c> {
+    fn push(self: &mut Self, var_name: &str, code: &ExprCode<'c>, ty: &Arc<Type>) {
         if !self.data.contains_key(var_name) {
             self.data.insert(String::from(var_name), Default::default());
         }
@@ -318,8 +382,19 @@ impl<'ctx> LocalVariables<'ctx> {
             self.data.remove(var_name);
         }
     }
-    fn get(self: &Self, var_name: &str) -> (ExprCode<'ctx>, Arc<Type>) {
+    fn get(self: &Self, var_name: &str) -> (ExprCode<'c>, Arc<Type>) {
         self.data.get(var_name).unwrap().last().unwrap().clone()
+    }
+    fn get_field<'m, 'b>(
+        self: &Self,
+        var_name: &str,
+        field_idx: u32,
+        ty: StructType<'c>,
+        gc: &GenerationContext<'c, 'm, 'b>,
+    ) -> BasicValueEnum<'c> {
+        let (expr, _) = self.get(var_name);
+        let ptr = expr.ptr.const_cast(ty.ptr_type(AddressSpace::Generic));
+        build_get_field(ptr, field_idx, gc)
     }
 }
 
@@ -382,30 +457,31 @@ fn generate_literal<'c, 'm, 'b>(
     lit: Arc<Literal>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    match &*lit.ty {
-        Type::LitTy(ty) => match ty.value.as_str() {
-            "Int" => {
-                let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
-                let value = lit.value.parse::<i64>().unwrap();
-                let value = gc.context.i64_type().const_int(value as u64, false);
-                build_set_field(ptr_to_int_obj, 0, value, gc);
-                ExprCode {
-                    ptr: ptr_to_int_obj,
-                }
-            }
-            _ => {
-                panic!(
-                    "Cannot generate literal value {} of type {}.",
-                    lit.value, ty.value,
-                )
-            }
-        },
-        Type::TyVar(_) => panic!("Type of given Literal is TyVar (should be TyLit)."),
-        Type::AppTy(_, _) => panic!("Type of given Literal is AppTy (should be TyLit)."),
-        Type::TyConApp(_, _) => panic!("Type of given Literal is TyConApp (should be TyLit)."),
-        Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."), // e.g., fix
-        Type::ForAllTy(_, _) => panic!("Type of given Literal is ForAllTy (should be TyLit)."),
-    }
+    (lit.generator)(gc)
+    // match &*lit.ty {
+    //     Type::LitTy(ty) => match ty.value.as_str() {
+    //         "Int" => {
+    //             let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
+    //             let value = lit.value.parse::<i64>().unwrap();
+    //             let value = gc.context.i64_type().const_int(value as u64, false);
+    //             build_set_field(ptr_to_int_obj, 0, value, gc);
+    //             ExprCode {
+    //                 ptr: ptr_to_int_obj,
+    //             }
+    //         }
+    //         _ => {
+    //             panic!(
+    //                 "Cannot generate literal value {} of type {}.",
+    //                 lit.value, ty.value,
+    //             )
+    //         }
+    //     },
+    //     Type::TyVar(_) => panic!("Type of given Literal is TyVar (should be TyLit)."),
+    //     Type::AppTy(_, _) => panic!("Type of given Literal is AppTy (should be TyLit)."),
+    //     Type::TyConApp(_, _) => panic!("Type of given Literal is TyConApp (should be TyLit)."),
+    //     Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."), // e.g., fix
+    //     Type::ForAllTy(_, _) => panic!("Type of given Literal is ForAllTy (should be TyLit)."),
+    // }
 }
 
 fn generate_lam<'c, 'm, 'b>(
@@ -416,7 +492,9 @@ fn generate_lam<'c, 'm, 'b>(
     let context = gc.context;
     let module = gc.module;
     // Fix ordering of captured names
-    let captured_names: Vec<String> = val.free_vars.clone().into_iter().collect();
+    let mut captured_names = val.free_vars.clone();
+    captured_names.remove(arg.name());
+    let captured_names: Vec<String> = captured_names.into_iter().collect();
     // Determine the type of closure
     let mut field_types = vec![
         ObjectFieldType::ControlBlock,
@@ -531,6 +609,10 @@ fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
     obj: PointerValue<'c>,
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> PointerValue<'c> {
+    let ptr_to_lam_obj_ty = ObjectType::lam_obj_type()
+        .to_struct_type(gc.context)
+        .ptr_type(AddressSpace::Generic);
+    let obj = obj.const_cast(ptr_to_lam_obj_ty);
     build_get_field(obj, 0, gc).into_pointer_value()
 }
 
@@ -567,7 +649,7 @@ impl ObjectFieldType {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(context).into(),
             ObjectFieldType::LambdaFunction => ptr_to_lambda_function_type(context).into(),
-            ObjectFieldType::SubObject => refcnt_type(context).into(),
+            ObjectFieldType::SubObject => ptr_to_object_type(context).into(),
             ObjectFieldType::Int => context.i64_type().into(),
         }
     }
@@ -621,6 +703,14 @@ impl ObjectType {
         Self::shared_obj_type(vec![ObjectFieldType::Int])
     }
 
+    fn lam_obj_type() -> Self {
+        let mut field_types: Vec<ObjectFieldType> = Default::default();
+        field_types.push(ObjectFieldType::ControlBlock);
+        field_types.push(ObjectFieldType::LambdaFunction);
+        // Following fields may exist, but their types are unknown.
+        ObjectType { field_types }
+    }
+
     fn generate_func_dtor<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm, 'b>,
@@ -641,26 +731,38 @@ impl ObjectType {
         let func = gc.module.add_function("dtor", func_type, None);
         let bb = gc.context.append_basic_block(func, "entry");
         let builder = gc.context.create_builder();
-        builder.position_at_end(bb);
-        let ptr_to_obj = func
-            .get_first_param()
-            .unwrap()
-            .into_pointer_value()
-            .const_cast(struct_type.ptr_type(AddressSpace::Generic));
-        for (i, ft) in self.field_types.iter().enumerate() {
-            match ft {
-                ObjectFieldType::SubObject => {
-                    let ptr_to_field = builder
-                        .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_field")
-                        .unwrap();
-                    build_release(ptr_to_field, &gc);
+        {
+            let context = gc.context;
+            let module = gc.module;
+            // Create new gc
+            let gc = GenerationContext {
+                context,
+                module,
+                builder: &builder,
+                scope: Default::default(), // This gc use used only for build_release, and it doesn't use scope.
+                system_functions: gc.system_functions.clone(),
+            };
+            builder.position_at_end(bb);
+            let ptr_to_obj = func
+                .get_first_param()
+                .unwrap()
+                .into_pointer_value()
+                .const_cast(struct_type.ptr_type(AddressSpace::Generic));
+            for (i, ft) in self.field_types.iter().enumerate() {
+                match ft {
+                    ObjectFieldType::SubObject => {
+                        let ptr_to_field = builder
+                            .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_field")
+                            .unwrap();
+                        build_release(ptr_to_field, &gc);
+                    }
+                    ObjectFieldType::ControlBlock => {}
+                    ObjectFieldType::Int => {}
+                    ObjectFieldType::LambdaFunction => {}
                 }
-                ObjectFieldType::ControlBlock => {}
-                ObjectFieldType::Int => {}
-                ObjectFieldType::LambdaFunction => {}
             }
+            builder.build_return(None);
         }
-        builder.build_return(None);
         gc.system_functions
             .insert(SystemFunctions::Dtor(self.clone()), func);
         func
@@ -710,16 +812,14 @@ fn ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     refcnt_type(context).ptr_type(AddressSpace::Generic)
 }
 
-// TODO: reomve use of this
 fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     context.i8_type().ptr_type(AddressSpace::Generic)
 }
 
 fn dtor_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
-    context.void_type().fn_type(
-        &[refcnt_type(context).ptr_type(AddressSpace::Generic).into()],
-        false,
-    )
+    context
+        .void_type()
+        .fn_type(&[ptr_to_object_type(context).into()], false)
 }
 
 fn ptr_to_dtor_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
@@ -1027,6 +1127,9 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
     assert_eq!(execute_main_module(&module), answer);
 }
 
+static Add: Lazy<Arc<ExprInfo>> =
+    Lazy::new(|| lam(intvar_var("lhs"), lam(intvar_var("rhs"), add("lhs", "rhs"))));
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1091,6 +1194,14 @@ mod tests {
         let program = app(lam(intvar_var("x"), intvar("x")), int(1));
         test_int_program(program, 1);
     }
+    // #[test]
+    // fn add0() {
+    //     let program = app(app((*Add).clone(), int(2)), int(3));
+    //     test_int_program(program, 5);
+    // }
 }
 
-fn main() {}
+fn main() {
+    let program = let_in(intvar_var("add"), (*Add).clone(), int(3));
+    test_int_program(program, 3);
+}
