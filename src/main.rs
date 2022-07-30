@@ -416,6 +416,8 @@ fn generate_lam<'c, 'm, 'b>(
     build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
     for (i, cap) in captured_names.iter().enumerate() {
         let idx = i + 2;
+        let (code, _) = gc.scope.get(cap);
+        build_retain(code.ptr, gc);
     }
     // Return closure object
     ExprCode { ptr: obj }
@@ -478,10 +480,9 @@ fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
     build_get_field(obj, 0, gc).into_pointer_value()
 }
 
-fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, context: &GenerationContext<'c, 'm, 'b>) {
-    context.builder.build_call(
-        *context
-            .system_functions
+fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
+    gc.builder.build_call(
+        *gc.system_functions
             .get(&SystemFunctions::RetainObj)
             .unwrap(),
         &[ptr_to_obj.clone().into()],
@@ -489,10 +490,9 @@ fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, context: &GenerationContex
     );
 }
 
-fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, context: &GenerationContext<'c, 'm, 'b>) {
-    context.builder.build_call(
-        *context
-            .system_functions
+fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
+    gc.builder.build_call(
+        *gc.system_functions
             .get(&SystemFunctions::ReleaseObj)
             .unwrap(),
         &[ptr_to_obj.clone().into()],
