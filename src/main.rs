@@ -53,16 +53,20 @@ enum Expr {
 }
 
 impl Expr {
-    fn into_expr_info(self: Arc<Self>) -> Arc<ExprInfo> {
+    fn into_expr_info(self: &Arc<Self>) -> Arc<ExprInfo> {
+        self.into_expr_info_with(Default::default())
+    }
+    fn into_expr_info_with(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<ExprInfo> {
         Arc::new(ExprInfo {
             expr: self.clone(),
-            free_vars: Default::default(),
+            free_vars,
         })
     }
 }
 
 struct Literal {
     value: String,
+    args: Vec<String>, // e.g. "+" literal has two args.
     ty: Arc<Type>,
 }
 
@@ -70,6 +74,15 @@ struct Literal {
 enum Var {
     TermVar { name: String, ty: Arc<Type> },
     TyVar { name: String, kind: Arc<Kind> },
+}
+
+impl Var {
+    fn name(self: &Self) -> &String {
+        match self {
+            Var::TermVar { name, ty: _ } => name,
+            Var::TyVar { name, kind: _ } => name,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq)]
@@ -139,7 +152,8 @@ fn intvar_var(var_name: &str) -> Arc<Var> {
 
 fn lit(value: &str, ty: Arc<Type>) -> Arc<ExprInfo> {
     let value = String::from(value);
-    Arc::new(Expr::Lit(Arc::new(Literal { value, ty }))).into_expr_info()
+    let args = vec![];
+    Arc::new(Expr::Lit(Arc::new(Literal { value, args, ty }))).into_expr_info()
 }
 
 fn int(val: i32) -> Arc<ExprInfo> {
@@ -195,30 +209,44 @@ static FIX_A_TO_B: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
 });
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
-// fn calculate_aux_info(expr: Arc<Expr>) -> Arc<Expr> {
-//     match &*expr {
-//         Expr::Var(v, _) => {
-//             let new_name: String;
-//             match *v {
-//                 Var::TermVar { name, ty } => {
-//                     new_name = name;
-//                 },
-//                 Var::TyVar { name, kind } => {
-//                     new_name = name;
-//                 }
-//             }
-//             let free_vars = HashSet::new();
-//             free_vars.insert(new_name);
-
-//         },
-//         Expr::Lit(_, _) => todo!(),
-//         Expr::App(_, _, _) => todo!(),
-//         Expr::Lam(_, _, _) => todo!(),
-//         Expr::Let(_, _, _, _) => todo!(),
-//         Expr::If(_, _, _, _) => todo!(),
-//         Expr::Type(_, _) => todo!(),
-//     }
-// }
+fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
+    match &*ei.expr {
+        Expr::Var(var) => {
+            let free_vars = vec![var.name().clone()].into_iter().collect();
+            ei.expr.into_expr_info_with(free_vars)
+        }
+        Expr::Lit(lit) => {
+            let free_vars = lit.args.clone().into_iter().collect();
+            ei.expr.into_expr_info_with(free_vars)
+        }
+        Expr::App(func, arg) => {
+            let mut free_vars = func.free_vars.clone();
+            free_vars.extend(arg.free_vars.clone());
+            ei.expr.into_expr_info_with(free_vars)
+        }
+        Expr::Lam(arg, val) => {
+            let mut free_vars = val.free_vars.clone();
+            free_vars.remove(arg.name());
+            ei.expr.into_expr_info_with(free_vars)
+        }
+        Expr::Let(var, bound, val) => {
+            // NOTE: Our Let is non-recursive let, i.e.,
+            // "let x = f x in g x" is equal to "let y = f x in g y",
+            // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
+            let mut free_vars = val.free_vars.clone();
+            free_vars.remove(var.name());
+            free_vars.extend(bound.free_vars.clone());
+            ei.expr.into_expr_info_with(free_vars)
+        }
+        Expr::If(cond, then_expr, else_expr) => {
+            let mut free_vars = cond.free_vars.clone();
+            free_vars.extend(then_expr.free_vars.clone());
+            free_vars.extend(else_expr.free_vars.clone());
+            ei.expr.into_expr_info_with(free_vars)
+        }
+        Expr::Type(_) => ei.clone(),
+    }
+}
 
 // MEMO:
 // Lazy組み込み型を導入して、fix : (Lazy a -> a) -> Lazy aとするべきではないか。
@@ -829,6 +857,8 @@ fn execute_main_module<'ctx>(module: &Module<'ctx>) -> i32 {
 const DEBUG_MEMORY: bool = true;
 
 fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
+    let program = calculate_aux_info(program);
+
     let context = Context::create();
     let module = context.create_module("main");
     let builder = context.create_builder();
