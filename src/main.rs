@@ -1084,7 +1084,7 @@ mod tests {
     #[test]
     fn lam0() {
         let program = app(lam(intvar_var("x"), int(0)), int(1));
-        test_int_program(program, 1);
+        test_int_program(program, 0);
     }
 }
 
