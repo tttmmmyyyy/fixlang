@@ -401,7 +401,8 @@ fn generate_lam<'c, 'm, 'b>(
         ObjectFieldType::ControlBlock,
         ObjectFieldType::LambdaFunction,
     ];
-    for _ in captured_names {
+    let subobj_offset = field_types.len() as u32;
+    for _ in captured_names.iter() {
         field_types.push(ObjectFieldType::SubObject);
     }
     let obj_type = ObjectType { field_types };
@@ -410,14 +411,49 @@ fn generate_lam<'c, 'm, 'b>(
     let lam_fn_ty = lambda_function_type(context);
     let lam_fn = module.add_function("lambda", lam_fn_ty, None);
     // Implement lambda function
-    todo!();
+    {
+        // Create new builder
+        let builder = gc.context.create_builder();
+        let bb = context.append_basic_block(lam_fn, "entry");
+        builder.position_at_end(bb);
+        // Create new scope
+        let mut scope = LocalVariables::default();
+        let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
+        scope.push(&arg.name(), &ExprCode { ptr: arg_ptr }, arg.ty());
+        let closure_obj_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let closure_ptr = closure_obj_ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
+        for (i, cap_name) in captured_names.iter().enumerate() {
+            let idx = i as u32 + subobj_offset;
+            let cap_ptr = builder
+                .build_struct_gep(closure_ptr, idx, "ptr_to_captured_field")
+                .unwrap();
+            let (_, cap_ty) = gc.scope.get(cap_name);
+            scope.push(cap_name, &ExprCode { ptr: cap_ptr }, &cap_ty);
+        }
+        // Create new gc
+        let mut gc = GenerationContext {
+            context,
+            module,
+            builder: &builder,
+            scope,
+            system_functions: gc.system_functions.clone(),
+        };
+        // Generate value
+        let val = generate_expr(val, &mut gc);
+        // Release closure and arg
+        build_release(arg_ptr, &gc);
+        build_release(closure_obj_ptr, &gc);
+        // Return result
+        builder.build_return(Some(&val.ptr));
+    }
     // Allocate and set up closure
     let obj = obj_type.build_allocate_shared_obj(gc);
     build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
     for (i, cap) in captured_names.iter().enumerate() {
-        let idx = i + 2;
+        let idx = i as u32 + subobj_offset;
         let (code, _) = gc.scope.get(cap);
         build_retain(code.ptr, gc);
+        build_set_field(obj, idx, code.ptr, gc);
     }
     // Return closure object
     ExprCode { ptr: obj }
@@ -679,7 +715,7 @@ fn ptr_to_lambda_function_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx
     lambda_function_type(context).ptr_type(AddressSpace::Generic)
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Clone)]
 enum SystemFunctions {
     Printf,
     PrintIntObj,
