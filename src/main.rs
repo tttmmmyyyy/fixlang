@@ -10,7 +10,7 @@ use inkwell::values::{
 use inkwell::{AddressSpace, OptimizationLevel};
 use once_cell::sync::Lazy;
 use std::alloc::System;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Pointer;
 use std::sync::Arc;
 use std::vec::Vec;
@@ -35,15 +35,30 @@ use Either::Right;
 //   | FunTy Type Type
 //   | ForAllTy Var Type
 
+struct ExprInfo {
+    expr: Arc<Expr>,
+    free_vars: HashSet<String>,
+}
+
+#[derive(Clone)]
 enum Expr {
     Var(Arc<Var>),
     Lit(Arc<Literal>),
-    App(Arc<Expr>, Arc<Expr>),
-    Lam(Arc<Var>, Arc<Expr>),
-    Let(Arc<Var>, Arc<Expr>, Arc<Expr>),
+    App(Arc<ExprInfo>, Arc<ExprInfo>),
+    Lam(Arc<Var>, Arc<ExprInfo>),
+    Let(Arc<Var>, Arc<ExprInfo>, Arc<ExprInfo>),
     // Caseはあとで
-    If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
+    If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>),
     Type(Arc<Type>),
+}
+
+impl Expr {
+    fn into_expr_info(self: Arc<Self>) -> Arc<ExprInfo> {
+        Arc::new(ExprInfo {
+            expr: self.clone(),
+            free_vars: Default::default(),
+        })
+    }
 }
 
 struct Literal {
@@ -122,24 +137,24 @@ fn intvar_var(var_name: &str) -> Arc<Var> {
     termvar_var(var_name, INT_TYPE.clone())
 }
 
-fn lit(value: &str, ty: Arc<Type>) -> Arc<Expr> {
+fn lit(value: &str, ty: Arc<Type>) -> Arc<ExprInfo> {
     let value = String::from(value);
-    Arc::new(Expr::Lit(Arc::new(Literal { value, ty })))
+    Arc::new(Expr::Lit(Arc::new(Literal { value, ty }))).into_expr_info()
 }
 
-fn int(val: i32) -> Arc<Expr> {
+fn int(val: i32) -> Arc<ExprInfo> {
     lit(val.to_string().as_str(), INT_TYPE.clone())
 }
 
-fn let_in(var: Arc<Var>, bound: Arc<Expr>, expr: Arc<Expr>) -> Arc<Expr> {
-    Arc::new(Expr::Let(var, bound, expr))
+fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
+    Arc::new(Expr::Let(var, bound, expr)).into_expr_info()
 }
 
-fn var(var_name: &str, ty: Arc<Type>) -> Arc<Expr> {
-    Arc::new(Expr::Var(termvar_var(var_name, ty)))
+fn var(var_name: &str, ty: Arc<Type>) -> Arc<ExprInfo> {
+    Arc::new(Expr::Var(termvar_var(var_name, ty))).into_expr_info()
 }
 
-fn intvar(var_name: &str) -> Arc<Expr> {
+fn intvar(var_name: &str) -> Arc<ExprInfo> {
     var(var_name, INT_TYPE.clone())
 }
 
@@ -147,7 +162,7 @@ static KIND_STAR: Lazy<Arc<Kind>> = Lazy::new(|| Arc::new(Kind::Star));
 
 static INT_TYPE: Lazy<Arc<Type>> = Lazy::new(|| lit_ty("Int"));
 
-static FIX_INT_INT: Lazy<Arc<Expr>> = Lazy::new(|| {
+static FIX_INT_INT: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
     lit(
         "fixIntInt",
         lambda_ty(
@@ -160,7 +175,7 @@ static FIX_INT_INT: Lazy<Arc<Expr>> = Lazy::new(|| {
     )
 });
 
-static FIX_A_TO_B: Lazy<Arc<Expr>> = Lazy::new(|| {
+static FIX_A_TO_B: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
     lit(
         "fix",
         forall_ty(
@@ -178,6 +193,32 @@ static FIX_A_TO_B: Lazy<Arc<Expr>> = Lazy::new(|| {
         ),
     )
 });
+
+// TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
+// fn calculate_aux_info(expr: Arc<Expr>) -> Arc<Expr> {
+//     match &*expr {
+//         Expr::Var(v, _) => {
+//             let new_name: String;
+//             match *v {
+//                 Var::TermVar { name, ty } => {
+//                     new_name = name;
+//                 },
+//                 Var::TyVar { name, kind } => {
+//                     new_name = name;
+//                 }
+//             }
+//             let free_vars = HashSet::new();
+//             free_vars.insert(new_name);
+
+//         },
+//         Expr::Lit(_, _) => todo!(),
+//         Expr::App(_, _, _) => todo!(),
+//         Expr::Lam(_, _, _) => todo!(),
+//         Expr::Let(_, _, _, _) => todo!(),
+//         Expr::If(_, _, _, _) => todo!(),
+//         Expr::Type(_, _) => todo!(),
+//     }
+// }
 
 // MEMO:
 // Lazy組み込み型を導入して、fix : (Lazy a -> a) -> Lazy aとするべきではないか。
@@ -215,10 +256,10 @@ struct GenerationContext<'c, 'm, 'b> {
 }
 
 fn generate_expr<'c, 'm, 'b>(
-    expr: Arc<Expr>,
+    expr: Arc<ExprInfo>,
     context: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    match &*expr {
+    match &*expr.expr {
         Expr::Var(var) => match &**var {
             Var::TermVar { name, ty: _ } => {
                 let (code, _) = context.scope.data.get(name).unwrap().last().unwrap();
@@ -240,8 +281,8 @@ fn generate_expr<'c, 'm, 'b>(
 }
 
 fn generate_app<'c, 'm, 'b>(
-    lambda: Arc<Expr>,
-    arg: Arc<Expr>,
+    lambda: Arc<ExprInfo>,
+    arg: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
     let builder = gc.builder;
@@ -291,8 +332,8 @@ fn generate_literal<'c, 'm, 'b>(
 
 fn generate_let<'c, 'm, 'b>(
     var: Arc<Var>,
-    bound: Arc<Expr>,
-    expr: Arc<Expr>,
+    bound: Arc<ExprInfo>,
+    expr: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
     // We don't retain here because the result of generate_expr is considered to be "moved into" the variable.
@@ -787,7 +828,7 @@ fn execute_main_module<'ctx>(module: &Module<'ctx>) -> i32 {
 
 const DEBUG_MEMORY: bool = true;
 
-fn test_int_program(program: Arc<Expr>, answer: i32) {
+fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
     let context = Context::create();
     let module = context.create_module("main");
     let builder = context.create_builder();
