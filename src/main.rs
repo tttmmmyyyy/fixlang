@@ -113,6 +113,19 @@ enum Type {
     ForAllTy(Arc<Var>, Arc<Type>),
 }
 
+// impl Type {
+//     fn fn_result(self: &Self) -> Arc<Type> {
+//         match self {
+//             Type::TyVar(_) => unimplemented!(),
+//             Type::LitTy(_) => unimplemented!(),
+//             Type::AppTy(_, _) => unimplemented!(),
+//             Type::TyConApp(_, _) => unimplemented!(),
+//             Type::FunTy(_, res) => res.clone(),
+//             Type::ForAllTy(_, _) => unimplemented!(),
+//         }
+//     }
+// }
+
 #[derive(Eq, PartialEq)]
 enum TyCon {
     Pair,
@@ -168,6 +181,14 @@ fn int(val: i32) -> Arc<ExprInfo> {
 
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
     Arc::new(Expr::Let(var, bound, expr)).into_expr_info()
+}
+
+fn lam(var: Arc<Var>, val: Arc<ExprInfo>) -> Arc<ExprInfo> {
+    Arc::new(Expr::Lam(var, val)).into_expr_info()
+}
+
+fn app(lam: Arc<ExprInfo>, arg: Arc<ExprInfo>) -> Arc<ExprInfo> {
+    Arc::new(Expr::App(lam, arg)).into_expr_info()
 }
 
 fn var(var_name: &str, ty: Arc<Type>) -> Arc<ExprInfo> {
@@ -401,7 +422,6 @@ fn generate_lam<'c, 'm, 'b>(
         ObjectFieldType::ControlBlock,
         ObjectFieldType::LambdaFunction,
     ];
-    let subobj_offset = field_types.len() as u32;
     for _ in captured_names.iter() {
         field_types.push(ObjectFieldType::SubObject);
     }
@@ -423,9 +443,8 @@ fn generate_lam<'c, 'm, 'b>(
         let closure_obj_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
         let closure_ptr = closure_obj_ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
         for (i, cap_name) in captured_names.iter().enumerate() {
-            let idx = i as u32 + subobj_offset;
             let cap_ptr = builder
-                .build_struct_gep(closure_ptr, idx, "ptr_to_captured_field")
+                .build_struct_gep(closure_ptr, i as u32 + 2, "ptr_to_captured_field")
                 .unwrap();
             let (_, cap_ty) = gc.scope.get(cap_name);
             scope.push(cap_name, &ExprCode { ptr: cap_ptr }, &cap_ty);
@@ -448,12 +467,11 @@ fn generate_lam<'c, 'm, 'b>(
     }
     // Allocate and set up closure
     let obj = obj_type.build_allocate_shared_obj(gc);
-    build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
+    build_set_field(obj, 0, lam_fn.as_global_value().as_pointer_value(), gc);
     for (i, cap) in captured_names.iter().enumerate() {
-        let idx = i as u32 + subobj_offset;
         let (code, _) = gc.scope.get(cap);
         build_retain(code.ptr, gc);
-        build_set_field(obj, idx, code.ptr, gc);
+        build_set_field(obj, i as u32 + 1, code.ptr, gc);
     }
     // Return closure object
     ExprCode { ptr: obj }
@@ -561,6 +579,28 @@ struct ObjectType {
 }
 
 impl ObjectType {
+    // fn from_type(ty: Arc<Type>) -> Self {
+    //     if ty == *INT_TYPE {
+    //         return Self::int_obj_type();
+    //     }
+    //     match &*ty {
+    //         Type::TyVar(var) => ObjectType::from_type(var.ty().clone()),
+    //         Type::LitTy(_) => unreachable!("Should have treated above."),
+    //         Type::AppTy(_, _) => todo!(),
+    //         Type::TyConApp(_, _) => todo!(),
+    //         Type::FunTy(_, _) => {
+    //             let mut field_types: Vec<ObjectFieldType> = Default::default();
+    //             field_types.push(ObjectFieldType::ControlBlock);
+    //             field_types.push(ObjectFieldType::LambdaFunction);
+    //             // Following fields may exist, but their types are unknown.
+    //             ObjectType { field_types }
+    //         }
+    //         Type::ForAllTy(_, _) => todo!(),
+    //     }
+    //     // let mut field_types: Vec<ObjectFieldType> = Default::default();
+    //     // field_types.push(ObjectFieldType::ControlBlock);
+    //     // ObjectType { field_types }
+    // }
     fn to_struct_type<'ctx>(&self, context: &'ctx Context) -> StructType<'ctx> {
         let mut fields: Vec<BasicTypeEnum<'ctx>> = vec![];
         for field_type in &self.field_types {
@@ -970,7 +1010,12 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
     //     &[program_result.ptr.into()],
     //     "print_program_result",
     // );
-    let value = build_get_field(program_result.ptr, 0, &gc);
+    let int_obj_ptr = program_result.ptr.const_cast(
+        ObjectType::int_obj_type()
+            .to_struct_type(&context)
+            .ptr_type(AddressSpace::Generic),
+    );
+    let value = build_get_field(int_obj_ptr, 0, &gc);
     if let BasicValueEnum::IntValue(value) = value {
         builder.build_return(Some(&value));
     } else {
@@ -1035,6 +1080,11 @@ mod tests {
             intvar("x"),
         );
         test_int_program(program, 42);
+    }
+    #[test]
+    fn lam0() {
+        let program = app(lam(intvar_var("x"), int(0)), int(1));
+        test_int_program(program, 1);
     }
 }
 
