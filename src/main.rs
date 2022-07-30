@@ -83,6 +83,12 @@ impl Var {
             Var::TyVar { name, kind: _ } => name,
         }
     }
+    fn ty(self: &Self) -> &Arc<Type> {
+        match self {
+            Var::TermVar { name: _, ty } => ty,
+            Var::TyVar { name: _, kind: _ } => unimplemented!(),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq)]
@@ -275,6 +281,24 @@ struct LocalVariables<'ctx> {
     data: HashMap<String, Vec<(ExprCode<'ctx>, Arc<Type>)>>,
 }
 
+impl<'ctx> LocalVariables<'ctx> {
+    fn push(self: &mut Self, var_name: &str, code: &ExprCode<'ctx>, ty: &Arc<Type>) {
+        if !self.data.contains_key(var_name) {
+            self.data.insert(String::from(var_name), Default::default());
+        }
+        self.data
+            .get_mut(var_name)
+            .unwrap()
+            .push((code.clone(), ty.clone()));
+    }
+    fn pop(self: &mut Self, var_name: &str) {
+        self.data.get_mut(var_name).unwrap().pop();
+        if self.data.get(var_name).unwrap().is_empty() {
+            self.data.remove(var_name);
+        }
+    }
+}
+
 struct GenerationContext<'c, 'm, 'b> {
     context: &'c Context,
     module: &'m Module<'c>,
@@ -366,25 +390,11 @@ fn generate_let<'c, 'm, 'b>(
 ) -> ExprCode<'c> {
     // We don't retain here because the result of generate_expr is considered to be "moved into" the variable.
     let bound_val = generate_expr(bound.clone(), gc);
-    let var_name;
-    let var_type;
-    match &*var {
-        Var::TermVar { name, ty } => {
-            var_name = name.clone();
-            var_type = ty.clone();
-        }
-        Var::TyVar { name: _, kind: _ } => unimplemented!(),
-    }
-    if !gc.scope.data.contains_key(&var_name) {
-        gc.scope.data.insert(var_name.clone(), Default::default());
-    }
-    gc.scope
-        .data
-        .get_mut(&var_name)
-        .unwrap()
-        .push((bound_val.clone(), var_type));
+    let var_name = var.name();
+    let var_type = var.ty();
+    gc.scope.push(&var_name, &bound_val, &var_type);
     let expr_val = generate_expr(expr.clone(), gc);
-    gc.scope.data.get_mut(&var_name).unwrap().pop();
+    gc.scope.pop(&var_name);
     build_release(bound_val.ptr, gc);
     expr_val
 }
