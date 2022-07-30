@@ -1087,70 +1087,73 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
     let program = calculate_aux_info(program);
 
     let context = Context::create();
-    let module = context.create_module("main");
-    let builder = context.create_builder();
-    let mut gc = GenerationContext {
-        context: &context,
-        module: &module,
-        builder: &builder,
-        scope: Default::default(),
-        system_functions: Default::default(),
-    };
-    generate_system_functions(&mut gc);
+    {
+        let module = context.create_module("main");
+        let builder = context.create_builder();
+        let mut gc = GenerationContext {
+            context: &context,
+            module: &module,
+            builder: &builder,
+            scope: Default::default(),
+            system_functions: Default::default(),
+        };
+        generate_system_functions(&mut gc);
 
-    let i32_type = context.i32_type();
-    let main_fn_type = i32_type.fn_type(&[], false);
-    let main_function = module.add_function("main", main_fn_type, None);
+        let i32_type = context.i32_type();
+        let main_fn_type = i32_type.fn_type(&[], false);
+        let main_function = module.add_function("main", main_fn_type, None);
 
-    let entry_bb = context.append_basic_block(main_function, "entry");
-    builder.position_at_end(entry_bb);
+        let entry_bb = context.append_basic_block(main_function, "entry");
+        builder.position_at_end(entry_bb);
 
-    let program_result = generate_expr(program, &mut gc);
-    // let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
-    // builder.build_call(
-    //     print_int_obj,
-    //     &[program_result.ptr.into()],
-    //     "print_program_result",
-    // );
-    let int_obj_ptr = program_result.ptr.const_cast(
-        ObjectType::int_obj_type()
-            .to_struct_type(&context)
-            .ptr_type(AddressSpace::Generic),
-    );
-    let value = build_get_field(int_obj_ptr, 0, &gc);
-    if let BasicValueEnum::IntValue(value) = value {
-        builder.build_return(Some(&value));
-    } else {
-        unreachable!()
-        // builder.build_return(Some(&i32_type.const_int(0, false)));
+        let program_result = generate_expr(program, &mut gc);
+        // let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
+        // builder.build_call(
+        //     print_int_obj,
+        //     &[program_result.ptr.into()],
+        //     "print_program_result",
+        // );
+        let int_obj_ptr = program_result.ptr.const_cast(
+            ObjectType::int_obj_type()
+                .to_struct_type(&context)
+                .ptr_type(AddressSpace::Generic),
+        );
+        let value = build_get_field(int_obj_ptr, 0, &gc);
+        if let BasicValueEnum::IntValue(value) = value {
+            builder.build_return(Some(&value));
+        } else {
+            unreachable!()
+            // builder.build_return(Some(&i32_type.const_int(0, false)));
+        }
+
+        module.print_to_file("ir").unwrap();
+        assert_eq!(execute_main_module(&module), answer);
     }
-
-    module.print_to_file("ir").unwrap();
-    assert_eq!(execute_main_module(&module), answer);
+    std::mem::forget(context);
 }
 
 static Add: Lazy<Arc<ExprInfo>> =
     Lazy::new(|| lam(intvar_var("lhs"), lam(intvar_var("rhs"), add("lhs", "rhs"))));
 
-// #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
-    // #[test]
+    #[test]
     pub fn test0() {
         let program = int(-42);
         test_int_program(program, -42);
     }
-    // #[test]
+    #[test]
     pub fn test1() {
         let program = let_in(intvar_var("x"), int(-42), int(42));
         test_int_program(program, 42);
     }
-    // #[test]
+    #[test]
     pub fn test2() {
         let program = let_in(intvar_var("x"), int(-42), intvar("x"));
         test_int_program(program, -42);
     }
-    // #[test]
+    #[test]
     pub fn test3() {
         let program = let_in(
             intvar_var("n"),
@@ -1159,7 +1162,7 @@ mod tests {
         );
         test_int_program(program, -42);
     }
-    // #[test]
+    #[test]
     pub fn test4() {
         let program = let_in(
             intvar_var("n"),
@@ -1168,7 +1171,7 @@ mod tests {
         );
         test_int_program(program, 42);
     }
-    // #[test]
+    #[test]
     pub fn test5() {
         let program = let_in(
             intvar_var("x"),
@@ -1177,7 +1180,7 @@ mod tests {
         );
         test_int_program(program, 42);
     }
-    // #[test]
+    #[test]
     pub fn test6() {
         let program = let_in(
             intvar_var("x"),
@@ -1186,32 +1189,21 @@ mod tests {
         );
         test_int_program(program, 42);
     }
-    // #[test]
+    #[test]
     pub fn test7() {
         let program = app(lam(intvar_var("x"), int(0)), int(1));
         test_int_program(program, 0);
     }
-    // #[test]
+    #[test]
     pub fn test8() {
         let program = app(lam(intvar_var("x"), intvar("x")), int(1));
         test_int_program(program, 1);
     }
-    // #[test]
+    #[test]
     pub fn test9() {
         let program = app(app((*Add).clone(), int(2)), int(3));
         test_int_program(program, 5);
     }
 }
 
-fn main() {
-    tests::test9();
-    tests::test8();
-    tests::test7();
-    tests::test6();
-    // tests::test5(); // fail
-    // tests::test4(); // fail
-    tests::test3();
-    // tests::test2(); // fail
-    // tests::test1(); // fail
-    tests::test0();
-}
+fn main() {}
