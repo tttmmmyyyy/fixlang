@@ -1086,6 +1086,11 @@ mod tests {
         let program = app(lam(intvar_var("x"), int(0)), int(1));
         test_int_program(program, 0);
     }
+    #[test]
+    fn lam1() {
+        let program = app(lam(intvar_var("x"), intvar("x")), int(1));
+        test_int_program(program, 1);
+    }
 }
 
 fn main() {}
