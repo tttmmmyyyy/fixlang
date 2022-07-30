@@ -1129,7 +1129,7 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
         module.print_to_file("ir").unwrap();
         assert_eq!(execute_main_module(&module), answer);
     }
-    std::mem::forget(context);
+    std::mem::forget(context); // To avoid crash in destructor of LLVMContext
 }
 
 static Add: Lazy<Arc<ExprInfo>> =
