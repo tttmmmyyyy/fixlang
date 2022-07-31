@@ -1288,6 +1288,27 @@ mod tests {
         );
         test_int_program(program, 2);
     }
+    #[test]
+    pub fn test12() {
+        let program = let_in(
+            intvar_var("x"),
+            int(5),
+            let_in(
+                intvar_var("y"),
+                int(-3),
+                let_in(
+                    intvar_var("z"),
+                    int(12),
+                    let_in(
+                        intvar_var("xy"),
+                        app(app((*Add).clone(), intvar("x")), intvar("y")),
+                        app(app((*Add).clone(), intvar("xy")), intvar("z")),
+                    ),
+                ),
+            ),
+        );
+        test_int_program(program, 5 - 3 + 12);
+    }
 }
 
 fn main() {}
