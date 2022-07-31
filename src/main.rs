@@ -1266,6 +1266,28 @@ mod tests {
         let program = app(app((*Add).clone(), int(2)), int(3));
         test_int_program(program, 5);
     }
+    #[test]
+    pub fn test10() {
+        let program = let_in(
+            intvar_var("x"),
+            int(5),
+            app(app((*Add).clone(), int(2)), intvar("x")),
+        );
+        test_int_program(program, 7);
+    }
+    #[test]
+    pub fn test11() {
+        let program = let_in(
+            intvar_var("x"),
+            int(5),
+            let_in(
+                intvar_var("y"),
+                int(-3),
+                app(app((*Add).clone(), intvar("y")), intvar("x")),
+            ),
+        );
+        test_int_program(program, 2);
+    }
 }
 
 fn main() {}
