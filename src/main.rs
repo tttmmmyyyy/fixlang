@@ -646,11 +646,7 @@ fn build_panic<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {
 }
 
 fn build_raise<'c, 'm, 'b>(signal: i32, gc: &GenerationContext<'c, 'm, 'b>) {
-    let builder = gc.builder;
-    let system_functions = &gc.system_functions;
-    let raise_func = *system_functions.get(&SystemFunctions::Raise).unwrap();
-    let signal = gc.context.i32_type().const_int(signal as u64, false);
-    builder.build_call(raise_func, &[signal.into()], "build_raise");
+    //I don't know how to raise signal
 }
 
 fn build_debug_printf<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {
@@ -886,7 +882,7 @@ fn ptr_to_lambda_function_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx
 #[derive(Eq, Hash, PartialEq, Clone)]
 enum SystemFunctions {
     Printf,
-    Raise,
+    // Raise,
     PrintIntObj,
     RetainObj,
     ReleaseObj,
@@ -908,17 +904,17 @@ fn generate_func_printf<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> Funct
     func
 }
 
-fn generate_func_raise<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
-    let context = gc.context;
-    let module = gc.module;
+// fn generate_func_raise<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+//     let context = gc.context;
+//     let module = gc.module;
 
-    let i32_type = context.i32_type();
+//     let i32_type = context.i32_type();
 
-    let fn_type = i32_type.fn_type(&[i32_type.into()], false);
-    let func = module.add_function("raise", fn_type, None);
+//     let fn_type = i32_type.fn_type(&[i32_type.into()], false);
+//     let func = module.add_function("raise", fn_type, None);
 
-    func
-}
+//     func
+// }
 
 fn generate_func_print_int_obj<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm, 'b>,
@@ -1089,8 +1085,8 @@ fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>)
     );
     gc.system_functions
         .insert(SystemFunctions::Printf, generate_func_printf(gc));
-    gc.system_functions
-        .insert(SystemFunctions::Raise, generate_func_raise(gc));
+    // gc.system_functions
+    //     .insert(SystemFunctions::Raise, generate_func_raise(gc));
     gc.system_functions.insert(
         SystemFunctions::PrintIntObj,
         generate_func_print_int_obj(gc),
