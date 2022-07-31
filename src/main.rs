@@ -639,6 +639,32 @@ fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c
     );
 }
 
+fn build_panic<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {
+    const SIGABRT: i32 = 22;
+    build_debug_printf(msg, gc);
+    build_raise(SIGABRT, gc);
+}
+
+fn build_raise<'c, 'm, 'b>(signal: i32, gc: &GenerationContext<'c, 'm, 'b>) {
+    let builder = gc.builder;
+    let system_functions = &gc.system_functions;
+    let raise_func = *system_functions.get(&SystemFunctions::Raise).unwrap();
+    let signal = gc.context.i32_type().const_int(signal as u64, false);
+    builder.build_call(raise_func, &[signal.into()], "build_raise");
+}
+
+fn build_debug_printf<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {
+    let builder = gc.builder;
+    let system_functions = &gc.system_functions;
+    let string_ptr = builder.build_global_string_ptr(msg, "debug_printf");
+    let printf_func = *system_functions.get(&SystemFunctions::Printf).unwrap();
+    builder.build_call(
+        printf_func,
+        &[string_ptr.as_pointer_value().into()],
+        "build_debug_printf",
+    );
+}
+
 #[derive(Eq, Hash, PartialEq, Clone)]
 enum ObjectFieldType {
     ControlBlock,
@@ -860,6 +886,7 @@ fn ptr_to_lambda_function_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx
 #[derive(Eq, Hash, PartialEq, Clone)]
 enum SystemFunctions {
     Printf,
+    Raise,
     PrintIntObj,
     RetainObj,
     ReleaseObj,
@@ -877,6 +904,18 @@ fn generate_func_printf<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> Funct
 
     let fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
     let func = module.add_function("printf", fn_type, None);
+
+    func
+}
+
+fn generate_func_raise<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+    let context = gc.context;
+    let module = gc.module;
+
+    let i32_type = context.i32_type();
+
+    let fn_type = i32_type.fn_type(&[i32_type.into()], false);
+    let func = module.add_function("raise", fn_type, None);
 
     func
 }
@@ -972,17 +1011,8 @@ fn generate_func_release_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> 
         builder.build_conditional_branch(is_positive, then_bb, cont_bb);
 
         builder.position_at_end(then_bb);
-        let string_ptr = builder.build_global_string_ptr(
-            "Release object whose refcnt is already %lld\n",
-            "release_error_msg",
-        );
-        builder.build_call(
-            *system_functions.get(&SystemFunctions::Printf).unwrap(),
-            &[string_ptr.as_pointer_value().into(), refcnt.into()],
-            "print_error_in_release",
-        );
-        builder.build_unreachable();
-        // builder.build_unconditional_branch(cont_bb);
+        // build_panic("Release object whose refcnt is already zero.", gc);
+        builder.build_unconditional_branch(cont_bb);
 
         bb = cont_bb;
         builder.position_at_end(bb);
@@ -1059,6 +1089,8 @@ fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>)
     );
     gc.system_functions
         .insert(SystemFunctions::Printf, generate_func_printf(gc));
+    gc.system_functions
+        .insert(SystemFunctions::Raise, generate_func_raise(gc));
     gc.system_functions.insert(
         SystemFunctions::PrintIntObj,
         generate_func_print_int_obj(gc),

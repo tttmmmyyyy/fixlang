@@ -2,7 +2,6 @@
 source_filename = "main"
 
 @int_placefolder = private unnamed_addr constant [6 x i8] c"%lld\0A\00", align 1
-@release_error_msg = private unnamed_addr constant [45 x i8] c"Release object whose refcnt is already %lld\0A\00", align 1
 
 define void @empty_destructor(i64* %0) {
 entry:
@@ -10,6 +9,8 @@ entry:
 }
 
 declare i32 @printf(i8*, ...)
+
+declare i32 @raise(i32)
 
 define void @print_int_obj({ { i64, void (i8*)* }, i64 }* %0) {
 entry:
@@ -34,10 +35,9 @@ entry:
   br i1 %is_refcnt_positive, label %error_refcnt_already_leq_zero, label %refcnt_positive
 
 error_refcnt_already_leq_zero:                    ; preds = %entry
-  %print_error_in_release = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([45 x i8], [45 x i8]* @release_error_msg, i32 0, i32 0), i64 %refcnt)
-  unreachable
+  br label %refcnt_positive
 
-refcnt_positive:                                  ; preds = %entry
+refcnt_positive:                                  ; preds = %error_refcnt_already_leq_zero, %entry
   %refcnt1 = sub i64 %refcnt, 1
   %is_refcnt_zero = icmp eq i64 %refcnt1, 0
   br i1 %is_refcnt_zero, label %refcnt_zero_after_release, label %end
