@@ -192,7 +192,7 @@ fn int(val: i32) -> Arc<ExprInfo> {
     > = Arc::new(move |gc| {
         let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
         let value = gc.context.i64_type().const_int(val as u64, false);
-        build_set_field(ptr_to_int_obj, 0, value, gc);
+        build_set_field(ptr_to_int_obj, 1, value, gc);
         ExprCode {
             ptr: ptr_to_int_obj,
         }
@@ -211,7 +211,7 @@ fn add(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             .scope
             .get_field(
                 &lhs_str,
-                0,
+                1,
                 ObjectType::int_obj_type().to_struct_type(gc.context),
                 gc,
             )
@@ -220,14 +220,14 @@ fn add(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             .scope
             .get_field(
                 &rhs_str,
-                0,
+                1,
                 ObjectType::int_obj_type().to_struct_type(gc.context),
                 gc,
             )
             .into_int_value();
         let value = gc.builder.build_int_add(lhs_val, rhs_val, "add");
         let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
-        build_set_field(ptr_to_int_obj, 0, value, gc);
+        build_set_field(ptr_to_int_obj, 1, value, gc);
         ExprCode {
             ptr: ptr_to_int_obj,
         }
@@ -487,7 +487,7 @@ fn generate_literal<'c, 'm, 'b>(
     //             let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
     //             let value = lit.value.parse::<i64>().unwrap();
     //             let value = gc.context.i64_type().const_int(value as u64, false);
-    //             build_set_field(ptr_to_int_obj, 0, value, gc);
+    //             build_set_field(ptr_to_int_obj, 1, value, gc);
     //             ExprCode {
     //                 ptr: ptr_to_int_obj,
     //             }
@@ -571,11 +571,11 @@ fn generate_lam<'c, 'm, 'b>(
     }
     // Allocate and set up closure
     let obj = obj_type.build_allocate_shared_obj(gc);
-    build_set_field(obj, 0, lam_fn.as_global_value().as_pointer_value(), gc);
+    build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
     for (i, cap) in captured_names.iter().enumerate() {
         let (code, _) = gc.scope.get(cap);
         build_retain(code.ptr, gc);
-        build_set_field(obj, i as u32 + 1, code.ptr, gc);
+        build_set_field(obj, i as u32 + 2, code.ptr, gc);
     }
     // Return closure object
     ExprCode { ptr: obj }
@@ -614,7 +614,7 @@ fn build_set_field<'c, 'm, 'b, V>(
 {
     let builder = gc.builder;
     let ptr_to_field = builder
-        .build_struct_gep(obj, index + 1, "ptr_to_field")
+        .build_struct_gep(obj, index, "ptr_to_field")
         .unwrap();
     builder.build_store(ptr_to_field, value);
 }
@@ -626,7 +626,7 @@ fn build_get_field<'c, 'm, 'b>(
 ) -> BasicValueEnum<'c> {
     let builder = gc.builder;
     let ptr_to_field = builder
-        .build_struct_gep(obj, index + 1, "ptr_to_field")
+        .build_struct_gep(obj, index, "ptr_to_field")
         .unwrap();
     builder.build_load(ptr_to_field, "field_value")
 }
@@ -639,7 +639,7 @@ fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
         .to_struct_type(gc.context)
         .ptr_type(AddressSpace::Generic);
     let obj = obj.const_cast(ptr_to_lam_obj_ty);
-    build_get_field(obj, 0, gc).into_pointer_value()
+    build_get_field(obj, 1, gc).into_pointer_value()
 }
 
 fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
@@ -800,7 +800,7 @@ impl ObjectType {
                 match ft {
                     ObjectFieldType::SubObject => {
                         let ptr_to_subobj =
-                            build_get_field(ptr_to_obj, i as u32 - 1, &gc).into_pointer_value();
+                            build_get_field(ptr_to_obj, i as u32, &gc).into_pointer_value();
                         build_release(ptr_to_subobj, &gc);
                     }
                     ObjectFieldType::ControlBlock => {}
@@ -1180,7 +1180,7 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
                 .to_struct_type(&context)
                 .ptr_type(AddressSpace::Generic),
         );
-        let value = build_get_field(int_obj_ptr, 0, &gc);
+        let value = build_get_field(int_obj_ptr, 1, &gc);
         if let BasicValueEnum::IntValue(value) = value {
             builder.build_return(Some(&value));
         } else {
