@@ -406,6 +406,29 @@ struct GenerationContext<'c, 'm, 'b> {
     system_functions: HashMap<SystemFunctions, FunctionValue<'c>>,
 }
 
+impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
+    fn push_builder<'s, 'd>(
+        self: &'s mut Self,
+        builder: &'d Builder<'c>,
+    ) -> (
+        GenerationContext<'c, 'm, 'd>,
+        impl 's + FnOnce(GenerationContext<'c, 'm, 'd>),
+    ) {
+        let new_gc = GenerationContext {
+            context: self.context,
+            module: self.module,
+            builder: builder,
+            scope: std::mem::replace(&mut self.scope, Default::default()),
+            system_functions: std::mem::replace(&mut self.system_functions, Default::default()),
+        };
+        let pop = |gc: GenerationContext<'c, 'm, 'd>| {
+            self.scope = gc.scope;
+            self.system_functions = gc.system_functions;
+        };
+        (new_gc, pop)
+    }
+}
+
 fn generate_expr<'c, 'm, 'b>(
     expr: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
