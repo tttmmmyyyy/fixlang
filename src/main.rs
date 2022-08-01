@@ -805,8 +805,6 @@ impl ObjectType {
                 .unwrap();
         }
         let struct_type = self.to_struct_type(gc.context);
-        let void_type = gc.context.void_type();
-        let ptr_to_obj_type = ptr_to_refcnt_type(gc.context);
         let func_type = dtor_type(gc.context);
         let func = gc.module.add_function("dtor", func_type, None);
         let bb = gc.context.append_basic_block(func, "entry");
