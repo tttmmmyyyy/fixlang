@@ -219,7 +219,7 @@ fn int(val: i32) -> Arc<ExprInfo> {
     lit(generator, int_ty(), vec![])
 }
 
-fn add(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
+fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     let lhs_str = String::from(lhs);
     let rhs_str = String::from(rhs);
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
@@ -276,6 +276,13 @@ fn intvar(var_name: &str) -> Arc<ExprInfo> {
 
 fn int2intvar(var_name: &str) -> Arc<ExprInfo> {
     var(var_name, int2int_ty())
+}
+
+fn add() -> Arc<ExprInfo> {
+    lam(
+        intvar_var("lhs"),
+        lam(intvar_var("rhs"), add_lit("lhs", "rhs")),
+    )
 }
 
 // static FIX_INT_INT: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
@@ -1211,9 +1218,6 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
     std::mem::forget(context); // To avoid crash in destructor of LLVMContext
 }
 
-static Add: Lazy<Arc<ExprInfo>> =
-    Lazy::new(|| lam(intvar_var("lhs"), lam(intvar_var("rhs"), add("lhs", "rhs"))));
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1280,7 +1284,7 @@ mod tests {
     }
     #[test]
     pub fn test9() {
-        let program = app(app((*Add).clone(), int(2)), int(3));
+        let program = app(app(add(), int(2)), int(3));
         test_int_program(program, 5);
     }
     #[test]
@@ -1288,7 +1292,7 @@ mod tests {
         let program = let_in(
             intvar_var("x"),
             int(5),
-            app(app((*Add).clone(), int(2)), intvar("x")),
+            app(app(add(), int(2)), intvar("x")),
         );
         test_int_program(program, 7);
     }
@@ -1300,7 +1304,7 @@ mod tests {
             let_in(
                 intvar_var("y"),
                 int(-3),
-                app(app((*Add).clone(), intvar("y")), intvar("x")),
+                app(app(add(), intvar("y")), intvar("x")),
             ),
         );
         test_int_program(program, 2);
@@ -1318,8 +1322,8 @@ mod tests {
                     int(12),
                     let_in(
                         intvar_var("xy"),
-                        app(app((*Add).clone(), intvar("x")), intvar("y")),
-                        app(app((*Add).clone(), intvar("xy")), intvar("z")),
+                        app(app(add(), intvar("x")), intvar("y")),
+                        app(app(add(), intvar("xy")), intvar("z")),
                     ),
                 ),
             ),
@@ -1330,7 +1334,7 @@ mod tests {
     pub fn test13() {
         let program = let_in(
             int2intvar_var("f"),
-            app((*Add).clone(), int(3)),
+            app(add(), int(3)),
             app(int2intvar("f"), int(5)),
         );
         test_int_program(program, 3 + 5);
@@ -1345,7 +1349,7 @@ mod tests {
                 int(5),
                 let_in(
                     int2intvar_var("f"),
-                    app((*Add).clone(), intvar("x")),
+                    app(add(), intvar("x")),
                     app(int2intvar("f"), intvar("y")),
                 ),
             ),
@@ -1356,10 +1360,7 @@ mod tests {
     pub fn test15() {
         let program = let_in(
             int2intvar_var("f"),
-            lam(
-                intvar_var("x"),
-                app(app((*Add).clone(), int(3)), intvar("x")),
-            ),
+            lam(intvar_var("x"), app(app(add(), int(3)), intvar("x"))),
             app(int2intvar("f"), int(5)),
         );
         test_int_program(program, 3 + 5);
@@ -1368,10 +1369,7 @@ mod tests {
     pub fn test16() {
         let program = let_in(
             int2intvar_var("f"),
-            lam(
-                intvar_var("x"),
-                app(app((*Add).clone(), intvar("x")), int(3)),
-            ),
+            lam(intvar_var("x"), app(app(add(), intvar("x")), int(3))),
             app(int2intvar("f"), int(5)),
         );
         test_int_program(program, 3 + 5);
