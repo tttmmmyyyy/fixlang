@@ -977,8 +977,7 @@ fn generate_func_retain_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> F
     let context = gc.context;
     let module = gc.module;
     let void_type = context.void_type();
-    let ptr_to_refcnt_type = context.i64_type().ptr_type(AddressSpace::Generic);
-    let func_type = void_type.fn_type(&[ptr_to_refcnt_type.into()], false);
+    let func_type = void_type.fn_type(&[ptr_to_object_type(context).into()], false);
     let retain_func = module.add_function("retain_obj", func_type, None);
     let bb = context.append_basic_block(retain_func, "entry");
 
@@ -1001,8 +1000,7 @@ fn generate_func_release_obj<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> FunctionValue<'c> {
     let void_type = gc.context.void_type();
-    let ptr_to_refcnt_type = ptr_to_refcnt_type(gc.context);
-    let func_type = void_type.fn_type(&[ptr_to_refcnt_type.into()], false);
+    let func_type = void_type.fn_type(&[ptr_to_object_type(gc.context).into()], false);
     let release_func = gc.module.add_function("release_obj", func_type, None);
     let mut bb = gc.context.append_basic_block(release_func, "entry");
 
