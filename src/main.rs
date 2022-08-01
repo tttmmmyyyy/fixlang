@@ -149,6 +149,10 @@ fn int_ty() -> Arc<Type> {
     lit_ty("Int")
 }
 
+fn bool_ty() -> Arc<Type> {
+    lit_ty("Bool")
+}
+
 fn lambda_ty(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::FunTy(src, dst))
 }
@@ -716,6 +720,7 @@ enum ObjectFieldType {
     LambdaFunction,
     SubObject,
     Int,
+    Bool,
 }
 
 impl ObjectFieldType {
@@ -725,6 +730,7 @@ impl ObjectFieldType {
             ObjectFieldType::LambdaFunction => ptr_to_lambda_function_type(context).into(),
             ObjectFieldType::SubObject => ptr_to_object_type(context).into(),
             ObjectFieldType::Int => context.i64_type().into(),
+            ObjectFieldType::Bool => context.i8_type().into(),
         }
     }
 }
@@ -832,6 +838,7 @@ impl ObjectType {
                     ObjectFieldType::ControlBlock => {}
                     ObjectFieldType::Int => {}
                     ObjectFieldType::LambdaFunction => {}
+                    ObjectFieldType::Bool => {}
                 }
             }
             builder.build_return(None);
@@ -871,6 +878,7 @@ impl ObjectType {
                 ObjectFieldType::Int => {}
                 ObjectFieldType::SubObject => {}
                 ObjectFieldType::LambdaFunction => {}
+                ObjectFieldType::Bool => {}
             }
         }
         ptr_to_obj
