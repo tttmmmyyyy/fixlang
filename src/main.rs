@@ -7,7 +7,7 @@ use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructTy
 use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
 };
-use inkwell::{AddressSpace, OptimizationLevel};
+use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 use once_cell::sync::Lazy;
 use std::alloc::System;
 use std::collections::{HashMap, HashSet};
@@ -64,10 +64,11 @@ impl Expr {
     }
 }
 
+type LiteralGenerator =
+    dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>;
+
 struct Literal {
-    generator: Arc<
-        dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>,
-    >,
+    generator: Arc<LiteralGenerator>,
     free_vars: Vec<String>, // e.g. "+" literal has two free variables.
     ty: Arc<Type>,
 }
@@ -194,13 +195,7 @@ fn int2intvar_var(var_name: &str) -> Arc<Var> {
     termvar_var(var_name, int2int_ty())
 }
 
-fn lit(
-    generator: Arc<
-        dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>,
-    >,
-    ty: Arc<Type>,
-    free_vars: Vec<String>,
-) -> Arc<ExprInfo> {
+fn lit(generator: Arc<LiteralGenerator>, ty: Arc<Type>, free_vars: Vec<String>) -> Arc<ExprInfo> {
     Arc::new(Expr::Lit(Arc::new(Literal {
         generator,
         free_vars,
@@ -210,9 +205,7 @@ fn lit(
 }
 
 fn int(val: i32) -> Arc<ExprInfo> {
-    let generator: Arc<
-        dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>,
-    > = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
         let value = gc.context.i64_type().const_int(val as u64, false);
         build_set_field(ptr_to_int_obj, 1, value, gc);
@@ -223,13 +216,21 @@ fn int(val: i32) -> Arc<ExprInfo> {
     lit(generator, int_ty(), vec![])
 }
 
+fn bool(val: bool) -> Arc<ExprInfo> {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc);
+        let value = gc.context.i8_type().const_int(val as u64, false);
+        build_set_field(ptr_to_obj, 1, value, gc);
+        ExprCode { ptr: ptr_to_obj }
+    });
+    lit(generator, bool_ty(), vec![])
+}
+
 fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     let lhs_str = String::from(lhs);
     let rhs_str = String::from(rhs);
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
-    let generator: Arc<
-        dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>,
-    > = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let lhs_val = gc
             .scope
             .get_field(
@@ -256,6 +257,39 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         }
     });
     lit(generator, int_ty(), free_vars)
+}
+
+fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
+    let lhs_str = String::from(lhs);
+    let rhs_str = String::from(rhs);
+    let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let lhs_val = gc
+            .scope
+            .get_field(
+                &lhs_str,
+                1,
+                ObjectType::bool_obj_type().to_struct_type(gc.context),
+                gc,
+            )
+            .into_int_value();
+        let rhs_val = gc
+            .scope
+            .get_field(
+                &rhs_str,
+                1,
+                ObjectType::bool_obj_type().to_struct_type(gc.context),
+                gc,
+            )
+            .into_int_value();
+        let value = gc
+            .builder
+            .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, "eq");
+        let ptr_to_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
+        build_set_field(ptr_to_obj, 1, value, gc);
+        ExprCode { ptr: ptr_to_obj }
+    });
+    lit(generator, bool_ty(), free_vars)
 }
 
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
@@ -286,6 +320,13 @@ fn add() -> Arc<ExprInfo> {
     lam(
         intvar_var("lhs"),
         lam(intvar_var("rhs"), add_lit("lhs", "rhs")),
+    )
+}
+
+fn eq() -> Arc<ExprInfo> {
+    lam(
+        intvar_var("lhs"),
+        lam(intvar_var("rhs"), eq_lit("lhs", "rhs")),
     )
 }
 
@@ -781,6 +822,10 @@ impl ObjectType {
 
     fn int_obj_type() -> Self {
         Self::shared_obj_type(vec![ObjectFieldType::Int])
+    }
+
+    fn bool_obj_type() -> Self {
+        Self::shared_obj_type(vec![ObjectFieldType::Bool])
     }
 
     fn lam_obj_type() -> Self {
