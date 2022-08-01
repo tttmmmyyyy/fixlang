@@ -141,6 +141,10 @@ fn lit_ty(value: &str) -> Arc<Type> {
     })))
 }
 
+fn int_ty() -> Arc<Type> {
+    lit_ty("Int")
+}
+
 fn lambda_ty(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::FunTy(src, dst))
 }
@@ -162,11 +166,8 @@ fn forall_ty(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
 
 fn int2int_ty() -> Arc<Type> {
     lambda_ty(
-        lambda_ty(
-            lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
-            lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
-        ),
-        lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
+        lambda_ty(lambda_ty(int_ty(), int_ty()), lambda_ty(int_ty(), int_ty())),
+        lambda_ty(int_ty(), int_ty()),
     )
 }
 
@@ -178,7 +179,7 @@ fn termvar_var(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
 }
 
 fn intvar_var(var_name: &str) -> Arc<Var> {
-    termvar_var(var_name, INT_TYPE.clone())
+    termvar_var(var_name, int_ty())
 }
 
 fn int2intvar_var(var_name: &str) -> Arc<Var> {
@@ -211,7 +212,7 @@ fn int(val: i32) -> Arc<ExprInfo> {
             ptr: ptr_to_int_obj,
         }
     });
-    lit(generator, INT_TYPE.clone(), vec![])
+    lit(generator, int_ty(), vec![])
 }
 
 fn add(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
@@ -246,7 +247,7 @@ fn add(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             ptr: ptr_to_int_obj,
         }
     });
-    lit(generator, INT_TYPE.clone(), free_vars)
+    lit(generator, int_ty(), free_vars)
 }
 
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
@@ -266,7 +267,7 @@ fn var(var_name: &str, ty: Arc<Type>) -> Arc<ExprInfo> {
 }
 
 fn intvar(var_name: &str) -> Arc<ExprInfo> {
-    var(var_name, INT_TYPE.clone())
+    var(var_name, int_ty())
 }
 
 fn int2intvar(var_name: &str) -> Arc<ExprInfo> {
@@ -274,8 +275,6 @@ fn int2intvar(var_name: &str) -> Arc<ExprInfo> {
 }
 
 static KIND_STAR: Lazy<Arc<Kind>> = Lazy::new(|| Arc::new(Kind::Star));
-
-static INT_TYPE: Lazy<Arc<Type>> = Lazy::new(|| lit_ty("Int"));
 
 // static FIX_INT_INT: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
 //     lit(
