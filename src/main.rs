@@ -133,6 +133,10 @@ enum TyCon {
     Pair,
 }
 
+fn star_kind() -> Arc<Kind> {
+    Arc::new(Kind::Star)
+}
+
 fn lit_ty(value: &str) -> Arc<Type> {
     let value = String::from(value);
     Arc::new(Type::LitTy(Arc::new(TyLit {
@@ -152,7 +156,7 @@ fn lambda_ty(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
 fn tyvar_var(var_name: &str) -> Arc<Var> {
     Arc::new(Var::TyVar {
         name: String::from(var_name),
-        kind: KIND_STAR.clone(),
+        kind: star_kind(),
     })
 }
 
@@ -273,8 +277,6 @@ fn intvar(var_name: &str) -> Arc<ExprInfo> {
 fn int2intvar(var_name: &str) -> Arc<ExprInfo> {
     var(var_name, int2int_ty())
 }
-
-static KIND_STAR: Lazy<Arc<Kind>> = Lazy::new(|| Arc::new(Kind::Star));
 
 // static FIX_INT_INT: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
 //     lit(
