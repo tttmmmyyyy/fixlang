@@ -160,6 +160,16 @@ fn forall_ty(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::ForAllTy(tyvar_var("a"), ty))
 }
 
+fn int2int_ty() -> Arc<Type> {
+    lambda_ty(
+        lambda_ty(
+            lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
+            lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
+        ),
+        lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
+    )
+}
+
 fn termvar_var(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
     Arc::new(Var::TermVar {
         name: String::from(var_name),
@@ -169,6 +179,10 @@ fn termvar_var(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
 
 fn intvar_var(var_name: &str) -> Arc<Var> {
     termvar_var(var_name, INT_TYPE.clone())
+}
+
+fn int2intvar_var(var_name: &str) -> Arc<Var> {
+    termvar_var(var_name, int2int_ty())
 }
 
 fn lit(
@@ -253,6 +267,10 @@ fn var(var_name: &str, ty: Arc<Type>) -> Arc<ExprInfo> {
 
 fn intvar(var_name: &str) -> Arc<ExprInfo> {
     var(var_name, INT_TYPE.clone())
+}
+
+fn int2intvar(var_name: &str) -> Arc<ExprInfo> {
+    var(var_name, int2int_ty())
 }
 
 static KIND_STAR: Lazy<Arc<Kind>> = Lazy::new(|| Arc::new(Kind::Star));
@@ -1306,6 +1324,32 @@ mod tests {
             ),
         );
         test_int_program(program, 5 - 3 + 12);
+    }
+    #[test]
+    pub fn test13() {
+        let program = let_in(
+            int2intvar_var("f"),
+            app((*Add).clone(), int(3)),
+            app(int2intvar("f"), int(5)),
+        );
+        test_int_program(program, 3 + 5);
+    }
+    #[test]
+    pub fn test14() {
+        let program = let_in(
+            intvar_var("x"),
+            int(3),
+            let_in(
+                intvar_var("y"),
+                int(5),
+                let_in(
+                    int2intvar_var("f"),
+                    app((*Add).clone(), intvar("x")),
+                    app(int2intvar("f"), intvar("y")),
+                ),
+            ),
+        );
+        test_int_program(program, 3 + 5);
     }
 }
 
