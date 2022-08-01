@@ -1351,6 +1351,30 @@ mod tests {
         );
         test_int_program(program, 3 + 5);
     }
+    #[test]
+    pub fn test15() {
+        let program = let_in(
+            int2intvar_var("f"),
+            lam(
+                intvar_var("x"),
+                app(app((*Add).clone(), int(3)), intvar("x")),
+            ),
+            app(int2intvar("f"), int(5)),
+        );
+        test_int_program(program, 3 + 5);
+    }
+    #[test]
+    pub fn test16() {
+        let program = let_in(
+            int2intvar_var("f"),
+            lam(
+                intvar_var("x"),
+                app(app((*Add).clone(), intvar("x")), int(3)),
+            ),
+            app(int2intvar("f"), int(5)),
+        );
+        test_int_program(program, 3 + 5);
+    }
 }
 
 fn main() {}
