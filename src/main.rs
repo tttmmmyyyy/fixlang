@@ -330,6 +330,11 @@ fn eq() -> Arc<ExprInfo> {
     )
 }
 
+// If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>),
+fn if_else(cond: Arc<ExprInfo>, then: Arc<ExprInfo>, else_expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
+    Arc::new(Expr::If(cond, then, else_expr)).into_expr_info()
+}
+
 // static FIX_INT_INT: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
 //     lit(
 //         "fixIntInt",
@@ -399,12 +404,16 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
                 .expr
                 .into_expr_info_with(free_vars)
         }
-        Expr::If(cond, then_expr, else_expr) => {
-            unimplemented!()
-            // let mut free_vars = cond.free_vars.clone();
-            // free_vars.extend(then_expr.free_vars.clone());
-            // free_vars.extend(else_expr.free_vars.clone());
-            // ei.expr.into_expr_info_with(free_vars)
+        Expr::If(cond, then, else_expr) => {
+            let cond = calculate_aux_info(cond.clone());
+            let then = calculate_aux_info(then.clone());
+            let else_expr = calculate_aux_info(else_expr.clone());
+            let mut free_vars = cond.free_vars.clone();
+            free_vars.extend(then.free_vars.clone());
+            free_vars.extend(else_expr.free_vars.clone());
+            if_else(cond, then, else_expr)
+                .expr
+                .into_expr_info_with(free_vars)
         }
         Expr::Type(_) => ei.clone(),
     }
@@ -510,7 +519,9 @@ fn generate_expr<'c, 'm, 'b>(
         Expr::App(lambda, arg) => generate_app(lambda.clone(), arg.clone(), gc),
         Expr::Lam(arg, val) => generate_lam(arg.clone(), val.clone(), gc),
         Expr::Let(var, bound, expr) => generate_let(var.clone(), bound.clone(), expr.clone(), gc),
-        Expr::If(_, _, _) => todo!(),
+        Expr::If(cond_expr, then_expr, else_expr) => {
+            generate_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), gc)
+        }
         Expr::Type(_) => todo!(),
     }
 }
@@ -667,6 +678,53 @@ fn generate_let<'c, 'm, 'b>(
     gc.scope.pop(&var_name);
     build_release(bound_val.ptr, gc);
     expr_val
+}
+
+fn generate_if<'c, 'm, 'b>(
+    cond_expr: Arc<ExprInfo>,
+    then_expr: Arc<ExprInfo>,
+    else_expr: Arc<ExprInfo>,
+    gc: &mut GenerationContext<'c, 'm, 'b>,
+) -> ExprCode<'c> {
+    // // check if refcnt is positive
+    // let zero = gc.context.i64_type().const_zero();
+    // let is_positive = builder.build_int_compare(
+    //     inkwell::IntPredicate::ULE,
+    //     refcnt,
+    //     zero,
+    //     "is_refcnt_positive",
+    // );
+    // let then_bb = gc
+    //     .context
+    //     .append_basic_block(release_func, "error_refcnt_already_leq_zero");
+    // let cont_bb = gc
+    //     .context
+    //     .append_basic_block(release_func, "refcnt_positive");
+    // builder.build_conditional_branch(is_positive, then_bb, cont_bb);
+
+    // builder.position_at_end(then_bb);
+    // build_panic("Release object whose refcnt is already zero.", gc);
+    // builder.build_unconditional_branch(cont_bb);
+
+    // bb = cont_bb;
+    // builder.position_at_end(bb);
+    let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
+    let cond_val = build_get_field(ptr_to_cond_obj, 1, gc).into_int_value();
+    let bb = gc.builder.get_insert_block().unwrap();
+    let func = bb.get_parent().unwrap();
+    let then_bb = gc.context.append_basic_block(func, "then");
+    let else_bb = gc.context.append_basic_block(func, "else");
+    let cont_bb = gc.context.append_basic_block(func, "cont");
+    gc.builder
+        .build_conditional_branch(cond_val, then_bb, else_bb);
+    gc.builder.position_at_end(then_bb);
+    let then_code = generate_expr(then_expr, gc);
+    gc.builder.build_unconditional_branch(cont_bb);
+    gc.builder.position_at_end(else_bb);
+    let else_code = generate_expr(else_expr, gc);
+    gc.builder.build_unconditional_branch(cont_bb);
+    gc.builder.position_at_end(cont_bb);
+    let phi = gc.builder.build_phi(type_, name);
 }
 
 fn generate_clear_object<'c, 'm, 'b>(obj: PointerValue<'c>, gc: &GenerationContext<'c, 'm, 'b>) {
