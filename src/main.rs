@@ -1525,9 +1525,31 @@ mod tests {
         let program = if3(app(app(eq(), int(3)), int(5)), int(3), int(5));
         test_int_program(program, 5);
     }
+    #[test]
+    pub fn test21() {
+        let program = let_in(
+            int2intvar_var("F"),
+            app(
+                fix(),
+                lam(
+                    int2intvar_var("f"),
+                    lam(
+                        intvar_var("x"),
+                        if3(
+                            app(app(eq(), intvar("x")), int(0)),
+                            int(0),
+                            app(
+                                app(add(), intvar("x")),
+                                app(int2intvar("f"), app(app(add(), intvar("x")), int(-1))),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            app(int2intvar("F"), int(10)),
+        );
+        test_int_program(program, 55);
+    }
 }
 
-fn main() {
-    let program = if3(app(app(eq(), int(3)), int(3)), int(3), int(5));
-    test_int_program(program, 3);
-}
+fn main() {}
