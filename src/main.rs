@@ -292,6 +292,27 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     lit(generator, bool_ty(), free_vars)
 }
 
+fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
+    let f_str = String::from(f);
+    let x_str = String::from(x);
+    let free_vars = vec![f_str.clone(), x_str.clone()];
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let bb = gc.builder.get_insert_block().unwrap();
+        let func = bb.get_parent().unwrap();
+        // The pointer "fixed" is already retained by callee and moved into here.
+        let fixed = func.get_nth_param(1).unwrap().into_pointer_value();
+        // The pointer "x" is already retained by callee and moved into here.
+        let (x, _) = gc.scope.get(&x_str);
+        let x = x.ptr;
+        // The pointer "f" should be retained here.
+        let (f, _) = gc.scope.get(&f_str);
+        let f = f.ptr;
+        build_retain(f, gc);
+        unimplemented!()
+    });
+    lit(generator, bool_ty(), free_vars)
+}
+
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
     Arc::new(Expr::Let(var, bound, expr)).into_expr_info()
 }
@@ -328,6 +349,10 @@ fn eq() -> Arc<ExprInfo> {
         intvar_var("lhs"),
         lam(intvar_var("rhs"), eq_lit("lhs", "rhs")),
     )
+}
+
+fn fix() -> Arc<ExprInfo> {
+    lam(intvar_var("f"), lam(intvar_var("x"), fix_lit("f", "x")))
 }
 
 // If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>),
@@ -546,17 +571,25 @@ fn generate_app<'c, 'm, 'b>(
     let builder = gc.builder;
     let lambda = generate_expr(lambda, gc);
     let arg = generate_expr(arg, gc);
-    let ptr_to_func = build_ptr_to_func_of_lambda(lambda.ptr, gc);
+    build_app(lambda.ptr, arg.ptr, gc)
+    // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
+}
+
+fn build_app<'c, 'm, 'b>(
+    ptr_to_lambda: PointerValue<'c>,
+    ptr_to_arg: PointerValue<'c>,
+    gc: &mut GenerationContext<'c, 'm, 'b>,
+) -> ExprCode<'c> {
+    let ptr_to_func = build_ptr_to_func_of_lambda(ptr_to_lambda, gc);
     let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
-    let ret = builder.build_call(
+    let ret = gc.builder.build_call(
         lambda_func,
-        &[arg.ptr.into(), lambda.ptr.into()],
+        &[ptr_to_arg.into(), ptr_to_lambda.into()],
         "call_lambda",
     );
-    ret.set_tail_call(true); // TODO: understand the meaning of this precisely!
+    ret.set_tail_call(true); // TODO: Precusely understand the implication of this line!
     let ret = ret.try_as_basic_value().unwrap_left().into_pointer_value();
     ExprCode { ptr: ret }
-    // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
 }
 
 fn generate_literal<'c, 'm, 'b>(
