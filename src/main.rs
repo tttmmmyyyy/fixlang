@@ -687,6 +687,11 @@ fn generate_if<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
     let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
+    let ptr_to_cond_obj = ptr_to_cond_obj.const_cast(
+        ObjectType::bool_obj_type()
+            .to_struct_type(gc.context)
+            .ptr_type(AddressSpace::Generic),
+    );
     let cond_val = build_get_field(ptr_to_cond_obj, 1, gc).into_int_value();
     let bb = gc.builder.get_insert_block().unwrap();
     let func = bb.get_parent().unwrap();
@@ -1464,6 +1469,29 @@ mod tests {
         );
         test_int_program(program, 3 + 5);
     }
+    #[test]
+    pub fn test17() {
+        let program = if3(bool(true), int(3), int(5));
+        test_int_program(program, 3);
+    }
+    #[test]
+    pub fn test18() {
+        let program = if3(bool(false), int(3), int(5));
+        test_int_program(program, 5);
+    }
+    #[test]
+    pub fn test19() {
+        let program = if3(app(app(eq(), int(3)), int(3)), int(3), int(5));
+        test_int_program(program, 3);
+    }
+    #[test]
+    pub fn test20() {
+        let program = if3(app(app(eq(), int(3)), int(5)), int(3), int(5));
+        test_int_program(program, 5);
+    }
 }
 
-fn main() {}
+fn main() {
+    let program = if3(app(app(eq(), int(3)), int(3)), int(3), int(5));
+    test_int_program(program, 3);
+}
