@@ -553,6 +553,7 @@ fn generate_app<'c, 'm, 'b>(
         &[arg.ptr.into(), lambda.ptr.into()],
         "call_lambda",
     );
+    ret.set_tail_call(true); // TODO: understand the meaning of this precisely!
     let ret = ret.try_as_basic_value().unwrap_left().into_pointer_value();
     ExprCode { ptr: ret }
     // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
