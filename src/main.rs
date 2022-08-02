@@ -308,7 +308,9 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         let (f, _) = gc.scope.get(&f_str);
         let f = f.ptr;
         build_retain(f, gc);
-        unimplemented!()
+        let f_fixed = build_app(f, fixed, gc).ptr;
+        let f_fixed_x = build_app(f_fixed, x, gc).ptr;
+        ExprCode { ptr: f_fixed_x }
     });
     lit(generator, bool_ty(), free_vars)
 }
