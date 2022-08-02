@@ -87,7 +87,7 @@ entry:
   %ptr_to_dtor_field12 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block10, i32 0, i32 1
   store void (i8*)* @dtor.17, void (i8*)** %ptr_to_dtor_field12, align 8
   %ptr_to_field13 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj9, i32 0, i32 1
-  store i64 10, i64* %ptr_to_field13, align 4
+  store i64 127, i64* %ptr_to_field13, align 4
   %field_value14 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** getelementptr inbounds ({ { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* bitcast (i8* %call_lambda to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*), i32 0, i32 1), align 8
   %call_lambda15 = tail call i8* %field_value14({ { i64, void (i8*)* }, i64 }* %ptr_to_obj9, i8* %call_lambda)
   call void @release_obj(i8* %call_lambda)

@@ -1527,6 +1527,7 @@ mod tests {
     }
     #[test]
     pub fn test21() {
+        let n = 127;
         let program = let_in(
             int2intvar_var("F"),
             app(
@@ -1546,9 +1547,9 @@ mod tests {
                     ),
                 ),
             ),
-            app(int2intvar("F"), int(10)),
+            app(int2intvar("F"), int(n)),
         );
-        test_int_program(program, 55);
+        test_int_program(program, (n * (n + 1)) / 2);
     }
 }
 
