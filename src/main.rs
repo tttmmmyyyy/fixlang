@@ -331,7 +331,7 @@ fn eq() -> Arc<ExprInfo> {
 }
 
 // If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>),
-fn if_else(cond: Arc<ExprInfo>, then: Arc<ExprInfo>, else_expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
+fn if3(cond: Arc<ExprInfo>, then: Arc<ExprInfo>, else_expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
     Arc::new(Expr::If(cond, then, else_expr)).into_expr_info()
 }
 
@@ -411,7 +411,7 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = cond.free_vars.clone();
             free_vars.extend(then.free_vars.clone());
             free_vars.extend(else_expr.free_vars.clone());
-            if_else(cond, then, else_expr)
+            if3(cond, then, else_expr)
                 .expr
                 .into_expr_info_with(free_vars)
         }
@@ -686,28 +686,6 @@ fn generate_if<'c, 'm, 'b>(
     else_expr: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    // // check if refcnt is positive
-    // let zero = gc.context.i64_type().const_zero();
-    // let is_positive = builder.build_int_compare(
-    //     inkwell::IntPredicate::ULE,
-    //     refcnt,
-    //     zero,
-    //     "is_refcnt_positive",
-    // );
-    // let then_bb = gc
-    //     .context
-    //     .append_basic_block(release_func, "error_refcnt_already_leq_zero");
-    // let cont_bb = gc
-    //     .context
-    //     .append_basic_block(release_func, "refcnt_positive");
-    // builder.build_conditional_branch(is_positive, then_bb, cont_bb);
-
-    // builder.position_at_end(then_bb);
-    // build_panic("Release object whose refcnt is already zero.", gc);
-    // builder.build_unconditional_branch(cont_bb);
-
-    // bb = cont_bb;
-    // builder.position_at_end(bb);
     let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
     let cond_val = build_get_field(ptr_to_cond_obj, 1, gc).into_int_value();
     let bb = gc.builder.get_insert_block().unwrap();
@@ -724,7 +702,10 @@ fn generate_if<'c, 'm, 'b>(
     let else_code = generate_expr(else_expr, gc);
     gc.builder.build_unconditional_branch(cont_bb);
     gc.builder.position_at_end(cont_bb);
-    let phi = gc.builder.build_phi(type_, name);
+    let phi = gc.builder.build_phi(ptr_to_object_type(gc.context), "phi");
+    phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
+    let ret_ptr = phi.as_basic_value().into_pointer_value();
+    ExprCode { ptr: ret_ptr }
 }
 
 fn generate_clear_object<'c, 'm, 'b>(obj: PointerValue<'c>, gc: &GenerationContext<'c, 'm, 'b>) {
