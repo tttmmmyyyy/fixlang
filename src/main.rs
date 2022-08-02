@@ -1140,7 +1140,11 @@ fn generate_func_retain_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> F
 
     let builder = context.create_builder();
     builder.position_at_end(bb);
-    let ptr_to_refcnt = retain_func.get_first_param().unwrap().into_pointer_value();
+    let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
+    let ptr_to_control_block = ptr_to_obj.const_cast(ptr_to_control_block_type(gc.context));
+    let ptr_to_refcnt = builder
+        .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
+        .unwrap();
     let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
     let one = context.i64_type().const_int(1, false);
     let refcnt = builder.build_int_add(refcnt, one, "refcnt");
@@ -1527,7 +1531,7 @@ mod tests {
     }
     #[test]
     pub fn test21() {
-        let n = 127;
+        let n = 256;
         let program = let_in(
             int2intvar_var("F"),
             app(
