@@ -312,7 +312,7 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         let f_fixed_x = build_app(f_fixed, x, gc).ptr;
         ExprCode { ptr: f_fixed_x }
     });
-    lit(generator, bool_ty(), free_vars)
+    lit(generator, int2int_ty(), free_vars)
 }
 
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
