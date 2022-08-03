@@ -269,7 +269,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             .get_field(
                 &lhs_str,
                 1,
-                ObjectType::bool_obj_type().to_struct_type(gc.context),
+                ObjectType::int_obj_type().to_struct_type(gc.context),
                 gc,
             )
             .into_int_value();
@@ -278,14 +278,14 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             .get_field(
                 &rhs_str,
                 1,
-                ObjectType::bool_obj_type().to_struct_type(gc.context),
+                ObjectType::int_obj_type().to_struct_type(gc.context),
                 gc,
             )
             .into_int_value();
         let value = gc
             .builder
             .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, "eq");
-        let ptr_to_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
+        let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc);
         build_set_field(ptr_to_obj, 1, value, gc);
         ExprCode { ptr: ptr_to_obj }
     });
@@ -1531,7 +1531,7 @@ mod tests {
     }
     #[test]
     pub fn test21() {
-        let n = 256;
+        let n = 10000;
         let program = let_in(
             int2intvar_var("F"),
             app(
