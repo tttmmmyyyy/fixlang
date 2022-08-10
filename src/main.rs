@@ -302,10 +302,10 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         // The pointer "fixed" is already retained by callee and moved into here.
         let fixed = func.get_nth_param(1).unwrap().into_pointer_value();
         // The pointer "x" is already retained by callee and moved into here.
-        let (x, _) = gc.scope.get(&x_str);
+        let x = gc.scope.get(&x_str);
         let x = x.ptr;
         // The pointer "f" should be retained here.
-        let (f, _) = gc.scope.get(&f_str);
+        let f = gc.scope.get(&f_str);
         let f = f.ptr;
         build_retain(f, gc);
         let f_fixed = build_app(f, fixed, gc).ptr;
@@ -470,18 +470,15 @@ struct ExprCode<'ctx> {
 
 #[derive(Default)]
 struct LocalVariables<'ctx> {
-    data: HashMap<String, Vec<(ExprCode<'ctx>, Arc<Type>)>>,
+    data: HashMap<String, Vec<ExprCode<'ctx>>>,
 }
 
 impl<'c> LocalVariables<'c> {
-    fn push(self: &mut Self, var_name: &str, code: &ExprCode<'c>, ty: &Arc<Type>) {
+    fn push(self: &mut Self, var_name: &str, code: &ExprCode<'c>) {
         if !self.data.contains_key(var_name) {
             self.data.insert(String::from(var_name), Default::default());
         }
-        self.data
-            .get_mut(var_name)
-            .unwrap()
-            .push((code.clone(), ty.clone()));
+        self.data.get_mut(var_name).unwrap().push(code.clone());
     }
     fn pop(self: &mut Self, var_name: &str) {
         self.data.get_mut(var_name).unwrap().pop();
@@ -489,7 +486,7 @@ impl<'c> LocalVariables<'c> {
             self.data.remove(var_name);
         }
     }
-    fn get(self: &Self, var_name: &str) -> (ExprCode<'c>, Arc<Type>) {
+    fn get(self: &Self, var_name: &str) -> ExprCode<'c> {
         self.data.get(var_name).unwrap().last().unwrap().clone()
     }
     fn get_field<'m, 'b>(
@@ -499,7 +496,7 @@ impl<'c> LocalVariables<'c> {
         ty: StructType<'c>,
         gc: &GenerationContext<'c, 'm, 'b>,
     ) -> BasicValueEnum<'c> {
-        let (expr, _) = self.get(var_name);
+        let expr = self.get(var_name);
         let ptr = expr.ptr.const_cast(ty.ptr_type(AddressSpace::Generic));
         build_get_field(ptr, field_idx, gc)
     }
@@ -556,7 +553,7 @@ fn generate_expr<'c, 'm, 'b>(
 fn generate_var<'c, 'm, 'b>(var: Arc<Var>, gc: &mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c> {
     match &*var {
         Var::TermVar { name, ty: _ } => {
-            let (code, _) = gc.scope.get(name);
+            let code = gc.scope.get(name);
             // We need to retain here since the pointer value is cloned.
             build_retain(code.ptr, gc);
             code.clone()
@@ -658,7 +655,7 @@ fn generate_lam<'c, 'm, 'b>(
         // Create new scope
         let mut scope = LocalVariables::default();
         let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
-        scope.push(&arg.name(), &ExprCode { ptr: arg_ptr }, arg.ty());
+        scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
         let closure_obj_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
         let closure_ptr = closure_obj_ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
         for (i, cap_name) in captured_names.iter().enumerate() {
@@ -668,8 +665,7 @@ fn generate_lam<'c, 'm, 'b>(
             let cap_ptr = builder
                 .build_load(ptr_to_cap_ptr, "ptr_to_captured_obj")
                 .into_pointer_value();
-            let (_, cap_ty) = gc.scope.get(cap_name);
-            scope.push(cap_name, &ExprCode { ptr: cap_ptr }, &cap_ty);
+            scope.push(cap_name, &ExprCode { ptr: cap_ptr });
         }
         // Create new gc
         let mut gc = GenerationContext {
@@ -691,7 +687,7 @@ fn generate_lam<'c, 'm, 'b>(
     let obj = obj_type.build_allocate_shared_obj(gc);
     build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
     for (i, cap) in captured_names.iter().enumerate() {
-        let (code, _) = gc.scope.get(cap);
+        let code = gc.scope.get(cap);
         build_retain(code.ptr, gc);
         build_set_field(obj, i as u32 + 2, code.ptr, gc);
     }
@@ -708,8 +704,7 @@ fn generate_let<'c, 'm, 'b>(
     let bound_val = generate_expr(bound.clone(), gc);
     // We don't retain here because the result of generate_expr is considered to be "moved into" the variable.
     let var_name = var.name();
-    let var_type = var.ty();
-    gc.scope.push(&var_name, &bound_val, &var_type);
+    gc.scope.push(&var_name, &bound_val);
     let expr_val = generate_expr(expr.clone(), gc);
     gc.scope.pop(&var_name);
     build_release(bound_val.ptr, gc);
