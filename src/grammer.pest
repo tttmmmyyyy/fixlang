@@ -1,0 +1,31 @@
+WHITESPACE = _{ " " | NEWLINE }
+
+int_expr = @{ "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
+
+fix_lit_expr = { "fix" ~ !var_char }
+
+add_lit_expr = { "add" ~ !var_char }
+
+eq_lit_expr = { "eq" ~ !var_char }
+
+lit_expr = { int_expr | fix_lit_expr | add_lit_expr | eq_lit_expr }
+
+var_char = { ASCII_ALPHA | ASCII_DIGIT }
+
+var_expr = @{ ASCII_ALPHA_LOWER ~ var_char* }
+
+let_expr = { "let" ~ WHITESPACE ~ var_expr ~ "=" ~ expr ~ WHITESPACE ~ ";" ~ WHITESPACE ~ expr }
+
+if_expr = { "if" ~ WHITESPACE ~ expr ~ WHITESPACE ~ "then" ~ WHITESPACE ~ expr ~ WHITESPACE ~ "else" ~ WHITESPACE ~ expr }
+
+lam_expr = { "\\" ~ var_expr ~ "->" ~ expr }
+
+app_expr = { not_app_expr ~ (WHITESPACE ~ not_app_expr)+ }
+
+not_app_expr = { lit_expr | var_expr | let_expr | if_expr | lam_expr | bracket_expr }
+
+bracket_expr = { "(" ~ expr ~ ")" }
+
+expr = { app_expr | not_app_expr }
+
+file = _{ SOI ~ expr ~ EOI }

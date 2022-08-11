@@ -1,3 +1,7 @@
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
+
 use either::Either;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
@@ -9,6 +13,8 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 use once_cell::sync::Lazy;
+use pest::iterators::{Pair, Pairs};
+use pest::Parser;
 use std::alloc::System;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Pointer;
@@ -1427,6 +1433,58 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32, opt_level: Optimization
     std::mem::forget(context); // To avoid crash in destructor of LLVMContext
 }
 
+fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
+    let file = RespParser::parse(Rule::file, source).unwrap();
+    let ast = parse_file(file);
+    test_int_program(ast, answer, opt_level);
+}
+
+#[derive(Parser)]
+#[grammar = "grammer.pest"]
+pub struct RespParser;
+
+fn parse_file(mut file: Pairs<Rule>) -> Arc<ExprInfo> {
+    let pair = file.next().unwrap();
+    match pair.as_rule() {
+        Rule::expr => return parse_expr(pair),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let pair = expr.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::app_expr => parse_app_expr(pair),
+        Rule::not_app_expr => parse_not_app_expr(pair),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    todo!()
+}
+
+fn parse_not_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let pair = expr.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::lit_expr => parse_lit_expr(pair),
+        _ => todo!(),
+    }
+}
+
+fn parse_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let pair = expr.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::int_expr => parse_int_expr(pair),
+        _ => todo!(),
+    }
+}
+
+fn parse_int_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let val = expr.as_str().parse::<i32>().unwrap();
+    int(val)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1662,6 +1720,12 @@ mod tests {
             app(app(int2intvar("F"), int(0)), int(n)),
         );
         test_int_program(program, (n * (n + 1)) / 2, OptimizationLevel::Default);
+    }
+    #[test]
+    pub fn test23() {
+        let source = r"5";
+        let answer = 5;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
 }
 
