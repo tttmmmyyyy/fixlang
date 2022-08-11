@@ -252,6 +252,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         let value = gc.builder.build_int_add(lhs_val, rhs_val, "add");
         let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
         build_set_field(ptr_to_int_obj, 1, value, gc);
+        gc.build_release_vars_unused_later();
         ExprCode {
             ptr: ptr_to_int_obj,
         }
@@ -287,6 +288,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, "eq");
         let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc);
         build_set_field(ptr_to_obj, 1, value, gc);
+        gc.build_release_vars_unused_later();
         ExprCode { ptr: ptr_to_obj }
     });
     lit(generator, bool_ty(), free_vars)
@@ -295,24 +297,16 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
 fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
     let f_str = String::from(f);
     let x_str = String::from(x);
-    let free_vars = vec![f_str.clone(), x_str.clone()];
+    let free_vars = vec![String::from(SELF_NAME), f_str.clone(), x_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let bb = gc.builder.get_insert_block().unwrap();
-        let func = bb.get_parent().unwrap();
-        // The pointer "fixed" is already retained by callee and moved into here.
-        let fixed = func.get_nth_param(1).unwrap().into_pointer_value();
-        // The pointer "x" is already retained by callee and moved into here.
-        let x = gc.scope.get(&x_str);
-        let x = x.ptr;
-        // The pointer "f" should be retained here.
-        let f = gc.scope.get(&f_str);
-        let f = f.ptr;
-        build_retain(f, gc);
-        let f_fixed = build_app(f, fixed, gc).ptr;
-        let f_fixed_x = build_app(f_fixed, x, gc).ptr;
-        ExprCode { ptr: f_fixed_x }
+        let fixf = gc.scope.get(SELF_NAME).code.ptr;
+        let x = gc.scope.get(&x_str).code.ptr;
+        let f = gc.scope.get(&f_str).code.ptr;
+        let f_fixf = build_app(f, fixf, gc).ptr;
+        let f_fixf_x = build_app(fixf, x, gc).ptr;
+        ExprCode { ptr: f_fixf_x }
     });
-    lit(generator, int2int_ty(), free_vars)
+    lit(generator, int_ty(), free_vars)
 }
 
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
@@ -416,6 +410,7 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let val = calculate_aux_info(val.clone());
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(arg.name());
+            free_vars.remove(SELF_NAME);
             lam(arg.clone(), val).expr.into_expr_info_with(free_vars)
         }
         Expr::Let(var, bound, val) => {
@@ -468,9 +463,15 @@ struct ExprCode<'ctx> {
     ptr: PointerValue<'ctx>,
 }
 
+#[derive(Clone)]
+struct LocalVariable<'ctx> {
+    code: ExprCode<'ctx>,
+    used_later: u32,
+}
+
 #[derive(Default)]
 struct LocalVariables<'ctx> {
-    data: HashMap<String, Vec<ExprCode<'ctx>>>,
+    data: HashMap<String, Vec<LocalVariable<'ctx>>>,
 }
 
 impl<'c> LocalVariables<'c> {
@@ -478,7 +479,10 @@ impl<'c> LocalVariables<'c> {
         if !self.data.contains_key(var_name) {
             self.data.insert(String::from(var_name), Default::default());
         }
-        self.data.get_mut(var_name).unwrap().push(code.clone());
+        self.data.get_mut(var_name).unwrap().push(LocalVariable {
+            code: code.clone(),
+            used_later: 0,
+        });
     }
     fn pop(self: &mut Self, var_name: &str) {
         self.data.get_mut(var_name).unwrap().pop();
@@ -486,7 +490,7 @@ impl<'c> LocalVariables<'c> {
             self.data.remove(var_name);
         }
     }
-    fn get(self: &Self, var_name: &str) -> ExprCode<'c> {
+    fn get(self: &Self, var_name: &str) -> LocalVariable<'c> {
         self.data.get(var_name).unwrap().last().unwrap().clone()
     }
     fn get_field<'m, 'b>(
@@ -497,8 +501,34 @@ impl<'c> LocalVariables<'c> {
         gc: &GenerationContext<'c, 'm, 'b>,
     ) -> BasicValueEnum<'c> {
         let expr = self.get(var_name);
-        let ptr = expr.ptr.const_cast(ty.ptr_type(AddressSpace::Generic));
+        let ptr = expr.code.ptr.const_cast(ty.ptr_type(AddressSpace::Generic));
         build_get_field(ptr, field_idx, gc)
+    }
+    fn modify_used_later(self: &mut Self, names: &HashSet<String>, by: i32) {
+        for name in names {
+            let used_later = &mut self
+                .data
+                .get_mut(name)
+                .unwrap()
+                .last_mut()
+                .unwrap()
+                .used_later;
+            *used_later = add_i32_to_u32(*used_later, by);
+        }
+    }
+    fn increment_used_later(self: &mut Self, names: &HashSet<String>) {
+        self.modify_used_later(names, 1);
+    }
+    fn decrement_used_later(self: &mut Self, names: &HashSet<String>) {
+        self.modify_used_later(names, -1);
+    }
+}
+
+fn add_i32_to_u32(u: u32, i: i32) -> u32 {
+    if i.is_negative() {
+        u - i.wrapping_abs() as u32
+    } else {
+        u + i as u32
     }
 }
 
@@ -521,7 +551,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         let new_gc = GenerationContext {
             context: self.context,
             module: self.module,
-            builder: builder,
+            builder,
             scope: std::mem::replace(&mut self.scope, Default::default()),
             system_functions: std::mem::replace(&mut self.system_functions, Default::default()),
         };
@@ -530,6 +560,22 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             self.system_functions = gc.system_functions;
         };
         (new_gc, pop)
+    }
+    fn get_var_retained_if_used_later(&mut self, var_name: &str) -> ExprCode<'c> {
+        let var = self.scope.get(var_name);
+        let code = var.code;
+        if var.used_later > 0 {
+            build_retain(code.ptr, self);
+        }
+        code
+    }
+    fn build_release_vars_unused_later(&mut self) {
+        for (_, var) in self.scope.data.iter() {
+            let v = var.last().unwrap();
+            if v.used_later == 0 {
+                build_release(v.code.ptr, self);
+            }
+        }
     }
 }
 
@@ -552,12 +598,7 @@ fn generate_expr<'c, 'm, 'b>(
 
 fn generate_var<'c, 'm, 'b>(var: Arc<Var>, gc: &mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c> {
     match &*var {
-        Var::TermVar { name, ty: _ } => {
-            let code = gc.scope.get(name);
-            // We need to retain here since the pointer value is cloned.
-            build_retain(code.ptr, gc);
-            code.clone()
-        }
+        Var::TermVar { name, ty: _ } => gc.get_var_retained_if_used_later(name),
         Var::TyVar { name: _, kind: _ } => unreachable!(),
     }
 }
@@ -568,9 +609,11 @@ fn generate_app<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
     let builder = gc.builder;
-    let lambda = generate_expr(lambda, gc);
-    let arg = generate_expr(arg, gc);
-    build_app(lambda.ptr, arg.ptr, gc)
+    gc.scope.increment_used_later(&arg.free_vars);
+    let lambda_code = generate_expr(lambda, gc);
+    gc.scope.decrement_used_later(&arg.free_vars);
+    let arg_code = generate_expr(arg, gc);
+    build_app(lambda_code.ptr, arg_code.ptr, gc)
     // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
 }
 
@@ -586,7 +629,7 @@ fn build_app<'c, 'm, 'b>(
         &[ptr_to_arg.into(), ptr_to_lambda.into()],
         "call_lambda",
     );
-    ret.set_tail_call(true); // TODO: Precusely understand the implication of this line!
+    ret.set_tail_call(true);
     let ret = ret.try_as_basic_value().unwrap_left().into_pointer_value();
     ExprCode { ptr: ret }
 }
@@ -622,6 +665,8 @@ fn generate_literal<'c, 'm, 'b>(
     // }
 }
 
+static SELF_NAME: &str = "%SELF%";
+
 fn generate_lam<'c, 'm, 'b>(
     arg: Arc<Var>,
     val: Arc<ExprInfo>,
@@ -632,6 +677,7 @@ fn generate_lam<'c, 'm, 'b>(
     // Fix ordering of captured names
     let mut captured_names = val.free_vars.clone();
     captured_names.remove(arg.name());
+    captured_names.remove(SELF_NAME);
     let captured_names: Vec<String> = captured_names.into_iter().collect();
     // Determine the type of closure
     let mut field_types = vec![
@@ -656,8 +702,9 @@ fn generate_lam<'c, 'm, 'b>(
         let mut scope = LocalVariables::default();
         let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
         scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
-        let closure_obj_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-        let closure_ptr = closure_obj_ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
+        let closure_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let closure_ptr = closure_ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
+        scope.push(SELF_NAME, &ExprCode { ptr: closure_ptr });
         for (i, cap_name) in captured_names.iter().enumerate() {
             let ptr_to_cap_ptr = builder
                 .build_struct_gep(closure_ptr, i as u32 + 2, "ptr_to_captured_field")
@@ -675,11 +722,17 @@ fn generate_lam<'c, 'm, 'b>(
             scope,
             system_functions: gc.system_functions.clone(),
         };
+        // Retain captured objects
+        for cap_name in &captured_names {
+            let ptr = gc.scope.get(cap_name).code.ptr;
+            build_retain(ptr, &gc);
+        }
+        // Release unused variables (SELF is released here in many cases).
+        gc.scope.increment_used_later(&val.free_vars);
+        gc.build_release_vars_unused_later();
+        gc.scope.decrement_used_later(&val.free_vars);
         // Generate value
         let val = generate_expr(val, &mut gc);
-        // Release closure and arg
-        build_release(arg_ptr, &gc);
-        build_release(closure_obj_ptr, &gc);
         // Return result
         builder.build_return(Some(&val.ptr));
     }
@@ -687,9 +740,8 @@ fn generate_lam<'c, 'm, 'b>(
     let obj = obj_type.build_allocate_shared_obj(gc);
     build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
     for (i, cap) in captured_names.iter().enumerate() {
-        let code = gc.scope.get(cap);
-        build_retain(code.ptr, gc);
-        build_set_field(obj, i as u32 + 2, code.ptr, gc);
+        let ptr = gc.get_var_retained_if_used_later(cap).ptr;
+        build_set_field(obj, i as u32 + 2, ptr, gc);
     }
     // Return closure object
     ExprCode { ptr: obj }
@@ -698,17 +750,22 @@ fn generate_lam<'c, 'm, 'b>(
 fn generate_let<'c, 'm, 'b>(
     var: Arc<Var>,
     bound: Arc<ExprInfo>,
-    expr: Arc<ExprInfo>,
+    val: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    let bound_val = generate_expr(bound.clone(), gc);
-    // We don't retain here because the result of generate_expr is considered to be "moved into" the variable.
     let var_name = var.name();
-    gc.scope.push(&var_name, &bound_val);
-    let expr_val = generate_expr(expr.clone(), gc);
+    let mut used_in_val_except_var = val.free_vars.clone();
+    used_in_val_except_var.remove(var_name);
+    gc.scope.increment_used_later(&used_in_val_except_var);
+    let bound_code = generate_expr(bound.clone(), gc);
+    gc.scope.decrement_used_later(&used_in_val_except_var);
+    gc.scope.push(&var_name, &bound_code);
+    gc.scope.increment_used_later(&val.free_vars);
+    gc.build_release_vars_unused_later();
+    gc.scope.decrement_used_later(&val.free_vars);
+    let val_code = generate_expr(val.clone(), gc);
     gc.scope.pop(&var_name);
-    build_release(bound_val.ptr, gc);
-    expr_val
+    val_code
 }
 
 fn generate_if<'c, 'm, 'b>(
@@ -717,7 +774,11 @@ fn generate_if<'c, 'm, 'b>(
     else_expr: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
+    let mut used_then_or_else = then_expr.free_vars.clone();
+    used_then_or_else.extend(else_expr.free_vars.clone());
+    gc.scope.increment_used_later(&used_then_or_else);
     let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
+    gc.scope.decrement_used_later(&used_then_or_else);
     let ptr_to_cond_obj = ptr_to_cond_obj.const_cast(
         ObjectType::bool_obj_type()
             .to_struct_type(gc.context)
@@ -731,12 +792,27 @@ fn generate_if<'c, 'm, 'b>(
     let cont_bb = gc.context.append_basic_block(func, "cont");
     gc.builder
         .build_conditional_branch(cond_val, then_bb, else_bb);
+
     gc.builder.position_at_end(then_bb);
+    {
+        // Release variables used only in the else block.
+        gc.scope.increment_used_later(&then_expr.free_vars);
+        gc.build_release_vars_unused_later();
+        gc.scope.decrement_used_later(&then_expr.free_vars);
+    }
     let then_code = generate_expr(then_expr, gc);
     gc.builder.build_unconditional_branch(cont_bb);
+
     gc.builder.position_at_end(else_bb);
+    {
+        // Release variables used only in the if block.
+        gc.scope.increment_used_later(&else_expr.free_vars);
+        gc.build_release_vars_unused_later();
+        gc.scope.decrement_used_later(&else_expr.free_vars);
+    }
     let else_code = generate_expr(else_expr, gc);
     gc.builder.build_unconditional_branch(cont_bb);
+
     gc.builder.position_at_end(cont_bb);
     let phi = gc.builder.build_phi(ptr_to_object_type(gc.context), "phi");
     phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
