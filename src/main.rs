@@ -1631,6 +1631,40 @@ mod tests {
         );
         test_int_program(program, (n * (n + 1)) / 2);
     }
+    #[test]
+    pub fn test22() {
+        let n = 10000;
+        let program = let_in(
+            int2intvar_var("F"),
+            app(
+                fix(),
+                lam(
+                    int2intvar_var("f"),
+                    lam(
+                        intvar_var("a"),
+                        lam(
+                            intvar_var("x"),
+                            if3(
+                                app(app(eq(), intvar("x")), int(0)),
+                                intvar("a"),
+                                let_in(
+                                    intvar_var("a2"),
+                                    app(app(add(), intvar("a")), intvar("x")),
+                                    let_in(
+                                        intvar_var("x2"),
+                                        app(app(add(), intvar("x")), int(-1)),
+                                        app(app(int2intvar("f"), intvar("a2")), intvar("x2")),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            app(app(int2intvar("F"), int(0)), int(n)),
+        );
+        test_int_program(program, (n * (n + 1)) / 2);
+    }
 }
 
 fn main() {}
