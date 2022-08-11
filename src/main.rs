@@ -1366,10 +1366,8 @@ fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>)
         .insert(SystemFunctions::ReleaseObj, release_func);
 }
 
-fn execute_main_module<'ctx>(module: &Module<'ctx>) -> i32 {
-    let execution_engine = module
-        .create_jit_execution_engine(OptimizationLevel::None)
-        .unwrap();
+fn execute_main_module<'ctx>(module: &Module<'ctx>, opt_level: OptimizationLevel) -> i32 {
+    let execution_engine = module.create_jit_execution_engine(opt_level).unwrap();
     unsafe {
         let func = execution_engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -1380,7 +1378,7 @@ fn execute_main_module<'ctx>(module: &Module<'ctx>) -> i32 {
 
 const DEBUG_MEMORY: bool = true;
 
-fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
+fn test_int_program(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLevel) {
     let program = calculate_aux_info(program);
 
     let context = Context::create();
@@ -1424,7 +1422,7 @@ fn test_int_program(program: Arc<ExprInfo>, answer: i32) {
         }
 
         module.print_to_file("ir").unwrap();
-        assert_eq!(execute_main_module(&module), answer);
+        assert_eq!(execute_main_module(&module, opt_level), answer);
     }
     std::mem::forget(context); // To avoid crash in destructor of LLVMContext
 }
@@ -1435,17 +1433,17 @@ mod tests {
     #[test]
     pub fn test0() {
         let program = int(-42);
-        test_int_program(program, -42);
+        test_int_program(program, -42, OptimizationLevel::None);
     }
     #[test]
     pub fn test1() {
         let program = let_in(intvar_var("x"), int(-42), int(42));
-        test_int_program(program, 42);
+        test_int_program(program, 42, OptimizationLevel::None);
     }
     #[test]
     pub fn test2() {
         let program = let_in(intvar_var("x"), int(-42), intvar("x"));
-        test_int_program(program, -42);
+        test_int_program(program, -42, OptimizationLevel::None);
     }
     #[test]
     pub fn test3() {
@@ -1454,7 +1452,7 @@ mod tests {
             int(-42),
             let_in(intvar_var("p"), int(42), intvar("n")),
         );
-        test_int_program(program, -42);
+        test_int_program(program, -42, OptimizationLevel::None);
     }
     #[test]
     pub fn test4() {
@@ -1463,7 +1461,7 @@ mod tests {
             int(-42),
             let_in(intvar_var("p"), int(42), intvar("p")),
         );
-        test_int_program(program, 42);
+        test_int_program(program, 42, OptimizationLevel::None);
     }
     #[test]
     pub fn test5() {
@@ -1472,7 +1470,7 @@ mod tests {
             int(-42),
             let_in(intvar_var("x"), int(42), intvar("x")),
         );
-        test_int_program(program, 42);
+        test_int_program(program, 42, OptimizationLevel::None);
     }
     #[test]
     pub fn test6() {
@@ -1481,22 +1479,22 @@ mod tests {
             let_in(intvar_var("y"), int(42), intvar("y")),
             intvar("x"),
         );
-        test_int_program(program, 42);
+        test_int_program(program, 42, OptimizationLevel::None);
     }
     #[test]
     pub fn test7() {
         let program = app(lam(intvar_var("x"), int(0)), int(1));
-        test_int_program(program, 0);
+        test_int_program(program, 0, OptimizationLevel::None);
     }
     #[test]
     pub fn test8() {
         let program = app(lam(intvar_var("x"), intvar("x")), int(1));
-        test_int_program(program, 1);
+        test_int_program(program, 1, OptimizationLevel::None);
     }
     #[test]
     pub fn test9() {
         let program = app(app(add(), int(2)), int(3));
-        test_int_program(program, 5);
+        test_int_program(program, 5, OptimizationLevel::None);
     }
     #[test]
     pub fn test10() {
@@ -1505,7 +1503,7 @@ mod tests {
             int(5),
             app(app(add(), int(2)), intvar("x")),
         );
-        test_int_program(program, 7);
+        test_int_program(program, 7, OptimizationLevel::None);
     }
     #[test]
     pub fn test11() {
@@ -1518,7 +1516,7 @@ mod tests {
                 app(app(add(), intvar("y")), intvar("x")),
             ),
         );
-        test_int_program(program, 2);
+        test_int_program(program, 2, OptimizationLevel::None);
     }
     #[test]
     pub fn test12() {
@@ -1539,7 +1537,7 @@ mod tests {
                 ),
             ),
         );
-        test_int_program(program, 5 - 3 + 12);
+        test_int_program(program, 5 - 3 + 12, OptimizationLevel::None);
     }
     #[test]
     pub fn test13() {
@@ -1548,7 +1546,7 @@ mod tests {
             app(add(), int(3)),
             app(int2intvar("f"), int(5)),
         );
-        test_int_program(program, 3 + 5);
+        test_int_program(program, 3 + 5, OptimizationLevel::None);
     }
     #[test]
     pub fn test14() {
@@ -1565,7 +1563,7 @@ mod tests {
                 ),
             ),
         );
-        test_int_program(program, 3 + 5);
+        test_int_program(program, 3 + 5, OptimizationLevel::None);
     }
     #[test]
     pub fn test15() {
@@ -1574,7 +1572,7 @@ mod tests {
             lam(intvar_var("x"), app(app(add(), int(3)), intvar("x"))),
             app(int2intvar("f"), int(5)),
         );
-        test_int_program(program, 3 + 5);
+        test_int_program(program, 3 + 5, OptimizationLevel::None);
     }
     #[test]
     pub fn test16() {
@@ -1583,27 +1581,27 @@ mod tests {
             lam(intvar_var("x"), app(app(add(), intvar("x")), int(3))),
             app(int2intvar("f"), int(5)),
         );
-        test_int_program(program, 3 + 5);
+        test_int_program(program, 3 + 5, OptimizationLevel::None);
     }
     #[test]
     pub fn test17() {
         let program = if3(bool(true), int(3), int(5));
-        test_int_program(program, 3);
+        test_int_program(program, 3, OptimizationLevel::None);
     }
     #[test]
     pub fn test18() {
         let program = if3(bool(false), int(3), int(5));
-        test_int_program(program, 5);
+        test_int_program(program, 5, OptimizationLevel::None);
     }
     #[test]
     pub fn test19() {
         let program = if3(app(app(eq(), int(3)), int(3)), int(3), int(5));
-        test_int_program(program, 3);
+        test_int_program(program, 3, OptimizationLevel::None);
     }
     #[test]
     pub fn test20() {
         let program = if3(app(app(eq(), int(3)), int(5)), int(3), int(5));
-        test_int_program(program, 5);
+        test_int_program(program, 5, OptimizationLevel::None);
     }
     #[test]
     pub fn test21() {
@@ -1629,11 +1627,11 @@ mod tests {
             ),
             app(int2intvar("F"), int(n)),
         );
-        test_int_program(program, (n * (n + 1)) / 2);
+        test_int_program(program, (n * (n + 1)) / 2, OptimizationLevel::None);
     }
     #[test]
     pub fn test22() {
-        let n = 10000;
+        let n = 20000;
         let program = let_in(
             int2intvar_var("F"),
             app(
@@ -1663,7 +1661,7 @@ mod tests {
             ),
             app(app(int2intvar("F"), int(0)), int(n)),
         );
-        test_int_program(program, (n * (n + 1)) / 2);
+        test_int_program(program, (n * (n + 1)) / 2, OptimizationLevel::Default);
     }
 }
 
