@@ -252,7 +252,8 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         let value = gc.builder.build_int_add(lhs_val, rhs_val, "add");
         let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
         build_set_field(ptr_to_int_obj, 1, value, gc);
-        gc.build_release_vars_unused_later();
+        build_release(gc.scope.get(&lhs_str).code.ptr, gc);
+        build_release(gc.scope.get(&rhs_str).code.ptr, gc);
         ExprCode {
             ptr: ptr_to_int_obj,
         }
@@ -288,7 +289,8 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, "eq");
         let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc);
         build_set_field(ptr_to_obj, 1, value, gc);
-        gc.build_release_vars_unused_later();
+        build_release(gc.scope.get(&lhs_str).code.ptr, gc);
+        build_release(gc.scope.get(&rhs_str).code.ptr, gc);
         ExprCode { ptr: ptr_to_obj }
     });
     lit(generator, bool_ty(), free_vars)
@@ -303,7 +305,7 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         let x = gc.scope.get(&x_str).code.ptr;
         let f = gc.scope.get(&f_str).code.ptr;
         let f_fixf = build_app(f, fixf, gc).ptr;
-        let f_fixf_x = build_app(fixf, x, gc).ptr;
+        let f_fixf_x = build_app(f_fixf, x, gc).ptr;
         ExprCode { ptr: f_fixf_x }
     });
     lit(generator, int_ty(), free_vars)
@@ -569,14 +571,14 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         }
         code
     }
-    fn build_release_vars_unused_later(&mut self) {
-        for (_, var) in self.scope.data.iter() {
-            let v = var.last().unwrap();
-            if v.used_later == 0 {
-                build_release(v.code.ptr, self);
-            }
-        }
-    }
+    // fn build_release_vars_unused_later(&mut self) {
+    //     for (_, var) in self.scope.data.iter() {
+    //         let v = var.last().unwrap();
+    //         if v.used_later == 0 {
+    //             build_release(v.code.ptr, self);
+    //         }
+    //     }
+    // }
 }
 
 fn generate_expr<'c, 'm, 'b>(
@@ -727,10 +729,13 @@ fn generate_lam<'c, 'm, 'b>(
             let ptr = gc.scope.get(cap_name).code.ptr;
             build_retain(ptr, &gc);
         }
-        // Release unused variables (SELF is released here in many cases).
-        gc.scope.increment_used_later(&val.free_vars);
-        gc.build_release_vars_unused_later();
-        gc.scope.decrement_used_later(&val.free_vars);
+        // Release SELF and arg if unused
+        if !val.free_vars.contains(SELF_NAME) {
+            build_release(closure_ptr, &gc);
+        }
+        if !val.free_vars.contains(arg.name()) {
+            build_release(arg_ptr, &gc);
+        }
         // Generate value
         let val = generate_expr(val, &mut gc);
         // Return result
@@ -760,9 +765,9 @@ fn generate_let<'c, 'm, 'b>(
     let bound_code = generate_expr(bound.clone(), gc);
     gc.scope.decrement_used_later(&used_in_val_except_var);
     gc.scope.push(&var_name, &bound_code);
-    gc.scope.increment_used_later(&val.free_vars);
-    gc.build_release_vars_unused_later();
-    gc.scope.decrement_used_later(&val.free_vars);
+    if !val.free_vars.contains(var_name) {
+        build_release(bound_code.ptr, gc);
+    }
     let val_code = generate_expr(val.clone(), gc);
     gc.scope.pop(&var_name);
     val_code
@@ -794,21 +799,21 @@ fn generate_if<'c, 'm, 'b>(
         .build_conditional_branch(cond_val, then_bb, else_bb);
 
     gc.builder.position_at_end(then_bb);
-    {
-        // Release variables used only in the else block.
-        gc.scope.increment_used_later(&then_expr.free_vars);
-        gc.build_release_vars_unused_later();
-        gc.scope.decrement_used_later(&then_expr.free_vars);
+    // Release variables used only in the else block.
+    for var_name in &else_expr.free_vars {
+        if !then_expr.free_vars.contains(var_name) && gc.scope.get(var_name).used_later == 0 {
+            build_release(gc.scope.get(var_name).code.ptr, gc);
+        }
     }
-    let then_code = generate_expr(then_expr, gc);
+    let then_code = generate_expr(then_expr.clone(), gc);
     gc.builder.build_unconditional_branch(cont_bb);
 
     gc.builder.position_at_end(else_bb);
-    {
-        // Release variables used only in the if block.
-        gc.scope.increment_used_later(&else_expr.free_vars);
-        gc.build_release_vars_unused_later();
-        gc.scope.decrement_used_later(&else_expr.free_vars);
+    // Release variables used only in the then block.
+    for var_name in &then_expr.free_vars {
+        if !else_expr.free_vars.contains(var_name) && gc.scope.get(var_name).used_later == 0 {
+            build_release(gc.scope.get(var_name).code.ptr, gc);
+        }
     }
     let else_code = generate_expr(else_expr, gc);
     gc.builder.build_unconditional_branch(cont_bb);
