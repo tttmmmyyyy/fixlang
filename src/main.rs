@@ -710,8 +710,8 @@ fn generate_lam<'c, 'm, 'b>(
         let mut scope = LocalVariables::default();
         let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
         scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
-        let closure_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-        let closure_ptr = closure_ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
+        let closure_ptr_raw = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let closure_ptr = closure_ptr_raw.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
         scope.push(SELF_NAME, &ExprCode { ptr: closure_ptr });
         for (i, cap_name) in captured_names.iter().enumerate() {
             let ptr_to_cap_ptr = builder
@@ -737,7 +737,7 @@ fn generate_lam<'c, 'm, 'b>(
         }
         // Release SELF and arg if unused
         if !val.free_vars.contains(SELF_NAME) {
-            build_release(closure_ptr, &gc);
+            build_release(closure_ptr_raw, &gc);
         }
         if !val.free_vars.contains(arg.name()) {
             build_release(arg_ptr, &gc);
@@ -1436,9 +1436,9 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
 fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
     let file = RespParser::parse(Rule::file, source).unwrap();
     let ast = parse_file(file);
-    let ast = let_in(intvar_var("add"), add(), ast);
-    let ast = let_in(intvar_var("eq"), eq(), ast);
-    let ast = let_in(intvar_var("fix"), fix(), ast);
+    // let ast = let_in(intvar_var("add"), add(), ast);
+    // let ast = let_in(intvar_var("eq"), eq(), ast);
+    // let ast = let_in(intvar_var("fix"), fix(), ast);
     test_int_ast(ast, answer, opt_level);
 }
 
@@ -1667,7 +1667,18 @@ mod tests {
             f 5
         ";
         let answer = 3 + 5;
-        test_int_source(source, answer, OptimizationLevel::None);
+        test_int_source(source, answer, OptimizationLevel::Default);
+        // TODO: if optimization is enabled, the optimizer crashes.
+    }
+    #[test]
+    pub fn test15_5() {
+        let source = r"
+            let x = 3;
+            let f = \y -> x;
+            f 5
+        ";
+        let answer = 3;
+        test_int_source(source, answer, OptimizationLevel::Default);
         // TODO: if optimization is enabled, the optimizer crashes.
     }
     #[test]
