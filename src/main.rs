@@ -18,7 +18,9 @@ use pest::Parser;
 use std::alloc::System;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Pointer;
+use std::path::Path;
 use std::sync::Arc;
+use std::thread::panicking;
 use std::vec::Vec;
 use Either::Right;
 
@@ -634,7 +636,10 @@ fn build_app<'c, 'm, 'b>(
     let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
     let ret = gc.builder.build_call(
         lambda_func,
-        &[ptr_to_arg.into(), ptr_to_lambda.into()],
+        &[
+            ptr_to_arg.const_cast(ptr_to_object_type(gc.context)).into(),
+            ptr_to_lambda.into(),
+        ],
         "call_lambda",
     );
     ret.set_tail_call(true);
@@ -710,8 +715,8 @@ fn generate_lam<'c, 'm, 'b>(
         let mut scope = LocalVariables::default();
         let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
         scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
-        let closure_ptr_raw = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-        let closure_ptr = closure_ptr_raw.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
+        let closure_i8ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let closure_ptr = closure_i8ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
         scope.push(SELF_NAME, &ExprCode { ptr: closure_ptr });
         for (i, cap_name) in captured_names.iter().enumerate() {
             let ptr_to_cap_ptr = builder
@@ -737,7 +742,7 @@ fn generate_lam<'c, 'm, 'b>(
         }
         // Release SELF and arg if unused
         if !val.free_vars.contains(SELF_NAME) {
-            build_release(closure_ptr_raw, &gc);
+            build_release(closure_i8ptr, &gc);
         }
         if !val.free_vars.contains(arg.name()) {
             build_release(arg_ptr, &gc);
@@ -745,7 +750,7 @@ fn generate_lam<'c, 'm, 'b>(
         // Generate value
         let val = generate_expr(val, &mut gc);
         // Return result
-        builder.build_return(Some(&val.ptr));
+        builder.build_return(Some(&val.ptr.const_cast(ptr_to_object_type(gc.context))));
     }
     // Allocate and set up closure
     let obj = obj_type.build_allocate_shared_obj(gc);
@@ -886,6 +891,7 @@ fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c,
 }
 
 fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
+    let ptr_to_obj = ptr_to_obj.const_cast(ptr_to_object_type(gc.context));
     gc.builder.build_call(
         *gc.system_functions
             .get(&SystemFunctions::ReleaseObj)
@@ -1421,13 +1427,20 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
         );
         let value = build_get_field(int_obj_ptr, 1, &gc);
         if let BasicValueEnum::IntValue(value) = value {
-            builder.build_return(Some(&value));
+            let ret = value.const_cast(gc.context.i32_type(), true);
+            builder.build_return(Some(&ret));
         } else {
             unreachable!()
             // builder.build_return(Some(&i32_type.const_int(0, false)));
         }
 
         module.print_to_file("ir").unwrap();
+        let verify = module.verify();
+        if verify.is_err() {
+            print!("{}", verify.unwrap_err().to_str().unwrap());
+            panic!("Verify failed!");
+        }
+        // module.write_bitcode_to_path(&Path::new("bit"));
         assert_eq!(execute_main_module(&module, opt_level), answer);
     }
     std::mem::forget(context); // To avoid crash in destructor of LLVMContext
@@ -1436,9 +1449,9 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
 fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
     let file = RespParser::parse(Rule::file, source).unwrap();
     let ast = parse_file(file);
-    // let ast = let_in(intvar_var("add"), add(), ast);
-    // let ast = let_in(intvar_var("eq"), eq(), ast);
-    // let ast = let_in(intvar_var("fix"), fix(), ast);
+    let ast = let_in(intvar_var("add"), add(), ast);
+    let ast = let_in(intvar_var("eq"), eq(), ast);
+    let ast = let_in(intvar_var("fix"), fix(), ast);
     test_int_ast(ast, answer, opt_level);
 }
 
@@ -1667,7 +1680,7 @@ mod tests {
             f 5
         ";
         let answer = 3 + 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_int_source(source, answer, OptimizationLevel::None);
         // TODO: if optimization is enabled, the optimizer crashes.
     }
     #[test]
@@ -1678,7 +1691,7 @@ mod tests {
             f 5
         ";
         let answer = 3;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_int_source(source, answer, OptimizationLevel::None);
         // TODO: if optimization is enabled, the optimizer crashes.
     }
     #[test]
