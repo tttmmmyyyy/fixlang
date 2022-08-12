@@ -1478,7 +1478,10 @@ fn parse_not_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
         Rule::lit_expr => parse_lit_expr(pair),
         Rule::var_expr => parse_var_expr(pair),
         Rule::let_expr => parse_let_expr(pair),
-        _ => todo!(),
+        Rule::lam_expr => parse_lam_expr(pair),
+        Rule::if_expr => todo!(),
+        Rule::bracket_expr => parse_bracket_expr(pair),
+        _ => unreachable!(),
     }
 }
 
@@ -1504,6 +1507,18 @@ fn parse_let_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let bound = pairs.next().unwrap();
     let val = pairs.next().unwrap();
     let_in(parse_var_var(var), parse_expr(bound), parse_expr(val))
+}
+
+fn parse_lam_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let mut pairs = expr.into_inner();
+    let var = pairs.next().unwrap();
+    let val = pairs.next().unwrap();
+    lam(parse_var_var(var), parse_expr(val))
+}
+
+fn parse_bracket_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let inner = expr.into_inner().next().unwrap();
+    parse_expr(inner)
 }
 
 fn parse_int_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
@@ -1559,7 +1574,7 @@ mod tests {
     #[test]
     pub fn test7() {
         let source = r"(\x -> 5) 10";
-        let answer = 10;
+        let answer = 5;
         test_int_source(source, answer, OptimizationLevel::Default);
         // let program = app(lam(intvar_var("x"), int(0)), int(1));
         // test_int_ast(program, 0, OptimizationLevel::Default);
