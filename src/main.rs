@@ -1684,27 +1684,25 @@ mod tests {
     pub fn test17() {
         let source = r"if true then 3 else 5";
         let answer = 3;
-        test_int_source(source, answer, OptimizationLevel::None);
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test18() {
         let source = r"if false then 3 else 5";
         let answer = 5;
-        test_int_source(source, answer, OptimizationLevel::None);
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test19() {
         let source = r"if eq 3 3 then 1 else 0";
         let answer = 1;
-        test_int_source(source, answer, OptimizationLevel::None);
-
-        // let program = if3(app(app(eq(), int(3)), int(3)), int(3), int(5));
-        // test_int_ast(program, 3, OptimizationLevel::Default);
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test20() {
-        let program = if3(app(app(eq(), int(3)), int(5)), int(3), int(5));
-        test_int_ast(program, 5, OptimizationLevel::Default);
+        let source = r"if eq 3 5 then 1 else 0";
+        let answer = 0;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test21() {

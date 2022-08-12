@@ -106,7 +106,7 @@ entry:
   %ptr_to_dtor_field24 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block22, i32 0, i32 1
   store void (i8*)* @dtor.11, void (i8*)** %ptr_to_dtor_field24, align 8
   %ptr_to_field25 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj21, i32 0, i32 1
-  store i64 3, i64* %ptr_to_field25, align 4
+  store i64 5, i64* %ptr_to_field25, align 4
   %field_value26 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** getelementptr inbounds ({ { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* bitcast (i8* %call_lambda to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*), i32 0, i32 1), align 8
   %call_lambda27 = tail call i8* %field_value26({ { i64, void (i8*)* }, i64 }* %ptr_to_obj21, i8* %call_lambda)
   %field_value28 = load i8, i8* getelementptr inbounds ({ { i64, void (i8*)* }, i8 }, { { i64, void (i8*)* }, i8 }* bitcast (i8* %call_lambda27 to { { i64, void (i8*)* }, i8 }*), i32 0, i32 1), align 1
