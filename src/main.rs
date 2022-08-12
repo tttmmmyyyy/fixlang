@@ -1688,8 +1688,9 @@ mod tests {
     }
     #[test]
     pub fn test18() {
-        let program = if3(bool(false), int(3), int(5));
-        test_int_ast(program, 5, OptimizationLevel::Default);
+        let source = r"if false then 3 else 5";
+        let answer = 5;
+        test_int_source(source, answer, OptimizationLevel::None);
     }
     #[test]
     pub fn test19() {
