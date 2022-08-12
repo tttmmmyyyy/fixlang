@@ -1579,8 +1579,9 @@ mod tests {
     }
     #[test]
     pub fn test8() {
-        let program = app(lam(intvar_var("x"), intvar("x")), int(1));
-        test_int_ast(program, 1, OptimizationLevel::Default);
+        let source = r"(\x -> x) 6";
+        let answer = 6;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test9() {
@@ -1590,12 +1591,9 @@ mod tests {
     }
     #[test]
     pub fn test10() {
-        let program = let_in(
-            intvar_var("x"),
-            int(5),
-            app(app(add(), int(2)), intvar("x")),
-        );
-        test_int_ast(program, 7, OptimizationLevel::Default);
+        let source = r"let x = 5 in add 2 x";
+        let answer = 7;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test11() {
