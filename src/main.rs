@@ -295,6 +295,13 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         let value = gc
             .builder
             .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, "eq");
+        let value = gc.builder.build_int_cast(
+            value,
+            ObjectFieldType::Bool
+                .to_basic_type(gc.context)
+                .into_int_type(),
+            "eq_bool",
+        );
         let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc);
         build_set_field(ptr_to_obj, 1, value, gc);
         build_release(gc.scope.get(&lhs_str).code.ptr, gc);
@@ -511,8 +518,12 @@ impl<'c> LocalVariables<'c> {
         gc: &GenerationContext<'c, 'm, 'b>,
     ) -> BasicValueEnum<'c> {
         let expr = self.get(var_name);
-        let ptr = expr.code.ptr.const_cast(ty.ptr_type(AddressSpace::Generic));
-        build_get_field(ptr, field_idx, gc)
+        let ptr_to_struct = gc.builder.build_pointer_cast(
+            expr.code.ptr,
+            ty.ptr_type(AddressSpace::Generic),
+            "ptr_to_struct",
+        );
+        build_get_field(ptr_to_struct, field_idx, gc)
     }
     fn modify_used_later(self: &mut Self, names: &HashSet<String>, by: i32) {
         for name in names {
@@ -593,7 +604,7 @@ fn generate_expr<'c, 'm, 'b>(
     expr: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    match &*expr.expr {
+    let mut ret = match &*expr.expr {
         Expr::Var(var) => generate_var(var.clone(), gc),
         Expr::Lit(lit) => generate_literal(lit.clone(), gc),
         Expr::App(lambda, arg) => generate_app(lambda.clone(), arg.clone(), gc),
@@ -603,7 +614,14 @@ fn generate_expr<'c, 'm, 'b>(
             generate_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), gc)
         }
         Expr::Type(_) => todo!(),
-    }
+    };
+    let ptr = gc.builder.build_pointer_cast(
+        ret.ptr,
+        ptr_to_object_type(gc.context),
+        "ptr_ret_generate_expr",
+    );
+    ret.ptr = ptr;
+    ret
 }
 
 fn generate_var<'c, 'm, 'b>(var: Arc<Var>, gc: &mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c> {
@@ -636,10 +654,7 @@ fn build_app<'c, 'm, 'b>(
     let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
     let ret = gc.builder.build_call(
         lambda_func,
-        &[
-            ptr_to_arg.const_cast(ptr_to_object_type(gc.context)).into(),
-            ptr_to_lambda.into(),
-        ],
+        &[ptr_to_arg.into(), ptr_to_lambda.into()],
         "call_lambda",
     );
     ret.set_tail_call(true);
@@ -715,9 +730,13 @@ fn generate_lam<'c, 'm, 'b>(
         let mut scope = LocalVariables::default();
         let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
         scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
-        let closure_i8ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-        let closure_ptr = closure_i8ptr.const_cast(closure_ty.ptr_type(AddressSpace::Generic));
-        scope.push(SELF_NAME, &ExprCode { ptr: closure_ptr });
+        let closure_param = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let closure_ptr = builder.build_pointer_cast(
+            closure_param,
+            closure_ty.ptr_type(AddressSpace::Generic),
+            "closure_ptr",
+        );
+        scope.push(SELF_NAME, &ExprCode { ptr: closure_param });
         for (i, cap_name) in captured_names.iter().enumerate() {
             let ptr_to_cap_ptr = builder
                 .build_struct_gep(closure_ptr, i as u32 + 2, "ptr_to_captured_field")
@@ -742,7 +761,7 @@ fn generate_lam<'c, 'm, 'b>(
         }
         // Release SELF and arg if unused
         if !val.free_vars.contains(SELF_NAME) {
-            build_release(closure_i8ptr, &gc);
+            build_release(closure_param, &gc);
         }
         if !val.free_vars.contains(arg.name()) {
             build_release(arg_ptr, &gc);
@@ -750,7 +769,8 @@ fn generate_lam<'c, 'm, 'b>(
         // Generate value
         let val = generate_expr(val, &mut gc);
         // Return result
-        builder.build_return(Some(&val.ptr.const_cast(ptr_to_object_type(gc.context))));
+        let ret = builder.build_pointer_cast(val.ptr, ptr_to_object_type(gc.context), "ret");
+        builder.build_return(Some(&ret));
     }
     // Allocate and set up closure
     let obj = obj_type.build_allocate_shared_obj(gc);
@@ -795,11 +815,14 @@ fn generate_if<'c, 'm, 'b>(
     gc.scope.increment_used_later(&used_then_or_else);
     let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
     gc.scope.decrement_used_later(&used_then_or_else);
-    let ptr_to_cond_obj = ptr_to_cond_obj.const_cast(
+    let ptr_to_cond_obj = gc.builder.build_pointer_cast(
+        ptr_to_cond_obj,
         ObjectType::bool_obj_type()
             .to_struct_type(gc.context)
             .ptr_type(AddressSpace::Generic),
+        "ptr_to_cond_obj",
     );
+
     let cond_val = build_get_field(ptr_to_cond_obj, 1, gc).into_int_value();
     let bb = gc.builder.get_insert_block().unwrap();
     let func = bb.get_parent().unwrap();
@@ -876,11 +899,16 @@ fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
     let ptr_to_lam_obj_ty = ObjectType::lam_obj_type()
         .to_struct_type(gc.context)
         .ptr_type(AddressSpace::Generic);
-    let obj = obj.const_cast(ptr_to_lam_obj_ty);
+    let obj = gc
+        .builder
+        .build_pointer_cast(obj, ptr_to_lam_obj_ty, "ptr_to_lam_obj");
     build_get_field(obj, 1, gc).into_pointer_value()
 }
 
 fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
+    if ptr_to_obj.get_type() != ptr_to_object_type(gc.context) {
+        panic!("type of arg of build_release is incorrect.");
+    }
     gc.builder.build_call(
         *gc.system_functions
             .get(&SystemFunctions::RetainObj)
@@ -891,12 +919,14 @@ fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c,
 }
 
 fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
-    let ptr_to_obj = ptr_to_obj.const_cast(ptr_to_object_type(gc.context));
+    if ptr_to_obj.get_type() != ptr_to_object_type(gc.context) {
+        panic!("type of arg of build_release is incorrect.");
+    }
     gc.builder.build_call(
         *gc.system_functions
             .get(&SystemFunctions::ReleaseObj)
             .unwrap(),
-        &[ptr_to_obj.clone().into()],
+        &[ptr_to_obj.into()],
         "release",
     );
 }
@@ -1034,11 +1064,12 @@ impl ObjectType {
                 system_functions: gc.system_functions.clone(),
             };
             builder.position_at_end(bb);
-            let ptr_to_obj = func
-                .get_first_param()
-                .unwrap()
-                .into_pointer_value()
-                .const_cast(struct_type.ptr_type(AddressSpace::Generic));
+            let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
+            let ptr_to_obj = gc.builder.build_pointer_cast(
+                ptr_to_obj,
+                struct_type.ptr_type(AddressSpace::Generic),
+                "ptr_to_obj",
+            );
             for (i, ft) in self.field_types.iter().enumerate() {
                 match ft {
                     ObjectFieldType::SubObject => {
@@ -1229,7 +1260,11 @@ fn generate_func_retain_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> F
     let builder = context.create_builder();
     builder.position_at_end(bb);
     let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
-    let ptr_to_control_block = ptr_to_obj.const_cast(ptr_to_control_block_type(gc.context));
+    let ptr_to_control_block = builder.build_pointer_cast(
+        ptr_to_obj,
+        ptr_to_control_block_type(gc.context),
+        "ptr_to_control_block",
+    );
     let ptr_to_refcnt = builder
         .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
         .unwrap();
@@ -1259,7 +1294,11 @@ fn generate_func_release_obj<'c, 'm, 'b>(
         let gc = &mut new_gc;
         builder.position_at_end(bb);
         let ptr_to_obj = release_func.get_first_param().unwrap().into_pointer_value();
-        let ptr_to_control_block = ptr_to_obj.const_cast(ptr_to_control_block_type(gc.context));
+        let ptr_to_control_block = builder.build_pointer_cast(
+            ptr_to_obj,
+            ptr_to_control_block_type(gc.context),
+            "ptr_to_control_block",
+        );
         let ptr_to_refcnt = builder
             .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
             .unwrap();
@@ -1420,14 +1459,16 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
         //     &[program_result.ptr.into()],
         //     "print_program_result",
         // );
-        let int_obj_ptr = program_result.ptr.const_cast(
+        let int_obj_ptr = builder.build_pointer_cast(
+            program_result.ptr,
             ObjectType::int_obj_type()
                 .to_struct_type(&context)
                 .ptr_type(AddressSpace::Generic),
+            "int_obj_ptr",
         );
         let value = build_get_field(int_obj_ptr, 1, &gc);
         if let BasicValueEnum::IntValue(value) = value {
-            let ret = value.const_cast(gc.context.i32_type(), true);
+            let ret = builder.build_int_cast(value, gc.context.i32_type(), "ret");
             builder.build_return(Some(&ret));
         } else {
             unreachable!()
@@ -1680,8 +1721,7 @@ mod tests {
             f 5
         ";
         let answer = 3 + 5;
-        test_int_source(source, answer, OptimizationLevel::None);
-        // TODO: if optimization is enabled, the optimizer crashes.
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test15_5() {
@@ -1691,8 +1731,7 @@ mod tests {
             f 5
         ";
         let answer = 3;
-        test_int_source(source, answer, OptimizationLevel::None);
-        // TODO: if optimization is enabled, the optimizer crashes.
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test16() {
@@ -1701,8 +1740,7 @@ mod tests {
             f 5
         ";
         let answer = 3 + 5;
-        test_int_source(source, answer, OptimizationLevel::None);
-        // TODO: if optimization is enabled, the optimizer crashes.
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test17() {
@@ -1762,4 +1800,45 @@ mod tests {
     }
 }
 
-fn main() {}
+fn main() {
+    let context = Context::create();
+    let module = context.create_module("main");
+    let builder = context.create_builder();
+
+    let i32_type = context.i32_type();
+    let i8_type = context.i8_type();
+    let i8_ptr_type = i8_type.ptr_type(AddressSpace::Generic);
+    let main_fn_type = i32_type.fn_type(&[], false);
+    let main_function = module.add_function("main", main_fn_type, None);
+
+    let entry_bb = context.append_basic_block(main_function, "entry");
+    builder.position_at_end(entry_bb);
+
+    let struct_ty = context.struct_type(&[i32_type.into(), i32_type.into()], false);
+    let malloc = builder.build_malloc(struct_ty, "malloc").unwrap();
+
+    let sub_fn_ty = context.void_type().fn_type(&[i8_ptr_type.into()], false);
+    let sub_fn = module.add_function("sub", sub_fn_ty, None);
+    let bb = context.append_basic_block(sub_fn, "entry");
+    {
+        let builder = context.create_builder();
+        builder.position_at_end(bb);
+        builder.build_return(None);
+    }
+
+    let malloc_i8 = builder.build_pointer_cast(malloc, i8_ptr_type, "malloc_i8");
+    builder.build_call(sub_fn, &[malloc_i8.into()], "call_sub");
+    builder.build_return(Some(&i32_type.const_zero()));
+
+    module.print_to_file("ir").unwrap();
+    let verify = module.verify();
+    if verify.is_err() {
+        print!("{}", verify.unwrap_err().to_str().unwrap());
+        panic!("Verify failed!");
+    }
+}
+
+/*
+%malloccall = tail call i8* @malloc(i32 ptrtoint ({ i32, i32 }* getelementptr ({ i32, i32 }, { i32, i32 }* null, i32 1) to i32))
+%malloc = bitcast i8* %malloccall to { i32, i32 }*
+*/
