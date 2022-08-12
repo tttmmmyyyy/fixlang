@@ -1658,12 +1658,12 @@ mod tests {
     }
     #[test]
     pub fn test16() {
-        let program = let_in(
-            int2intvar_var("f"),
-            lam(intvar_var("x"), app(app(add(), intvar("x")), int(3))),
-            app(int2intvar("f"), int(5)),
-        );
-        test_int_ast(program, 3 + 5, OptimizationLevel::Default);
+        let source = r"
+            let f = \x -> add x 3 in
+            f 5
+        ";
+        let answer = 3 + 5;
+        test_int_source(source, answer, OptimizationLevel::None);
     }
     #[test]
     pub fn test17() {
