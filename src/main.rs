@@ -1475,7 +1475,6 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
             builder.build_return(Some(&ret));
         } else {
             unreachable!()
-            // builder.build_return(Some(&i32_type.const_int(0, false)));
         }
 
         module.print_to_file("ir").unwrap();
@@ -1484,10 +1483,8 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
             print!("{}", verify.unwrap_err().to_str().unwrap());
             panic!("Verify failed!");
         }
-        // module.write_bitcode_to_path(&Path::new("bit"));
         assert_eq!(execute_main_module(&module, opt_level), answer);
     }
-    std::mem::forget(context); // To avoid crash in destructor of LLVMContext
 }
 
 fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
