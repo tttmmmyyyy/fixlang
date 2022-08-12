@@ -1837,8 +1837,3 @@ fn main() {
         panic!("Verify failed!");
     }
 }
-
-/*
-%malloccall = tail call i8* @malloc(i32 ptrtoint ({ i32, i32 }* getelementptr ({ i32, i32 }, { i32, i32 }* null, i32 1) to i32))
-%malloc = bitcast i8* %malloccall to { i32, i32 }*
-*/
