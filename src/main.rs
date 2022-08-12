@@ -1694,8 +1694,12 @@ mod tests {
     }
     #[test]
     pub fn test19() {
-        let program = if3(app(app(eq(), int(3)), int(3)), int(3), int(5));
-        test_int_ast(program, 3, OptimizationLevel::Default);
+        let source = r"if eq 3 3 then 1 else 0";
+        let answer = 1;
+        test_int_source(source, answer, OptimizationLevel::None);
+
+        // let program = if3(app(app(eq(), int(3)), int(3)), int(3), int(5));
+        // test_int_ast(program, 3, OptimizationLevel::Default);
     }
     #[test]
     pub fn test20() {
