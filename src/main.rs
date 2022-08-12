@@ -1534,44 +1534,35 @@ mod tests {
     }
     #[test]
     pub fn test3() {
-        let program = let_in(
-            intvar_var("n"),
-            int(-42),
-            let_in(intvar_var("p"), int(42), intvar("n")),
-        );
-        test_int_ast(program, -42, OptimizationLevel::Default);
+        let source = r"let n = -5 in let p = 5 in n";
+        let answer = -5;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test4() {
-        let program = let_in(
-            intvar_var("n"),
-            int(-42),
-            let_in(intvar_var("p"), int(42), intvar("p")),
-        );
-        test_int_ast(program, 42, OptimizationLevel::Default);
+        let source = r"let n = -5 in let p = 5 in p";
+        let answer = 5;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test5() {
-        let program = let_in(
-            intvar_var("x"),
-            int(-42),
-            let_in(intvar_var("x"), int(42), intvar("x")),
-        );
-        test_int_ast(program, 42, OptimizationLevel::Default);
+        let source = r"let x = -5 in let x = 5 in x";
+        let answer = 5;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test6() {
-        let program = let_in(
-            intvar_var("x"),
-            let_in(intvar_var("y"), int(42), intvar("y")),
-            intvar("x"),
-        );
-        test_int_ast(program, 42, OptimizationLevel::Default);
+        let source = r"let x = let y = 3 in y in x";
+        let answer = 3;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test7() {
-        let program = app(lam(intvar_var("x"), int(0)), int(1));
-        test_int_ast(program, 0, OptimizationLevel::Default);
+        let source = r"(\x -> 5) 10";
+        let answer = 10;
+        test_int_source(source, answer, OptimizationLevel::Default);
+        // let program = app(lam(intvar_var("x"), int(0)), int(1));
+        // test_int_ast(program, 0, OptimizationLevel::Default);
     }
     #[test]
     pub fn test8() {
