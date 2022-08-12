@@ -1664,6 +1664,7 @@ mod tests {
         ";
         let answer = 3 + 5;
         test_int_source(source, answer, OptimizationLevel::None);
+        // TODO: if optimization is enabled, the optimizer crashes.
     }
     #[test]
     pub fn test17() {
