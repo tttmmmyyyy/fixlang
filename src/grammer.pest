@@ -1,14 +1,16 @@
-sep = _{ " " | NEWLINE }
+sep = _{ " " | "\t" | NEWLINE }
 
 int_expr = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
 lit_expr = { int_expr }
 
+keywords = _{ "let" | "in" | "if" | "then" | "else" }
+
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
-var_expr = { ASCII_ALPHA_LOWER ~ var_char* }
+var_expr = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char*) }
 
-let_expr = { "let" ~ sep+ ~ var_expr ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" ~ sep* ~ expr }
+let_expr = { "let" ~ sep+ ~ var_expr ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ "in" ~ sep* ~ expr }
 
 if_expr = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 

@@ -1477,6 +1477,7 @@ fn parse_not_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     match pair.as_rule() {
         Rule::lit_expr => parse_lit_expr(pair),
         Rule::var_expr => parse_var_expr(pair),
+        Rule::let_expr => parse_let_expr(pair),
         _ => todo!(),
     }
 }
@@ -1493,6 +1494,18 @@ fn parse_var_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     intvar(expr.as_str())
 }
 
+fn parse_var_var(var: Pair<Rule>) -> Arc<Var> {
+    intvar_var(var.as_str())
+}
+
+fn parse_let_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let mut pairs = expr.into_inner();
+    let var = pairs.next().unwrap();
+    let bound = pairs.next().unwrap();
+    let val = pairs.next().unwrap();
+    let_in(parse_var_var(var), parse_expr(bound), parse_expr(val))
+}
+
 fn parse_int_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let val = expr.as_str().parse::<i32>().unwrap();
     int(val)
@@ -1503,18 +1516,21 @@ mod tests {
     use super::*;
     #[test]
     pub fn test0() {
-        let program = int(-42);
-        test_int_ast(program, -42, OptimizationLevel::Default);
+        let source = r"5";
+        let answer = 5;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test1() {
-        let program = let_in(intvar_var("x"), int(-42), int(42));
-        test_int_ast(program, 42, OptimizationLevel::Default);
+        let source = r"let x = 5 in x";
+        let answer = 5;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test2() {
-        let program = let_in(intvar_var("x"), int(-42), intvar("x"));
-        test_int_ast(program, -42, OptimizationLevel::Default);
+        let source = r"let x = 5 in 3";
+        let answer = 3;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test3() {
@@ -1564,8 +1580,9 @@ mod tests {
     }
     #[test]
     pub fn test9() {
-        let program = app(app(add(), int(2)), int(3));
-        test_int_ast(program, 5, OptimizationLevel::Default);
+        let source = r"add 3 5";
+        let answer = 8;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test10() {
@@ -1733,18 +1750,6 @@ mod tests {
             app(app(int2intvar("F"), int(0)), int(n)),
         );
         test_int_ast(program, (n * (n + 1)) / 2, OptimizationLevel::Default);
-    }
-    #[test]
-    pub fn test23() {
-        let source = r"5";
-        let answer = 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
-    }
-    #[test]
-    pub fn test24() {
-        let source = r"add 3 5";
-        let answer = 8;
-        test_int_source(source, answer, OptimizationLevel::Default);
     }
 }
 
