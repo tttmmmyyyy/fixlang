@@ -212,7 +212,7 @@ fn lit(generator: Arc<LiteralGenerator>, ty: Arc<Type>, free_vars: Vec<String>) 
     .into_expr_info()
 }
 
-fn int(val: i32) -> Arc<ExprInfo> {
+fn int(val: i64) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
         let value = gc.context.i64_type().const_int(val as u64, false);
@@ -1585,7 +1585,7 @@ fn parse_bracket_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 }
 
 fn parse_int_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
-    let val = expr.as_str().parse::<i32>().unwrap();
+    let val = expr.as_str().parse::<i64>().unwrap();
     int(val)
 }
 
