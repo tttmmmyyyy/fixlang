@@ -1576,8 +1576,6 @@ mod tests {
         let source = r"(\x -> 5) 10";
         let answer = 5;
         test_int_source(source, answer, OptimizationLevel::Default);
-        // let program = app(lam(intvar_var("x"), int(0)), int(1));
-        // test_int_ast(program, 0, OptimizationLevel::Default);
     }
     #[test]
     pub fn test8() {
