@@ -1479,7 +1479,7 @@ fn parse_not_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
         Rule::var_expr => parse_var_expr(pair),
         Rule::let_expr => parse_let_expr(pair),
         Rule::lam_expr => parse_lam_expr(pair),
-        Rule::if_expr => todo!(),
+        Rule::if_expr => parse_if_expr(pair),
         Rule::bracket_expr => parse_bracket_expr(pair),
         _ => unreachable!(),
     }
@@ -1488,8 +1488,9 @@ fn parse_not_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 fn parse_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
-        Rule::int_expr => parse_int_expr(pair),
-        _ => todo!(),
+        Rule::int_lit_expr => parse_int_expr(pair),
+        Rule::bool_lit_expr => parse_bool_lit_expr(pair),
+        _ => unreachable!(),
     }
 }
 
@@ -1516,6 +1517,14 @@ fn parse_lam_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     lam(parse_var_var(var), parse_expr(val))
 }
 
+fn parse_if_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let mut pairs = expr.into_inner();
+    let cond = pairs.next().unwrap();
+    let then_val = pairs.next().unwrap();
+    let else_val = pairs.next().unwrap();
+    if3(parse_expr(cond), parse_expr(then_val), parse_expr(else_val))
+}
+
 fn parse_bracket_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let inner = expr.into_inner().next().unwrap();
     parse_expr(inner)
@@ -1524,6 +1533,11 @@ fn parse_bracket_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 fn parse_int_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let val = expr.as_str().parse::<i32>().unwrap();
     int(val)
+}
+
+fn parse_bool_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let val = expr.as_str().parse::<bool>().unwrap();
+    bool(val)
 }
 
 #[cfg(test)]
@@ -1668,8 +1682,9 @@ mod tests {
     }
     #[test]
     pub fn test17() {
-        let program = if3(bool(true), int(3), int(5));
-        test_int_ast(program, 3, OptimizationLevel::Default);
+        let source = r"if true then 3 else 5";
+        let answer = 3;
+        test_int_source(source, answer, OptimizationLevel::None);
     }
     #[test]
     pub fn test18() {

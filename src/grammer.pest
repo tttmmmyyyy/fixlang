@@ -1,10 +1,12 @@
 sep = _{ " " | "\t" | NEWLINE }
 
-int_expr = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
+int_lit_expr = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
-lit_expr = { int_expr }
+bool_lit_expr = { "true" | "false" }
 
-keywords = _{ "let" | "in" | "if" | "then" | "else" }
+lit_expr = { int_lit_expr | bool_lit_expr }
+
+keywords = _{ "let" | "in" | "if" | "then" | "else" | bool_lit_expr }
 
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
