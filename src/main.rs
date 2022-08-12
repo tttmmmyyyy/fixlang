@@ -1728,8 +1728,8 @@ mod tests {
                             else
                                 let a2 = add a x;
                                 let x2 = add x -1;
-                                f a2 x2;
-                g 0 {}
+                                f a2 x2
+                in g 0 {}
         ",
             n
         );
