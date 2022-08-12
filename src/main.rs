@@ -1436,6 +1436,9 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
 fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
     let file = RespParser::parse(Rule::file, source).unwrap();
     let ast = parse_file(file);
+    let ast = let_in(intvar_var("add"), add(), ast);
+    let ast = let_in(intvar_var("eq"), eq(), ast);
+    let ast = let_in(intvar_var("fix"), fix(), ast);
     test_int_ast(ast, answer, opt_level);
 }
 
@@ -1461,13 +1464,19 @@ fn parse_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 }
 
 fn parse_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
-    todo!()
+    let mut subexprs = expr.into_inner();
+    let mut ret = parse_not_app_expr(subexprs.next().unwrap());
+    for pair in subexprs {
+        ret = app(ret, parse_not_app_expr(pair));
+    }
+    ret
 }
 
 fn parse_not_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::lit_expr => parse_lit_expr(pair),
+        Rule::var_expr => parse_var_expr(pair),
         _ => todo!(),
     }
 }
@@ -1478,6 +1487,10 @@ fn parse_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
         Rule::int_expr => parse_int_expr(pair),
         _ => todo!(),
     }
+}
+
+fn parse_var_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    intvar(expr.as_str())
 }
 
 fn parse_int_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
@@ -1725,6 +1738,12 @@ mod tests {
     pub fn test23() {
         let source = r"5";
         let answer = 5;
+        test_int_source(source, answer, OptimizationLevel::Default);
+    }
+    #[test]
+    pub fn test24() {
+        let source = r"add 3 5";
+        let answer = 8;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
 }

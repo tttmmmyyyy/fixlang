@@ -1,31 +1,25 @@
-WHITESPACE = _{ " " | NEWLINE }
+sep = _{ " " | NEWLINE }
 
-int_expr = @{ "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
+int_expr = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
-fix_lit_expr = { "fix" ~ !var_char }
+lit_expr = { int_expr }
 
-add_lit_expr = { "add" ~ !var_char }
+var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
-eq_lit_expr = { "eq" ~ !var_char }
+var_expr = { ASCII_ALPHA_LOWER ~ var_char* }
 
-lit_expr = { int_expr | fix_lit_expr | add_lit_expr | eq_lit_expr }
+let_expr = { "let" ~ sep+ ~ var_expr ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" ~ sep* ~ expr }
 
-var_char = { ASCII_ALPHA | ASCII_DIGIT }
+if_expr = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
-var_expr = @{ ASCII_ALPHA_LOWER ~ var_char* }
+lam_expr = { "\\" ~ sep* ~ var_expr ~ sep* ~ "->" ~ sep* ~ expr }
 
-let_expr = { "let" ~ WHITESPACE ~ var_expr ~ "=" ~ expr ~ WHITESPACE ~ ";" ~ WHITESPACE ~ expr }
-
-if_expr = { "if" ~ WHITESPACE ~ expr ~ WHITESPACE ~ "then" ~ WHITESPACE ~ expr ~ WHITESPACE ~ "else" ~ WHITESPACE ~ expr }
-
-lam_expr = { "\\" ~ var_expr ~ "->" ~ expr }
-
-app_expr = { not_app_expr ~ (WHITESPACE ~ not_app_expr)+ }
+app_expr = { not_app_expr ~ (sep+ ~ not_app_expr)+ }
 
 not_app_expr = { lit_expr | var_expr | let_expr | if_expr | lam_expr | bracket_expr }
 
-bracket_expr = { "(" ~ expr ~ ")" }
+bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 expr = { app_expr | not_app_expr }
 
-file = _{ SOI ~ expr ~ EOI }
+file = _{ SOI ~ sep* ~ expr ~ sep* ~ EOI }
