@@ -1619,12 +1619,21 @@ mod tests {
     }
     #[test]
     pub fn test13() {
-        let program = let_in(
-            int2intvar_var("f"),
-            app(add(), int(3)),
-            app(int2intvar("f"), int(5)),
-        );
-        test_int_ast(program, 3 + 5, OptimizationLevel::Default);
+        let source = r"
+            let f = add 5 in
+            f 3
+        ";
+        let answer = 5 + 3;
+        test_int_source(source, answer, OptimizationLevel::Default);
+    }
+    #[test]
+    pub fn test13_5() {
+        let source = r"
+            let f = add 5 in
+            add (f -3) (f 12)
+        ";
+        let answer = 5 - 3 + 5 + 12;
+        test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test14() {
