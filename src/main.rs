@@ -824,6 +824,9 @@ fn generate_if<'c, 'm, 'b>(
     );
 
     let cond_val = build_get_field(ptr_to_cond_obj, 1, gc).into_int_value();
+    let cond_val = gc
+        .builder
+        .build_int_cast(cond_val, gc.context.bool_type(), "cond_val_i1");
     let bb = gc.builder.get_insert_block().unwrap();
     let func = bb.get_parent().unwrap();
     let then_bb = gc.context.append_basic_block(func, "then");
