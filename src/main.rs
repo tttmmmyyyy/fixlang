@@ -1707,62 +1707,34 @@ mod tests {
     #[test]
     pub fn test21() {
         let n = 10000;
-        let program = let_in(
-            int2intvar_var("F"),
-            app(
-                fix(),
-                lam(
-                    int2intvar_var("f"),
-                    lam(
-                        intvar_var("x"),
-                        if3(
-                            app(app(eq(), intvar("x")), int(0)),
-                            int(0),
-                            app(
-                                app(add(), intvar("x")),
-                                app(int2intvar("f"), app(app(add(), intvar("x")), int(-1))),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-            app(int2intvar("F"), int(n)),
+        let source = format!(
+            r"
+                let g = fix \f -> \x -> if eq x 0 then 0 else add x (f (add x -1));
+                g {}
+        ",
+            n
         );
-        test_int_ast(program, (n * (n + 1)) / 2, OptimizationLevel::Default);
+        let answer = (n * (n + 1)) / 2;
+        test_int_source(source.as_str(), answer, OptimizationLevel::Default);
     }
     #[test]
     pub fn test22() {
         let n = 46340; // max i32 s.t. n * (n + 1) does not overflow.
-        let program = let_in(
-            int2intvar_var("F"),
-            app(
-                fix(),
-                lam(
-                    int2intvar_var("f"),
-                    lam(
-                        intvar_var("a"),
-                        lam(
-                            intvar_var("x"),
-                            if3(
-                                app(app(eq(), intvar("x")), int(0)),
-                                intvar("a"),
-                                let_in(
-                                    intvar_var("a2"),
-                                    app(app(add(), intvar("a")), intvar("x")),
-                                    let_in(
-                                        intvar_var("x2"),
-                                        app(app(add(), intvar("x")), int(-1)),
-                                        app(app(int2intvar("f"), intvar("a2")), intvar("x2")),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-            app(app(int2intvar("F"), int(0)), int(n)),
+        let source = format!(
+            r"
+                let g = fix \f -> \a -> \x -> 
+                            if eq x 0 then 
+                                a 
+                            else
+                                let a2 = add a x;
+                                let x2 = add x -1;
+                                f a2 x2;
+                g 0 {}
+        ",
+            n
         );
-        test_int_ast(program, (n * (n + 1)) / 2, OptimizationLevel::Default);
+        let answer = (n * (n + 1)) / 2;
+        test_int_source(source.as_str(), answer, OptimizationLevel::Default);
     }
 }
 

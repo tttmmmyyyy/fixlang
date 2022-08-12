@@ -8,11 +8,13 @@ lit_expr = { int_lit_expr | bool_lit_expr }
 
 keywords = _{ "let" | "in" | "if" | "then" | "else" | bool_lit_expr }
 
+let_in = _{ "in" | ";" }
+
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
 var_expr = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char*) }
 
-let_expr = { "let" ~ sep+ ~ var_expr ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ "in" ~ sep* ~ expr }
+let_expr = { "let" ~ sep+ ~ var_expr ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ let_in ~ sep* ~ expr }
 
 if_expr = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
