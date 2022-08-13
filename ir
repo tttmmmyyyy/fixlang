@@ -72,7 +72,6 @@ entry:
   %ptr_to_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_obj, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda, i8* (i8*, i8*)** %ptr_to_field, align 8
   %ptr_ret_generate_expr = bitcast { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_obj to i8*
-  call void @release_obj(i8* %ptr_ret_generate_expr)
   %malloccall1 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i8* (i8*, i8*)* }* getelementptr ({ { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* null, i32 1) to i32))
   %ptr_to_obj2 = bitcast i8* %malloccall1 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
   %ptr_to_control_block3 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_obj2, i32 0, i32 0
@@ -83,7 +82,6 @@ entry:
   %ptr_to_field6 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_obj2, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.3, i8* (i8*, i8*)** %ptr_to_field6, align 8
   %ptr_ret_generate_expr7 = bitcast { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_obj2 to i8*
-  call void @release_obj(i8* %ptr_ret_generate_expr7)
   %malloccall8 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i8* (i8*, i8*)* }* getelementptr ({ { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* null, i32 1) to i32))
   %ptr_to_obj9 = bitcast i8* %malloccall8 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
   %ptr_to_control_block10 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_obj9, i32 0, i32 0
@@ -94,38 +92,56 @@ entry:
   %ptr_to_field13 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_obj9, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.7, i8* (i8*, i8*)** %ptr_to_field13, align 8
   %ptr_ret_generate_expr14 = bitcast { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_obj9 to i8*
-  %malloccall15 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i64 }* getelementptr ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* null, i32 1) to i32))
-  %ptr_to_obj16 = bitcast i8* %malloccall15 to { { i64, void (i8*)* }, i64 }*
-  %ptr_to_control_block17 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj16, i32 0, i32 0
+  %malloccall15 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* getelementptr ({ { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* null, i32 1) to i32))
+  %ptr_to_obj16 = bitcast i8* %malloccall15 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }*
+  %ptr_to_control_block17 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj16, i32 0, i32 0
   %ptr_to_refcnt18 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block17, i32 0, i32 0
   store i64 1, i64* %ptr_to_refcnt18, align 4
   %ptr_to_dtor_field19 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block17, i32 0, i32 1
-  store void (i8*)* @dtor.11, void (i8*)** %ptr_to_dtor_field19, align 8
-  %ptr_to_field20 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj16, i32 0, i32 1
-  store i64 3, i64* %ptr_to_field20, align 4
-  %ptr_ret_generate_expr21 = bitcast { { i64, void (i8*)* }, i64 }* %ptr_to_obj16 to i8*
-  %ptr_to_lam_obj = bitcast i8* %ptr_ret_generate_expr14 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
-  %ptr_to_field22 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj, i32 0, i32 1
-  %field_value = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field22, align 8
-  %call_lambda = tail call i8* %field_value(i8* %ptr_ret_generate_expr21, i8* %ptr_ret_generate_expr14)
-  %malloccall23 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i64 }* getelementptr ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* null, i32 1) to i32))
-  %ptr_to_obj24 = bitcast i8* %malloccall23 to { { i64, void (i8*)* }, i64 }*
-  %ptr_to_control_block25 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj24, i32 0, i32 0
-  %ptr_to_refcnt26 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block25, i32 0, i32 0
-  store i64 1, i64* %ptr_to_refcnt26, align 4
-  %ptr_to_dtor_field27 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block25, i32 0, i32 1
-  store void (i8*)* @dtor.11, void (i8*)** %ptr_to_dtor_field27, align 8
-  %ptr_to_field28 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj24, i32 0, i32 1
-  store i64 5, i64* %ptr_to_field28, align 4
-  %ptr_ret_generate_expr29 = bitcast { { i64, void (i8*)* }, i64 }* %ptr_to_obj24 to i8*
-  %ptr_to_lam_obj30 = bitcast i8* %call_lambda to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
-  %ptr_to_field31 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj30, i32 0, i32 1
-  %field_value32 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field31, align 8
-  %call_lambda33 = tail call i8* %field_value32(i8* %ptr_ret_generate_expr29, i8* %call_lambda)
-  %int_obj_ptr = bitcast i8* %call_lambda33 to { { i64, void (i8*)* }, i64 }*
-  %ptr_to_field34 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %int_obj_ptr, i32 0, i32 1
-  %field_value35 = load i64, i64* %ptr_to_field34, align 4
-  %ret = trunc i64 %field_value35 to i32
+  store void (i8*)* @dtor.17, void (i8*)** %ptr_to_dtor_field19, align 8
+  %ptr_to_field20 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj16, i32 0, i32 1
+  store i8* (i8*, i8*)* @lambda.11, i8* (i8*, i8*)** %ptr_to_field20, align 8
+  %ptr_to_field21 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj16, i32 0, i32 2
+  store i8* %ptr_ret_generate_expr7, i8** %ptr_to_field21, align 8
+  %ptr_to_field22 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj16, i32 0, i32 3
+  store i8* %ptr_ret_generate_expr14, i8** %ptr_to_field22, align 8
+  %ptr_ret_generate_expr23 = bitcast { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj16 to i8*
+  %ptr_to_lam_obj = bitcast i8* %ptr_ret_generate_expr to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field24 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj, i32 0, i32 1
+  %field_value = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field24, align 8
+  %call_lambda = tail call i8* %field_value(i8* %ptr_ret_generate_expr23, i8* %ptr_ret_generate_expr)
+  %malloccall25 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i64 }* getelementptr ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* null, i32 1) to i32))
+  %ptr_to_obj26 = bitcast i8* %malloccall25 to { { i64, void (i8*)* }, i64 }*
+  %ptr_to_control_block27 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj26, i32 0, i32 0
+  %ptr_to_refcnt28 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block27, i32 0, i32 0
+  store i64 1, i64* %ptr_to_refcnt28, align 4
+  %ptr_to_dtor_field29 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block27, i32 0, i32 1
+  store void (i8*)* @dtor.18, void (i8*)** %ptr_to_dtor_field29, align 8
+  %ptr_to_field30 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj26, i32 0, i32 1
+  store i64 0, i64* %ptr_to_field30, align 4
+  %ptr_ret_generate_expr31 = bitcast { { i64, void (i8*)* }, i64 }* %ptr_to_obj26 to i8*
+  %ptr_to_lam_obj32 = bitcast i8* %call_lambda to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field33 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj32, i32 0, i32 1
+  %field_value34 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field33, align 8
+  %call_lambda35 = tail call i8* %field_value34(i8* %ptr_ret_generate_expr31, i8* %call_lambda)
+  %malloccall36 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i64 }* getelementptr ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* null, i32 1) to i32))
+  %ptr_to_obj37 = bitcast i8* %malloccall36 to { { i64, void (i8*)* }, i64 }*
+  %ptr_to_control_block38 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj37, i32 0, i32 0
+  %ptr_to_refcnt39 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block38, i32 0, i32 0
+  store i64 1, i64* %ptr_to_refcnt39, align 4
+  %ptr_to_dtor_field40 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block38, i32 0, i32 1
+  store void (i8*)* @dtor.18, void (i8*)** %ptr_to_dtor_field40, align 8
+  %ptr_to_field41 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj37, i32 0, i32 1
+  store i64 46340, i64* %ptr_to_field41, align 4
+  %ptr_ret_generate_expr42 = bitcast { { i64, void (i8*)* }, i64 }* %ptr_to_obj37 to i8*
+  %ptr_to_lam_obj43 = bitcast i8* %call_lambda35 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field44 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj43, i32 0, i32 1
+  %field_value45 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field44, align 8
+  %call_lambda46 = tail call i8* %field_value45(i8* %ptr_ret_generate_expr42, i8* %call_lambda35)
+  %int_obj_ptr = bitcast i8* %call_lambda46 to { { i64, void (i8*)* }, i64 }*
+  %ptr_to_field47 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %int_obj_ptr, i32 0, i32 1
+  %field_value48 = load i64, i64* %ptr_to_field47, align 4
+  %ret = trunc i64 %field_value48 to i32
   ret i32 %ret
 }
 
@@ -309,7 +325,212 @@ entry:
   ret void
 }
 
-define void @dtor.11(i8* %0) {
+define i8* @lambda.11(i8* %0, i8* %1) {
+entry:
+  %closure_ptr = bitcast i8* %1 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }*
+  %ptr_to_captured_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %closure_ptr, i32 0, i32 2
+  %ptr_to_captured_obj = load i8*, i8** %ptr_to_captured_field, align 8
+  %ptr_to_captured_field1 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %closure_ptr, i32 0, i32 3
+  %ptr_to_captured_obj2 = load i8*, i8** %ptr_to_captured_field1, align 8
+  call void @retain_obj(i8* %ptr_to_captured_obj)
+  call void @retain_obj(i8* %ptr_to_captured_obj2)
+  call void @release_obj(i8* %1)
+  %malloccall = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* getelementptr ({ { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* null, i32 1) to i32))
+  %ptr_to_obj = bitcast i8* %malloccall to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }*
+  %ptr_to_control_block = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 0
+  %ptr_to_refcnt = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block, i32 0, i32 0
+  store i64 1, i64* %ptr_to_refcnt, align 4
+  %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block, i32 0, i32 1
+  store void (i8*)* @dtor.16, void (i8*)** %ptr_to_dtor_field, align 8
+  %ptr_to_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 1
+  store i8* (i8*, i8*)* @lambda.12, i8* (i8*, i8*)** %ptr_to_field, align 8
+  %ptr_to_field3 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 2
+  store i8* %0, i8** %ptr_to_field3, align 8
+  %ptr_to_field4 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 3
+  store i8* %ptr_to_captured_obj, i8** %ptr_to_field4, align 8
+  %ptr_to_field5 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 4
+  store i8* %ptr_to_captured_obj2, i8** %ptr_to_field5, align 8
+  %ptr_ret_generate_expr = bitcast { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj to i8*
+  ret i8* %ptr_ret_generate_expr
+}
+
+define i8* @lambda.12(i8* %0, i8* %1) {
+entry:
+  %closure_ptr = bitcast i8* %1 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }*
+  %ptr_to_captured_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %closure_ptr, i32 0, i32 2
+  %ptr_to_captured_obj = load i8*, i8** %ptr_to_captured_field, align 8
+  %ptr_to_captured_field1 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %closure_ptr, i32 0, i32 3
+  %ptr_to_captured_obj2 = load i8*, i8** %ptr_to_captured_field1, align 8
+  %ptr_to_captured_field3 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %closure_ptr, i32 0, i32 4
+  %ptr_to_captured_obj4 = load i8*, i8** %ptr_to_captured_field3, align 8
+  call void @retain_obj(i8* %ptr_to_captured_obj)
+  call void @retain_obj(i8* %ptr_to_captured_obj2)
+  call void @retain_obj(i8* %ptr_to_captured_obj4)
+  call void @release_obj(i8* %1)
+  %malloccall = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* getelementptr ({ { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* null, i32 1) to i32))
+  %ptr_to_obj = bitcast i8* %malloccall to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }*
+  %ptr_to_control_block = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 0
+  %ptr_to_refcnt = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block, i32 0, i32 0
+  store i64 1, i64* %ptr_to_refcnt, align 4
+  %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block, i32 0, i32 1
+  store void (i8*)* @dtor.15, void (i8*)** %ptr_to_dtor_field, align 8
+  %ptr_to_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 1
+  store i8* (i8*, i8*)* @lambda.13, i8* (i8*, i8*)** %ptr_to_field, align 8
+  %ptr_to_field5 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 2
+  store i8* %ptr_to_captured_obj, i8** %ptr_to_field5, align 8
+  %ptr_to_field6 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 3
+  store i8* %ptr_to_captured_obj2, i8** %ptr_to_field6, align 8
+  %ptr_to_field7 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 4
+  store i8* %ptr_to_captured_obj4, i8** %ptr_to_field7, align 8
+  %ptr_to_field8 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 5
+  store i8* %0, i8** %ptr_to_field8, align 8
+  %ptr_ret_generate_expr = bitcast { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj to i8*
+  ret i8* %ptr_ret_generate_expr
+}
+
+define i8* @lambda.13(i8* %0, i8* %1) {
+entry:
+  %closure_ptr = bitcast i8* %1 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }*
+  %ptr_to_captured_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %closure_ptr, i32 0, i32 2
+  %ptr_to_captured_obj = load i8*, i8** %ptr_to_captured_field, align 8
+  %ptr_to_captured_field1 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %closure_ptr, i32 0, i32 3
+  %ptr_to_captured_obj2 = load i8*, i8** %ptr_to_captured_field1, align 8
+  %ptr_to_captured_field3 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %closure_ptr, i32 0, i32 4
+  %ptr_to_captured_obj4 = load i8*, i8** %ptr_to_captured_field3, align 8
+  %ptr_to_captured_field5 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %closure_ptr, i32 0, i32 5
+  %ptr_to_captured_obj6 = load i8*, i8** %ptr_to_captured_field5, align 8
+  call void @retain_obj(i8* %ptr_to_captured_obj)
+  call void @retain_obj(i8* %ptr_to_captured_obj2)
+  call void @retain_obj(i8* %ptr_to_captured_obj4)
+  call void @retain_obj(i8* %ptr_to_captured_obj6)
+  call void @release_obj(i8* %1)
+  call void @retain_obj(i8* %0)
+  %ptr_to_lam_obj = bitcast i8* %ptr_to_captured_obj2 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj, i32 0, i32 1
+  %field_value = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field, align 8
+  %call_lambda = tail call i8* %field_value(i8* %0, i8* %ptr_to_captured_obj2)
+  %malloccall = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i64 }* getelementptr ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* null, i32 1) to i32))
+  %ptr_to_obj = bitcast i8* %malloccall to { { i64, void (i8*)* }, i64 }*
+  %ptr_to_control_block = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj, i32 0, i32 0
+  %ptr_to_refcnt = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block, i32 0, i32 0
+  store i64 1, i64* %ptr_to_refcnt, align 4
+  %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block, i32 0, i32 1
+  store void (i8*)* @dtor.14, void (i8*)** %ptr_to_dtor_field, align 8
+  %ptr_to_field7 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj, i32 0, i32 1
+  store i64 0, i64* %ptr_to_field7, align 4
+  %ptr_ret_generate_expr = bitcast { { i64, void (i8*)* }, i64 }* %ptr_to_obj to i8*
+  %ptr_to_lam_obj8 = bitcast i8* %call_lambda to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field9 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj8, i32 0, i32 1
+  %field_value10 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field9, align 8
+  %call_lambda11 = tail call i8* %field_value10(i8* %ptr_ret_generate_expr, i8* %call_lambda)
+  %ptr_to_cond_obj = bitcast i8* %call_lambda11 to { { i64, void (i8*)* }, i8 }*
+  %ptr_to_field12 = getelementptr inbounds { { i64, void (i8*)* }, i8 }, { { i64, void (i8*)* }, i8 }* %ptr_to_cond_obj, i32 0, i32 1
+  %field_value13 = load i8, i8* %ptr_to_field12, align 1
+  %cond_val_i1 = trunc i8 %field_value13 to i1
+  br i1 %cond_val_i1, label %then, label %else
+
+then:                                             ; preds = %entry
+  call void @release_obj(i8* %0)
+  call void @release_obj(i8* %ptr_to_captured_obj4)
+  call void @release_obj(i8* %ptr_to_captured_obj)
+  br label %cont
+
+else:                                             ; preds = %entry
+  call void @retain_obj(i8* %ptr_to_captured_obj4)
+  %ptr_to_lam_obj14 = bitcast i8* %ptr_to_captured_obj4 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field15 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj14, i32 0, i32 1
+  %field_value16 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field15, align 8
+  %call_lambda17 = tail call i8* %field_value16(i8* %ptr_to_captured_obj6, i8* %ptr_to_captured_obj4)
+  call void @retain_obj(i8* %0)
+  %ptr_to_lam_obj18 = bitcast i8* %call_lambda17 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field19 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj18, i32 0, i32 1
+  %field_value20 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field19, align 8
+  %call_lambda21 = tail call i8* %field_value20(i8* %0, i8* %call_lambda17)
+  %ptr_to_lam_obj22 = bitcast i8* %ptr_to_captured_obj4 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field23 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj22, i32 0, i32 1
+  %field_value24 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field23, align 8
+  %call_lambda25 = tail call i8* %field_value24(i8* %0, i8* %ptr_to_captured_obj4)
+  %malloccall26 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)* }, i64 }* getelementptr ({ { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* null, i32 1) to i32))
+  %ptr_to_obj27 = bitcast i8* %malloccall26 to { { i64, void (i8*)* }, i64 }*
+  %ptr_to_control_block28 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj27, i32 0, i32 0
+  %ptr_to_refcnt29 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block28, i32 0, i32 0
+  store i64 1, i64* %ptr_to_refcnt29, align 4
+  %ptr_to_dtor_field30 = getelementptr inbounds { i64, void (i8*)* }, { i64, void (i8*)* }* %ptr_to_control_block28, i32 0, i32 1
+  store void (i8*)* @dtor.14, void (i8*)** %ptr_to_dtor_field30, align 8
+  %ptr_to_field31 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %ptr_to_obj27, i32 0, i32 1
+  store i64 -1, i64* %ptr_to_field31, align 4
+  %ptr_ret_generate_expr32 = bitcast { { i64, void (i8*)* }, i64 }* %ptr_to_obj27 to i8*
+  %ptr_to_lam_obj33 = bitcast i8* %call_lambda25 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field34 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj33, i32 0, i32 1
+  %field_value35 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field34, align 8
+  %call_lambda36 = tail call i8* %field_value35(i8* %ptr_ret_generate_expr32, i8* %call_lambda25)
+  %ptr_to_lam_obj37 = bitcast i8* %ptr_to_captured_obj to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field38 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj37, i32 0, i32 1
+  %field_value39 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field38, align 8
+  %call_lambda40 = tail call i8* %field_value39(i8* %call_lambda21, i8* %ptr_to_captured_obj)
+  %ptr_to_lam_obj41 = bitcast i8* %call_lambda40 to { { i64, void (i8*)* }, i8* (i8*, i8*)* }*
+  %ptr_to_field42 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj41, i32 0, i32 1
+  %field_value43 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field42, align 8
+  %call_lambda44 = tail call i8* %field_value43(i8* %call_lambda36, i8* %call_lambda40)
+  br label %cont
+
+cont:                                             ; preds = %else, %then
+  %phi = phi i8* [ %ptr_to_captured_obj6, %then ], [ %call_lambda44, %else ]
+  ret i8* %phi
+}
+
+define void @dtor.14(i8* %0) {
+entry:
+  %ptr_to_obj = bitcast i8* %0 to { { i64, void (i8*)* }, i64 }*
+  ret void
+}
+
+define void @dtor.15(i8* %0) {
+entry:
+  %ptr_to_obj = bitcast i8* %0 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }*
+  %ptr_to_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 2
+  %field_value = load i8*, i8** %ptr_to_field, align 8
+  call void @release_obj(i8* %field_value)
+  %ptr_to_field1 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 3
+  %field_value2 = load i8*, i8** %ptr_to_field1, align 8
+  call void @release_obj(i8* %field_value2)
+  %ptr_to_field3 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 4
+  %field_value4 = load i8*, i8** %ptr_to_field3, align 8
+  call void @release_obj(i8* %field_value4)
+  %ptr_to_field5 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 5
+  %field_value6 = load i8*, i8** %ptr_to_field5, align 8
+  call void @release_obj(i8* %field_value6)
+  ret void
+}
+
+define void @dtor.16(i8* %0) {
+entry:
+  %ptr_to_obj = bitcast i8* %0 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }*
+  %ptr_to_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 2
+  %field_value = load i8*, i8** %ptr_to_field, align 8
+  call void @release_obj(i8* %field_value)
+  %ptr_to_field1 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 3
+  %field_value2 = load i8*, i8** %ptr_to_field1, align 8
+  call void @release_obj(i8* %field_value2)
+  %ptr_to_field3 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8*, i8* }* %ptr_to_obj, i32 0, i32 4
+  %field_value4 = load i8*, i8** %ptr_to_field3, align 8
+  call void @release_obj(i8* %field_value4)
+  ret void
+}
+
+define void @dtor.17(i8* %0) {
+entry:
+  %ptr_to_obj = bitcast i8* %0 to { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }*
+  %ptr_to_field = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj, i32 0, i32 2
+  %field_value = load i8*, i8** %ptr_to_field, align 8
+  call void @release_obj(i8* %field_value)
+  %ptr_to_field1 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)* }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj, i32 0, i32 3
+  %field_value2 = load i8*, i8** %ptr_to_field1, align 8
+  call void @release_obj(i8* %field_value2)
+  ret void
+}
+
+define void @dtor.18(i8* %0) {
 entry:
   %ptr_to_obj = bitcast i8* %0 to { { i64, void (i8*)* }, i64 }*
   ret void

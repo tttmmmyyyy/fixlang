@@ -1331,8 +1331,15 @@ fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>)
         .insert(SystemFunctions::ReleaseObj, release_func);
 }
 
-fn execute_main_module<'ctx>(module: &Module<'ctx>, opt_level: OptimizationLevel) -> i32 {
+fn execute_main_module<'c>(
+    context: &'c Context,
+    module: &Module<'c>,
+    opt_level: OptimizationLevel,
+) -> i32 {
+    let runtime_module =
+        Module::parse_bitcode_from_path(&Path::new("runtime/fixruntime.bc"), context).unwrap();
     let execution_engine = module.create_jit_execution_engine(opt_level).unwrap();
+    execution_engine.add_module(&runtime_module).unwrap();
     unsafe {
         let func = execution_engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -1347,55 +1354,53 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
     let program = calculate_aux_info(program);
 
     let context = Context::create();
-    {
-        let module = context.create_module("main");
-        let builder = context.create_builder();
-        let mut gc = GenerationContext {
-            context: &context,
-            module: &module,
-            builder: &builder,
-            scope: Default::default(),
-            system_functions: Default::default(),
-        };
-        generate_system_functions(&mut gc);
+    let module = context.create_module("main");
+    let builder = context.create_builder();
+    let mut gc = GenerationContext {
+        context: &context,
+        module: &module,
+        builder: &builder,
+        scope: Default::default(),
+        system_functions: Default::default(),
+    };
+    generate_system_functions(&mut gc);
 
-        let i32_type = context.i32_type();
-        let main_fn_type = i32_type.fn_type(&[], false);
-        let main_function = module.add_function("main", main_fn_type, None);
+    let i32_type = context.i32_type();
+    let main_fn_type = i32_type.fn_type(&[], false);
+    let main_function = module.add_function("main", main_fn_type, None);
 
-        let entry_bb = context.append_basic_block(main_function, "entry");
-        builder.position_at_end(entry_bb);
+    let entry_bb = context.append_basic_block(main_function, "entry");
+    builder.position_at_end(entry_bb);
 
-        let program_result = generate_expr(program, &mut gc);
-        // let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
-        // builder.build_call(
-        //     print_int_obj,
-        //     &[program_result.ptr.into()],
-        //     "print_program_result",
-        // );
-        let int_obj_ptr = builder.build_pointer_cast(
-            program_result.ptr,
-            ObjectType::int_obj_type()
-                .to_struct_type(&context)
-                .ptr_type(AddressSpace::Generic),
-            "int_obj_ptr",
-        );
-        let value = build_get_field(int_obj_ptr, 1, &gc);
-        if let BasicValueEnum::IntValue(value) = value {
-            let ret = builder.build_int_cast(value, gc.context.i32_type(), "ret");
-            builder.build_return(Some(&ret));
-        } else {
-            unreachable!()
-        }
-
-        module.print_to_file("ir").unwrap();
-        let verify = module.verify();
-        if verify.is_err() {
-            print!("{}", verify.unwrap_err().to_str().unwrap());
-            panic!("Verify failed!");
-        }
-        assert_eq!(execute_main_module(&module, opt_level), answer);
+    let program_result = generate_expr(program, &mut gc);
+    // let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
+    // builder.build_call(
+    //     print_int_obj,
+    //     &[program_result.ptr.into()],
+    //     "print_program_result",
+    // );
+    let int_obj_ptr = builder.build_pointer_cast(
+        program_result.ptr,
+        ObjectType::int_obj_type()
+            .to_struct_type(&context)
+            .ptr_type(AddressSpace::Generic),
+        "int_obj_ptr",
+    );
+    let value = build_get_field(int_obj_ptr, 1, &gc);
+    if let BasicValueEnum::IntValue(value) = value {
+        let ret = builder.build_int_cast(value, gc.context.i32_type(), "ret");
+        builder.build_return(Some(&ret));
+    } else {
+        unreachable!()
     }
+
+    module.print_to_file("ir").unwrap();
+    let verify = module.verify();
+    if verify.is_err() {
+        print!("{}", verify.unwrap_err().to_str().unwrap());
+        panic!("Verify failed!");
+    }
+    assert_eq!(execute_main_module(&context, &module, opt_level), answer);
 }
 
 fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
