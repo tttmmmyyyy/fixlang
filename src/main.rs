@@ -1,6 +1,8 @@
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
+#[macro_use]
+extern crate serial_test;
 
 use either::Either;
 use inkwell::basic_block::BasicBlock;
@@ -1670,73 +1672,86 @@ fn parse_bool_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Tests should run sequentially, since OBJECT_TABLE in libfixsanitizer.so is shared between tests and check_leak() asserts OBJECT_TABLE is empty.
     #[test]
+    #[serial]
     pub fn test0() {
         let source = r"5";
         let answer = 5;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test1() {
         let source = r"let x = 5 in x";
         let answer = 5;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test2() {
         let source = r"let x = 5 in 3";
         let answer = 3;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test3() {
         let source = r"let n = -5 in let p = 5 in n";
         let answer = -5;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test4() {
         let source = r"let n = -5 in let p = 5 in p";
         let answer = 5;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test5() {
         let source = r"let x = -5 in let x = 5 in x";
         let answer = 5;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test6() {
         let source = r"let x = let y = 3 in y in x";
         let answer = 3;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test7() {
         let source = r"(\x -> 5) 10";
         let answer = 5;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test8() {
         let source = r"(\x -> x) 6";
         let answer = 6;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test9() {
         let source = r"add 3 5";
         let answer = 8;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test10() {
         let source = r"let x = 5 in add 2 x";
         let answer = 7;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test11() {
         let source = r"
             let x = 5 in 
@@ -1747,6 +1762,7 @@ mod tests {
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test12() {
         let source = r"
             let x = 5 in 
@@ -1759,6 +1775,7 @@ mod tests {
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test13() {
         let source = r"
             let f = add 5 in
@@ -1768,6 +1785,7 @@ mod tests {
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test13_5() {
         let source = r"
             let f = add 5 in
@@ -1777,6 +1795,7 @@ mod tests {
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test14() {
         let source = r"
             let x = 3 in 
@@ -1788,6 +1807,7 @@ mod tests {
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test15() {
         let source = r"
             let f = \x -> add 3 x in
@@ -1797,6 +1817,7 @@ mod tests {
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test15_5() {
         let source = r"
             let x = 3;
@@ -1807,6 +1828,7 @@ mod tests {
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test16() {
         let source = r"
             let f = \x -> add x 3 in
@@ -1816,30 +1838,35 @@ mod tests {
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test17() {
         let source = r"if true then 3 else 5";
         let answer = 3;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test18() {
         let source = r"if false then 3 else 5";
         let answer = 5;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test19() {
         let source = r"if eq 3 3 then 1 else 0";
         let answer = 1;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test20() {
         let source = r"if eq 3 5 then 1 else 0";
         let answer = 0;
         test_int_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test21() {
         let n = 10000;
         let source = format!(
@@ -1853,6 +1880,7 @@ mod tests {
         test_int_source(source.as_str(), answer, OptimizationLevel::Default);
     }
     #[test]
+    #[serial]
     pub fn test22() {
         let n = 46340; // max i32 s.t. n * (n + 1) does not overflow.
         let source = format!(
