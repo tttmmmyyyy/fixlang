@@ -21,6 +21,7 @@ struct ObjectInfo {
     id: i64,
     addr: usize,
     refcnt: i64,
+    code: String,
 }
 
 #[no_mangle]
@@ -37,7 +38,7 @@ pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
     let objid = *guard;
     if VERBOSE {
         println!(
-            "Object id={} is allocated. refcnt=(0 -> 1), addr={:#X}, name={}",
+            "Object id={} is allocated. refcnt=(0 -> 1), addr={:#X}, code = {}",
             objid, address as usize, name_c_str
         );
     }
@@ -46,6 +47,7 @@ pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
         id: objid,
         addr: address as usize,
         refcnt: 1,
+        code: String::from(name_c_str),
     };
     object_table.insert(objid, info);
     objid
