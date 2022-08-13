@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use std::process::exit;
 use std::ptr::null;
 extern crate libc;
-use libc::{c_char, c_int, c_void};
+use libc::{c_char, c_int, c_ulonglong, c_void};
 
 #[test]
 fn test_rustc_version() {
@@ -27,3 +27,42 @@ pub extern "C" fn hello_runtime() -> () {
     // }
     println!("Hello runtime!");
 }
+
+#[no_mangle]
+pub extern "C" fn report_malloc(address: *const i8) -> () {
+    if VERBOSE {
+        println!("Object at {:#X} is allocated (0 -> 1)", address as usize,);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn report_retain(address: *const i8, refcnt: i64) -> () {
+    if VERBOSE {
+        println!(
+            "Object at {:#X} is retained ({} -> {})",
+            address as usize,
+            refcnt,
+            refcnt + 1
+        );
+    }
+    if refcnt == 0 {
+        panic!("Object with refcnt zero is retained!",)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn report_release(address: *const i8, refcnt: i64) -> () {
+    if VERBOSE {
+        println!(
+            "Object at {:#X} is released ({} -> {})",
+            address as usize,
+            refcnt,
+            refcnt - 1
+        );
+    }
+    if refcnt == 0 {
+        panic!("Object with refcnt zero is released!",)
+    }
+}
+
+const VERBOSE: bool = false;

@@ -1008,6 +1008,22 @@ impl ObjectType {
         let struct_type = self.to_struct_type(context);
         // NOTE: Only once allocation is needed since we don't implement weak_ptr
         let ptr_to_obj = builder.build_malloc(struct_type, "ptr_to_obj").unwrap();
+
+        if SANITIZE_MEMORY {
+            let ptr = builder.build_pointer_cast(
+                ptr_to_obj,
+                ptr_to_object_type(gc.context),
+                "cast_to_i8ptr",
+            );
+            builder.build_call(
+                *gc.system_functions
+                    .get(&SystemFunctions::ReportMalloc)
+                    .unwrap(),
+                &[ptr.into()],
+                "call_report_malloc",
+            );
+        }
+
         for (i, ft) in self.field_types.iter().enumerate() {
             match ft {
                 ObjectFieldType::ControlBlock => {
@@ -1090,7 +1106,9 @@ fn ptr_to_lambda_function_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx
 #[derive(Eq, Hash, PartialEq, Clone)]
 enum SystemFunctions {
     Printf,
-    // Raise,
+    ReportMalloc,
+    ReportRetain,
+    ReportRelease,
     PrintIntObj,
     RetainObj,
     ReleaseObj,
@@ -1112,17 +1130,41 @@ fn generate_func_printf<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> Funct
     func
 }
 
-// fn generate_func_raise<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
-//     let context = gc.context;
-//     let module = gc.module;
+fn generate_func_report_malloc<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> FunctionValue<'c> {
+    let fn_ty = gc
+        .context
+        .void_type()
+        .fn_type(&[ptr_to_object_type(gc.context).into()], false);
+    gc.module.add_function("report_malloc", fn_ty, None)
+}
 
-//     let i32_type = context.i32_type();
+fn generate_func_report_retain<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> FunctionValue<'c> {
+    let fn_ty = gc.context.void_type().fn_type(
+        &[
+            ptr_to_object_type(gc.context).into(),
+            refcnt_type(gc.context).into(),
+        ],
+        false,
+    );
+    gc.module.add_function("report_retain", fn_ty, None)
+}
 
-//     let fn_type = i32_type.fn_type(&[i32_type.into()], false);
-//     let func = module.add_function("raise", fn_type, None);
-
-//     func
-// }
+fn generate_func_report_release<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> FunctionValue<'c> {
+    let fn_ty = gc.context.void_type().fn_type(
+        &[
+            ptr_to_object_type(gc.context).into(),
+            refcnt_type(gc.context).into(),
+        ],
+        false,
+    );
+    gc.module.add_function("report_release", fn_ty, None)
+}
 
 fn generate_func_print_int_obj<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm, 'b>,
@@ -1178,6 +1220,17 @@ fn generate_func_retain_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> F
         .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
         .unwrap();
     let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
+
+    if SANITIZE_MEMORY {
+        builder.build_call(
+            *gc.system_functions
+                .get(&SystemFunctions::ReportRetain)
+                .unwrap(),
+            &[ptr_to_obj.into(), refcnt.into()],
+            "call_report_retain",
+        );
+    }
+
     let one = context.i64_type().const_int(1, false);
     let refcnt = builder.build_int_add(refcnt, one, "refcnt");
     builder.build_store(ptr_to_refcnt, refcnt);
@@ -1214,28 +1267,13 @@ fn generate_func_release_obj<'c, 'm, 'b>(
         let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
 
         if SANITIZE_MEMORY {
-            // check if refcnt is positive
-            let zero = gc.context.i64_type().const_zero();
-            let is_positive = builder.build_int_compare(
-                inkwell::IntPredicate::ULE,
-                refcnt,
-                zero,
-                "is_refcnt_positive",
+            gc.builder.build_call(
+                *gc.system_functions
+                    .get(&SystemFunctions::ReportRelease)
+                    .unwrap(),
+                &[ptr_to_obj.into(), refcnt.into()],
+                "report_release_call",
             );
-            let then_bb = gc
-                .context
-                .append_basic_block(release_func, "error_refcnt_already_leq_zero");
-            let cont_bb = gc
-                .context
-                .append_basic_block(release_func, "refcnt_positive");
-            builder.build_conditional_branch(is_positive, then_bb, cont_bb);
-
-            builder.position_at_end(then_bb);
-            build_panic("Release object whose refcnt is already zero.", gc);
-            builder.build_unconditional_branch(cont_bb);
-
-            bb = cont_bb;
-            builder.position_at_end(bb);
         }
 
         let one = gc.context.i64_type().const_int(1, false);
@@ -1313,8 +1351,18 @@ fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>)
     );
     gc.system_functions
         .insert(SystemFunctions::Printf, generate_func_printf(gc));
-    // gc.system_functions
-    //     .insert(SystemFunctions::Raise, generate_func_raise(gc));
+    gc.system_functions.insert(
+        SystemFunctions::ReportMalloc,
+        generate_func_report_malloc(gc),
+    );
+    gc.system_functions.insert(
+        SystemFunctions::ReportRetain,
+        generate_func_report_retain(gc),
+    );
+    gc.system_functions.insert(
+        SystemFunctions::ReportRelease,
+        generate_func_report_release(gc),
+    );
     gc.system_functions.insert(
         SystemFunctions::PrintIntObj,
         generate_func_print_int_obj(gc),
@@ -1331,10 +1379,12 @@ fn execute_main_module<'c>(
     module: &Module<'c>,
     opt_level: OptimizationLevel,
 ) -> i32 {
-    assert_eq!(
-        load_library_permanently("sanitizer/libfixsanitizer.so"),
-        false
-    );
+    if SANITIZE_MEMORY {
+        assert_eq!(
+            load_library_permanently("sanitizer/libfixsanitizer.so"),
+            false
+        );
+    }
     let execution_engine = module.create_jit_execution_engine(opt_level).unwrap();
     unsafe {
         let func = execution_engine
@@ -1370,9 +1420,9 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
 
     let program_result = generate_expr(program, &mut gc);
 
-    let fn_type = context.void_type().fn_type(&[], false);
-    let hello_runtime = module.add_function("hello_runtime", fn_type, None);
-    builder.build_call(hello_runtime, &[], "hello_runtime");
+    // let fn_type = context.void_type().fn_type(&[], false);
+    // let hello_runtime = module.add_function("hello_runtime", fn_type, None);
+    // builder.build_call(hello_runtime, &[], "hello_runtime");
 
     let int_obj_ptr = builder.build_pointer_cast(
         program_result.ptr,
