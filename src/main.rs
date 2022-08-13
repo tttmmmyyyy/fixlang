@@ -22,7 +22,7 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 use once_cell::sync::Lazy;
-use parser::parse_source;
+use parser::*;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use std::alloc::System;
