@@ -353,7 +353,11 @@ fn fix() -> Arc<ExprInfo> {
     lam(var_var("f"), lam(var_var("x"), fix_lit("f", "x")))
 }
 
-fn br(cond: Arc<ExprInfo>, then_expr: Arc<ExprInfo>, else_expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
+fn conditional(
+    cond: Arc<ExprInfo>,
+    then_expr: Arc<ExprInfo>,
+    else_expr: Arc<ExprInfo>,
+) -> Arc<ExprInfo> {
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info()
 }
 
@@ -400,7 +404,7 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = cond.free_vars.clone();
             free_vars.extend(then.free_vars.clone());
             free_vars.extend(else_expr.free_vars.clone());
-            br(cond, then, else_expr).with_free_vars(free_vars)
+            conditional(cond, then, else_expr).with_free_vars(free_vars)
         }
         Expr::Type(_) => ei.clone(),
     }
@@ -1668,7 +1672,7 @@ fn parse_if_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let cond = pairs.next().unwrap();
     let then_val = pairs.next().unwrap();
     let else_val = pairs.next().unwrap();
-    br(parse_expr(cond), parse_expr(then_val), parse_expr(else_val))
+    conditional(parse_expr(cond), parse_expr(then_val), parse_expr(else_val))
 }
 
 fn parse_bracket_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
