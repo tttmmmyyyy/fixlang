@@ -160,19 +160,6 @@ enum Type {
     ForAllTy(Arc<Var>, Arc<Type>),
 }
 
-// impl Type {
-//     fn fn_result(self: &Self) -> Arc<Type> {
-//         match self {
-//             Type::TyVar(_) => unimplemented!(),
-//             Type::LitTy(_) => unimplemented!(),
-//             Type::AppTy(_, _) => unimplemented!(),
-//             Type::TyConApp(_, _) => unimplemented!(),
-//             Type::FunTy(_, res) => res.clone(),
-//             Type::ForAllTy(_, _) => unimplemented!(),
-//         }
-//     }
-// }
-
 #[derive(Eq, PartialEq)]
 enum TyCon {
     Pair,
