@@ -1213,7 +1213,7 @@ fn generate_func_release_obj<'c, 'm, 'b>(
             .unwrap();
         let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
 
-        if DEBUG_MEMORY {
+        if SANITIZE_MEMORY {
             // check if refcnt is positive
             let zero = gc.context.i64_type().const_zero();
             let is_positive = builder.build_int_compare(
@@ -1341,7 +1341,7 @@ fn execute_main_module<'c>(
     }
 }
 
-const DEBUG_MEMORY: bool = true;
+const SANITIZE_MEMORY: bool = true;
 
 fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLevel) {
     let program = calculate_aux_info(program);
