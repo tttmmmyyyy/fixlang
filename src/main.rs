@@ -55,7 +55,7 @@ enum Expr {
     App(Arc<ExprInfo>, Arc<ExprInfo>),
     Lam(Arc<Var>, Arc<ExprInfo>),
     Let(Arc<Var>, Arc<ExprInfo>, Arc<ExprInfo>),
-    // Caseはあとで
+    // implement case later
     If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>),
     Type(Arc<Type>),
 }
