@@ -186,7 +186,7 @@ fn tyvar_ty(var_name: &str) -> Arc<Type> {
 }
 
 fn forall_ty(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::ForAllTy(tyvar_var("a"), ty))
+    Arc::new(Type::ForAllTy(tyvar_var(var_name), ty))
 }
 
 fn var_var(var_name: &str) -> Arc<Var> {
@@ -411,23 +411,6 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
         Expr::Type(_) => ei.clone(),
     }
 }
-
-// MEMO:
-// Lazy組み込み型を導入して、fix : (Lazy a -> a) -> Lazy aとするべきではないか。
-// fix : ((() -> a) -> (() -> a)) -> (() -> a) と等価で、FIX_A_TO_Bで表せるのでとりあえず良いけど。Lazyにはキャッシュ機能を付けたほうが良い。
-
-// #[cfg(test)]
-// mod tests {
-//     #[test]
-//     fn it_works() {
-//         assert_eq!(2 + 2, 4);
-//     }
-// }
-
-// memo
-// data List a = () -> [] | (a, List a) と定義する。Lazy b = () -> b + キャッシュ、なら、data List a = Lazy ([] | (a, List a))
-// このときfixと組み合わせて無限リストが正常動作すると思う。fix (\l -> 1:2:l) で、1,2,1,2,... など。
-// フィボナッチ数列を計算する有名なコードはどうか？？
 
 #[derive(Clone)]
 struct ExprCode<'ctx> {
