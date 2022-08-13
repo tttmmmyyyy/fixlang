@@ -7,6 +7,7 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
+use inkwell::support::load_library_permanently;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructType};
 use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
@@ -17,8 +18,10 @@ use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use std::alloc::System;
 use std::collections::{HashMap, HashSet};
+use std::ffi::CString;
 use std::fmt::Pointer;
 use std::path::Path;
+use std::ptr::null;
 use std::sync::Arc;
 use std::thread::panicking;
 use std::vec::Vec;
@@ -1336,10 +1339,8 @@ fn execute_main_module<'c>(
     module: &Module<'c>,
     opt_level: OptimizationLevel,
 ) -> i32 {
-    let runtime_module =
-        Module::parse_bitcode_from_path(&Path::new("runtime/fixruntime.bc"), context).unwrap();
+    assert_eq!(load_library_permanently("runtime/libfixruntime.so"), false);
     let execution_engine = module.create_jit_execution_engine(opt_level).unwrap();
-    execution_engine.add_module(&runtime_module).unwrap();
     unsafe {
         let func = execution_engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -1373,12 +1374,12 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
     builder.position_at_end(entry_bb);
 
     let program_result = generate_expr(program, &mut gc);
-    // let print_int_obj = *system_functions.get(&SystemFunctions::PrintIntObj).unwrap();
-    // builder.build_call(
-    //     print_int_obj,
-    //     &[program_result.ptr.into()],
-    //     "print_program_result",
-    // );
+
+    // let fn_type = context.i32_type().fn_type(&[], false);
+    // let rust_function = module.add_function("rust_function", fn_type, None);
+    // let ret = builder.build_call(rust_function, &[], "rust_function");
+    // let ret_rust_func = ret.try_as_basic_value().unwrap_left().into_int_value();
+
     let int_obj_ptr = builder.build_pointer_cast(
         program_result.ptr,
         ObjectType::int_obj_type()
@@ -1716,40 +1717,4 @@ mod tests {
     }
 }
 
-fn main() {
-    let context = Context::create();
-    let module = context.create_module("main");
-    let builder = context.create_builder();
-
-    let i32_type = context.i32_type();
-    let i8_type = context.i8_type();
-    let i8_ptr_type = i8_type.ptr_type(AddressSpace::Generic);
-    let main_fn_type = i32_type.fn_type(&[], false);
-    let main_function = module.add_function("main", main_fn_type, None);
-
-    let entry_bb = context.append_basic_block(main_function, "entry");
-    builder.position_at_end(entry_bb);
-
-    let struct_ty = context.struct_type(&[i32_type.into(), i32_type.into()], false);
-    let malloc = builder.build_malloc(struct_ty, "malloc").unwrap();
-
-    let sub_fn_ty = context.void_type().fn_type(&[i8_ptr_type.into()], false);
-    let sub_fn = module.add_function("sub", sub_fn_ty, None);
-    let bb = context.append_basic_block(sub_fn, "entry");
-    {
-        let builder = context.create_builder();
-        builder.position_at_end(bb);
-        builder.build_return(None);
-    }
-
-    let malloc_i8 = builder.build_pointer_cast(malloc, i8_ptr_type, "malloc_i8");
-    builder.build_call(sub_fn, &[malloc_i8.into()], "call_sub");
-    builder.build_return(Some(&i32_type.const_zero()));
-
-    module.print_to_file("ir").unwrap();
-    let verify = module.verify();
-    if verify.is_err() {
-        print!("{}", verify.unwrap_err().to_str().unwrap());
-        panic!("Verify failed!");
-    }
-}
+fn main() {}

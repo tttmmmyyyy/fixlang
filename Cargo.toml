@@ -11,3 +11,4 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", feat
 either = "1.7.0"
 pest = "2.2"
 pest_derive = "2.2"
+libloading = "0.7"
