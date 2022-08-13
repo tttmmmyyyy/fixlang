@@ -95,6 +95,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f107b87b6afc2a64fd13cac55fe06d6c8859f12d4b14cbcdd2c67d0976781be"
 
 [[package]]
+name = "fixlang"
+version = "0.1.0"
+dependencies = [
+ "either",
+ "inkwell",
+ "libloading",
+ "once_cell",
+ "pest",
+ "pest_derive",
+ "serial_test",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -333,19 +346,6 @@ name = "regex-syntax"
 version = "0.6.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3f87b73ce11b1619a3c6332f45341e0047173771e8b8b73f87bfeefb7b56244"
-
-[[package]]
-name = "resplang"
-version = "0.1.0"
-dependencies = [
- "either",
- "inkwell",
- "libloading",
- "once_cell",
- "pest",
- "pest_derive",
- "serial_test",
-]
 
 [[package]]
 name = "scopeguard"

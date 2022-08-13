@@ -1563,7 +1563,7 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
 }
 
 fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
-    let file = RespParser::parse(Rule::file, source).unwrap();
+    let file = FixParser::parse(Rule::file, source).unwrap();
     let ast = parse_file(file);
     let ast = let_in(var_var("add"), add(), ast);
     let ast = let_in(var_var("eq"), eq(), ast);
@@ -1573,7 +1573,7 @@ fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
 
 #[derive(Parser)]
 #[grammar = "grammer.pest"]
-pub struct RespParser;
+pub struct FixParser;
 
 fn parse_file(mut file: Pairs<Rule>) -> Arc<ExprInfo> {
     let pair = file.next().unwrap();

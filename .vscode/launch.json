@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'resplang'",
+            "name": "Debug executable 'fixlang'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=resplang",
-                    "--package=resplang"
+                    "--bin=fixlang",
+                    "--package=fixlang"
                 ],
                 "filter": {
-                    "name": "resplang",
+                    "name": "fixlang",
                     "kind": "bin"
                 }
             },
@@ -25,16 +25,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'resplang'",
+            "name": "Debug unit tests in executable 'fixlang'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=resplang",
-                    "--package=resplang"
+                    "--bin=fixlang",
+                    "--package=fixlang"
                 ],
                 "filter": {
-                    "name": "resplang",
+                    "name": "fixlang",
                     "kind": "bin"
                 }
             },
