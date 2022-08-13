@@ -1369,8 +1369,11 @@ fn generate_func_release_obj<'c, 'm, 'b>(
             );
         }
 
+        // Decrement refcnt.
         let one = gc.context.i64_type().const_int(1, false);
         let refcnt = builder.build_int_sub(refcnt, one, "refcnt");
+        builder.build_store(ptr_to_refcnt, refcnt);
+
         let zero = gc.context.i64_type().const_zero();
         let is_refcnt_zero =
             builder.build_int_compare(inkwell::IntPredicate::EQ, refcnt, zero, "is_refcnt_zero");

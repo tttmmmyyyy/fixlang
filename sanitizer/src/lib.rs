@@ -55,15 +55,6 @@ pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
 
 #[no_mangle]
 pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) -> () {
-    if VERBOSE {
-        println!(
-            "Object id={} is retained. refcnt=({} -> {}), addr={:#X}",
-            obj_id,
-            refcnt,
-            refcnt + 1,
-            address as usize,
-        );
-    }
     assert_ne!(
         refcnt, 0,
         "Object id={} whose refcnt zero is retained!",
@@ -82,19 +73,20 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
         obj_id, refcnt, info.refcnt
     );
     info.refcnt += 1;
+    if VERBOSE {
+        println!(
+            "Object id={} is retained. refcnt=({} -> {}), addr={:#X}, code = {}",
+            obj_id,
+            refcnt,
+            refcnt + 1,
+            address as usize,
+            info.code
+        );
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -> () {
-    if VERBOSE {
-        println!(
-            "Object id={} is released. refcnt=({} -> {}), addr={:#X}",
-            obj_id,
-            refcnt,
-            refcnt - 1,
-            address as usize,
-        );
-    }
     assert_ne!(
         refcnt, 0,
         "Object id={} whose refcnt zero is retained!",
@@ -114,10 +106,21 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
     );
     info.refcnt -= 1;
 
+    if VERBOSE {
+        println!(
+            "Object id={} is released. refcnt=({} -> {}), addr={:#X}, code = {}",
+            obj_id,
+            refcnt,
+            refcnt - 1,
+            address as usize,
+            info.code
+        );
+    }
+
     if info.refcnt == 0 {
         // When deallocated, remove it from OBJECT_INFO
         object_info.remove(&obj_id);
     }
 }
 
-const VERBOSE: bool = true;
+const VERBOSE: bool = false;

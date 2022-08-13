@@ -58,6 +58,7 @@ entry:
   %objid = load i64, i64* %ptr_to_objid, align 4
   call void @report_release(i8* %0, i64 %objid, i64 %refcnt)
   %refcnt2 = sub i64 %refcnt, 1
+  store i64 %refcnt2, i64* %ptr_to_refcnt, align 4
   %is_refcnt_zero = icmp eq i64 %refcnt2, 0
   br i1 %is_refcnt_zero, label %refcnt_zero_after_release, label %end
 
