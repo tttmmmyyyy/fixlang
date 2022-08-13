@@ -22,6 +22,7 @@ use std::ffi::CString;
 use std::fmt::Pointer;
 use std::path::Path;
 use std::ptr::null;
+use std::string;
 use std::sync::Arc;
 use std::thread::panicking;
 use std::vec::Vec;
@@ -184,7 +185,7 @@ fn lit(generator: Arc<LiteralGenerator>, free_vars: Vec<String>) -> Arc<ExprInfo
 
 fn int(val: i64) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
+        let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc, None);
         let value = gc.context.i64_type().const_int(val as u64, false);
         build_set_field(ptr_to_int_obj, 1, value, gc);
         ExprCode {
@@ -196,7 +197,7 @@ fn int(val: i64) -> Arc<ExprInfo> {
 
 fn bool(val: bool) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc);
+        let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc, None);
         let value = gc.context.i8_type().const_int(val as u64, false);
         build_set_field(ptr_to_obj, 1, value, gc);
         ExprCode { ptr: ptr_to_obj }
@@ -228,7 +229,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             )
             .into_int_value();
         let value = gc.builder.build_int_add(lhs_val, rhs_val, "add");
-        let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
+        let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc, None);
         build_set_field(ptr_to_int_obj, 1, value, gc);
         build_release(gc.scope.get(&lhs_str).code.ptr, gc);
         build_release(gc.scope.get(&rhs_str).code.ptr, gc);
@@ -272,7 +273,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
                 .into_int_type(),
             "eq_bool",
         );
-        let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc);
+        let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc, None);
         build_set_field(ptr_to_obj, 1, value, gc);
         build_release(gc.scope.get(&lhs_str).code.ptr, gc);
         build_release(gc.scope.get(&rhs_str).code.ptr, gc);
@@ -684,7 +685,7 @@ fn generate_lam<'c, 'm, 'b>(
         builder.build_return(Some(&ret));
     }
     // Allocate and set up closure
-    let obj = obj_type.build_allocate_shared_obj(gc);
+    let obj = obj_type.build_allocate_shared_obj(gc, None);
     build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
     for (i, cap) in captured_names.iter().enumerate() {
         let ptr = gc.get_var_retained_if_used_later(cap).ptr;
@@ -1026,6 +1027,7 @@ impl ObjectType {
     fn build_allocate_shared_obj<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm, 'b>,
+        name: Option<&str>,
     ) -> PointerValue<'c> {
         let context = gc.context;
         let builder = gc.builder;
@@ -1036,6 +1038,14 @@ impl ObjectType {
         let mut object_id = obj_id_type(gc.context).const_int(0, false);
 
         if SANITIZE_MEMORY {
+            let string_ptr = name.unwrap_or("N/A");
+            let string_ptr = builder.build_global_string_ptr(string_ptr, "name_of_obj");
+            let string_ptr = string_ptr.as_pointer_value();
+            let string_ptr = gc.builder.build_pointer_cast(
+                string_ptr,
+                gc.context.i8_type().ptr_type(AddressSpace::Generic),
+                "name_of_obj_i8ptr",
+            );
             let ptr = builder.build_pointer_cast(
                 ptr_to_obj,
                 ptr_to_object_type(gc.context),
@@ -1045,7 +1055,7 @@ impl ObjectType {
                 *gc.system_functions
                     .get(&SystemFunctions::ReportMalloc)
                     .unwrap(),
-                &[ptr.into()],
+                &[ptr.into(), string_ptr.into()],
                 "call_report_malloc",
             );
             object_id = obj_id.try_as_basic_value().unwrap_left().into_int_value();
@@ -1172,10 +1182,13 @@ fn generate_func_printf<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> Funct
 fn generate_func_report_malloc<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> FunctionValue<'c> {
-    let fn_ty = gc
-        .context
-        .i64_type()
-        .fn_type(&[ptr_to_object_type(gc.context).into()], false);
+    let fn_ty = gc.context.i64_type().fn_type(
+        &[
+            ptr_to_object_type(gc.context).into(),
+            gc.context.i8_type().ptr_type(AddressSpace::Generic).into(),
+        ],
+        false,
+    );
     gc.module.add_function("report_malloc", fn_ty, None)
 }
 

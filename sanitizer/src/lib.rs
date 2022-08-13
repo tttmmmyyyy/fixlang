@@ -2,7 +2,7 @@ extern crate rustc_version;
 use rustc_version::{version, Version};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::{self, Write};
 use std::process::exit;
 use std::ptr::null;
@@ -25,14 +25,20 @@ struct ObjectInfo {
 
 #[no_mangle]
 // Returns reserved object id.
-pub extern "C" fn report_malloc(address: *const i8) -> i64 {
+pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
+    let name_c_str = unsafe { CStr::from_ptr(name) };
+    let name_c_str = name_c_str.to_str();
+    if name_c_str.is_err() {
+        println!("[report_malloc] Failed to convert given name to &str.");
+    }
+    let name_c_str = name_c_str.unwrap();
     let mut guard = (*OBJECT_ID).lock().unwrap();
     *guard += 1;
     let objid = *guard;
     if VERBOSE {
         println!(
-            "Object id={} is allocated. refcnt=(0 -> 1), addr={:#X}",
-            objid, address as usize
+            "Object id={} is allocated. refcnt=(0 -> 1), addr={:#X}, name={}",
+            objid, address as usize, name_c_str
         );
     }
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
