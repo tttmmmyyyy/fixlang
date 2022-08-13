@@ -70,10 +70,10 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
     let info = object_table.get_mut(&obj_id).unwrap();
     assert_eq!(
         info.refcnt, refcnt,
-        "The refcnt of object id={} mismatch! reported={}, sanitizer={}",
+        "The refcnt of object id={} in report_retain mismatch! reported={}, sanitizer={}",
         obj_id, refcnt, info.refcnt
     );
-    info.refcnt = refcnt;
+    info.refcnt += 1;
 }
 
 #[no_mangle]
@@ -101,15 +101,15 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
     let info = object_info.get_mut(&obj_id).unwrap();
     assert_eq!(
         info.refcnt, refcnt,
-        "The refcnt of object id={} mismatch! reported={}, sanitizer={}",
+        "The refcnt of object id={} in report_release mismatch! reported={}, sanitizer={}",
         obj_id, refcnt, info.refcnt
     );
-    info.refcnt = refcnt;
+    info.refcnt -= 1;
 
-    if refcnt == 0 {
+    if info.refcnt == 0 {
         // When deallocated, remove it from OBJECT_INFO
         object_info.remove(&obj_id);
     }
 }
 
-const VERBOSE: bool = false;
+const VERBOSE: bool = true;

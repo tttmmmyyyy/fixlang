@@ -49,6 +49,17 @@ use Either::Right;
 struct ExprInfo {
     expr: Arc<Expr>,
     free_vars: HashSet<String>,
+    code: String,
+}
+
+impl ExprInfo {
+    fn with_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<ExprInfo> {
+        Arc::new(ExprInfo {
+            expr: self.expr.clone(),
+            free_vars,
+            code: self.code.clone(),
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -65,12 +76,10 @@ enum Expr {
 
 impl Expr {
     fn into_expr_info(self: &Arc<Self>) -> Arc<ExprInfo> {
-        self.into_expr_info_with(Default::default())
-    }
-    fn into_expr_info_with(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<ExprInfo> {
         Arc::new(ExprInfo {
             expr: self.clone(),
-            free_vars,
+            free_vars: Default::default(),
+            code: Default::default(),
         })
     }
 }
@@ -324,25 +333,25 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
     match &*ei.expr {
         Expr::Var(var) => {
             let free_vars = vec![var.name().clone()].into_iter().collect();
-            ei.expr.into_expr_info_with(free_vars)
+            ei.with_free_vars(free_vars)
         }
         Expr::Lit(lit) => {
             let free_vars = lit.free_vars.clone().into_iter().collect();
-            ei.expr.into_expr_info_with(free_vars)
+            ei.with_free_vars(free_vars)
         }
         Expr::App(func, arg) => {
             let func = calculate_aux_info(func.clone());
             let arg = calculate_aux_info(arg.clone());
             let mut free_vars = func.free_vars.clone();
             free_vars.extend(arg.free_vars.clone());
-            app(func, arg).expr.into_expr_info_with(free_vars)
+            app(func, arg).with_free_vars(free_vars)
         }
         Expr::Lam(arg, val) => {
             let val = calculate_aux_info(val.clone());
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(arg.name());
             free_vars.remove(SELF_NAME);
-            lam(arg.clone(), val).expr.into_expr_info_with(free_vars)
+            lam(arg.clone(), val).with_free_vars(free_vars)
         }
         Expr::Let(var, bound, val) => {
             // NOTE: Our Let is non-recursive let, i.e.,
@@ -353,9 +362,7 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(var.name());
             free_vars.extend(bound.free_vars.clone());
-            let_in(var.clone(), bound, val)
-                .expr
-                .into_expr_info_with(free_vars)
+            let_in(var.clone(), bound, val).with_free_vars(free_vars)
         }
         Expr::If(cond, then, else_expr) => {
             let cond = calculate_aux_info(cond.clone());
@@ -364,9 +371,7 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = cond.free_vars.clone();
             free_vars.extend(then.free_vars.clone());
             free_vars.extend(else_expr.free_vars.clone());
-            br(cond, then, else_expr)
-                .expr
-                .into_expr_info_with(free_vars)
+            br(cond, then, else_expr).with_free_vars(free_vars)
         }
         Expr::Type(_) => ei.clone(),
     }
@@ -1801,3 +1806,23 @@ mod tests {
 }
 
 fn main() {}
+
+/*
+
+add 3 5
+Object id=1 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0 // fix
+Object id=1 is released. refcnt=(1 -> 0), addr=0x7EFF8001F3D0 // fix
+Object id=2 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0 // eq
+Object id=2 is released. refcnt=(1 -> 0), addr=0x7EFF8001F3D0 // eq
+Object id=3 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0 // add
+Object id=4 is allocated. refcnt=(0 -> 1), addr=0x7EFF8002E7E0 // 3
+Object id=3 is released. refcnt=(1 -> 0), addr=0x7EFF8001F3D0 //
+Object id=5 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0
+Object id=6 is allocated. refcnt=(0 -> 1), addr=0x7EFF800319E0
+Object id=4 is retained. refcnt=(1 -> 2), addr=0x7EFF8002E7E0
+Object id=5 is released. refcnt=(1 -> 0), addr=0x7EFF8001F3D0
+Object id=4 is released. refcnt=(2 -> 1), addr=0x7EFF8002E7E0
+Object id=7 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0
+Object id=4 is released. refcnt=(2 -> 1), addr=0x7EFF8002E7E0
+
+*/
