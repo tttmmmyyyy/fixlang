@@ -123,4 +123,19 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
     }
 }
 
+#[no_mangle]
+pub extern "C" fn check_leak() -> () {
+    let object_info = (*OBJECT_TABLE).lock().unwrap();
+    if object_info.is_empty() {
+        return;
+    }
+    for (id, info) in &*object_info {
+        println!(
+            "Object id={} is leaked. refcnt={}, addr={:#X}, code = {}",
+            id, info.refcnt, info.addr, info.code
+        );
+    }
+    panic!("Some objects leaked!");
+}
+
 const VERBOSE: bool = false;

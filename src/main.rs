@@ -1191,6 +1191,7 @@ enum SystemFunctions {
     ReportMalloc,
     ReportRetain,
     ReportRelease,
+    CheckLeak,
     PrintIntObj,
     RetainObj,
     ReleaseObj,
@@ -1251,6 +1252,11 @@ fn generate_func_report_release<'c, 'm, 'b>(
         false,
     );
     gc.module.add_function("report_release", fn_ty, None)
+}
+
+fn generate_check_leak<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+    let fn_ty = gc.context.void_type().fn_type(&[], false);
+    gc.module.add_function("check_leak", fn_ty, None)
 }
 
 fn generate_func_print_int_obj<'c, 'm, 'b>(
@@ -1447,18 +1453,22 @@ fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>)
     );
     gc.system_functions
         .insert(SystemFunctions::Printf, generate_func_printf(gc));
-    gc.system_functions.insert(
-        SystemFunctions::ReportMalloc,
-        generate_func_report_malloc(gc),
-    );
-    gc.system_functions.insert(
-        SystemFunctions::ReportRetain,
-        generate_func_report_retain(gc),
-    );
-    gc.system_functions.insert(
-        SystemFunctions::ReportRelease,
-        generate_func_report_release(gc),
-    );
+    if SANITIZE_MEMORY {
+        gc.system_functions.insert(
+            SystemFunctions::ReportMalloc,
+            generate_func_report_malloc(gc),
+        );
+        gc.system_functions.insert(
+            SystemFunctions::ReportRetain,
+            generate_func_report_retain(gc),
+        );
+        gc.system_functions.insert(
+            SystemFunctions::ReportRelease,
+            generate_func_report_release(gc),
+        );
+        gc.system_functions
+            .insert(SystemFunctions::CheckLeak, generate_check_leak(gc));
+    }
     gc.system_functions.insert(
         SystemFunctions::PrintIntObj,
         generate_func_print_int_obj(gc),
@@ -1525,6 +1535,15 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
         "int_obj_ptr",
     );
     let value = build_get_field(int_obj_ptr, 1, &gc);
+    build_release(program_result.ptr, &gc);
+    if SANITIZE_MEMORY {
+        let check_leak = *gc
+            .system_functions
+            .get(&SystemFunctions::CheckLeak)
+            .unwrap();
+        gc.builder.build_call(check_leak, &[], "check_leak");
+    }
+
     if let BasicValueEnum::IntValue(value) = value {
         let ret = builder.build_int_cast(value, gc.context.i32_type(), "ret");
         builder.build_return(Some(&ret));
@@ -1855,27 +1874,7 @@ mod tests {
 }
 
 fn main() {
-    let source = r"add 3 5";
-    let answer = 8;
+    let source = r"if true then 3 else 5";
+    let answer = 3;
     test_int_source(source, answer, OptimizationLevel::Default);
 }
-
-/*
-
-add 3 5
-Object id=1 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0 // fix
-Object id=1 is released. refcnt=(1 -> 0), addr=0x7EFF8001F3D0 // fix
-Object id=2 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0 // eq
-Object id=2 is released. refcnt=(1 -> 0), addr=0x7EFF8001F3D0 // eq
-Object id=3 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0 // add
-Object id=4 is allocated. refcnt=(0 -> 1), addr=0x7EFF8002E7E0 // 3
-Object id=3 is released. refcnt=(1 -> 0), addr=0x7EFF8001F3D0 //
-Object id=5 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0
-Object id=6 is allocated. refcnt=(0 -> 1), addr=0x7EFF800319E0
-Object id=4 is retained. refcnt=(1 -> 2), addr=0x7EFF8002E7E0
-Object id=5 is released. refcnt=(1 -> 0), addr=0x7EFF8001F3D0
-Object id=4 is released. refcnt=(2 -> 1), addr=0x7EFF8002E7E0
-Object id=7 is allocated. refcnt=(0 -> 1), addr=0x7EFF8001F3D0
-Object id=4 is released. refcnt=(2 -> 1), addr=0x7EFF8002E7E0
-
-*/
