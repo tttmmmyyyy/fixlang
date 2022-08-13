@@ -3,7 +3,7 @@
 version = 3
 
 [[package]]
-name = "fixruntime"
+name = "fixsanitizer"
 version = "0.1.0"
 dependencies = [
  "libc",

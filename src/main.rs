@@ -1331,7 +1331,10 @@ fn execute_main_module<'c>(
     module: &Module<'c>,
     opt_level: OptimizationLevel,
 ) -> i32 {
-    assert_eq!(load_library_permanently("runtime/libfixruntime.so"), false);
+    assert_eq!(
+        load_library_permanently("sanitizer/libfixsanitizer.so"),
+        false
+    );
     let execution_engine = module.create_jit_execution_engine(opt_level).unwrap();
     unsafe {
         let func = execution_engine

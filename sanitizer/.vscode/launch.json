@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'fixruntime'",
+            "name": "Debug executable 'fixsanitizer'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=fixruntime",
-                    "--package=fixruntime"
+                    "--bin=fixsanitizer",
+                    "--package=fixsanitizer"
                 ],
                 "filter": {
-                    "name": "fixruntime",
+                    "name": "fixsanitizer",
                     "kind": "bin"
                 }
             },
@@ -25,16 +25,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'fixruntime'",
+            "name": "Debug unit tests in executable 'fixsanitizer'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=fixruntime",
-                    "--package=fixruntime"
+                    "--bin=fixsanitizer",
+                    "--package=fixsanitizer"
                 ],
                 "filter": {
-                    "name": "fixruntime",
+                    "name": "fixsanitizer",
                     "kind": "bin"
                 }
             },
