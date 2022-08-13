@@ -312,8 +312,8 @@ fn fix() -> Arc<ExprInfo> {
     lam(var_var("f"), lam(var_var("x"), fix_lit("f", "x")))
 }
 
-fn if3(cond: Arc<ExprInfo>, then: Arc<ExprInfo>, else_expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
-    Arc::new(Expr::If(cond, then, else_expr)).into_expr_info()
+fn br(cond: Arc<ExprInfo>, then_expr: Arc<ExprInfo>, else_expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
+    Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info()
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
@@ -361,7 +361,7 @@ fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = cond.free_vars.clone();
             free_vars.extend(then.free_vars.clone());
             free_vars.extend(else_expr.free_vars.clone());
-            if3(cond, then, else_expr)
+            br(cond, then, else_expr)
                 .expr
                 .into_expr_info_with(free_vars)
         }
@@ -1487,7 +1487,7 @@ fn parse_if_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let cond = pairs.next().unwrap();
     let then_val = pairs.next().unwrap();
     let else_val = pairs.next().unwrap();
-    if3(parse_expr(cond), parse_expr(then_val), parse_expr(else_val))
+    br(parse_expr(cond), parse_expr(then_val), parse_expr(else_val))
 }
 
 fn parse_bracket_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
