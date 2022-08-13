@@ -20,11 +20,10 @@ fn test_rustc_version() {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_function() -> i32 {
+pub extern "C" fn hello_runtime() -> () {
     // unsafe {
     //     let p: *mut c_void = libc::malloc(10);
     //     let p = p as *mut c_char;
     // }
-    println!("rust_function called!");
-    return 0;
+    println!("Hello runtime!");
 }

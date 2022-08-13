@@ -122,6 +122,7 @@ entry:
   %ptr_to_field31 = getelementptr inbounds { { i64, void (i8*)* }, i8* (i8*, i8*)* }, { { i64, void (i8*)* }, i8* (i8*, i8*)* }* %ptr_to_lam_obj30, i32 0, i32 1
   %field_value32 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field31, align 8
   %call_lambda33 = tail call i8* %field_value32(i8* %ptr_ret_generate_expr29, i8* %call_lambda)
+  call void @hello_runtime()
   %int_obj_ptr = bitcast i8* %call_lambda33 to { { i64, void (i8*)* }, i64 }*
   %ptr_to_field34 = getelementptr inbounds { { i64, void (i8*)* }, i64 }, { { i64, void (i8*)* }, i64 }* %int_obj_ptr, i32 0, i32 1
   %field_value35 = load i64, i64* %ptr_to_field34, align 4
@@ -314,3 +315,5 @@ entry:
   %ptr_to_obj = bitcast i8* %0 to { { i64, void (i8*)* }, i64 }*
   ret void
 }
+
+declare void @hello_runtime()

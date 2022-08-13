@@ -1375,10 +1375,9 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
 
     let program_result = generate_expr(program, &mut gc);
 
-    // let fn_type = context.i32_type().fn_type(&[], false);
-    // let rust_function = module.add_function("rust_function", fn_type, None);
-    // let ret = builder.build_call(rust_function, &[], "rust_function");
-    // let ret_rust_func = ret.try_as_basic_value().unwrap_left().into_int_value();
+    let fn_type = context.void_type().fn_type(&[], false);
+    let hello_runtime = module.add_function("hello_runtime", fn_type, None);
+    builder.build_call(hello_runtime, &[], "hello_runtime");
 
     let int_obj_ptr = builder.build_pointer_cast(
         program_result.ptr,

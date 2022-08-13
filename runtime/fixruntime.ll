@@ -5,30 +5,30 @@ target triple = "x86_64-unknown-linux-gnu"
 
 %"std::fmt::Arguments" = type { { [0 x { [0 x i8]*, i64 }]*, i64 }, { i64*, i64 }, { [0 x { i8*, i64* }]*, i64 } }
 
-@alloc3 = private unnamed_addr constant <{ [0 x i8] }> zeroinitializer, align 8
-@alloc5 = private unnamed_addr constant <{ [22 x i8] }> <{ [22 x i8] c"rust_function called!\0A" }>, align 1
-@alloc6 = private unnamed_addr constant <{ i8*, [8 x i8] }> <{ i8* getelementptr inbounds (<{ [22 x i8] }>, <{ [22 x i8] }>* @alloc5, i32 0, i32 0, i32 0), [8 x i8] c"\16\00\00\00\00\00\00\00" }>, align 8
+@alloc2 = private unnamed_addr constant <{ [0 x i8] }> zeroinitializer, align 8
+@alloc4 = private unnamed_addr constant <{ [15 x i8] }> <{ [15 x i8] c"Hello runtime!\0A" }>, align 1
+@alloc5 = private unnamed_addr constant <{ i8*, [8 x i8] }> <{ i8* getelementptr inbounds (<{ [15 x i8] }>, <{ [15 x i8] }>* @alloc4, i32 0, i32 0, i32 0), [8 x i8] c"\0F\00\00\00\00\00\00\00" }>, align 8
 
 ; Function Attrs: nonlazybind uwtable
-define i32 @rust_function() unnamed_addr #0 {
+define void @hello_runtime() unnamed_addr #0 {
 start:
   %_2 = alloca %"std::fmt::Arguments", align 8
   %0 = bitcast %"std::fmt::Arguments"* %_2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 48, i8* nonnull %0)
   %1 = getelementptr inbounds %"std::fmt::Arguments", %"std::fmt::Arguments"* %_2, i64 0, i32 0, i32 0
-  store [0 x { [0 x i8]*, i64 }]* bitcast (<{ i8*, [8 x i8] }>* @alloc6 to [0 x { [0 x i8]*, i64 }]*), [0 x { [0 x i8]*, i64 }]** %1, align 8, !alias.scope !2
+  store [0 x { [0 x i8]*, i64 }]* bitcast (<{ i8*, [8 x i8] }>* @alloc5 to [0 x { [0 x i8]*, i64 }]*), [0 x { [0 x i8]*, i64 }]** %1, align 8, !alias.scope !2
   %2 = getelementptr inbounds %"std::fmt::Arguments", %"std::fmt::Arguments"* %_2, i64 0, i32 0, i32 1
   store i64 1, i64* %2, align 8, !alias.scope !2
   %3 = getelementptr inbounds %"std::fmt::Arguments", %"std::fmt::Arguments"* %_2, i64 0, i32 1, i32 0
   store i64* null, i64** %3, align 8, !alias.scope !2
   %4 = getelementptr inbounds %"std::fmt::Arguments", %"std::fmt::Arguments"* %_2, i64 0, i32 2, i32 0
-  store [0 x { i8*, i64* }]* bitcast (<{ [0 x i8] }>* @alloc3 to [0 x { i8*, i64* }]*), [0 x { i8*, i64* }]** %4, align 8, !alias.scope !2
+  store [0 x { i8*, i64* }]* bitcast (<{ [0 x i8] }>* @alloc2 to [0 x { i8*, i64* }]*), [0 x { i8*, i64* }]** %4, align 8, !alias.scope !2
   %5 = getelementptr inbounds %"std::fmt::Arguments", %"std::fmt::Arguments"* %_2, i64 0, i32 2, i32 1
   store i64 0, i64* %5, align 8, !alias.scope !2
 ; call std::io::stdio::_print
   call void @_ZN3std2io5stdio6_print17ha2acac7a448afbe2E(%"std::fmt::Arguments"* noalias nocapture nonnull dereferenceable(48) %_2)
   call void @llvm.lifetime.end.p0i8(i64 48, i8* nonnull %0)
-  ret i32 0
+  ret void
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nosync nounwind willreturn
