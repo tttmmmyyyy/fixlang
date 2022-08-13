@@ -504,14 +504,6 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         }
         code
     }
-    // fn build_release_vars_unused_later(&mut self) {
-    //     for (_, var) in self.scope.data.iter() {
-    //         let v = var.last().unwrap();
-    //         if v.used_later == 0 {
-    //             build_release(v.code.ptr, self);
-    //         }
-    //     }
-    // }
 }
 
 fn generate_expr<'c, 'm, 'b>(
