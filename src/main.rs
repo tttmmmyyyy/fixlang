@@ -83,6 +83,27 @@ impl Expr {
             code: Default::default(),
         })
     }
+    fn to_string(&self) -> String {
+        match self {
+            Expr::Var(v) => v.name().clone(),
+            Expr::Lit(l) => l.name.clone(),
+            Expr::App(f, a) => format!("({}) ({})", f.expr.to_string(), a.expr.to_string()),
+            Expr::Lam(x, fx) => format!("\\{}->({})", x.name(), fx.expr.to_string()),
+            Expr::Let(x, b, v) => format!(
+                "let {}={} in ({})",
+                x.name(),
+                b.expr.to_string(),
+                v.expr.to_string()
+            ),
+            Expr::If(c, t, e) => format!(
+                "if {} then {} else ({})",
+                c.expr.to_string(),
+                t.expr.to_string(),
+                e.expr.to_string()
+            ),
+            Expr::Type(_) => todo!(),
+        }
+    }
 }
 
 type LiteralGenerator =
@@ -91,6 +112,7 @@ type LiteralGenerator =
 struct Literal {
     generator: Arc<LiteralGenerator>,
     free_vars: Vec<String>, // e.g. "+" literal has two free variables.
+    name: String,
 }
 
 #[derive(Eq, PartialEq)]
@@ -175,40 +197,45 @@ fn var_var(var_name: &str) -> Arc<Var> {
     })
 }
 
-fn lit(generator: Arc<LiteralGenerator>, free_vars: Vec<String>) -> Arc<ExprInfo> {
+fn lit(generator: Arc<LiteralGenerator>, free_vars: Vec<String>, name: String) -> Arc<ExprInfo> {
     Arc::new(Expr::Lit(Arc::new(Literal {
         generator,
         free_vars,
+        name,
     })))
     .into_expr_info()
 }
 
 fn int(val: i64) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc, None);
+        let ptr_to_int_obj = ObjectType::int_obj_type()
+            .build_allocate_shared_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i64_type().const_int(val as u64, false);
         build_set_field(ptr_to_int_obj, 1, value, gc);
         ExprCode {
             ptr: ptr_to_int_obj,
         }
     });
-    lit(generator, vec![])
+    lit(generator, vec![], val.to_string())
 }
 
 fn bool(val: bool) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc, None);
+        let ptr_to_obj = ObjectType::bool_obj_type()
+            .build_allocate_shared_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i8_type().const_int(val as u64, false);
         build_set_field(ptr_to_obj, 1, value, gc);
         ExprCode { ptr: ptr_to_obj }
     });
-    lit(generator, vec![])
+    lit(generator, vec![], val.to_string())
 }
 
 fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     let lhs_str = String::from(lhs);
     let rhs_str = String::from(rhs);
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
+    let name = format!("add {} {}", lhs, rhs);
+    let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let lhs_val = gc
             .scope
@@ -229,7 +256,8 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             )
             .into_int_value();
         let value = gc.builder.build_int_add(lhs_val, rhs_val, "add");
-        let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc, None);
+        let ptr_to_int_obj =
+            ObjectType::int_obj_type().build_allocate_shared_obj(gc, Some(name_cloned.as_str()));
         build_set_field(ptr_to_int_obj, 1, value, gc);
         build_release(gc.scope.get(&lhs_str).code.ptr, gc);
         build_release(gc.scope.get(&rhs_str).code.ptr, gc);
@@ -237,12 +265,14 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             ptr: ptr_to_int_obj,
         }
     });
-    lit(generator, free_vars)
+    lit(generator, free_vars, name)
 }
 
 fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     let lhs_str = String::from(lhs);
     let rhs_str = String::from(rhs);
+    let name = format!("eq {} {}", lhs, rhs);
+    let name_cloned = name.clone();
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let lhs_val = gc
@@ -273,18 +303,20 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
                 .into_int_type(),
             "eq_bool",
         );
-        let ptr_to_obj = ObjectType::bool_obj_type().build_allocate_shared_obj(gc, None);
+        let ptr_to_obj =
+            ObjectType::bool_obj_type().build_allocate_shared_obj(gc, Some(name_cloned.as_str()));
         build_set_field(ptr_to_obj, 1, value, gc);
         build_release(gc.scope.get(&lhs_str).code.ptr, gc);
         build_release(gc.scope.get(&rhs_str).code.ptr, gc);
         ExprCode { ptr: ptr_to_obj }
     });
-    lit(generator, free_vars)
+    lit(generator, free_vars, name)
 }
 
 fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
     let f_str = String::from(f);
     let x_str = String::from(x);
+    let name = format!("fix {} {}", f_str, x_str);
     let free_vars = vec![String::from(SELF_NAME), f_str.clone(), x_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let fixf = gc.scope.get(SELF_NAME).code.ptr;
@@ -294,7 +326,7 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         let f_fixf_x = build_app(f_fixf, x, gc).ptr;
         ExprCode { ptr: f_fixf_x }
     });
-    lit(generator, free_vars)
+    lit(generator, free_vars, name)
 }
 
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
@@ -679,13 +711,14 @@ fn generate_lam<'c, 'm, 'b>(
             build_release(arg_ptr, &gc);
         }
         // Generate value
-        let val = generate_expr(val, &mut gc);
+        let val = generate_expr(val.clone(), &mut gc);
         // Return result
         let ret = builder.build_pointer_cast(val.ptr, ptr_to_object_type(gc.context), "ret");
         builder.build_return(Some(&ret));
     }
     // Allocate and set up closure
-    let obj = obj_type.build_allocate_shared_obj(gc, None);
+    let name = lam(arg, val).expr.to_string();
+    let obj = obj_type.build_allocate_shared_obj(gc, Some(name.as_str()));
     build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
     for (i, cap) in captured_names.iter().enumerate() {
         let ptr = gc.get_var_retained_if_used_later(cap).ptr;
@@ -1818,7 +1851,11 @@ mod tests {
     }
 }
 
-fn main() {}
+fn main() {
+    let source = r"add 3 5";
+    let answer = 8;
+    test_int_source(source, answer, OptimizationLevel::Default);
+}
 
 /*
 
