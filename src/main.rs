@@ -758,17 +758,17 @@ fn generate_if<'c, 'm, 'b>(
     let mut used_then_or_else = then_expr.free_vars.clone();
     used_then_or_else.extend(else_expr.free_vars.clone());
     gc.scope.increment_used_later(&used_then_or_else);
-    let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
+    let ptr_to_cond_obj_i8ptr = generate_expr(cond_expr, gc).ptr;
     gc.scope.decrement_used_later(&used_then_or_else);
     let ptr_to_cond_obj = gc.builder.build_pointer_cast(
-        ptr_to_cond_obj,
+        ptr_to_cond_obj_i8ptr,
         ObjectType::bool_obj_type()
             .to_struct_type(gc.context)
             .ptr_type(AddressSpace::Generic),
         "ptr_to_cond_obj",
     );
-
     let cond_val = build_get_field(ptr_to_cond_obj, 1, gc).into_int_value();
+    build_release(ptr_to_cond_obj_i8ptr, gc);
     let cond_val = gc
         .builder
         .build_int_cast(cond_val, gc.context.bool_type(), "cond_val_i1");
