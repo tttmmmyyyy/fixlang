@@ -55,7 +55,7 @@ enum Expr {
     App(Arc<ExprInfo>, Arc<ExprInfo>),
     Lam(Arc<Var>, Arc<ExprInfo>),
     Let(Arc<Var>, Arc<ExprInfo>, Arc<ExprInfo>),
-    // implement case later
+    // TODO: Implement case
     If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>),
     Type(Arc<Type>),
 }
@@ -78,26 +78,19 @@ type LiteralGenerator =
 struct Literal {
     generator: Arc<LiteralGenerator>,
     free_vars: Vec<String>, // e.g. "+" literal has two free variables.
-    ty: Arc<Type>,
 }
 
 #[derive(Eq, PartialEq)]
 enum Var {
-    TermVar { name: String, ty: Arc<Type> },
-    TyVar { name: String, kind: Arc<Kind> },
+    TermVar { name: String },
+    TyVar { name: String },
 }
 
 impl Var {
     fn name(self: &Self) -> &String {
         match self {
-            Var::TermVar { name, ty: _ } => name,
-            Var::TyVar { name, kind: _ } => name,
-        }
-    }
-    fn ty(self: &Self) -> &Arc<Type> {
-        match self {
-            Var::TermVar { name: _, ty } => ty,
-            Var::TyVar { name: _, kind: _ } => unimplemented!(),
+            Var::TermVar { name } => name,
+            Var::TyVar { name } => name,
         }
     }
 }
@@ -111,7 +104,6 @@ enum Kind {
 #[derive(Eq, PartialEq)]
 struct TyLit {
     value: String,
-    kind: Arc<Kind>,
 }
 
 #[derive(Eq, PartialEq)]
@@ -146,22 +138,6 @@ fn star_kind() -> Arc<Kind> {
     Arc::new(Kind::Star)
 }
 
-fn lit_ty(value: &str) -> Arc<Type> {
-    let value = String::from(value);
-    Arc::new(Type::LitTy(Arc::new(TyLit {
-        value,
-        kind: Arc::new(Kind::Star),
-    })))
-}
-
-fn int_ty() -> Arc<Type> {
-    lit_ty("Int")
-}
-
-fn bool_ty() -> Arc<Type> {
-    lit_ty("Bool")
-}
-
 fn lambda_ty(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::FunTy(src, dst))
 }
@@ -169,7 +145,6 @@ fn lambda_ty(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
 fn tyvar_var(var_name: &str) -> Arc<Var> {
     Arc::new(Var::TyVar {
         name: String::from(var_name),
-        kind: star_kind(),
     })
 }
 
@@ -181,33 +156,16 @@ fn forall_ty(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::ForAllTy(tyvar_var("a"), ty))
 }
 
-fn int2int_ty() -> Arc<Type> {
-    lambda_ty(
-        lambda_ty(lambda_ty(int_ty(), int_ty()), lambda_ty(int_ty(), int_ty())),
-        lambda_ty(int_ty(), int_ty()),
-    )
-}
-
-fn termvar_var(var_name: &str, ty: Arc<Type>) -> Arc<Var> {
+fn var_var(var_name: &str) -> Arc<Var> {
     Arc::new(Var::TermVar {
         name: String::from(var_name),
-        ty: ty,
     })
 }
 
-fn intvar_var(var_name: &str) -> Arc<Var> {
-    termvar_var(var_name, int_ty())
-}
-
-fn int2intvar_var(var_name: &str) -> Arc<Var> {
-    termvar_var(var_name, int2int_ty())
-}
-
-fn lit(generator: Arc<LiteralGenerator>, ty: Arc<Type>, free_vars: Vec<String>) -> Arc<ExprInfo> {
+fn lit(generator: Arc<LiteralGenerator>, free_vars: Vec<String>) -> Arc<ExprInfo> {
     Arc::new(Expr::Lit(Arc::new(Literal {
         generator,
         free_vars,
-        ty,
     })))
     .into_expr_info()
 }
@@ -221,7 +179,7 @@ fn int(val: i64) -> Arc<ExprInfo> {
             ptr: ptr_to_int_obj,
         }
     });
-    lit(generator, int_ty(), vec![])
+    lit(generator, vec![])
 }
 
 fn bool(val: bool) -> Arc<ExprInfo> {
@@ -231,7 +189,7 @@ fn bool(val: bool) -> Arc<ExprInfo> {
         build_set_field(ptr_to_obj, 1, value, gc);
         ExprCode { ptr: ptr_to_obj }
     });
-    lit(generator, bool_ty(), vec![])
+    lit(generator, vec![])
 }
 
 fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
@@ -266,7 +224,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             ptr: ptr_to_int_obj,
         }
     });
-    lit(generator, int_ty(), free_vars)
+    lit(generator, free_vars)
 }
 
 fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
@@ -308,7 +266,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         build_release(gc.scope.get(&rhs_str).code.ptr, gc);
         ExprCode { ptr: ptr_to_obj }
     });
-    lit(generator, bool_ty(), free_vars)
+    lit(generator, free_vars)
 }
 
 fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
@@ -323,7 +281,7 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         let f_fixf_x = build_app(f_fixf, x, gc).ptr;
         ExprCode { ptr: f_fixf_x }
     });
-    lit(generator, int_ty(), free_vars)
+    lit(generator, free_vars)
 }
 
 fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
@@ -338,72 +296,25 @@ fn app(lam: Arc<ExprInfo>, arg: Arc<ExprInfo>) -> Arc<ExprInfo> {
     Arc::new(Expr::App(lam, arg)).into_expr_info()
 }
 
-fn var(var_name: &str, ty: Arc<Type>) -> Arc<ExprInfo> {
-    Arc::new(Expr::Var(termvar_var(var_name, ty))).into_expr_info()
-}
-
-fn intvar(var_name: &str) -> Arc<ExprInfo> {
-    var(var_name, int_ty())
-}
-
-fn int2intvar(var_name: &str) -> Arc<ExprInfo> {
-    var(var_name, int2int_ty())
+fn var(var_name: &str) -> Arc<ExprInfo> {
+    Arc::new(Expr::Var(var_var(var_name))).into_expr_info()
 }
 
 fn add() -> Arc<ExprInfo> {
-    lam(
-        intvar_var("lhs"),
-        lam(intvar_var("rhs"), add_lit("lhs", "rhs")),
-    )
+    lam(var_var("lhs"), lam(var_var("rhs"), add_lit("lhs", "rhs")))
 }
 
 fn eq() -> Arc<ExprInfo> {
-    lam(
-        intvar_var("lhs"),
-        lam(intvar_var("rhs"), eq_lit("lhs", "rhs")),
-    )
+    lam(var_var("lhs"), lam(var_var("rhs"), eq_lit("lhs", "rhs")))
 }
 
 fn fix() -> Arc<ExprInfo> {
-    lam(intvar_var("f"), lam(intvar_var("x"), fix_lit("f", "x")))
+    lam(var_var("f"), lam(var_var("x"), fix_lit("f", "x")))
 }
 
-// If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>),
 fn if3(cond: Arc<ExprInfo>, then: Arc<ExprInfo>, else_expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
     Arc::new(Expr::If(cond, then, else_expr)).into_expr_info()
 }
-
-// static FIX_INT_INT: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
-//     lit(
-//         "fixIntInt",
-//         lambda_ty(
-//             lambda_ty(
-//                 lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
-//                 lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
-//             ),
-//             lambda_ty(INT_TYPE.clone(), INT_TYPE.clone()),
-//         ),
-//     )
-// });
-
-// static FIX_A_TO_B: Lazy<Arc<ExprInfo>> = Lazy::new(|| {
-//     lit(
-//         "fix",
-//         forall_ty(
-//             "a",
-//             forall_ty(
-//                 "b",
-//                 lambda_ty(
-//                     lambda_ty(
-//                         lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
-//                         lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
-//                     ),
-//                     lambda_ty(tyvar_ty("a"), tyvar_ty("b")),
-//                 ),
-//             ),
-//         ),
-//     )
-// });
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
 fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
@@ -626,8 +537,8 @@ fn generate_expr<'c, 'm, 'b>(
 
 fn generate_var<'c, 'm, 'b>(var: Arc<Var>, gc: &mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c> {
     match &*var {
-        Var::TermVar { name, ty: _ } => gc.get_var_retained_if_used_later(name),
-        Var::TyVar { name: _, kind: _ } => unreachable!(),
+        Var::TermVar { name } => gc.get_var_retained_if_used_later(name),
+        Var::TyVar { name } => unreachable!(),
     }
 }
 
@@ -1490,9 +1401,9 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
 fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
     let file = RespParser::parse(Rule::file, source).unwrap();
     let ast = parse_file(file);
-    let ast = let_in(intvar_var("add"), add(), ast);
-    let ast = let_in(intvar_var("eq"), eq(), ast);
-    let ast = let_in(intvar_var("fix"), fix(), ast);
+    let ast = let_in(var_var("add"), add(), ast);
+    let ast = let_in(var_var("eq"), eq(), ast);
+    let ast = let_in(var_var("fix"), fix(), ast);
     test_int_ast(ast, answer, opt_level);
 }
 
@@ -1549,11 +1460,11 @@ fn parse_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 }
 
 fn parse_var_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
-    intvar(expr.as_str())
+    var(expr.as_str())
 }
 
 fn parse_var_var(var: Pair<Rule>) -> Arc<Var> {
-    intvar_var(var.as_str())
+    var_var(var.as_str())
 }
 
 fn parse_let_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
