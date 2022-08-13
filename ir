@@ -78,7 +78,7 @@ end:                                              ; preds = %refcnt_zero_after_r
 
 declare void @free(i8*)
 
-define i32 @main() {
+define i64 @main() {
 entry:
   %malloccall = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* getelementptr ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* null, i32 1) to i32))
   %ptr_to_obj = bitcast i8* %malloccall to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }*
@@ -165,8 +165,7 @@ entry:
   %field_value47 = load i64, i64* %ptr_to_field46, align 4
   call void @release_obj(i8* %call_lambda45)
   call void @check_leak()
-  %ret = trunc i64 %field_value47 to i32
-  ret i32 %ret
+  ret i64 %field_value47
 }
 
 define i8* @lambda(i8* %0, i8* %1) {

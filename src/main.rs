@@ -1487,7 +1487,7 @@ fn execute_main_module<'c>(
     context: &'c Context,
     module: &Module<'c>,
     opt_level: OptimizationLevel,
-) -> i32 {
+) -> i64 {
     if SANITIZE_MEMORY {
         assert_eq!(
             load_library_permanently("sanitizer/libfixsanitizer.so"),
@@ -1497,15 +1497,18 @@ fn execute_main_module<'c>(
     let execution_engine = module.create_jit_execution_engine(opt_level).unwrap();
     unsafe {
         let func = execution_engine
-            .get_function::<unsafe extern "C" fn() -> i32>("main")
+            .get_function::<unsafe extern "C" fn() -> i64>("main")
             .unwrap();
         func.call()
     }
 }
 
-const SANITIZE_MEMORY: bool = true;
+fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
+    // Add library functions to program.
+    let program = let_in(var_var("add"), add(), program);
+    let program = let_in(var_var("eq"), eq(), program);
+    let program = let_in(var_var("fix"), fix(), program);
 
-fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLevel) {
     let program = calculate_aux_info(program);
 
     let context = Context::create();
@@ -1520,8 +1523,7 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
     };
     generate_system_functions(&mut gc);
 
-    let i32_type = context.i32_type();
-    let main_fn_type = i32_type.fn_type(&[], false);
+    let main_fn_type = context.i64_type().fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
 
     let entry_bb = context.append_basic_block(main_function, "entry");
@@ -1538,7 +1540,9 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
     );
     let value = build_get_field(int_obj_ptr, 1, &gc);
     build_release(program_result.ptr, &gc);
+
     if SANITIZE_MEMORY {
+        // Perform leak check
         let check_leak = *gc
             .system_functions
             .get(&SystemFunctions::CheckLeak)
@@ -1547,28 +1551,28 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
     }
 
     if let BasicValueEnum::IntValue(value) = value {
-        let ret = builder.build_int_cast(value, gc.context.i32_type(), "ret");
-        builder.build_return(Some(&ret));
+        builder.build_return(Some(&value));
     } else {
-        unreachable!()
+        panic!("Given program doesn't return int value!");
     }
 
     module.print_to_file("ir").unwrap();
     let verify = module.verify();
     if verify.is_err() {
         print!("{}", verify.unwrap_err().to_str().unwrap());
-        panic!("Verify failed!");
+        panic!("LLVM verify failed!");
     }
-    assert_eq!(execute_main_module(&context, &module, opt_level), answer);
+    execute_main_module(&context, &module, opt_level)
 }
 
-fn test_int_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
+fn run_source(source: &str, opt_level: OptimizationLevel) -> i64 {
     let file = FixParser::parse(Rule::file, source).unwrap();
     let ast = parse_file(file);
-    let ast = let_in(var_var("add"), add(), ast);
-    let ast = let_in(var_var("eq"), eq(), ast);
-    let ast = let_in(var_var("fix"), fix(), ast);
-    test_int_ast(ast, answer, opt_level);
+    run_ast(ast, opt_level)
+}
+
+fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) {
+    assert_eq!(run_source(source, opt_level), answer)
 }
 
 #[derive(Parser)]
@@ -1678,77 +1682,77 @@ mod tests {
     pub fn test0() {
         let source = r"5";
         let answer = 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test1() {
         let source = r"let x = 5 in x";
         let answer = 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test2() {
         let source = r"let x = 5 in 3";
         let answer = 3;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test3() {
         let source = r"let n = -5 in let p = 5 in n";
         let answer = -5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test4() {
         let source = r"let n = -5 in let p = 5 in p";
         let answer = 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test5() {
         let source = r"let x = -5 in let x = 5 in x";
         let answer = 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test6() {
         let source = r"let x = let y = 3 in y in x";
         let answer = 3;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test7() {
         let source = r"(\x -> 5) 10";
         let answer = 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test8() {
         let source = r"(\x -> x) 6";
         let answer = 6;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test9() {
         let source = r"add 3 5";
         let answer = 8;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test10() {
         let source = r"let x = 5 in add 2 x";
         let answer = 7;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1759,7 +1763,7 @@ mod tests {
             add x y
         ";
         let answer = 2;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1772,7 +1776,7 @@ mod tests {
             add xy z
         ";
         let answer = 14;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1782,7 +1786,7 @@ mod tests {
             f 3
         ";
         let answer = 5 + 3;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1792,7 +1796,7 @@ mod tests {
             add (f -3) (f 12)
         ";
         let answer = 5 - 3 + 5 + 12;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1804,7 +1808,7 @@ mod tests {
             f y
         ";
         let answer = 3 + 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1814,7 +1818,7 @@ mod tests {
             f 5
         ";
         let answer = 3 + 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1825,7 +1829,7 @@ mod tests {
             f 5
         ";
         let answer = 3;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1835,35 +1839,35 @@ mod tests {
             f 5
         ";
         let answer = 3 + 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test17() {
         let source = r"if true then 3 else 5";
         let answer = 3;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test18() {
         let source = r"if false then 3 else 5";
         let answer = 5;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test19() {
         let source = r"if eq 3 3 then 1 else 0";
         let answer = 1;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
     pub fn test20() {
         let source = r"if eq 3 5 then 1 else 0";
         let answer = 0;
-        test_int_source(source, answer, OptimizationLevel::Default);
+        test_run_source(source, answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1877,7 +1881,7 @@ mod tests {
             n
         );
         let answer = (n * (n + 1)) / 2;
-        test_int_source(source.as_str(), answer, OptimizationLevel::Default);
+        test_run_source(source.as_str(), answer, OptimizationLevel::Default);
     }
     #[test]
     #[serial]
@@ -1897,12 +1901,14 @@ mod tests {
             n
         );
         let answer = (n * (n + 1)) / 2;
-        test_int_source(source.as_str(), answer, OptimizationLevel::Default);
+        test_run_source(source.as_str(), answer, OptimizationLevel::Default);
     }
 }
+
+const SANITIZE_MEMORY: bool = true;
 
 fn main() {
     let source = r"if true then 3 else 5";
     let answer = 3;
-    test_int_source(source, answer, OptimizationLevel::Default);
+    test_run_source(source, answer, OptimizationLevel::Default);
 }
