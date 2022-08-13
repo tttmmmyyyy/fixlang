@@ -14,7 +14,7 @@ use once_cell::sync::Lazy;
 
 static OBJECT_ID: Lazy<Mutex<i64>> = Lazy::new(|| Mutex::new(0));
 
-static OBJECT_INFO: Lazy<Mutex<HashMap<i64, ObjectInfo>>> =
+static OBJECT_TABLE: Lazy<Mutex<HashMap<i64, ObjectInfo>>> =
     Lazy::new(|| Mutex::new(Default::default()));
 
 struct ObjectInfo {
@@ -35,13 +35,13 @@ pub extern "C" fn report_malloc(address: *const i8) -> i64 {
             objid, address as usize
         );
     }
-    let mut object_info = (*OBJECT_INFO).lock().unwrap();
+    let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     let info = ObjectInfo {
         id: objid,
         addr: address as usize,
         refcnt: 1,
     };
-    object_info.insert(objid, info);
+    object_table.insert(objid, info);
     objid
 }
 
@@ -61,13 +61,13 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
         "Object id={} whose refcnt zero is retained!",
         obj_id
     );
-    let mut object_info = (*OBJECT_INFO).lock().unwrap();
+    let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     assert!(
-        object_info.contains_key(&obj_id),
+        object_table.contains_key(&obj_id),
         "Retain of object id={} is reported but it isn't registered to sanitizer.",
         obj_id
     );
-    let info = object_info.get_mut(&obj_id).unwrap();
+    let info = object_table.get_mut(&obj_id).unwrap();
     assert_eq!(
         info.refcnt, refcnt,
         "The refcnt of object id={} mismatch! reported={}, sanitizer={}",
@@ -92,7 +92,7 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
         "Object id={} whose refcnt zero is retained!",
         obj_id
     );
-    let mut object_info = (*OBJECT_INFO).lock().unwrap();
+    let mut object_info = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_info.contains_key(&obj_id),
         "Release of object id={} is reported but it isn't registered to sanitizer.",
