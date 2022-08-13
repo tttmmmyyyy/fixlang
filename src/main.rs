@@ -840,6 +840,25 @@ fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c
     );
 }
 
+fn build_get_objid<'c, 'm, 'b>(
+    ptr_to_obj: PointerValue<'c>,
+    gc: &GenerationContext<'c, 'm, 'b>,
+) -> IntValue<'c> {
+    assert!(SANITIZE_MEMORY);
+    let ptr_to_control_block = gc.builder.build_pointer_cast(
+        ptr_to_obj,
+        ptr_to_control_block_type(gc.context),
+        "ptr_to_control_block",
+    );
+    let ptr_to_objid = gc
+        .builder
+        .build_struct_gep(ptr_to_control_block, 2, "ptr_to_objid")
+        .unwrap();
+    gc.builder
+        .build_load(ptr_to_objid, "objid")
+        .into_int_value()
+}
+
 fn build_panic<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {
     const SIGABRT: i32 = 22;
     build_debug_printf(msg, gc);
@@ -1009,19 +1028,22 @@ impl ObjectType {
         // NOTE: Only once allocation is needed since we don't implement weak_ptr
         let ptr_to_obj = builder.build_malloc(struct_type, "ptr_to_obj").unwrap();
 
+        let mut object_id = obj_id_type(gc.context).const_int(0, false);
+
         if SANITIZE_MEMORY {
             let ptr = builder.build_pointer_cast(
                 ptr_to_obj,
                 ptr_to_object_type(gc.context),
                 "cast_to_i8ptr",
             );
-            builder.build_call(
+            let obj_id = builder.build_call(
                 *gc.system_functions
                     .get(&SystemFunctions::ReportMalloc)
                     .unwrap(),
                 &[ptr.into()],
                 "call_report_malloc",
             );
+            object_id = obj_id.try_as_basic_value().unwrap_left().into_int_value();
         }
 
         for (i, ft) in self.field_types.iter().enumerate() {
@@ -1041,6 +1063,13 @@ impl ObjectType {
                     let dtor = self.generate_func_dtor(gc);
                     builder
                         .build_store(ptr_to_dtor_field, dtor.as_global_value().as_pointer_value());
+
+                    if SANITIZE_MEMORY {
+                        let ptr_to_objid = builder
+                            .build_struct_gep(ptr_to_control_block, 2, "ptr_to_objid")
+                            .unwrap();
+                        builder.build_store(ptr_to_objid, object_id);
+                    }
                 }
                 ObjectFieldType::Int => {}
                 ObjectFieldType::SubObject => {}
@@ -1060,6 +1089,10 @@ fn ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     refcnt_type(context).ptr_type(AddressSpace::Generic)
 }
 
+fn obj_id_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
+    context.i64_type()
+}
+
 fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     context.i8_type().ptr_type(AddressSpace::Generic)
 }
@@ -1075,13 +1108,14 @@ fn ptr_to_dtor_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
 }
 
 fn control_block_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
-    context.struct_type(
-        &[
-            refcnt_type(context).into(),
-            ptr_to_dtor_type(context).into(),
-        ],
-        false,
-    )
+    let mut fields = vec![
+        refcnt_type(context).into(),
+        ptr_to_dtor_type(context).into(),
+    ];
+    if SANITIZE_MEMORY {
+        fields.push(obj_id_type(context).into())
+    }
+    context.struct_type(&fields, false)
 }
 
 fn ptr_to_control_block_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
@@ -1135,7 +1169,7 @@ fn generate_func_report_malloc<'c, 'm, 'b>(
 ) -> FunctionValue<'c> {
     let fn_ty = gc
         .context
-        .void_type()
+        .i64_type()
         .fn_type(&[ptr_to_object_type(gc.context).into()], false);
     gc.module.add_function("report_malloc", fn_ty, None)
 }
@@ -1146,6 +1180,7 @@ fn generate_func_report_retain<'c, 'm, 'b>(
     let fn_ty = gc.context.void_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
+            obj_id_type(gc.context).into(),
             refcnt_type(gc.context).into(),
         ],
         false,
@@ -1159,6 +1194,7 @@ fn generate_func_report_release<'c, 'm, 'b>(
     let fn_ty = gc.context.void_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
+            obj_id_type(gc.context).into(),
             refcnt_type(gc.context).into(),
         ],
         false,
@@ -1200,7 +1236,9 @@ fn generate_func_print_int_obj<'c, 'm, 'b>(
     func
 }
 
-fn generate_func_retain_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+fn generate_func_retain_obj<'c, 'm, 'b>(
+    gc: &mut GenerationContext<'c, 'm, 'b>,
+) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
     let void_type = context.void_type();
@@ -1209,37 +1247,40 @@ fn generate_func_retain_obj<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> F
     let bb = context.append_basic_block(retain_func, "entry");
 
     let builder = context.create_builder();
-    builder.position_at_end(bb);
-    let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
-    let ptr_to_control_block = builder.build_pointer_cast(
-        ptr_to_obj,
-        ptr_to_control_block_type(gc.context),
-        "ptr_to_control_block",
-    );
-    let ptr_to_refcnt = builder
-        .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
-        .unwrap();
-    let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
-
-    if SANITIZE_MEMORY {
-        builder.build_call(
-            *gc.system_functions
-                .get(&SystemFunctions::ReportRetain)
-                .unwrap(),
-            &[ptr_to_obj.into(), refcnt.into()],
-            "call_report_retain",
+    let (mut new_gc, pop_gc) = gc.push_builder(&builder);
+    {
+        let gc = &mut new_gc;
+        builder.position_at_end(bb);
+        let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
+        let ptr_to_control_block = builder.build_pointer_cast(
+            ptr_to_obj,
+            ptr_to_control_block_type(gc.context),
+            "ptr_to_control_block",
         );
+        let ptr_to_refcnt = builder
+            .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
+            .unwrap();
+        let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
+
+        if SANITIZE_MEMORY {
+            let objid = build_get_objid(ptr_to_obj, gc);
+            builder.build_call(
+                *gc.system_functions
+                    .get(&SystemFunctions::ReportRetain)
+                    .unwrap(),
+                &[ptr_to_obj.into(), objid.into(), refcnt.into()],
+                "call_report_retain",
+            );
+        }
+
+        let one = context.i64_type().const_int(1, false);
+        let refcnt = builder.build_int_add(refcnt, one, "refcnt");
+        builder.build_store(ptr_to_refcnt, refcnt);
+        builder.build_return(None);
     }
-
-    let one = context.i64_type().const_int(1, false);
-    let refcnt = builder.build_int_add(refcnt, one, "refcnt");
-    builder.build_store(ptr_to_refcnt, refcnt);
-    builder.build_return(None);
-
+    pop_gc(new_gc);
     retain_func
     // TODO: Add fence instruction for incrementing refcnt
-    // TODO: Add code for leak detector
-    // TODO: Raise error when trying to retain object of refcnt is zero (which implies use of deallocate memory).
 }
 
 fn generate_func_release_obj<'c, 'm, 'b>(
@@ -1267,11 +1308,12 @@ fn generate_func_release_obj<'c, 'm, 'b>(
         let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
 
         if SANITIZE_MEMORY {
+            let objid = build_get_objid(ptr_to_obj, gc);
             gc.builder.build_call(
                 *gc.system_functions
                     .get(&SystemFunctions::ReportRelease)
                     .unwrap(),
-                &[ptr_to_obj.into(), refcnt.into()],
+                &[ptr_to_obj.into(), objid.into(), refcnt.into()],
                 "report_release_call",
             );
         }
@@ -1367,8 +1409,9 @@ fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>)
         SystemFunctions::PrintIntObj,
         generate_func_print_int_obj(gc),
     );
+    let retain_func = generate_func_retain_obj(gc);
     gc.system_functions
-        .insert(SystemFunctions::RetainObj, generate_func_retain_obj(gc));
+        .insert(SystemFunctions::RetainObj, retain_func);
     let release_func = generate_func_release_obj(gc);
     gc.system_functions
         .insert(SystemFunctions::ReleaseObj, release_func);
@@ -1419,10 +1462,6 @@ fn test_int_ast(program: Arc<ExprInfo>, answer: i32, opt_level: OptimizationLeve
     builder.position_at_end(entry_bb);
 
     let program_result = generate_expr(program, &mut gc);
-
-    // let fn_type = context.void_type().fn_type(&[], false);
-    // let hello_runtime = module.add_function("hello_runtime", fn_type, None);
-    // builder.build_call(hello_runtime, &[], "hello_runtime");
 
     let int_obj_ptr = builder.build_pointer_cast(
         program_result.ptr,

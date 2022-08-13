@@ -7,6 +7,7 @@ name = "fixsanitizer"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "once_cell",
  "rustc_version",
 ]
 
@@ -15,6 +16,12 @@ name = "libc"
 version = "0.2.131"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04c3b4822ccebfa39c02fc03d1534441b22ead323fa0f48bb7ddd8e6ba076a40"
+
+[[package]]
+name = "once_cell"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18a6dbe30758c9f83eb00cbea4ac95966305f5a7772f3f42ebfc7fc7eddbd8e1"
 
 [[package]]
 name = "rustc_version"
