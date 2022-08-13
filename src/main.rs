@@ -244,30 +244,6 @@ fn generate_literal<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
     (lit.generator)(gc)
-    // match &*lit.ty {
-    //     Type::LitTy(ty) => match ty.value.as_str() {
-    //         "Int" => {
-    //             let ptr_to_int_obj = ObjectType::int_obj_type().build_allocate_shared_obj(gc);
-    //             let value = lit.value.parse::<i64>().unwrap();
-    //             let value = gc.context.i64_type().const_int(value as u64, false);
-    //             build_set_field(ptr_to_int_obj, 1, value, gc);
-    //             ExprCode {
-    //                 ptr: ptr_to_int_obj,
-    //             }
-    //         }
-    //         _ => {
-    //             panic!(
-    //                 "Cannot generate literal value {} of type {}.",
-    //                 lit.value, ty.value,
-    //             )
-    //         }
-    //     },
-    //     Type::TyVar(_) => panic!("Type of given Literal is TyVar (should be TyLit)."),
-    //     Type::AppTy(_, _) => panic!("Type of given Literal is AppTy (should be TyLit)."),
-    //     Type::TyConApp(_, _) => panic!("Type of given Literal is TyConApp (should be TyLit)."),
-    //     Type::FunTy(_, _) => panic!("Type of given Literal is FunTy (should be TyLit)."), // e.g., fix
-    //     Type::ForAllTy(_, _) => panic!("Type of given Literal is ForAllTy (should be TyLit)."),
-    // }
 }
 
 static SELF_NAME: &str = "%SELF%";
