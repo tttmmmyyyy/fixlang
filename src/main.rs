@@ -4,6 +4,7 @@ extern crate pest_derive;
 #[macro_use]
 extern crate serial_test;
 
+use clap::{App, AppSettings, Arg};
 use either::Either;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
@@ -22,6 +23,8 @@ use std::alloc::System;
 use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::fmt::Pointer;
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 use std::ptr::null;
 use std::string;
@@ -516,7 +519,7 @@ struct GenerationContext<'c, 'm, 'b> {
 }
 
 impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
-    fn push_builder<'s, 'd>(
+    fn push_builder<'s: 'd, 'd>(
         self: &'s mut Self,
         builder: &'d Builder<'c>,
     ) -> (
@@ -1571,6 +1574,25 @@ fn run_source(source: &str, opt_level: OptimizationLevel) -> i64 {
     run_ast(ast, opt_level)
 }
 
+fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
+    let display = path.display();
+
+    let mut file = match File::open(&path) {
+        Err(why) => panic!("Couldn't open {}: {}", display, why),
+        Ok(file) => file,
+    };
+
+    // Read the file contents into a string, returns `io::Result<usize>`
+    // ファイルの中身を文字列に読み込む。`io::Result<useize>`を返す。
+    let mut s = String::new();
+    match file.read_to_string(&mut s) {
+        Err(why) => panic!("Couldn't read {}: {}", display, why),
+        Ok(_) => (),
+    }
+
+    run_source(s.as_str(), opt_level)
+}
+
 fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) {
     assert_eq!(run_source(source, opt_level), answer)
 }
@@ -1908,7 +1930,19 @@ mod tests {
 const SANITIZE_MEMORY: bool = true;
 
 fn main() {
-    let source = r"if true then 3 else 5";
-    let answer = 3;
-    test_run_source(source, answer, OptimizationLevel::Default);
+    let source_file = Arg::new("source-file").required(true);
+    let run_subcom = App::new("run").arg(source_file);
+    let app = App::new("Fix-lang")
+        .bin_name("fix")
+        .setting(AppSettings::ArgRequiredElseHelp)
+        .subcommand(run_subcom);
+
+    match app.get_matches().subcommand() {
+        Some(("run", m)) => {
+            let path = m.value_of("source-file").unwrap();
+            let res = run_file(Path::new(path), OptimizationLevel::Default);
+            println!("{}", res);
+        }
+        _ => eprintln!("Unknown command!"),
+    }
 }
