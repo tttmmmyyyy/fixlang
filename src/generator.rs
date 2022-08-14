@@ -13,7 +13,7 @@ use super::*;
 
 #[derive(Clone)]
 pub struct LocalVariable<'c> {
-    pub code: PointerValue<'c>,
+    pub ptr: PointerValue<'c>,
     used_later: u32,
 }
 
@@ -28,7 +28,7 @@ impl<'c> Scope<'c> {
             self.data.insert(String::from(var_name), Default::default());
         }
         self.data.get_mut(var_name).unwrap().push(LocalVariable {
-            code: code.clone(),
+            ptr: code.clone(),
             used_later: 0,
         });
     }
@@ -49,7 +49,7 @@ impl<'c> Scope<'c> {
         gc: &GenerationContext<'c, 'm>,
     ) -> BasicValueEnum<'c> {
         let expr = self.get(var_name);
-        gc.load_obj_field(expr.code, ty, field_idx)
+        gc.load_obj_field(expr.ptr, ty, field_idx)
     }
     fn modify_used_later(self: &mut Self, names: &HashSet<String>, by: i32) {
         for name in names {
@@ -196,7 +196,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     pub fn get_var_retained_if_used_later(&mut self, var_name: &str) -> PointerValue<'c> {
         let var = self.scope_get(var_name);
-        let code = var.code;
+        let code = var.ptr;
         if var.used_later > 0 {
             self.retain(code);
         }
@@ -406,7 +406,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
             // Retain captured objects
             for cap_name in &captured_names {
-                let ptr = self.scope_get(cap_name).code;
+                let ptr = self.scope_get(cap_name).ptr;
                 self.retain(ptr);
             }
             // Release SELF and arg if unused
@@ -493,7 +493,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Release variables used only in the else block.
         for var_name in &else_expr.free_vars {
             if !then_expr.free_vars.contains(var_name) && self.scope_get(var_name).used_later == 0 {
-                self.release(self.scope_get(var_name).code);
+                self.release(self.scope_get(var_name).ptr);
             }
         }
         let then_code = self.eval_expr(then_expr.clone());
@@ -503,7 +503,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Release variables used only in the then block.
         for var_name in &then_expr.free_vars {
             if !else_expr.free_vars.contains(var_name) && self.scope_get(var_name).used_later == 0 {
-                self.release(self.scope_get(var_name).code);
+                self.release(self.scope_get(var_name).ptr);
             }
         }
         let else_code = self.eval_expr(else_expr);

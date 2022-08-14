@@ -36,4 +36,5 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
     * remove ExprCode
     * start_function method
     * RAII of lock_used_later
-    * rename LocalVariable.code to ptr.
+    * rename LocalVariable.code to ptr (and search for code)
+    * remove name of ExprInfo

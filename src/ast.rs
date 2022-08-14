@@ -253,8 +253,8 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             1,
             value,
         );
-        gc.release(gc.scope_get(&lhs_str).code);
-        gc.release(gc.scope_get(&rhs_str).code);
+        gc.release(gc.scope_get(&lhs_str).ptr);
+        gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_int_obj
     });
     lit(generator, free_vars, name)
@@ -303,8 +303,8 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             1,
             value,
         );
-        gc.release(gc.scope_get(&lhs_str).code);
-        gc.release(gc.scope_get(&rhs_str).code);
+        gc.release(gc.scope_get(&lhs_str).ptr);
+        gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_obj
     });
     lit(generator, free_vars, name)
@@ -320,9 +320,9 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
     let name = format!("fix {} {}", f_str, x_str);
     let free_vars = vec![String::from(SELF_NAME), f_str.clone(), x_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let fixf = gc.scope_get(SELF_NAME).code;
-        let x = gc.scope_get(&x_str).code;
-        let f = gc.scope_get(&f_str).code;
+        let fixf = gc.scope_get(SELF_NAME).ptr;
+        let x = gc.scope_get(&x_str).ptr;
+        let f = gc.scope_get(&f_str).ptr;
         let f_fixf = gc.apply_lambda(f, fixf);
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
         f_fixf_x
