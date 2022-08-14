@@ -130,10 +130,10 @@ fn generate_func_retain_obj<'c, 'm, 'b>(
 
         // Report retain to sanitizer.
         if SANITIZE_MEMORY {
-            let objid = build_get_objid(ptr_to_obj, gc);
+            let obj_id = build_get_obj_id(ptr_to_obj, gc);
             builder.build_call(
                 *gc.runtimes.get(&RuntimeFunctions::ReportRetain).unwrap(),
-                &[ptr_to_obj.into(), objid.into(), refcnt.into()],
+                &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
                 "call_report_retain",
             );
         }
@@ -170,10 +170,10 @@ fn generate_func_release_obj<'c, 'm, 'b>(
 
         // Report release to sanitizer.
         if SANITIZE_MEMORY {
-            let objid = build_get_objid(ptr_to_obj, gc);
+            let obj_id = build_get_obj_id(ptr_to_obj, gc);
             gc.builder.build_call(
                 *gc.runtimes.get(&RuntimeFunctions::ReportRelease).unwrap(),
-                &[ptr_to_obj.into(), objid.into(), refcnt.into()],
+                &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
                 "report_release_call",
             );
         }

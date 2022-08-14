@@ -84,8 +84,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt, align 4
   %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 1
   store void (i8*)* @dtor.3, void (i8*)** %ptr_to_dtor_field, align 8
-  %ptr_to_objid = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
-  store i64 %call_report_malloc, i64* %ptr_to_objid, align 4
+  %ptr_to_obj_id = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
+  store i64 %call_report_malloc, i64* %ptr_to_obj_id, align 4
   %ptr_to_field = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda, i8* (i8*, i8*)** %ptr_to_field, align 8
   %pointer_cast1 = bitcast { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj to i8*
@@ -99,8 +99,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt7, align 4
   %ptr_to_dtor_field8 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block6, i32 0, i32 1
   store void (i8*)* @dtor.3, void (i8*)** %ptr_to_dtor_field8, align 8
-  %ptr_to_objid9 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block6, i32 0, i32 2
-  store i64 %call_report_malloc5, i64* %ptr_to_objid9, align 4
+  %ptr_to_obj_id9 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block6, i32 0, i32 2
+  store i64 %call_report_malloc5, i64* %ptr_to_obj_id9, align 4
   %ptr_to_field10 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj3, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.4, i8* (i8*, i8*)** %ptr_to_field10, align 8
   %pointer_cast11 = bitcast { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj3 to i8*
@@ -114,8 +114,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt17, align 4
   %ptr_to_dtor_field18 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block16, i32 0, i32 1
   store void (i8*)* @dtor.3, void (i8*)** %ptr_to_dtor_field18, align 8
-  %ptr_to_objid19 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block16, i32 0, i32 2
-  store i64 %call_report_malloc15, i64* %ptr_to_objid19, align 4
+  %ptr_to_obj_id19 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block16, i32 0, i32 2
+  store i64 %call_report_malloc15, i64* %ptr_to_obj_id19, align 4
   %ptr_to_field20 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj13, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.11, i8* (i8*, i8*)** %ptr_to_field20, align 8
   %pointer_cast21 = bitcast { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj13 to i8*
@@ -128,8 +128,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt27, align 4
   %ptr_to_dtor_field28 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block26, i32 0, i32 1
   store void (i8*)* @dtor.19, void (i8*)** %ptr_to_dtor_field28, align 8
-  %ptr_to_objid29 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block26, i32 0, i32 2
-  store i64 %call_report_malloc25, i64* %ptr_to_objid29, align 4
+  %ptr_to_obj_id29 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block26, i32 0, i32 2
+  store i64 %call_report_malloc25, i64* %ptr_to_obj_id29, align 4
   %ptr_to_field30 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj23, i32 0, i32 1
   store i64 3, i64* %ptr_to_field30, align 4
   %pointer_cast31 = bitcast { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj23 to i8*
@@ -146,8 +146,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt39, align 4
   %ptr_to_dtor_field40 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block38, i32 0, i32 1
   store void (i8*)* @dtor.19, void (i8*)** %ptr_to_dtor_field40, align 8
-  %ptr_to_objid41 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block38, i32 0, i32 2
-  store i64 %call_report_malloc37, i64* %ptr_to_objid41, align 4
+  %ptr_to_obj_id41 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block38, i32 0, i32 2
+  store i64 %call_report_malloc37, i64* %ptr_to_obj_id41, align 4
   %ptr_to_field42 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj35, i32 0, i32 1
   store i64 5, i64* %ptr_to_field42, align 4
   %pointer_cast43 = bitcast { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj35 to i8*
@@ -175,8 +175,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt, align 4
   %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 1
   store void (i8*)* @dtor, void (i8*)** %ptr_to_dtor_field, align 8
-  %ptr_to_objid = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
-  store i64 %call_report_malloc, i64* %ptr_to_objid, align 4
+  %ptr_to_obj_id = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
+  store i64 %call_report_malloc, i64* %ptr_to_obj_id, align 4
   %ptr_to_field = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* %ptr_to_obj, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.1, i8* (i8*, i8*)** %ptr_to_field, align 8
   %ptr_to_field1 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* %ptr_to_obj, i32 0, i32 2
@@ -230,8 +230,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt, align 4
   %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 1
   store void (i8*)* @dtor.9, void (i8*)** %ptr_to_dtor_field, align 8
-  %ptr_to_objid = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
-  store i64 %call_report_malloc, i64* %ptr_to_objid, align 4
+  %ptr_to_obj_id = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
+  store i64 %call_report_malloc, i64* %ptr_to_obj_id, align 4
   %ptr_to_field = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* %ptr_to_obj, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.5, i8* (i8*, i8*)** %ptr_to_field, align 8
   %ptr_to_field1 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* %ptr_to_obj, i32 0, i32 2
@@ -264,8 +264,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt, align 4
   %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 1
   store void (i8*)* @dtor.7, void (i8*)** %ptr_to_dtor_field, align 8
-  %ptr_to_objid = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
-  store i64 %call_report_malloc, i64* %ptr_to_objid, align 4
+  %ptr_to_obj_id = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
+  store i64 %call_report_malloc, i64* %ptr_to_obj_id, align 4
   %ptr_to_field8 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8 }, { { i64, void (i8*)*, i64 }, i8 }* %ptr_to_obj, i32 0, i32 1
   store i8 %eq_bool, i8* %ptr_to_field8, align 1
   call void @release_obj(i8* %field_value)
@@ -300,8 +300,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt, align 4
   %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 1
   store void (i8*)* @dtor.16, void (i8*)** %ptr_to_dtor_field, align 8
-  %ptr_to_objid = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
-  store i64 %call_report_malloc, i64* %ptr_to_objid, align 4
+  %ptr_to_obj_id = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
+  store i64 %call_report_malloc, i64* %ptr_to_obj_id, align 4
   %ptr_to_field = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* %ptr_to_obj, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.12, i8* (i8*, i8*)** %ptr_to_field, align 8
   %ptr_to_field1 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* %ptr_to_obj, i32 0, i32 2
@@ -333,8 +333,8 @@ entry:
   store i64 1, i64* %ptr_to_refcnt, align 4
   %ptr_to_dtor_field = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 1
   store void (i8*)* @dtor.14, void (i8*)** %ptr_to_dtor_field, align 8
-  %ptr_to_objid = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
-  store i64 %call_report_malloc, i64* %ptr_to_objid, align 4
+  %ptr_to_obj_id = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 2
+  store i64 %call_report_malloc, i64* %ptr_to_obj_id, align 4
   %ptr_to_field8 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj, i32 0, i32 1
   store i64 %add, i64* %ptr_to_field8, align 4
   call void @release_obj(i8* %field_value)

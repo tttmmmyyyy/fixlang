@@ -441,7 +441,7 @@ pub fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContex
     );
 }
 
-pub fn build_get_objid<'c, 'm, 'b>(
+pub fn build_get_obj_id<'c, 'm, 'b>(
     ptr_to_obj: PointerValue<'c>,
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> IntValue<'c> {

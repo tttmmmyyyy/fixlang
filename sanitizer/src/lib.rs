@@ -35,22 +35,22 @@ pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
     let name_c_str = name_c_str.unwrap();
     let mut guard = (*OBJECT_ID).lock().unwrap();
     *guard += 1;
-    let objid = *guard;
+    let obj_id = *guard;
     if VERBOSE {
         println!(
             "Object id={} is allocated. refcnt=(0 -> 1), addr={:#X}, code = {}",
-            objid, address as usize, name_c_str
+            obj_id, address as usize, name_c_str
         );
     }
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     let info = ObjectInfo {
-        id: objid,
+        id: obj_id,
         addr: address as usize,
         refcnt: 1,
         code: String::from(name_c_str),
     };
-    object_table.insert(objid, info);
-    objid
+    object_table.insert(obj_id, info);
+    obj_id
 }
 
 #[no_mangle]

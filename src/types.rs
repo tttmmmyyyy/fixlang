@@ -161,10 +161,10 @@ impl ObjectType {
                         .build_store(ptr_to_dtor_field, dtor.as_global_value().as_pointer_value());
 
                     if SANITIZE_MEMORY {
-                        let ptr_to_objid = builder
-                            .build_struct_gep(ptr_to_control_block, 2, "ptr_to_objid")
+                        let ptr_to_obj_id = builder
+                            .build_struct_gep(ptr_to_control_block, 2, "ptr_to_obj_id")
                             .unwrap();
-                        builder.build_store(ptr_to_objid, object_id);
+                        builder.build_store(ptr_to_obj_id, object_id);
                     }
                 }
                 ObjectFieldType::Int => {}
