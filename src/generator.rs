@@ -47,7 +47,7 @@ impl<'c> LocalVariables<'c> {
         gc: &GenerationContext<'c, 'm, 'b>,
     ) -> BasicValueEnum<'c> {
         let expr = self.get(var_name);
-        build_load_field_of_obj(expr.code.ptr, ty, field_idx, gc)
+        gc.build_load_field_of_obj(expr.code.ptr, ty, field_idx)
     }
     fn modify_used_later(self: &mut Self, names: &HashSet<String>, by: i32) {
         for name in names {
@@ -141,11 +141,27 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
 
     // Call dtor of object.
     pub fn build_call_dtor(&self, obj: PointerValue<'c>) {
-        let ptr_to_dtor = build_load_field_of_obj(obj, control_block_type(self.context), 1, self)
+        let ptr_to_dtor = self
+            .build_load_field_of_obj(obj, control_block_type(self.context), 1)
             .into_pointer_value();
         let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
         self.builder
             .build_call(dtor_func, &[obj.into()], "call_dtor");
+    }
+
+    // Take an pointer of struct and return the loaded value of a pointer field.
+    pub fn build_load_field_of_obj(
+        &self,
+        obj: PointerValue<'c>,
+        ty: StructType<'c>,
+        index: u32,
+    ) -> BasicValueEnum<'c> {
+        let ptr = self.build_pointer_cast(obj, ptr_type(ty));
+        let ptr_to_field = self
+            .builder
+            .build_struct_gep(ptr, index, "ptr_to_field")
+            .unwrap();
+        self.builder.build_load(ptr_to_field, "field_value")
     }
 }
 
@@ -263,7 +279,8 @@ fn generate_lam<'c, 'm, 'b>(
         let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
         gc.scope.push(SELF_NAME, &ExprCode { ptr: closure_obj });
         for (i, cap_name) in captured_names.iter().enumerate() {
-            let cap_obj = build_load_field_of_obj(closure_obj, closure_ty, i as u32 + 2, &gc)
+            let cap_obj = gc
+                .build_load_field_of_obj(closure_obj, closure_ty, i as u32 + 2)
                 .into_pointer_value();
             gc.scope.push(cap_name, &ExprCode { ptr: cap_obj });
         }
@@ -330,7 +347,9 @@ fn generate_if<'c, 'm, 'b>(
     let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
     gc.scope.decrement_used_later(&used_then_or_else);
     let bool_ty = ObjectType::bool_obj_type().to_struct_type(gc.context);
-    let cond_val = build_load_field_of_obj(ptr_to_cond_obj, bool_ty, 1, gc).into_int_value();
+    let cond_val = gc
+        .build_load_field_of_obj(ptr_to_cond_obj, bool_ty, 1)
+        .into_int_value();
     build_release(ptr_to_cond_obj, gc);
     let cond_val = gc
         .builder
@@ -391,27 +410,13 @@ pub fn build_set_field<'c, 'm, 'b, V>(
     builder.build_store(ptr_to_field, value);
 }
 
-// Take an pointer of struct and return the loaded value of a pointer field.
-pub fn build_load_field_of_obj<'c, 'm, 'b>(
-    obj: PointerValue<'c>,
-    ty: StructType<'c>,
-    index: u32,
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> BasicValueEnum<'c> {
-    let ptr = gc.build_pointer_cast(obj, ptr_type(ty));
-    let ptr_to_field = gc
-        .builder
-        .build_struct_gep(ptr, index, "ptr_to_field")
-        .unwrap();
-    gc.builder.build_load(ptr_to_field, "field_value")
-}
-
 fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
     obj: PointerValue<'c>,
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> PointerValue<'c> {
     let lam_obj_ty = ObjectType::lam_obj_type().to_struct_type(gc.context);
-    build_load_field_of_obj(obj, lam_obj_ty, 1, gc).into_pointer_value()
+    gc.build_load_field_of_obj(obj, lam_obj_ty, 1)
+        .into_pointer_value()
 }
 
 fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
@@ -441,7 +446,8 @@ pub fn build_get_objid<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> IntValue<'c> {
     assert!(SANITIZE_MEMORY);
-    build_load_field_of_obj(ptr_to_obj, control_block_type(gc.context), 2, gc).into_int_value()
+    gc.build_load_field_of_obj(ptr_to_obj, control_block_type(gc.context), 2)
+        .into_int_value()
 }
 
 fn build_panic<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {

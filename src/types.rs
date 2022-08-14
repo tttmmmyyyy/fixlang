@@ -93,9 +93,9 @@ impl ObjectType {
             for (i, ft) in self.field_types.iter().enumerate() {
                 match ft {
                     ObjectFieldType::SubObject => {
-                        let ptr_to_subobj =
-                            build_load_field_of_obj(ptr_to_obj, struct_type, i as u32, &gc)
-                                .into_pointer_value();
+                        let ptr_to_subobj = gc
+                            .build_load_field_of_obj(ptr_to_obj, struct_type, i as u32)
+                            .into_pointer_value();
                         build_release(ptr_to_subobj, &gc);
                     }
                     ObjectFieldType::ControlBlock => {}
