@@ -165,13 +165,19 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     }
 
     // Take an pointer of struct and store a value value into a pointer field.
-    pub fn build_set_field<V>(&self, obj: PointerValue<'c>, index: u32, value: V)
-    where
+    pub fn build_set_field<V>(
+        &self,
+        obj: PointerValue<'c>,
+        ty: StructType<'c>,
+        index: u32,
+        value: V,
+    ) where
         V: BasicValue<'c>,
     {
+        let ptr = self.build_pointer_cast(obj, ptr_type(ty));
         let ptr_to_field = self
             .builder
-            .build_struct_gep(obj, index, "ptr_to_field")
+            .build_struct_gep(ptr, index, "ptr_to_field")
             .unwrap();
         self.builder.build_store(ptr_to_field, value);
     }
@@ -317,10 +323,15 @@ fn generate_lam<'c, 'm, 'b>(
     // Allocate and set up closure
     let name = lam(arg, val).expr.to_string();
     let obj = obj_type.build_allocate_shared_obj(gc, Some(name.as_str()));
-    gc.build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value());
+    gc.build_set_field(
+        obj,
+        closure_ty,
+        1,
+        lam_fn.as_global_value().as_pointer_value(),
+    );
     for (i, cap) in captured_names.iter().enumerate() {
         let ptr = gc.get_var_retained_if_used_later(cap).ptr;
-        gc.build_set_field(obj, i as u32 + 2, ptr);
+        gc.build_set_field(obj, closure_ty, i as u32 + 2, ptr);
     }
     // Return closure object
     ExprCode { ptr: obj }
