@@ -88,7 +88,7 @@ pub struct GenerationContext<'c, 'm> {
     pub context: &'c Context,
     pub module: &'m Module<'c>,
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
-    scope: Vec<Scope<'c>>,
+    scope: Rc<RefCell<Vec<Scope<'c>>>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
 }
 
@@ -102,15 +102,15 @@ impl<'c> Drop for PopBuilderGuard<'c> {
     }
 }
 
-// struct PopScopeGuard<'c, 'm> {
-//     gc: RefCell<GenerationContext<'c, 'm>>,
-// }
+pub struct PopScopeGuard<'c> {
+    scope: Rc<RefCell<Vec<Scope<'c>>>>,
+}
 
-// impl<'c, 'm> Drop for PopScopeGuard<'c, 'm> {
-//     fn drop(&mut self) {
-//         self.gc.get_mut().pop_scope();
-//     }
-// }
+impl<'c> Drop for PopScopeGuard<'c> {
+    fn drop(&mut self) {
+        self.scope.borrow_mut().pop();
+    }
+}
 
 impl<'c, 'm> GenerationContext<'c, 'm> {
     // Create new gc.
@@ -119,7 +119,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             context: ctx,
             module,
             builders: Rc::new(RefCell::new(vec![Rc::new(ctx.create_builder())])),
-            scope: vec![Default::default()],
+            scope: Rc::new(RefCell::new(vec![Default::default()])),
             runtimes: Default::default(),
         };
         ret
@@ -140,30 +140,74 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    // Get scope.
-    pub fn scope(&self) -> &Scope<'c> {
-        self.scope.last().unwrap()
-    }
-    // Get mutable scope.
-    pub fn scope_mut(&mut self) -> &mut Scope<'c> {
-        self.scope.last_mut().unwrap()
-    }
     // Push a new scope.
-    pub fn push_scope(&mut self) {
-        self.scope.push(Default::default());
+    pub fn push_scope(&mut self) -> PopScopeGuard<'c> {
+        self.scope.borrow_mut().push(Default::default());
+        PopScopeGuard {
+            scope: self.scope.clone(),
+        }
     }
-    // Pop a scope
-    pub fn pop_scope(&mut self) {
-        self.scope.pop().unwrap();
+
+    // Get a variable from scope.
+    pub fn scope_get(&self, var_name: &str) -> LocalVariable<'c> {
+        self.scope.borrow().last().unwrap().get(var_name)
     }
+
+    // Lock variables in scope from moved out.
+    fn scope_increment_used_later(self: &mut Self, names: &HashSet<String>) {
+        self.scope
+            .borrow_mut()
+            .last_mut()
+            .unwrap()
+            .increment_used_later(names);
+    }
+
+    // Get field of object in the scope.
+    pub fn scope_get_field(
+        self: &Self,
+        var_name: &str,
+        field_idx: u32,
+        ty: StructType<'c>,
+    ) -> BasicValueEnum<'c> {
+        self.scope
+            .borrow_mut()
+            .last()
+            .unwrap()
+            .get_field(var_name, field_idx, ty, self)
+    }
+
+    // Release lock variables in scope from moved out.
+    fn scope_decrement_used_later(self: &mut Self, names: &HashSet<String>) {
+        self.scope
+            .borrow_mut()
+            .last_mut()
+            .unwrap()
+            .decrement_used_later(names);
+    }
+
+    // Push scope.
+    fn scope_push(self: &mut Self, var_name: &str, code: &ExprCode<'c>) {
+        self.scope
+            .borrow_mut()
+            .last_mut()
+            .unwrap()
+            .push(var_name, code)
+    }
+
+    // Pop scope.
+    fn scope_pop(self: &mut Self, var_name: &str) {
+        self.scope.borrow_mut().last_mut().unwrap().pop(var_name);
+    }
+
     pub fn get_var_retained_if_used_later(&mut self, var_name: &str) -> ExprCode<'c> {
-        let var = self.scope().get(var_name);
+        let var = self.scope_get(var_name);
         let code = var.code;
         if var.used_later > 0 {
             self.build_retain(code.ptr);
         }
         code
     }
+
     pub fn build_pointer_cast(
         &self,
         from: PointerValue<'c>,
@@ -317,9 +361,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate application
     fn eval_app(&mut self, lambda: Arc<ExprInfo>, arg: Arc<ExprInfo>) -> ExprCode<'c> {
-        self.scope_mut().increment_used_later(&arg.free_vars);
+        self.scope_increment_used_later(&arg.free_vars);
         let lambda_code = self.eval_expr(lambda);
-        self.scope_mut().decrement_used_later(&arg.free_vars);
+        self.scope_decrement_used_later(&arg.free_vars);
         let arg_code = self.eval_expr(arg);
         self.build_app(lambda_code.ptr, arg_code.ptr)
     }
@@ -359,24 +403,22 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().position_at_end(bb);
 
             // Create new scope
-            self.push_scope();
+            let scope_guard = self.push_scope();
 
             // Set up new scope
             let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
-            self.scope_mut()
-                .push(&arg.name(), &ExprCode { ptr: arg_ptr });
+            self.scope_push(&arg.name(), &ExprCode { ptr: arg_ptr });
             let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-            self.scope_mut()
-                .push(SELF_NAME, &ExprCode { ptr: closure_obj });
+            self.scope_push(SELF_NAME, &ExprCode { ptr: closure_obj });
             for (i, cap_name) in captured_names.iter().enumerate() {
                 let cap_obj = self
                     .build_load_field_of_obj(closure_obj, closure_ty, i as u32 + 2)
                     .into_pointer_value();
-                self.scope_mut().push(cap_name, &ExprCode { ptr: cap_obj });
+                self.scope_push(cap_name, &ExprCode { ptr: cap_obj });
             }
             // Retain captured objects
             for cap_name in &captured_names {
-                let ptr = self.scope().get(cap_name).code.ptr;
+                let ptr = self.scope_get(cap_name).code.ptr;
                 self.build_retain(ptr);
             }
             // Release SELF and arg if unused
@@ -391,10 +433,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Return result
             let ptr = self.build_pointer_cast(val.ptr, ptr_to_object_type(self.context));
             self.builder().build_return(Some(&ptr));
-
-            // Pop context.
-            self.pop_scope();
-            // self.pop_builder();
         }
         // Allocate and set up closure
         let name = lam(arg, val).expr.to_string();
@@ -423,17 +461,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let var_name = var.name();
         let mut used_in_val_except_var = val.free_vars.clone();
         used_in_val_except_var.remove(var_name);
-        self.scope_mut()
-            .increment_used_later(&used_in_val_except_var);
+        self.scope_increment_used_later(&used_in_val_except_var);
         let bound_code = self.eval_expr(bound.clone());
-        self.scope_mut()
-            .decrement_used_later(&used_in_val_except_var);
-        self.scope_mut().push(&var_name, &bound_code);
+        self.scope_decrement_used_later(&used_in_val_except_var);
+        self.scope_push(&var_name, &bound_code);
         if !val.free_vars.contains(var_name) {
             self.build_release(bound_code.ptr);
         }
         let val_code = self.eval_expr(val.clone());
-        self.scope_mut().pop(&var_name);
+        self.scope_pop(&var_name);
         val_code
     }
 
@@ -446,9 +482,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     ) -> ExprCode<'c> {
         let mut used_then_or_else = then_expr.free_vars.clone();
         used_then_or_else.extend(else_expr.free_vars.clone());
-        self.scope_mut().increment_used_later(&used_then_or_else);
+        self.scope_increment_used_later(&used_then_or_else);
         let ptr_to_cond_obj = self.eval_expr(cond_expr).ptr;
-        self.scope_mut().decrement_used_later(&used_then_or_else);
+        self.scope_decrement_used_later(&used_then_or_else);
         let bool_ty = ObjectType::bool_obj_type().to_struct_type(self.context);
         let cond_val = self
             .build_load_field_of_obj(ptr_to_cond_obj, bool_ty, 1)
@@ -468,9 +504,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().position_at_end(then_bb);
         // Release variables used only in the else block.
         for var_name in &else_expr.free_vars {
-            if !then_expr.free_vars.contains(var_name) && self.scope().get(var_name).used_later == 0
-            {
-                self.build_release(self.scope().get(var_name).code.ptr);
+            if !then_expr.free_vars.contains(var_name) && self.scope_get(var_name).used_later == 0 {
+                self.build_release(self.scope_get(var_name).code.ptr);
             }
         }
         let then_code = self.eval_expr(then_expr.clone());
@@ -479,9 +514,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().position_at_end(else_bb);
         // Release variables used only in the then block.
         for var_name in &then_expr.free_vars {
-            if !else_expr.free_vars.contains(var_name) && self.scope().get(var_name).used_later == 0
-            {
-                self.build_release(self.scope().get(var_name).code.ptr);
+            if !else_expr.free_vars.contains(var_name) && self.scope_get(var_name).used_later == 0 {
+                self.build_release(self.scope_get(var_name).code.ptr);
             }
         }
         let else_code = self.eval_expr(else_expr);
