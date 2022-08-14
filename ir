@@ -33,15 +33,15 @@ entry:
 
 define void @retain_obj(i8* %0) {
 entry:
-  %ptr_to_control_block = bitcast i8* %0 to { i64, void (i8*)*, i64 }*
-  %ptr_to_refcnt = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block, i32 0, i32 0
-  %refcnt = load i64, i64* %ptr_to_refcnt, align 4
   %pointer_cast = bitcast i8* %0 to { i64, void (i8*)*, i64 }*
-  %ptr_to_field = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %pointer_cast, i32 0, i32 2
+  %ptr_to_refcnt = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %pointer_cast, i32 0, i32 0
+  %refcnt = load i64, i64* %ptr_to_refcnt, align 4
+  %pointer_cast1 = bitcast i8* %0 to { i64, void (i8*)*, i64 }*
+  %ptr_to_field = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %pointer_cast1, i32 0, i32 2
   %field_value = load i64, i64* %ptr_to_field, align 4
   call void @report_retain(i8* %0, i64 %field_value, i64 %refcnt)
-  %refcnt1 = add i64 %refcnt, 1
-  store i64 %refcnt1, i64* %ptr_to_refcnt, align 4
+  %refcnt2 = add i64 %refcnt, 1
+  store i64 %refcnt2, i64* %ptr_to_refcnt, align 4
   ret void
 }
 

@@ -114,7 +114,11 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         }
         code
     }
-    fn build_pointer_cast(&self, from: PointerValue<'c>, to: PointerType<'c>) -> PointerValue<'c> {
+    pub fn build_pointer_cast(
+        &self,
+        from: PointerValue<'c>,
+        to: PointerType<'c>,
+    ) -> PointerValue<'c> {
         if from.get_type() == to {
             from
         } else {

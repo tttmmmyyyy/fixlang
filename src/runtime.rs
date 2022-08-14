@@ -122,17 +122,19 @@ fn generate_func_retain_obj<'c, 'm, 'b>(
     {
         let gc = &mut new_gc;
         builder.position_at_end(bb);
+
+        // Get pointer to reference counter
         let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
-        let ptr_to_control_block = builder.build_pointer_cast(
-            ptr_to_obj,
-            ptr_to_control_block_type(gc.context),
-            "ptr_to_control_block",
-        );
+        let ptr_to_control_block =
+            gc.build_pointer_cast(ptr_to_obj, ptr_to_control_block_type(gc.context));
         let ptr_to_refcnt = builder
             .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
             .unwrap();
+
+        // Get reference counter
         let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
 
+        // Report retain to sanitizer
         if SANITIZE_MEMORY {
             let objid = build_get_objid(ptr_to_obj, gc);
             builder.build_call(
@@ -142,6 +144,7 @@ fn generate_func_retain_obj<'c, 'm, 'b>(
             );
         }
 
+        // Increment refcnt
         let one = context.i64_type().const_int(1, false);
         let refcnt = builder.build_int_add(refcnt, one, "refcnt");
         builder.build_store(ptr_to_refcnt, refcnt);
