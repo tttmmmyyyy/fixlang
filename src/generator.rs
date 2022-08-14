@@ -248,7 +248,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             Expr::Var(var) => self.eval_var(var.clone()),
             Expr::Lit(lit) => self.eval_literal(lit.clone()),
             Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone()),
-            Expr::Lam(arg, val) => self.generate_lam(arg.clone(), val.clone()),
+            Expr::Lam(arg, val) => self.eval_lam(arg.clone(), val.clone()),
             Expr::Let(var, bound, expr) => {
                 generate_let(var.clone(), bound.clone(), expr.clone(), self)
             }
@@ -287,7 +287,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     }
 
     // Evaluate lambda abstraction.
-    fn generate_lam(&mut self, arg: Arc<Var>, val: Arc<ExprInfo>) -> ExprCode<'c> {
+    fn eval_lam(&mut self, arg: Arc<Var>, val: Arc<ExprInfo>) -> ExprCode<'c> {
         let context = self.context;
         let module = self.module;
         // Fix ordering of captured names
