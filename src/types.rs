@@ -103,7 +103,7 @@ impl ObjectType {
         func
     }
 
-    // Create a object
+    // Create an object
     pub fn create_obj<'c, 'm>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
