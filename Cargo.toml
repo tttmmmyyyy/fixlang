@@ -14,3 +14,9 @@ pest_derive = "2.2"
 libloading = "0.7"
 serial_test = "0.4.0"
 clap = "3.2.0"
+
+# TODO: use rustc-llvm-proxy: 
+# rustc-llvm-proxy = "0.2"
+# [dependencies.llvm-sys]
+# version = "120"
+# features = ["no-llvm-linking", "disable-alltargets-init"]
