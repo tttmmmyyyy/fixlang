@@ -1,7 +1,7 @@
 Fix-lang
 ====
 
-Overview
+## Overview
 
 Fix is *planned to be* a functional language of Haskell-like syntax and type systems, with the following features:
 - Eager evaluation
