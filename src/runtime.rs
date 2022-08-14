@@ -12,7 +12,7 @@ pub enum RuntimeFunctions {
     Dtor(ObjectType),
 }
 
-fn generate_func_printf<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+fn build_printf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
 
@@ -26,7 +26,7 @@ fn generate_func_printf<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> Funct
     func
 }
 
-fn generate_func_report_malloc<'c, 'm, 'b>(
+fn build_report_malloc_function<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> FunctionValue<'c> {
     let fn_ty = gc.context.i64_type().fn_type(
@@ -39,7 +39,7 @@ fn generate_func_report_malloc<'c, 'm, 'b>(
     gc.module.add_function("report_malloc", fn_ty, None)
 }
 
-fn generate_func_report_retain<'c, 'm, 'b>(
+fn build_report_retain_function<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> FunctionValue<'c> {
     let fn_ty = gc.context.void_type().fn_type(
@@ -53,7 +53,7 @@ fn generate_func_report_retain<'c, 'm, 'b>(
     gc.module.add_function("report_retain", fn_ty, None)
 }
 
-fn generate_func_report_release<'c, 'm, 'b>(
+fn build_report_release_function<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> FunctionValue<'c> {
     let fn_ty = gc.context.void_type().fn_type(
@@ -67,14 +67,12 @@ fn generate_func_report_release<'c, 'm, 'b>(
     gc.module.add_function("report_release", fn_ty, None)
 }
 
-fn generate_check_leak<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+fn build_check_leak_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
     let fn_ty = gc.context.void_type().fn_type(&[], false);
     gc.module.add_function("check_leak", fn_ty, None)
 }
 
-fn generate_func_retain_obj<'c, 'm, 'b>(
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> FunctionValue<'c> {
+fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
     let void_type = context.void_type();
@@ -114,9 +112,7 @@ fn generate_func_retain_obj<'c, 'm, 'b>(
     // TODO: Add fence instruction for incrementing refcnt
 }
 
-fn generate_func_release_obj<'c, 'm, 'b>(
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> FunctionValue<'c> {
+fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
     let void_type = gc.context.void_type();
     let func_type = void_type.fn_type(&[ptr_to_object_type(gc.context).into()], false);
     let release_func = gc.module.add_function("release_obj", func_type, None);
@@ -176,26 +172,26 @@ fn generate_func_release_obj<'c, 'm, 'b>(
 
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) {
     gc.runtimes
-        .insert(RuntimeFunctions::Printf, generate_func_printf(gc));
+        .insert(RuntimeFunctions::Printf, build_printf_function(gc));
     if SANITIZE_MEMORY {
         gc.runtimes.insert(
             RuntimeFunctions::ReportMalloc,
-            generate_func_report_malloc(gc),
+            build_report_malloc_function(gc),
         );
         gc.runtimes.insert(
             RuntimeFunctions::ReportRetain,
-            generate_func_report_retain(gc),
+            build_report_retain_function(gc),
         );
         gc.runtimes.insert(
             RuntimeFunctions::ReportRelease,
-            generate_func_report_release(gc),
+            build_report_release_function(gc),
         );
         gc.runtimes
-            .insert(RuntimeFunctions::CheckLeak, generate_check_leak(gc));
+            .insert(RuntimeFunctions::CheckLeak, build_check_leak_function(gc));
     }
-    let retain_func = generate_func_retain_obj(gc);
+    let retain_func = build_retain_function(gc);
     gc.runtimes.insert(RuntimeFunctions::RetainObj, retain_func);
-    let release_func = generate_func_release_obj(gc);
+    let release_func = build_release_function(gc);
     gc.runtimes
         .insert(RuntimeFunctions::ReleaseObj, release_func);
 }
