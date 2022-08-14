@@ -81,7 +81,7 @@ impl Expr {
 }
 
 pub type LiteralGenerator =
-    dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c>;
+    dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm>) -> ExprCode<'c>;
 
 pub struct Literal {
     pub generator: Arc<LiteralGenerator>,
@@ -233,7 +233,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let lhs_val = gc
-            .scope
+            .scope()
             .get_field(
                 &lhs_str,
                 1,
@@ -242,7 +242,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             )
             .into_int_value();
         let rhs_val = gc
-            .scope
+            .scope()
             .get_field(
                 &rhs_str,
                 1,
@@ -250,7 +250,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
                 gc,
             )
             .into_int_value();
-        let value = gc.builder.build_int_add(lhs_val, rhs_val, "add");
+        let value = gc.builder().build_int_add(lhs_val, rhs_val, "add");
         let ptr_to_int_obj =
             ObjectType::int_obj_type().build_allocate_shared_obj(gc, Some(name_cloned.as_str()));
         gc.build_set_field(
@@ -259,8 +259,8 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             1,
             value,
         );
-        gc.build_release(gc.scope.get(&lhs_str).code.ptr);
-        gc.build_release(gc.scope.get(&rhs_str).code.ptr);
+        gc.build_release(gc.scope().get(&lhs_str).code.ptr);
+        gc.build_release(gc.scope().get(&rhs_str).code.ptr);
         ExprCode {
             ptr: ptr_to_int_obj,
         }
@@ -280,7 +280,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let lhs_val = gc
-            .scope
+            .scope()
             .get_field(
                 &lhs_str,
                 1,
@@ -289,7 +289,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             )
             .into_int_value();
         let rhs_val = gc
-            .scope
+            .scope()
             .get_field(
                 &rhs_str,
                 1,
@@ -298,9 +298,9 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             )
             .into_int_value();
         let value = gc
-            .builder
+            .builder()
             .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, "eq");
-        let value = gc.builder.build_int_cast(
+        let value = gc.builder().build_int_cast(
             value,
             ObjectFieldType::Bool
                 .to_basic_type(gc.context)
@@ -315,8 +315,8 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             1,
             value,
         );
-        gc.build_release(gc.scope.get(&lhs_str).code.ptr);
-        gc.build_release(gc.scope.get(&rhs_str).code.ptr);
+        gc.build_release(gc.scope().get(&lhs_str).code.ptr);
+        gc.build_release(gc.scope().get(&rhs_str).code.ptr);
         ExprCode { ptr: ptr_to_obj }
     });
     lit(generator, free_vars, name)
@@ -332,9 +332,9 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
     let name = format!("fix {} {}", f_str, x_str);
     let free_vars = vec![String::from(SELF_NAME), f_str.clone(), x_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let fixf = gc.scope.get(SELF_NAME).code.ptr;
-        let x = gc.scope.get(&x_str).code.ptr;
-        let f = gc.scope.get(&f_str).code.ptr;
+        let fixf = gc.scope().get(SELF_NAME).code.ptr;
+        let x = gc.scope().get(&x_str).code.ptr;
+        let f = gc.scope().get(&f_str).code.ptr;
         let f_fixf = gc.build_app(f, fixf).ptr;
         let f_fixf_x = gc.build_app(f_fixf, x).ptr;
         ExprCode { ptr: f_fixf_x }

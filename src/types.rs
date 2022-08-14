@@ -59,10 +59,7 @@ impl ObjectType {
         ObjectType { field_types }
     }
 
-    fn generate_func_dtor<'c, 'm, 'b>(
-        &self,
-        gc: &mut GenerationContext<'c, 'm, 'b>,
-    ) -> FunctionValue<'c> {
+    fn generate_func_dtor<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
         if gc
             .runtimes
             .contains_key(&RuntimeFunctions::Dtor(self.clone()))
@@ -76,59 +73,58 @@ impl ObjectType {
         let func_type = dtor_type(gc.context);
         let func = gc.module.add_function("dtor", func_type, None);
         let bb = gc.context.append_basic_block(func, "entry");
-        let builder = gc.context.create_builder();
-        {
-            let context = gc.context;
-            let module = gc.module;
-            // Create new gc
-            let gc = GenerationContext {
-                context,
-                module,
-                builder: &builder,
-                scope: Default::default(), // This gc use used only for build_release, and it doesn't use scope.
-                runtimes: gc.runtimes.clone(),
-            };
-            builder.position_at_end(bb);
-            let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
-            for (i, ft) in self.field_types.iter().enumerate() {
-                match ft {
-                    ObjectFieldType::SubObject => {
-                        let ptr_to_subobj = gc
-                            .build_load_field_of_obj(ptr_to_obj, struct_type, i as u32)
-                            .into_pointer_value();
-                        gc.build_release(ptr_to_subobj);
-                    }
-                    ObjectFieldType::ControlBlock => {}
-                    ObjectFieldType::Int => {}
-                    ObjectFieldType::LambdaFunction => {}
-                    ObjectFieldType::Bool => {}
+
+        gc.push_builder();
+
+        let context = gc.context;
+        let module = gc.module;
+
+        gc.builder().position_at_end(bb);
+        let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
+        for (i, ft) in self.field_types.iter().enumerate() {
+            match ft {
+                ObjectFieldType::SubObject => {
+                    let ptr_to_subobj = gc
+                        .build_load_field_of_obj(ptr_to_obj, struct_type, i as u32)
+                        .into_pointer_value();
+                    gc.build_release(ptr_to_subobj);
                 }
+                ObjectFieldType::ControlBlock => {}
+                ObjectFieldType::Int => {}
+                ObjectFieldType::LambdaFunction => {}
+                ObjectFieldType::Bool => {}
             }
-            builder.build_return(None);
         }
+        gc.builder().build_return(None);
+        gc.pop_builder();
+
         gc.runtimes
             .insert(RuntimeFunctions::Dtor(self.clone()), func);
         func
     }
 
-    pub fn build_allocate_shared_obj<'c, 'm, 'b>(
+    pub fn build_allocate_shared_obj<'c, 'm>(
         &self,
-        gc: &mut GenerationContext<'c, 'm, 'b>,
+        gc: &mut GenerationContext<'c, 'm>,
         name: Option<&str>,
     ) -> PointerValue<'c> {
         let context = gc.context;
-        let builder = gc.builder;
         let struct_type = self.to_struct_type(context);
         // NOTE: Only once allocation is needed since we don't implement weak_ptr
-        let ptr_to_obj = builder.build_malloc(struct_type, "ptr_to_obj").unwrap();
+        let ptr_to_obj = gc
+            .builder()
+            .build_malloc(struct_type, "ptr_to_obj")
+            .unwrap();
 
         let mut object_id = obj_id_type(gc.context).const_int(0, false);
 
         if SANITIZE_MEMORY {
             let string_ptr = name.unwrap_or("N/A");
-            let string_ptr = builder.build_global_string_ptr(string_ptr, "name_of_obj");
+            let string_ptr = gc
+                .builder()
+                .build_global_string_ptr(string_ptr, "name_of_obj");
             let string_ptr = string_ptr.as_pointer_value();
-            let string_ptr = gc.builder.build_pointer_cast(
+            let string_ptr = gc.builder().build_pointer_cast(
                 string_ptr,
                 gc.context.i8_type().ptr_type(AddressSpace::Generic),
                 "name_of_obj_i8ptr",
@@ -144,26 +140,31 @@ impl ObjectType {
         for (i, ft) in self.field_types.iter().enumerate() {
             match ft {
                 ObjectFieldType::ControlBlock => {
-                    let ptr_to_control_block = builder
+                    let ptr_to_control_block = gc
+                        .builder()
                         .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_control_block")
                         .unwrap();
-                    let ptr_to_refcnt = builder
+                    let ptr_to_refcnt = gc
+                        .builder()
                         .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
                         .unwrap();
                     // The initial value of refcnt should be one (as std::make_shared of C++ does).
-                    builder.build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
-                    let ptr_to_dtor_field = builder
+                    gc.builder()
+                        .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
+                    let ptr_to_dtor_field = gc
+                        .builder()
                         .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_field")
                         .unwrap();
                     let dtor = self.generate_func_dtor(gc);
-                    builder
+                    gc.builder()
                         .build_store(ptr_to_dtor_field, dtor.as_global_value().as_pointer_value());
 
                     if SANITIZE_MEMORY {
-                        let ptr_to_obj_id = builder
+                        let ptr_to_obj_id = gc
+                            .builder()
                             .build_struct_gep(ptr_to_control_block, 2, "ptr_to_obj_id")
                             .unwrap();
-                        builder.build_store(ptr_to_obj_id, object_id);
+                        gc.builder().build_store(ptr_to_obj_id, object_id);
                     }
                 }
                 ObjectFieldType::Int => {}

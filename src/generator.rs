@@ -2,6 +2,8 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
+use std::cell::RefCell;
+
 use inkwell::values::{BasicMetadataValueEnum, CallSiteValue};
 
 use super::*;
@@ -46,7 +48,7 @@ impl<'c> LocalVariables<'c> {
         var_name: &str,
         field_idx: u32,
         ty: StructType<'c>,
-        gc: &GenerationContext<'c, 'm, 'b>,
+        gc: &GenerationContext<'c, 'm>,
     ) -> BasicValueEnum<'c> {
         let expr = self.get(var_name);
         gc.build_load_field_of_obj(expr.code.ptr, ty, field_idx)
@@ -79,38 +81,76 @@ fn add_i32_to_u32(u: u32, i: i32) -> u32 {
     }
 }
 
-pub struct GenerationContext<'c, 'm, 'b> {
+pub struct GenerationContext<'c, 'm> {
     pub context: &'c Context,
     pub module: &'m Module<'c>,
-    pub builder: &'b Builder<'c>,
-    pub scope: LocalVariables<'c>,
+    builders: Vec<Builder<'c>>,
+    scope: Vec<LocalVariables<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
 }
 
-impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
-    // Push a new builder to this generation context.
-    pub fn push_builder<'s: 'd, 'd>(
-        self: &'s mut Self,
-        builder: &'d Builder<'c>,
-    ) -> (
-        GenerationContext<'c, 'm, 'd>,
-        impl 's + FnOnce(GenerationContext<'c, 'm, 'd>),
-    ) {
-        let new_gc = GenerationContext {
-            context: self.context,
-            module: self.module,
-            builder,
-            scope: std::mem::replace(&mut self.scope, Default::default()),
-            runtimes: std::mem::replace(&mut self.runtimes, Default::default()),
-        };
-        let pop = |gc: GenerationContext<'c, 'm, 'd>| {
-            self.scope = gc.scope;
-            self.runtimes = gc.runtimes;
-        };
-        (new_gc, pop)
+// struct PopBuilderGuard<'c, 'm> {
+//     gc: RefCell<GenerationContext<'c, 'm>>,
+// }
+
+// impl<'c, 'm> Drop for PopBuilderGuard<'c, 'm> {
+//     fn drop(&mut self) {
+//         self.gc.get_mut().pop_builder();
+//     }
+// }
+
+// struct PopScopeGuard<'c, 'm> {
+//     gc: RefCell<GenerationContext<'c, 'm>>,
+// }
+
+// impl<'c, 'm> Drop for PopScopeGuard<'c, 'm> {
+//     fn drop(&mut self) {
+//         self.gc.get_mut().pop_scope();
+//     }
+// }
+
+impl<'c, 'm> GenerationContext<'c, 'm> {
+    // Create new gc.
+    pub fn new(ctx: &'c Context, module: &'m Module<'c>) -> Self {
+        Self {
+            context: ctx,
+            module,
+            builders: vec![ctx.create_builder()],
+            scope: vec![Default::default()],
+            runtimes: Default::default(),
+        }
+    }
+
+    // Get builder.
+    pub fn builder(&self) -> &Builder<'c> {
+        self.builders.last().unwrap()
+    }
+    // Push a new builder.
+    pub fn push_builder(&mut self) {
+        self.builders.push(self.context.create_builder());
+    }
+    // Pop a builder.
+    pub fn pop_builder(&mut self) {
+        self.builders.pop().unwrap();
+    }
+    // Get scope.
+    pub fn scope(&self) -> &LocalVariables<'c> {
+        self.scope.last().unwrap()
+    }
+    // Get mutable scope.
+    pub fn scope_mut(&mut self) -> &mut LocalVariables<'c> {
+        self.scope.last_mut().unwrap()
+    }
+    // Push a new scope.
+    pub fn push_scope(&mut self) {
+        self.scope.push(Default::default());
+    }
+    // Pop a scope
+    pub fn pop_scope(&mut self) {
+        self.scope.pop().unwrap();
     }
     pub fn get_var_retained_if_used_later(&mut self, var_name: &str) -> ExprCode<'c> {
-        let var = self.scope.get(var_name);
+        let var = self.scope().get(var_name);
         let code = var.code;
         if var.used_later > 0 {
             self.build_retain(code.ptr);
@@ -125,7 +165,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         if from.get_type() == to {
             from
         } else {
-            self.builder.build_pointer_cast(from, to, "pointer_cast")
+            self.builder().build_pointer_cast(from, to, "pointer_cast")
         }
     }
 
@@ -137,7 +177,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     // Get pointer to reference counter of a given object.
     pub fn build_ptr_to_refcnt(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         let ptr_control_block = self.build_ptr_to_control_block(obj);
-        self.builder
+        self.builder()
             .build_struct_gep(ptr_control_block, 0, "ptr_to_refcnt")
             .unwrap()
     }
@@ -148,7 +188,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             .build_load_field_of_obj(obj, control_block_type(self.context), 1)
             .into_pointer_value();
         let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
-        self.builder
+        self.builder()
             .build_call(dtor_func, &[obj.into()], "call_dtor");
     }
 
@@ -161,10 +201,10 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     ) -> BasicValueEnum<'c> {
         let ptr = self.build_pointer_cast(obj, ptr_type(ty));
         let ptr_to_field = self
-            .builder
+            .builder()
             .build_struct_gep(ptr, index, "ptr_to_field")
             .unwrap();
-        self.builder.build_load(ptr_to_field, "field_value")
+        self.builder().build_load(ptr_to_field, "field_value")
     }
 
     // Take an pointer of struct and store a value value into a pointer field.
@@ -179,10 +219,10 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     {
         let ptr = self.build_pointer_cast(obj, ptr_type(ty));
         let ptr_to_field = self
-            .builder
+            .builder()
             .build_struct_gep(ptr, index, "ptr_to_field")
             .unwrap();
-        self.builder.build_store(ptr_to_field, value);
+        self.builder().build_store(ptr_to_field, value);
     }
 
     // Take a closure object and return function pointer.
@@ -200,7 +240,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     ) -> ExprCode<'c> {
         let ptr_to_func = self.build_ptr_to_func_of_lambda(ptr_to_lambda);
         let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
-        let ret = self.builder.build_call(
+        let ret = self.builder().build_call(
             lambda_func,
             &[ptr_to_arg.into(), ptr_to_lambda.into()],
             "call_lambda",
@@ -239,7 +279,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         func: RuntimeFunctions,
         args: &[BasicMetadataValueEnum<'c>],
     ) -> CallSiteValue<'c> {
-        self.builder
+        self.builder()
             .build_call(*self.runtimes.get(&func).unwrap(), args, "call_runtime")
     }
 
@@ -270,9 +310,9 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
 
     // Evaluate application
     fn eval_app(&mut self, lambda: Arc<ExprInfo>, arg: Arc<ExprInfo>) -> ExprCode<'c> {
-        self.scope.increment_used_later(&arg.free_vars);
+        self.scope_mut().increment_used_later(&arg.free_vars);
         let lambda_code = self.eval_expr(lambda);
-        self.scope.decrement_used_later(&arg.free_vars);
+        self.scope_mut().decrement_used_later(&arg.free_vars);
         let arg_code = self.eval_expr(arg);
         self.build_app(lambda_code.ptr, arg_code.ptr)
     }
@@ -306,46 +346,48 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         let lam_fn = module.add_function("lambda", lam_fn_ty, None);
         // Implement lambda function
         {
-            // Create new builder
-            let builder = self.context.create_builder();
+            // Create new builder and set up
+            self.push_builder();
             let bb = context.append_basic_block(lam_fn, "entry");
-            builder.position_at_end(bb);
-            // Create new gc
-            let mut gc = GenerationContext {
-                context,
-                module,
-                builder: &builder,
-                scope: LocalVariables::default(),
-                runtimes: self.runtimes.clone(),
-            };
+            self.builder().position_at_end(bb);
+
+            // Create new scope
+            self.push_scope();
+
             // Set up new scope
             let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
-            gc.scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
+            self.scope_mut()
+                .push(&arg.name(), &ExprCode { ptr: arg_ptr });
             let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-            gc.scope.push(SELF_NAME, &ExprCode { ptr: closure_obj });
+            self.scope_mut()
+                .push(SELF_NAME, &ExprCode { ptr: closure_obj });
             for (i, cap_name) in captured_names.iter().enumerate() {
-                let cap_obj = gc
+                let cap_obj = self
                     .build_load_field_of_obj(closure_obj, closure_ty, i as u32 + 2)
                     .into_pointer_value();
-                gc.scope.push(cap_name, &ExprCode { ptr: cap_obj });
+                self.scope_mut().push(cap_name, &ExprCode { ptr: cap_obj });
             }
             // Retain captured objects
             for cap_name in &captured_names {
-                let ptr = gc.scope.get(cap_name).code.ptr;
-                gc.build_retain(ptr);
+                let ptr = self.scope().get(cap_name).code.ptr;
+                self.build_retain(ptr);
             }
             // Release SELF and arg if unused
             if !val.free_vars.contains(SELF_NAME) {
-                gc.build_release(closure_obj);
+                self.build_release(closure_obj);
             }
             if !val.free_vars.contains(arg.name()) {
-                gc.build_release(arg_ptr);
+                self.build_release(arg_ptr);
             }
             // Generate value
-            let val = gc.eval_expr(val.clone());
+            let val = self.eval_expr(val.clone());
             // Return result
-            let ptr = gc.build_pointer_cast(val.ptr, ptr_to_object_type(gc.context));
-            builder.build_return(Some(&ptr));
+            let ptr = self.build_pointer_cast(val.ptr, ptr_to_object_type(self.context));
+            self.builder().build_return(Some(&ptr));
+
+            // Pop context.
+            self.pop_scope();
+            self.pop_builder();
         }
         // Allocate and set up closure
         let name = lam(arg, val).expr.to_string();
@@ -374,15 +416,17 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         let var_name = var.name();
         let mut used_in_val_except_var = val.free_vars.clone();
         used_in_val_except_var.remove(var_name);
-        self.scope.increment_used_later(&used_in_val_except_var);
+        self.scope_mut()
+            .increment_used_later(&used_in_val_except_var);
         let bound_code = self.eval_expr(bound.clone());
-        self.scope.decrement_used_later(&used_in_val_except_var);
-        self.scope.push(&var_name, &bound_code);
+        self.scope_mut()
+            .decrement_used_later(&used_in_val_except_var);
+        self.scope_mut().push(&var_name, &bound_code);
         if !val.free_vars.contains(var_name) {
             self.build_release(bound_code.ptr);
         }
         let val_code = self.eval_expr(val.clone());
-        self.scope.pop(&var_name);
+        self.scope_mut().pop(&var_name);
         val_code
     }
 
@@ -395,48 +439,50 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     ) -> ExprCode<'c> {
         let mut used_then_or_else = then_expr.free_vars.clone();
         used_then_or_else.extend(else_expr.free_vars.clone());
-        self.scope.increment_used_later(&used_then_or_else);
+        self.scope_mut().increment_used_later(&used_then_or_else);
         let ptr_to_cond_obj = self.eval_expr(cond_expr).ptr;
-        self.scope.decrement_used_later(&used_then_or_else);
+        self.scope_mut().decrement_used_later(&used_then_or_else);
         let bool_ty = ObjectType::bool_obj_type().to_struct_type(self.context);
         let cond_val = self
             .build_load_field_of_obj(ptr_to_cond_obj, bool_ty, 1)
             .into_int_value();
         self.build_release(ptr_to_cond_obj);
         let cond_val =
-            self.builder
+            self.builder()
                 .build_int_cast(cond_val, self.context.bool_type(), "cond_val_i1");
-        let bb = self.builder.get_insert_block().unwrap();
+        let bb = self.builder().get_insert_block().unwrap();
         let func = bb.get_parent().unwrap();
         let then_bb = self.context.append_basic_block(func, "then");
         let else_bb = self.context.append_basic_block(func, "else");
         let cont_bb = self.context.append_basic_block(func, "cont");
-        self.builder
+        self.builder()
             .build_conditional_branch(cond_val, then_bb, else_bb);
 
-        self.builder.position_at_end(then_bb);
+        self.builder().position_at_end(then_bb);
         // Release variables used only in the else block.
         for var_name in &else_expr.free_vars {
-            if !then_expr.free_vars.contains(var_name) && self.scope.get(var_name).used_later == 0 {
-                self.build_release(self.scope.get(var_name).code.ptr);
+            if !then_expr.free_vars.contains(var_name) && self.scope().get(var_name).used_later == 0
+            {
+                self.build_release(self.scope().get(var_name).code.ptr);
             }
         }
         let then_code = self.eval_expr(then_expr.clone());
-        self.builder.build_unconditional_branch(cont_bb);
+        self.builder().build_unconditional_branch(cont_bb);
 
-        self.builder.position_at_end(else_bb);
+        self.builder().position_at_end(else_bb);
         // Release variables used only in the then block.
         for var_name in &then_expr.free_vars {
-            if !else_expr.free_vars.contains(var_name) && self.scope.get(var_name).used_later == 0 {
-                self.build_release(self.scope.get(var_name).code.ptr);
+            if !else_expr.free_vars.contains(var_name) && self.scope().get(var_name).used_later == 0
+            {
+                self.build_release(self.scope().get(var_name).code.ptr);
             }
         }
         let else_code = self.eval_expr(else_expr);
-        self.builder.build_unconditional_branch(cont_bb);
+        self.builder().build_unconditional_branch(cont_bb);
 
-        self.builder.position_at_end(cont_bb);
+        self.builder().position_at_end(cont_bb);
         let phi = self
-            .builder
+            .builder()
             .build_phi(ptr_to_object_type(self.context), "phi");
         phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
         let ret_ptr = phi.as_basic_value().into_pointer_value();

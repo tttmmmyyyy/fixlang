@@ -39,3 +39,6 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
     * use push_builder in generate_lam
     * remove ExprCode
     * naming convention of methods of GeneratorContext.
+    * start_function method
+    * increment_used_later -> lock_used_later
+    * builder / scope RAII and make pop()s private

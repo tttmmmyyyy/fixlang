@@ -30,21 +30,15 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
 
     let context = Context::create();
     let module = context.create_module("main");
-    let builder = context.create_builder();
-    let mut gc = GenerationContext {
-        context: &context,
-        module: &module,
-        builder: &builder,
-        scope: Default::default(),
-        runtimes: Default::default(),
-    };
+
+    let mut gc = GenerationContext::new(&context, &module);
     build_runtime(&mut gc);
 
     let main_fn_type = context.i64_type().fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
 
     let entry_bb = context.append_basic_block(main_function, "entry");
-    builder.position_at_end(entry_bb);
+    gc.builder().position_at_end(entry_bb);
 
     let program_result = gc.eval_expr(program);
     let int_obj_ptr = program_result.ptr;
@@ -59,7 +53,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     }
 
     if let BasicValueEnum::IntValue(value) = value {
-        builder.build_return(Some(&value));
+        gc.builder().build_return(Some(&value));
     } else {
         panic!("Given program doesn't return int value!");
     }

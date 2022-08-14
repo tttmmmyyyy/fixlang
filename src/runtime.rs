@@ -12,7 +12,7 @@ pub enum RuntimeFunctions {
     Dtor(ObjectType),
 }
 
-fn build_printf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+fn build_printf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
 
@@ -26,9 +26,7 @@ fn build_printf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> Func
     func
 }
 
-fn build_report_malloc_function<'c, 'm, 'b>(
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> FunctionValue<'c> {
+fn build_report_malloc_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let fn_ty = gc.context.i64_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
@@ -39,9 +37,7 @@ fn build_report_malloc_function<'c, 'm, 'b>(
     gc.module.add_function("report_malloc", fn_ty, None)
 }
 
-fn build_report_retain_function<'c, 'm, 'b>(
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> FunctionValue<'c> {
+fn build_report_retain_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let fn_ty = gc.context.void_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
@@ -53,9 +49,7 @@ fn build_report_retain_function<'c, 'm, 'b>(
     gc.module.add_function("report_retain", fn_ty, None)
 }
 
-fn build_report_release_function<'c, 'm, 'b>(
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> FunctionValue<'c> {
+fn build_report_release_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let fn_ty = gc.context.void_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
@@ -67,12 +61,12 @@ fn build_report_release_function<'c, 'm, 'b>(
     gc.module.add_function("report_release", fn_ty, None)
 }
 
-fn build_check_leak_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+fn build_check_leak_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let fn_ty = gc.context.void_type().fn_type(&[], false);
     gc.module.add_function("check_leak", fn_ty, None)
 }
 
-fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
     let void_type = context.void_type();
@@ -80,95 +74,97 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) -> 
     let retain_func = module.add_function("retain_obj", func_type, None);
     let bb = context.append_basic_block(retain_func, "entry");
 
-    let builder = context.create_builder();
-    let (mut new_gc, pop_gc) = gc.push_builder(&builder);
-    {
-        let gc = &mut new_gc;
-        builder.position_at_end(bb);
+    gc.push_builder();
+    gc.builder().position_at_end(bb);
 
-        // Get pointer to / value of reference counter.
-        let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
-        let ptr_to_refcnt = gc.build_ptr_to_refcnt(ptr_to_obj);
-        let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
+    // Get pointer to / value of reference counter.
+    let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
+    let ptr_to_refcnt = gc.build_ptr_to_refcnt(ptr_to_obj);
+    let refcnt = gc
+        .builder()
+        .build_load(ptr_to_refcnt, "refcnt")
+        .into_int_value();
 
-        // Report retain to sanitizer.
-        if SANITIZE_MEMORY {
-            let obj_id = gc.build_get_obj_id(ptr_to_obj);
-            gc.call_runtime(
-                RuntimeFunctions::ReportRetain,
-                &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
-            );
-        }
-
-        // Increment refcnt.
-        let one = context.i64_type().const_int(1, false);
-        let refcnt = builder.build_int_add(refcnt, one, "refcnt");
-        builder.build_store(ptr_to_refcnt, refcnt);
-        builder.build_return(None);
+    // Report retain to sanitizer.
+    if SANITIZE_MEMORY {
+        let obj_id = gc.build_get_obj_id(ptr_to_obj);
+        gc.call_runtime(
+            RuntimeFunctions::ReportRetain,
+            &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
+        );
     }
-    pop_gc(new_gc);
+
+    // Increment refcnt.
+    let one = context.i64_type().const_int(1, false);
+    let refcnt = gc.builder().build_int_add(refcnt, one, "refcnt");
+    gc.builder().build_store(ptr_to_refcnt, refcnt);
+    gc.builder().build_return(None);
+
+    gc.pop_builder();
     retain_func
     // TODO: Add fence instruction for incrementing refcnt
 }
 
-fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
+fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let void_type = gc.context.void_type();
     let func_type = void_type.fn_type(&[ptr_to_object_type(gc.context).into()], false);
     let release_func = gc.module.add_function("release_obj", func_type, None);
     let bb = gc.context.append_basic_block(release_func, "entry");
 
-    let builder = gc.context.create_builder();
-    let (mut new_gc, pop_gc) = gc.push_builder(&builder);
-    {
-        let gc = &mut new_gc;
-        builder.position_at_end(bb);
+    gc.push_builder();
+    gc.builder().position_at_end(bb);
 
-        // Get pointer to / value of reference counter.
-        let ptr_to_obj = release_func.get_first_param().unwrap().into_pointer_value();
-        let ptr_to_refcnt = gc.build_ptr_to_refcnt(ptr_to_obj);
-        let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
+    // Get pointer to / value of reference counter.
+    let ptr_to_obj = release_func.get_first_param().unwrap().into_pointer_value();
+    let ptr_to_refcnt = gc.build_ptr_to_refcnt(ptr_to_obj);
+    let refcnt = gc
+        .builder()
+        .build_load(ptr_to_refcnt, "refcnt")
+        .into_int_value();
 
-        // Report release to sanitizer.
-        if SANITIZE_MEMORY {
-            let obj_id = gc.build_get_obj_id(ptr_to_obj);
-            gc.call_runtime(
-                RuntimeFunctions::ReportRelease,
-                &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
-            );
-        }
-
-        // Decrement refcnt.
-        let one = gc.context.i64_type().const_int(1, false);
-        let refcnt = builder.build_int_sub(refcnt, one, "refcnt");
-        builder.build_store(ptr_to_refcnt, refcnt);
-
-        // Branch if refcnt is zero.
-        let zero = gc.context.i64_type().const_zero();
-        let is_refcnt_zero =
-            builder.build_int_compare(inkwell::IntPredicate::EQ, refcnt, zero, "is_refcnt_zero");
-        let then_bb = gc
-            .context
-            .append_basic_block(release_func, "refcnt_zero_after_release");
-        let cont_bb = gc.context.append_basic_block(release_func, "end");
-        builder.build_conditional_branch(is_refcnt_zero, then_bb, cont_bb);
-
-        // If refcnt is zero, then call dtor and free object.
-        builder.position_at_end(then_bb);
-        gc.build_call_dtor(ptr_to_obj);
-        builder.build_free(ptr_to_obj);
-        builder.build_unconditional_branch(cont_bb);
-
-        // End function.
-        builder.position_at_end(cont_bb);
-        builder.build_return(None);
+    // Report release to sanitizer.
+    if SANITIZE_MEMORY {
+        let obj_id = gc.build_get_obj_id(ptr_to_obj);
+        gc.call_runtime(
+            RuntimeFunctions::ReportRelease,
+            &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
+        );
     }
-    pop_gc(new_gc);
+
+    // Decrement refcnt.
+    let one = gc.context.i64_type().const_int(1, false);
+    let refcnt = gc.builder().build_int_sub(refcnt, one, "refcnt");
+    gc.builder().build_store(ptr_to_refcnt, refcnt);
+
+    // Branch if refcnt is zero.
+    let zero = gc.context.i64_type().const_zero();
+    let is_refcnt_zero =
+        gc.builder()
+            .build_int_compare(inkwell::IntPredicate::EQ, refcnt, zero, "is_refcnt_zero");
+    let then_bb = gc
+        .context
+        .append_basic_block(release_func, "refcnt_zero_after_release");
+    let cont_bb = gc.context.append_basic_block(release_func, "end");
+    gc.builder()
+        .build_conditional_branch(is_refcnt_zero, then_bb, cont_bb);
+
+    // If refcnt is zero, then call dtor and free object.
+    gc.builder().position_at_end(then_bb);
+    gc.build_call_dtor(ptr_to_obj);
+    gc.builder().build_free(ptr_to_obj);
+    gc.builder().build_unconditional_branch(cont_bb);
+
+    // End function.
+    gc.builder().position_at_end(cont_bb);
+    gc.builder().build_return(None);
+
+    gc.pop_builder();
     release_func
     // TODO: Add fence instruction for incrementing refcnt
     // TODO: Add code for leak detector
 }
 
-pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) {
+pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     gc.runtimes
         .insert(RuntimeFunctions::Printf, build_printf_function(gc));
     if SANITIZE_MEMORY {
