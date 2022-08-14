@@ -33,6 +33,5 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
         * int_obj_type and bool_obj_type
         * take gc instead of context.
     * move literal generator to somewhere
-    * start_function method
+    * start_function method of GC
     * RAII of lock_used_later
-    * remove name of ExprInfo

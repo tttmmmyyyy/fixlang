@@ -269,8 +269,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Take a closure object and return function pointer.
     fn get_lambda_func_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
-        let lam_obj_ty = ObjectType::lam_obj_type().to_struct_type(self.context);
-        self.load_obj_field(obj, lam_obj_ty, 1).into_pointer_value()
+        let lam_ty = lambda_type(self.context);
+        self.load_obj_field(obj, lam_ty, 1).into_pointer_value()
     }
 
     // Apply a object to a closure.
