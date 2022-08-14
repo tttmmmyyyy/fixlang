@@ -46,7 +46,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     let entry_bb = context.append_basic_block(main_function, "entry");
     builder.position_at_end(entry_bb);
 
-    let program_result = generate_expr(program, &mut gc);
+    let program_result = gc.eval_expr(program);
     let int_obj_ptr = program_result.ptr;
 
     let int_obj_ty = ObjectType::int_obj_type().to_struct_type(&context);

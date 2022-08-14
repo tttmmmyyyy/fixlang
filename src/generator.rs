@@ -241,36 +241,39 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         self.builder
             .build_call(*self.runtimes.get(&func).unwrap(), args, "call_runtime")
     }
+
+    // Evaluate expression.
+    pub fn eval_expr(&mut self, expr: Arc<ExprInfo>) -> ExprCode<'c> {
+        let mut ret = match &*expr.expr {
+            Expr::Var(var) => self.eval_var(var.clone()),
+            Expr::Lit(lit) => generate_literal(lit.clone(), self),
+            Expr::App(lambda, arg) => generate_app(lambda.clone(), arg.clone(), self),
+            Expr::Lam(arg, val) => generate_lam(arg.clone(), val.clone(), self),
+            Expr::Let(var, bound, expr) => {
+                generate_let(var.clone(), bound.clone(), expr.clone(), self)
+            }
+            Expr::If(cond_expr, then_expr, else_expr) => generate_if(
+                cond_expr.clone(),
+                then_expr.clone(),
+                else_expr.clone(),
+                self,
+            ),
+            Expr::Type(_) => todo!(),
+        };
+        ret.ptr = self.build_pointer_cast(ret.ptr, ptr_to_object_type(self.context));
+        ret
+    }
+    // Evaluate variable.
+    fn eval_var(&mut self, var: Arc<Var>) -> ExprCode<'c> {
+        match &*var {
+            Var::TermVar { name } => self.get_var_retained_if_used_later(name),
+            Var::TyVar { name: _ } => unreachable!(),
+        }
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
     ty.ptr_type(AddressSpace::Generic)
-}
-
-pub fn generate_expr<'c, 'm, 'b>(
-    expr: Arc<ExprInfo>,
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> ExprCode<'c> {
-    let mut ret = match &*expr.expr {
-        Expr::Var(var) => generate_var(var.clone(), gc),
-        Expr::Lit(lit) => generate_literal(lit.clone(), gc),
-        Expr::App(lambda, arg) => generate_app(lambda.clone(), arg.clone(), gc),
-        Expr::Lam(arg, val) => generate_lam(arg.clone(), val.clone(), gc),
-        Expr::Let(var, bound, expr) => generate_let(var.clone(), bound.clone(), expr.clone(), gc),
-        Expr::If(cond_expr, then_expr, else_expr) => {
-            generate_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), gc)
-        }
-        Expr::Type(_) => todo!(),
-    };
-    ret.ptr = gc.build_pointer_cast(ret.ptr, ptr_to_object_type(gc.context));
-    ret
-}
-
-fn generate_var<'c, 'm, 'b>(var: Arc<Var>, gc: &mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c> {
-    match &*var {
-        Var::TermVar { name } => gc.get_var_retained_if_used_later(name),
-        Var::TyVar { name: _ } => unreachable!(),
-    }
 }
 
 fn generate_app<'c, 'm, 'b>(
@@ -279,9 +282,9 @@ fn generate_app<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
     gc.scope.increment_used_later(&arg.free_vars);
-    let lambda_code = generate_expr(lambda, gc);
+    let lambda_code = gc.eval_expr(lambda);
     gc.scope.decrement_used_later(&arg.free_vars);
-    let arg_code = generate_expr(arg, gc);
+    let arg_code = gc.eval_expr(arg);
     gc.build_app(lambda_code.ptr, arg_code.ptr)
     // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
 }
@@ -358,7 +361,7 @@ fn generate_lam<'c, 'm, 'b>(
             gc.build_release(arg_ptr);
         }
         // Generate value
-        let val = generate_expr(val.clone(), &mut gc);
+        let val = gc.eval_expr(val.clone());
         // Return result
         let ptr = gc.build_pointer_cast(val.ptr, ptr_to_object_type(gc.context));
         builder.build_return(Some(&ptr));
@@ -390,13 +393,13 @@ fn generate_let<'c, 'm, 'b>(
     let mut used_in_val_except_var = val.free_vars.clone();
     used_in_val_except_var.remove(var_name);
     gc.scope.increment_used_later(&used_in_val_except_var);
-    let bound_code = generate_expr(bound.clone(), gc);
+    let bound_code = gc.eval_expr(bound.clone());
     gc.scope.decrement_used_later(&used_in_val_except_var);
     gc.scope.push(&var_name, &bound_code);
     if !val.free_vars.contains(var_name) {
         gc.build_release(bound_code.ptr);
     }
-    let val_code = generate_expr(val.clone(), gc);
+    let val_code = gc.eval_expr(val.clone());
     gc.scope.pop(&var_name);
     val_code
 }
@@ -410,7 +413,7 @@ fn generate_if<'c, 'm, 'b>(
     let mut used_then_or_else = then_expr.free_vars.clone();
     used_then_or_else.extend(else_expr.free_vars.clone());
     gc.scope.increment_used_later(&used_then_or_else);
-    let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
+    let ptr_to_cond_obj = gc.eval_expr(cond_expr).ptr;
     gc.scope.decrement_used_later(&used_then_or_else);
     let bool_ty = ObjectType::bool_obj_type().to_struct_type(gc.context);
     let cond_val = gc
@@ -435,7 +438,7 @@ fn generate_if<'c, 'm, 'b>(
             gc.build_release(gc.scope.get(var_name).code.ptr);
         }
     }
-    let then_code = generate_expr(then_expr.clone(), gc);
+    let then_code = gc.eval_expr(then_expr.clone());
     gc.builder.build_unconditional_branch(cont_bb);
 
     gc.builder.position_at_end(else_bb);
@@ -445,7 +448,7 @@ fn generate_if<'c, 'm, 'b>(
             gc.build_release(gc.scope.get(var_name).code.ptr);
         }
     }
-    let else_code = generate_expr(else_expr, gc);
+    let else_code = gc.eval_expr(else_expr);
     gc.builder.build_unconditional_branch(cont_bb);
 
     gc.builder.position_at_end(cont_bb);
