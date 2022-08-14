@@ -238,7 +238,7 @@ pub fn test21() {
 #[test]
 #[serial]
 pub fn test22() {
-    let n = 1000000;
+    let n = 100000;
     let source = format!(
         r"
                 let g = fix \f -> \a -> \x -> 
