@@ -94,10 +94,9 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) -> 
         // Report retain to sanitizer.
         if SANITIZE_MEMORY {
             let obj_id = gc.build_get_obj_id(ptr_to_obj);
-            builder.build_call(
-                *gc.runtimes.get(&RuntimeFunctions::ReportRetain).unwrap(),
+            gc.call_runtime(
+                RuntimeFunctions::ReportRetain,
                 &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
-                "call_report_retain",
             );
         }
 
