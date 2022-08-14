@@ -174,23 +174,6 @@ fn generate_func_release_obj<'c, 'm, 'b>(
     // TODO: Add code for leak detector
 }
 
-fn generate_func_empty_destructor<'c, 'm, 'b>(
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> FunctionValue<'c> {
-    let context = gc.context;
-    let module = gc.module;
-    let void_type = context.void_type();
-    let ptr_to_obj_type = context.i64_type().ptr_type(AddressSpace::Generic);
-    let func_type = void_type.fn_type(&[ptr_to_obj_type.into()], false);
-    let func = module.add_function("empty_destructor", func_type, None);
-    let bb = context.append_basic_block(func, "entry");
-    let builder = context.create_builder();
-    builder.position_at_end(bb);
-    builder.build_return(None);
-
-    func
-}
-
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) {
     gc.runtimes
         .insert(RuntimeFunctions::Printf, generate_func_printf(gc));
