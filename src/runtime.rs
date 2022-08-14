@@ -191,25 +191,7 @@ fn generate_func_empty_destructor<'c, 'm, 'b>(
     func
 }
 
-fn generate_func_dtor<'c, 'm, 'b>(
-    obj_type: StructType<'c>,
-    subobj_indices: &[i32],
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> FunctionValue<'c> {
-    let context = gc.context;
-    let module = gc.module;
-    let void_type = context.void_type();
-    let ptr_to_obj_type = obj_type.ptr_type(AddressSpace::Generic);
-    let func_type = void_type.fn_type(&[ptr_to_obj_type.into()], false);
-    let func = module.add_function("destructor", func_type, None); // TODO: give appropriate name
-    let bb = context.append_basic_block(func, "entry");
-    let builder = context.create_builder();
-    builder.position_at_end(bb);
-    builder.build_return(None);
-    func
-}
-
-pub fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) {
+pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) {
     gc.runtimes
         .insert(RuntimeFunctions::Printf, generate_func_printf(gc));
     if SANITIZE_MEMORY {

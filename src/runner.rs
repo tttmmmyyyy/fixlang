@@ -38,7 +38,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
         scope: Default::default(),
         runtimes: Default::default(),
     };
-    generate_system_functions(&mut gc);
+    build_runtime(&mut gc);
 
     let main_fn_type = context.i64_type().fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
