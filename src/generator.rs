@@ -412,12 +412,6 @@ fn generate_if<'c, 'm, 'b>(
     ExprCode { ptr: ret_ptr }
 }
 
-fn generate_clear_object<'c, 'm, 'b>(obj: PointerValue<'c>, gc: &GenerationContext<'c, 'm, 'b>) {
-    let builder = gc.builder;
-    let ptr_to_refcnt = builder.build_struct_gep(obj, 0, "ptr_to_refcnt").unwrap();
-    builder.build_store(ptr_to_refcnt, gc.context.i64_type().const_zero());
-}
-
 fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
     obj: PointerValue<'c>,
     gc: &GenerationContext<'c, 'm, 'b>,
