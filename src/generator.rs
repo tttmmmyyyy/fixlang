@@ -119,6 +119,18 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         }
         code
     }
+    fn build_pointer_cast(&self, from: PointerValue<'c>, to: StructType<'c>) -> PointerValue<'c> {
+        let to = to_ptr_type(to);
+        if from.get_type() == to {
+            from
+        } else {
+            self.builder.build_pointer_cast(from, to, "pointer_cast")
+        }
+    }
+}
+
+pub fn to_ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
+    ty.ptr_type(AddressSpace::Generic)
 }
 
 pub fn generate_expr<'c, 'm, 'b>(
