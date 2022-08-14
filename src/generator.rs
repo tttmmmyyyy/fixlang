@@ -154,12 +154,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Lock variables in scope from moved out.
-    fn scope_increment_used_later(self: &mut Self, names: &HashSet<String>) {
+    fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<String>) {
         self.scope
             .borrow_mut()
             .last_mut()
             .unwrap()
             .increment_used_later(names);
+    }
+
+    // Release lock variables in scope from moved out.
+    fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<String>) {
+        self.scope
+            .borrow_mut()
+            .last_mut()
+            .unwrap()
+            .decrement_used_later(names);
     }
 
     // Get field of object in the scope.
@@ -174,15 +183,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .last()
             .unwrap()
             .get_field(var_name, field_idx, ty, self)
-    }
-
-    // Release lock variables in scope from moved out.
-    fn scope_decrement_used_later(self: &mut Self, names: &HashSet<String>) {
-        self.scope
-            .borrow_mut()
-            .last_mut()
-            .unwrap()
-            .decrement_used_later(names);
     }
 
     // Push scope.
@@ -361,9 +361,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate application
     fn eval_app(&mut self, lambda: Arc<ExprInfo>, arg: Arc<ExprInfo>) -> ExprCode<'c> {
-        self.scope_increment_used_later(&arg.free_vars);
+        self.scope_lock_as_used_later(&arg.free_vars);
         let lambda_code = self.eval_expr(lambda);
-        self.scope_decrement_used_later(&arg.free_vars);
+        self.scope_unlock_as_used_later(&arg.free_vars);
         let arg_code = self.eval_expr(arg);
         self.build_app(lambda_code.ptr, arg_code.ptr)
     }
@@ -461,9 +461,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let var_name = var.name();
         let mut used_in_val_except_var = val.free_vars.clone();
         used_in_val_except_var.remove(var_name);
-        self.scope_increment_used_later(&used_in_val_except_var);
+        self.scope_lock_as_used_later(&used_in_val_except_var);
         let bound_code = self.eval_expr(bound.clone());
-        self.scope_decrement_used_later(&used_in_val_except_var);
+        self.scope_unlock_as_used_later(&used_in_val_except_var);
         self.scope_push(&var_name, &bound_code);
         if !val.free_vars.contains(var_name) {
             self.build_release(bound_code.ptr);
@@ -482,9 +482,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     ) -> ExprCode<'c> {
         let mut used_then_or_else = then_expr.free_vars.clone();
         used_then_or_else.extend(else_expr.free_vars.clone());
-        self.scope_increment_used_later(&used_then_or_else);
+        self.scope_lock_as_used_later(&used_then_or_else);
         let ptr_to_cond_obj = self.eval_expr(cond_expr).ptr;
-        self.scope_decrement_used_later(&used_then_or_else);
+        self.scope_unlock_as_used_later(&used_then_or_else);
         let bool_ty = ObjectType::bool_obj_type().to_struct_type(self.context);
         let cond_val = self
             .build_load_field_of_obj(ptr_to_cond_obj, bool_ty, 1)

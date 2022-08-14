@@ -40,5 +40,4 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
     * remove ExprCode
     * naming convention of methods of GeneratorContext.
     * start_function method
-    * increment_used_later -> lock_used_later
-    * builder / scope RAII and make pop()s private
+    * RAII of lock_used_later
