@@ -163,6 +163,18 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             .unwrap();
         self.builder.build_load(ptr_to_field, "field_value")
     }
+
+    // Take an pointer of struct and store a value value into a pointer field.
+    pub fn build_set_field<V>(&self, obj: PointerValue<'c>, index: u32, value: V)
+    where
+        V: BasicValue<'c>,
+    {
+        let ptr_to_field = self
+            .builder
+            .build_struct_gep(obj, index, "ptr_to_field")
+            .unwrap();
+        self.builder.build_store(ptr_to_field, value);
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
@@ -305,10 +317,10 @@ fn generate_lam<'c, 'm, 'b>(
     // Allocate and set up closure
     let name = lam(arg, val).expr.to_string();
     let obj = obj_type.build_allocate_shared_obj(gc, Some(name.as_str()));
-    build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value(), gc);
+    gc.build_set_field(obj, 1, lam_fn.as_global_value().as_pointer_value());
     for (i, cap) in captured_names.iter().enumerate() {
         let ptr = gc.get_var_retained_if_used_later(cap).ptr;
-        build_set_field(obj, i as u32 + 2, ptr, gc);
+        gc.build_set_field(obj, i as u32 + 2, ptr);
     }
     // Return closure object
     ExprCode { ptr: obj }
@@ -393,21 +405,6 @@ fn generate_clear_object<'c, 'm, 'b>(obj: PointerValue<'c>, gc: &GenerationConte
     let builder = gc.builder;
     let ptr_to_refcnt = builder.build_struct_gep(obj, 0, "ptr_to_refcnt").unwrap();
     builder.build_store(ptr_to_refcnt, gc.context.i64_type().const_zero());
-}
-
-pub fn build_set_field<'c, 'm, 'b, V>(
-    obj: PointerValue<'c>,
-    index: u32,
-    value: V,
-    gc: &GenerationContext<'c, 'm, 'b>,
-) where
-    V: BasicValue<'c>,
-{
-    let builder = gc.builder;
-    let ptr_to_field = builder
-        .build_struct_gep(obj, index, "ptr_to_field")
-        .unwrap();
-    builder.build_store(ptr_to_field, value);
 }
 
 fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
