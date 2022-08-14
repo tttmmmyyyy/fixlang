@@ -87,7 +87,7 @@ pub struct GenerationContext<'c, 'm, 'b> {
     pub module: &'m Module<'c>,
     pub builder: &'b Builder<'c>,
     pub scope: LocalVariables<'c>,
-    pub system_functions: HashMap<SystemFunctions, FunctionValue<'c>>,
+    pub system_functions: HashMap<RuntimeFunctions, FunctionValue<'c>>,
 }
 
 impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
@@ -411,7 +411,7 @@ fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c,
     }
     gc.builder.build_call(
         *gc.system_functions
-            .get(&SystemFunctions::RetainObj)
+            .get(&RuntimeFunctions::RetainObj)
             .unwrap(),
         &[ptr_to_obj.clone().into()],
         "retain",
@@ -424,7 +424,7 @@ pub fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContex
     }
     gc.builder.build_call(
         *gc.system_functions
-            .get(&SystemFunctions::ReleaseObj)
+            .get(&RuntimeFunctions::ReleaseObj)
             .unwrap(),
         &[ptr_to_obj.into()],
         "release",
@@ -464,7 +464,7 @@ fn build_debug_printf<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>)
     let builder = gc.builder;
     let system_functions = &gc.system_functions;
     let string_ptr = builder.build_global_string_ptr(msg, "debug_printf");
-    let printf_func = *system_functions.get(&SystemFunctions::Printf).unwrap();
+    let printf_func = *system_functions.get(&RuntimeFunctions::Printf).unwrap();
     builder.build_call(
         printf_func,
         &[string_ptr.as_pointer_value().into()],

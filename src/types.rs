@@ -87,11 +87,11 @@ impl ObjectType {
     ) -> FunctionValue<'c> {
         if gc
             .system_functions
-            .contains_key(&SystemFunctions::Dtor(self.clone()))
+            .contains_key(&RuntimeFunctions::Dtor(self.clone()))
         {
             return *gc
                 .system_functions
-                .get(&SystemFunctions::Dtor(self.clone()))
+                .get(&RuntimeFunctions::Dtor(self.clone()))
                 .unwrap();
         }
         let struct_type = self.to_struct_type(gc.context);
@@ -133,7 +133,7 @@ impl ObjectType {
             builder.build_return(None);
         }
         gc.system_functions
-            .insert(SystemFunctions::Dtor(self.clone()), func);
+            .insert(RuntimeFunctions::Dtor(self.clone()), func);
         func
     }
 
@@ -166,7 +166,7 @@ impl ObjectType {
             );
             let obj_id = builder.build_call(
                 *gc.system_functions
-                    .get(&SystemFunctions::ReportMalloc)
+                    .get(&RuntimeFunctions::ReportMalloc)
                     .unwrap(),
                 &[ptr.into(), string_ptr.into()],
                 "call_report_malloc",

@@ -13,11 +13,6 @@ source_filename = "main"
 @name_of_obj.18 = private unnamed_addr constant [2 x i8] c"3\00", align 1
 @name_of_obj.20 = private unnamed_addr constant [2 x i8] c"5\00", align 1
 
-define void @empty_destructor(i64* %0) {
-entry:
-  ret void
-}
-
 declare i32 @printf(i8*, ...)
 
 declare i64 @report_malloc(i8*, i8*)

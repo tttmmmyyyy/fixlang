@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Eq, Hash, PartialEq, Clone)]
-pub enum SystemFunctions {
+pub enum RuntimeFunctions {
     Printf,
     ReportMalloc,
     ReportRetain,
@@ -10,7 +10,6 @@ pub enum SystemFunctions {
     PrintIntObj,
     RetainObj,
     ReleaseObj,
-    EmptyDestructor,
     Dtor(ObjectType),
 }
 
@@ -97,7 +96,7 @@ fn generate_func_print_int_obj<'c, 'm, 'b>(
         .build_load(int_field_ptr, "int_val")
         .into_int_value();
     let string_ptr = builder.build_global_string_ptr("%lld\n", "int_placefolder");
-    let printf_func = *system_functions.get(&SystemFunctions::Printf).unwrap();
+    let printf_func = *system_functions.get(&RuntimeFunctions::Printf).unwrap();
     builder.build_call(
         printf_func,
         &[string_ptr.as_pointer_value().into(), int_val.into()],
@@ -138,7 +137,7 @@ fn generate_func_retain_obj<'c, 'm, 'b>(
             let objid = build_get_objid(ptr_to_obj, gc);
             builder.build_call(
                 *gc.system_functions
-                    .get(&SystemFunctions::ReportRetain)
+                    .get(&RuntimeFunctions::ReportRetain)
                     .unwrap(),
                 &[ptr_to_obj.into(), objid.into(), refcnt.into()],
                 "call_report_retain",
@@ -183,7 +182,7 @@ fn generate_func_release_obj<'c, 'm, 'b>(
             let objid = build_get_objid(ptr_to_obj, gc);
             gc.builder.build_call(
                 *gc.system_functions
-                    .get(&SystemFunctions::ReportRelease)
+                    .get(&RuntimeFunctions::ReportRelease)
                     .unwrap(),
                 &[ptr_to_obj.into(), objid.into(), refcnt.into()],
                 "report_release_call",
@@ -262,36 +261,32 @@ fn generate_func_dtor<'c, 'm, 'b>(
 }
 
 pub fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) {
-    gc.system_functions.insert(
-        SystemFunctions::EmptyDestructor,
-        generate_func_empty_destructor(gc),
-    );
     gc.system_functions
-        .insert(SystemFunctions::Printf, generate_func_printf(gc));
+        .insert(RuntimeFunctions::Printf, generate_func_printf(gc));
     if SANITIZE_MEMORY {
         gc.system_functions.insert(
-            SystemFunctions::ReportMalloc,
+            RuntimeFunctions::ReportMalloc,
             generate_func_report_malloc(gc),
         );
         gc.system_functions.insert(
-            SystemFunctions::ReportRetain,
+            RuntimeFunctions::ReportRetain,
             generate_func_report_retain(gc),
         );
         gc.system_functions.insert(
-            SystemFunctions::ReportRelease,
+            RuntimeFunctions::ReportRelease,
             generate_func_report_release(gc),
         );
         gc.system_functions
-            .insert(SystemFunctions::CheckLeak, generate_check_leak(gc));
+            .insert(RuntimeFunctions::CheckLeak, generate_check_leak(gc));
     }
     gc.system_functions.insert(
-        SystemFunctions::PrintIntObj,
+        RuntimeFunctions::PrintIntObj,
         generate_func_print_int_obj(gc),
     );
     let retain_func = generate_func_retain_obj(gc);
     gc.system_functions
-        .insert(SystemFunctions::RetainObj, retain_func);
+        .insert(RuntimeFunctions::RetainObj, retain_func);
     let release_func = generate_func_release_obj(gc);
     gc.system_functions
-        .insert(SystemFunctions::ReleaseObj, release_func);
+        .insert(RuntimeFunctions::ReleaseObj, release_func);
 }

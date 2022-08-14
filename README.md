@@ -30,3 +30,5 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
 
 * Refactoring:
     * system_functions -> runtimes
+    * make call of SystemFunctions more easily
+    * move builder functions to method of GenerationContext

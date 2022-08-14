@@ -62,7 +62,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
         // Perform leak check
         let check_leak = *gc
             .system_functions
-            .get(&SystemFunctions::CheckLeak)
+            .get(&RuntimeFunctions::CheckLeak)
             .unwrap();
         gc.builder.build_call(check_leak, &[], "check_leak");
     }
