@@ -250,12 +250,9 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone()),
             Expr::Lam(arg, val) => self.eval_lam(arg.clone(), val.clone()),
             Expr::Let(var, bound, expr) => self.eval_let(var.clone(), bound.clone(), expr.clone()),
-            Expr::If(cond_expr, then_expr, else_expr) => generate_if(
-                cond_expr.clone(),
-                then_expr.clone(),
-                else_expr.clone(),
-                self,
-            ),
+            Expr::If(cond_expr, then_expr, else_expr) => {
+                self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone())
+            }
             Expr::Type(_) => todo!(),
         };
         ret.ptr = self.build_pointer_cast(ret.ptr, ptr_to_object_type(self.context));
@@ -387,6 +384,63 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         self.scope.pop(&var_name);
         val_code
     }
+
+    // Evaluate if
+    fn eval_if(
+        &mut self,
+        cond_expr: Arc<ExprInfo>,
+        then_expr: Arc<ExprInfo>,
+        else_expr: Arc<ExprInfo>,
+    ) -> ExprCode<'c> {
+        let mut used_then_or_else = then_expr.free_vars.clone();
+        used_then_or_else.extend(else_expr.free_vars.clone());
+        self.scope.increment_used_later(&used_then_or_else);
+        let ptr_to_cond_obj = self.eval_expr(cond_expr).ptr;
+        self.scope.decrement_used_later(&used_then_or_else);
+        let bool_ty = ObjectType::bool_obj_type().to_struct_type(self.context);
+        let cond_val = self
+            .build_load_field_of_obj(ptr_to_cond_obj, bool_ty, 1)
+            .into_int_value();
+        self.build_release(ptr_to_cond_obj);
+        let cond_val =
+            self.builder
+                .build_int_cast(cond_val, self.context.bool_type(), "cond_val_i1");
+        let bb = self.builder.get_insert_block().unwrap();
+        let func = bb.get_parent().unwrap();
+        let then_bb = self.context.append_basic_block(func, "then");
+        let else_bb = self.context.append_basic_block(func, "else");
+        let cont_bb = self.context.append_basic_block(func, "cont");
+        self.builder
+            .build_conditional_branch(cond_val, then_bb, else_bb);
+
+        self.builder.position_at_end(then_bb);
+        // Release variables used only in the else block.
+        for var_name in &else_expr.free_vars {
+            if !then_expr.free_vars.contains(var_name) && self.scope.get(var_name).used_later == 0 {
+                self.build_release(self.scope.get(var_name).code.ptr);
+            }
+        }
+        let then_code = self.eval_expr(then_expr.clone());
+        self.builder.build_unconditional_branch(cont_bb);
+
+        self.builder.position_at_end(else_bb);
+        // Release variables used only in the then block.
+        for var_name in &then_expr.free_vars {
+            if !else_expr.free_vars.contains(var_name) && self.scope.get(var_name).used_later == 0 {
+                self.build_release(self.scope.get(var_name).code.ptr);
+            }
+        }
+        let else_code = self.eval_expr(else_expr);
+        self.builder.build_unconditional_branch(cont_bb);
+
+        self.builder.position_at_end(cont_bb);
+        let phi = self
+            .builder
+            .build_phi(ptr_to_object_type(self.context), "phi");
+        phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
+        let ret_ptr = phi.as_basic_value().into_pointer_value();
+        ExprCode { ptr: ret_ptr }
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
@@ -394,57 +448,3 @@ pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
 }
 
 pub static SELF_NAME: &str = "%SELF%";
-
-fn generate_if<'c, 'm, 'b>(
-    cond_expr: Arc<ExprInfo>,
-    then_expr: Arc<ExprInfo>,
-    else_expr: Arc<ExprInfo>,
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> ExprCode<'c> {
-    let mut used_then_or_else = then_expr.free_vars.clone();
-    used_then_or_else.extend(else_expr.free_vars.clone());
-    gc.scope.increment_used_later(&used_then_or_else);
-    let ptr_to_cond_obj = gc.eval_expr(cond_expr).ptr;
-    gc.scope.decrement_used_later(&used_then_or_else);
-    let bool_ty = ObjectType::bool_obj_type().to_struct_type(gc.context);
-    let cond_val = gc
-        .build_load_field_of_obj(ptr_to_cond_obj, bool_ty, 1)
-        .into_int_value();
-    gc.build_release(ptr_to_cond_obj);
-    let cond_val = gc
-        .builder
-        .build_int_cast(cond_val, gc.context.bool_type(), "cond_val_i1");
-    let bb = gc.builder.get_insert_block().unwrap();
-    let func = bb.get_parent().unwrap();
-    let then_bb = gc.context.append_basic_block(func, "then");
-    let else_bb = gc.context.append_basic_block(func, "else");
-    let cont_bb = gc.context.append_basic_block(func, "cont");
-    gc.builder
-        .build_conditional_branch(cond_val, then_bb, else_bb);
-
-    gc.builder.position_at_end(then_bb);
-    // Release variables used only in the else block.
-    for var_name in &else_expr.free_vars {
-        if !then_expr.free_vars.contains(var_name) && gc.scope.get(var_name).used_later == 0 {
-            gc.build_release(gc.scope.get(var_name).code.ptr);
-        }
-    }
-    let then_code = gc.eval_expr(then_expr.clone());
-    gc.builder.build_unconditional_branch(cont_bb);
-
-    gc.builder.position_at_end(else_bb);
-    // Release variables used only in the then block.
-    for var_name in &then_expr.free_vars {
-        if !else_expr.free_vars.contains(var_name) && gc.scope.get(var_name).used_later == 0 {
-            gc.build_release(gc.scope.get(var_name).code.ptr);
-        }
-    }
-    let else_code = gc.eval_expr(else_expr);
-    gc.builder.build_unconditional_branch(cont_bb);
-
-    gc.builder.position_at_end(cont_bb);
-    let phi = gc.builder.build_phi(ptr_to_object_type(gc.context), "phi");
-    phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
-    let ret_ptr = phi.as_basic_value().into_pointer_value();
-    ExprCode { ptr: ret_ptr }
-}
