@@ -78,7 +78,7 @@ fn generate_func_print_int_obj<'c, 'm, 'b>(
 ) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
-    let system_functions = &gc.system_functions;
+    let system_functions = &gc.runtimes;
     let void_type = context.void_type();
     let int_obj_type = ObjectType::int_obj_type().to_struct_type(context);
     let int_obj_ptr_type = int_obj_type.ptr_type(AddressSpace::Generic);
@@ -136,9 +136,7 @@ fn generate_func_retain_obj<'c, 'm, 'b>(
         if SANITIZE_MEMORY {
             let objid = build_get_objid(ptr_to_obj, gc);
             builder.build_call(
-                *gc.system_functions
-                    .get(&RuntimeFunctions::ReportRetain)
-                    .unwrap(),
+                *gc.runtimes.get(&RuntimeFunctions::ReportRetain).unwrap(),
                 &[ptr_to_obj.into(), objid.into(), refcnt.into()],
                 "call_report_retain",
             );
@@ -181,9 +179,7 @@ fn generate_func_release_obj<'c, 'm, 'b>(
         if SANITIZE_MEMORY {
             let objid = build_get_objid(ptr_to_obj, gc);
             gc.builder.build_call(
-                *gc.system_functions
-                    .get(&RuntimeFunctions::ReportRelease)
-                    .unwrap(),
+                *gc.runtimes.get(&RuntimeFunctions::ReportRelease).unwrap(),
                 &[ptr_to_obj.into(), objid.into(), refcnt.into()],
                 "report_release_call",
             );
@@ -261,32 +257,31 @@ fn generate_func_dtor<'c, 'm, 'b>(
 }
 
 pub fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) {
-    gc.system_functions
+    gc.runtimes
         .insert(RuntimeFunctions::Printf, generate_func_printf(gc));
     if SANITIZE_MEMORY {
-        gc.system_functions.insert(
+        gc.runtimes.insert(
             RuntimeFunctions::ReportMalloc,
             generate_func_report_malloc(gc),
         );
-        gc.system_functions.insert(
+        gc.runtimes.insert(
             RuntimeFunctions::ReportRetain,
             generate_func_report_retain(gc),
         );
-        gc.system_functions.insert(
+        gc.runtimes.insert(
             RuntimeFunctions::ReportRelease,
             generate_func_report_release(gc),
         );
-        gc.system_functions
+        gc.runtimes
             .insert(RuntimeFunctions::CheckLeak, generate_check_leak(gc));
     }
-    gc.system_functions.insert(
+    gc.runtimes.insert(
         RuntimeFunctions::PrintIntObj,
         generate_func_print_int_obj(gc),
     );
     let retain_func = generate_func_retain_obj(gc);
-    gc.system_functions
-        .insert(RuntimeFunctions::RetainObj, retain_func);
+    gc.runtimes.insert(RuntimeFunctions::RetainObj, retain_func);
     let release_func = generate_func_release_obj(gc);
-    gc.system_functions
+    gc.runtimes
         .insert(RuntimeFunctions::ReleaseObj, release_func);
 }

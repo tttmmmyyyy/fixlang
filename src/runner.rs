@@ -36,7 +36,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
         module: &module,
         builder: &builder,
         scope: Default::default(),
-        system_functions: Default::default(),
+        runtimes: Default::default(),
     };
     generate_system_functions(&mut gc);
 
@@ -60,10 +60,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
 
     if SANITIZE_MEMORY {
         // Perform leak check
-        let check_leak = *gc
-            .system_functions
-            .get(&RuntimeFunctions::CheckLeak)
-            .unwrap();
+        let check_leak = *gc.runtimes.get(&RuntimeFunctions::CheckLeak).unwrap();
         gc.builder.build_call(check_leak, &[], "check_leak");
     }
 

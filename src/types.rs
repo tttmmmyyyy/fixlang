@@ -86,11 +86,11 @@ impl ObjectType {
         gc: &mut GenerationContext<'c, 'm, 'b>,
     ) -> FunctionValue<'c> {
         if gc
-            .system_functions
+            .runtimes
             .contains_key(&RuntimeFunctions::Dtor(self.clone()))
         {
             return *gc
-                .system_functions
+                .runtimes
                 .get(&RuntimeFunctions::Dtor(self.clone()))
                 .unwrap();
         }
@@ -108,7 +108,7 @@ impl ObjectType {
                 module,
                 builder: &builder,
                 scope: Default::default(), // This gc use used only for build_release, and it doesn't use scope.
-                system_functions: gc.system_functions.clone(),
+                runtimes: gc.runtimes.clone(),
             };
             builder.position_at_end(bb);
             let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
@@ -132,7 +132,7 @@ impl ObjectType {
             }
             builder.build_return(None);
         }
-        gc.system_functions
+        gc.runtimes
             .insert(RuntimeFunctions::Dtor(self.clone()), func);
         func
     }
@@ -165,9 +165,7 @@ impl ObjectType {
                 "cast_to_i8ptr",
             );
             let obj_id = builder.build_call(
-                *gc.system_functions
-                    .get(&RuntimeFunctions::ReportMalloc)
-                    .unwrap(),
+                *gc.runtimes.get(&RuntimeFunctions::ReportMalloc).unwrap(),
                 &[ptr.into(), string_ptr.into()],
                 "call_report_malloc",
             );

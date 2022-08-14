@@ -87,7 +87,7 @@ pub struct GenerationContext<'c, 'm, 'b> {
     pub module: &'m Module<'c>,
     pub builder: &'b Builder<'c>,
     pub scope: LocalVariables<'c>,
-    pub system_functions: HashMap<RuntimeFunctions, FunctionValue<'c>>,
+    pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
 }
 
 impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
@@ -103,11 +103,11 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             module: self.module,
             builder,
             scope: std::mem::replace(&mut self.scope, Default::default()),
-            system_functions: std::mem::replace(&mut self.system_functions, Default::default()),
+            runtimes: std::mem::replace(&mut self.runtimes, Default::default()),
         };
         let pop = |gc: GenerationContext<'c, 'm, 'd>| {
             self.scope = gc.scope;
-            self.system_functions = gc.system_functions;
+            self.runtimes = gc.runtimes;
         };
         (new_gc, pop)
     }
@@ -248,7 +248,7 @@ fn generate_lam<'c, 'm, 'b>(
             module,
             builder: &builder,
             scope,
-            system_functions: gc.system_functions.clone(),
+            runtimes: gc.runtimes.clone(),
         };
         // Retain captured objects
         for cap_name in &captured_names {
@@ -410,9 +410,7 @@ fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c,
         panic!("type of arg of build_release is incorrect.");
     }
     gc.builder.build_call(
-        *gc.system_functions
-            .get(&RuntimeFunctions::RetainObj)
-            .unwrap(),
+        *gc.runtimes.get(&RuntimeFunctions::RetainObj).unwrap(),
         &[ptr_to_obj.clone().into()],
         "retain",
     );
@@ -423,9 +421,7 @@ pub fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContex
         panic!("type of arg of build_release is incorrect.");
     }
     gc.builder.build_call(
-        *gc.system_functions
-            .get(&RuntimeFunctions::ReleaseObj)
-            .unwrap(),
+        *gc.runtimes.get(&RuntimeFunctions::ReleaseObj).unwrap(),
         &[ptr_to_obj.into()],
         "release",
     );
@@ -462,7 +458,7 @@ fn build_raise<'c, 'm, 'b>(signal: i32, gc: &GenerationContext<'c, 'm, 'b>) {
 
 fn build_debug_printf<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {
     let builder = gc.builder;
-    let system_functions = &gc.system_functions;
+    let system_functions = &gc.runtimes;
     let string_ptr = builder.build_global_string_ptr(msg, "debug_printf");
     let printf_func = *system_functions.get(&RuntimeFunctions::Printf).unwrap();
     builder.build_call(
