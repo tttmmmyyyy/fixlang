@@ -230,6 +230,13 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             "release",
         );
     }
+
+    // Get object id of a object
+    pub fn build_get_obj_id(&self, ptr_to_obj: PointerValue<'c>) -> IntValue<'c> {
+        assert!(SANITIZE_MEMORY);
+        self.build_load_field_of_obj(ptr_to_obj, control_block_type(self.context), 2)
+            .into_int_value()
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
@@ -442,13 +449,4 @@ fn generate_if<'c, 'm, 'b>(
     phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
     let ret_ptr = phi.as_basic_value().into_pointer_value();
     ExprCode { ptr: ret_ptr }
-}
-
-pub fn build_get_obj_id<'c, 'm, 'b>(
-    ptr_to_obj: PointerValue<'c>,
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> IntValue<'c> {
-    assert!(SANITIZE_MEMORY);
-    gc.build_load_field_of_obj(ptr_to_obj, control_block_type(gc.context), 2)
-        .into_int_value()
 }
