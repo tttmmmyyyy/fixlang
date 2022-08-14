@@ -218,15 +218,11 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     }
 
     // Release object.
-    pub fn build_release(&self, ptr_to_obj: PointerValue) {
+    pub fn build_release(&self, ptr_to_obj: PointerValue<'c>) {
         if ptr_to_obj.get_type() != ptr_to_object_type(self.context) {
             panic!("type of arg of build_release is incorrect.");
         }
-        self.builder.build_call(
-            *self.runtimes.get(&RuntimeFunctions::ReleaseObj).unwrap(),
-            &[ptr_to_obj.into()],
-            "release",
-        );
+        self.call_runtime(RuntimeFunctions::ReleaseObj, &[ptr_to_obj.clone().into()]);
     }
 
     // Get object id of a object
