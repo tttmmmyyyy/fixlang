@@ -196,7 +196,7 @@ pub fn int(val: i64) -> Arc<ExprInfo> {
         let ptr_to_int_obj = ObjectType::int_obj_type()
             .build_allocate_shared_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i64_type().const_int(val as u64, false);
-        gc.build_set_field(
+        gc.store_obj_field(
             ptr_to_int_obj,
             ObjectType::int_obj_type().to_struct_type(gc.context),
             1,
@@ -214,7 +214,7 @@ pub fn bool(val: bool) -> Arc<ExprInfo> {
         let ptr_to_obj = ObjectType::bool_obj_type()
             .build_allocate_shared_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i8_type().const_int(val as u64, false);
-        gc.build_set_field(
+        gc.store_obj_field(
             ptr_to_obj,
             ObjectType::bool_obj_type().to_struct_type(gc.context),
             1,
@@ -249,14 +249,14 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         let value = gc.builder().build_int_add(lhs_val, rhs_val, "add");
         let ptr_to_int_obj =
             ObjectType::int_obj_type().build_allocate_shared_obj(gc, Some(name_cloned.as_str()));
-        gc.build_set_field(
+        gc.store_obj_field(
             ptr_to_int_obj,
             ObjectType::int_obj_type().to_struct_type(gc.context),
             1,
             value,
         );
-        gc.build_release(gc.scope_get(&lhs_str).code.ptr);
-        gc.build_release(gc.scope_get(&rhs_str).code.ptr);
+        gc.release(gc.scope_get(&lhs_str).code.ptr);
+        gc.release(gc.scope_get(&rhs_str).code.ptr);
         ExprCode {
             ptr: ptr_to_int_obj,
         }
@@ -301,14 +301,14 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         );
         let ptr_to_obj =
             ObjectType::bool_obj_type().build_allocate_shared_obj(gc, Some(name_cloned.as_str()));
-        gc.build_set_field(
+        gc.store_obj_field(
             ptr_to_obj,
             ObjectType::bool_obj_type().to_struct_type(gc.context),
             1,
             value,
         );
-        gc.build_release(gc.scope_get(&lhs_str).code.ptr);
-        gc.build_release(gc.scope_get(&rhs_str).code.ptr);
+        gc.release(gc.scope_get(&lhs_str).code.ptr);
+        gc.release(gc.scope_get(&rhs_str).code.ptr);
         ExprCode { ptr: ptr_to_obj }
     });
     lit(generator, free_vars, name)
@@ -327,8 +327,8 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         let fixf = gc.scope_get(SELF_NAME).code.ptr;
         let x = gc.scope_get(&x_str).code.ptr;
         let f = gc.scope_get(&f_str).code.ptr;
-        let f_fixf = gc.build_app(f, fixf).ptr;
-        let f_fixf_x = gc.build_app(f_fixf, x).ptr;
+        let f_fixf = gc.apply_lambda(f, fixf).ptr;
+        let f_fixf_x = gc.apply_lambda(f_fixf, x).ptr;
         ExprCode { ptr: f_fixf_x }
     });
     lit(generator, free_vars, name)

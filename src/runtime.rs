@@ -79,7 +79,7 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Func
 
     // Get pointer to / value of reference counter.
     let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
-    let ptr_to_refcnt = gc.build_ptr_to_refcnt(ptr_to_obj);
+    let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_obj);
     let refcnt = gc
         .builder()
         .build_load(ptr_to_refcnt, "refcnt")
@@ -87,7 +87,7 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Func
 
     // Report retain to sanitizer.
     if SANITIZE_MEMORY {
-        let obj_id = gc.build_get_obj_id(ptr_to_obj);
+        let obj_id = gc.get_obj_id(ptr_to_obj);
         gc.call_runtime(
             RuntimeFunctions::ReportRetain,
             &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
@@ -115,7 +115,7 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
 
     // Get pointer to / value of reference counter.
     let ptr_to_obj = release_func.get_first_param().unwrap().into_pointer_value();
-    let ptr_to_refcnt = gc.build_ptr_to_refcnt(ptr_to_obj);
+    let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_obj);
     let refcnt = gc
         .builder()
         .build_load(ptr_to_refcnt, "refcnt")
@@ -123,7 +123,7 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
 
     // Report release to sanitizer.
     if SANITIZE_MEMORY {
-        let obj_id = gc.build_get_obj_id(ptr_to_obj);
+        let obj_id = gc.get_obj_id(ptr_to_obj);
         gc.call_runtime(
             RuntimeFunctions::ReportRelease,
             &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
@@ -149,7 +149,7 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
 
     // If refcnt is zero, then call dtor and free object.
     gc.builder().position_at_end(then_bb);
-    gc.build_call_dtor(ptr_to_obj);
+    gc.call_dtor(ptr_to_obj);
     gc.builder().build_free(ptr_to_obj);
     gc.builder().build_unconditional_branch(cont_bb);
 

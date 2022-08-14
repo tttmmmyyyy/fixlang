@@ -85,9 +85,9 @@ impl ObjectType {
             match ft {
                 ObjectFieldType::SubObject => {
                     let ptr_to_subobj = gc
-                        .build_load_field_of_obj(ptr_to_obj, struct_type, i as u32)
+                        .load_obj_field(ptr_to_obj, struct_type, i as u32)
                         .into_pointer_value();
-                    gc.build_release(ptr_to_subobj);
+                    gc.release(ptr_to_subobj);
                 }
                 ObjectFieldType::ControlBlock => {}
                 ObjectFieldType::Int => {}
@@ -129,7 +129,7 @@ impl ObjectType {
                 gc.context.i8_type().ptr_type(AddressSpace::Generic),
                 "name_of_obj_i8ptr",
             );
-            let ptr = gc.build_pointer_cast(ptr_to_obj, ptr_to_object_type(gc.context));
+            let ptr = gc.cast_pointer(ptr_to_obj, ptr_to_object_type(gc.context));
             let obj_id = gc.call_runtime(
                 RuntimeFunctions::ReportMalloc,
                 &[ptr.into(), string_ptr.into()],
