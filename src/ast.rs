@@ -81,7 +81,7 @@ impl Expr {
 }
 
 pub type LiteralGenerator =
-    dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm>) -> ExprCode<'c>;
+    dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm>) -> PointerValue<'c>;
 
 pub struct Literal {
     pub generator: Arc<LiteralGenerator>,
@@ -202,9 +202,7 @@ pub fn int(val: i64) -> Arc<ExprInfo> {
             1,
             value,
         );
-        ExprCode {
-            ptr: ptr_to_int_obj,
-        }
+        ptr_to_int_obj
     });
     lit(generator, vec![], val.to_string())
 }
@@ -220,7 +218,7 @@ pub fn bool(val: bool) -> Arc<ExprInfo> {
             1,
             value,
         );
-        ExprCode { ptr: ptr_to_obj }
+        ptr_to_obj
     });
     lit(generator, vec![], val.to_string())
 }
@@ -255,11 +253,9 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             1,
             value,
         );
-        gc.release(gc.scope_get(&lhs_str).code.ptr);
-        gc.release(gc.scope_get(&rhs_str).code.ptr);
-        ExprCode {
-            ptr: ptr_to_int_obj,
-        }
+        gc.release(gc.scope_get(&lhs_str).code);
+        gc.release(gc.scope_get(&rhs_str).code);
+        ptr_to_int_obj
     });
     lit(generator, free_vars, name)
 }
@@ -307,9 +303,9 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             1,
             value,
         );
-        gc.release(gc.scope_get(&lhs_str).code.ptr);
-        gc.release(gc.scope_get(&rhs_str).code.ptr);
-        ExprCode { ptr: ptr_to_obj }
+        gc.release(gc.scope_get(&lhs_str).code);
+        gc.release(gc.scope_get(&rhs_str).code);
+        ptr_to_obj
     });
     lit(generator, free_vars, name)
 }
@@ -324,12 +320,12 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
     let name = format!("fix {} {}", f_str, x_str);
     let free_vars = vec![String::from(SELF_NAME), f_str.clone(), x_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let fixf = gc.scope_get(SELF_NAME).code.ptr;
-        let x = gc.scope_get(&x_str).code.ptr;
-        let f = gc.scope_get(&f_str).code.ptr;
-        let f_fixf = gc.apply_lambda(f, fixf).ptr;
-        let f_fixf_x = gc.apply_lambda(f_fixf, x).ptr;
-        ExprCode { ptr: f_fixf_x }
+        let fixf = gc.scope_get(SELF_NAME).code;
+        let x = gc.scope_get(&x_str).code;
+        let f = gc.scope_get(&f_str).code;
+        let f_fixf = gc.apply_lambda(f, fixf);
+        let f_fixf_x = gc.apply_lambda(f_fixf, x);
+        f_fixf_x
     });
     lit(generator, free_vars, name)
 }

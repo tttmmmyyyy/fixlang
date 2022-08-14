@@ -41,11 +41,11 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     gc.builder().position_at_end(entry_bb);
 
     let program_result = gc.eval_expr(program);
-    let int_obj_ptr = program_result.ptr;
+    let int_obj_ptr = program_result;
 
     let int_obj_ty = ObjectType::int_obj_type().to_struct_type(&context);
     let value = gc.load_obj_field(int_obj_ptr, int_obj_ty, 1);
-    gc.release(program_result.ptr);
+    gc.release(program_result);
 
     if SANITIZE_MEMORY {
         // Perform leak check
