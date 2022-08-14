@@ -134,10 +134,9 @@ impl ObjectType {
                 "name_of_obj_i8ptr",
             );
             let ptr = gc.build_pointer_cast(ptr_to_obj, ptr_to_object_type(gc.context));
-            let obj_id = builder.build_call(
-                *gc.runtimes.get(&RuntimeFunctions::ReportMalloc).unwrap(),
+            let obj_id = gc.call_runtime(
+                RuntimeFunctions::ReportMalloc,
                 &[ptr.into(), string_ptr.into()],
-                "call_report_malloc",
             );
             object_id = obj_id.try_as_basic_value().unwrap_left().into_int_value();
         }
