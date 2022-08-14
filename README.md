@@ -39,3 +39,4 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
     * move literal generator to somewhere
     * use push_builder in generate_lam
     * remove ExprCode
+    * naming convention of methods of GeneratorContext.

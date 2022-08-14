@@ -7,7 +7,6 @@ pub enum RuntimeFunctions {
     ReportRetain,
     ReportRelease,
     CheckLeak,
-    PrintIntObj,
     RetainObj,
     ReleaseObj,
     Dtor(ObjectType),
@@ -71,40 +70,6 @@ fn generate_func_report_release<'c, 'm, 'b>(
 fn generate_check_leak<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm, 'b>) -> FunctionValue<'c> {
     let fn_ty = gc.context.void_type().fn_type(&[], false);
     gc.module.add_function("check_leak", fn_ty, None)
-}
-
-fn generate_func_print_int_obj<'c, 'm, 'b>(
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> FunctionValue<'c> {
-    let context = gc.context;
-    let module = gc.module;
-    let system_functions = &gc.runtimes;
-    let void_type = context.void_type();
-    let int_obj_type = ObjectType::int_obj_type().to_struct_type(context);
-    let int_obj_ptr_type = int_obj_type.ptr_type(AddressSpace::Generic);
-    let fn_type = void_type.fn_type(&[int_obj_ptr_type.into()], false);
-    let func = module.add_function("print_int_obj", fn_type, None);
-
-    let entry_bb = context.append_basic_block(func, "entry");
-    let builder = context.create_builder();
-    builder.position_at_end(entry_bb);
-    let int_obj_ptr = func.get_first_param().unwrap().into_pointer_value();
-    let int_field_ptr = builder
-        .build_struct_gep(int_obj_ptr, 1, "int_field_ptr")
-        .unwrap();
-    let int_val = builder
-        .build_load(int_field_ptr, "int_val")
-        .into_int_value();
-    let string_ptr = builder.build_global_string_ptr("%lld\n", "int_placefolder");
-    let printf_func = *system_functions.get(&RuntimeFunctions::Printf).unwrap();
-    builder.build_call(
-        printf_func,
-        &[string_ptr.as_pointer_value().into(), int_val.into()],
-        "call_print_int",
-    );
-    builder.build_return(None);
-
-    func
 }
 
 fn generate_func_retain_obj<'c, 'm, 'b>(
@@ -263,10 +228,6 @@ pub fn generate_system_functions<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 
         gc.runtimes
             .insert(RuntimeFunctions::CheckLeak, generate_check_leak(gc));
     }
-    gc.runtimes.insert(
-        RuntimeFunctions::PrintIntObj,
-        generate_func_print_int_obj(gc),
-    );
     let retain_func = generate_func_retain_obj(gc);
     gc.runtimes.insert(RuntimeFunctions::RetainObj, retain_func);
     let release_func = generate_func_release_obj(gc);
