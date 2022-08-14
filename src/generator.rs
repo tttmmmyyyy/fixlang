@@ -247,7 +247,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         let mut ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone()),
             Expr::Lit(lit) => generate_literal(lit.clone(), self),
-            Expr::App(lambda, arg) => generate_app(lambda.clone(), arg.clone(), self),
+            Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone()),
             Expr::Lam(arg, val) => generate_lam(arg.clone(), val.clone(), self),
             Expr::Let(var, bound, expr) => {
                 generate_let(var.clone(), bound.clone(), expr.clone(), self)
@@ -263,6 +263,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         ret.ptr = self.build_pointer_cast(ret.ptr, ptr_to_object_type(self.context));
         ret
     }
+
     // Evaluate variable.
     fn eval_var(&mut self, var: Arc<Var>) -> ExprCode<'c> {
         match &*var {
@@ -270,23 +271,19 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             Var::TyVar { name: _ } => unreachable!(),
         }
     }
+
+    // Evaluate application
+    fn eval_app(&mut self, lambda: Arc<ExprInfo>, arg: Arc<ExprInfo>) -> ExprCode<'c> {
+        self.scope.increment_used_later(&arg.free_vars);
+        let lambda_code = self.eval_expr(lambda);
+        self.scope.decrement_used_later(&arg.free_vars);
+        let arg_code = self.eval_expr(arg);
+        self.build_app(lambda_code.ptr, arg_code.ptr)
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
     ty.ptr_type(AddressSpace::Generic)
-}
-
-fn generate_app<'c, 'm, 'b>(
-    lambda: Arc<ExprInfo>,
-    arg: Arc<ExprInfo>,
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> ExprCode<'c> {
-    gc.scope.increment_used_later(&arg.free_vars);
-    let lambda_code = gc.eval_expr(lambda);
-    gc.scope.decrement_used_later(&arg.free_vars);
-    let arg_code = gc.eval_expr(arg);
-    gc.build_app(lambda_code.ptr, arg_code.ptr)
-    // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
 }
 
 fn generate_literal<'c, 'm, 'b>(
