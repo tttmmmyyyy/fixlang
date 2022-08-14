@@ -181,6 +181,13 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             .unwrap();
         self.builder.build_store(ptr_to_field, value);
     }
+
+    // Take a ptr to closure and return function pointer.
+    fn build_ptr_to_func_of_lambda(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
+        let lam_obj_ty = ObjectType::lam_obj_type().to_struct_type(self.context);
+        self.build_load_field_of_obj(obj, lam_obj_ty, 1)
+            .into_pointer_value()
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
@@ -231,7 +238,7 @@ pub fn build_app<'c, 'm, 'b>(
     ptr_to_arg: PointerValue<'c>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    let ptr_to_func = build_ptr_to_func_of_lambda(ptr_to_lambda, gc);
+    let ptr_to_func = gc.build_ptr_to_func_of_lambda(ptr_to_lambda);
     let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
     let ret = gc.builder.build_call(
         lambda_func,
@@ -410,15 +417,6 @@ fn generate_if<'c, 'm, 'b>(
     phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
     let ret_ptr = phi.as_basic_value().into_pointer_value();
     ExprCode { ptr: ret_ptr }
-}
-
-fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
-    obj: PointerValue<'c>,
-    gc: &GenerationContext<'c, 'm, 'b>,
-) -> PointerValue<'c> {
-    let lam_obj_ty = ObjectType::lam_obj_type().to_struct_type(gc.context);
-    gc.build_load_field_of_obj(obj, lam_obj_ty, 1)
-        .into_pointer_value()
 }
 
 fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
