@@ -193,12 +193,7 @@ pub fn int(val: i64) -> Arc<ExprInfo> {
         let ptr_to_int_obj = ObjectType::int_obj_type()
             .build_allocate_shared_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i64_type().const_int(val as u64, false);
-        gc.store_obj_field(
-            ptr_to_int_obj,
-            ObjectType::int_obj_type().to_struct_type(gc.context),
-            1,
-            value,
-        );
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     });
     lit(generator, vec![], val.to_string())
@@ -228,28 +223,15 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let lhs_val = gc
-            .scope_get_field(
-                &lhs_str,
-                1,
-                ObjectType::int_obj_type().to_struct_type(gc.context),
-            )
+            .scope_get_field(&lhs_str, 1, int_type(gc.context))
             .into_int_value();
         let rhs_val = gc
-            .scope_get_field(
-                &rhs_str,
-                1,
-                ObjectType::int_obj_type().to_struct_type(gc.context),
-            )
+            .scope_get_field(&rhs_str, 1, int_type(gc.context))
             .into_int_value();
         let value = gc.builder().build_int_add(lhs_val, rhs_val, "add");
         let ptr_to_int_obj =
             ObjectType::int_obj_type().build_allocate_shared_obj(gc, Some(name_cloned.as_str()));
-        gc.store_obj_field(
-            ptr_to_int_obj,
-            ObjectType::int_obj_type().to_struct_type(gc.context),
-            1,
-            value,
-        );
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         gc.release(gc.scope_get(&lhs_str).ptr);
         gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_int_obj
@@ -269,18 +251,10 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let lhs_val = gc
-            .scope_get_field(
-                &lhs_str,
-                1,
-                ObjectType::int_obj_type().to_struct_type(gc.context),
-            )
+            .scope_get_field(&lhs_str, 1, int_type(gc.context))
             .into_int_value();
         let rhs_val = gc
-            .scope_get_field(
-                &rhs_str,
-                1,
-                ObjectType::int_obj_type().to_struct_type(gc.context),
-            )
+            .scope_get_field(&rhs_str, 1, int_type(gc.context))
             .into_int_value();
         let value = gc
             .builder()

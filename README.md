@@ -35,3 +35,4 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
     * move literal generator to somewhere
     * start_function method of GC
     * RAII of lock_used_later
+    * rename build_allocate_shared_obj

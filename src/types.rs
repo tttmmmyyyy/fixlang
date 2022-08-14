@@ -236,3 +236,7 @@ fn ptr_to_lambda_function_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx
 pub fn lambda_type<'c>(context: &'c Context) -> StructType<'c> {
     ObjectType::lam_obj_type().to_struct_type(context)
 }
+
+pub fn int_type<'c>(context: &'c Context) -> StructType<'c> {
+    ObjectType::int_obj_type().to_struct_type(context)
+}
