@@ -23,11 +23,11 @@ pub struct LocalVariable<'ctx> {
 }
 
 #[derive(Default)]
-pub struct LocalVariables<'ctx> {
+pub struct Scope<'ctx> {
     data: HashMap<String, Vec<LocalVariable<'ctx>>>,
 }
 
-impl<'c> LocalVariables<'c> {
+impl<'c> Scope<'c> {
     fn push(self: &mut Self, var_name: &str, code: &ExprCode<'c>) {
         if !self.data.contains_key(var_name) {
             self.data.insert(String::from(var_name), Default::default());
@@ -88,7 +88,7 @@ pub struct GenerationContext<'c, 'm> {
     pub context: &'c Context,
     pub module: &'m Module<'c>,
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
-    scope: Vec<LocalVariables<'c>>,
+    scope: Vec<Scope<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
 }
 
@@ -141,11 +141,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get scope.
-    pub fn scope(&self) -> &LocalVariables<'c> {
+    pub fn scope(&self) -> &Scope<'c> {
         self.scope.last().unwrap()
     }
     // Get mutable scope.
-    pub fn scope_mut(&mut self) -> &mut LocalVariables<'c> {
+    pub fn scope_mut(&mut self) -> &mut Scope<'c> {
         self.scope.last_mut().unwrap()
     }
     // Push a new scope.
