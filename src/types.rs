@@ -228,7 +228,7 @@ fn ptr_to_dtor_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     dtor_type(context).ptr_type(AddressSpace::Generic)
 }
 
-fn control_block_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
+pub fn control_block_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
     let mut fields = vec![
         refcnt_type(context).into(),
         ptr_to_dtor_type(context).into(),

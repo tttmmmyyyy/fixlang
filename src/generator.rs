@@ -366,15 +366,15 @@ pub fn build_set_field<'c, 'm, 'b, V>(
 }
 
 pub fn build_get_field<'c, 'm, 'b>(
-    obj: PointerValue<'c>,
+    ptr: PointerValue<'c>,
     ty: StructType<'c>,
     index: u32,
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> BasicValueEnum<'c> {
-    let obj = gc.build_pointer_cast(obj, ptr_type(ty));
+    let ptr = gc.build_pointer_cast(ptr, ptr_type(ty));
     let ptr_to_field = gc
         .builder
-        .build_struct_gep(obj, index, "ptr_to_field")
+        .build_struct_gep(ptr, index, "ptr_to_field")
         .unwrap();
     gc.builder.build_load(ptr_to_field, "field_value")
 }
@@ -414,18 +414,7 @@ pub fn build_get_objid<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> IntValue<'c> {
     assert!(SANITIZE_MEMORY);
-    let ptr_to_control_block = gc.builder.build_pointer_cast(
-        ptr_to_obj,
-        ptr_to_control_block_type(gc.context),
-        "ptr_to_control_block",
-    );
-    let ptr_to_objid = gc
-        .builder
-        .build_struct_gep(ptr_to_control_block, 2, "ptr_to_objid")
-        .unwrap();
-    gc.builder
-        .build_load(ptr_to_objid, "objid")
-        .into_int_value()
+    build_get_field(ptr_to_obj, control_block_type(gc.context), 2, gc).into_int_value()
 }
 
 fn build_panic<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {

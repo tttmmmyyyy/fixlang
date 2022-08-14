@@ -38,3 +38,4 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
         * int_obj_type and bool_obj_type
     * move literal generator to somewhere
     * use push_builder in generate_lam
+    * remove ExprCode
