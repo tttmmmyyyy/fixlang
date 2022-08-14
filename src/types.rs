@@ -155,11 +155,7 @@ impl ObjectType {
                 gc.context.i8_type().ptr_type(AddressSpace::Generic),
                 "name_of_obj_i8ptr",
             );
-            let ptr = builder.build_pointer_cast(
-                ptr_to_obj,
-                ptr_to_object_type(gc.context),
-                "cast_to_i8ptr",
-            );
+            let ptr = gc.build_pointer_cast(ptr_to_obj, ptr_to_object_type(gc.context));
             let obj_id = builder.build_call(
                 *gc.runtimes.get(&RuntimeFunctions::ReportMalloc).unwrap(),
                 &[ptr.into(), string_ptr.into()],
