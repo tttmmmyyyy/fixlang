@@ -131,10 +131,9 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm, 'b>) ->
         // Report release to sanitizer.
         if SANITIZE_MEMORY {
             let obj_id = gc.build_get_obj_id(ptr_to_obj);
-            gc.builder.build_call(
-                *gc.runtimes.get(&RuntimeFunctions::ReportRelease).unwrap(),
+            gc.call_runtime(
+                RuntimeFunctions::ReportRelease,
                 &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
-                "report_release_call",
             );
         }
 
