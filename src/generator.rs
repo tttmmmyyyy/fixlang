@@ -249,9 +249,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             Expr::Lit(lit) => self.eval_lit(lit.clone()),
             Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone()),
             Expr::Lam(arg, val) => self.eval_lam(arg.clone(), val.clone()),
-            Expr::Let(var, bound, expr) => {
-                generate_let(var.clone(), bound.clone(), expr.clone(), self)
-            }
+            Expr::Let(var, bound, expr) => self.eval_let(var.clone(), bound.clone(), expr.clone()),
             Expr::If(cond_expr, then_expr, else_expr) => generate_if(
                 cond_expr.clone(),
                 then_expr.clone(),
@@ -367,6 +365,28 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         // Return closure object
         ExprCode { ptr: obj }
     }
+
+    // Evaluate let
+    fn eval_let(
+        &mut self,
+        var: Arc<Var>,
+        bound: Arc<ExprInfo>,
+        val: Arc<ExprInfo>,
+    ) -> ExprCode<'c> {
+        let var_name = var.name();
+        let mut used_in_val_except_var = val.free_vars.clone();
+        used_in_val_except_var.remove(var_name);
+        self.scope.increment_used_later(&used_in_val_except_var);
+        let bound_code = self.eval_expr(bound.clone());
+        self.scope.decrement_used_later(&used_in_val_except_var);
+        self.scope.push(&var_name, &bound_code);
+        if !val.free_vars.contains(var_name) {
+            self.build_release(bound_code.ptr);
+        }
+        let val_code = self.eval_expr(val.clone());
+        self.scope.pop(&var_name);
+        val_code
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
@@ -374,27 +394,6 @@ pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
 }
 
 pub static SELF_NAME: &str = "%SELF%";
-
-fn generate_let<'c, 'm, 'b>(
-    var: Arc<Var>,
-    bound: Arc<ExprInfo>,
-    val: Arc<ExprInfo>,
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> ExprCode<'c> {
-    let var_name = var.name();
-    let mut used_in_val_except_var = val.free_vars.clone();
-    used_in_val_except_var.remove(var_name);
-    gc.scope.increment_used_later(&used_in_val_except_var);
-    let bound_code = gc.eval_expr(bound.clone());
-    gc.scope.decrement_used_later(&used_in_val_except_var);
-    gc.scope.push(&var_name, &bound_code);
-    if !val.free_vars.contains(var_name) {
-        gc.build_release(bound_code.ptr);
-    }
-    let val_code = gc.eval_expr(val.clone());
-    gc.scope.pop(&var_name);
-    val_code
-}
 
 fn generate_if<'c, 'm, 'b>(
     cond_expr: Arc<ExprInfo>,
