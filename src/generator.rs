@@ -223,34 +223,24 @@ fn generate_lam<'c, 'm, 'b>(
         let builder = gc.context.create_builder();
         let bb = context.append_basic_block(lam_fn, "entry");
         builder.position_at_end(bb);
-        // Create new scope
-        let mut scope = LocalVariables::default();
-        let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
-        scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
-        let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-        scope.push(SELF_NAME, &ExprCode { ptr: closure_obj });
-        for (i, cap_name) in captured_names.iter().enumerate() {
-            let closure_ptr = builder.build_pointer_cast(
-                closure_obj,
-                closure_ty.ptr_type(AddressSpace::Generic),
-                "closure_ptr",
-            );
-            let ptr_to_cap_ptr = builder
-                .build_struct_gep(closure_ptr, i as u32 + 2, "ptr_to_captured_field")
-                .unwrap();
-            let cap_ptr = builder
-                .build_load(ptr_to_cap_ptr, "ptr_to_captured_obj")
-                .into_pointer_value();
-            scope.push(cap_name, &ExprCode { ptr: cap_ptr });
-        }
         // Create new gc
         let mut gc = GenerationContext {
             context,
             module,
             builder: &builder,
-            scope,
+            scope: LocalVariables::default(),
             runtimes: gc.runtimes.clone(),
         };
+        // Set up new scope
+        let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
+        gc.scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
+        let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
+        gc.scope.push(SELF_NAME, &ExprCode { ptr: closure_obj });
+        for (i, cap_name) in captured_names.iter().enumerate() {
+            let cap_obj =
+                build_get_field(closure_obj, closure_ty, i as u32 + 2, &gc).into_pointer_value();
+            gc.scope.push(cap_name, &ExprCode { ptr: cap_obj });
+        }
         // Retain captured objects
         for cap_name in &captured_names {
             let ptr = gc.scope.get(cap_name).code.ptr;
