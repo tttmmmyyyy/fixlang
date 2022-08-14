@@ -110,7 +110,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         let var = self.scope.get(var_name);
         let code = var.code;
         if var.used_later > 0 {
-            build_retain(code.ptr, self);
+            self.build_retain(code.ptr);
         }
         code
     }
@@ -189,7 +189,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             .into_pointer_value()
     }
 
-    // Build application of argment to closure
+    // Apply a object to a closure.
     pub fn build_app(
         &self,
         ptr_to_lambda: PointerValue<'c>,
@@ -205,6 +205,18 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         ret.set_tail_call(true);
         let ret = ret.try_as_basic_value().unwrap_left().into_pointer_value();
         ExprCode { ptr: ret }
+    }
+
+    // Retain object.
+    fn build_retain(&self, ptr_to_obj: PointerValue) {
+        if ptr_to_obj.get_type() != ptr_to_object_type(self.context) {
+            panic!("type of arg of build_release is incorrect.");
+        }
+        self.builder.build_call(
+            *self.runtimes.get(&RuntimeFunctions::RetainObj).unwrap(),
+            &[ptr_to_obj.clone().into()],
+            "retain",
+        );
     }
 }
 
@@ -313,7 +325,7 @@ fn generate_lam<'c, 'm, 'b>(
         // Retain captured objects
         for cap_name in &captured_names {
             let ptr = gc.scope.get(cap_name).code.ptr;
-            build_retain(ptr, &gc);
+            gc.build_retain(ptr);
         }
         // Release SELF and arg if unused
         if !val.free_vars.contains(SELF_NAME) {
@@ -418,17 +430,6 @@ fn generate_if<'c, 'm, 'b>(
     phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
     let ret_ptr = phi.as_basic_value().into_pointer_value();
     ExprCode { ptr: ret_ptr }
-}
-
-fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
-    if ptr_to_obj.get_type() != ptr_to_object_type(gc.context) {
-        panic!("type of arg of build_release is incorrect.");
-    }
-    gc.builder.build_call(
-        *gc.runtimes.get(&RuntimeFunctions::RetainObj).unwrap(),
-        &[ptr_to_obj.clone().into()],
-        "retain",
-    );
 }
 
 pub fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
