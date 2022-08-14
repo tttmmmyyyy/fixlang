@@ -29,13 +29,13 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
 ## ToDo:
 
 * Refactoring:
-    * system_functions -> runtimes
     * make call of SystemFunctions more easily
     * move builder functions to method of GenerationContext
     * make push_builder better
     * replace pointer cast to to_ptr_type
     * place ObjectType::lam_obj_type().to_struct_type(gc.context) to global (like other types)
         * int_obj_type and bool_obj_type
+        * take gc instead of context.
     * move literal generator to somewhere
     * use push_builder in generate_lam
     * remove ExprCode

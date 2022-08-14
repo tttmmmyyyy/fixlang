@@ -265,7 +265,7 @@ pub fn generate_expr<'c, 'm, 'b>(
 fn generate_var<'c, 'm, 'b>(var: Arc<Var>, gc: &mut GenerationContext<'c, 'm, 'b>) -> ExprCode<'c> {
     match &*var {
         Var::TermVar { name } => gc.get_var_retained_if_used_later(name),
-        Var::TyVar { name } => unreachable!(),
+        Var::TyVar { name: _ } => unreachable!(),
     }
 }
 
