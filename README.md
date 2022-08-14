@@ -28,7 +28,5 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
 
 ## ToDo:
 
-* Refactoring:
-    * move literal generator to somewhere
-    * start_function method of GC
-    * RAII of lock_used_later
+* Type checking
+* Add Array
