@@ -55,8 +55,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
 
     if SANITIZE_MEMORY {
         // Perform leak check
-        let check_leak = *gc.runtimes.get(&RuntimeFunctions::CheckLeak).unwrap();
-        gc.builder.build_call(check_leak, &[], "check_leak");
+        gc.call_runtime(RuntimeFunctions::CheckLeak, &[]);
     }
 
     if let BasicValueEnum::IntValue(value) = value {
