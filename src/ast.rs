@@ -190,8 +190,8 @@ pub fn conditional(
 
 pub fn int(val: i64) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let ptr_to_int_obj = ObjectType::int_obj_type()
-            .build_allocate_shared_obj(gc, Some(val.to_string().as_str()));
+        let ptr_to_int_obj =
+            ObjectType::int_obj_type().create_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i64_type().const_int(val as u64, false);
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
@@ -201,8 +201,7 @@ pub fn int(val: i64) -> Arc<ExprInfo> {
 
 pub fn bool(val: bool) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let ptr_to_obj = ObjectType::bool_obj_type()
-            .build_allocate_shared_obj(gc, Some(val.to_string().as_str()));
+        let ptr_to_obj = ObjectType::bool_obj_type().create_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i8_type().const_int(val as u64, false);
         gc.store_obj_field(
             ptr_to_obj,
@@ -229,8 +228,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             .scope_get_field(&rhs_str, 1, int_type(gc.context))
             .into_int_value();
         let value = gc.builder().build_int_add(lhs_val, rhs_val, "add");
-        let ptr_to_int_obj =
-            ObjectType::int_obj_type().build_allocate_shared_obj(gc, Some(name_cloned.as_str()));
+        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(gc, Some(name_cloned.as_str()));
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         gc.release(gc.scope_get(&lhs_str).ptr);
         gc.release(gc.scope_get(&rhs_str).ptr);
@@ -266,8 +264,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
                 .into_int_type(),
             "eq_bool",
         );
-        let ptr_to_obj =
-            ObjectType::bool_obj_type().build_allocate_shared_obj(gc, Some(name_cloned.as_str()));
+        let ptr_to_obj = ObjectType::bool_obj_type().create_obj(gc, Some(name_cloned.as_str()));
         gc.store_obj_field(
             ptr_to_obj,
             ObjectType::bool_obj_type().to_struct_type(gc.context),

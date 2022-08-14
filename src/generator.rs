@@ -424,7 +424,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         // Allocate and set up closure
         let name = lam(arg, val).expr.to_string();
-        let obj = obj_type.build_allocate_shared_obj(self, Some(name.as_str()));
+        let obj = obj_type.create_obj(self, Some(name.as_str()));
         self.store_obj_field(
             obj,
             closure_ty,

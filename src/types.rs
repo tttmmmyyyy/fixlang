@@ -103,7 +103,8 @@ impl ObjectType {
         func
     }
 
-    pub fn build_allocate_shared_obj<'c, 'm>(
+    // Create a object
+    pub fn create_obj<'c, 'm>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         name: Option<&str>,
