@@ -29,8 +29,6 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
 ## ToDo:
 
 * Refactoring:
-    * place ObjectType::lam_obj_type().to_struct_type(gc.context) to global (like other types)
     * move literal generator to somewhere
     * start_function method of GC
     * RAII of lock_used_later
-    * rename build_allocate_shared_obj

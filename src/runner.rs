@@ -26,44 +26,51 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     let program = let_in(var_var("eq"), eq(), program);
     let program = let_in(var_var("fix"), fix(), program);
 
-    let program = calculate_aux_info(program);
+    // Calculate free variables of nodes.
+    let program = calculate_free_vars(program);
 
+    // Create GenerationContext.
     let context = Context::create();
     let module = context.create_module("main");
-
     let mut gc = GenerationContext::new(&context, &module);
+
+    // Build runtime functions.
     build_runtime(&mut gc);
 
+    // Add main function.
     let main_fn_type = context.i64_type().fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
-
     let entry_bb = context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
 
+    // Evaluate program and extract int value from result.
     let program_result = gc.eval_expr(program);
-    let int_obj_ptr = program_result;
-
-    let int_ty = int_type(&context);
-    let value = gc.load_obj_field(int_obj_ptr, int_ty, 1);
+    let result = gc.load_obj_field(program_result, int_type(&context), 1);
     gc.release(program_result);
 
+    // Perform leak check
     if SANITIZE_MEMORY {
-        // Perform leak check
         gc.call_runtime(RuntimeFunctions::CheckLeak, &[]);
     }
 
-    if let BasicValueEnum::IntValue(value) = value {
-        gc.builder().build_return(Some(&value));
+    // Build return
+    if let BasicValueEnum::IntValue(result) = result {
+        gc.builder().build_return(Some(&result));
     } else {
         panic!("Given program doesn't return int value!");
     }
 
-    module.print_to_file("ir").unwrap();
+    // Print LLVM bitcode to file
+    module.print_to_file("main.ll").unwrap();
+
+    // Verify LLVM module.
     let verify = module.verify();
     if verify.is_err() {
         print!("{}", verify.unwrap_err().to_str().unwrap());
         panic!("LLVM verify failed!");
     }
+
+    // Run the module.
     execute_main_module(&context, &module, opt_level)
 }
 

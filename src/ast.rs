@@ -293,7 +293,7 @@ pub fn fix() -> Arc<ExprInfo> {
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
-pub fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
+pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
     match &*ei.expr {
         Expr::Var(var) => {
             let free_vars = vec![var.name().clone()].into_iter().collect();
@@ -304,14 +304,14 @@ pub fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             ei.with_free_vars(free_vars)
         }
         Expr::App(func, arg) => {
-            let func = calculate_aux_info(func.clone());
-            let arg = calculate_aux_info(arg.clone());
+            let func = calculate_free_vars(func.clone());
+            let arg = calculate_free_vars(arg.clone());
             let mut free_vars = func.free_vars.clone();
             free_vars.extend(arg.free_vars.clone());
             app(func, arg).with_free_vars(free_vars)
         }
         Expr::Lam(arg, val) => {
-            let val = calculate_aux_info(val.clone());
+            let val = calculate_free_vars(val.clone());
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(arg.name());
             free_vars.remove(SELF_NAME);
@@ -321,17 +321,17 @@ pub fn calculate_aux_info(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             // NOTE: Our Let is non-recursive let, i.e.,
             // "let x = f x in g x" is equal to "let y = f x in g y",
             // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
-            let bound = calculate_aux_info(bound.clone());
-            let val = calculate_aux_info(val.clone());
+            let bound = calculate_free_vars(bound.clone());
+            let val = calculate_free_vars(val.clone());
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(var.name());
             free_vars.extend(bound.free_vars.clone());
             let_in(var.clone(), bound, val).with_free_vars(free_vars)
         }
         Expr::If(cond, then, else_expr) => {
-            let cond = calculate_aux_info(cond.clone());
-            let then = calculate_aux_info(then.clone());
-            let else_expr = calculate_aux_info(else_expr.clone());
+            let cond = calculate_free_vars(cond.clone());
+            let then = calculate_free_vars(then.clone());
+            let else_expr = calculate_free_vars(else_expr.clone());
             let mut free_vars = cond.free_vars.clone();
             free_vars.extend(then.free_vars.clone());
             free_vars.extend(else_expr.free_vars.clone());
