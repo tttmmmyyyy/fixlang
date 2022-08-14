@@ -182,11 +182,29 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         self.builder.build_store(ptr_to_field, value);
     }
 
-    // Take a ptr to closure and return function pointer.
+    // Take a closure object and return function pointer.
     fn build_ptr_to_func_of_lambda(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         let lam_obj_ty = ObjectType::lam_obj_type().to_struct_type(self.context);
         self.build_load_field_of_obj(obj, lam_obj_ty, 1)
             .into_pointer_value()
+    }
+
+    // Build application of argment to closure
+    pub fn build_app(
+        &self,
+        ptr_to_lambda: PointerValue<'c>,
+        ptr_to_arg: PointerValue<'c>,
+    ) -> ExprCode<'c> {
+        let ptr_to_func = self.build_ptr_to_func_of_lambda(ptr_to_lambda);
+        let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
+        let ret = self.builder.build_call(
+            lambda_func,
+            &[ptr_to_arg.into(), ptr_to_lambda.into()],
+            "call_lambda",
+        );
+        ret.set_tail_call(true);
+        let ret = ret.try_as_basic_value().unwrap_left().into_pointer_value();
+        ExprCode { ptr: ret }
     }
 }
 
@@ -229,25 +247,8 @@ fn generate_app<'c, 'm, 'b>(
     let lambda_code = generate_expr(lambda, gc);
     gc.scope.decrement_used_later(&arg.free_vars);
     let arg_code = generate_expr(arg, gc);
-    build_app(lambda_code.ptr, arg_code.ptr, gc)
+    gc.build_app(lambda_code.ptr, arg_code.ptr)
     // We do not release arg.ptr and lambda.ptr here since we have moved them into the arguments of lambda_func.
-}
-
-pub fn build_app<'c, 'm, 'b>(
-    ptr_to_lambda: PointerValue<'c>,
-    ptr_to_arg: PointerValue<'c>,
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> ExprCode<'c> {
-    let ptr_to_func = gc.build_ptr_to_func_of_lambda(ptr_to_lambda);
-    let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
-    let ret = gc.builder.build_call(
-        lambda_func,
-        &[ptr_to_arg.into(), ptr_to_lambda.into()],
-        "call_lambda",
-    );
-    ret.set_tail_call(true);
-    let ret = ret.try_as_basic_value().unwrap_left().into_pointer_value();
-    ExprCode { ptr: ret }
 }
 
 fn generate_literal<'c, 'm, 'b>(

@@ -335,8 +335,8 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         let fixf = gc.scope.get(SELF_NAME).code.ptr;
         let x = gc.scope.get(&x_str).code.ptr;
         let f = gc.scope.get(&f_str).code.ptr;
-        let f_fixf = build_app(f, fixf, gc).ptr;
-        let f_fixf_x = build_app(f_fixf, x, gc).ptr;
+        let f_fixf = gc.build_app(f, fixf).ptr;
+        let f_fixf_x = gc.build_app(f_fixf, x).ptr;
         ExprCode { ptr: f_fixf_x }
     });
     lit(generator, free_vars, name)
