@@ -99,7 +99,7 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Func
     let refcnt = gc.builder().build_int_add(refcnt, one, "refcnt");
     gc.builder().build_store(ptr_to_refcnt, refcnt);
     gc.builder().build_return(None);
-    gc.pop_builder();
+    // gc.pop_builder();
     retain_func
     // TODO: Add fence instruction for incrementing refcnt
 }
@@ -157,7 +157,7 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
     gc.builder().position_at_end(cont_bb);
     gc.builder().build_return(None);
 
-    gc.pop_builder();
+    // gc.pop_builder();
     release_func
     // TODO: Add fence instruction for incrementing refcnt
     // TODO: Add code for leak detector

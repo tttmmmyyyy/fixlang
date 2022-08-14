@@ -87,18 +87,18 @@ fn add_i32_to_u32(u: u32, i: i32) -> u32 {
 pub struct GenerationContext<'c, 'm> {
     pub context: &'c Context,
     pub module: &'m Module<'c>,
-    builders: RefCell<Vec<Rc<Builder<'c>>>>,
+    builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
     scope: Vec<LocalVariables<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
 }
 
 pub struct PopBuilderGuard<'c> {
-    builders: RefCell<Vec<Rc<Builder<'c>>>>,
+    builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
 }
 
 impl<'c> Drop for PopBuilderGuard<'c> {
     fn drop(&mut self) {
-        self.builders.get_mut().pop().unwrap();
+        self.builders.borrow_mut().pop().unwrap();
     }
 }
 
@@ -115,10 +115,10 @@ impl<'c> Drop for PopBuilderGuard<'c> {
 impl<'c, 'm> GenerationContext<'c, 'm> {
     // Create new gc.
     pub fn new(ctx: &'c Context, module: &'m Module<'c>) -> Self {
-        let mut ret = Self {
+        let ret = Self {
             context: ctx,
             module,
-            builders: RefCell::new(vec![Rc::new(ctx.create_builder())]),
+            builders: Rc::new(RefCell::new(vec![Rc::new(ctx.create_builder())])),
             scope: vec![Default::default()],
             runtimes: Default::default(),
         };
@@ -131,17 +131,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Push a new builder.
-    pub fn push_builder(&mut self) {
+    pub fn push_builder(&mut self) -> PopBuilderGuard<'c> {
         self.builders
-            .get_mut()
+            .borrow_mut()
             .push(Rc::new(self.context.create_builder()));
-        // PopBuilderGuard {
-        //     builders: self.builders.clone(),
-        // }
-    }
-    // Pop a builder.
-    pub fn pop_builder(&mut self) {
-        self.builders.get_mut().pop().unwrap();
+        PopBuilderGuard {
+            builders: self.builders.clone(),
+        }
     }
 
     // Get scope.
@@ -398,7 +394,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // Pop context.
             self.pop_scope();
-            self.pop_builder();
+            // self.pop_builder();
         }
         // Allocate and set up closure
         let name = lam(arg, val).expr.to_string();

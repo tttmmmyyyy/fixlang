@@ -97,7 +97,7 @@ impl ObjectType {
         }
         gc.builder().build_return(None);
 
-        gc.pop_builder();
+        // gc.pop_builder();
         gc.runtimes
             .insert(RuntimeFunctions::Dtor(self.clone()), func);
         func
