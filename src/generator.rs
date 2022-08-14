@@ -142,12 +142,7 @@ pub fn generate_expr<'c, 'm, 'b>(
         }
         Expr::Type(_) => todo!(),
     };
-    let ptr = gc.builder.build_pointer_cast(
-        ret.ptr,
-        ptr_to_object_type(gc.context),
-        "ptr_ret_generate_expr",
-    );
-    ret.ptr = ptr;
+    ret.ptr = gc.build_pointer_cast(ret.ptr, ptr_to_object_type(gc.context));
     ret
 }
 
