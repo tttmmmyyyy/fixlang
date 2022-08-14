@@ -449,25 +449,3 @@ pub fn build_get_objid<'c, 'm, 'b>(
     gc.build_load_field_of_obj(ptr_to_obj, control_block_type(gc.context), 2)
         .into_int_value()
 }
-
-fn build_panic<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {
-    const SIGABRT: i32 = 22;
-    build_debug_printf(msg, gc);
-    build_raise(SIGABRT, gc);
-}
-
-fn build_raise<'c, 'm, 'b>(signal: i32, gc: &GenerationContext<'c, 'm, 'b>) {
-    //I don't know how to raise signal
-}
-
-fn build_debug_printf<'c, 'm, 'b>(msg: &str, gc: &GenerationContext<'c, 'm, 'b>) {
-    let builder = gc.builder;
-    let system_functions = &gc.runtimes;
-    let string_ptr = builder.build_global_string_ptr(msg, "debug_printf");
-    let printf_func = *system_functions.get(&RuntimeFunctions::Printf).unwrap();
-    builder.build_call(
-        printf_func,
-        &[string_ptr.as_pointer_value().into()],
-        "build_debug_printf",
-    );
-}
