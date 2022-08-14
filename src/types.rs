@@ -27,28 +27,6 @@ pub struct ObjectType {
 }
 
 impl ObjectType {
-    // fn from_type(ty: Arc<Type>) -> Self {
-    //     if ty == *INT_TYPE {
-    //         return Self::int_obj_type();
-    //     }
-    //     match &*ty {
-    //         Type::TyVar(var) => ObjectType::from_type(var.ty().clone()),
-    //         Type::LitTy(_) => unreachable!("Should have treated above."),
-    //         Type::AppTy(_, _) => todo!(),
-    //         Type::TyConApp(_, _) => todo!(),
-    //         Type::FunTy(_, _) => {
-    //             let mut field_types: Vec<ObjectFieldType> = Default::default();
-    //             field_types.push(ObjectFieldType::ControlBlock);
-    //             field_types.push(ObjectFieldType::LambdaFunction);
-    //             // Following fields may exist, but their types are unknown.
-    //             ObjectType { field_types }
-    //         }
-    //         Type::ForAllTy(_, _) => todo!(),
-    //     }
-    //     // let mut field_types: Vec<ObjectFieldType> = Default::default();
-    //     // field_types.push(ObjectFieldType::ControlBlock);
-    //     // ObjectType { field_types }
-    // }
     pub fn to_struct_type<'ctx>(&self, context: &'ctx Context) -> StructType<'ctx> {
         let mut fields: Vec<BasicTypeEnum<'ctx>> = vec![];
         for field_type in &self.field_types {
