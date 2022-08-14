@@ -246,9 +246,9 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     pub fn eval_expr(&mut self, expr: Arc<ExprInfo>) -> ExprCode<'c> {
         let mut ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone()),
-            Expr::Lit(lit) => generate_literal(lit.clone(), self),
+            Expr::Lit(lit) => self.eval_literal(lit.clone()),
             Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone()),
-            Expr::Lam(arg, val) => generate_lam(arg.clone(), val.clone(), self),
+            Expr::Lam(arg, val) => self.generate_lam(arg.clone(), val.clone()),
             Expr::Let(var, bound, expr) => {
                 generate_let(var.clone(), bound.clone(), expr.clone(), self)
             }
@@ -280,105 +280,100 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         let arg_code = self.eval_expr(arg);
         self.build_app(lambda_code.ptr, arg_code.ptr)
     }
+
+    // Evaluate literal
+    fn eval_literal(&mut self, lit: Arc<Literal>) -> ExprCode<'c> {
+        (lit.generator)(self)
+    }
+
+    // Evaluate lambda abstraction.
+    fn generate_lam(&mut self, arg: Arc<Var>, val: Arc<ExprInfo>) -> ExprCode<'c> {
+        let context = self.context;
+        let module = self.module;
+        // Fix ordering of captured names
+        let mut captured_names = val.free_vars.clone();
+        captured_names.remove(arg.name());
+        captured_names.remove(SELF_NAME);
+        let captured_names: Vec<String> = captured_names.into_iter().collect();
+        // Determine the type of closure
+        let mut field_types = vec![
+            ObjectFieldType::ControlBlock,
+            ObjectFieldType::LambdaFunction,
+        ];
+        for _ in captured_names.iter() {
+            field_types.push(ObjectFieldType::SubObject);
+        }
+        let obj_type = ObjectType { field_types };
+        let closure_ty = obj_type.to_struct_type(context);
+        // Declare lambda function
+        let lam_fn_ty = lambda_function_type(context);
+        let lam_fn = module.add_function("lambda", lam_fn_ty, None);
+        // Implement lambda function
+        {
+            // Create new builder
+            let builder = self.context.create_builder();
+            let bb = context.append_basic_block(lam_fn, "entry");
+            builder.position_at_end(bb);
+            // Create new gc
+            let mut gc = GenerationContext {
+                context,
+                module,
+                builder: &builder,
+                scope: LocalVariables::default(),
+                runtimes: self.runtimes.clone(),
+            };
+            // Set up new scope
+            let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
+            gc.scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
+            let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
+            gc.scope.push(SELF_NAME, &ExprCode { ptr: closure_obj });
+            for (i, cap_name) in captured_names.iter().enumerate() {
+                let cap_obj = gc
+                    .build_load_field_of_obj(closure_obj, closure_ty, i as u32 + 2)
+                    .into_pointer_value();
+                gc.scope.push(cap_name, &ExprCode { ptr: cap_obj });
+            }
+            // Retain captured objects
+            for cap_name in &captured_names {
+                let ptr = gc.scope.get(cap_name).code.ptr;
+                gc.build_retain(ptr);
+            }
+            // Release SELF and arg if unused
+            if !val.free_vars.contains(SELF_NAME) {
+                gc.build_release(closure_obj);
+            }
+            if !val.free_vars.contains(arg.name()) {
+                gc.build_release(arg_ptr);
+            }
+            // Generate value
+            let val = gc.eval_expr(val.clone());
+            // Return result
+            let ptr = gc.build_pointer_cast(val.ptr, ptr_to_object_type(gc.context));
+            builder.build_return(Some(&ptr));
+        }
+        // Allocate and set up closure
+        let name = lam(arg, val).expr.to_string();
+        let obj = obj_type.build_allocate_shared_obj(self, Some(name.as_str()));
+        self.build_set_field(
+            obj,
+            closure_ty,
+            1,
+            lam_fn.as_global_value().as_pointer_value(),
+        );
+        for (i, cap) in captured_names.iter().enumerate() {
+            let ptr = self.get_var_retained_if_used_later(cap).ptr;
+            self.build_set_field(obj, closure_ty, i as u32 + 2, ptr);
+        }
+        // Return closure object
+        ExprCode { ptr: obj }
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
     ty.ptr_type(AddressSpace::Generic)
 }
 
-fn generate_literal<'c, 'm, 'b>(
-    lit: Arc<Literal>,
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> ExprCode<'c> {
-    (lit.generator)(gc)
-}
-
 pub static SELF_NAME: &str = "%SELF%";
-
-fn generate_lam<'c, 'm, 'b>(
-    arg: Arc<Var>,
-    val: Arc<ExprInfo>,
-    gc: &mut GenerationContext<'c, 'm, 'b>,
-) -> ExprCode<'c> {
-    let context = gc.context;
-    let module = gc.module;
-    // Fix ordering of captured names
-    let mut captured_names = val.free_vars.clone();
-    captured_names.remove(arg.name());
-    captured_names.remove(SELF_NAME);
-    let captured_names: Vec<String> = captured_names.into_iter().collect();
-    // Determine the type of closure
-    let mut field_types = vec![
-        ObjectFieldType::ControlBlock,
-        ObjectFieldType::LambdaFunction,
-    ];
-    for _ in captured_names.iter() {
-        field_types.push(ObjectFieldType::SubObject);
-    }
-    let obj_type = ObjectType { field_types };
-    let closure_ty = obj_type.to_struct_type(context);
-    // Declare lambda function
-    let lam_fn_ty = lambda_function_type(context);
-    let lam_fn = module.add_function("lambda", lam_fn_ty, None);
-    // Implement lambda function
-    {
-        // Create new builder
-        let builder = gc.context.create_builder();
-        let bb = context.append_basic_block(lam_fn, "entry");
-        builder.position_at_end(bb);
-        // Create new gc
-        let mut gc = GenerationContext {
-            context,
-            module,
-            builder: &builder,
-            scope: LocalVariables::default(),
-            runtimes: gc.runtimes.clone(),
-        };
-        // Set up new scope
-        let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
-        gc.scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
-        let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-        gc.scope.push(SELF_NAME, &ExprCode { ptr: closure_obj });
-        for (i, cap_name) in captured_names.iter().enumerate() {
-            let cap_obj = gc
-                .build_load_field_of_obj(closure_obj, closure_ty, i as u32 + 2)
-                .into_pointer_value();
-            gc.scope.push(cap_name, &ExprCode { ptr: cap_obj });
-        }
-        // Retain captured objects
-        for cap_name in &captured_names {
-            let ptr = gc.scope.get(cap_name).code.ptr;
-            gc.build_retain(ptr);
-        }
-        // Release SELF and arg if unused
-        if !val.free_vars.contains(SELF_NAME) {
-            gc.build_release(closure_obj);
-        }
-        if !val.free_vars.contains(arg.name()) {
-            gc.build_release(arg_ptr);
-        }
-        // Generate value
-        let val = gc.eval_expr(val.clone());
-        // Return result
-        let ptr = gc.build_pointer_cast(val.ptr, ptr_to_object_type(gc.context));
-        builder.build_return(Some(&ptr));
-    }
-    // Allocate and set up closure
-    let name = lam(arg, val).expr.to_string();
-    let obj = obj_type.build_allocate_shared_obj(gc, Some(name.as_str()));
-    gc.build_set_field(
-        obj,
-        closure_ty,
-        1,
-        lam_fn.as_global_value().as_pointer_value(),
-    );
-    for (i, cap) in captured_names.iter().enumerate() {
-        let ptr = gc.get_var_retained_if_used_later(cap).ptr;
-        gc.build_set_field(obj, closure_ty, i as u32 + 2, ptr);
-    }
-    // Return closure object
-    ExprCode { ptr: obj }
-}
 
 fn generate_let<'c, 'm, 'b>(
     var: Arc<Var>,
