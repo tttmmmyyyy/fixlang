@@ -241,3 +241,7 @@ pub fn lambda_type<'c>(context: &'c Context) -> StructType<'c> {
 pub fn int_type<'c>(context: &'c Context) -> StructType<'c> {
     ObjectType::int_obj_type().to_struct_type(context)
 }
+
+pub fn bool_type<'c>(context: &'c Context) -> StructType<'c> {
+    ObjectType::bool_obj_type().to_struct_type(context)
+}

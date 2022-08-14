@@ -30,8 +30,6 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
 
 * Refactoring:
     * place ObjectType::lam_obj_type().to_struct_type(gc.context) to global (like other types)
-        * int_obj_type and bool_obj_type
-        * take gc instead of context.
     * move literal generator to somewhere
     * start_function method of GC
     * RAII of lock_used_later

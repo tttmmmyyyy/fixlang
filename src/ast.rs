@@ -203,12 +203,7 @@ pub fn bool(val: bool) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let ptr_to_obj = ObjectType::bool_obj_type().create_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i8_type().const_int(val as u64, false);
-        gc.store_obj_field(
-            ptr_to_obj,
-            ObjectType::bool_obj_type().to_struct_type(gc.context),
-            1,
-            value,
-        );
+        gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
         ptr_to_obj
     });
     lit(generator, vec![], val.to_string())
@@ -265,12 +260,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             "eq_bool",
         );
         let ptr_to_obj = ObjectType::bool_obj_type().create_obj(gc, Some(name_cloned.as_str()));
-        gc.store_obj_field(
-            ptr_to_obj,
-            ObjectType::bool_obj_type().to_struct_type(gc.context),
-            1,
-            value,
-        );
+        gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
         gc.release(gc.scope_get(&lhs_str).ptr);
         gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_obj
