@@ -74,7 +74,7 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Func
     let retain_func = module.add_function("retain_obj", func_type, None);
     let bb = context.append_basic_block(retain_func, "entry");
 
-    gc.push_builder();
+    let builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
     // Get pointer to / value of reference counter.
@@ -99,7 +99,6 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Func
     let refcnt = gc.builder().build_int_add(refcnt, one, "refcnt");
     gc.builder().build_store(ptr_to_refcnt, refcnt);
     gc.builder().build_return(None);
-
     gc.pop_builder();
     retain_func
     // TODO: Add fence instruction for incrementing refcnt
@@ -111,7 +110,7 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
     let release_func = gc.module.add_function("release_obj", func_type, None);
     let bb = gc.context.append_basic_block(release_func, "entry");
 
-    gc.push_builder();
+    let builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
     // Get pointer to / value of reference counter.

@@ -2,7 +2,10 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
-use std::cell::RefCell;
+use std::{
+    cell::{Ref, RefCell},
+    rc::Rc,
+};
 
 use inkwell::values::{BasicMetadataValueEnum, CallSiteValue};
 
@@ -84,20 +87,20 @@ fn add_i32_to_u32(u: u32, i: i32) -> u32 {
 pub struct GenerationContext<'c, 'm> {
     pub context: &'c Context,
     pub module: &'m Module<'c>,
-    builders: Vec<Builder<'c>>,
+    builders: RefCell<Vec<Rc<Builder<'c>>>>,
     scope: Vec<LocalVariables<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
 }
 
-// struct PopBuilderGuard<'c, 'm> {
-//     gc: RefCell<GenerationContext<'c, 'm>>,
-// }
+pub struct PopBuilderGuard<'c> {
+    builders: RefCell<Vec<Rc<Builder<'c>>>>,
+}
 
-// impl<'c, 'm> Drop for PopBuilderGuard<'c, 'm> {
-//     fn drop(&mut self) {
-//         self.gc.get_mut().pop_builder();
-//     }
-// }
+impl<'c> Drop for PopBuilderGuard<'c> {
+    fn drop(&mut self) {
+        self.builders.get_mut().pop().unwrap();
+    }
+}
 
 // struct PopScopeGuard<'c, 'm> {
 //     gc: RefCell<GenerationContext<'c, 'm>>,
@@ -112,27 +115,35 @@ pub struct GenerationContext<'c, 'm> {
 impl<'c, 'm> GenerationContext<'c, 'm> {
     // Create new gc.
     pub fn new(ctx: &'c Context, module: &'m Module<'c>) -> Self {
-        Self {
+        let mut ret = Self {
             context: ctx,
             module,
-            builders: vec![ctx.create_builder()],
+            builders: RefCell::new(vec![Rc::new(ctx.create_builder())]),
             scope: vec![Default::default()],
             runtimes: Default::default(),
-        }
+        };
+        ret
     }
 
     // Get builder.
-    pub fn builder(&self) -> &Builder<'c> {
-        self.builders.last().unwrap()
+    pub fn builder(&self) -> Rc<Builder<'c>> {
+        self.builders.borrow().last().unwrap().clone()
     }
+
     // Push a new builder.
     pub fn push_builder(&mut self) {
-        self.builders.push(self.context.create_builder());
+        self.builders
+            .get_mut()
+            .push(Rc::new(self.context.create_builder()));
+        // PopBuilderGuard {
+        //     builders: self.builders.clone(),
+        // }
     }
     // Pop a builder.
     pub fn pop_builder(&mut self) {
-        self.builders.pop().unwrap();
+        self.builders.get_mut().pop().unwrap();
     }
+
     // Get scope.
     pub fn scope(&self) -> &LocalVariables<'c> {
         self.scope.last().unwrap()
@@ -347,7 +358,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Implement lambda function
         {
             // Create new builder and set up
-            self.push_builder();
+            let builder_guard = self.push_builder();
             let bb = context.append_basic_block(lam_fn, "entry");
             self.builder().position_at_end(bb);
 

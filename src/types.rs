@@ -74,7 +74,7 @@ impl ObjectType {
         let func = gc.module.add_function("dtor", func_type, None);
         let bb = gc.context.append_basic_block(func, "entry");
 
-        gc.push_builder();
+        let builder_guard = gc.push_builder();
 
         let context = gc.context;
         let module = gc.module;
@@ -96,8 +96,8 @@ impl ObjectType {
             }
         }
         gc.builder().build_return(None);
-        gc.pop_builder();
 
+        gc.pop_builder();
         gc.runtimes
             .insert(RuntimeFunctions::Dtor(self.clone()), func);
         func
