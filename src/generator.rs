@@ -2,6 +2,8 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
+use inkwell::values::{BasicMetadataValueEnum, CallSiteValue};
+
 use super::*;
 
 #[derive(Clone)]
@@ -208,15 +210,11 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     }
 
     // Retain object.
-    fn build_retain(&self, ptr_to_obj: PointerValue) {
+    fn build_retain(&self, ptr_to_obj: PointerValue<'c>) {
         if ptr_to_obj.get_type() != ptr_to_object_type(self.context) {
             panic!("type of arg of build_release is incorrect.");
         }
-        self.builder.build_call(
-            *self.runtimes.get(&RuntimeFunctions::RetainObj).unwrap(),
-            &[ptr_to_obj.clone().into()],
-            "retain",
-        );
+        self.call_runtime(RuntimeFunctions::RetainObj, &[ptr_to_obj.clone().into()]);
     }
 
     // Release object.
@@ -236,6 +234,16 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         assert!(SANITIZE_MEMORY);
         self.build_load_field_of_obj(ptr_to_obj, control_block_type(self.context), 2)
             .into_int_value()
+    }
+
+    // Call a runtime function.
+    pub fn call_runtime(
+        &self,
+        func: RuntimeFunctions,
+        args: &[BasicMetadataValueEnum<'c>],
+    ) -> CallSiteValue<'c> {
+        self.builder
+            .build_call(*self.runtimes.get(&func).unwrap(), args, "call_runtime")
     }
 }
 
