@@ -256,8 +256,8 @@ fn generate_lam<'c, 'm, 'b>(
         // Generate value
         let val = generate_expr(val.clone(), &mut gc);
         // Return result
-        let ret = builder.build_pointer_cast(val.ptr, ptr_to_object_type(gc.context), "ret");
-        builder.build_return(Some(&ret));
+        let ptr = gc.build_pointer_cast(val.ptr, ptr_to_object_type(gc.context));
+        builder.build_return(Some(&ptr));
     }
     // Allocate and set up closure
     let name = lam(arg, val).expr.to_string();
