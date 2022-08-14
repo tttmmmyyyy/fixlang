@@ -165,7 +165,6 @@ entry:
 
 define i8* @lambda(i8* %0, i8* %1) {
 entry:
-  %closure_ptr = bitcast i8* %1 to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }*
   call void @release_obj(i8* %1)
   %malloccall = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* getelementptr ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* null, i32 1) to i32))
   %ptr_to_obj = bitcast i8* %malloccall to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }*
@@ -221,7 +220,6 @@ entry:
 
 define i8* @lambda.4(i8* %0, i8* %1) {
 entry:
-  %closure_ptr = bitcast i8* %1 to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }*
   call void @release_obj(i8* %1)
   %malloccall = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* getelementptr ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* null, i32 1) to i32))
   %ptr_to_obj = bitcast i8* %malloccall to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }*
@@ -292,7 +290,6 @@ entry:
 
 define i8* @lambda.11(i8* %0, i8* %1) {
 entry:
-  %closure_ptr = bitcast i8* %1 to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }*
   call void @release_obj(i8* %1)
   %malloccall = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* getelementptr ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }* null, i32 1) to i32))
   %ptr_to_obj = bitcast i8* %malloccall to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8* }*

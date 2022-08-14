@@ -36,3 +36,4 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
     * replace pointer cast to to_ptr_type
     * place ObjectType::lam_obj_type().to_struct_type(gc.context) to global (like other types)
         * int_obj_type and bool_obj_type
+    * move literal generator to somewhere

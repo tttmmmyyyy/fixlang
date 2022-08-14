@@ -227,14 +227,14 @@ fn generate_lam<'c, 'm, 'b>(
         let mut scope = LocalVariables::default();
         let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
         scope.push(&arg.name(), &ExprCode { ptr: arg_ptr });
-        let closure_param = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-        let closure_ptr = builder.build_pointer_cast(
-            closure_param,
-            closure_ty.ptr_type(AddressSpace::Generic),
-            "closure_ptr",
-        );
-        scope.push(SELF_NAME, &ExprCode { ptr: closure_param });
+        let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
+        scope.push(SELF_NAME, &ExprCode { ptr: closure_obj });
         for (i, cap_name) in captured_names.iter().enumerate() {
+            let closure_ptr = builder.build_pointer_cast(
+                closure_obj,
+                closure_ty.ptr_type(AddressSpace::Generic),
+                "closure_ptr",
+            );
             let ptr_to_cap_ptr = builder
                 .build_struct_gep(closure_ptr, i as u32 + 2, "ptr_to_captured_field")
                 .unwrap();
@@ -258,7 +258,7 @@ fn generate_lam<'c, 'm, 'b>(
         }
         // Release SELF and arg if unused
         if !val.free_vars.contains(SELF_NAME) {
-            build_release(closure_param, &gc);
+            build_release(closure_obj, &gc);
         }
         if !val.free_vars.contains(arg.name()) {
             build_release(arg_ptr, &gc);
