@@ -246,7 +246,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     pub fn eval_expr(&mut self, expr: Arc<ExprInfo>) -> ExprCode<'c> {
         let mut ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone()),
-            Expr::Lit(lit) => self.eval_literal(lit.clone()),
+            Expr::Lit(lit) => self.eval_lit(lit.clone()),
             Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone()),
             Expr::Lam(arg, val) => self.eval_lam(arg.clone(), val.clone()),
             Expr::Let(var, bound, expr) => {
@@ -282,7 +282,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     }
 
     // Evaluate literal
-    fn eval_literal(&mut self, lit: Arc<Literal>) -> ExprCode<'c> {
+    fn eval_lit(&mut self, lit: Arc<Literal>) -> ExprCode<'c> {
         (lit.generator)(self)
     }
 
