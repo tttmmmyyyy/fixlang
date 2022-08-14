@@ -123,18 +123,12 @@ fn generate_func_retain_obj<'c, 'm, 'b>(
         let gc = &mut new_gc;
         builder.position_at_end(bb);
 
-        // Get pointer to reference counter
+        // Get pointer to / value of reference counter.
         let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
-        let ptr_to_control_block =
-            gc.build_pointer_cast(ptr_to_obj, ptr_to_control_block_type(gc.context));
-        let ptr_to_refcnt = builder
-            .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
-            .unwrap();
-
-        // Get reference counter
+        let ptr_to_refcnt = gc.build_ptr_to_refcnt(ptr_to_obj);
         let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
 
-        // Report retain to sanitizer
+        // Report retain to sanitizer.
         if SANITIZE_MEMORY {
             let objid = build_get_objid(ptr_to_obj, gc);
             builder.build_call(
@@ -144,7 +138,7 @@ fn generate_func_retain_obj<'c, 'm, 'b>(
             );
         }
 
-        // Increment refcnt
+        // Increment refcnt.
         let one = context.i64_type().const_int(1, false);
         let refcnt = builder.build_int_add(refcnt, one, "refcnt");
         builder.build_store(ptr_to_refcnt, refcnt);
@@ -161,24 +155,20 @@ fn generate_func_release_obj<'c, 'm, 'b>(
     let void_type = gc.context.void_type();
     let func_type = void_type.fn_type(&[ptr_to_object_type(gc.context).into()], false);
     let release_func = gc.module.add_function("release_obj", func_type, None);
-    let mut bb = gc.context.append_basic_block(release_func, "entry");
+    let bb = gc.context.append_basic_block(release_func, "entry");
 
     let builder = gc.context.create_builder();
     let (mut new_gc, pop_gc) = gc.push_builder(&builder);
     {
         let gc = &mut new_gc;
         builder.position_at_end(bb);
+
+        // Get pointer to / value of reference counter.
         let ptr_to_obj = release_func.get_first_param().unwrap().into_pointer_value();
-        let ptr_to_control_block = builder.build_pointer_cast(
-            ptr_to_obj,
-            ptr_to_control_block_type(gc.context),
-            "ptr_to_control_block",
-        );
-        let ptr_to_refcnt = builder
-            .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
-            .unwrap();
+        let ptr_to_refcnt = gc.build_ptr_to_refcnt(ptr_to_obj);
         let refcnt = builder.build_load(ptr_to_refcnt, "refcnt").into_int_value();
 
+        // Report release to sanitizer.
         if SANITIZE_MEMORY {
             let objid = build_get_objid(ptr_to_obj, gc);
             gc.builder.build_call(
@@ -193,6 +183,7 @@ fn generate_func_release_obj<'c, 'm, 'b>(
         let refcnt = builder.build_int_sub(refcnt, one, "refcnt");
         builder.build_store(ptr_to_refcnt, refcnt);
 
+        // Branch if refcnt is zero.
         let zero = gc.context.i64_type().const_zero();
         let is_refcnt_zero =
             builder.build_int_compare(inkwell::IntPredicate::EQ, refcnt, zero, "is_refcnt_zero");
@@ -202,19 +193,21 @@ fn generate_func_release_obj<'c, 'm, 'b>(
         let cont_bb = gc.context.append_basic_block(release_func, "end");
         builder.build_conditional_branch(is_refcnt_zero, then_bb, cont_bb);
 
+        // If refcnt is zero, then call dtor and free object.
         builder.position_at_end(then_bb);
+        let ptr_to_control_block = gc.build_ptr_to_control_block(ptr_to_obj);
         let ptr_to_dtor_ptr = builder
             .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_ptr")
             .unwrap();
         let ptr_to_dtor = builder
             .build_load(ptr_to_dtor_ptr, "ptr_to_dtor")
             .into_pointer_value();
-
         let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
         builder.build_call(dtor_func, &[ptr_to_obj.into()], "call_dtor");
-        builder.build_free(ptr_to_refcnt);
+        builder.build_free(ptr_to_obj);
         builder.build_unconditional_branch(cont_bb);
 
+        // End function.
         builder.position_at_end(cont_bb);
         builder.build_return(None);
     }

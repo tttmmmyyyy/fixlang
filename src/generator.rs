@@ -125,6 +125,19 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             self.builder.build_pointer_cast(from, to, "pointer_cast")
         }
     }
+
+    // Get pointer to control block of a given object.
+    pub fn build_ptr_to_control_block(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
+        self.build_pointer_cast(obj, ptr_to_control_block_type(self.context))
+    }
+
+    // Get pointer to reference counter of a given object.
+    pub fn build_ptr_to_refcnt(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
+        let ptr_control_block = self.build_ptr_to_control_block(obj);
+        self.builder
+            .build_struct_gep(ptr_control_block, 0, "ptr_to_refcnt")
+            .unwrap()
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
