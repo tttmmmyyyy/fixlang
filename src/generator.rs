@@ -88,6 +88,7 @@ pub struct GenerationContext<'c, 'm, 'b> {
 }
 
 impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
+    // Push a new builder to this generation context.
     pub fn push_builder<'s: 'd, 'd>(
         self: &'s mut Self,
         builder: &'d Builder<'c>,
