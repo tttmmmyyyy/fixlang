@@ -1,4 +1,9 @@
 use super::*;
+
+fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) {
+    assert_eq!(run_source(source, opt_level), answer)
+}
+
 // Tests should run sequentially, since OBJECT_TABLE in libfixsanitizer.so is shared between tests and check_leak() asserts OBJECT_TABLE is empty.
 #[test]
 #[serial]
