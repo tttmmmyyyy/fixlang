@@ -195,15 +195,7 @@ fn generate_func_release_obj<'c, 'm, 'b>(
 
         // If refcnt is zero, then call dtor and free object.
         builder.position_at_end(then_bb);
-        let ptr_to_control_block = gc.build_ptr_to_control_block(ptr_to_obj);
-        let ptr_to_dtor_ptr = builder
-            .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_ptr")
-            .unwrap();
-        let ptr_to_dtor = builder
-            .build_load(ptr_to_dtor_ptr, "ptr_to_dtor")
-            .into_pointer_value();
-        let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
-        builder.build_call(dtor_func, &[ptr_to_obj.into()], "call_dtor");
+        gc.build_call_dtor(ptr_to_obj);
         builder.build_free(ptr_to_obj);
         builder.build_unconditional_branch(cont_bb);
 
