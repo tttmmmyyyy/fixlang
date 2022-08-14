@@ -1,5 +1,26 @@
 use super::*;
 
+// Haskell Core:
+//
+// data Expr
+//   = Var Var
+//   | Lit Literal
+//   | App Expr Expr
+//   | Lam Var Expr -- Both term and type lambda
+//   | Let Bind Expr
+//   | Case Expr Var Type [(AltCon, [Var], Expr)]
+//   | Type Type -- Used for type application
+
+// data Var = Id Name Type -- Term variable
+//   | TyVar Name Kind -- Type variable
+
+// data Type = TyVarTy Var
+//   | LitTy TyLit
+//   | AppTy Type Type
+//   | TyConApp TyCon [Type]
+//   | FunTy Type Type
+//   | ForAllTy Var Type
+
 pub struct ExprInfo {
     pub expr: Arc<Expr>,
     pub free_vars: HashSet<String>,

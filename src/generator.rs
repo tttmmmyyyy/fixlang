@@ -157,7 +157,6 @@ fn generate_app<'c, 'm, 'b>(
     arg: Arc<ExprInfo>,
     gc: &mut GenerationContext<'c, 'm, 'b>,
 ) -> ExprCode<'c> {
-    let builder = gc.builder;
     gc.scope.increment_used_later(&arg.free_vars);
     let lambda_code = generate_expr(lambda, gc);
     gc.scope.decrement_used_later(&arg.free_vars);
