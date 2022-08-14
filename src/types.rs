@@ -112,16 +112,11 @@ impl ObjectType {
             };
             builder.position_at_end(bb);
             let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
-            let ptr_to_obj = gc.builder.build_pointer_cast(
-                ptr_to_obj,
-                struct_type.ptr_type(AddressSpace::Generic),
-                "ptr_to_obj",
-            );
             for (i, ft) in self.field_types.iter().enumerate() {
                 match ft {
                     ObjectFieldType::SubObject => {
-                        let ptr_to_subobj =
-                            build_get_field(ptr_to_obj, i as u32, &gc).into_pointer_value();
+                        let ptr_to_subobj = build_get_field(ptr_to_obj, struct_type, i as u32, &gc)
+                            .into_pointer_value();
                         build_release(ptr_to_subobj, &gc);
                     }
                     ObjectFieldType::ControlBlock => {}

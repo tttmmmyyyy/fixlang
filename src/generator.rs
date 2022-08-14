@@ -47,12 +47,7 @@ impl<'c> LocalVariables<'c> {
         gc: &GenerationContext<'c, 'm, 'b>,
     ) -> BasicValueEnum<'c> {
         let expr = self.get(var_name);
-        let ptr_to_struct = gc.builder.build_pointer_cast(
-            expr.code.ptr,
-            ty.ptr_type(AddressSpace::Generic),
-            "ptr_to_struct",
-        );
-        build_get_field(ptr_to_struct, field_idx, gc)
+        build_get_field(expr.code.ptr, ty, field_idx, gc)
     }
     fn modify_used_later(self: &mut Self, names: &HashSet<String>, by: i32) {
         for name in names {
@@ -119,8 +114,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
         }
         code
     }
-    fn build_pointer_cast(&self, from: PointerValue<'c>, to: StructType<'c>) -> PointerValue<'c> {
-        let to = to_ptr_type(to);
+    fn build_pointer_cast(&self, from: PointerValue<'c>, to: PointerType<'c>) -> PointerValue<'c> {
         if from.get_type() == to {
             from
         } else {
@@ -129,7 +123,7 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
     }
 }
 
-pub fn to_ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
+pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
     ty.ptr_type(AddressSpace::Generic)
 }
 
@@ -322,17 +316,11 @@ fn generate_if<'c, 'm, 'b>(
     let mut used_then_or_else = then_expr.free_vars.clone();
     used_then_or_else.extend(else_expr.free_vars.clone());
     gc.scope.increment_used_later(&used_then_or_else);
-    let ptr_to_cond_obj_i8ptr = generate_expr(cond_expr, gc).ptr;
+    let ptr_to_cond_obj = generate_expr(cond_expr, gc).ptr;
     gc.scope.decrement_used_later(&used_then_or_else);
-    let ptr_to_cond_obj = gc.builder.build_pointer_cast(
-        ptr_to_cond_obj_i8ptr,
-        ObjectType::bool_obj_type()
-            .to_struct_type(gc.context)
-            .ptr_type(AddressSpace::Generic),
-        "ptr_to_cond_obj",
-    );
-    let cond_val = build_get_field(ptr_to_cond_obj, 1, gc).into_int_value();
-    build_release(ptr_to_cond_obj_i8ptr, gc);
+    let bool_ty = ObjectType::bool_obj_type().to_struct_type(gc.context);
+    let cond_val = build_get_field(ptr_to_cond_obj, bool_ty, 1, gc).into_int_value();
+    build_release(ptr_to_cond_obj, gc);
     let cond_val = gc
         .builder
         .build_int_cast(cond_val, gc.context.bool_type(), "cond_val_i1");
@@ -394,27 +382,24 @@ pub fn build_set_field<'c, 'm, 'b, V>(
 
 pub fn build_get_field<'c, 'm, 'b>(
     obj: PointerValue<'c>,
+    ty: StructType<'c>,
     index: u32,
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> BasicValueEnum<'c> {
-    let builder = gc.builder;
-    let ptr_to_field = builder
+    let obj = gc.build_pointer_cast(obj, ptr_type(ty));
+    let ptr_to_field = gc
+        .builder
         .build_struct_gep(obj, index, "ptr_to_field")
         .unwrap();
-    builder.build_load(ptr_to_field, "field_value")
+    gc.builder.build_load(ptr_to_field, "field_value")
 }
 
 fn build_ptr_to_func_of_lambda<'c, 'm, 'b>(
     obj: PointerValue<'c>,
     gc: &GenerationContext<'c, 'm, 'b>,
 ) -> PointerValue<'c> {
-    let ptr_to_lam_obj_ty = ObjectType::lam_obj_type()
-        .to_struct_type(gc.context)
-        .ptr_type(AddressSpace::Generic);
-    let obj = gc
-        .builder
-        .build_pointer_cast(obj, ptr_to_lam_obj_ty, "ptr_to_lam_obj");
-    build_get_field(obj, 1, gc).into_pointer_value()
+    let lam_obj_ty = ObjectType::lam_obj_type().to_struct_type(gc.context);
+    build_get_field(obj, lam_obj_ty, 1, gc).into_pointer_value()
 }
 
 fn build_retain<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {

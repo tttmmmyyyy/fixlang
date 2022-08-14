@@ -47,15 +47,10 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     builder.position_at_end(entry_bb);
 
     let program_result = generate_expr(program, &mut gc);
+    let int_obj_ptr = program_result.ptr;
 
-    let int_obj_ptr = builder.build_pointer_cast(
-        program_result.ptr,
-        ObjectType::int_obj_type()
-            .to_struct_type(&context)
-            .ptr_type(AddressSpace::Generic),
-        "int_obj_ptr",
-    );
-    let value = build_get_field(int_obj_ptr, 1, &gc);
+    let int_obj_ty = ObjectType::int_obj_type().to_struct_type(&context);
+    let value = build_get_field(int_obj_ptr, int_obj_ty, 1, &gc);
     build_release(program_result.ptr, &gc);
 
     if SANITIZE_MEMORY {
