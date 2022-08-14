@@ -61,9 +61,9 @@ entry:
 
 refcnt_zero_after_release:                        ; preds = %entry
   %pointer_cast3 = bitcast i8* %0 to { i64, void (i8*)*, i64 }*
-  %ptr_to_dtor_ptr = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %pointer_cast3, i32 0, i32 1
-  %ptr_to_dtor = load void (i8*)*, void (i8*)** %ptr_to_dtor_ptr, align 8
-  call void %ptr_to_dtor(i8* %0)
+  %ptr_to_field4 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %pointer_cast3, i32 0, i32 1
+  %field_value5 = load void (i8*)*, void (i8*)** %ptr_to_field4, align 8
+  call void %field_value5(i8* %0)
   tail call void @free(i8* %0)
   br label %end
 

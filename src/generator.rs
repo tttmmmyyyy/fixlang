@@ -141,15 +141,8 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
 
     // Call dtor of object.
     pub fn build_call_dtor(&self, obj: PointerValue<'c>) {
-        let ptr_to_control_block = self.build_ptr_to_control_block(obj);
-        let ptr_to_dtor_ptr = self
-            .builder
-            .build_struct_gep(ptr_to_control_block, 1, "ptr_to_dtor_ptr")
-            .unwrap();
-        let ptr_to_dtor = self
-            .builder
-            .build_load(ptr_to_dtor_ptr, "ptr_to_dtor")
-            .into_pointer_value();
+        let ptr_to_dtor =
+            build_get_field(obj, control_block_type(self.context), 1, self).into_pointer_value();
         let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
         self.builder
             .build_call(dtor_func, &[obj.into()], "call_dtor");
