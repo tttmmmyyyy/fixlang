@@ -24,7 +24,6 @@ use super::*;
 pub struct ExprInfo {
     pub expr: Arc<Expr>,
     pub free_vars: HashSet<String>,
-    code: String,
 }
 
 impl ExprInfo {
@@ -32,7 +31,6 @@ impl ExprInfo {
         Arc::new(ExprInfo {
             expr: self.expr.clone(),
             free_vars,
-            code: self.code.clone(),
         })
     }
 }
@@ -54,7 +52,6 @@ impl Expr {
         Arc::new(ExprInfo {
             expr: self.clone(),
             free_vars: Default::default(),
-            code: Default::default(),
         })
     }
     pub fn to_string(&self) -> String {

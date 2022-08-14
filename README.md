@@ -33,8 +33,6 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
         * int_obj_type and bool_obj_type
         * take gc instead of context.
     * move literal generator to somewhere
-    * remove ExprCode
     * start_function method
     * RAII of lock_used_later
-    * rename LocalVariable.code to ptr (and search for code)
     * remove name of ExprInfo
