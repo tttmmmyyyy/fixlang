@@ -218,6 +218,18 @@ impl<'c, 'm, 'b> GenerationContext<'c, 'm, 'b> {
             "retain",
         );
     }
+
+    // Release object.
+    pub fn build_release(&self, ptr_to_obj: PointerValue) {
+        if ptr_to_obj.get_type() != ptr_to_object_type(self.context) {
+            panic!("type of arg of build_release is incorrect.");
+        }
+        self.builder.build_call(
+            *self.runtimes.get(&RuntimeFunctions::ReleaseObj).unwrap(),
+            &[ptr_to_obj.into()],
+            "release",
+        );
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
@@ -329,10 +341,10 @@ fn generate_lam<'c, 'm, 'b>(
         }
         // Release SELF and arg if unused
         if !val.free_vars.contains(SELF_NAME) {
-            build_release(closure_obj, &gc);
+            gc.build_release(closure_obj);
         }
         if !val.free_vars.contains(arg.name()) {
-            build_release(arg_ptr, &gc);
+            gc.build_release(arg_ptr);
         }
         // Generate value
         let val = generate_expr(val.clone(), &mut gc);
@@ -371,7 +383,7 @@ fn generate_let<'c, 'm, 'b>(
     gc.scope.decrement_used_later(&used_in_val_except_var);
     gc.scope.push(&var_name, &bound_code);
     if !val.free_vars.contains(var_name) {
-        build_release(bound_code.ptr, gc);
+        gc.build_release(bound_code.ptr);
     }
     let val_code = generate_expr(val.clone(), gc);
     gc.scope.pop(&var_name);
@@ -393,7 +405,7 @@ fn generate_if<'c, 'm, 'b>(
     let cond_val = gc
         .build_load_field_of_obj(ptr_to_cond_obj, bool_ty, 1)
         .into_int_value();
-    build_release(ptr_to_cond_obj, gc);
+    gc.build_release(ptr_to_cond_obj);
     let cond_val = gc
         .builder
         .build_int_cast(cond_val, gc.context.bool_type(), "cond_val_i1");
@@ -409,7 +421,7 @@ fn generate_if<'c, 'm, 'b>(
     // Release variables used only in the else block.
     for var_name in &else_expr.free_vars {
         if !then_expr.free_vars.contains(var_name) && gc.scope.get(var_name).used_later == 0 {
-            build_release(gc.scope.get(var_name).code.ptr, gc);
+            gc.build_release(gc.scope.get(var_name).code.ptr);
         }
     }
     let then_code = generate_expr(then_expr.clone(), gc);
@@ -419,7 +431,7 @@ fn generate_if<'c, 'm, 'b>(
     // Release variables used only in the then block.
     for var_name in &then_expr.free_vars {
         if !else_expr.free_vars.contains(var_name) && gc.scope.get(var_name).used_later == 0 {
-            build_release(gc.scope.get(var_name).code.ptr, gc);
+            gc.build_release(gc.scope.get(var_name).code.ptr);
         }
     }
     let else_code = generate_expr(else_expr, gc);
@@ -430,17 +442,6 @@ fn generate_if<'c, 'm, 'b>(
     phi.add_incoming(&[(&then_code.ptr, then_bb), (&else_code.ptr, else_bb)]);
     let ret_ptr = phi.as_basic_value().into_pointer_value();
     ExprCode { ptr: ret_ptr }
-}
-
-pub fn build_release<'c, 'm, 'b>(ptr_to_obj: PointerValue, gc: &GenerationContext<'c, 'm, 'b>) {
-    if ptr_to_obj.get_type() != ptr_to_object_type(gc.context) {
-        panic!("type of arg of build_release is incorrect.");
-    }
-    gc.builder.build_call(
-        *gc.runtimes.get(&RuntimeFunctions::ReleaseObj).unwrap(),
-        &[ptr_to_obj.into()],
-        "release",
-    );
 }
 
 pub fn build_get_obj_id<'c, 'm, 'b>(

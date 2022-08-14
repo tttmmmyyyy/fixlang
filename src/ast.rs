@@ -259,8 +259,8 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             1,
             value,
         );
-        build_release(gc.scope.get(&lhs_str).code.ptr, gc);
-        build_release(gc.scope.get(&rhs_str).code.ptr, gc);
+        gc.build_release(gc.scope.get(&lhs_str).code.ptr);
+        gc.build_release(gc.scope.get(&rhs_str).code.ptr);
         ExprCode {
             ptr: ptr_to_int_obj,
         }
@@ -315,8 +315,8 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
             1,
             value,
         );
-        build_release(gc.scope.get(&lhs_str).code.ptr, gc);
-        build_release(gc.scope.get(&rhs_str).code.ptr, gc);
+        gc.build_release(gc.scope.get(&lhs_str).code.ptr);
+        gc.build_release(gc.scope.get(&rhs_str).code.ptr);
         ExprCode { ptr: ptr_to_obj }
     });
     lit(generator, free_vars, name)
