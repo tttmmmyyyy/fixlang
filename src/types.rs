@@ -166,7 +166,7 @@ impl ObjectFieldType {
         // Set size.
         gc.store_obj_field(array_ptr, array_struct, 0, size);
 
-        // Allocate and set buffer.
+        // Allocate buffer and set it to array.
         let buffer_ptr = gc
             .builder()
             .build_array_malloc(ptr_to_object_type(gc.context), size, "buffer_ptr")
