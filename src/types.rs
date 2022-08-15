@@ -7,6 +7,7 @@ pub enum ObjectFieldType {
     SubObject,
     Int,
     Bool,
+    Array,
 }
 
 impl ObjectFieldType {
@@ -17,6 +18,15 @@ impl ObjectFieldType {
             ObjectFieldType::SubObject => ptr_to_object_type(context).into(),
             ObjectFieldType::Int => context.i64_type().into(),
             ObjectFieldType::Bool => context.i8_type().into(),
+            ObjectFieldType::Array => context
+                .struct_type(
+                    &[
+                        context.i64_type().into(),          // size
+                        ptr_to_object_type(context).into(), // ptr to buffer
+                    ],
+                    false,
+                )
+                .into(),
         }
     }
 }
@@ -52,11 +62,12 @@ impl ObjectType {
     }
 
     pub fn lam_obj_type() -> Self {
-        let mut field_types: Vec<ObjectFieldType> = Default::default();
-        field_types.push(ObjectFieldType::ControlBlock);
-        field_types.push(ObjectFieldType::LambdaFunction);
-        // Following fields may exist, but their types are unknown.
-        ObjectType { field_types }
+        Self::shared_obj_type(vec![ObjectFieldType::LambdaFunction]) // Other fields for captured objects may exist but omitted here.
+    }
+
+    pub fn array_type() -> Self {
+        let fields = vec![ObjectFieldType::Array];
+        Self::shared_obj_type(fields)
     }
 
     fn generate_func_dtor<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -74,7 +85,7 @@ impl ObjectType {
         let func = gc.module.add_function("dtor", func_type, None);
         let bb = gc.context.append_basic_block(func, "entry");
 
-        let builder_guard = gc.push_builder();
+        let _builder_guard = gc.push_builder();
 
         let context = gc.context;
         let module = gc.module;
@@ -93,6 +104,14 @@ impl ObjectType {
                 ObjectFieldType::Int => {}
                 ObjectFieldType::LambdaFunction => {}
                 ObjectFieldType::Bool => {}
+                ObjectFieldType::Array => {
+                    let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
+                    let ptr_to_array = gc
+                        .builder()
+                        .build_struct_gep(ptr_to_struct, i as u32, "ptr_to_array")
+                        .unwrap();
+                    Self::destruct_array(gc, ptr_to_array);
+                }
             }
         }
         gc.builder().build_return(None);
@@ -101,6 +120,79 @@ impl ObjectType {
         gc.runtimes
             .insert(RuntimeFunctions::Dtor(self.clone()), func);
         func
+    }
+
+    // Take pointer to array = [size, ptr_to_buffer], call release of ptr_to_bufer[i] for all i and free ptr_to_buffer.
+    fn destruct_array<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, ptr_to_array: PointerValue<'c>) {
+        // Get fields (size, ptr_to_buffer).
+        let array_struct = ObjectFieldType::Array
+            .to_basic_type(gc.context)
+            .into_struct_type();
+        let size = gc
+            .load_obj_field(ptr_to_array, array_struct, 0)
+            .into_int_value();
+        let ptr_to_buffer = gc
+            .load_obj_field(ptr_to_array, array_struct, 1)
+            .into_pointer_value();
+
+        // Append blocks: loop_check, loop_body and after_loop.
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let dtor_func = current_bb.get_parent().unwrap();
+        let loop_check_bb = gc
+            .context
+            .append_basic_block(dtor_func, "loop_release_array_elements");
+        let loop_body_bb = gc.context.append_basic_block(dtor_func, "loop_body");
+        let after_loop_bb = gc.context.append_basic_block(dtor_func, "after_loop");
+
+        // Allocate and initialize loop counter.
+        let counter_type = gc.context.i64_type();
+        let counter_ptr = gc
+            .builder()
+            .build_alloca(counter_type, "release_loop_counter");
+        gc.builder()
+            .build_store(counter_ptr, counter_type.const_zero());
+
+        // Jump to loop_check bb.
+        gc.builder().build_unconditional_branch(loop_check_bb);
+
+        // Implement loop_check bb.
+        gc.builder().position_at_end(loop_check_bb);
+        let counter_val = gc
+            .builder()
+            .build_load(counter_ptr, "counter_val")
+            .into_int_value();
+        let is_end = gc
+            .builder()
+            .build_int_compare(IntPredicate::EQ, counter_val, size, "is_end");
+        gc.builder()
+            .build_conditional_branch(is_end, after_loop_bb, loop_body_bb);
+
+        // Implement loop_body bb.
+        gc.builder().position_at_end(loop_body_bb);
+        {
+            // Release object of idx = counter_val
+            let obj_ptr = unsafe {
+                gc.builder()
+                    .build_gep(ptr_to_buffer, &[counter_val.into()], "elem_of_array")
+            };
+            gc.release(obj_ptr);
+
+            // Increment counter.
+            let incremented_counter_val = gc.builder().build_int_add(
+                counter_val,
+                counter_type.const_int(1, false),
+                "incremented_counter_val",
+            );
+            gc.builder()
+                .build_store(counter_ptr, incremented_counter_val);
+
+            // Jump back to loop_check bb.
+            gc.builder().build_unconditional_branch(loop_check_bb);
+        }
+
+        // Free buffer.
+        gc.builder().position_at_end(after_loop_bb);
+        gc.builder().build_free(ptr_to_buffer);
     }
 
     // Create an object
