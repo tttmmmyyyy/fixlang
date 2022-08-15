@@ -291,7 +291,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Retain object.
-    fn retain(&self, ptr_to_obj: PointerValue<'c>) {
+    pub fn retain(&self, ptr_to_obj: PointerValue<'c>) {
         if ptr_to_obj.get_type() != ptr_to_object_type(self.context) {
             panic!("type of arg of build_release is incorrect.");
         }
