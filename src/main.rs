@@ -7,6 +7,7 @@ extern crate serial_test;
 // extern crate rustc_llvm_proxy;
 
 mod ast;
+mod builtin;
 mod generator;
 mod parser;
 mod runner;
@@ -16,6 +17,7 @@ mod tests;
 mod types;
 
 use ast::*;
+use builtin::*;
 use clap::{App, AppSettings, Arg};
 use either::Either;
 use generator::*;
