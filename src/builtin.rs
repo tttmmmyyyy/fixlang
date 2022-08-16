@@ -104,3 +104,33 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
 pub fn fix() -> Arc<ExprInfo> {
     lam(var_var("f"), lam(var_var("x"), fix_lit("f", "x")))
 }
+
+// Implementation of newArray built-in function.
+fn new_array_lit(size: &str, value: &str) -> Arc<ExprInfo> {
+    let size_str = String::from(size);
+    let value_str = String::from(value);
+    let name = format!("newArray {} {}", size, value);
+    let name_cloned = name.clone();
+    let free_vars = vec![size_str.clone(), value_str.clone()];
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        let size = gc
+            .scope_get_field(&size_str, 1, int_type(gc.context))
+            .into_int_value();
+        let value = gc.scope_get(&value_str).ptr;
+        let array_struct = ObjectType::array_type().to_struct_type(gc.context);
+        let array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
+        let array_field = ObjectFieldType::create_array(gc, size, value);
+        gc.store_obj_field(array, array_struct, 1, array_field);
+        array
+    });
+    lit(generator, free_vars, name)
+}
+
+// newArray built-in function.
+pub fn newArray() -> Arc<ExprInfo> {
+    lam(
+        var_var("size"),
+        lam(var_var("value"), new_array_lit("size", "value")),
+    )
+}
