@@ -30,6 +30,21 @@ impl ObjectFieldType {
         }
     }
 
+    // Get fields (size and buffer) from array.
+    fn get_size_and_buffer_of_array<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        array: PointerValue<'c>,
+    ) -> (IntValue<'c>, PointerValue<'c>) {
+        let array_struct = ObjectFieldType::Array
+            .to_basic_type(gc.context)
+            .into_struct_type();
+        let size = gc.load_obj_field(array, array_struct, 0).into_int_value();
+        let buffer = gc
+            .load_obj_field(array, array_struct, 1)
+            .into_pointer_value();
+        (size, buffer)
+    }
+
     // Take array and generate code iterating its elements.
     fn loop_over_array<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
@@ -47,15 +62,7 @@ impl ObjectFieldType {
         ),
     ) {
         // Get fields (size, ptr_to_buffer).
-        let array_struct = ObjectFieldType::Array
-            .to_basic_type(gc.context)
-            .into_struct_type();
-        let size = gc
-            .load_obj_field(ptr_to_array, array_struct, 0)
-            .into_int_value();
-        let ptr_to_buffer = gc
-            .load_obj_field(ptr_to_array, array_struct, 1)
-            .into_pointer_value();
+        let (size, ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, ptr_to_array);
 
         // Append blocks: loop_check, loop_body and after_loop.
         let current_bb = gc.builder().get_insert_block().unwrap();
@@ -201,6 +208,60 @@ impl ObjectFieldType {
 
         // Return pointer to array.
         array_ptr
+    }
+
+    // Read an element of array.
+    fn read_array<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        array: PointerValue<'c>,
+        idx: IntValue<'c>,
+    ) -> PointerValue<'c> {
+        // Get fields (size, ptr_to_buffer).
+        let (_size, ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, array);
+
+        // Check if out_of_range.
+        // TODO!
+
+        // Get element.
+        let ptr_to_elem = unsafe {
+            gc.builder()
+                .build_gep(ptr_to_buffer, &[idx.into()], "ptr_to_elem_of_array")
+        };
+        let elem = gc
+            .builder()
+            .build_load(ptr_to_elem, "elem")
+            .into_pointer_value();
+
+        // Retain element and return it.
+        gc.retain(elem);
+        elem
+    }
+
+    // Read an element of array.
+    fn write_array<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        array: PointerValue<'c>,
+        idx: IntValue<'c>,
+        value: PointerValue<'c>,
+    ) {
+        // Get fields (size, ptr_to_buffer).
+        let (_size, ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, array);
+
+        // Check if out_of_range.
+        // TODO!
+
+        // Get ptr to the place at idx.
+        let place = unsafe {
+            gc.builder()
+                .build_gep(ptr_to_buffer, &[idx.into()], "ptr_to_elem_of_array")
+        };
+
+        // Release element that is already at the place.
+        let elem = gc.builder().build_load(place, "elem").into_pointer_value();
+        gc.release(elem);
+
+        // Insert the given value to the place.
+        gc.builder().build_store(place, value);
     }
 }
 
