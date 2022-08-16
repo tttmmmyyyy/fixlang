@@ -226,16 +226,16 @@ impl ObjectType {
         }
     }
 
+    pub fn lam_obj_type() -> Self {
+        Self::shared_obj_type(vec![ObjectFieldType::LambdaFunction]) // Other fields for captured objects may exist but omitted here.
+    }
+
     pub fn int_obj_type() -> Self {
         Self::shared_obj_type(vec![ObjectFieldType::Int])
     }
 
     pub fn bool_obj_type() -> Self {
         Self::shared_obj_type(vec![ObjectFieldType::Bool])
-    }
-
-    pub fn lam_obj_type() -> Self {
-        Self::shared_obj_type(vec![ObjectFieldType::LambdaFunction]) // Other fields for captured objects may exist but omitted here.
     }
 
     pub fn array_type() -> Self {

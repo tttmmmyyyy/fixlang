@@ -2,6 +2,7 @@ use super::*;
 
 #[derive(Eq, Hash, PartialEq, Clone)]
 pub enum RuntimeFunctions {
+    Abort,
     Printf,
     ReportMalloc,
     ReportRetain,
@@ -10,6 +11,11 @@ pub enum RuntimeFunctions {
     RetainObj,
     ReleaseObj,
     Dtor(ObjectType),
+}
+
+fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+    let fn_ty = gc.context.void_type().fn_type(&[], false);
+    gc.module.add_function("abort", fn_ty, None)
 }
 
 fn build_printf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -164,6 +170,8 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
 }
 
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
+    gc.runtimes
+        .insert(RuntimeFunctions::Abort, build_abort_function(gc));
     gc.runtimes
         .insert(RuntimeFunctions::Printf, build_printf_function(gc));
     if SANITIZE_MEMORY {
