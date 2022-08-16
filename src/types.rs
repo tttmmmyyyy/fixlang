@@ -155,20 +155,19 @@ impl ObjectFieldType {
         Self::loop_over_array(gc, ptr_to_array, loop_body, after_loop);
     }
 
-    // Create and initialize an array.
-    pub fn create_array<'c, 'm>(
+    // Initialize an array.
+    pub fn initialize_array<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
+        array_ptr: PointerValue<'c>,
         size: IntValue<'c>,
         value: PointerValue<'c>,
-    ) -> PointerValue<'c> {
+    ) {
         assert_eq!(size.get_type(), gc.context.i64_type());
         assert_eq!(value.get_type(), ptr_to_object_type(gc.context));
 
-        // Allocate array.
         let array_struct = ObjectFieldType::Array
             .to_basic_type(gc.context)
             .into_struct_type();
-        let array_ptr = gc.builder().build_malloc(array_struct, "array").unwrap();
 
         // Set size.
         gc.store_obj_field(array_ptr, array_struct, 0, size);
@@ -205,13 +204,11 @@ impl ObjectFieldType {
             // Generate loop.
             Self::loop_over_array(gc, array_ptr, loop_body, after_loop);
         }
-
-        // Return pointer to array.
-        array_ptr
     }
 
     // Read an element of array.
-    fn read_array<'c, 'm>(
+    // Returned object is already retained.
+    pub fn read_array<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         array: PointerValue<'c>,
         idx: IntValue<'c>,
@@ -237,8 +234,8 @@ impl ObjectFieldType {
         elem
     }
 
-    // Read an element of array.
-    fn write_array<'c, 'm>(
+    // Write an element into array.
+    pub fn write_array<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         array: PointerValue<'c>,
         idx: IntValue<'c>,

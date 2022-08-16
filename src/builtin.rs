@@ -113,15 +113,20 @@ fn new_array_lit(size: &str, value: &str) -> Arc<ExprInfo> {
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        // Array = [ControlBlock, ArrayField] where ArrayField = [Size, PtrToBuffer].
         let size = gc
             .scope_get_field(&size_str, 1, int_type(gc.context))
             .into_int_value();
+        gc.release(gc.scope_get(&size_str).ptr);
         let value = gc.scope_get(&value_str).ptr;
-        let array_struct = ObjectType::array_type().to_struct_type(gc.context);
         let array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
-        let array_field = ObjectFieldType::create_array(gc, size, value);
-        gc.store_obj_field(array, array_struct, 1, array_field);
+        let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
+        let array = gc.cast_pointer(array, array_ptr_ty);
+        let array_field = gc
+            .builder()
+            .build_struct_gep(array, 1, "array_field")
+            .unwrap();
+        ObjectFieldType::initialize_array(gc, array_field, size, value);
         array
     });
     lit(generator, free_vars, name)
@@ -132,5 +137,39 @@ pub fn newArray() -> Arc<ExprInfo> {
     lam(
         var_var("size"),
         lam(var_var("value"), new_array_lit("size", "value")),
+    )
+}
+
+// Implementation of readArray built-in function.
+fn read_array_lit(array: &str, idx: &str) -> Arc<ExprInfo> {
+    let array_str = String::from(array);
+    let idx_str = String::from(idx);
+    let name = format!("readArray {} {}", array, idx);
+    let free_vars = vec![array_str.clone(), idx_str.clone()];
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
+        let array = gc.scope_get(array_str.as_str()).ptr;
+        let array = gc.cast_pointer(array, array_ptr_ty);
+        let array_field = gc
+            .builder()
+            .build_struct_gep(array, 1, "array_field")
+            .unwrap();
+        let idx = gc
+            .scope_get_field(&idx_str, 1, int_type(gc.context))
+            .into_int_value();
+        gc.release(gc.scope_get(&idx_str).ptr);
+        let elem = ObjectFieldType::read_array(gc, array_field, idx);
+        gc.release(array);
+        elem
+    });
+    lit(generator, free_vars, name)
+}
+
+// readArray built-in function.
+pub fn readArray() -> Arc<ExprInfo> {
+    lam(
+        var_var("array"),
+        lam(var_var("idx"), read_array_lit("array", "idx")),
     )
 }
