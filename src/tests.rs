@@ -255,3 +255,40 @@ pub fn test22() {
     let answer = (n * (n + 1)) / 2;
     test_run_source(source.as_str(), answer, OptimizationLevel::Default);
 }
+
+#[test]
+#[serial]
+pub fn test23() {
+    // Test newArray of size 0.
+    let source = r"
+            let arr = newArray 0 42;
+            32
+        ";
+    let answer = 32;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test24() {
+    // Test newArray of size > 0.
+    let source = r"
+            let arr = newArray 100 42;
+            32
+        ";
+    let answer = 32;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test25() {
+    // Test readArray.
+    let source = r"
+            let arr = newArray 100 42;
+            let elem = newArray array 50;
+            elem
+        ";
+    let answer = 42;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}

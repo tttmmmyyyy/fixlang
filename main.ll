@@ -18,8 +18,9 @@ source_filename = "main"
 @name_of_obj.30 = private unnamed_addr constant [12 x i8] c"add lhs rhs\00", align 1
 @name_of_obj.32 = private unnamed_addr constant [20 x i8] c"\\rhs->(add lhs rhs)\00", align 1
 @name_of_obj.33 = private unnamed_addr constant [28 x i8] c"\\lhs->(\\rhs->(add lhs rhs))\00", align 1
-@name_of_obj.34 = private unnamed_addr constant [2 x i8] c"3\00", align 1
-@name_of_obj.35 = private unnamed_addr constant [2 x i8] c"5\00", align 1
+@name_of_obj.34 = private unnamed_addr constant [4 x i8] c"100\00", align 1
+@name_of_obj.35 = private unnamed_addr constant [3 x i8] c"42\00", align 1
+@name_of_obj.36 = private unnamed_addr constant [3 x i8] c"32\00", align 1
 
 declare void @abort()
 
@@ -121,7 +122,6 @@ entry:
   %ptr_to_field20 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj13, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.13, i8* (i8*, i8*)** %ptr_to_field20, align 8
   %pointer_cast21 = bitcast { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj13 to i8*
-  call void @release_obj(i8* %pointer_cast21)
   %malloccall22 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* getelementptr ({ { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* null, i32 1) to i32))
   %ptr_to_obj23 = bitcast i8* %malloccall22 to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }*
   %pointer_cast24 = bitcast { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj23 to i8*
@@ -166,10 +166,11 @@ entry:
   %ptr_to_field50 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj43, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.28, i8* (i8*, i8*)** %ptr_to_field50, align 8
   %pointer_cast51 = bitcast { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %ptr_to_obj43 to i8*
+  call void @release_obj(i8* %pointer_cast51)
   %malloccall52 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)*, i64 }, i64 }* getelementptr ({ { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* null, i32 1) to i32))
   %ptr_to_obj53 = bitcast i8* %malloccall52 to { { i64, void (i8*)*, i64 }, i64 }*
   %pointer_cast54 = bitcast { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj53 to i8*
-  %call_runtime55 = call i64 @report_malloc(i8* %pointer_cast54, i8* getelementptr inbounds ([2 x i8], [2 x i8]* @name_of_obj.34, i32 0, i32 0))
+  %call_runtime55 = call i64 @report_malloc(i8* %pointer_cast54, i8* getelementptr inbounds ([4 x i8], [4 x i8]* @name_of_obj.34, i32 0, i32 0))
   %ptr_to_control_block56 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj53, i32 0, i32 0
   %ptr_to_refcnt57 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block56, i32 0, i32 0
   store i64 1, i64* %ptr_to_refcnt57, align 4
@@ -178,16 +179,16 @@ entry:
   %ptr_to_obj_id59 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block56, i32 0, i32 2
   store i64 %call_runtime55, i64* %ptr_to_obj_id59, align 4
   %ptr_to_field60 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj53, i32 0, i32 1
-  store i64 3, i64* %ptr_to_field60, align 4
+  store i64 100, i64* %ptr_to_field60, align 4
   %pointer_cast61 = bitcast { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj53 to i8*
-  %pointer_cast62 = bitcast i8* %pointer_cast51 to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }*
+  %pointer_cast62 = bitcast i8* %pointer_cast21 to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }*
   %ptr_to_field63 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %pointer_cast62, i32 0, i32 1
   %field_value = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field63, align 8
-  %call_lambda = tail call i8* %field_value(i8* %pointer_cast61, i8* %pointer_cast51)
+  %call_lambda = tail call i8* %field_value(i8* %pointer_cast61, i8* %pointer_cast21)
   %malloccall64 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)*, i64 }, i64 }* getelementptr ({ { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* null, i32 1) to i32))
   %ptr_to_obj65 = bitcast i8* %malloccall64 to { { i64, void (i8*)*, i64 }, i64 }*
   %pointer_cast66 = bitcast { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj65 to i8*
-  %call_runtime67 = call i64 @report_malloc(i8* %pointer_cast66, i8* getelementptr inbounds ([2 x i8], [2 x i8]* @name_of_obj.35, i32 0, i32 0))
+  %call_runtime67 = call i64 @report_malloc(i8* %pointer_cast66, i8* getelementptr inbounds ([3 x i8], [3 x i8]* @name_of_obj.35, i32 0, i32 0))
   %ptr_to_control_block68 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj65, i32 0, i32 0
   %ptr_to_refcnt69 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block68, i32 0, i32 0
   store i64 1, i64* %ptr_to_refcnt69, align 4
@@ -196,18 +197,33 @@ entry:
   %ptr_to_obj_id71 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block68, i32 0, i32 2
   store i64 %call_runtime67, i64* %ptr_to_obj_id71, align 4
   %ptr_to_field72 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj65, i32 0, i32 1
-  store i64 5, i64* %ptr_to_field72, align 4
+  store i64 42, i64* %ptr_to_field72, align 4
   %pointer_cast73 = bitcast { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj65 to i8*
   %pointer_cast74 = bitcast i8* %call_lambda to { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }*
   %ptr_to_field75 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)* }* %pointer_cast74, i32 0, i32 1
   %field_value76 = load i8* (i8*, i8*)*, i8* (i8*, i8*)** %ptr_to_field75, align 8
   %call_lambda77 = tail call i8* %field_value76(i8* %pointer_cast73, i8* %call_lambda)
-  %pointer_cast78 = bitcast i8* %call_lambda77 to { { i64, void (i8*)*, i64 }, i64 }*
-  %ptr_to_field79 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %pointer_cast78, i32 0, i32 1
-  %field_value80 = load i64, i64* %ptr_to_field79, align 4
   call void @release_obj(i8* %call_lambda77)
+  %malloccall78 = tail call i8* @malloc(i32 ptrtoint ({ { i64, void (i8*)*, i64 }, i64 }* getelementptr ({ { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* null, i32 1) to i32))
+  %ptr_to_obj79 = bitcast i8* %malloccall78 to { { i64, void (i8*)*, i64 }, i64 }*
+  %pointer_cast80 = bitcast { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj79 to i8*
+  %call_runtime81 = call i64 @report_malloc(i8* %pointer_cast80, i8* getelementptr inbounds ([3 x i8], [3 x i8]* @name_of_obj.36, i32 0, i32 0))
+  %ptr_to_control_block82 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj79, i32 0, i32 0
+  %ptr_to_refcnt83 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block82, i32 0, i32 0
+  store i64 1, i64* %ptr_to_refcnt83, align 4
+  %ptr_to_dtor_field84 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block82, i32 0, i32 1
+  store void (i8*)* @dtor.31, void (i8*)** %ptr_to_dtor_field84, align 8
+  %ptr_to_obj_id85 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %ptr_to_control_block82, i32 0, i32 2
+  store i64 %call_runtime81, i64* %ptr_to_obj_id85, align 4
+  %ptr_to_field86 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj79, i32 0, i32 1
+  store i64 32, i64* %ptr_to_field86, align 4
+  %pointer_cast87 = bitcast { { i64, void (i8*)*, i64 }, i64 }* %ptr_to_obj79 to i8*
+  %pointer_cast88 = bitcast i8* %pointer_cast87 to { { i64, void (i8*)*, i64 }, i64 }*
+  %ptr_to_field89 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %pointer_cast88, i32 0, i32 1
+  %field_value90 = load i64, i64* %ptr_to_field89, align 4
+  call void @release_obj(i8* %pointer_cast87)
   call void @check_leak()
-  ret i64 %field_value80
+  ret i64 %field_value90
 }
 
 define i8* @lambda(i8* %0, i8* %1) {
@@ -253,9 +269,9 @@ entry:
   %ptr_to_field2 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj, i32 0, i32 1
   store i8* (i8*, i8*)* @lambda.2, i8* (i8*, i8*)** %ptr_to_field2, align 8
   %ptr_to_field3 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj, i32 0, i32 2
-  store i8* %0, i8** %ptr_to_field3, align 8
+  store i8* %field_value, i8** %ptr_to_field3, align 8
   %ptr_to_field4 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8*, i8* }, { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj, i32 0, i32 3
-  store i8* %field_value, i8** %ptr_to_field4, align 8
+  store i8* %0, i8** %ptr_to_field4, align 8
   %pointer_cast5 = bitcast { { i64, void (i8*)*, i64 }, i8* (i8*, i8*)*, i8*, i8* }* %ptr_to_obj to i8*
   ret i8* %pointer_cast5
 }
@@ -271,11 +287,11 @@ entry:
   call void @retain_obj(i8* %field_value)
   call void @retain_obj(i8* %field_value3)
   call void @release_obj(i8* %1)
-  %pointer_cast4 = bitcast i8* %field_value to { { i64, void (i8*)*, i64 }, i64 }*
+  %pointer_cast4 = bitcast i8* %field_value3 to { { i64, void (i8*)*, i64 }, i64 }*
   %ptr_to_field5 = getelementptr inbounds { { i64, void (i8*)*, i64 }, i64 }, { { i64, void (i8*)*, i64 }, i64 }* %pointer_cast4, i32 0, i32 1
   %field_value6 = load i64, i64* %ptr_to_field5, align 4
-  call void @release_obj(i8* %field_value)
-  %pointer_cast7 = bitcast i8* %field_value3 to { { i64, void (i8*)*, i64 }, { i64, i8** } }*
+  call void @release_obj(i8* %field_value3)
+  %pointer_cast7 = bitcast i8* %field_value to { { i64, void (i8*)*, i64 }, { i64, i8** } }*
   %2 = getelementptr inbounds { { i64, void (i8*)*, i64 }, { i64, i8** } }, { { i64, void (i8*)*, i64 }, { i64, i8** } }* %pointer_cast7, i32 0, i32 1
   %pointer_cast8 = bitcast { { i64, void (i8*)*, i64 }, { i64, i8** } }* %pointer_cast7 to { i64, void (i8*)*, i64 }*
   %ptr_to_field9 = getelementptr inbounds { i64, void (i8*)*, i64 }, { i64, void (i8*)*, i64 }* %pointer_cast8, i32 0, i32 0
