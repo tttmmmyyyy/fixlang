@@ -31,7 +31,7 @@ impl ObjectFieldType {
     }
 
     // Get fields (size and buffer) from array.
-    fn get_size_and_buffer_of_array<'c, 'm>(
+    pub fn get_size_and_buffer_of_array<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         array: PointerValue<'c>,
     ) -> (IntValue<'c>, PointerValue<'c>) {
@@ -259,6 +259,61 @@ impl ObjectFieldType {
 
         // Insert the given value to the place.
         gc.builder().build_store(place, value);
+    }
+
+    // Clone an array
+    pub fn clone_array<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        src: PointerValue<'c>,
+        dst: PointerValue<'c>,
+    ) {
+        let array_struct = ObjectFieldType::Array
+            .to_basic_type(gc.context)
+            .into_struct_type();
+
+        // Get fields (size, ptr_to_buffer) of src.
+        let (src_size, src_buffer) = Self::get_size_and_buffer_of_array(gc, src);
+
+        // Copy size.
+        gc.store_obj_field(dst, array_struct, 0, src_size);
+
+        // Allocate buffer and set it to dst.
+        let dst_buffer = gc
+            .builder()
+            .build_array_malloc(ptr_to_object_type(gc.context), src_size, "dst_buffer")
+            .unwrap();
+        gc.store_obj_field(dst, array_struct, 1, dst_buffer);
+
+        // Clone each elements.
+        {
+            // In loop body, retain value and store it at idx.
+            let loop_body = |gc: &mut GenerationContext<'c, 'm>,
+                             idx: IntValue<'c>,
+                             _size: IntValue<'c>,
+                             _ptr_to_buffer: PointerValue<'c>| {
+                let ptr_to_src_elem = unsafe {
+                    gc.builder()
+                        .build_gep(src_buffer, &[idx.into()], "ptr_to_src_elem")
+                };
+                let ptr_to_dst_elem = unsafe {
+                    gc.builder()
+                        .build_gep(dst_buffer, &[idx.into()], "ptr_to_dst_elem")
+                };
+                let src_elem = gc
+                    .builder()
+                    .build_load(ptr_to_src_elem, "src_elem")
+                    .into_pointer_value();
+                gc.retain(src_elem);
+                gc.builder().build_store(ptr_to_dst_elem, src_elem);
+            };
+
+            // After loop, do nothing.
+            let after_loop = |gc: &mut GenerationContext<'c, 'm>,
+                              _size: IntValue<'c>,
+                              _ptr_to_buffer: PointerValue<'c>| {};
+
+            Self::loop_over_array(gc, src, loop_body, after_loop);
+        }
     }
 }
 
