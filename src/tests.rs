@@ -286,7 +286,7 @@ pub fn test25() {
     // Test readArray.
     let source = r"
             let arr = newArray 100 42;
-            let elem = newArray arr 50;
+            let elem = readArray arr 50;
             elem
         ";
     let answer = 42;
