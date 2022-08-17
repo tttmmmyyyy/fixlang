@@ -21,8 +21,10 @@ impl ObjectFieldType {
             ObjectFieldType::Array => context
                 .struct_type(
                     &[
-                        context.i64_type().into(),          // size
-                        ptr_to_object_type(context).into(), // ptr to buffer
+                        context.i64_type().into(), // size
+                        ptr_to_object_type(context)
+                            .ptr_type(AddressSpace::Generic)
+                            .into(), // ptr to buffer
                     ],
                     false,
                 )
@@ -42,6 +44,8 @@ impl ObjectFieldType {
         let buffer = gc
             .load_obj_field(array, array_struct, 1)
             .into_pointer_value();
+        // let array = gc.cast_pointer(array, ptr_type(array_struct));
+        // let buffer = gc.builder().build_struct_gep(array, 1, "buffer").unwrap();
         (size, buffer)
     }
 
