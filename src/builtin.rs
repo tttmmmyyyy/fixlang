@@ -224,6 +224,7 @@ fn write_array_lit(array: &str, idx: &str, value: &str) -> Arc<ExprInfo> {
         let cloned_array_field = gc.builder().build_struct_gep(cloned_array, 1, "").unwrap();
         ObjectFieldType::clone_array(gc, array_field, cloned_array_field);
         gc.release(array); // Given array should be released here.
+        let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
 
         // Implement cont_bb
@@ -231,13 +232,17 @@ fn write_array_lit(array: &str, idx: &str, value: &str) -> Arc<ExprInfo> {
 
         // Build phi value of array and array_field.
         let array_phi = gc.builder().build_phi(array.get_type(), "array_phi");
-        array_phi.add_incoming(&[(&array, current_bb), (&cloned_array, shared_bb)]);
+        assert_eq!(array.get_type(), cloned_array.get_type());
+        array_phi.add_incoming(&[(&array, current_bb), (&cloned_array, succ_of_shared_bb)]);
         let array = array_phi.as_basic_value().into_pointer_value();
         let array_field_phi = gc
             .builder()
             .build_phi(array_field.get_type(), "array_field_phi");
-        array_field_phi
-            .add_incoming(&[(&array_field, current_bb), (&cloned_array_field, shared_bb)]);
+        assert_eq!(array_field.get_type(), cloned_array_field.get_type());
+        array_field_phi.add_incoming(&[
+            (&array_field, current_bb),
+            (&cloned_array_field, succ_of_shared_bb),
+        ]);
         let array_field = array_field_phi.as_basic_value().into_pointer_value();
 
         // Perform write and return.
