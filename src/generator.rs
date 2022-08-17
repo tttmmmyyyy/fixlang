@@ -292,17 +292,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Retain object.
     pub fn retain(&self, ptr_to_obj: PointerValue<'c>) {
-        if ptr_to_obj.get_type() != ptr_to_object_type(self.context) {
-            panic!("type of arg of build_release is incorrect.");
-        }
+        let ptr_to_obj = self.cast_pointer(ptr_to_obj, ptr_to_object_type(self.context));
         self.call_runtime(RuntimeFunctions::RetainObj, &[ptr_to_obj.clone().into()]);
     }
 
     // Release object.
     pub fn release(&self, ptr_to_obj: PointerValue<'c>) {
-        if ptr_to_obj.get_type() != ptr_to_object_type(self.context) {
-            panic!("type of arg of build_release is incorrect.");
-        }
+        let ptr_to_obj = self.cast_pointer(ptr_to_obj, ptr_to_object_type(self.context));
         self.call_runtime(RuntimeFunctions::ReleaseObj, &[ptr_to_obj.clone().into()]);
     }
 
