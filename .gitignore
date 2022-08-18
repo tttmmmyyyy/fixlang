@@ -1,3 +1,4 @@
 /target
 /sanitizer/target
 /sanitizer/libfixsanitizer.so
+/main.ll
