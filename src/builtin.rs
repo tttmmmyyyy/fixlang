@@ -229,7 +229,7 @@ fn write_array_lit(array: &str, idx: &str, value: &str, is_unique_version: bool)
         gc.builder().position_at_end(shared_bb);
         if is_unique_version {
             // In case of unique version, panic in this case.
-            gc.panic(format!("The argument of {} is shared!", func_name.as_str()).as_str());
+            gc.panic(format!("The argument of {} is shared!\n", func_name.as_str()).as_str());
         }
         let cloned_array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
         let cloned_array = gc.cast_pointer(cloned_array, ptr_type(array_str_ty));
