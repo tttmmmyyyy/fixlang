@@ -210,6 +210,28 @@ impl ObjectFieldType {
         }
     }
 
+    // Panic if idx is out_of_range for the array.
+    pub fn panic_if_out_of_array<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        array: PointerValue<'c>,
+        idx: IntValue<'c>,
+    ) {
+        let (size, _ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, array);
+        let curr_bb = gc.builder().get_insert_block().unwrap();
+        let curr_func = curr_bb.get_parent().unwrap();
+        let is_out_of_range =
+            gc.builder()
+                .build_int_compare(IntPredicate::UGE, idx, size, "is_out_of_ramge");
+        let out_of_range_bb = gc.context.append_basic_block(curr_func, "out_of_range_bb");
+        let in_range_bb = gc.context.append_basic_block(curr_func, "in_range_bb");
+        gc.builder()
+            .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb);
+        gc.builder().position_at_end(out_of_range_bb);
+        gc.panic("Index out of range!");
+        gc.builder().build_unreachable();
+        gc.builder().position_at_end(in_range_bb);
+    }
+
     // Read an element of array.
     // Returned object is already retained.
     pub fn read_array<'c, 'm>(
@@ -217,11 +239,11 @@ impl ObjectFieldType {
         array: PointerValue<'c>,
         idx: IntValue<'c>,
     ) -> PointerValue<'c> {
+        // Panic if out_of_range.
+        Self::panic_if_out_of_array(gc, array, idx);
+
         // Get fields (size, ptr_to_buffer).
         let (_size, ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, array);
-
-        // Check if out_of_range.
-        // TODO!
 
         // Get element.
         let ptr_to_elem = unsafe {
@@ -245,6 +267,9 @@ impl ObjectFieldType {
         idx: IntValue<'c>,
         value: PointerValue<'c>,
     ) {
+        // Panic if out_of_range.
+        Self::panic_if_out_of_array(gc, array, idx);
+
         // Get fields (size, ptr_to_buffer).
         let (_size, ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, array);
 
