@@ -305,3 +305,28 @@ pub fn test26() {
     let answer = 21;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
+
+#[test]
+#[serial]
+pub fn test28() {
+    // Calculate Fibonacci sequence using array.
+    let source = r"
+            let arr = newArray 31 0;
+            let arr = writeArray arr 0 0;
+            let arr = writeArray arr 1 1;
+            let loop = fix \f -> \arr -> \n -> 
+                if eq n 31 then 
+                    arr 
+                else
+                    let i = add n (-1);
+                    let j = add n (-2);
+                    let x = readArray arr i;
+                    let y = readArray arr j;
+                    let arr = writeArray arr n (add x y);
+                    f arr (add n 1);
+            let fib = loop arr 2;
+            readArray fib 30
+        ";
+    let answer = 832040;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
