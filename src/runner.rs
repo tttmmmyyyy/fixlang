@@ -28,6 +28,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     let program = let_in(var_var("newArray"), new_array(), program);
     let program = let_in(var_var("readArray"), read_array(), program);
     let program = let_in(var_var("writeArray"), write_array(), program);
+    let program = let_in(var_var("writeArray!"), write_array_unique(), program);
 
     // Calculate free variables of nodes.
     let program = calculate_free_vars(program);

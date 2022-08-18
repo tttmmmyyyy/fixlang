@@ -4,6 +4,7 @@ use super::*;
 pub enum RuntimeFunctions {
     Abort,
     Printf,
+    Panic,
     ReportMalloc,
     ReportRetain,
     ReportRelease,

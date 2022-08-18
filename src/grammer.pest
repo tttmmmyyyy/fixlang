@@ -12,7 +12,7 @@ let_in = _{ "in" | ";" }
 
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
-var_expr = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char*) }
+var_expr = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
 let_expr = { "let" ~ sep+ ~ var_expr ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ let_in ~ sep* ~ expr }
 

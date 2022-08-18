@@ -174,12 +174,20 @@ pub fn read_array() -> Arc<ExprInfo> {
     )
 }
 
-// Implementation of writeArray built-in function.
-fn write_array_lit(array: &str, idx: &str, value: &str) -> Arc<ExprInfo> {
+// Implementation of writeArray / writeArray! built-in function.
+// is_unique_mode - if true, generate code that calls abort when given array is shared.
+fn write_array_lit(array: &str, idx: &str, value: &str, is_unique_version: bool) -> Arc<ExprInfo> {
     let array_str = String::from(array);
     let idx_str = String::from(idx);
     let value_str = String::from(value);
-    let name = format!("writeArray {} {} {}", array, idx, value);
+    let func_name = String::from({
+        if is_unique_version {
+            "writeArray!"
+        } else {
+            "writeArray"
+        }
+    });
+    let name = format!("{} {} {} {}", func_name, array, idx, value);
     let name_cloned = name.clone();
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
@@ -219,6 +227,10 @@ fn write_array_lit(array: &str, idx: &str, value: &str) -> Arc<ExprInfo> {
 
         // In shared_bb, create new array and clone array field.
         gc.builder().position_at_end(shared_bb);
+        if is_unique_version {
+            // In case of unique version, panic in this case.
+            gc.panic(format!("The argument of {} is shared!", func_name.as_str()).as_str());
+        }
         let cloned_array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
         let cloned_array = gc.cast_pointer(cloned_array, ptr_type(array_str_ty));
         let cloned_array_field = gc.builder().build_struct_gep(cloned_array, 1, "").unwrap();
@@ -258,7 +270,24 @@ pub fn write_array() -> Arc<ExprInfo> {
         var_var("array"),
         lam(
             var_var("idx"),
-            lam(var_var("value"), write_array_lit("array", "idx", "value")),
+            lam(
+                var_var("value"),
+                write_array_lit("array", "idx", "value", false),
+            ),
+        ),
+    )
+}
+
+// writeArray! built-in function.
+pub fn write_array_unique() -> Arc<ExprInfo> {
+    lam(
+        var_var("array"),
+        lam(
+            var_var("idx"),
+            lam(
+                var_var("value"),
+                write_array_lit("array", "idx", "value", true),
+            ),
         ),
     )
 }

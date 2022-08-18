@@ -312,15 +312,15 @@ pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r"
             let arr = newArray 31 0;
-            let arr = writeArray arr 0 0;
-            let arr = writeArray arr 1 1;
+            let arr = writeArray! arr 0 0;
+            let arr = writeArray! arr 1 1;
             let loop = fix \f -> \arr -> \n -> 
                 if eq n 31 then 
                     arr 
                 else
                     let x = readArray arr (add n (-1));
                     let y = readArray arr (add n (-2));
-                    let arr = writeArray arr n (add x y);
+                    let arr = writeArray! arr n (add x y);
                     f arr (add n 1);
             let fib = loop arr 2;
             readArray fib 30

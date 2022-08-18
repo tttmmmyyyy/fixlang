@@ -302,6 +302,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.call_runtime(RuntimeFunctions::ReleaseObj, &[ptr_to_obj.clone().into()]);
     }
 
+    // Printf Rust's &str.
+    pub fn printf(&self, string: &str) {
+        let string_ptr = self.builder().build_global_string_ptr(string, "rust_str");
+        let string_ptr = string_ptr.as_pointer_value();
+        self.call_runtime(RuntimeFunctions::Printf, &[string_ptr.into()]);
+    }
+
+    // Panic with Rust's &str (i.e, print string and abort.)
+    pub fn panic(&self, string: &str) {
+        self.printf(string);
+        self.call_runtime(RuntimeFunctions::Abort, &[]);
+    }
+
     // Get object id of a object
     pub fn get_obj_id(&self, ptr_to_obj: PointerValue<'c>) -> IntValue<'c> {
         assert!(SANITIZE_MEMORY);
