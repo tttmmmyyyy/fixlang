@@ -318,10 +318,8 @@ pub fn test28() {
                 if eq n 31 then 
                     arr 
                 else
-                    let i = add n (-1);
-                    let j = add n (-2);
-                    let x = readArray arr i;
-                    let y = readArray arr j;
+                    let x = readArray arr (add n (-1));
+                    let y = readArray arr (add n (-2));
                     let arr = writeArray arr n (add x y);
                     f arr (add n 1);
             let fib = loop arr 2;
