@@ -292,3 +292,16 @@ pub fn test25() {
     let answer = 42;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
+
+#[test]
+#[serial]
+pub fn test26() {
+    // Test writeArray.
+    let source = r"
+            let arr = newArray 100 42;
+            let arr = writeArray arr 50 21;
+            readArray arr 50
+        ";
+    let answer = 21;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
