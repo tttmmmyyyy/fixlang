@@ -29,3 +29,9 @@ bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 expr = { app_expr | not_app_expr }
 
 file = _{ SOI ~ sep* ~ expr ~ sep* ~ EOI }
+
+block_commented_string = { "/*"  ~ block_commented_character*  ~ "*/" }
+block_commented_character = { !"*/" ~ ANY }
+
+line_commented_string = {"//" ~ line_commented_character* ~ ( NEWLINE | EOI )}
+line_commented_character = { !(NEWLINE | EOI) ~ ANY }
