@@ -1,4 +1,4 @@
-sep = _{ " " | "\t" | NEWLINE }
+sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
 int_lit_expr = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
@@ -29,3 +29,11 @@ bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 expr = { app_expr | not_app_expr }
 
 file = _{ SOI ~ sep* ~ expr ~ sep* ~ EOI }
+
+block_comment = _{ "{-"  ~ block_commented_character*  ~ "-}" }
+
+block_commented_character = _{ !"-}" ~ ANY }
+
+line_comment = _{"//" ~ line_commented_character* ~ ( NEWLINE | EOI )}
+
+line_commented_character = _{ !(NEWLINE | EOI) ~ ANY }
