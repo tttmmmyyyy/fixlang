@@ -222,6 +222,20 @@ pub fn test20() {
 
 #[test]
 #[serial]
+pub fn test20_5() {
+    let source = r"         
+        if eq 2 0 then 
+            0 
+        else if eq 2 1 then 
+            1
+        else 2
+    ";
+    let answer = 2;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test21() {
     let n = 10000;
     let source = format!(
@@ -256,22 +270,22 @@ pub fn test22() {
     test_run_source(source.as_str(), answer, OptimizationLevel::Default);
 }
 
-#[test]
-#[serial]
-pub fn test22_5() {
-    let source = r"
-        let fib = fix \f -> \n -> 
-                    if eq n 0 then 
-                        0 
-                    else if eq n 1 then 
-                        1
-                    else
-                        f (add n -1) (add n -2)
-        in fib 30
-    ";
-    let answer = 0;
-    test_run_source(source, answer, OptimizationLevel::Default);
-}
+// #[test]
+// #[serial]
+// pub fn test22_5() {
+//     let source = r"
+//         let fib = fix \f -> \n ->
+//                     if eq n 0 then
+//                         0
+//                     else if eq n 1 then
+//                         1
+//                     else
+//                         f (add n -1) (add n -2)
+//         in fib 30
+//     ";
+//     let answer = 0;
+//     test_run_source(source, answer, OptimizationLevel::Default);
+// }
 
 #[test]
 #[serial]

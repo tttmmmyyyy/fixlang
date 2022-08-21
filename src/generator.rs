@@ -506,6 +506,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         }
         let then_code = self.eval_expr(then_expr.clone());
+        let then_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
 
         self.builder().position_at_end(else_bb);
@@ -516,6 +517,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         }
         let else_code = self.eval_expr(else_expr);
+        let else_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
 
         self.builder().position_at_end(cont_bb);
