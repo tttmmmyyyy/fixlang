@@ -1,6 +1,6 @@
 use super::*;
 
-fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) {
+pub fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) {
     assert_eq!(run_source(source, opt_level), answer)
 }
 
@@ -270,22 +270,22 @@ pub fn test22() {
     test_run_source(source.as_str(), answer, OptimizationLevel::Default);
 }
 
-// #[test]
-// #[serial]
-// pub fn test22_5() {
-//     let source = r"
-//         let fib = fix \f -> \n ->
-//                     if eq n 0 then
-//                         0
-//                     else if eq n 1 then
-//                         1
-//                     else
-//                         f (add n -1) (add n -2)
-//         in fib 30
-//     ";
-//     let answer = 0;
-//     test_run_source(source, answer, OptimizationLevel::Default);
-// }
+#[test]
+#[serial]
+pub fn test22_5() {
+    let source = r"
+        let fib = fix \f -> \n ->
+                    if eq n 0 then
+                        0
+                    else if eq n 1 then
+                        1
+                    else
+                        add (f (add n -1)) (f (add n -2))
+        in fib 10
+    ";
+    let answer = 55;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
 
 #[test]
 #[serial]
