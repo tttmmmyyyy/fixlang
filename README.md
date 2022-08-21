@@ -31,3 +31,4 @@ Fix is *planned to be* a functional language of Haskell-like syntax and type sys
 * Type checking
 * Add Array
     * Do boundary check in read_array and write_array.
+* Comment

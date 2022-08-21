@@ -258,6 +258,23 @@ pub fn test22() {
 
 #[test]
 #[serial]
+pub fn test22_5() {
+    let source = r"
+        let fib = fix \f -> \n -> 
+                    if eq n 0 then 
+                        0 
+                    else if eq n 1 then 
+                        1
+                    else
+                        f (add n -1) (add n -2)
+        in fib 30
+    ";
+    let answer = 0;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test23() {
     // Test newArray of size 0.
     let source = r"
