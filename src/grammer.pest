@@ -1,3 +1,4 @@
+// === Basic rules ===
 sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
 int_lit_expr = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
@@ -8,17 +9,20 @@ lit_expr = { int_lit_expr | bool_lit_expr }
 
 keywords = _{ "let" | "in" | "if" | "then" | "else" | bool_lit_expr }
 
+// === Expressions ===
 let_in = _{ "in" | ";" }
 
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
 var_expr = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
+var_with_type = { var_expr ~ sep* ~ ":" ~ sep* ~ type_expr }
+
 let_expr = { "let" ~ sep+ ~ var_expr ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ let_in ~ sep* ~ expr }
 
 if_expr = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
-lam_expr = { "\\" ~ sep* ~ var_expr ~ sep* ~ "->" ~ sep* ~ expr }
+lam_expr = { "\\" ~ sep* ~ var_with_type ~ sep*  ~ "->" ~ sep* ~ expr }
 
 app_expr = { not_app_expr ~ (sep+ ~ not_app_expr)+ }
 
@@ -28,8 +32,28 @@ bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 expr = { app_expr | not_app_expr }
 
-file = _{ SOI ~ sep* ~ expr ~ sep* ~ EOI }
+// === Types ===
+type_expr = { type_app | type_fun | type_expr_not_app_or_fun }
 
+type_bracket = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
+
+type_expr_not_app_or_fun = { type_var | type_lit | tycon_app | type_forall | type_bracket }
+
+type_var = { ASCII_ALPHA_LOWER ~ var_char* }
+
+type_lit = { ASCII_ALPHA_UPPER ~ var_char* }
+
+type_app = { type_expr_not_app_or_fun ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
+
+tycon_app = { tycon ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
+
+type_fun = { (type_app | type_expr_not_app_or_fun) ~ sep* ~ "->" ~ sep* ~ type_expr }
+
+type_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ type_expr }
+
+tycon = { ASCII_ALPHA_LOWER ~ var_char* }
+
+// === Comments ===
 block_comment = _{ "{-"  ~ block_commented_character*  ~ "-}" }
 
 block_commented_character = _{ !"-}" ~ ANY }
@@ -37,3 +61,6 @@ block_commented_character = _{ !"-}" ~ ANY }
 line_comment = _{"//" ~ line_commented_character* ~ ( NEWLINE | EOI )}
 
 line_commented_character = _{ !(NEWLINE | EOI) ~ ANY }
+
+// === File ===
+file = _{ SOI ~ sep* ~ expr ~ sep* ~ EOI }

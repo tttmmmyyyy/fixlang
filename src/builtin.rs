@@ -1,6 +1,29 @@
 // Implement built-in functions, (constructor of) types, etc.
 use super::*;
 
+const INT_TYPEID: u32 = 0;
+const INT_NAME: &str = "Int";
+const BOOL_TYPEID: u32 = 1;
+const BOOL_NAME: &str = "Bool";
+
+// Make Int type.
+pub fn int_lit_ty() -> Arc<Type> {
+    lit_ty(INT_TYPEID, INT_NAME)
+}
+
+// Make Bool type.
+pub fn bool_lit_ty() -> Arc<Type> {
+    lit_ty(BOOL_TYPEID, BOOL_NAME)
+}
+
+const ARRAY_TYCONID: u32 = 0;
+const ARRAY_NAME: &str = "Array";
+
+// Make Array literay type constructor.
+pub fn array_lit_tycon() -> Arc<TyCon> {
+    tycon(ARRAY_TYCONID, ARRAY_NAME, 1)
+}
+
 pub fn int(val: i64) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let ptr_to_int_obj =
@@ -9,7 +32,7 @@ pub fn int(val: i64) -> Arc<ExprInfo> {
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     });
-    lit(generator, vec![], val.to_string())
+    lit(generator, vec![], val.to_string(), int_lit_ty())
 }
 
 pub fn bool(val: bool) -> Arc<ExprInfo> {
@@ -19,7 +42,7 @@ pub fn bool(val: bool) -> Arc<ExprInfo> {
         gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
         ptr_to_obj
     });
-    lit(generator, vec![], val.to_string())
+    lit(generator, vec![], val.to_string(), bool_lit_ty())
 }
 
 fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
@@ -42,11 +65,14 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_int_obj
     });
-    lit(generator, free_vars, name)
+    lit(generator, free_vars, name, int_lit_ty())
 }
 
 pub fn add() -> Arc<ExprInfo> {
-    lam(var_var("lhs"), lam(var_var("rhs"), add_lit("lhs", "rhs")))
+    lam(
+        var_var("lhs", Some(int_lit_ty())),
+        lam(var_var("rhs", Some(int_lit_ty())), add_lit("lhs", "rhs")),
+    )
 }
 
 fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
@@ -78,16 +104,24 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_obj
     });
-    lit(generator, free_vars, name)
+    lit(generator, free_vars, name, bool_lit_ty())
 }
 
+// eq = for<a> \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
 pub fn eq() -> Arc<ExprInfo> {
-    lam(var_var("lhs"), lam(var_var("rhs"), eq_lit("lhs", "rhs")))
+    forall(
+        tyvar_var("a"),
+        lam(
+            var_var("lhs", Some(tyvar_ty("a"))),
+            lam(var_var("rhs", Some(tyvar_ty("a"))), eq_lit("lhs", "rhs")),
+        ),
+    )
 }
 
-fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
+fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
     let f_str = String::from(f);
     let x_str = String::from(x);
+    let b_str = String::from(b);
     let name = format!("fix {} {}", f_str, x_str);
     let free_vars = vec![String::from(SELF_NAME), f_str.clone(), x_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
@@ -98,15 +132,26 @@ fn fix_lit(f: &str, x: &str) -> Arc<ExprInfo> {
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
         f_fixf_x
     });
-    lit(generator, free_vars, name)
+    lit(generator, free_vars, name, tyvar_ty(b))
 }
 
+// fix = for<a, b> \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> Arc<ExprInfo> {
-    lam(var_var("f"), lam(var_var("x"), fix_lit("f", "x")))
+    let fixed_ty = lam_ty(tyvar_ty("a"), tyvar_ty("b"));
+    forall(
+        tyvar_var("a"),
+        forall(
+            tyvar_var("b"),
+            lam(
+                var_var("f", Some(lam_ty(fixed_ty.clone(), fixed_ty))),
+                lam(var_var("x", Some(tyvar_ty("a"))), fix_lit("b", "f", "x")),
+            ),
+        ),
+    )
 }
 
 // Implementation of newArray built-in function.
-fn new_array_lit(size: &str, value: &str) -> Arc<ExprInfo> {
+fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprInfo> {
     let size_str = String::from(size);
     let value_str = String::from(value);
     let name = format!("newArray {} {}", size, value);
@@ -129,19 +174,31 @@ fn new_array_lit(size: &str, value: &str) -> Arc<ExprInfo> {
         ObjectFieldType::initialize_array(gc, array_field, size, value);
         array
     });
-    lit(generator, free_vars, name)
+    lit(
+        generator,
+        free_vars,
+        name,
+        tycon_app(array_lit_tycon(), vec![tyvar_ty(a)]),
+    )
 }
 
-// newArray built-in function.
+// "newArray" built-in function.
+// newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
 pub fn new_array() -> Arc<ExprInfo> {
-    lam(
-        var_var("size"),
-        lam(var_var("value"), new_array_lit("size", "value")),
+    forall(
+        tyvar_var("a"),
+        lam(
+            var_var("size", Some(int_lit_ty())),
+            lam(
+                var_var("value", Some(tyvar_ty("a"))),
+                new_array_lit("a", "size", "value"),
+            ),
+        ),
     )
 }
 
 // Implementation of readArray built-in function.
-fn read_array_lit(array: &str, idx: &str) -> Arc<ExprInfo> {
+fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprInfo> {
     let array_str = String::from(array);
     let idx_str = String::from(idx);
     let name = format!("readArray {} {}", array, idx);
@@ -163,20 +220,36 @@ fn read_array_lit(array: &str, idx: &str) -> Arc<ExprInfo> {
         gc.release(array);
         elem
     });
-    lit(generator, free_vars, name)
+    lit(generator, free_vars, name, tyvar_ty(a))
 }
 
-// readArray built-in function.
+// "readArray" built-in function.
+// readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
 pub fn read_array() -> Arc<ExprInfo> {
-    lam(
-        var_var("array"),
-        lam(var_var("idx"), read_array_lit("array", "idx")),
+    forall(
+        tyvar_var("a"),
+        lam(
+            var_var(
+                "array",
+                Some(tycon_app(array_lit_tycon(), vec![tyvar_ty("a")])),
+            ),
+            lam(
+                var_var("idx", Some(int_lit_ty())),
+                read_array_lit("a", "array", "idx"),
+            ),
+        ),
     )
 }
 
 // Implementation of writeArray / writeArray! built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
-fn write_array_lit(array: &str, idx: &str, value: &str, is_unique_version: bool) -> Arc<ExprInfo> {
+fn write_array_lit(
+    a: &str,
+    array: &str,
+    idx: &str,
+    value: &str,
+    is_unique_version: bool,
+) -> Arc<ExprInfo> {
     let array_str = String::from(array);
     let idx_str = String::from(idx);
     let value_str = String::from(value);
@@ -261,33 +334,41 @@ fn write_array_lit(array: &str, idx: &str, value: &str, is_unique_version: bool)
         ObjectFieldType::write_array(gc, array_field, idx, value);
         array
     });
-    lit(generator, free_vars, name)
+    lit(
+        generator,
+        free_vars,
+        name,
+        tycon_app(array_lit_tycon(), vec![tyvar_ty(a)]),
+    )
+}
+
+// writeArray built-in function.
+// writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
+pub fn write_array_common(is_unique_version: bool) -> Arc<ExprInfo> {
+    forall(
+        tyvar_var("a"),
+        lam(
+            var_var(
+                "array",
+                Some(tycon_app(array_lit_tycon(), vec![tyvar_ty("a")])),
+            ),
+            lam(
+                var_var("idx", Some(int_lit_ty())),
+                lam(
+                    var_var("value", Some(tyvar_ty("a"))),
+                    write_array_lit("a", "array", "idx", "value", is_unique_version),
+                ),
+            ),
+        ),
+    )
 }
 
 // writeArray built-in function.
 pub fn write_array() -> Arc<ExprInfo> {
-    lam(
-        var_var("array"),
-        lam(
-            var_var("idx"),
-            lam(
-                var_var("value"),
-                write_array_lit("array", "idx", "value", false),
-            ),
-        ),
-    )
+    write_array_common(false)
 }
 
 // writeArray! built-in function.
 pub fn write_array_unique() -> Arc<ExprInfo> {
-    lam(
-        var_var("array"),
-        lam(
-            var_var("idx"),
-            lam(
-                var_var("value"),
-                write_array_lit("array", "idx", "value", true),
-            ),
-        ),
-    )
+    write_array_common(true)
 }

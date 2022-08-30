@@ -14,6 +14,7 @@ mod runner;
 mod runtime;
 #[cfg(test)]
 mod tests;
+mod typecheck;
 mod types;
 
 use ast::*;
@@ -49,6 +50,7 @@ use std::string;
 use std::sync::Arc;
 use std::thread::panicking;
 use std::vec::Vec;
+use typecheck::*;
 use types::*;
 use Either::Right;
 

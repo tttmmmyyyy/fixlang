@@ -50,8 +50,8 @@ impl ObjectFieldType {
     }
 
     // Take array and generate code iterating its elements.
-    fn loop_over_array<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+    fn loop_over_array<'c, 'm, 'x>(
+        gc: &'x mut GenerationContext<'c, 'm>,
         ptr_to_array: PointerValue<'c>,
         loop_body: impl Fn(
             &mut GenerationContext<'c, 'm>,
@@ -60,7 +60,7 @@ impl ObjectFieldType {
             PointerValue<'c>, /* buffer */
         ),
         after_loop: impl Fn(
-            &mut GenerationContext<'c, 'm>,
+            &'x mut GenerationContext<'c, 'm>,
             IntValue<'c>,     /* size */
             PointerValue<'c>, /* buffer */
         ),

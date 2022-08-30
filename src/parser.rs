@@ -61,7 +61,14 @@ fn parse_var_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 }
 
 fn parse_var_var(var: Pair<Rule>) -> Arc<Var> {
-    var_var(var.as_str())
+    var_var(var.as_str(), None)
+}
+
+fn parse_var_var_with_type(var_with_type: Pair<Rule>) -> Arc<Var> {
+    let mut pairs = var_with_type.into_inner();
+    let var = pairs.next().unwrap();
+    let ty = pairs.next().unwrap();
+    var_var(var.as_str(), Some(parse_type(ty)))
 }
 
 fn parse_let_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
@@ -74,9 +81,9 @@ fn parse_let_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 
 fn parse_lam_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let mut pairs = expr.into_inner();
-    let var = pairs.next().unwrap();
+    let var_with_type = pairs.next().unwrap();
     let val = pairs.next().unwrap();
-    lam(parse_var_var(var), parse_expr(val))
+    lam(parse_var_var_with_type(var_with_type), parse_expr(val))
 }
 
 fn parse_if_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
@@ -100,4 +107,13 @@ fn parse_int_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 fn parse_bool_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let val = expr.as_str().parse::<bool>().unwrap();
     bool(val)
+}
+
+fn parse_type(type_expr: Pair<Rule>) -> Arc<Type> {
+    let mut pairs = type_expr.into_inner();
+    let sub = pairs.next().unwrap();
+    todo!()
+    // match sub.as_rule() {
+    //     Rule::type_app => todo!(),
+    // }
 }

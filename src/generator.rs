@@ -343,17 +343,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::If(cond_expr, then_expr, else_expr) => {
                 self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone())
             }
-            Expr::Type(_) => todo!(),
+            Expr::AppType(ei, _) => self.eval_expr(ei.clone()),
+            Expr::ForAll(_, ei) => {
+                // TODO: For implementation of type class, push local variables of associated functions at here.
+                self.eval_expr(ei.clone())
+            }
         };
         self.cast_pointer(ret, ptr_to_object_type(self.context))
     }
 
     // Evaluate variable.
     fn eval_var(&mut self, var: Arc<Var>) -> PointerValue<'c> {
-        match &*var {
-            Var::TermVar { name } => self.get_var_retained_if_used_later(name),
-            Var::TyVar { name: _ } => unreachable!(),
-        }
+        self.get_var_retained_if_used_later(&var.name)
     }
 
     // Evaluate application
@@ -376,7 +377,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let module = self.module;
         // Fix ordering of captured names
         let mut captured_names = val.free_vars.clone();
-        captured_names.remove(arg.name());
+        captured_names.remove(&arg.name);
         captured_names.remove(SELF_NAME);
         let captured_names: Vec<String> = captured_names.into_iter().collect();
         // Determine the type of closure
@@ -404,7 +405,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // Set up new scope
             let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
-            self.scope_push(&arg.name(), &arg_ptr);
+            self.scope_push(&arg.name, &arg_ptr);
             let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
             self.scope_push(SELF_NAME, &closure_obj);
             for (i, cap_name) in captured_names.iter().enumerate() {
@@ -422,7 +423,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             if !val.free_vars.contains(SELF_NAME) {
                 self.release(closure_obj);
             }
-            if !val.free_vars.contains(arg.name()) {
+            if !val.free_vars.contains(&arg.name) {
                 self.release(arg_ptr);
             }
             // Generate value
@@ -455,7 +456,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         bound: Arc<ExprInfo>,
         val: Arc<ExprInfo>,
     ) -> PointerValue<'c> {
-        let var_name = var.name();
+        let var_name = &var.name;
         let mut used_in_val_except_var = val.free_vars.clone();
         used_in_val_except_var.remove(var_name);
         self.scope_lock_as_used_later(&used_in_val_except_var);
