@@ -24,9 +24,11 @@ if_expr = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ s
 
 lam_expr = { "\\" ~ sep* ~ var_with_type ~ sep*  ~ "->" ~ sep* ~ expr }
 
+forall_expr = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
+
 app_expr = { not_app_expr ~ (sep+ ~ not_app_expr)+ }
 
-not_app_expr = { lit_expr | var_expr | let_expr | if_expr | lam_expr | bracket_expr }
+not_app_expr = { lit_expr | var_expr | let_expr | if_expr | lam_expr | forall_expr | bracket_expr }
 
 bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
@@ -37,7 +39,7 @@ type_expr = { type_app | type_fun | type_expr_not_app_or_fun }
 
 type_bracket = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
 
-type_expr_not_app_or_fun = { type_var | type_lit | tycon_app | type_forall | type_bracket }
+type_expr_not_app_or_fun = { type_var | type_lit | type_tycon_app | type_forall | type_bracket }
 
 type_var = { ASCII_ALPHA_LOWER ~ var_char* }
 
@@ -45,7 +47,7 @@ type_lit = { ASCII_ALPHA_UPPER ~ var_char* }
 
 type_app = { type_expr_not_app_or_fun ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 
-tycon_app = { tycon ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
+type_tycon_app = { tycon ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 
 type_fun = { (type_app | type_expr_not_app_or_fun) ~ sep* ~ "->" ~ sep* ~ type_expr }
 

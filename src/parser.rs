@@ -41,6 +41,7 @@ fn parse_not_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
         Rule::var_expr => parse_var_expr(pair),
         Rule::let_expr => parse_let_expr(pair),
         Rule::lam_expr => parse_lam_expr(pair),
+        Rule::forall_expr => parse_forall_expr(pair),
         Rule::if_expr => parse_if_expr(pair),
         Rule::bracket_expr => parse_bracket_expr(pair),
         _ => unreachable!(),
@@ -86,6 +87,29 @@ fn parse_lam_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     lam(parse_var_var_with_type(var_with_type), parse_expr(val))
 }
 
+fn parse_forall_expr(pair: Pair<Rule>) -> Arc<ExprInfo> {
+    let mut pairs = pair.into_inner();
+    let mut vars: Vec<Arc<TyVar>> = Default::default();
+    let mut expr = loop {
+        let pair = pairs.next().unwrap();
+        match pair.as_rule() {
+            Rule::type_var => {
+                vars.push(tyvar_var(pair.as_str()));
+            }
+            Rule::expr => {
+                break parse_expr(pair);
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    };
+    for var in vars.iter().rev() {
+        expr = forall(var.clone(), expr);
+    }
+    expr
+}
+
 fn parse_if_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let mut pairs = expr.into_inner();
     let cond = pairs.next().unwrap();
@@ -111,9 +135,97 @@ fn parse_bool_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
 
 fn parse_type(type_expr: Pair<Rule>) -> Arc<Type> {
     let mut pairs = type_expr.into_inner();
-    let sub = pairs.next().unwrap();
-    todo!()
-    // match sub.as_rule() {
-    //     Rule::type_app => todo!(),
-    // }
+    let pair = pairs.next().unwrap();
+    match pair.as_rule() {
+        Rule::type_app => parse_type_app(pair),
+        Rule::type_fun => parse_type_fun(pair),
+        Rule::type_expr_not_app_or_fun => parse_type_expr_not_app_or_fun(pair),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_type_bracket(type_expr: Pair<Rule>) -> Arc<Type> {
+    let mut pairs = type_expr.into_inner();
+    let pair = pairs.next().unwrap();
+    parse_type(pair)
+}
+
+fn parse_type_expr_not_app_or_fun(type_expr: Pair<Rule>) -> Arc<Type> {
+    let mut pairs = type_expr.into_inner();
+    let pair = pairs.next().unwrap();
+    match pair.as_rule() {
+        Rule::type_var => parse_type_var(pair),
+        Rule::type_lit => parse_type_lit(pair),
+        Rule::type_tycon_app => parse_type_tycon_app(pair),
+        Rule::type_forall => parse_type_forall(pair),
+        Rule::type_bracket => parse_type_bracket(pair),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_type_var(type_expr: Pair<Rule>) -> Arc<Type> {
+    tyvar_ty(type_expr.as_str())
+}
+
+fn parse_type_lit(type_expr: Pair<Rule>) -> Arc<Type> {
+    make_bultin_type(type_expr.as_str())
+}
+
+fn parse_type_app(type_expr: Pair<Rule>) -> Arc<Type> {
+    let mut pairs = type_expr.into_inner();
+    let head = pairs.next().unwrap();
+    let mut ret = parse_type_expr_not_app_or_fun(head);
+    for pair in pairs {
+        ret = type_app(ret, parse_type(pair))
+    }
+    ret
+}
+
+fn parse_type_tycon_app(type_expr: Pair<Rule>) -> Arc<Type> {
+    let mut pairs = type_expr.into_inner();
+    let tycon = pairs.next().unwrap();
+    let tycon = parse_tycon(tycon);
+    let mut args: Vec<Arc<Type>> = Default::default();
+    for pair in pairs {
+        args.push(parse_type(pair));
+    }
+    tycon_app(tycon, args)
+}
+
+fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<Type> {
+    let mut pairs = type_expr.into_inner();
+    let src_ty = parse_type(pairs.next().unwrap());
+    let dst_ty = parse_type(pairs.next().unwrap());
+    type_fun(src_ty, dst_ty)
+}
+
+fn parse_type_forall(type_expr: Pair<Rule>) -> Arc<Type> {
+    let mut pairs = type_expr.into_inner();
+    let mut vars: Vec<Arc<TyVar>> = Default::default();
+    let mut type_expr = loop {
+        let pair = pairs.next().unwrap();
+        match pair.as_rule() {
+            Rule::type_var => {
+                vars.push(tyvar_var(pair.as_str()));
+            }
+            Rule::type_expr => {
+                break parse_type(pair);
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    };
+    for var in vars.iter().rev() {
+        type_expr = type_forall(var.clone(), type_expr);
+    }
+    type_expr
+}
+
+fn parse_tycon(type_expr: Pair<Rule>) -> Arc<TyCon> {
+    tycon(
+        u32::MAX, /* implies N/A */
+        type_expr.as_str(),
+        u32::MAX, /* implies N/A */
+    )
 }

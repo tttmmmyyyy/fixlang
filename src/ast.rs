@@ -125,9 +125,9 @@ pub enum Kind {
 }
 
 #[derive(Eq, PartialEq)]
-struct TyLit {
-    name: String,
+pub struct TyLit {
     id: u32,
+    name: String,
 }
 
 #[derive(Eq, PartialEq)]
@@ -226,6 +226,14 @@ pub fn conditional(
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info()
 }
 
+pub fn app_ty(expr: Arc<ExprInfo>, ty: Arc<Type>) -> Arc<ExprInfo> {
+    Arc::new(Expr::AppType(expr, ty)).into_expr_info()
+}
+
+pub fn forall(var: Arc<TyVar>, val: Arc<ExprInfo>) -> Arc<ExprInfo> {
+    Arc::new(Expr::ForAll(var, val)).into_expr_info()
+}
+
 pub fn lit_ty(id: u32, name: &str) -> Arc<Type> {
     Arc::new(Type::LitTy(Arc::new(TyLit {
         id,
@@ -245,16 +253,20 @@ pub fn tycon(id: u32, name: &str, arity: u32) -> Arc<TyCon> {
     })
 }
 
+pub fn type_app(head: Arc<Type>, param: Arc<Type>) -> Arc<Type> {
+    Arc::new(Type::AppTy(head, param))
+}
+
+pub fn type_fun(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
+    Arc::new(Type::FunTy(src, dst))
+}
+
+pub fn type_forall(var: Arc<TyVar>, ty: Arc<Type>) -> Arc<Type> {
+    Arc::new(Type::ForAllTy(var, ty))
+}
+
 pub fn tycon_app(tycon: Arc<TyCon>, params: Vec<Arc<Type>>) -> Arc<Type> {
     Arc::new(Type::TyConApp(tycon, params))
-}
-
-pub fn forall(var: Arc<TyVar>, val: Arc<ExprInfo>) -> Arc<ExprInfo> {
-    Arc::new(Expr::ForAll(var, val)).into_expr_info()
-}
-
-pub fn app_ty(expr: Arc<ExprInfo>, ty: Arc<Type>) -> Arc<ExprInfo> {
-    Arc::new(Expr::AppType(expr, ty)).into_expr_info()
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.

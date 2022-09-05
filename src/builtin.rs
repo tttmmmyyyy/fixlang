@@ -1,19 +1,45 @@
 // Implement built-in functions, (constructor of) types, etc.
 use super::*;
 
-const INT_TYPEID: u32 = 0;
 const INT_NAME: &str = "Int";
-const BOOL_TYPEID: u32 = 1;
 const BOOL_NAME: &str = "Bool";
+
+// Array of literal types, which also defines type id of literal types.
+const BUILTIN_LITERAL_TYPES: [&str; 2] = [INT_NAME, BOOL_NAME];
+
+// Search type id of literal type from its name.
+pub fn builtin_type_id(name: &str) -> u32 {
+    // TODO: Avoid linear search by preparing HashMap from BUILTIN_LITERAL_TYPES using once_cell::Lazy.
+    for i in 0..BUILTIN_LITERAL_TYPES.len() {
+        if BUILTIN_LITERAL_TYPES[i] == name {
+            return i as u32;
+        }
+    }
+    panic!("Unknown literal type: {}", name);
+}
+
+// Make builtin type.
+pub fn make_bultin_type(name: &str) -> Arc<Type> {
+    lit_ty(builtin_type_id(name), name)
+}
 
 // Make Int type.
 pub fn int_lit_ty() -> Arc<Type> {
-    lit_ty(INT_TYPEID, INT_NAME)
+    make_bultin_type(INT_NAME)
 }
 
 // Make Bool type.
 pub fn bool_lit_ty() -> Arc<Type> {
-    lit_ty(BOOL_TYPEID, BOOL_NAME)
+    make_bultin_type(BOOL_NAME)
+}
+
+// Make built-in literal type from type id.
+pub fn make_literal_type(type_id: u32) -> Arc<Type> {
+    match type_id {
+        INT_TYPEID => int_lit_ty(),
+        BOOL_TYPEID => bool_lit_ty(),
+        _ => unreachable!(),
+    }
 }
 
 const ARRAY_TYCONID: u32 = 0;
