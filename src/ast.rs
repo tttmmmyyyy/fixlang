@@ -28,11 +28,18 @@ pub struct ExprInfo {
 }
 
 impl ExprInfo {
-    fn with_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<ExprInfo> {
+    fn with_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<Self> {
         Arc::new(ExprInfo {
             expr: self.expr.clone(),
             free_vars,
             deduced_type: self.deduced_type.clone(),
+        })
+    }
+    pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<Type>) -> Arc<Self> {
+        Arc::new(ExprInfo {
+            expr: self.expr.clone(),
+            free_vars: self.free_vars.clone(),
+            deduced_type: Some(ty),
         })
     }
 }
@@ -50,7 +57,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    fn into_expr_info(self: &Arc<Self>) -> Arc<ExprInfo> {
+    pub fn into_expr_info(self: &Arc<Self>) -> Arc<ExprInfo> {
         Arc::new(ExprInfo {
             expr: self.clone(),
             free_vars: Default::default(),
@@ -98,7 +105,7 @@ pub struct Literal {
 #[derive(Eq, PartialEq)]
 pub struct Var {
     pub name: String,
-    type_annotation: Option<Arc<Type>>,
+    pub type_annotation: Option<Arc<Type>>,
 }
 
 #[derive(Eq, PartialEq)]

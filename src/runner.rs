@@ -32,7 +32,6 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
 
     // Check types.
     let program = check_type(program);
-    let program = program.unwrap();
 
     // Calculate free variables of nodes.
     let program = calculate_free_vars(program);
