@@ -72,7 +72,7 @@ pub fn test7() {
 #[test]
 #[serial]
 pub fn test8() {
-    let source = r"(\x -> x) 6";
+    let source = r"(\x: Int -> x) 6";
     let answer = 6;
     test_run_source(source, answer, OptimizationLevel::Default);
 }

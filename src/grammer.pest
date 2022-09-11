@@ -49,7 +49,7 @@ type_app = { type_expr_not_app_or_fun ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ s
 
 type_tycon_app = { tycon ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 
-type_fun = { (type_app | type_expr_not_app_or_fun) ~ sep* ~ "->" ~ sep* ~ type_expr }
+type_fun = { (type_app | type_expr_not_app_or_fun) ~ sep* ~ "=>" ~ sep* ~ type_expr }
 
 type_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ type_expr }
 
