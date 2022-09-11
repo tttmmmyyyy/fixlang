@@ -110,7 +110,7 @@ pub struct Var {
 
 #[derive(Eq, PartialEq)]
 pub struct TyVar {
-    name: String,
+    pub name: String,
 }
 
 // impl Var {
@@ -133,8 +133,8 @@ pub enum Kind {
 
 #[derive(Eq, PartialEq)]
 pub struct TyLit {
-    id: u32,
-    name: String,
+    pub id: u32,
+    pub name: String,
 }
 
 #[derive(Eq, PartialEq)]
@@ -145,6 +145,7 @@ pub enum Type {
     TyConApp(Arc<TyCon>, Vec<Arc<Type>>),
     FunTy(Arc<Type>, Arc<Type>),
     ForAllTy(Arc<TyVar>, Arc<Type>),
+    EqvTy(Arc<Type>, Arc<Type>, Arc<Type>), // Eqv(a, b, x) expects a and b is equivalent and evaluated to x. Used for mathcing given type to type annotation or deducing type of conditional expression.
 }
 
 impl Type {
@@ -155,9 +156,9 @@ impl Type {
 
 #[derive(Eq, PartialEq)]
 pub struct TyCon {
-    name: String,
+    pub name: String,
     id: u32,
-    kind: Arc<Kind>,
+    pub arity: u32, // kind: Arc<Kind>,
 }
 
 pub fn star_kind() -> Arc<Kind> {
@@ -249,14 +250,14 @@ pub fn lit_ty(id: u32, name: &str) -> Arc<Type> {
 }
 
 pub fn tycon(id: u32, name: &str, arity: u32) -> Arc<TyCon> {
-    let mut kind = star_kind();
-    for _ in 0..arity {
-        kind = arrow_kind(star_kind(), kind);
-    }
+    // let mut kind = star_kind();
+    // for _ in 0..arity {
+    //     kind = arrow_kind(star_kind(), kind);
+    // }
     Arc::new(TyCon {
         id,
         name: String::from(name),
-        kind,
+        arity,
     })
 }
 
@@ -274,6 +275,10 @@ pub fn type_forall(var: Arc<TyVar>, ty: Arc<Type>) -> Arc<Type> {
 
 pub fn tycon_app(tycon: Arc<TyCon>, params: Vec<Arc<Type>>) -> Arc<Type> {
     Arc::new(Type::TyConApp(tycon, params))
+}
+
+pub fn type_eqv(expected: Arc<Type>, found: Arc<Type>, val: Arc<Type>) -> Arc<Type> {
+    Arc::new(Type::EqvTy(expected, found, val))
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.

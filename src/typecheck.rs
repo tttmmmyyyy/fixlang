@@ -1,3 +1,5 @@
+use core::panic;
+
 use super::*;
 
 // #[derive(Debug)]
@@ -9,132 +11,371 @@ struct LocalTermVar {
 }
 
 #[derive(Clone)]
-struct LocalTypeVar {/* field for type class */}
-
-#[derive(Default)]
-struct Scope {
-    term_var: HashMap<String, Vec<LocalTermVar>>,
-    type_var: HashMap<String, Vec<LocalTypeVar>>,
+struct LocalTypeVar {
+    ty: Arc<Type>,
+    /* field for type class */
 }
 
-impl Scope {
+struct Scope<T> {
+    var: HashMap<String, Vec<T>>,
+    // type_var: HashMap<String, Vec<LocalTypeVar>>,
+}
+
+impl<T> Scope<T> {
+    fn empty() -> Self {
+        Self {
+            var: HashMap::new(),
+        }
+    }
+}
+
+impl<T> Scope<T>
+where
+    T: Clone,
+{
     // TODO: throw TypeError when unwrap fails.
-    fn push_term(self: &mut Self, name: &str, ty: &LocalTermVar) {
-        if !self.term_var.contains_key(name) {
-            self.term_var.insert(String::from(name), Default::default());
+    fn push(self: &mut Self, name: &str, ty: &T) {
+        if !self.var.contains_key(name) {
+            self.var.insert(String::from(name), Default::default());
         }
-        self.term_var.get_mut(name).unwrap().push(ty.clone());
+        self.var.get_mut(name).unwrap().push(ty.clone());
     }
-    fn pop_term(self: &mut Self, name: &str) {
-        self.term_var.get_mut(name).unwrap().pop();
-        if self.term_var.get(name).unwrap().is_empty() {
-            self.term_var.remove(name);
+    fn pop(self: &mut Self, name: &str) {
+        self.var.get_mut(name).unwrap().pop();
+        if self.var.get(name).unwrap().is_empty() {
+            self.var.remove(name);
         }
     }
-    fn get_term(self: &Self, name: &str) -> LocalTermVar {
-        self.term_var.get(name).unwrap().last().unwrap().clone()
+    fn get(self: &Self, name: &str) -> Option<T> {
+        self.var.get(name).map(|v| v.last().unwrap().clone())
     }
 
-    fn push_type(self: &mut Self, name: &str) {
-        if !self.type_var.contains_key(name) {
-            self.type_var.insert(String::from(name), Default::default());
-        }
-        self.type_var.get_mut(name).unwrap().push(LocalTypeVar {});
-    }
-    fn pop_type(self: &mut Self, name: &str) {
-        self.type_var.get_mut(name).unwrap().pop();
-        if self.type_var.get(name).unwrap().is_empty() {
-            self.type_var.remove(name);
-        }
-    }
-    fn get_type(self: &Self, name: &str) -> LocalTypeVar {
-        self.type_var.get(name).unwrap().last().unwrap().clone()
-    }
+    // fn push_type(self: &mut Self, name: &str) {
+    //     if !self.type_var.contains_key(name) {
+    //         self.type_var.insert(String::from(name), Default::default());
+    //     }
+    //     self.type_var.get_mut(name).unwrap().push(LocalTypeVar {});
+    // }
+    // fn pop_type(self: &mut Self, name: &str) {
+    //     self.type_var.get_mut(name).unwrap().pop();
+    //     if self.type_var.get(name).unwrap().is_empty() {
+    //         self.type_var.remove(name);
+    //     }
+    // }
+    // fn get_type(self: &Self, name: &str) -> LocalTypeVar {
+    //     self.type_var.get(name).unwrap().last().unwrap().clone()
+    // }
 }
 
 pub fn check_type(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
-    let mut scope: Scope = Default::default();
-    check_expr(ei, &mut scope)
+    let mut scope = Scope::<LocalTermVar>::empty();
+    let ei = deduce_expr(ei, &mut scope);
+    let mut var_scope = Scope::<LocalTypeVar>::empty();
+    let _ = reduce_type(ei.deduced_type.clone().unwrap(), &mut var_scope);
+    ei
 }
 
-fn check_expr(ei: Arc<ExprInfo>, scope: &mut Scope) -> Arc<ExprInfo> {
+fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
     match &*ei.expr {
-        Expr::Var(v) => check_var(v.clone(), scope),
-        Expr::Lit(lit) => check_lit(lit.clone(), scope),
-        Expr::App(func, arg) => check_app(func.clone(), arg.clone(), scope),
-        Expr::Lam(arg, val) => check_lam(arg.clone(), val.clone(), scope),
-        Expr::Let(var, bound, val) => check_let(var.clone(), bound.clone(), val.clone(), scope),
-        Expr::If(_, _, _) => todo!(),
-        Expr::AppType(_, _) => todo!(),
-        Expr::ForAll(_, _) => todo!(),
+        Expr::Var(v) => deduce_var(v.clone(), scope),
+        Expr::Lit(lit) => deduce_lit(lit.clone(), scope),
+        Expr::App(func, arg) => deduce_app(func.clone(), arg.clone(), scope),
+        Expr::Lam(arg, val) => deduce_lam(arg.clone(), val.clone(), scope),
+        Expr::Let(var, bound, val) => deduce_let(var.clone(), bound.clone(), val.clone(), scope),
+        Expr::If(cond, then_expr, else_expr) => {
+            deduce_if(cond.clone(), then_expr.clone(), else_expr.clone(), scope)
+        }
+        Expr::AppType(expr, ty) => deduce_apptype(expr.clone(), ty.clone(), scope),
+        Expr::ForAll(tyvar, expr) => deduce_forall(tyvar.clone(), expr.clone(), scope),
     }
 }
 
-fn check_var(var: Arc<Var>, scope: &mut Scope) -> Arc<ExprInfo> {
-    let ty = scope.get_term(&var.name).ty;
-    let ty = match &var.type_annotation {
-        None => ty,
-        Some(ty_anno) => {
-            if ty == *ty_anno {
-                ty
-            } else {
-                panic!("Type mismatch at {}.", var.name)
-            }
-        }
+fn deduce_var(var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
+    let ty = scope.get(&var.name);
+    let ty = if ty.is_some() {
+        ty.unwrap().ty
+    } else {
+        panic!("Unknown variable: {}", var.name)
     };
     Arc::new(Expr::Var(var))
         .into_expr_info()
         .with_deduced_type(ty)
 }
 
-fn check_lit(lit: Arc<Literal>, _scope: &mut Scope) -> Arc<ExprInfo> {
+fn deduce_lit(lit: Arc<Literal>, _scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
     let lit_ty = lit.ty.clone();
     Arc::new(Expr::Lit(lit))
         .into_expr_info()
         .with_deduced_type(lit_ty.clone())
 }
 
-fn check_app(func: Arc<ExprInfo>, arg: Arc<ExprInfo>, scope: &mut Scope) -> Arc<ExprInfo> {
-    let func = check_expr(func, scope);
-    let arg = check_expr(arg, scope);
+fn deduce_app(
+    func: Arc<ExprInfo>,
+    arg: Arc<ExprInfo>,
+    scope: &mut Scope<LocalTermVar>,
+) -> Arc<ExprInfo> {
+    let func = deduce_expr(func, scope);
+    let arg = deduce_expr(arg, scope);
+    let arg_ty = arg.deduced_type.clone().unwrap();
     let ty = match &*func.deduced_type.clone().unwrap() {
-        Type::FunTy(arg_ty, result_ty) => {
-            if *arg_ty != *arg.deduced_type.as_ref().unwrap() {
-                panic!("Type mismatch at {}.", arg.expr.to_string())
-            }
-            result_ty.clone()
+        Type::FunTy(param_ty, result_ty) => type_eqv(param_ty.clone(), arg_ty, result_ty.clone()),
+        _ => {
+            panic!("In the expression \"a b\", \"a\" is expected to be a function.")
         }
-        _ => panic!("Function required at {}.", func.expr.to_string()),
     };
     app(func, arg).with_deduced_type(ty)
 }
 
-fn check_lam(arg: Arc<Var>, val: Arc<ExprInfo>, scope: &mut Scope) -> Arc<ExprInfo> {
-    let arg_ty = arg.type_annotation.clone().unwrap();
-    scope.push_term(&arg.name, &LocalTermVar { ty: arg_ty.clone() });
-    let val = check_expr(val, scope);
-    scope.pop_term(&arg.name);
+fn deduce_lam(
+    param: Arc<Var>,
+    val: Arc<ExprInfo>,
+    scope: &mut Scope<LocalTermVar>,
+) -> Arc<ExprInfo> {
+    let param_ty = param.type_annotation.clone().unwrap();
+    scope.push(
+        &param.name,
+        &LocalTermVar {
+            ty: param_ty.clone(),
+        },
+    );
+    let val = deduce_expr(val, scope);
+    scope.pop(&param.name);
     let val_ty = val.deduced_type.clone().unwrap();
-    lam(arg, val).with_deduced_type(lam_ty(arg_ty, val_ty))
+    lam(param, val).with_deduced_type(lam_ty(param_ty, val_ty))
 }
 
-fn check_let(
+fn deduce_let(
     var: Arc<Var>,
     bound: Arc<ExprInfo>,
     val: Arc<ExprInfo>,
-    scope: &mut Scope,
+    scope: &mut Scope<LocalTermVar>,
 ) -> Arc<ExprInfo> {
-    let bound = check_expr(bound, scope);
+    let bound = deduce_expr(bound, scope);
     let bound_ty = bound.deduced_type.clone().unwrap();
-    if var.type_annotation.is_some() && var.type_annotation.clone().unwrap() != bound_ty {
-        panic!(
-            "Type mismatch on let {} = {}; ...",
-            var.name,
-            bound.expr.to_string()
-        );
+    scope.push(
+        &var.name,
+        &LocalTermVar {
+            ty: bound_ty.clone(),
+        },
+    );
+    let val = deduce_expr(val, scope);
+    scope.pop(&var.name);
+    let val_ty = val.deduced_type.clone().unwrap();
+    let ty = match var.type_annotation.clone() {
+        Some(annotation) => type_eqv(annotation, bound_ty, val_ty),
+        None => val_ty,
+    };
+    let_in(var, bound, val).with_deduced_type(ty)
+}
+
+fn deduce_if(
+    cond: Arc<ExprInfo>,
+    then_expr: Arc<ExprInfo>,
+    else_expr: Arc<ExprInfo>,
+    scope: &mut Scope<LocalTermVar>,
+) -> Arc<ExprInfo> {
+    let cond = deduce_expr(cond, scope);
+    let then_expr = deduce_expr(then_expr, scope);
+    let else_expr = deduce_expr(else_expr, scope);
+    let then_ty = then_expr.deduced_type.clone().unwrap();
+    let else_ty = else_expr.deduced_type.clone().unwrap();
+    let ty = type_eqv(then_ty.clone(), else_ty, then_ty);
+    let ty = type_eqv(bool_lit_ty(), cond.deduced_type.clone().unwrap(), ty);
+    conditional(cond, then_expr, else_expr).with_deduced_type(ty)
+}
+
+fn deduce_apptype(
+    expr: Arc<ExprInfo>,
+    arg_ty: Arc<Type>,
+    scope: &mut Scope<LocalTermVar>,
+) -> Arc<ExprInfo> {
+    let expr = deduce_expr(expr, scope);
+    let ty = type_app(expr.deduced_type.clone().unwrap(), arg_ty.clone());
+    app_ty(expr, arg_ty).with_deduced_type(ty)
+}
+
+fn deduce_forall(
+    tyvar: Arc<TyVar>,
+    expr: Arc<ExprInfo>,
+    scope: &mut Scope<LocalTermVar>,
+) -> Arc<ExprInfo> {
+    let expr = deduce_expr(expr, scope);
+    let ty = type_forall(tyvar.clone(), expr.deduced_type.clone().unwrap());
+    forall(tyvar, expr).with_deduced_type(ty)
+}
+
+fn reduce_type(ty: Arc<Type>, scope: &mut Scope<LocalTypeVar>) -> Arc<Type> {
+    match &*ty {
+        Type::AppTy(fun_ty, arg_ty) => {
+            let arg_ty = reduce_type(arg_ty.clone(), scope);
+            match &**fun_ty {
+                Type::ForAllTy(param_ty, val_ty) => {
+                    scope.push(param_ty.name.as_str(), &LocalTypeVar { ty: arg_ty });
+                    let val_ty = reduce_type(val_ty.clone(), scope);
+                    scope.pop(param_ty.name.as_str());
+                    val_ty
+                }
+                _ => panic!("In a expression \"a<b>\", type \"a\" should be of form \"for<c> d\"."),
+            }
+        }
+        Type::TyVar(var) => {
+            let ty = scope.get(var.name.as_str());
+            if ty.is_some() {
+                ty.unwrap().ty
+            } else {
+                panic!("Unknown variable: {}", var.name)
+            }
+        }
+        Type::LitTy(_) => ty,
+        Type::TyConApp(tycon, arg_tys) => {
+            let arg_tys: Vec<Arc<Type>> = arg_tys
+                .iter()
+                .map(|ty| reduce_type(ty.clone(), scope))
+                .collect();
+            if tycon.arity != arg_tys.len() as u32 {
+                panic!(
+                    "Type constructor {} requires {} argments.",
+                    tycon.name, tycon.arity
+                );
+            }
+            tycon_app(tycon.clone(), arg_tys)
+        }
+        Type::FunTy(param_ty, val_ty) => type_fun(
+            reduce_type(param_ty.clone(), scope),
+            reduce_type(val_ty.clone(), scope),
+        ),
+        Type::ForAllTy(_, _) => ty,
+        Type::EqvTy(expected, found, val) => {
+            let found = reduce_type(found.clone(), scope);
+            let expected = reduce_type(expected.clone(), scope);
+            if !is_equivalent_type(found, expected) {
+                panic!("Type mismatch.")
+            } else {
+                val.clone()
+            }
+        }
     }
-    scope.push_term(&var.name, &LocalTermVar { ty: bound_ty });
-    let val = check_expr(val, scope);
-    scope.pop_term(&var.name);
-    let_in(var, bound, val)
+}
+
+fn is_equivalent_type(lhs: Arc<Type>, rhs: Arc<Type>) -> bool {
+    let mut lhs_scope = Scope::<u32>::empty();
+    let mut rhs_scope = Scope::<u32>::empty();
+    let mut next_id: u32 = 0;
+    is_equivalent_type_inner(lhs, rhs, &mut lhs_scope, &mut rhs_scope, &mut next_id)
+}
+
+// "for<a> a" is equivalent to "for<b> b".
+fn is_equivalent_type_inner(
+    lhs: Arc<Type>,
+    rhs: Arc<Type>,
+    lhs_scope: &mut Scope<u32>, // name of type variable -> identifier
+    rhs_scope: &mut Scope<u32>, // name of type variable -> identifier
+    next_id: &mut u32,
+) -> bool {
+    match &*lhs {
+        Type::TyVar(lhs_var) => match &*rhs {
+            Type::TyVar(rhs_var) => {
+                let lhs = lhs_scope.get(&lhs_var.name);
+                let rhs = rhs_scope.get(&rhs_var.name);
+                if lhs.is_none() {
+                    if rhs.is_some() {
+                        return false;
+                    }
+                    lhs_var == rhs_var
+                } else {
+                    if rhs.is_none() {
+                        return false;
+                    }
+                    let lhs = lhs.unwrap();
+                    let rhs = rhs.unwrap();
+                    lhs == rhs
+                }
+            }
+            _ => false,
+        },
+        Type::LitTy(lhs_lit) => match &*rhs {
+            Type::LitTy(rhs_lit) => lhs_lit.id == rhs_lit.id,
+            _ => false,
+        },
+        Type::AppTy(lhs_func_ty, lhs_arg_ty) => match &*rhs {
+            Type::AppTy(rhs_func_ty, rhs_arg_ty) => {
+                is_equivalent_type_inner(
+                    lhs_func_ty.clone(),
+                    rhs_func_ty.clone(),
+                    lhs_scope,
+                    rhs_scope,
+                    next_id,
+                ) && is_equivalent_type_inner(
+                    lhs_arg_ty.clone(),
+                    rhs_arg_ty.clone(),
+                    lhs_scope,
+                    rhs_scope,
+                    next_id,
+                )
+            }
+            _ => false,
+        },
+        Type::TyConApp(lhs_tycon, lhs_args) => match &*rhs {
+            Type::TyConApp(rhs_tycon, rhs_args) => {
+                if lhs_tycon != rhs_tycon {
+                    return false;
+                }
+                if lhs_args.len() != rhs_args.len() {
+                    return false;
+                }
+                for i in 0..lhs_args.len() {
+                    if !is_equivalent_type_inner(
+                        lhs_args[i].clone(),
+                        rhs_args[i].clone(),
+                        lhs_scope,
+                        rhs_scope,
+                        next_id,
+                    ) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            _ => false,
+        },
+        Type::FunTy(lhs_param_ty, lhs_val_ty) => match &*rhs {
+            Type::FunTy(rhs_param_ty, rhs_val_ty) => {
+                is_equivalent_type_inner(
+                    lhs_param_ty.clone(),
+                    rhs_param_ty.clone(),
+                    lhs_scope,
+                    rhs_scope,
+                    next_id,
+                ) && is_equivalent_type_inner(
+                    lhs_val_ty.clone(),
+                    rhs_val_ty.clone(),
+                    lhs_scope,
+                    rhs_scope,
+                    next_id,
+                )
+            }
+            _ => false,
+        },
+        Type::ForAllTy(lhs_tyvar, lhs_val_ty) => match &*rhs {
+            Type::ForAllTy(rhs_tyvar, rhs_val_ty) => {
+                lhs_scope.push(&lhs_tyvar.name, next_id);
+                rhs_scope.push(&rhs_tyvar.name, next_id);
+                *next_id += 1;
+                let ret = is_equivalent_type_inner(
+                    lhs_val_ty.clone(),
+                    rhs_val_ty.clone(),
+                    lhs_scope,
+                    rhs_scope,
+                    next_id,
+                );
+                rhs_scope.pop(&rhs_tyvar.name);
+                lhs_scope.pop(&lhs_tyvar.name);
+                ret
+            }
+            _ => false,
+        },
+        Type::EqvTy(_, _, _) => {
+            unreachable!("is_equivalent_type should be called for reduced type.")
+        }
+    }
 }
