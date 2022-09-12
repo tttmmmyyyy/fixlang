@@ -117,13 +117,20 @@ fn deduce_app(
     let func = deduce_expr(func, scope);
     let arg = deduce_expr(arg, scope);
     let arg_ty = arg.deduced_type.clone().unwrap();
-    let ty = match &*func.deduced_type.clone().unwrap() {
+    let ty = match &*reveal_eqvty_result(func.deduced_type.clone().unwrap()) {
         Type::FunTy(param_ty, result_ty) => type_eqv(param_ty.clone(), arg_ty, result_ty.clone()),
         _ => {
             panic!("In the expression \"a b\", \"a\" is expected to be a function.")
         }
     };
     app(func, arg).with_deduced_type(ty)
+}
+
+fn reveal_eqvty_result(ty: Arc<Type>) -> Arc<Type> {
+    match &*ty {
+        Type::EqvTy(_, _, res) => reveal_eqvty_result(res.clone()),
+        _ => ty,
+    }
 }
 
 fn deduce_lam(

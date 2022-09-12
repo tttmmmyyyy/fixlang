@@ -80,7 +80,7 @@ pub fn test8() {
 #[test]
 #[serial]
 pub fn test9() {
-    let source = r"add<Int> 3 5";
+    let source = r"add 3 5";
     let answer = 8;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
