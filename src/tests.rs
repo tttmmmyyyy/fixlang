@@ -274,10 +274,10 @@ pub fn test22() {
 #[serial]
 pub fn test22_5() {
     let source = r"
-        let fib = fix \f -> \n ->
-                    if eq n 0 then
+        let fib = fix<Int,Int> \f:Int=>Int -> \n:Int ->
+                    if eq<Int> n 0 then
                         0
-                    else if eq n 1 then
+                    else if eq<Int> n 1 then
                         1
                     else
                         add (f (add n -1)) (f (add n -2))
