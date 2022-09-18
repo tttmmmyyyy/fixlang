@@ -22,13 +22,13 @@ fn execute_main_module<'c>(
 
 fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     // Add library functions to program.
-    // let program = let_in(var_var("add", None), add(), program);
+    let program = let_in(var_var("add", None), add(), program);
     let program = let_in(var_var("eq", None), eq(), program);
-    // let program = let_in(var_var("fix", None), fix(), program);
-    // let program = let_in(var_var("newArray", None), new_array(), program);
-    // let program = let_in(var_var("readArray", None), read_array(), program);
-    // let program = let_in(var_var("writeArray", None), write_array(), program);
-    // let program = let_in(var_var("writeArray!", None), write_array_unique(), program);
+    let program = let_in(var_var("fix", None), fix(), program);
+    let program = let_in(var_var("newArray", None), new_array(), program);
+    let program = let_in(var_var("readArray", None), read_array(), program);
+    let program = let_in(var_var("writeArray", None), write_array(), program);
+    let program = let_in(var_var("writeArray!", None), write_array_unique(), program);
 
     // Check types.
     let program = check_type(program);
