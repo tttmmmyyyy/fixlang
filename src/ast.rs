@@ -145,7 +145,6 @@ pub enum Type {
     TyConApp(Arc<TyCon>, Vec<Arc<Type>>),
     FunTy(Arc<Type>, Arc<Type>),
     ForAllTy(Arc<TyVar>, Arc<Type>),
-    EqvTy(Arc<Type>, Arc<Type>, Arc<Type>), // Eqv(a, b, x) expects a and b is equivalent and evaluated to x. Used for mathcing given type to type annotation or deducing type of conditional expression.
 }
 
 impl Type {
@@ -275,10 +274,6 @@ pub fn type_forall(var: Arc<TyVar>, ty: Arc<Type>) -> Arc<Type> {
 
 pub fn tycon_app(tycon: Arc<TyCon>, params: Vec<Arc<Type>>) -> Arc<Type> {
     Arc::new(Type::TyConApp(tycon, params))
-}
-
-pub fn type_eqv(expected: Arc<Type>, found: Arc<Type>, val: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::EqvTy(expected, found, val))
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.

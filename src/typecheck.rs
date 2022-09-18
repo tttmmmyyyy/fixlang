@@ -117,20 +117,19 @@ fn deduce_app(
     let func = deduce_expr(func, scope);
     let arg = deduce_expr(arg, scope);
     let arg_ty = arg.deduced_type.clone().unwrap();
-    let ty = match &*reveal_eqvty_result(func.deduced_type.clone().unwrap()) {
-        Type::FunTy(param_ty, result_ty) => type_eqv(param_ty.clone(), arg_ty, result_ty.clone()),
+    let ty = match &*func.deduced_type.clone().unwrap() {
+        Type::FunTy(param_ty, result_ty) => {
+            if is_equivalent_type(param_ty.clone(), arg_ty) {
+                result_ty.clone()
+            } else {
+                panic!("Type mismatch between parameter and argument!");
+            }
+        }
         _ => {
             panic!("In the expression \"a b\", \"a\" is expected to be a function.")
         }
     };
     app(func, arg).with_deduced_type(ty)
-}
-
-fn reveal_eqvty_result(ty: Arc<Type>) -> Arc<Type> {
-    match &*ty {
-        Type::EqvTy(_, _, res) => reveal_eqvty_result(res.clone()),
-        _ => ty,
-    }
 }
 
 fn deduce_lam(
@@ -169,7 +168,13 @@ fn deduce_let(
     scope.pop(&var.name);
     let val_ty = val.deduced_type.clone().unwrap();
     let ty = match var.type_annotation.clone() {
-        Some(annotation) => type_eqv(annotation, bound_ty, val_ty),
+        Some(annotation) => {
+            if is_equivalent_type(annotation, bound_ty) {
+                val_ty
+            } else {
+                panic!("Type mismatch on let");
+            }
+        }
         None => val_ty,
     };
     let_in(var, bound, val).with_deduced_type(ty)
@@ -186,8 +191,15 @@ fn deduce_if(
     let else_expr = deduce_expr(else_expr, scope);
     let then_ty = then_expr.deduced_type.clone().unwrap();
     let else_ty = else_expr.deduced_type.clone().unwrap();
-    let ty = type_eqv(then_ty.clone(), else_ty, then_ty);
-    let ty = type_eqv(bool_lit_ty(), cond.deduced_type.clone().unwrap(), ty);
+    let ty = if is_equivalent_type(then_ty.clone(), else_ty) {
+        if is_equivalent_type(cond.deduced_type.clone().unwrap(), bool_lit_ty()) {
+            then_ty
+        } else {
+            panic!("Type mismatch on if condtion");
+        }
+    } else {
+        panic!("Type mismatch between then and else.")
+    };
     conditional(cond, then_expr, else_expr).with_deduced_type(ty)
 }
 
@@ -197,7 +209,17 @@ fn deduce_apptype(
     scope: &mut Scope<LocalTermVar>,
 ) -> Arc<ExprInfo> {
     let expr = deduce_expr(expr, scope);
-    let ty = type_app(expr.deduced_type.clone().unwrap(), arg_ty.clone());
+    let arg_ty = reduce_type(arg_ty, &mut Scope::<LocalTypeVar>::empty());
+    let ty = match &*expr.deduced_type.clone().unwrap() {
+        Type::ForAllTy(var, val_ty) => {
+            let mut ty_scope = Scope::<LocalTypeVar>::empty();
+            ty_scope.push(&var.name, &LocalTypeVar { ty: arg_ty.clone() });
+            reduce_type(val_ty.clone(), &mut ty_scope)
+        }
+        _ => {
+            panic!("Applying type requires forall.")
+        }
+    };
     app_ty(expr, arg_ty).with_deduced_type(ty)
 }
 
@@ -222,16 +244,16 @@ fn reduce_type(ty: Arc<Type>, scope: &mut Scope<LocalTypeVar>) -> Arc<Type> {
                     scope.pop(param_ty.name.as_str());
                     val_ty
                 }
-                _ => panic!("In a expression \"a<b>\", type \"a\" should be of form \"for<c> d\"."),
+                _ => panic!("Applying type requires forall."),
             }
         }
         Type::TyVar(var) => {
-            let ty = scope.get(var.name.as_str());
-            if ty.is_some() {
-                ty.unwrap().ty
-            } else {
-                panic!("Unknown variable: {}", var.name)
-            }
+            scope
+                .get(var.name.as_str())
+                .unwrap_or_else(|| {
+                    panic!("Unknown variable: {}", var.name);
+                })
+                .ty
         }
         Type::LitTy(_) => ty,
         Type::TyConApp(tycon, arg_tys) => {
@@ -251,15 +273,16 @@ fn reduce_type(ty: Arc<Type>, scope: &mut Scope<LocalTypeVar>) -> Arc<Type> {
             reduce_type(param_ty.clone(), scope),
             reduce_type(val_ty.clone(), scope),
         ),
-        Type::ForAllTy(_, _) => ty,
-        Type::EqvTy(expected, found, val) => {
-            let found = reduce_type(found.clone(), scope);
-            let expected = reduce_type(expected.clone(), scope);
-            if !is_equivalent_type(found, expected) {
-                panic!("Type mismatch.")
-            } else {
-                val.clone()
-            }
+        Type::ForAllTy(var, val_ty) => {
+            scope.push(
+                &var.name,
+                &LocalTypeVar {
+                    ty: Arc::new(Type::TyVar(var.clone())),
+                },
+            );
+            let val_ty = reduce_type(val_ty.clone(), scope);
+            scope.pop(&var.name);
+            type_forall(var.clone(), val_ty)
         }
     }
 }
@@ -381,8 +404,5 @@ fn is_equivalent_type_inner(
             }
             _ => false,
         },
-        Type::EqvTy(_, _, _) => {
-            unreachable!("is_equivalent_type should be called for reduced type.")
-        }
     }
 }
