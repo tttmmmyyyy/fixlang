@@ -252,9 +252,5 @@ fn parse_type_forall(type_expr: Pair<Rule>) -> Arc<Type> {
 }
 
 fn parse_tycon(type_expr: Pair<Rule>) -> Arc<TyCon> {
-    tycon(
-        u32::MAX, /* implies N/A */
-        type_expr.as_str(),
-        u32::MAX, /* implies N/A */
-    )
+    make_bultin_tycon(type_expr.as_str())
 }

@@ -292,7 +292,7 @@ pub fn test22_5() {
 pub fn test23() {
     // Test newArray of size 0.
     let source = r"
-            let arr = newArray 0 42;
+            let arr = newArray<Int> 0 42;
             32
         ";
     let answer = 32;
@@ -304,7 +304,7 @@ pub fn test23() {
 pub fn test24() {
     // Test newArray of size > 0.
     let source = r"
-            let arr = newArray 100 42;
+            let arr = newArray<Int> 100 42;
             32
         ";
     let answer = 32;
@@ -316,8 +316,8 @@ pub fn test24() {
 pub fn test25() {
     // Test readArray.
     let source = r"
-            let arr = newArray 100 42;
-            let elem = readArray arr 50;
+            let arr = newArray<Int> 100 42;
+            let elem = readArray<Int> arr 50;
             elem
         ";
     let answer = 42;
@@ -329,9 +329,9 @@ pub fn test25() {
 pub fn test26() {
     // Test writeArray.
     let source = r"
-            let arr = newArray 100 42;
-            let arr = writeArray arr 50 21;
-            readArray arr 50
+            let arr = newArray<Int> 100 42;
+            let arr = writeArray<Int> arr 50 21;
+            readArray<Int> arr 50
         ";
     let answer = 21;
     test_run_source(source, answer, OptimizationLevel::Default);
@@ -342,19 +342,19 @@ pub fn test26() {
 pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r"
-            let arr = newArray 31 0;
-            let arr = writeArray! arr 0 0;
-            let arr = writeArray! arr 1 1;
-            let loop = fix \f -> \arr -> \n -> 
+            let arr = newArray<Int> 31 0;
+            let arr = writeArray!<Int> arr 0 0;
+            let arr = writeArray!<Int> arr 1 1;
+            let loop = fix<Array<Int>,Int=>Array<Int>> \f:Array<Int>=>Int=>Array<Int> -> \arr:Array<Int> -> \n:Int -> 
                 if eq n 31 then 
                     arr 
                 else
-                    let x = readArray arr (add n (-1));
-                    let y = readArray arr (add n (-2));
-                    let arr = writeArray! arr n (add x y);
-                    f arr (add n 1);
+                    let x = readArray<Int> arr (add n (-1));
+                    let y = readArray<Int> arr (add n (-2));
+                    let arr = writeArray!<Int> arr n (add x y);
+                    f arr (add n 1); 
             let fib = loop arr 2;
-            readArray fib 30
+            readArray<Int> fib 30
         ";
     let answer = 832040;
     test_run_source(source, answer, OptimizationLevel::Default);

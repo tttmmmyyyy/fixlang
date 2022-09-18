@@ -92,11 +92,11 @@ fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprIn
 
 fn deduce_var(var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
     let ty = scope.get(&var.name);
-    let ty = if ty.is_some() {
-        ty.unwrap().ty
-    } else {
-        panic!("Unknown variable: {}", var.name)
-    };
+    let ty = ty
+        .unwrap_or_else(|| {
+            panic!("Unknown variable: {}", var.name);
+        })
+        .ty;
     Arc::new(Expr::Var(var))
         .into_expr_info()
         .with_deduced_type(ty)

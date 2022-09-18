@@ -153,11 +153,17 @@ impl Type {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone)]
 pub struct TyCon {
     pub name: String,
-    id: u32,
     pub arity: u32, // kind: Arc<Kind>,
+}
+
+pub fn tycon(name: &str, arity: u32) -> Arc<TyCon> {
+    Arc::new(TyCon {
+        name: String::from(name),
+        arity,
+    })
 }
 
 pub fn star_kind() -> Arc<Kind> {
@@ -246,18 +252,6 @@ pub fn lit_ty(id: u32, name: &str) -> Arc<Type> {
         id,
         name: String::from(name),
     })))
-}
-
-pub fn tycon(id: u32, name: &str, arity: u32) -> Arc<TyCon> {
-    // let mut kind = star_kind();
-    // for _ in 0..arity {
-    //     kind = arrow_kind(star_kind(), kind);
-    // }
-    Arc::new(TyCon {
-        id,
-        name: String::from(name),
-        arity,
-    })
 }
 
 pub fn type_app(head: Arc<Type>, param: Arc<Type>) -> Arc<Type> {

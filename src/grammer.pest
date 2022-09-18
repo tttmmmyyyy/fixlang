@@ -43,7 +43,8 @@ type_expr = { type_app | type_fun | type_except_app_fun }
 
 type_bracket = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
 
-type_except_app_fun = { type_var | type_lit | type_tycon_app | type_forall | type_bracket }
+type_except_app_fun = { type_var | type_tycon_app | type_lit | type_forall | type_bracket }
+// type_tycon_app has to precede to type_lit
 
 type_except_fun = { type_app | type_except_app_fun }
 
@@ -59,7 +60,7 @@ type_fun = { type_except_fun ~ sep* ~ "=>" ~ sep* ~ type_expr }
 
 type_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ type_expr }
 
-tycon = { ASCII_ALPHA_LOWER ~ var_char* }
+tycon = { ASCII_ALPHA_UPPER ~ var_char* }
 
 // === Comments ===
 block_comment = _{ "{-"  ~ block_commented_character*  ~ "-}" }

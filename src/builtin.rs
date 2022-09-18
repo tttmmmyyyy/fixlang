@@ -42,12 +42,30 @@ pub fn make_literal_type(type_id: u32) -> Arc<Type> {
     }
 }
 
-const ARRAY_TYCONID: u32 = 0;
 const ARRAY_NAME: &str = "Array";
+
+// Array of typcons, which also defines type id of tycons.
+static BUILTIN_TYCONS: Lazy<Vec<Arc<TyCon>>> = Lazy::new(|| vec![tycon(ARRAY_NAME, 1)]);
+
+// Search tycon id of literal type from its name.
+pub fn builtin_tycon_id(name: &str) -> usize {
+    // TODO: Avoid linear search by preparing HashMap from BUILTIN_LITERAL_TYPES using once_cell::Lazy.
+    for i in 0..BUILTIN_TYCONS.len() {
+        if BUILTIN_TYCONS[i].name == name {
+            return i;
+        }
+    }
+    panic!("Unknown tycon: {}", name);
+}
+
+// Make builtin tycon.
+pub fn make_bultin_tycon(name: &str) -> Arc<TyCon> {
+    BUILTIN_TYCONS[builtin_tycon_id(name)].clone()
+}
 
 // Make Array literay type constructor.
 pub fn array_lit_tycon() -> Arc<TyCon> {
-    tycon(ARRAY_TYCONID, ARRAY_NAME, 1)
+    make_bultin_tycon(ARRAY_NAME)
 }
 
 pub fn int(val: i64) -> Arc<ExprInfo> {
