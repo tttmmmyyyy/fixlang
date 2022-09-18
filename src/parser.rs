@@ -158,7 +158,7 @@ fn parse_type(type_expr: Pair<Rule>) -> Arc<Type> {
     match pair.as_rule() {
         Rule::type_app => parse_type_app(pair),
         Rule::type_fun => parse_type_fun(pair),
-        Rule::type_expr_not_app_or_fun => parse_type_expr_not_app_or_fun(pair),
+        Rule::type_except_app_fun => parse_type_except_app_fun(pair),
         _ => unreachable!(),
     }
 }
@@ -169,7 +169,7 @@ fn parse_type_bracket(type_expr: Pair<Rule>) -> Arc<Type> {
     parse_type(pair)
 }
 
-fn parse_type_expr_not_app_or_fun(type_expr: Pair<Rule>) -> Arc<Type> {
+fn parse_type_except_app_fun(type_expr: Pair<Rule>) -> Arc<Type> {
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
@@ -193,7 +193,7 @@ fn parse_type_lit(type_expr: Pair<Rule>) -> Arc<Type> {
 fn parse_type_app(type_expr: Pair<Rule>) -> Arc<Type> {
     let mut pairs = type_expr.into_inner();
     let head = pairs.next().unwrap();
-    let mut ret = parse_type_expr_not_app_or_fun(head);
+    let mut ret = parse_type_except_app_fun(head);
     for pair in pairs {
         ret = type_app(ret, parse_type(pair))
     }
@@ -213,9 +213,19 @@ fn parse_type_tycon_app(type_expr: Pair<Rule>) -> Arc<Type> {
 
 fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<Type> {
     let mut pairs = type_expr.into_inner();
-    let src_ty = parse_type(pairs.next().unwrap());
+    let src_ty = parse_type_except_fun(pairs.next().unwrap());
     let dst_ty = parse_type(pairs.next().unwrap());
     type_fun(src_ty, dst_ty)
+}
+
+fn parse_type_except_fun(pair: Pair<Rule>) -> Arc<Type> {
+    let mut pairs = pair.into_inner();
+    let pair = pairs.next().unwrap();
+    match pair.as_rule() {
+        Rule::type_app => parse_type_app(pair),
+        Rule::type_except_app_fun => parse_type_except_app_fun(pair),
+        _ => unreachable!(),
+    }
 }
 
 fn parse_type_forall(type_expr: Pair<Rule>) -> Arc<Type> {

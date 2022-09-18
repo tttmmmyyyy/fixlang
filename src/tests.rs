@@ -240,7 +240,7 @@ pub fn test21() {
     let n = 10000;
     let source = format!(
         r"
-                let g = fix \f -> \x -> if eq x 0 then 0 else add x (f (add x -1));
+                let g = fix<Int,Int> \f:Int=>Int -> \x: Int -> if eq<Int> x 0 then 0 else add x (f (add x -1));
                 g {}
         ",
         n
@@ -255,8 +255,8 @@ pub fn test22() {
     let n = 100000;
     let source = format!(
         r"
-                let g = fix \f -> \a -> \x -> 
-                            if eq x 0 then 
+                let g = fix<Int,Int=>Int> \f:Int=>Int=>Int -> \a:Int -> \x:Int -> 
+                            if eq<Int> x 0 then 
                                 a 
                             else
                                 let a2 = add a x;

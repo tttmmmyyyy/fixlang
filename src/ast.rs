@@ -149,7 +149,7 @@ pub enum Type {
 
 impl Type {
     fn to_string(&self) -> String {
-        todo!()
+        String::from("SomeType") // TODO
     }
 }
 
