@@ -20,21 +20,40 @@ fn parse_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::app_expr => parse_app_expr(pair),
-        Rule::not_app_expr => parse_not_app_expr(pair),
+        Rule::tyapp_expr => parse_tyapp_expr(pair),
+        Rule::expr_except_app_tyapp => parse_expr_except_app_tyapp(pair),
         _ => unreachable!(),
     }
 }
 
 fn parse_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let mut subexprs = expr.into_inner();
-    let mut ret = parse_not_app_expr(subexprs.next().unwrap());
+    let mut ret = parse_expr_except_app(subexprs.next().unwrap());
     for pair in subexprs {
-        ret = app(ret, parse_not_app_expr(pair));
+        ret = app(ret, parse_expr_except_app(pair));
     }
     ret
 }
 
-fn parse_not_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+fn parse_expr_except_app(pair: Pair<Rule>) -> Arc<ExprInfo> {
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::tyapp_expr => parse_tyapp_expr(pair),
+        Rule::expr_except_app_tyapp => parse_expr_except_app_tyapp(pair),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_tyapp_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+    let mut pairs = expr.into_inner();
+    let mut ret = parse_expr_except_app_tyapp(pairs.next().unwrap());
+    for pair in pairs {
+        ret = app_ty(ret, parse_type(pair));
+    }
+    ret
+}
+
+fn parse_expr_except_app_tyapp(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::lit_expr => parse_lit_expr(pair),
