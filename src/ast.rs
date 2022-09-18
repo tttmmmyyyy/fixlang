@@ -322,6 +322,7 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             conditional(cond, then, else_expr).with_free_vars(free_vars)
         }
         Expr::AppType(ei, ty) => {
+            let ei = calculate_free_vars(ei.clone());
             app_ty(ei.clone(), ty.clone()).with_free_vars(ei.free_vars.clone())
         }
         Expr::ForAll(tyvar, ei) => {
