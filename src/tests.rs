@@ -158,7 +158,7 @@ pub fn test14() {
 #[serial]
 pub fn test15() {
     let source = r"
-            let f = \x -> add 3 x in
+            let f = \x: Int -> add 3 x in
             f 5
         ";
     let answer = 3 + 5;
