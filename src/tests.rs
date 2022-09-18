@@ -170,7 +170,7 @@ pub fn test15() {
 pub fn test15_5() {
     let source = r"
             let x = 3;
-            let f = \y -> x;
+            let f = \y: Int -> x;
             f 5
         ";
     let answer = 3;
