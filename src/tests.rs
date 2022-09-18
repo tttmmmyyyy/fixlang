@@ -208,6 +208,7 @@ pub fn test18() {
 #[serial]
 pub fn test19() {
     let source = r"if eq<Int> 3 3 then 1 else 0";
+    // let source = r"eq<Int> 3 3";
     let answer = 1;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -224,9 +225,9 @@ pub fn test20() {
 #[serial]
 pub fn test20_5() {
     let source = r"         
-        if eq 2 0 then 
+        if eq<Int> 2 0 then 
             0 
-        else if eq 2 1 then 
+        else if eq<Int> 2 1 then 
             1
         else 2
     ";
