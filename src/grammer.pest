@@ -54,7 +54,7 @@ type_except_app_fun = { type_var | type_tycon_app | type_lit | type_forall | typ
 
 type_except_fun = { type_app | type_except_app_fun }
 
-type_var = { ASCII_ALPHA_LOWER ~ var_char* }
+type_var = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
 
 type_lit = { ASCII_ALPHA_UPPER ~ var_char* }
 
