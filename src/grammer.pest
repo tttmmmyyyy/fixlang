@@ -9,7 +9,9 @@ expr_lit = { expr_int_lit | expr_bool_lit }
 
 keywords = _{ "let" | "in" | "if" | "then" | "else" | expr_bool_lit }
 
-let_in = _{ "in" | ";" }
+in_of_let = { "in" | ";" }
+
+eq_of_let = { "=" }
 
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
@@ -19,7 +21,7 @@ var_typed = { var ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 // === Expressions ===
 
-expr_let = { "let" ~ sep+ ~ var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ let_in ~ sep* ~ expr }
+expr_let = { "let" ~ sep+ ~ var ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 

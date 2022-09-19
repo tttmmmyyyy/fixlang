@@ -114,7 +114,9 @@ fn parse_var_typed_as_var(pair: Pair<Rule>) -> Arc<Var> {
 fn parse_expr_let(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let mut pairs = expr.into_inner();
     let var = pairs.next().unwrap();
+    let _eq_of_let = pairs.next().unwrap();
     let bound = pairs.next().unwrap();
+    let _in_of_let = pairs.next().unwrap();
     let val = pairs.next().unwrap();
     let_in(parse_var_as_var(var), parse_expr(bound), parse_expr(val))
 }
@@ -275,47 +277,76 @@ fn parse_tycon(type_expr: Pair<Rule>) -> Arc<TyCon> {
     make_bultin_tycon(type_expr.as_str())
 }
 
-fn rule_to_string(r: Rule) -> String {
+fn rule_to_string(r: &Rule) -> String {
     match r {
-        Rule::EOI => todo!(),
-        Rule::sep => todo!(),
-        Rule::expr_int_lit => todo!(),
-        Rule::expr_bool_lit => todo!(),
-        Rule::expr_lit => todo!(),
-        Rule::keywords => todo!(),
-        Rule::let_in => todo!(),
-        Rule::var_char => todo!(),
-        Rule::var => todo!(),
-        Rule::var_typed => todo!(),
-        Rule::expr_let => todo!(),
-        Rule::expr_if => todo!(),
-        Rule::expr_lam => todo!(),
-        Rule::expr_forall => todo!(),
-        Rule::expr_braced => todo!(),
-        Rule::expr => todo!(),
-        Rule::type_expr => todo!(),
-        Rule::type_braced => todo!(),
-        Rule::type_except_app_fun => todo!(),
-        Rule::type_except_fun => todo!(),
-        Rule::type_var => todo!(),
-        Rule::type_lit => todo!(),
-        Rule::type_app => todo!(),
-        Rule::type_tycon_app => todo!(),
-        Rule::type_fun => todo!(),
-        Rule::type_forall => todo!(),
-        Rule::tycon => todo!(),
-        Rule::block_comment => todo!(),
-        Rule::block_commented_character => todo!(),
-        Rule::line_comment => todo!(),
-        Rule::line_commented_character => todo!(),
-        Rule::file => todo!(),
-        Rule::expr_nlc => todo!(),
-        Rule::tyapp_bracket => todo!(),
-        Rule::expr_nlc_tyapp => todo!(),
-        Rule::expr_app_seq => todo!(),
+        Rule::EOI => "end of input".to_string(),
+        Rule::expr_int_lit => "integer".to_string(),
+        Rule::expr_bool_lit => "boolean".to_string(),
+        Rule::expr_nlc => "expression".to_string(),
+        Rule::var => "variable".to_string(),
+        Rule::in_of_let => "`in` or `;`".to_string(),
+        Rule::tyapp_bracket => "`<{types}>`".to_string(),
+        Rule::eq_of_let => "`=`".to_string(),
+        _ => format!("{:?}", r),
     }
 }
 
 fn message_parse_error(e: Error<Rule>) -> String {
-    String::from("TODO")
+    let mut msg: String = Default::default();
+
+    // Show error content.
+    msg += "parse error: expected ";
+    match &e.variant {
+        pest::error::ErrorVariant::ParsingError {
+            positives,
+            negatives,
+        } => {
+            fn concat_words(words: Vec<String>, sep: &str) -> String {
+                let mut msg = String::from("");
+                for (i, word) in words.iter().enumerate() {
+                    let i = i as i32;
+                    msg += word;
+                    if i <= words.len() as i32 - 2 {
+                        msg += &format!(" {} ", sep);
+                    }
+                }
+                msg
+            }
+            if positives.len() > 0 {
+                let words: Vec<String> = positives.iter().map(rule_to_string).collect();
+                msg += &concat_words(words, "or");
+                if negatives.len() > 0 {
+                    msg += " and ";
+                }
+            }
+            if negatives.len() > 0 {
+                msg += "neither ";
+                let words: Vec<String> = negatives.iter().map(rule_to_string).collect();
+                msg += &concat_words(words, "nor");
+            }
+        }
+        pest::error::ErrorVariant::CustomError { message: _ } => unreachable!(),
+    };
+    msg += "\n";
+
+    // Show line and column number.
+    // TODO: Show filename here.
+    let (line, col) = match e.line_col {
+        pest::error::LineColLocation::Pos(s) => s,
+        pest::error::LineColLocation::Span(s, _) => s,
+    };
+    msg += &format!("at {}:{}", line, col);
+    msg += "\n";
+
+    // Show source code.
+    let linenum_str = line.to_string();
+    let linnum_chars = linenum_str.len();
+    msg += &(" ".repeat(linnum_chars) + " | " + "\n");
+    msg += &(linenum_str.clone() + " | ");
+    msg += e.line();
+    msg += "\n";
+    msg += &(" ".repeat(linnum_chars) + " | ");
+    msg += &(" ".repeat(col - 1) + "^");
+    msg += "\n";
+    msg
 }
