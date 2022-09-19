@@ -193,7 +193,7 @@ fn parse_forall_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
         }
     };
     for var in vars.iter().rev() {
-        expr = forall(var.clone(), expr, Some(span.clone())); // TODO: each type should have span and call unite_span here.
+        expr = expr_forall(var.clone(), expr, Some(span.clone())); // TODO: each type should have span and call unite_span here.
     }
     expr
 }

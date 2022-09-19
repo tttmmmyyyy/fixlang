@@ -351,7 +351,7 @@ pub fn expr_appty(expr: Arc<ExprInfo>, ty: Arc<Type>, src: Option<Span>) -> Arc<
     Arc::new(Expr::AppType(expr, ty)).into_expr_info(src)
 }
 
-pub fn forall(var: Arc<TyVar>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_forall(var: Arc<TyVar>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
     Arc::new(Expr::ForAll(var, val)).into_expr_info(src)
 }
 
@@ -430,7 +430,7 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
         }
         Expr::ForAll(tyvar, ei) => {
             let ei = calculate_free_vars(ei.clone());
-            forall(tyvar.clone(), ei.clone(), ei.source.clone())
+            expr_forall(tyvar.clone(), ei.clone(), ei.source.clone())
                 .with_free_vars(ei.free_vars.clone())
         }
     }

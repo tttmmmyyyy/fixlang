@@ -243,7 +243,7 @@ fn deduce_forall(
 ) -> Arc<ExprInfo> {
     let expr = deduce_expr(expr, scope);
     let ty = type_forall(tyvar.clone(), expr.deduced_type.clone().unwrap());
-    forall(tyvar, expr, ei.source.clone()).with_deduced_type(ty)
+    expr_forall(tyvar, expr, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn reduce_type(ty: Arc<Type>, scope: &mut Scope<LocalTypeVar>) -> Arc<Type> {
