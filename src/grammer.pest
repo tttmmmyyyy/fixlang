@@ -13,14 +13,15 @@ let_in = _{ "in" | ";" }
 
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
-// === Expressions ===
 var = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
 var_typed = { var ~ sep* ~ ":" ~ sep* ~ type_expr }
 
+// === Expressions ===
+
 expr_let = { "let" ~ sep+ ~ var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ let_in ~ sep* ~ expr }
 
-if_expr = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
+expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
 lam_expr = { "\\" ~ sep* ~ var_typed ~ sep*  ~ "->" ~ sep* ~ expr }
 
@@ -29,7 +30,7 @@ forall_expr = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* 
 bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 // nlc = non left recursive
-expr_nlc = { expr_lit | var | expr_let | if_expr | lam_expr | forall_expr | bracket_expr }
+expr_nlc = { expr_lit | var | expr_let | expr_if | lam_expr | forall_expr | bracket_expr }
 
 tyapp_bracket = { "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 
