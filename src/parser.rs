@@ -283,7 +283,7 @@ fn rule_to_string(r: Rule) -> String {
         Rule::let_in => todo!(),
         Rule::var_char => todo!(),
         Rule::expr_var => todo!(),
-        Rule::var_with_type => todo!(),
+        Rule::expr_var_typed => todo!(),
         Rule::let_expr => todo!(),
         Rule::if_expr => todo!(),
         Rule::lam_expr => todo!(),

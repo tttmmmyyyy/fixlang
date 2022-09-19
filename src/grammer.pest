@@ -16,13 +16,13 @@ var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 // === Expressions ===
 expr_var = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
-var_with_type = { expr_var ~ sep* ~ ":" ~ sep* ~ type_expr }
+expr_var_typed = { expr_var ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 let_expr = { "let" ~ sep+ ~ expr_var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ let_in ~ sep* ~ expr }
 
 if_expr = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
-lam_expr = { "\\" ~ sep* ~ var_with_type ~ sep*  ~ "->" ~ sep* ~ expr }
+lam_expr = { "\\" ~ sep* ~ expr_var_typed ~ sep*  ~ "->" ~ sep* ~ expr }
 
 forall_expr = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
 
