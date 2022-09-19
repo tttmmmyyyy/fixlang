@@ -282,18 +282,18 @@ pub fn type_func(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::FunTy(src, dst))
 }
 
-pub fn tyvar_var(var_name: &str) -> Arc<TyVar> {
+pub fn var_tyvar(var_name: &str) -> Arc<TyVar> {
     Arc::new(TyVar {
         name: String::from(var_name),
     })
 }
 
 pub fn tyvar_ty(var_name: &str) -> Arc<Type> {
-    Arc::new(Type::TyVar(tyvar_var(var_name)))
+    Arc::new(Type::TyVar(var_tyvar(var_name)))
 }
 
 fn forall_ty(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::ForAllTy(tyvar_var(var_name), ty))
+    Arc::new(Type::ForAllTy(var_tyvar(var_name), ty))
 }
 
 pub fn var_var(var_name: &str, type_annotation: Option<Arc<Type>>, src: Option<Span>) -> Arc<Var> {

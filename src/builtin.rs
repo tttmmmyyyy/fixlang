@@ -159,7 +159,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
 // eq = for<a> \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
 pub fn eq() -> Arc<ExprInfo> {
     forall(
-        tyvar_var("a"),
+        var_tyvar("a"),
         lam(
             var_var("lhs", Some(tyvar_ty("a")), None),
             lam(
@@ -194,9 +194,9 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
 pub fn fix() -> Arc<ExprInfo> {
     let fixed_ty = type_func(tyvar_ty("a"), tyvar_ty("b"));
     forall(
-        tyvar_var("a"),
+        var_tyvar("a"),
         forall(
-            tyvar_var("b"),
+            var_tyvar("b"),
             lam(
                 var_var("f", Some(type_func(fixed_ty.clone(), fixed_ty)), None),
                 lam(
@@ -249,7 +249,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprInfo> {
 // newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
 pub fn new_array() -> Arc<ExprInfo> {
     forall(
-        tyvar_var("a"),
+        var_tyvar("a"),
         lam(
             var_var("size", Some(int_lit_ty()), None),
             lam(
@@ -293,7 +293,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprInfo> {
 // readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
 pub fn read_array() -> Arc<ExprInfo> {
     forall(
-        tyvar_var("a"),
+        var_tyvar("a"),
         lam(
             var_var(
                 "array",
@@ -417,7 +417,7 @@ fn write_array_lit(
 // writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
 pub fn write_array_common(is_unique_version: bool) -> Arc<ExprInfo> {
     forall(
-        tyvar_var("a"),
+        var_tyvar("a"),
         lam(
             var_var(
                 "array",
