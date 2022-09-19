@@ -87,7 +87,7 @@ fn parse_tyapp_bracket(pair: Pair<Rule>) -> Vec<Arc<Type>> {
 fn parse_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
-        Rule::int_lit_expr => parse_int_expr(pair),
+        Rule::expr_int_lit => parse_int_expr(pair),
         Rule::bool_lit_expr => parse_bool_lit_expr(pair),
         _ => unreachable!(),
     }
@@ -276,7 +276,7 @@ fn rule_to_string(r: Rule) -> String {
     match r {
         Rule::EOI => todo!(),
         Rule::sep => todo!(),
-        Rule::int_lit_expr => todo!(),
+        Rule::expr_int_lit => todo!(),
         Rule::bool_lit_expr => todo!(),
         Rule::lit_expr => todo!(),
         Rule::keywords => todo!(),

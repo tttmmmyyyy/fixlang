@@ -1,11 +1,11 @@
 // === Basic rules ===
 sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
-int_lit_expr = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
+expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
 bool_lit_expr = { "true" | "false" }
 
-lit_expr = { int_lit_expr | bool_lit_expr }
+lit_expr = { expr_int_lit | bool_lit_expr }
 
 keywords = _{ "let" | "in" | "if" | "then" | "else" | bool_lit_expr }
 
