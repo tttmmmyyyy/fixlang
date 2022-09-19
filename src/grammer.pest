@@ -27,10 +27,10 @@ expr_lam = { "\\" ~ sep* ~ var_typed ~ sep*  ~ "->" ~ sep* ~ expr }
 
 expr_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
 
-bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
+expr_bracket = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 // nlc = non left recursive
-expr_nlc = { expr_lit | var | expr_let | expr_if | expr_lam | expr_forall | bracket_expr }
+expr_nlc = { expr_lit | var | expr_let | expr_if | expr_lam | expr_forall | expr_bracket }
 
 tyapp_bracket = { "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 

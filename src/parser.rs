@@ -70,7 +70,7 @@ fn parse_expr_nlc(pair: Pair<Rule>) -> Arc<ExprInfo> {
         Rule::expr_if => parse_expr_if(pair),
         Rule::expr_lam => parse_expr_lam(pair),
         Rule::expr_forall => parse_forall_expr(pair),
-        Rule::bracket_expr => parse_bracket_expr(pair),
+        Rule::expr_bracket => parse_bracket_expr(pair),
         _ => unreachable!(),
     }
 }
@@ -291,7 +291,7 @@ fn rule_to_string(r: Rule) -> String {
         Rule::expr_if => todo!(),
         Rule::expr_lam => todo!(),
         Rule::expr_forall => todo!(),
-        Rule::bracket_expr => todo!(),
+        Rule::expr_bracket => todo!(),
         Rule::expr => todo!(),
         Rule::type_expr => todo!(),
         Rule::type_bracket => todo!(),
