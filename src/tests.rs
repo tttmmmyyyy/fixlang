@@ -454,6 +454,6 @@ pub fn test_print_type_5() {
 #[test]
 pub fn test_print_type_6() {
     let source = r"\f: for<a> a=>a -> \g: for<b> b=>b -> for<c> \x:c -> f<c> (g<c> x)";
-    let answer = "(Int => Int) => (Int => Int) => Int => Int";
+    let answer = "(for<a> a => a) => (for<b> b => b) => for<c> c => c";
     assert_eq!(type_of_source(source).to_string(), answer);
 }

@@ -244,14 +244,10 @@ fn reduce_type(ty: Arc<Type>, scope: &mut Scope<LocalTypeVar>) -> Arc<Type> {
                 _ => panic!("Applying type requires forall."),
             }
         }
-        Type::TyVar(var) => {
-            scope
-                .get(var.name.as_str())
-                .unwrap_or_else(|| {
-                    panic!("Unknown variable: {}", var.name);
-                })
-                .ty
-        }
+        Type::TyVar(var) => match scope.get(var.name.as_str()) {
+            Some(local_ty) => local_ty.ty,
+            None => ty,
+        },
         Type::LitTy(_) => ty,
         Type::TyConApp(tycon, arg_tys) => {
             let arg_tys: Vec<Arc<Type>> = arg_tys
