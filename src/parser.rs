@@ -153,7 +153,7 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     let bound = pairs.next().unwrap();
     let _in_of_let = pairs.next().unwrap();
     let val = pairs.next().unwrap();
-    let_in(
+    expr_let(
         parse_var_as_var(var, src),
         parse_expr(bound, src),
         parse_expr(val, src),

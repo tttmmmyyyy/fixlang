@@ -316,7 +316,7 @@ pub fn expr_lit(
     .into_expr_info(src)
 }
 
-pub fn let_in(
+pub fn expr_let(
     var: Arc<Var>,
     bound: Arc<ExprInfo>,
     expr: Arc<ExprInfo>,
@@ -412,7 +412,7 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(&var.name);
             free_vars.extend(bound.free_vars.clone());
-            let_in(var.clone(), bound, val, ei.source.clone()).with_free_vars(free_vars)
+            expr_let(var.clone(), bound, val, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::If(cond, then, else_expr) => {
             let cond = calculate_free_vars(cond.clone());

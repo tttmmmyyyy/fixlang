@@ -187,7 +187,7 @@ fn deduce_let(
         }
         None => val_ty,
     };
-    let_in(var, bound, val, ei.source.clone()).with_deduced_type(ty)
+    expr_let(var, bound, val, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn deduce_if(
