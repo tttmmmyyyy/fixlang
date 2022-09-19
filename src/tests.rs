@@ -363,6 +363,17 @@ pub fn test28() {
 #[test]
 #[serial]
 pub fn test29() {
+    let source = r"
+            let id = for<a> \x: a -> x;
+            if id<Bool> true then id<Int> 100 else 30
+        ";
+    let answer = 100;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test_comment_0() {
     // block comment
     let source = r"{- head -}
             let x = 5 in 
@@ -385,7 +396,7 @@ pub fn test29() {
 
 #[test]
 #[serial]
-pub fn test30() {
+pub fn test_comment_1() {
     // ilne comment
     let source = r"////
             let x = 5 in
@@ -396,4 +407,32 @@ pub fn test30() {
         //";
     let answer = 2;
     test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+pub fn test_print_type_0() {
+    let source = r"5";
+    let answer = "Int";
+    assert_eq!(type_of_source(source).to_string(), answer);
+}
+
+#[test]
+pub fn test_print_type_1() {
+    let source = r"true";
+    let answer = "Bool";
+    assert_eq!(type_of_source(source).to_string(), answer);
+}
+
+#[test]
+pub fn test_print_type_2() {
+    let source = r"\x: Int -> x";
+    let answer = "Int => Int";
+    assert_eq!(type_of_source(source).to_string(), answer);
+}
+
+#[test]
+pub fn test_print_type_3() {
+    let source = r"for<a> \x: a -> x";
+    let answer = "for<a> a => a";
+    assert_eq!(type_of_source(source).to_string(), answer);
 }

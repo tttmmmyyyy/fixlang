@@ -20,8 +20,8 @@ fn execute_main_module<'c>(
     }
 }
 
-fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
-    // Add library functions to program.
+// Add library functions (such as fix) to given ast.
+fn add_builtin_symbols(program: Arc<ExprInfo>) -> Arc<ExprInfo> {
     let program = let_in(var_var("add", None), add(), program);
     let program = let_in(var_var("eq", None), eq(), program);
     let program = let_in(var_var("fix", None), fix(), program);
@@ -29,6 +29,23 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     let program = let_in(var_var("readArray", None), read_array(), program);
     let program = let_in(var_var("writeArray", None), write_array(), program);
     let program = let_in(var_var("writeArray!", None), write_array_unique(), program);
+    program
+}
+
+// Calculate type of ast.
+fn type_of_ast(program: Arc<ExprInfo>) -> Arc<Type> {
+    // Add library functions to program.
+    let program = add_builtin_symbols(program);
+
+    // Check types.
+    let program = check_type(program);
+
+    program.deduced_type.clone().unwrap()
+}
+
+fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
+    // Add library functions to program.
+    let program = add_builtin_symbols(program);
 
     // Check types.
     let program = check_type(program);
@@ -109,4 +126,9 @@ pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
     }
 
     run_source(s.as_str(), opt_level)
+}
+
+// Calculate type of given source program.
+pub fn type_of_source(source: &str) -> Arc<Type> {
+    type_of_ast(parse_source(source))
 }
