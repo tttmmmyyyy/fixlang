@@ -65,7 +65,7 @@ fn parse_expr_nlc(pair: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_lit => parse_expr_lit(pair),
-        Rule::expr_var => parse_expr_var(pair),
+        Rule::expr_var => parse_var_as_expr(pair),
         Rule::let_expr => parse_let_expr(pair),
         Rule::if_expr => parse_if_expr(pair),
         Rule::lam_expr => parse_lam_expr(pair),
@@ -93,16 +93,19 @@ fn parse_expr_lit(expr: Pair<Rule>) -> Arc<ExprInfo> {
     }
 }
 
-fn parse_expr_var(expr: Pair<Rule>) -> Arc<ExprInfo> {
-    var(expr.as_str())
+fn parse_var_as_expr(pair: Pair<Rule>) -> Arc<ExprInfo> {
+    assert_eq!(pair.as_rule(), Rule::expr_var);
+    var(pair.as_str())
 }
 
-fn parse_var_var(var: Pair<Rule>) -> Arc<Var> {
-    var_var(var.as_str(), None)
+fn parse_var_as_var(pair: Pair<Rule>) -> Arc<Var> {
+    assert_eq!(pair.as_rule(), Rule::expr_var);
+    var_var(pair.as_str(), None)
 }
 
-fn parse_var_var_with_type(var_with_type: Pair<Rule>) -> Arc<Var> {
-    let mut pairs = var_with_type.into_inner();
+fn parse_var_typed_as_var(pair: Pair<Rule>) -> Arc<Var> {
+    assert_eq!(pair.as_rule(), Rule::expr_var_typed);
+    let mut pairs = pair.into_inner();
     let var = pairs.next().unwrap();
     let ty = pairs.next().unwrap();
     var_var(var.as_str(), Some(parse_type(ty)))
@@ -113,14 +116,14 @@ fn parse_let_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let var = pairs.next().unwrap();
     let bound = pairs.next().unwrap();
     let val = pairs.next().unwrap();
-    let_in(parse_var_var(var), parse_expr(bound), parse_expr(val))
+    let_in(parse_var_as_var(var), parse_expr(bound), parse_expr(val))
 }
 
 fn parse_lam_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let mut pairs = expr.into_inner();
     let var_with_type = pairs.next().unwrap();
     let val = pairs.next().unwrap();
-    lam(parse_var_var_with_type(var_with_type), parse_expr(val))
+    lam(parse_var_typed_as_var(var_with_type), parse_expr(val))
 }
 
 fn parse_forall_expr(pair: Pair<Rule>) -> Arc<ExprInfo> {
