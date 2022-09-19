@@ -71,7 +71,7 @@ fn parse_expr_app_seq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     for pair in pairs {
         let arg = parse_expr_nlc_tyapp(pair, src);
         let span = unite_span(&ret.source, &arg.source);
-        ret = app(ret, arg, span);
+        ret = expr_app(ret, arg, span);
     }
     ret
 }

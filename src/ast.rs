@@ -329,7 +329,7 @@ pub fn expr_abs(var: Arc<Var>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<Exp
     Arc::new(Expr::Lam(var, val)).into_expr_info(src)
 }
 
-pub fn app(lam: Arc<ExprInfo>, arg: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_app(lam: Arc<ExprInfo>, arg: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
     Arc::new(Expr::App(lam, arg)).into_expr_info(src)
 }
 
@@ -394,7 +394,7 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let arg = calculate_free_vars(arg.clone());
             let mut free_vars = func.free_vars.clone();
             free_vars.extend(arg.free_vars.clone());
-            app(func, arg, ei.source.clone()).with_free_vars(free_vars)
+            expr_app(func, arg, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::Lam(arg, val) => {
             let val = calculate_free_vars(val.clone());

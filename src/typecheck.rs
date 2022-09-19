@@ -137,7 +137,7 @@ fn deduce_app(
             panic!("In the expression \"a b\", \"a\" is expected to be a function.")
         }
     };
-    app(func, arg, ei.source.clone()).with_deduced_type(ty)
+    expr_app(func, arg, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn deduce_lam(
