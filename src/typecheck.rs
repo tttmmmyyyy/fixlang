@@ -69,10 +69,7 @@ where
 
 pub fn check_type(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
     let mut scope = Scope::<LocalTermVar>::empty();
-    let ei = deduce_expr(ei, &mut scope);
-    let mut var_scope = Scope::<LocalTypeVar>::empty();
-    let _ = reduce_type(ei.deduced_type.clone().unwrap(), &mut var_scope);
-    ei
+    deduce_expr(ei, &mut scope)
 }
 
 fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
