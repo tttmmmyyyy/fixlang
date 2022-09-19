@@ -65,7 +65,7 @@ fn parse_expr_nlc(pair: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_lit => parse_expr_lit(pair),
-        Rule::expr_var => parse_var_as_expr(pair),
+        Rule::var => parse_var_as_expr(pair),
         Rule::let_expr => parse_let_expr(pair),
         Rule::if_expr => parse_if_expr(pair),
         Rule::lam_expr => parse_lam_expr(pair),
@@ -94,17 +94,17 @@ fn parse_expr_lit(expr: Pair<Rule>) -> Arc<ExprInfo> {
 }
 
 fn parse_var_as_expr(pair: Pair<Rule>) -> Arc<ExprInfo> {
-    assert_eq!(pair.as_rule(), Rule::expr_var);
+    assert_eq!(pair.as_rule(), Rule::var);
     var(pair.as_str())
 }
 
 fn parse_var_as_var(pair: Pair<Rule>) -> Arc<Var> {
-    assert_eq!(pair.as_rule(), Rule::expr_var);
+    assert_eq!(pair.as_rule(), Rule::var);
     var_var(pair.as_str(), None)
 }
 
 fn parse_var_typed_as_var(pair: Pair<Rule>) -> Arc<Var> {
-    assert_eq!(pair.as_rule(), Rule::expr_var_typed);
+    assert_eq!(pair.as_rule(), Rule::var_typed);
     let mut pairs = pair.into_inner();
     let var = pairs.next().unwrap();
     let ty = pairs.next().unwrap();
@@ -285,8 +285,8 @@ fn rule_to_string(r: Rule) -> String {
         Rule::keywords => todo!(),
         Rule::let_in => todo!(),
         Rule::var_char => todo!(),
-        Rule::expr_var => todo!(),
-        Rule::expr_var_typed => todo!(),
+        Rule::var => todo!(),
+        Rule::var_typed => todo!(),
         Rule::let_expr => todo!(),
         Rule::if_expr => todo!(),
         Rule::lam_expr => todo!(),
