@@ -85,7 +85,7 @@ fn parse_expr_nlc_tyapp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
         Some(pair) => {
             let types = parse_tyapp_bracket(pair);
             for ty in types {
-                expr = app_ty(expr, ty, Some(span.clone())); // TODO: each type should have span and call unite_span here.
+                expr = expr_appty(expr, ty, Some(span.clone())); // TODO: each type should have span and call unite_span here.
             }
         }
         _ => {}

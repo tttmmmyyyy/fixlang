@@ -232,7 +232,7 @@ fn deduce_apptype(
             panic!("Applying type requires forall.")
         }
     };
-    app_ty(expr, arg_ty, ei.source.clone()).with_deduced_type(ty)
+    expr_appty(expr, arg_ty, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn deduce_forall(
