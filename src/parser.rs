@@ -65,7 +65,7 @@ fn parse_expr_nlc(pair: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_lit => parse_expr_lit(pair),
-        Rule::var_expr => parse_var_expr(pair),
+        Rule::expr_var => parse_expr_var(pair),
         Rule::let_expr => parse_let_expr(pair),
         Rule::if_expr => parse_if_expr(pair),
         Rule::lam_expr => parse_lam_expr(pair),
@@ -93,7 +93,7 @@ fn parse_expr_lit(expr: Pair<Rule>) -> Arc<ExprInfo> {
     }
 }
 
-fn parse_var_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+fn parse_expr_var(expr: Pair<Rule>) -> Arc<ExprInfo> {
     var(expr.as_str())
 }
 
@@ -282,7 +282,7 @@ fn rule_to_string(r: Rule) -> String {
         Rule::keywords => todo!(),
         Rule::let_in => todo!(),
         Rule::var_char => todo!(),
-        Rule::var_expr => todo!(),
+        Rule::expr_var => todo!(),
         Rule::var_with_type => todo!(),
         Rule::let_expr => todo!(),
         Rule::if_expr => todo!(),
