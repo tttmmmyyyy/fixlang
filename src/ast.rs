@@ -300,7 +300,7 @@ pub fn var_var(var_name: &str, type_annotation: Option<Arc<Type>>, src: Option<S
     })
 }
 
-pub fn lit(
+pub fn expr_lit(
     generator: Arc<LiteralGenerator>,
     free_vars: Vec<String>,
     name: String,

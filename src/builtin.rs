@@ -76,7 +76,7 @@ pub fn int(val: i64, source: Option<Span>) -> Arc<ExprInfo> {
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     });
-    lit(generator, vec![], val.to_string(), int_lit_ty(), source)
+    expr_lit(generator, vec![], val.to_string(), int_lit_ty(), source)
 }
 
 pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprInfo> {
@@ -86,7 +86,7 @@ pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprInfo> {
         gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
         ptr_to_obj
     });
-    lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
+    expr_lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
 }
 
 fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
@@ -109,7 +109,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_int_obj
     });
-    lit(generator, free_vars, name, int_lit_ty(), None)
+    expr_lit(generator, free_vars, name, int_lit_ty(), None)
 }
 
 pub fn add() -> Arc<ExprInfo> {
@@ -153,7 +153,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_obj
     });
-    lit(generator, free_vars, name, bool_lit_ty(), None)
+    expr_lit(generator, free_vars, name, bool_lit_ty(), None)
 }
 
 // eq = for<a> \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
@@ -187,7 +187,7 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
         f_fixf_x
     });
-    lit(generator, free_vars, name, type_tyvar(b), None)
+    expr_lit(generator, free_vars, name, type_tyvar(b), None)
 }
 
 // fix = for<a, b> \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
@@ -236,7 +236,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprInfo> {
         ObjectFieldType::initialize_array(gc, array_field, size, value);
         array
     });
-    lit(
+    expr_lit(
         generator,
         free_vars,
         name,
@@ -286,7 +286,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprInfo> {
         gc.release(array);
         elem
     });
-    lit(generator, free_vars, name, type_tyvar(a), None)
+    expr_lit(generator, free_vars, name, type_tyvar(a), None)
 }
 
 // "readArray" built-in function.
@@ -404,7 +404,7 @@ fn write_array_lit(
         ObjectFieldType::write_array(gc, array_field, idx, value);
         array
     });
-    lit(
+    expr_lit(
         generator,
         free_vars,
         name,
