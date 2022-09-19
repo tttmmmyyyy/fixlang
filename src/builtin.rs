@@ -20,7 +20,7 @@ pub fn builtin_type_id(name: &str) -> u32 {
 
 // Make builtin type.
 pub fn make_bultin_type(name: &str) -> Arc<Type> {
-    lit_ty(builtin_type_id(name), name)
+    type_lit(builtin_type_id(name), name)
 }
 
 // Make Int type.

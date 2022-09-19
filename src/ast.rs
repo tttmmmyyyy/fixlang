@@ -355,7 +355,7 @@ pub fn expr_forall(var: Arc<TyVar>, val: Arc<ExprInfo>, src: Option<Span>) -> Ar
     Arc::new(Expr::ForAll(var, val)).into_expr_info(src)
 }
 
-pub fn lit_ty(id: u32, name: &str) -> Arc<Type> {
+pub fn type_lit(id: u32, name: &str) -> Arc<Type> {
     Arc::new(Type::LitTy(Arc::new(TyLit {
         id,
         name: String::from(name),
