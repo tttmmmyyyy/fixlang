@@ -124,6 +124,7 @@ fn parse_expr_let(expr: Pair<Rule>) -> Arc<ExprInfo> {
 fn parse_expr_lam(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let mut pairs = expr.into_inner();
     let var_with_type = pairs.next().unwrap();
+    let _arrow_of_lam = pairs.next().unwrap();
     let val = pairs.next().unwrap();
     lam(parse_var_typed_as_var(var_with_type), parse_expr(val))
 }
@@ -279,7 +280,7 @@ fn parse_tycon(type_expr: Pair<Rule>) -> Arc<TyCon> {
 
 fn rule_to_string(r: &Rule) -> String {
     match r {
-        Rule::EOI => "end of input".to_string(),
+        Rule::EOI => "end-of-input".to_string(),
         Rule::expr_int_lit => "integer".to_string(),
         Rule::expr_bool_lit => "boolean".to_string(),
         Rule::expr_nlc => "expression".to_string(),
@@ -287,6 +288,9 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::in_of_let => "`in` or `;`".to_string(),
         Rule::tyapp_bracket => "`<{types}>`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
+        Rule::var_typed => "variable with type annotation".to_string(),
+        Rule::type_expr => "type".to_string(),
+        Rule::arrow_of_lam => "`->`".to_string(),
         _ => format!("{:?}", r),
     }
 }

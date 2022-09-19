@@ -13,6 +13,8 @@ in_of_let = { "in" | ";" }
 
 eq_of_let = { "=" }
 
+arrow_of_lam = { "->" }
+
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
 var = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
@@ -25,7 +27,7 @@ expr_let = { "let" ~ sep+ ~ var ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
-expr_lam = { "\\" ~ sep* ~ var_typed ~ sep*  ~ "->" ~ sep* ~ expr }
+expr_lam = { "\\" ~ sep* ~ var_typed ~ sep*  ~ arrow_of_lam ~ sep* ~ expr }
 
 expr_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
 
