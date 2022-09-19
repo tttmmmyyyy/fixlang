@@ -46,15 +46,20 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::ptr::null;
-use std::string;
 use std::sync::Arc;
 use std::thread::panicking;
 use std::vec::Vec;
+use std::{process, string};
 use typecheck::*;
 use types::*;
 use Either::Right;
 
 const SANITIZE_MEMORY: bool = true;
+
+fn error_exit(msg: &str) -> ! {
+    eprintln!("{}", msg);
+    process::exit(1)
+}
 
 fn main() {
     let source_file = Arg::new("source-file").required(true);

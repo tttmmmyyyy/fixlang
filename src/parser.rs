@@ -2,8 +2,6 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
-use std::process;
-
 use pest::error::Error;
 
 use super::*;
@@ -12,10 +10,7 @@ pub fn parse_source(source: &str) -> Arc<ExprInfo> {
     let file = FixParser::parse(Rule::file, source);
     let file = match file {
         Ok(res) => res,
-        Err(e) => {
-            eprintln!("{}", message_parse_error(e));
-            process::exit(1)
-        }
+        Err(e) => error_exit(&message_parse_error(e)),
     };
     parse_file(file)
 }
