@@ -67,8 +67,8 @@ fn parse_expr_nlc(pair: Pair<Rule>) -> Arc<ExprInfo> {
         Rule::expr_lit => parse_expr_lit(pair),
         Rule::var => parse_var_as_expr(pair),
         Rule::expr_let => parse_expr_let(pair),
-        Rule::expr_if => parse_if_expr(pair),
-        Rule::lam_expr => parse_lam_expr(pair),
+        Rule::expr_if => parse_expr_if(pair),
+        Rule::expr_lam => parse_expr_lam(pair),
         Rule::forall_expr => parse_forall_expr(pair),
         Rule::bracket_expr => parse_bracket_expr(pair),
         _ => unreachable!(),
@@ -119,7 +119,7 @@ fn parse_expr_let(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let_in(parse_var_as_var(var), parse_expr(bound), parse_expr(val))
 }
 
-fn parse_lam_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+fn parse_expr_lam(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let mut pairs = expr.into_inner();
     let var_with_type = pairs.next().unwrap();
     let val = pairs.next().unwrap();
@@ -149,7 +149,7 @@ fn parse_forall_expr(pair: Pair<Rule>) -> Arc<ExprInfo> {
     expr
 }
 
-fn parse_if_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+fn parse_expr_if(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let mut pairs = expr.into_inner();
     let cond = pairs.next().unwrap();
     let then_val = pairs.next().unwrap();
@@ -289,7 +289,7 @@ fn rule_to_string(r: Rule) -> String {
         Rule::var_typed => todo!(),
         Rule::expr_let => todo!(),
         Rule::expr_if => todo!(),
-        Rule::lam_expr => todo!(),
+        Rule::expr_lam => todo!(),
         Rule::forall_expr => todo!(),
         Rule::bracket_expr => todo!(),
         Rule::expr => todo!(),
