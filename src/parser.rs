@@ -1,6 +1,7 @@
 #[derive(Parser)]
 #[grammar = "grammer.pest"]
 struct FixParser;
+
 use super::*;
 
 pub fn parse_source(source: &str) -> Arc<ExprInfo> {
@@ -16,55 +17,60 @@ fn parse_file(mut file: Pairs<Rule>) -> Arc<ExprInfo> {
     }
 }
 
-fn parse_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
-    let pair = expr.into_inner().next().unwrap();
-    match pair.as_rule() {
-        Rule::app_expr => parse_app_expr(pair),
-        Rule::tyapp_expr => parse_tyapp_expr(pair),
-        Rule::expr_except_app_tyapp => parse_expr_except_app_tyapp(pair),
-        _ => unreachable!(),
-    }
-}
-
-fn parse_app_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
-    let mut subexprs = expr.into_inner();
-    let mut ret = parse_expr_except_app(subexprs.next().unwrap());
-    for pair in subexprs {
-        ret = app(ret, parse_expr_except_app(pair));
-    }
-    ret
-}
-
-fn parse_expr_except_app(pair: Pair<Rule>) -> Arc<ExprInfo> {
+fn parse_expr(pair: Pair<Rule>) -> Arc<ExprInfo> {
+    assert_eq!(pair.as_rule(), Rule::expr);
     let pair = pair.into_inner().next().unwrap();
-    match pair.as_rule() {
-        Rule::tyapp_expr => parse_tyapp_expr(pair),
-        Rule::expr_except_app_tyapp => parse_expr_except_app_tyapp(pair),
-        _ => unreachable!(),
-    }
+    parse_expr_app_seq(pair)
 }
 
-fn parse_tyapp_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
-    let mut pairs = expr.into_inner();
-    let mut ret = parse_expr_except_app_tyapp(pairs.next().unwrap());
+fn parse_expr_app_seq(pair: Pair<Rule>) -> Arc<ExprInfo> {
+    assert_eq!(pair.as_rule(), Rule::expr_app_seq);
+    let mut pairs = pair.into_inner();
+    let mut ret = parse_expr_nlc_tyapp(pairs.next().unwrap());
     for pair in pairs {
-        ret = app_ty(ret, parse_type(pair));
+        ret = app(ret, parse_expr_nlc_tyapp(pair));
     }
     ret
 }
 
-fn parse_expr_except_app_tyapp(expr: Pair<Rule>) -> Arc<ExprInfo> {
-    let pair = expr.into_inner().next().unwrap();
+fn parse_expr_nlc_tyapp(pair: Pair<Rule>) -> Arc<ExprInfo> {
+    assert_eq!(pair.as_rule(), Rule::expr_nlc_tyapp);
+    let mut pairs = pair.into_inner();
+    let mut expr = parse_expr_nlc(pairs.next().unwrap());
+    match pairs.next() {
+        Some(pair) => {
+            let types = parse_tyapp_bracket(pair);
+            for ty in types {
+                expr = app_ty(expr, ty);
+            }
+        }
+        _ => {}
+    };
+    expr
+}
+
+fn parse_expr_nlc(pair: Pair<Rule>) -> Arc<ExprInfo> {
+    assert_eq!(pair.as_rule(), Rule::expr_nlc);
+    let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::lit_expr => parse_lit_expr(pair),
         Rule::var_expr => parse_var_expr(pair),
         Rule::let_expr => parse_let_expr(pair),
+        Rule::if_expr => parse_if_expr(pair),
         Rule::lam_expr => parse_lam_expr(pair),
         Rule::forall_expr => parse_forall_expr(pair),
-        Rule::if_expr => parse_if_expr(pair),
         Rule::bracket_expr => parse_bracket_expr(pair),
         _ => unreachable!(),
     }
+}
+
+fn parse_tyapp_bracket(pair: Pair<Rule>) -> Vec<Arc<Type>> {
+    let pairs = pair.into_inner();
+    let mut ret: Vec<Arc<Type>> = vec![];
+    for pair in pairs {
+        ret.push(parse_type(pair));
+    }
+    ret
 }
 
 fn parse_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {

@@ -26,17 +26,18 @@ lam_expr = { "\\" ~ sep* ~ var_with_type ~ sep*  ~ "->" ~ sep* ~ expr }
 
 forall_expr = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
 
-app_expr = { expr_except_app ~ (sep+ ~ expr_except_app)+ }
-
-expr_except_app = { tyapp_expr | expr_except_app_tyapp }
-
-tyapp_expr = { expr_except_app_tyapp ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">"}
-
-expr_except_app_tyapp = { lit_expr | var_expr | let_expr | if_expr | lam_expr | forall_expr | bracket_expr }
-
 bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
-expr = { app_expr | tyapp_expr | expr_except_app_tyapp }
+// nlc = non left recursive
+expr_nlc = { lit_expr | var_expr | let_expr | if_expr | lam_expr | forall_expr | bracket_expr }
+
+tyapp_bracket = { "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
+
+expr_nlc_tyapp = { expr_nlc ~ (sep* ~ tyapp_bracket)? }
+
+expr_app_seq = { expr_nlc_tyapp ~ (sep+ ~ expr_nlc_tyapp)* }
+
+expr = { expr_app_seq }
 
 // === Types ===
 type_expr = { type_app | type_fun | type_except_app_fun }
