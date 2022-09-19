@@ -439,7 +439,7 @@ pub fn test_print_type_3() {
 
 #[test]
 pub fn test_print_type_4() {
-    let source = r"\x: Int -> \y:Int -> add x y";
+    let source = r"\x: Int -> \y: Int -> add x y";
     let answer = "Int => Int => Int";
     assert_eq!(type_of_source(source).to_string(), answer);
 }
@@ -455,5 +455,19 @@ pub fn test_print_type_5() {
 pub fn test_print_type_6() {
     let source = r"\f: for<a> a=>a -> \g: for<b> b=>b -> for<c> \x:c -> f<c> (g<c> x)";
     let answer = "(for<a> a => a) => (for<b> b => b) => for<c> c => c";
+    assert_eq!(type_of_source(source).to_string(), answer);
+}
+
+#[test]
+pub fn test_print_type_7() {
+    let source = r"newArray<Int> 30 0";
+    let answer = "Array<Int>";
+    assert_eq!(type_of_source(source).to_string(), answer);
+}
+
+#[test]
+pub fn test_print_type_8() {
+    let source = r"newArray<Array<Int=>Bool>> 30 (newArray<Int=>Bool> 30 \x: Int -> eq<Int> x 0)";
+    let answer = "Array<Array<Int => Bool>>";
     assert_eq!(type_of_source(source).to_string(), answer);
 }
