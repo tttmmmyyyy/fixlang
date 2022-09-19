@@ -96,8 +96,6 @@ pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
         Ok(file) => file,
     };
 
-    // Read the file contents into a string, returns `io::Result<usize>`
-    // ファイルの中身を文字列に読み込む。`io::Result<useize>`を返す。
     let mut s = String::new();
     match file.read_to_string(&mut s) {
         Err(why) => panic!("Couldn't read {}: {}", display, why),
