@@ -128,7 +128,7 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
 
 fn parse_var_as_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     assert_eq!(pair.as_rule(), Rule::var);
-    var(pair.as_str(), Some(Span::from_rule(&src, &pair)))
+    expr_var(pair.as_str(), Some(Span::from_rule(&src, &pair)))
 }
 
 fn parse_var_as_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {

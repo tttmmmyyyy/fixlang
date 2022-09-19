@@ -334,7 +334,7 @@ pub fn expr_app(lam: Arc<ExprInfo>, arg: Arc<ExprInfo>, src: Option<Span>) -> Ar
 }
 
 // Make variable expression.
-pub fn var(var_name: &str, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_var(var_name: &str, src: Option<Span>) -> Arc<ExprInfo> {
     Arc::new(Expr::Var(var_var(var_name, None, src.clone()))).into_expr_info(src)
 }
 
