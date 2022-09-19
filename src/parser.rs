@@ -5,7 +5,11 @@ struct FixParser;
 use super::*;
 
 pub fn parse_source(source: &str) -> Arc<ExprInfo> {
-    let file = FixParser::parse(Rule::file, source).unwrap();
+    let file = FixParser::parse(Rule::file, source);
+    let file = match file {
+        Ok(res) => res,
+        Err(e) => panic!("{}", e.variant.message()),
+    };
     parse_file(file)
 }
 

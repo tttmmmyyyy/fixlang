@@ -287,7 +287,7 @@ fn reduce_type(ty: Arc<Type>, scope: &mut Scope<LocalTypeVar>) -> Arc<Type> {
     }
 }
 
-fn is_equivalent_type(lhs: Arc<Type>, rhs: Arc<Type>) -> bool {
+pub fn is_equivalent_type(lhs: Arc<Type>, rhs: Arc<Type>) -> bool {
     let mut lhs_scope = Scope::<u32>::empty();
     let mut rhs_scope = Scope::<u32>::empty();
     let mut next_id: u32 = 0;

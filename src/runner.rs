@@ -33,7 +33,13 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     // Check types.
     let program = check_type(program);
 
-    // TODO: Check the type of the program is Int.
+    let program_ty = program.deduced_type.clone().unwrap();
+    if !is_equivalent_type(program_ty.clone(), int_lit_ty()) {
+        panic!(
+            "wrong program type: expected Int, found {}",
+            program_ty.to_string()
+        );
+    }
 
     // Calculate free variables of nodes.
     let program = calculate_free_vars(program);
