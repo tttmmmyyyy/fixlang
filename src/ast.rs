@@ -292,10 +292,6 @@ pub fn type_tyvar(var_name: &str) -> Arc<Type> {
     Arc::new(Type::TyVar(var_tyvar(var_name)))
 }
 
-fn forall_ty(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::ForAllTy(var_tyvar(var_name), ty))
-}
-
 pub fn var_var(var_name: &str, type_annotation: Option<Arc<Type>>, src: Option<Span>) -> Arc<Var> {
     Arc::new(Var {
         name: String::from(var_name),
