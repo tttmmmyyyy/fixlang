@@ -83,7 +83,7 @@ impl Expr {
                 e.expr.to_string()
             ),
             Expr::AppType(expr, ty) => {
-                format!("({})<{}>", expr.expr.to_string(), ty.to_string())
+                format!("({})<{}>", expr.expr.to_string(), ty.clone().to_string())
             }
             Expr::ForAll(tyvar, expr) => {
                 format!("for<{}> ({})", tyvar.name, expr.expr.to_string())
@@ -148,8 +148,88 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn to_string(&self) -> String {
-        String::from("TODO")
+    pub fn to_string(self: Arc<Type>) -> String {
+        match &*self {
+            Type::TyVar(v) => v.name.clone(),
+            Type::LitTy(l) => l.name.clone(),
+            Type::AppTy(_, _) => {
+                let (ty, args) = self.decompose_appty();
+                let ty = ty.to_string();
+                let args: Vec<String> = args.iter().map(|a| a.clone().to_string()).collect();
+                let mut res: String = Default::default();
+                res += &ty;
+                res += "<";
+                res += &args.join(", ");
+                res += ">";
+                res
+            }
+            Type::TyConApp(tycon, args) => {
+                let tycon = tycon.name.clone();
+                let args: Vec<String> = args.iter().map(|a| a.clone().to_string()).collect();
+                let mut res: String = Default::default();
+                res += &tycon;
+                res += "<";
+                res += &args.join(", ");
+                res += ">";
+                res
+            }
+            Type::FunTy(src, dst) => {
+                let src_brace_needed = match &**src {
+                    Type::FunTy(_, _) => true,
+                    Type::ForAllTy(_, _) => true,
+                    _ => false,
+                };
+                let src = src.clone().to_string();
+                let dst = dst.clone().to_string();
+                let mut res: String = Default::default();
+                if src_brace_needed {
+                    res += "(";
+                    res += &src;
+                    res += ")";
+                } else {
+                    res += &src;
+                }
+                res += " ";
+                res += &dst;
+                res
+            }
+            Type::ForAllTy(_, _) => {
+                let (vars, ty) = self.decompose_forall();
+                let vars: Vec<String> = vars.iter().map(|v| v.name.clone()).collect();
+                let mut res: String = Default::default();
+                res += "for<";
+                res += &vars.join(", ");
+                res += "> ";
+                res += &ty.to_string();
+                res
+            }
+        }
+    }
+
+    // Decompose AppTy as many as possible.
+    // Example: a<b, c> --> (a, vec![b, c])
+    fn decompose_appty(self: Arc<Type>) -> (Arc<Type>, Vec<Arc<Type>>) {
+        match &*self {
+            Type::AppTy(ty, arg) => {
+                let (ty, mut args) = ty.clone().decompose_appty();
+                args.push(arg.clone());
+                (ty, args)
+            }
+            _ => (self.clone(), vec![]),
+        }
+    }
+
+    // Decompose ForAllTy as many as possible.
+    // Example: for<b, c> a --> (vec![b, c], a)
+    fn decompose_forall(self: Arc<Type>) -> (Vec<Arc<TyVar>>, Arc<Type>) {
+        match &*self {
+            Type::ForAllTy(var, ty) => {
+                let (mut vars, ty) = ty.clone().decompose_forall();
+                vars.push(var.clone());
+                (vars, ty)
+            }
+            _ => (vec![], self.clone()),
+        }
     }
 }
 
