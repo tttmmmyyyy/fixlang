@@ -3,11 +3,11 @@ sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
 expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
-bool_lit_expr = { "true" | "false" }
+expr_bool_lit = { "true" | "false" }
 
-lit_expr = { expr_int_lit | bool_lit_expr }
+lit_expr = { expr_int_lit | expr_bool_lit }
 
-keywords = _{ "let" | "in" | "if" | "then" | "else" | bool_lit_expr }
+keywords = _{ "let" | "in" | "if" | "then" | "else" | expr_bool_lit }
 
 // === Expressions ===
 let_in = _{ "in" | ";" }
