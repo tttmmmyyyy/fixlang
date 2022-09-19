@@ -189,7 +189,7 @@ impl Type {
                 } else {
                     res += &src;
                 }
-                res += " ";
+                res += " => ";
                 res += &dst;
                 res
             }
@@ -222,6 +222,13 @@ impl Type {
     // Decompose ForAllTy as many as possible.
     // Example: for<b, c> a --> (vec![b, c], a)
     fn decompose_forall(self: Arc<Type>) -> (Vec<Arc<TyVar>>, Arc<Type>) {
+        let (mut vars, ty) = self.decompose_forall_inner();
+        vars.reverse();
+        (vars, ty)
+    }
+
+    // Decompose ForAllTy as many as possible. (vars reversed)
+    fn decompose_forall_inner(self: Arc<Type>) -> (Vec<Arc<TyVar>>, Arc<Type>) {
         match &*self {
             Type::ForAllTy(var, ty) => {
                 let (mut vars, ty) = ty.clone().decompose_forall();
