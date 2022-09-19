@@ -27,10 +27,10 @@ expr_lam = { "\\" ~ sep* ~ var_typed ~ sep*  ~ "->" ~ sep* ~ expr }
 
 expr_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
 
-expr_bracket = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
+expr_braced = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 // nlc = non left recursive
-expr_nlc = { expr_lit | var | expr_let | expr_if | expr_lam | expr_forall | expr_bracket }
+expr_nlc = { expr_lit | var | expr_let | expr_if | expr_lam | expr_forall | expr_braced }
 
 tyapp_bracket = { "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 
@@ -43,9 +43,9 @@ expr = { expr_app_seq }
 // === Types ===
 type_expr = { type_app | type_fun | type_except_app_fun }
 
-type_bracket = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
+type_braced = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
 
-type_except_app_fun = { type_var | type_tycon_app | type_lit | type_forall | type_bracket }
+type_except_app_fun = { type_var | type_tycon_app | type_lit | type_forall | type_braced }
 // type_tycon_app has to precede to type_lit
 
 type_except_fun = { type_app | type_except_app_fun }

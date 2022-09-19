@@ -70,7 +70,7 @@ fn parse_expr_nlc(pair: Pair<Rule>) -> Arc<ExprInfo> {
         Rule::expr_if => parse_expr_if(pair),
         Rule::expr_lam => parse_expr_lam(pair),
         Rule::expr_forall => parse_forall_expr(pair),
-        Rule::expr_bracket => parse_bracket_expr(pair),
+        Rule::expr_braced => parse_bracket_expr(pair),
         _ => unreachable!(),
     }
 }
@@ -183,7 +183,7 @@ fn parse_type(type_expr: Pair<Rule>) -> Arc<Type> {
     }
 }
 
-fn parse_type_bracket(type_expr: Pair<Rule>) -> Arc<Type> {
+fn parse_type_braced(type_expr: Pair<Rule>) -> Arc<Type> {
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     parse_type(pair)
@@ -197,7 +197,7 @@ fn parse_type_except_app_fun(type_expr: Pair<Rule>) -> Arc<Type> {
         Rule::type_lit => parse_type_lit(pair),
         Rule::type_tycon_app => parse_type_tycon_app(pair),
         Rule::type_forall => parse_type_forall(pair),
-        Rule::type_bracket => parse_type_bracket(pair),
+        Rule::type_braced => parse_type_braced(pair),
         _ => unreachable!(),
     }
 }
@@ -291,10 +291,10 @@ fn rule_to_string(r: Rule) -> String {
         Rule::expr_if => todo!(),
         Rule::expr_lam => todo!(),
         Rule::expr_forall => todo!(),
-        Rule::expr_bracket => todo!(),
+        Rule::expr_braced => todo!(),
         Rule::expr => todo!(),
         Rule::type_expr => todo!(),
-        Rule::type_bracket => todo!(),
+        Rule::type_braced => todo!(),
         Rule::type_except_app_fun => todo!(),
         Rule::type_except_fun => todo!(),
         Rule::type_var => todo!(),
