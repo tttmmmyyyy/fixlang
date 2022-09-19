@@ -288,7 +288,7 @@ pub fn var_tyvar(var_name: &str) -> Arc<TyVar> {
     })
 }
 
-pub fn tyvar_ty(var_name: &str) -> Arc<Type> {
+pub fn type_tyvar(var_name: &str) -> Arc<Type> {
     Arc::new(Type::TyVar(var_tyvar(var_name)))
 }
 

@@ -161,9 +161,9 @@ pub fn eq() -> Arc<ExprInfo> {
     forall(
         var_tyvar("a"),
         lam(
-            var_var("lhs", Some(tyvar_ty("a")), None),
+            var_var("lhs", Some(type_tyvar("a")), None),
             lam(
-                var_var("rhs", Some(tyvar_ty("a")), None),
+                var_var("rhs", Some(type_tyvar("a")), None),
                 eq_lit("lhs", "rhs"),
                 None,
             ),
@@ -187,12 +187,12 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
         f_fixf_x
     });
-    lit(generator, free_vars, name, tyvar_ty(b), None)
+    lit(generator, free_vars, name, type_tyvar(b), None)
 }
 
 // fix = for<a, b> \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> Arc<ExprInfo> {
-    let fixed_ty = type_func(tyvar_ty("a"), tyvar_ty("b"));
+    let fixed_ty = type_func(type_tyvar("a"), type_tyvar("b"));
     forall(
         var_tyvar("a"),
         forall(
@@ -200,7 +200,7 @@ pub fn fix() -> Arc<ExprInfo> {
             lam(
                 var_var("f", Some(type_func(fixed_ty.clone(), fixed_ty)), None),
                 lam(
-                    var_var("x", Some(tyvar_ty("a")), None),
+                    var_var("x", Some(type_tyvar("a")), None),
                     fix_lit("b", "f", "x"),
                     None,
                 ),
@@ -240,7 +240,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprInfo> {
         generator,
         free_vars,
         name,
-        tycon_app(array_lit_tycon(), vec![tyvar_ty(a)]),
+        tycon_app(array_lit_tycon(), vec![type_tyvar(a)]),
         None,
     )
 }
@@ -253,7 +253,7 @@ pub fn new_array() -> Arc<ExprInfo> {
         lam(
             var_var("size", Some(int_lit_ty()), None),
             lam(
-                var_var("value", Some(tyvar_ty("a")), None),
+                var_var("value", Some(type_tyvar("a")), None),
                 new_array_lit("a", "size", "value"),
                 None,
             ),
@@ -286,7 +286,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprInfo> {
         gc.release(array);
         elem
     });
-    lit(generator, free_vars, name, tyvar_ty(a), None)
+    lit(generator, free_vars, name, type_tyvar(a), None)
 }
 
 // "readArray" built-in function.
@@ -297,7 +297,7 @@ pub fn read_array() -> Arc<ExprInfo> {
         lam(
             var_var(
                 "array",
-                Some(tycon_app(array_lit_tycon(), vec![tyvar_ty("a")])),
+                Some(tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
                 None,
             ),
             lam(
@@ -408,7 +408,7 @@ fn write_array_lit(
         generator,
         free_vars,
         name,
-        tycon_app(array_lit_tycon(), vec![tyvar_ty(a)]),
+        tycon_app(array_lit_tycon(), vec![type_tyvar(a)]),
         None,
     )
 }
@@ -421,13 +421,13 @@ pub fn write_array_common(is_unique_version: bool) -> Arc<ExprInfo> {
         lam(
             var_var(
                 "array",
-                Some(tycon_app(array_lit_tycon(), vec![tyvar_ty("a")])),
+                Some(tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
                 None,
             ),
             lam(
                 var_var("idx", Some(int_lit_ty()), None),
                 lam(
-                    var_var("value", Some(tyvar_ty("a")), None),
+                    var_var("value", Some(type_tyvar("a")), None),
                     write_array_lit("a", "array", "idx", "value", is_unique_version),
                     None,
                 ),

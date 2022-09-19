@@ -261,7 +261,7 @@ fn parse_type_except_app_fun(type_expr: Pair<Rule>) -> Arc<Type> {
 }
 
 fn parse_type_var(type_expr: Pair<Rule>) -> Arc<Type> {
-    tyvar_ty(type_expr.as_str())
+    type_tyvar(type_expr.as_str())
 }
 
 fn parse_type_lit(type_expr: Pair<Rule>) -> Arc<Type> {
