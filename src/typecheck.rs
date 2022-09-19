@@ -156,7 +156,7 @@ fn deduce_lam(
     let val = deduce_expr(val, scope);
     scope.pop(&param.name);
     let val_ty = val.deduced_type.clone().unwrap();
-    lam(param, val, ei.source.clone()).with_deduced_type(lam_ty(param_ty, val_ty))
+    lam(param, val, ei.source.clone()).with_deduced_type(type_func(param_ty, val_ty))
 }
 
 fn deduce_let(

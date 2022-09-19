@@ -192,13 +192,13 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
 
 // fix = for<a, b> \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> Arc<ExprInfo> {
-    let fixed_ty = lam_ty(tyvar_ty("a"), tyvar_ty("b"));
+    let fixed_ty = type_func(tyvar_ty("a"), tyvar_ty("b"));
     forall(
         tyvar_var("a"),
         forall(
             tyvar_var("b"),
             lam(
-                var_var("f", Some(lam_ty(fixed_ty.clone(), fixed_ty)), None),
+                var_var("f", Some(type_func(fixed_ty.clone(), fixed_ty)), None),
                 lam(
                     var_var("x", Some(tyvar_ty("a")), None),
                     fix_lit("b", "f", "x"),

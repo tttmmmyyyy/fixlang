@@ -278,7 +278,7 @@ pub fn arrow_kind(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
-pub fn lam_ty(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
+pub fn type_func(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::FunTy(src, dst))
 }
 
