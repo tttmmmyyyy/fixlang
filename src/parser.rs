@@ -204,7 +204,7 @@ fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     let cond = pairs.next().unwrap();
     let then_val = pairs.next().unwrap();
     let else_val = pairs.next().unwrap();
-    conditional(
+    expr_if(
         parse_expr(cond, src),
         parse_expr(then_val, src),
         parse_expr(else_val, src),

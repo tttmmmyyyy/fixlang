@@ -211,7 +211,7 @@ fn deduce_if(
     } else {
         panic!("Type mismatch between then and else.")
     };
-    conditional(cond, then_expr, else_expr, ei.source.clone()).with_deduced_type(ty)
+    expr_if(cond, then_expr, else_expr, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn deduce_apptype(

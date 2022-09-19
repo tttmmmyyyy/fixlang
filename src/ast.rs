@@ -338,7 +338,7 @@ pub fn expr_var(var_name: &str, src: Option<Span>) -> Arc<ExprInfo> {
     Arc::new(Expr::Var(var_var(var_name, None, src.clone()))).into_expr_info(src)
 }
 
-pub fn conditional(
+pub fn expr_if(
     cond: Arc<ExprInfo>,
     then_expr: Arc<ExprInfo>,
     else_expr: Arc<ExprInfo>,
@@ -421,7 +421,7 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = cond.free_vars.clone();
             free_vars.extend(then.free_vars.clone());
             free_vars.extend(else_expr.free_vars.clone());
-            conditional(cond, then, else_expr, ei.source.clone()).with_free_vars(free_vars)
+            expr_if(cond, then, else_expr, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::AppType(ei, ty) => {
             let ei = calculate_free_vars(ei.clone());
