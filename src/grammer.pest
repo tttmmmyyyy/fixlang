@@ -18,7 +18,7 @@ var = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
 var_typed = { var ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-let_expr = { "let" ~ sep+ ~ var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ let_in ~ sep* ~ expr }
+expr_let = { "let" ~ sep+ ~ var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ let_in ~ sep* ~ expr }
 
 if_expr = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
@@ -29,7 +29,7 @@ forall_expr = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* 
 bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 // nlc = non left recursive
-expr_nlc = { expr_lit | var | let_expr | if_expr | lam_expr | forall_expr | bracket_expr }
+expr_nlc = { expr_lit | var | expr_let | if_expr | lam_expr | forall_expr | bracket_expr }
 
 tyapp_bracket = { "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 
