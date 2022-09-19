@@ -325,7 +325,7 @@ pub fn expr_let(
     Arc::new(Expr::Let(var, bound, expr)).into_expr_info(src)
 }
 
-pub fn lam(var: Arc<Var>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_abs(var: Arc<Var>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
     Arc::new(Expr::Lam(var, val)).into_expr_info(src)
 }
 
@@ -401,7 +401,7 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(&arg.name);
             free_vars.remove(SELF_NAME);
-            lam(arg.clone(), val, ei.source.clone()).with_free_vars(free_vars)
+            expr_abs(arg.clone(), val, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::Let(var, bound, val) => {
             // NOTE: Our Let is non-recursive let, i.e.,

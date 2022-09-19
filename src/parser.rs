@@ -167,7 +167,7 @@ fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     let var_with_type = pairs.next().unwrap();
     let _arrow_of_lam = pairs.next().unwrap();
     let val = pairs.next().unwrap();
-    lam(
+    expr_abs(
         parse_var_typed_as_var(var_with_type, src),
         parse_expr(val, src),
         Some(span),

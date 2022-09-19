@@ -113,9 +113,9 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
 }
 
 pub fn add() -> Arc<ExprInfo> {
-    lam(
+    expr_abs(
         var_var("lhs", Some(int_lit_ty()), None),
-        lam(
+        expr_abs(
             var_var("rhs", Some(int_lit_ty()), None),
             add_lit("lhs", "rhs"),
             None,
@@ -160,9 +160,9 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
 pub fn eq() -> Arc<ExprInfo> {
     forall(
         var_tyvar("a"),
-        lam(
+        expr_abs(
             var_var("lhs", Some(type_tyvar("a")), None),
-            lam(
+            expr_abs(
                 var_var("rhs", Some(type_tyvar("a")), None),
                 eq_lit("lhs", "rhs"),
                 None,
@@ -197,9 +197,9 @@ pub fn fix() -> Arc<ExprInfo> {
         var_tyvar("a"),
         forall(
             var_tyvar("b"),
-            lam(
+            expr_abs(
                 var_var("f", Some(type_func(fixed_ty.clone(), fixed_ty)), None),
-                lam(
+                expr_abs(
                     var_var("x", Some(type_tyvar("a")), None),
                     fix_lit("b", "f", "x"),
                     None,
@@ -250,9 +250,9 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprInfo> {
 pub fn new_array() -> Arc<ExprInfo> {
     forall(
         var_tyvar("a"),
-        lam(
+        expr_abs(
             var_var("size", Some(int_lit_ty()), None),
-            lam(
+            expr_abs(
                 var_var("value", Some(type_tyvar("a")), None),
                 new_array_lit("a", "size", "value"),
                 None,
@@ -294,13 +294,13 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprInfo> {
 pub fn read_array() -> Arc<ExprInfo> {
     forall(
         var_tyvar("a"),
-        lam(
+        expr_abs(
             var_var(
                 "array",
                 Some(tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
                 None,
             ),
-            lam(
+            expr_abs(
                 var_var("idx", Some(int_lit_ty()), None),
                 read_array_lit("a", "array", "idx"),
                 None,
@@ -418,15 +418,15 @@ fn write_array_lit(
 pub fn write_array_common(is_unique_version: bool) -> Arc<ExprInfo> {
     forall(
         var_tyvar("a"),
-        lam(
+        expr_abs(
             var_var(
                 "array",
                 Some(tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
                 None,
             ),
-            lam(
+            expr_abs(
                 var_var("idx", Some(int_lit_ty()), None),
-                lam(
+                expr_abs(
                     var_var("value", Some(type_tyvar("a")), None),
                     write_array_lit("a", "array", "idx", "value", is_unique_version),
                     None,
