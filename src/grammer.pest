@@ -5,15 +5,15 @@ expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
 expr_bool_lit = { "true" | "false" }
 
-lit_expr = { expr_int_lit | expr_bool_lit }
+expr_lit = { expr_int_lit | expr_bool_lit }
 
 keywords = _{ "let" | "in" | "if" | "then" | "else" | expr_bool_lit }
 
-// === Expressions ===
 let_in = _{ "in" | ";" }
 
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
+// === Expressions ===
 var_expr = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
 var_with_type = { var_expr ~ sep* ~ ":" ~ sep* ~ type_expr }
@@ -29,7 +29,7 @@ forall_expr = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* 
 bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 // nlc = non left recursive
-expr_nlc = { lit_expr | var_expr | let_expr | if_expr | lam_expr | forall_expr | bracket_expr }
+expr_nlc = { expr_lit | var_expr | let_expr | if_expr | lam_expr | forall_expr | bracket_expr }
 
 tyapp_bracket = { "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 

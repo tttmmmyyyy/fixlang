@@ -64,7 +64,7 @@ fn parse_expr_nlc(pair: Pair<Rule>) -> Arc<ExprInfo> {
     assert_eq!(pair.as_rule(), Rule::expr_nlc);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
-        Rule::lit_expr => parse_lit_expr(pair),
+        Rule::expr_lit => parse_expr_lit(pair),
         Rule::var_expr => parse_var_expr(pair),
         Rule::let_expr => parse_let_expr(pair),
         Rule::if_expr => parse_if_expr(pair),
@@ -84,7 +84,7 @@ fn parse_tyapp_bracket(pair: Pair<Rule>) -> Vec<Arc<Type>> {
     ret
 }
 
-fn parse_lit_expr(expr: Pair<Rule>) -> Arc<ExprInfo> {
+fn parse_expr_lit(expr: Pair<Rule>) -> Arc<ExprInfo> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_int_lit => parse_expr_int_lit(pair),
@@ -278,7 +278,7 @@ fn rule_to_string(r: Rule) -> String {
         Rule::sep => todo!(),
         Rule::expr_int_lit => todo!(),
         Rule::expr_bool_lit => todo!(),
-        Rule::lit_expr => todo!(),
+        Rule::expr_lit => todo!(),
         Rule::keywords => todo!(),
         Rule::let_in => todo!(),
         Rule::var_char => todo!(),
