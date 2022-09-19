@@ -2,13 +2,20 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
+use std::process;
+
+use pest::error::Error;
+
 use super::*;
 
 pub fn parse_source(source: &str) -> Arc<ExprInfo> {
     let file = FixParser::parse(Rule::file, source);
     let file = match file {
         Ok(res) => res,
-        Err(e) => panic!("{}", e.variant.message()),
+        Err(e) => {
+            eprintln!("{}", message_parse_error(e));
+            process::exit(1)
+        }
     };
     parse_file(file)
 }
@@ -263,4 +270,49 @@ fn parse_type_forall(type_expr: Pair<Rule>) -> Arc<Type> {
 
 fn parse_tycon(type_expr: Pair<Rule>) -> Arc<TyCon> {
     make_bultin_tycon(type_expr.as_str())
+}
+
+fn rule_to_string(r: Rule) -> String {
+    match r {
+        Rule::EOI => todo!(),
+        Rule::sep => todo!(),
+        Rule::int_lit_expr => todo!(),
+        Rule::bool_lit_expr => todo!(),
+        Rule::lit_expr => todo!(),
+        Rule::keywords => todo!(),
+        Rule::let_in => todo!(),
+        Rule::var_char => todo!(),
+        Rule::var_expr => todo!(),
+        Rule::var_with_type => todo!(),
+        Rule::let_expr => todo!(),
+        Rule::if_expr => todo!(),
+        Rule::lam_expr => todo!(),
+        Rule::forall_expr => todo!(),
+        Rule::bracket_expr => todo!(),
+        Rule::expr => todo!(),
+        Rule::type_expr => todo!(),
+        Rule::type_bracket => todo!(),
+        Rule::type_except_app_fun => todo!(),
+        Rule::type_except_fun => todo!(),
+        Rule::type_var => todo!(),
+        Rule::type_lit => todo!(),
+        Rule::type_app => todo!(),
+        Rule::type_tycon_app => todo!(),
+        Rule::type_fun => todo!(),
+        Rule::type_forall => todo!(),
+        Rule::tycon => todo!(),
+        Rule::block_comment => todo!(),
+        Rule::block_commented_character => todo!(),
+        Rule::line_comment => todo!(),
+        Rule::line_commented_character => todo!(),
+        Rule::file => todo!(),
+        Rule::expr_nlc => todo!(),
+        Rule::tyapp_bracket => todo!(),
+        Rule::expr_nlc_tyapp => todo!(),
+        Rule::expr_app_seq => todo!(),
+    }
+}
+
+fn message_parse_error(e: Error<Rule>) -> String {
+    String::from("TODO")
 }
