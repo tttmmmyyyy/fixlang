@@ -22,13 +22,28 @@ fn execute_main_module<'c>(
 
 // Add library functions (such as fix) to given ast.
 fn add_builtin_symbols(program: Arc<ExprInfo>) -> Arc<ExprInfo> {
-    let program = let_in(var_var("add", None), add(), program);
-    let program = let_in(var_var("eq", None), eq(), program);
-    let program = let_in(var_var("fix", None), fix(), program);
-    let program = let_in(var_var("newArray", None), new_array(), program);
-    let program = let_in(var_var("readArray", None), read_array(), program);
-    let program = let_in(var_var("writeArray", None), write_array(), program);
-    let program = let_in(var_var("writeArray!", None), write_array_unique(), program);
+    let program = let_in(var_var("add", None, None), add(), program, None);
+    let program = let_in(var_var("eq", None, None), eq(), program, None);
+    let program = let_in(var_var("fix", None, None), fix(), program, None);
+    let program = let_in(var_var("newArray", None, None), new_array(), program, None);
+    let program = let_in(
+        var_var("readArray", None, None),
+        read_array(),
+        program,
+        None,
+    );
+    let program = let_in(
+        var_var("writeArray", None, None),
+        write_array(),
+        program,
+        None,
+    );
+    let program = let_in(
+        var_var("writeArray!", None, None),
+        write_array_unique(),
+        program,
+        None,
+    );
     program
 }
 

@@ -74,20 +74,26 @@ pub fn check_type(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
 
 fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
     match &*ei.expr {
-        Expr::Var(v) => deduce_var(v.clone(), scope),
-        Expr::Lit(lit) => deduce_lit(lit.clone(), scope),
-        Expr::App(func, arg) => deduce_app(func.clone(), arg.clone(), scope),
-        Expr::Lam(arg, val) => deduce_lam(arg.clone(), val.clone(), scope),
-        Expr::Let(var, bound, val) => deduce_let(var.clone(), bound.clone(), val.clone(), scope),
-        Expr::If(cond, then_expr, else_expr) => {
-            deduce_if(cond.clone(), then_expr.clone(), else_expr.clone(), scope)
+        Expr::Var(v) => deduce_var(ei.clone(), v.clone(), scope),
+        Expr::Lit(lit) => deduce_lit(ei.clone(), lit.clone(), scope),
+        Expr::App(func, arg) => deduce_app(ei.clone(), func.clone(), arg.clone(), scope),
+        Expr::Lam(arg, val) => deduce_lam(ei.clone(), arg.clone(), val.clone(), scope),
+        Expr::Let(var, bound, val) => {
+            deduce_let(ei.clone(), var.clone(), bound.clone(), val.clone(), scope)
         }
-        Expr::AppType(expr, ty) => deduce_apptype(expr.clone(), ty.clone(), scope),
-        Expr::ForAll(tyvar, expr) => deduce_forall(tyvar.clone(), expr.clone(), scope),
+        Expr::If(cond, then_expr, else_expr) => deduce_if(
+            ei.clone(),
+            cond.clone(),
+            then_expr.clone(),
+            else_expr.clone(),
+            scope,
+        ),
+        Expr::AppType(expr, ty) => deduce_apptype(ei.clone(), expr.clone(), ty.clone(), scope),
+        Expr::ForAll(tyvar, expr) => deduce_forall(ei.clone(), tyvar.clone(), expr.clone(), scope),
     }
 }
 
-fn deduce_var(var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
+fn deduce_var(ei: Arc<ExprInfo>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
     let ty = scope.get(&var.name);
     let ty = ty
         .unwrap_or_else(|| {
@@ -95,18 +101,23 @@ fn deduce_var(var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
         })
         .ty;
     Arc::new(Expr::Var(var))
-        .into_expr_info()
+        .into_expr_info(ei.source.clone())
         .with_deduced_type(ty)
 }
 
-fn deduce_lit(lit: Arc<Literal>, _scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
+fn deduce_lit(
+    ei: Arc<ExprInfo>,
+    lit: Arc<Literal>,
+    _scope: &mut Scope<LocalTermVar>,
+) -> Arc<ExprInfo> {
     let lit_ty = lit.ty.clone();
     Arc::new(Expr::Lit(lit))
-        .into_expr_info()
+        .into_expr_info(ei.source.clone())
         .with_deduced_type(lit_ty.clone())
 }
 
 fn deduce_app(
+    ei: Arc<ExprInfo>,
     func: Arc<ExprInfo>,
     arg: Arc<ExprInfo>,
     scope: &mut Scope<LocalTermVar>,
@@ -126,10 +137,11 @@ fn deduce_app(
             panic!("In the expression \"a b\", \"a\" is expected to be a function.")
         }
     };
-    app(func, arg).with_deduced_type(ty)
+    app(func, arg, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn deduce_lam(
+    ei: Arc<ExprInfo>,
     param: Arc<Var>,
     val: Arc<ExprInfo>,
     scope: &mut Scope<LocalTermVar>,
@@ -144,10 +156,11 @@ fn deduce_lam(
     let val = deduce_expr(val, scope);
     scope.pop(&param.name);
     let val_ty = val.deduced_type.clone().unwrap();
-    lam(param, val).with_deduced_type(lam_ty(param_ty, val_ty))
+    lam(param, val, ei.source.clone()).with_deduced_type(lam_ty(param_ty, val_ty))
 }
 
 fn deduce_let(
+    ei: Arc<ExprInfo>,
     var: Arc<Var>,
     bound: Arc<ExprInfo>,
     val: Arc<ExprInfo>,
@@ -174,10 +187,11 @@ fn deduce_let(
         }
         None => val_ty,
     };
-    let_in(var, bound, val).with_deduced_type(ty)
+    let_in(var, bound, val, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn deduce_if(
+    ei: Arc<ExprInfo>,
     cond: Arc<ExprInfo>,
     then_expr: Arc<ExprInfo>,
     else_expr: Arc<ExprInfo>,
@@ -197,10 +211,11 @@ fn deduce_if(
     } else {
         panic!("Type mismatch between then and else.")
     };
-    conditional(cond, then_expr, else_expr).with_deduced_type(ty)
+    conditional(cond, then_expr, else_expr, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn deduce_apptype(
+    ei: Arc<ExprInfo>,
     expr: Arc<ExprInfo>,
     arg_ty: Arc<Type>,
     scope: &mut Scope<LocalTermVar>,
@@ -217,17 +232,18 @@ fn deduce_apptype(
             panic!("Applying type requires forall.")
         }
     };
-    app_ty(expr, arg_ty).with_deduced_type(ty)
+    app_ty(expr, arg_ty, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn deduce_forall(
+    ei: Arc<ExprInfo>,
     tyvar: Arc<TyVar>,
     expr: Arc<ExprInfo>,
     scope: &mut Scope<LocalTermVar>,
 ) -> Arc<ExprInfo> {
     let expr = deduce_expr(expr, scope);
     let ty = type_forall(tyvar.clone(), expr.deduced_type.clone().unwrap());
-    forall(tyvar, expr).with_deduced_type(ty)
+    forall(tyvar, expr, ei.source.clone()).with_deduced_type(ty)
 }
 
 fn reduce_type(ty: Arc<Type>, scope: &mut Scope<LocalTypeVar>) -> Arc<Type> {

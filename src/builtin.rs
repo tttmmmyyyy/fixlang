@@ -68,7 +68,7 @@ pub fn array_lit_tycon() -> Arc<TyCon> {
     make_bultin_tycon(ARRAY_NAME)
 }
 
-pub fn int(val: i64) -> Arc<ExprInfo> {
+pub fn int(val: i64, source: Option<Span>) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let ptr_to_int_obj =
             ObjectType::int_obj_type().create_obj(gc, Some(val.to_string().as_str()));
@@ -76,17 +76,17 @@ pub fn int(val: i64) -> Arc<ExprInfo> {
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     });
-    lit(generator, vec![], val.to_string(), int_lit_ty())
+    lit(generator, vec![], val.to_string(), int_lit_ty(), source)
 }
 
-pub fn bool(val: bool) -> Arc<ExprInfo> {
+pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprInfo> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let ptr_to_obj = ObjectType::bool_obj_type().create_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i8_type().const_int(val as u64, false);
         gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
         ptr_to_obj
     });
-    lit(generator, vec![], val.to_string(), bool_lit_ty())
+    lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
 }
 
 fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
@@ -109,13 +109,18 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_int_obj
     });
-    lit(generator, free_vars, name, int_lit_ty())
+    lit(generator, free_vars, name, int_lit_ty(), None)
 }
 
 pub fn add() -> Arc<ExprInfo> {
     lam(
-        var_var("lhs", Some(int_lit_ty())),
-        lam(var_var("rhs", Some(int_lit_ty())), add_lit("lhs", "rhs")),
+        var_var("lhs", Some(int_lit_ty()), None),
+        lam(
+            var_var("rhs", Some(int_lit_ty()), None),
+            add_lit("lhs", "rhs"),
+            None,
+        ),
+        None,
     )
 }
 
@@ -148,7 +153,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
         gc.release(gc.scope_get(&rhs_str).ptr);
         ptr_to_obj
     });
-    lit(generator, free_vars, name, bool_lit_ty())
+    lit(generator, free_vars, name, bool_lit_ty(), None)
 }
 
 // eq = for<a> \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
@@ -156,9 +161,15 @@ pub fn eq() -> Arc<ExprInfo> {
     forall(
         tyvar_var("a"),
         lam(
-            var_var("lhs", Some(tyvar_ty("a"))),
-            lam(var_var("rhs", Some(tyvar_ty("a"))), eq_lit("lhs", "rhs")),
+            var_var("lhs", Some(tyvar_ty("a")), None),
+            lam(
+                var_var("rhs", Some(tyvar_ty("a")), None),
+                eq_lit("lhs", "rhs"),
+                None,
+            ),
+            None,
         ),
+        None,
     )
 }
 
@@ -176,7 +187,7 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
         f_fixf_x
     });
-    lit(generator, free_vars, name, tyvar_ty(b))
+    lit(generator, free_vars, name, tyvar_ty(b), None)
 }
 
 // fix = for<a, b> \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
@@ -187,10 +198,17 @@ pub fn fix() -> Arc<ExprInfo> {
         forall(
             tyvar_var("b"),
             lam(
-                var_var("f", Some(lam_ty(fixed_ty.clone(), fixed_ty))),
-                lam(var_var("x", Some(tyvar_ty("a"))), fix_lit("b", "f", "x")),
+                var_var("f", Some(lam_ty(fixed_ty.clone(), fixed_ty)), None),
+                lam(
+                    var_var("x", Some(tyvar_ty("a")), None),
+                    fix_lit("b", "f", "x"),
+                    None,
+                ),
+                None,
             ),
+            None,
         ),
+        None,
     )
 }
 
@@ -223,6 +241,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprInfo> {
         free_vars,
         name,
         tycon_app(array_lit_tycon(), vec![tyvar_ty(a)]),
+        None,
     )
 }
 
@@ -232,12 +251,15 @@ pub fn new_array() -> Arc<ExprInfo> {
     forall(
         tyvar_var("a"),
         lam(
-            var_var("size", Some(int_lit_ty())),
+            var_var("size", Some(int_lit_ty()), None),
             lam(
-                var_var("value", Some(tyvar_ty("a"))),
+                var_var("value", Some(tyvar_ty("a")), None),
                 new_array_lit("a", "size", "value"),
+                None,
             ),
+            None,
         ),
+        None,
     )
 }
 
@@ -264,7 +286,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprInfo> {
         gc.release(array);
         elem
     });
-    lit(generator, free_vars, name, tyvar_ty(a))
+    lit(generator, free_vars, name, tyvar_ty(a), None)
 }
 
 // "readArray" built-in function.
@@ -276,12 +298,16 @@ pub fn read_array() -> Arc<ExprInfo> {
             var_var(
                 "array",
                 Some(tycon_app(array_lit_tycon(), vec![tyvar_ty("a")])),
+                None,
             ),
             lam(
-                var_var("idx", Some(int_lit_ty())),
+                var_var("idx", Some(int_lit_ty()), None),
                 read_array_lit("a", "array", "idx"),
+                None,
             ),
+            None,
         ),
+        None,
     )
 }
 
@@ -383,6 +409,7 @@ fn write_array_lit(
         free_vars,
         name,
         tycon_app(array_lit_tycon(), vec![tyvar_ty(a)]),
+        None,
     )
 }
 
@@ -395,15 +422,20 @@ pub fn write_array_common(is_unique_version: bool) -> Arc<ExprInfo> {
             var_var(
                 "array",
                 Some(tycon_app(array_lit_tycon(), vec![tyvar_ty("a")])),
+                None,
             ),
             lam(
-                var_var("idx", Some(int_lit_ty())),
+                var_var("idx", Some(int_lit_ty()), None),
                 lam(
-                    var_var("value", Some(tyvar_ty("a"))),
+                    var_var("value", Some(tyvar_ty("a")), None),
                     write_array_lit("a", "array", "idx", "value", is_unique_version),
+                    None,
                 ),
+                None,
             ),
+            None,
         ),
+        None,
     )
 }
 

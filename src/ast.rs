@@ -25,21 +25,37 @@ pub struct ExprInfo {
     pub expr: Arc<Expr>,
     pub free_vars: HashSet<String>,
     pub deduced_type: Option<Arc<Type>>,
+    pub source: Option<Span>,
 }
 
 impl ExprInfo {
+    // Add free vars
     fn with_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<Self> {
         Arc::new(ExprInfo {
             expr: self.expr.clone(),
             free_vars,
             deduced_type: self.deduced_type.clone(),
+            source: self.source.clone(),
         })
     }
+
+    // Add deduced type
     pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<Type>) -> Arc<Self> {
         Arc::new(ExprInfo {
             expr: self.expr.clone(),
             free_vars: self.free_vars.clone(),
             deduced_type: Some(ty),
+            source: self.source.clone(),
+        })
+    }
+
+    // Add source
+    pub fn with_source(self: &Arc<Self>, src: Option<Span>) -> Arc<Self> {
+        Arc::new(ExprInfo {
+            expr: self.expr.clone(),
+            free_vars: self.free_vars.clone(),
+            deduced_type: self.deduced_type.clone(),
+            source: src,
         })
     }
 }
@@ -57,11 +73,12 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn into_expr_info(self: &Arc<Self>) -> Arc<ExprInfo> {
+    pub fn into_expr_info(self: &Arc<Self>, src: Option<Span>) -> Arc<ExprInfo> {
         Arc::new(ExprInfo {
             expr: self.clone(),
             free_vars: Default::default(),
             deduced_type: None,
+            source: None,
         })
     }
     pub fn to_string(&self) -> String {
@@ -102,10 +119,10 @@ pub struct Literal {
     pub ty: Arc<Type>,
 }
 
-#[derive(Eq, PartialEq)]
 pub struct Var {
     pub name: String,
     pub type_annotation: Option<Arc<Type>>,
+    pub source: Option<Span>,
 }
 
 #[derive(Eq, PartialEq)]
@@ -279,10 +296,11 @@ fn forall_ty(var_name: &str, ty: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::ForAllTy(tyvar_var(var_name), ty))
 }
 
-pub fn var_var(var_name: &str, type_annotation: Option<Arc<Type>>) -> Arc<Var> {
+pub fn var_var(var_name: &str, type_annotation: Option<Arc<Type>>, src: Option<Span>) -> Arc<Var> {
     Arc::new(Var {
         name: String::from(var_name),
         type_annotation,
+        source: src,
     })
 }
 
@@ -291,6 +309,7 @@ pub fn lit(
     free_vars: Vec<String>,
     name: String,
     ty: Arc<Type>,
+    src: Option<Span>,
 ) -> Arc<ExprInfo> {
     Arc::new(Expr::Lit(Arc::new(Literal {
         generator,
@@ -298,40 +317,46 @@ pub fn lit(
         name,
         ty,
     })))
-    .into_expr_info()
+    .into_expr_info(src)
 }
 
-pub fn let_in(var: Arc<Var>, bound: Arc<ExprInfo>, expr: Arc<ExprInfo>) -> Arc<ExprInfo> {
-    Arc::new(Expr::Let(var, bound, expr)).into_expr_info()
+pub fn let_in(
+    var: Arc<Var>,
+    bound: Arc<ExprInfo>,
+    expr: Arc<ExprInfo>,
+    src: Option<Span>,
+) -> Arc<ExprInfo> {
+    Arc::new(Expr::Let(var, bound, expr)).into_expr_info(src)
 }
 
-pub fn lam(var: Arc<Var>, val: Arc<ExprInfo>) -> Arc<ExprInfo> {
-    Arc::new(Expr::Lam(var, val)).into_expr_info()
+pub fn lam(var: Arc<Var>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+    Arc::new(Expr::Lam(var, val)).into_expr_info(src)
 }
 
-pub fn app(lam: Arc<ExprInfo>, arg: Arc<ExprInfo>) -> Arc<ExprInfo> {
-    Arc::new(Expr::App(lam, arg)).into_expr_info()
+pub fn app(lam: Arc<ExprInfo>, arg: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+    Arc::new(Expr::App(lam, arg)).into_expr_info(src)
 }
 
 // Make variable expression.
-pub fn var(var_name: &str) -> Arc<ExprInfo> {
-    Arc::new(Expr::Var(var_var(var_name, None))).into_expr_info()
+pub fn var(var_name: &str, src: Option<Span>) -> Arc<ExprInfo> {
+    Arc::new(Expr::Var(var_var(var_name, None, src.clone()))).into_expr_info(src)
 }
 
 pub fn conditional(
     cond: Arc<ExprInfo>,
     then_expr: Arc<ExprInfo>,
     else_expr: Arc<ExprInfo>,
+    src: Option<Span>,
 ) -> Arc<ExprInfo> {
-    Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info()
+    Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
-pub fn app_ty(expr: Arc<ExprInfo>, ty: Arc<Type>) -> Arc<ExprInfo> {
-    Arc::new(Expr::AppType(expr, ty)).into_expr_info()
+pub fn app_ty(expr: Arc<ExprInfo>, ty: Arc<Type>, src: Option<Span>) -> Arc<ExprInfo> {
+    Arc::new(Expr::AppType(expr, ty)).into_expr_info(src)
 }
 
-pub fn forall(var: Arc<TyVar>, val: Arc<ExprInfo>) -> Arc<ExprInfo> {
-    Arc::new(Expr::ForAll(var, val)).into_expr_info()
+pub fn forall(var: Arc<TyVar>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+    Arc::new(Expr::ForAll(var, val)).into_expr_info(src)
 }
 
 pub fn lit_ty(id: u32, name: &str) -> Arc<Type> {
@@ -373,14 +398,14 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let arg = calculate_free_vars(arg.clone());
             let mut free_vars = func.free_vars.clone();
             free_vars.extend(arg.free_vars.clone());
-            app(func, arg).with_free_vars(free_vars)
+            app(func, arg, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::Lam(arg, val) => {
             let val = calculate_free_vars(val.clone());
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(&arg.name);
             free_vars.remove(SELF_NAME);
-            lam(arg.clone(), val).with_free_vars(free_vars)
+            lam(arg.clone(), val, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::Let(var, bound, val) => {
             // NOTE: Our Let is non-recursive let, i.e.,
@@ -391,7 +416,7 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = val.free_vars.clone();
             free_vars.remove(&var.name);
             free_vars.extend(bound.free_vars.clone());
-            let_in(var.clone(), bound, val).with_free_vars(free_vars)
+            let_in(var.clone(), bound, val, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::If(cond, then, else_expr) => {
             let cond = calculate_free_vars(cond.clone());
@@ -400,15 +425,16 @@ pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
             let mut free_vars = cond.free_vars.clone();
             free_vars.extend(then.free_vars.clone());
             free_vars.extend(else_expr.free_vars.clone());
-            conditional(cond, then, else_expr).with_free_vars(free_vars)
+            conditional(cond, then, else_expr, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::AppType(ei, ty) => {
             let ei = calculate_free_vars(ei.clone());
-            app_ty(ei.clone(), ty.clone()).with_free_vars(ei.free_vars.clone())
+            app_ty(ei.clone(), ty.clone(), ei.source.clone()).with_free_vars(ei.free_vars.clone())
         }
         Expr::ForAll(tyvar, ei) => {
             let ei = calculate_free_vars(ei.clone());
-            forall(tyvar.clone(), ei.clone()).with_free_vars(ei.free_vars.clone())
+            forall(tyvar.clone(), ei.clone(), ei.source.clone())
+                .with_free_vars(ei.free_vars.clone())
         }
     }
 }

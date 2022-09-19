@@ -433,7 +433,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().build_return(Some(&ptr));
         }
         // Allocate and set up closure
-        let name = lam(arg, val).expr.to_string();
+        let name = lam(arg, val, None).expr.to_string();
         let obj = obj_type.create_obj(self, Some(name.as_str()));
         self.store_obj_field(
             obj,
