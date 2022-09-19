@@ -25,12 +25,12 @@ expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ s
 
 expr_lam = { "\\" ~ sep* ~ var_typed ~ sep*  ~ "->" ~ sep* ~ expr }
 
-forall_expr = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
+expr_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
 
 bracket_expr = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 // nlc = non left recursive
-expr_nlc = { expr_lit | var | expr_let | expr_if | expr_lam | forall_expr | bracket_expr }
+expr_nlc = { expr_lit | var | expr_let | expr_if | expr_lam | expr_forall | bracket_expr }
 
 tyapp_bracket = { "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 
