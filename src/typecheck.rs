@@ -94,10 +94,19 @@ fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprIn
 }
 
 fn deduce_var(ei: Arc<ExprInfo>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
+    let src = ei.source.clone();
     let ty = scope.get(&var.name);
     let ty = ty
         .unwrap_or_else(|| {
-            panic!("Unknown variable: {}", var.name);
+            let mut msg: String = String::default();
+            msg += &format!("error: unknown variable `{}`\n", var.name);
+            match src {
+                Some(span) => {
+                    msg += &span.to_string();
+                }
+                None => {}
+            };
+            error_exit(&msg);
         })
         .ty;
     Arc::new(Expr::Var(var))

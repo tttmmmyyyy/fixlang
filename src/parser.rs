@@ -43,16 +43,25 @@ impl Span {
         }
 
         let mut ret: String = String::default();
+        ret += &format!(
+            "at {}:{}-{}:{}\n",
+            span.start_pos().line_col().0,
+            span.start_pos().line_col().1,
+            span.end_pos().line_col().0,
+            span.end_pos().line_col().1,
+        );
         ret += &(" ".repeat(linenum_str_size) + " | " + "\n");
         for line_span in span.lines_span() {
             let linenum_str = line_span.start_pos().line_col().0.to_string();
             ret +=
                 &(linenum_str.clone() + &" ".repeat(linenum_str.len() - linenum_str_size) + " | ");
-            ret += line_span.as_str();
+            ret += String::from(line_span.as_str()).trim_end();
             ret += "\n";
             ret += &(" ".repeat(linenum_str_size) + " | ");
-            let span_len = line_span.end_pos().line_col().1 - line_span.start_pos().line_col().1;
-            ret += &(" ".repeat(line_span.start_pos().line_col().1 - 1) + &"^".repeat(span_len));
+            let start_pos = span.start_pos().max(line_span.start_pos());
+            let end_pos = span.end_pos().min(line_span.end_pos());
+            let span_len = end_pos.line_col().1 - start_pos.line_col().1;
+            ret += &(" ".repeat(start_pos.line_col().1 - 1) + &"^".repeat(span_len));
             ret += "\n";
         }
         ret

@@ -78,7 +78,7 @@ impl Expr {
             expr: self.clone(),
             free_vars: Default::default(),
             deduced_type: None,
-            source: None,
+            source: src,
         })
     }
     pub fn to_string(&self) -> String {
