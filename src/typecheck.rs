@@ -131,7 +131,8 @@ fn deduce_app(
     let func = deduce_expr(func, scope);
     let arg = deduce_expr(arg, scope);
     let arg_ty = arg.deduced_type.clone().unwrap();
-    let ty = match &*func.deduced_type.clone().unwrap() {
+    let fun_ty = func.deduced_type.clone().unwrap();
+    let ty = match &*fun_ty {
         Type::FunTy(param_ty, result_ty) => {
             if is_equivalent_type(param_ty.clone(), arg_ty.clone()) {
                 result_ty.clone()
@@ -151,7 +152,17 @@ fn deduce_app(
             }
         }
         _ => {
-            panic!("In the expression \"a b\", \"a\" is expected to be a function.")
+            let mut msg: String = String::default();
+            msg += &format!(
+                "error: an expression of type {} is not a function but applied to something\n",
+                &fun_ty.clone().to_string()
+            );
+            msg += &func
+                .source
+                .clone()
+                .map(|span| span.to_string())
+                .unwrap_or(String::default());
+            error_exit(&msg)
         }
     };
     expr_app(func, arg, ei.source.clone()).with_deduced_type(ty)

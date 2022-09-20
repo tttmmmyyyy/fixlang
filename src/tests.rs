@@ -64,7 +64,7 @@ pub fn test6() {
 #[test]
 #[serial]
 pub fn test7() {
-    let source = r"(\x: Int -> 5) 10";
+    let source = r"false 10";
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
