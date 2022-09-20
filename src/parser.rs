@@ -15,7 +15,7 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn from_rule(src: &Arc<String>, pair: &Pair<Rule>) -> Self {
+    pub fn from_pair(src: &Arc<String>, pair: &Pair<Rule>) -> Self {
         let span = pair.as_span();
         Self {
             input: src.clone(),
@@ -78,7 +78,7 @@ fn parse_expr_app_seq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
 
 fn parse_expr_nlc_tyapp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     assert_eq!(pair.as_rule(), Rule::expr_nlc_tyapp);
-    let span = Span::from_rule(&src, &pair);
+    let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let mut expr = parse_expr_nlc(pairs.next().unwrap(), src);
     match pairs.next() {
@@ -128,17 +128,17 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
 
 fn parse_var_as_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     assert_eq!(pair.as_rule(), Rule::var);
-    expr_var(pair.as_str(), Some(Span::from_rule(&src, &pair)))
+    expr_var(pair.as_str(), Some(Span::from_pair(&src, &pair)))
 }
 
 fn parse_var_as_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
     assert_eq!(pair.as_rule(), Rule::var);
-    var_var(pair.as_str(), None, Some(Span::from_rule(&src, &pair)))
+    var_var(pair.as_str(), None, Some(Span::from_pair(&src, &pair)))
 }
 
 fn parse_var_typed_as_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
     assert_eq!(pair.as_rule(), Rule::var_typed);
-    let span = Span::from_rule(&src, &pair);
+    let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let var = pairs.next().unwrap();
     let ty = pairs.next().unwrap();
@@ -146,7 +146,7 @@ fn parse_var_typed_as_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
 }
 
 fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
-    let span = Span::from_rule(&src, &expr);
+    let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let var = pairs.next().unwrap();
     let _eq_of_let = pairs.next().unwrap();
@@ -162,7 +162,7 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
 }
 
 fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
-    let span = Span::from_rule(&src, &expr);
+    let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let var_with_type = pairs.next().unwrap();
     let _arrow_of_lam = pairs.next().unwrap();
@@ -175,7 +175,7 @@ fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
 }
 
 fn parse_forall_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
-    let span = Span::from_rule(&src, &pair);
+    let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let mut vars: Vec<Arc<TyVar>> = Default::default();
     let mut expr = loop {
@@ -199,7 +199,7 @@ fn parse_forall_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
 }
 
 fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
-    let span = Span::from_rule(&src, &expr);
+    let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let cond = pairs.next().unwrap();
     let then_val = pairs.next().unwrap();
@@ -213,20 +213,20 @@ fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
 }
 
 fn parse_bracket_expr(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
-    let span = Span::from_rule(&src, &expr);
+    let span = Span::from_pair(&src, &expr);
     let inner = expr.into_inner().next().unwrap();
     parse_expr(inner, src).with_source(Some(span))
 }
 
 fn parse_expr_int_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
-    let span = Span::from_rule(&src, &expr);
+    let span = Span::from_pair(&src, &expr);
     let val = expr.as_str().parse::<i64>().unwrap();
     int(val, Some(span))
 }
 
 fn parse_expr_bool_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     let val = expr.as_str().parse::<bool>().unwrap();
-    let span = Span::from_rule(&src, &expr);
+    let span = Span::from_pair(&src, &expr);
     bool(val, Some(span))
 }
 
