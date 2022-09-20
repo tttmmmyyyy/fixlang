@@ -54,14 +54,15 @@ impl Span {
         for line_span in span.lines_span() {
             let linenum_str = line_span.start_pos().line_col().0.to_string();
             ret +=
-                &(linenum_str.clone() + &" ".repeat(linenum_str.len() - linenum_str_size) + " | ");
+                &(linenum_str.clone() + &" ".repeat(linenum_str_size - linenum_str.len()) + " | ");
             ret += String::from(line_span.as_str()).trim_end();
             ret += "\n";
             ret += &(" ".repeat(linenum_str_size) + " | ");
             let start_pos = span.start_pos().max(line_span.start_pos());
             let end_pos = span.end_pos().min(line_span.end_pos());
-            let span_len = end_pos.line_col().1 - start_pos.line_col().1;
-            ret += &(" ".repeat(start_pos.line_col().1 - 1) + &"^".repeat(span_len));
+            let start_col = start_pos.line_col().1;
+            let span_len = end_pos.pos() - start_pos.pos();
+            ret += &(" ".repeat(start_col - 1) + &"^".repeat(span_len));
             ret += "\n";
         }
         ret

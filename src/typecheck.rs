@@ -100,13 +100,10 @@ fn deduce_var(ei: Arc<ExprInfo>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>)
         .unwrap_or_else(|| {
             let mut msg: String = String::default();
             msg += &format!("error: unknown variable `{}`\n", var.name);
-            match src {
-                Some(span) => {
-                    msg += &span.to_string();
-                }
-                None => {}
-            };
-            error_exit(&msg);
+            msg += &src
+                .map(|span| span.to_string())
+                .unwrap_or(String::default());
+            error_exit(&msg)
         })
         .ty;
     Arc::new(Expr::Var(var))
@@ -136,10 +133,21 @@ fn deduce_app(
     let arg_ty = arg.deduced_type.clone().unwrap();
     let ty = match &*func.deduced_type.clone().unwrap() {
         Type::FunTy(param_ty, result_ty) => {
-            if is_equivalent_type(param_ty.clone(), arg_ty) {
+            if is_equivalent_type(param_ty.clone(), arg_ty.clone()) {
                 result_ty.clone()
             } else {
-                panic!("Type mismatch between parameter and argument!");
+                let mut msg: String = String::default();
+                msg += &format!(
+                    "error: expected {}, found {}\n",
+                    &param_ty.clone().to_string(),
+                    &arg_ty.clone().to_string()
+                );
+                msg += &arg
+                    .source
+                    .clone()
+                    .map(|span| span.to_string())
+                    .unwrap_or(String::default());
+                error_exit(&msg)
             }
         }
         _ => {
