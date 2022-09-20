@@ -31,6 +31,32 @@ impl Span {
             end: self.end.max(other.end),
         }
     }
+
+    // Show source codes around this span.
+    pub fn to_string(&self) -> String {
+        let span = pest::Span::new(self.input.as_str(), self.start, self.end).unwrap();
+
+        let mut linenum_str_size = 0;
+        for line_span in span.lines_span() {
+            let linenum = line_span.start_pos().line_col().0;
+            linenum_str_size = linenum_str_size.max(linenum.to_string().len());
+        }
+
+        let mut ret: String = String::default();
+        ret += &(" ".repeat(linenum_str_size) + " | " + "\n");
+        for line_span in span.lines_span() {
+            let linenum_str = line_span.start_pos().line_col().0.to_string();
+            ret +=
+                &(linenum_str.clone() + &" ".repeat(linenum_str.len() - linenum_str_size) + " | ");
+            ret += line_span.as_str();
+            ret += "\n";
+            ret += &(" ".repeat(linenum_str_size) + " | ");
+            let span_len = line_span.end_pos().line_col().1 - line_span.start_pos().line_col().1;
+            ret += &(" ".repeat(line_span.start_pos().line_col().1 - 1) + &"^".repeat(span_len));
+            ret += "\n";
+        }
+        ret
+    }
 }
 
 fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
