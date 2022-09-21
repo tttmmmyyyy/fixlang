@@ -5,6 +5,20 @@ use super::*;
 // #[derive(Debug)]
 // pub struct TypeError {}
 
+fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
+    let mut str = String::default();
+    str += "error: ";
+    str += msg;
+    str += "\n";
+    match src {
+        None => todo!(),
+        Some(v) => {
+            str += &v.to_string();
+        }
+    };
+    error_exit(&str)
+}
+
 #[derive(Clone)]
 struct LocalTermVar {
     ty: Arc<Type>,
@@ -98,12 +112,7 @@ fn deduce_var(ei: Arc<ExprInfo>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>)
     let ty = scope.get(&var.name);
     let ty = ty
         .unwrap_or_else(|| {
-            let mut msg: String = String::default();
-            msg += &format!("error: unknown variable `{}`\n", var.name);
-            msg += &src
-                .map(|span| span.to_string())
-                .unwrap_or(String::default());
-            error_exit(&msg)
+            error_exit_with_src(&format!("unknown variable `{}`", var.name), &src);
         })
         .ty;
     Arc::new(Expr::Var(var))
@@ -137,33 +146,23 @@ fn deduce_app(
             if is_equivalent_type(param_ty.clone(), arg_ty.clone()) {
                 result_ty.clone()
             } else {
-                let mut msg: String = String::default();
-                msg += &format!(
-                    "error: expected {}, found {}\n",
-                    &param_ty.clone().to_string(),
-                    &arg_ty.clone().to_string()
-                );
-                msg += &arg
-                    .source
-                    .clone()
-                    .map(|span| span.to_string())
-                    .unwrap_or(String::default());
-                error_exit(&msg)
+                error_exit_with_src(
+                    &format!(
+                        "error: expected {}, found {}",
+                        &param_ty.clone().to_string(),
+                        &arg_ty.clone().to_string(),
+                    ),
+                    &arg.source,
+                )
             }
         }
-        _ => {
-            let mut msg: String = String::default();
-            msg += &format!(
+        _ => error_exit_with_src(
+            &format!(
                 "error: an expression of type {} is not a function but applied to something\n",
                 &fun_ty.clone().to_string()
-            );
-            msg += &func
-                .source
-                .clone()
-                .map(|span| span.to_string())
-                .unwrap_or(String::default());
-            error_exit(&msg)
-        }
+            ),
+            &func.source,
+        ),
     };
     expr_app(func, arg, ei.source.clone()).with_deduced_type(ty)
 }
@@ -230,14 +229,27 @@ fn deduce_if(
     let else_expr = deduce_expr(else_expr, scope);
     let then_ty = then_expr.deduced_type.clone().unwrap();
     let else_ty = else_expr.deduced_type.clone().unwrap();
-    let ty = if is_equivalent_type(then_ty.clone(), else_ty) {
+    let ty = if is_equivalent_type(then_ty.clone(), else_ty.clone()) {
         if is_equivalent_type(cond.deduced_type.clone().unwrap(), bool_lit_ty()) {
             then_ty
         } else {
-            panic!("Type mismatch on if condtion");
+            error_exit_with_src(
+                &format!(
+                    "expected Bool, found {}",
+                    cond.deduced_type.clone().unwrap().to_string()
+                ),
+                &cond.source,
+            )
         }
     } else {
-        panic!("Type mismatch between then and else.")
+        error_exit_with_src(
+            &format!(
+                "type mismatch between then and else: expected {}, found {}",
+                &then_ty.to_string(),
+                &else_ty.to_string()
+            ),
+            &else_expr.source,
+        )
     };
     expr_if(cond, then_expr, else_expr, ei.source.clone()).with_deduced_type(ty)
 }
