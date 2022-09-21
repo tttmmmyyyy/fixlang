@@ -268,9 +268,10 @@ fn deduce_apptype(
             ty_scope.push(&var.name, &LocalTypeVar { ty: arg_ty.clone() });
             reduce_type(val_ty.clone(), &mut ty_scope)
         }
-        _ => {
-            panic!("Applying type requires forall.")
-        }
+        _ => error_exit_with_src(
+            &format!("type argument given to non-generic expression"),
+            &ei.source,
+        ),
     };
     expr_appty(expr, arg_ty, ei.source.clone()).with_deduced_type(ty)
 }
