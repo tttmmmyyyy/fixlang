@@ -148,7 +148,7 @@ fn deduce_app(
             } else {
                 error_exit_with_src(
                     &format!(
-                        "error: expected {}, found {}",
+                        "expected {}, found {}",
                         &param_ty.clone().to_string(),
                         &arg_ty.clone().to_string(),
                     ),
@@ -158,7 +158,7 @@ fn deduce_app(
         }
         _ => error_exit_with_src(
             &format!(
-                "error: an expression of type {} is not a function but applied to something\n",
+                "an expression of type {} is not a function but applied to something\n",
                 &fun_ty.clone().to_string()
             ),
             &func.source,
