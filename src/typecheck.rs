@@ -269,7 +269,7 @@ fn deduce_apptype(
             reduce_type(val_ty.clone(), &mut ty_scope)
         }
         _ => error_exit_with_src(
-            &format!("type argument given to non-generic expression"),
+            &format!("type argument given to non-polymorphic expression"),
             &ei.source,
         ),
     };
