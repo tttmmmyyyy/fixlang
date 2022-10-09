@@ -47,17 +47,6 @@ fn add_builtin_symbols(program: Arc<ExprInfo>) -> Arc<ExprInfo> {
     program
 }
 
-// Calculate type of ast.
-fn type_of_ast(program: Arc<ExprInfo>) -> Arc<TypeInfo> {
-    // Add library functions to program.
-    let program = add_builtin_symbols(program);
-
-    // Check types.
-    let program = check_type(program);
-
-    program.deduced_type.clone().unwrap()
-}
-
 fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     // Add library functions to program.
     let program = add_builtin_symbols(program);
@@ -143,6 +132,19 @@ pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
     run_source(s.as_str(), opt_level)
 }
 
+#[cfg(test)]
+// Calculate type of ast.
+fn type_of_ast(program: Arc<ExprInfo>) -> Arc<TypeInfo> {
+    // Add library functions to program.
+    let program = add_builtin_symbols(program);
+
+    // Check types.
+    let program = check_type(program);
+
+    program.deduced_type.clone().unwrap()
+}
+
+#[cfg(test)]
 // Calculate type of given source program.
 pub fn type_of_source(source: &str) -> Arc<TypeInfo> {
     type_of_ast(parse_source(source))
