@@ -365,7 +365,7 @@ pub fn test28() {
 pub fn test29() {
     let source = r"
             let id = for<a> \x: a -> x;
-            if id<Bool> true then id<Int> 100 else 30
+            if id true then id 100 else 30
         ";
     let answer = 100;
     test_run_source(source, answer, OptimizationLevel::Default);
