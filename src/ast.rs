@@ -41,6 +41,7 @@ impl ExprInfo {
 
     // Add deduced type
     pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<TypeInfo>) -> Arc<Self> {
+        let ty = ty.calculate_free_vars();
         Arc::new(ExprInfo {
             expr: self.expr.clone(),
             free_vars: self.free_vars.clone(),
@@ -301,14 +302,14 @@ impl<I> TypeNode<I> {
 
     // Decompose ForAllTy as many as possible.
     // Example: for<b, c> a --> (vec![b, c], a)
-    fn decompose_forall(self: Arc<Self>) -> (Vec<Arc<TyVar>>, Arc<Self>) {
-        let (mut vars, ty) = self.decompose_forall_inner();
+    pub fn decompose_forall(self: Arc<Self>) -> (Vec<Arc<TyVar>>, Arc<Self>) {
+        let (mut vars, ty) = self.decompose_forall_reversed();
         vars.reverse();
         (vars, ty)
     }
 
-    // Decompose ForAllTy as many as possible. (vars reversed)
-    fn decompose_forall_inner(self: Arc<Self>) -> (Vec<Arc<TyVar>>, Arc<Self>) {
+    // Decompose ForAllTy as many as possible. (returned vars are reversed)
+    pub fn decompose_forall_reversed(self: Arc<Self>) -> (Vec<Arc<TyVar>>, Arc<Self>) {
         match &self.ty {
             Type::ForAllTy(var, ty) => {
                 let (mut vars, ty) = ty.clone().decompose_forall();

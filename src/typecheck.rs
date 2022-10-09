@@ -231,7 +231,28 @@ fn deduce_app(
 // Transform a type of form "for<...> x => y" to "for<a1,...,an> x => for<...> y" as far as possible,
 // where a1,...,an are type variables used in x.
 fn defer_forall_of_fun(ty: Arc<TypeInfo>) -> Arc<TypeInfo> {
-    unimplemented!()
+    let (vars, fun_ty) = ty.decompose_forall_reversed();
+    let (x, mut y) = match &fun_ty.ty {
+        Type::FunTy(x, y) => (x.clone(), y.clone()),
+        _ => unreachable!(),
+    };
+
+    let used_in_x = x.calculate_free_vars().info.free_vars.clone().unwrap();
+    let (outer_vars, inner_vars): (Vec<Arc<TyVar>>, Vec<Arc<TyVar>>) = vars
+        .iter()
+        .map(|var| var.clone())
+        .partition(|var| used_in_x.contains(&var.name));
+
+    for var in inner_vars.iter() {
+        y = type_forall(var.clone(), y).calculate_free_vars();
+    }
+
+    let mut ret = type_func(x, y).calculate_free_vars();
+    for var in outer_vars.iter() {
+        ret = type_forall(var.clone(), ret).calculate_free_vars();
+    }
+
+    ret
 }
 
 fn deduce_lam(
