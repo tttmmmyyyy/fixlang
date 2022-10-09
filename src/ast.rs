@@ -154,7 +154,6 @@ pub struct TyLit {
     pub name: String,
 }
 
-#[derive(Eq, PartialEq)]
 pub enum TypeNode {
     TyVar(Arc<TyVar>),
     LitTy(Arc<TyLit>),
