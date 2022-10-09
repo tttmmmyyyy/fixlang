@@ -485,26 +485,26 @@ pub fn match_type(
     // Match and return result.
     let mut next_id: u32 = 0;
     let ok = match_type_core(&lhs, &rhs, &mut lhs_scope, &mut rhs_scope, &mut next_id);
-    if ok {
-        let mut ret = HashMap::<String, Arc<TypeInfo>>::default();
-        for var_name in lhs_vars_infer {
-            let inferred = lhs_scope.get(&var_name).unwrap();
-            match inferred {
-                LocalTyVarInfo::Inferred(inferred) => match inferred {
-                    Some(inferred) => {
-                        ret.insert(var_name, inferred.clone());
-                    }
-                    None => {
-                        return None;
-                    }
-                },
-                _ => unreachable!(),
-            }
-        }
-        Some(ret)
-    } else {
-        None
+    if !ok {
+        return None;
     }
+
+    let mut ret = HashMap::<String, Arc<TypeInfo>>::default();
+    for var_name in lhs_vars_infer {
+        let inferred = lhs_scope.get(&var_name).unwrap();
+        match inferred {
+            LocalTyVarInfo::Inferred(inferred) => match inferred {
+                Some(inferred) => {
+                    ret.insert(var_name, inferred.clone());
+                }
+                None => {
+                    return None;
+                }
+            },
+            _ => unreachable!(),
+        }
+    }
+    Some(ret)
 }
 
 // Match two types.
