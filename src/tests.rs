@@ -224,7 +224,7 @@ pub fn test20() {
 #[serial]
 pub fn test20_5() {
     let source = r"         
-        if eq<Int> 2 0 then // type explicitly specified
+        if eq<Int> 2 0 then -- type explicitly specified
             0 
         else if eq 2 1 then 
             1
@@ -414,13 +414,13 @@ pub fn test_comment_0() {
 #[serial]
 pub fn test_comment_1() {
     // ilne comment
-    let source = r"////
+    let source = r"----
             let x = 5 in
-            // let x = 3 in
-// some excellent and brilliant comment
-            let y = -3 in// comment
+            -- let x = 3 in
+-- some excellent and brilliant comment
+            let y = -3 in-- comment
             add x y
-        //";
+        --";
     let answer = 2;
     test_run_source(source, answer, OptimizationLevel::Default);
 }

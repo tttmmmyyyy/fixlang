@@ -73,7 +73,7 @@ block_comment = _{ "{-"  ~ block_commented_character*  ~ "-}" }
 
 block_commented_character = _{ !"-}" ~ ANY }
 
-line_comment = _{"//" ~ line_commented_character* ~ ( NEWLINE | EOI )}
+line_comment = _{"--" ~ line_commented_character* ~ ( NEWLINE | EOI )}
 
 line_commented_character = _{ !(NEWLINE | EOI) ~ ANY }
 
