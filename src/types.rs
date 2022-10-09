@@ -337,7 +337,7 @@ impl ObjectFieldType {
             };
 
             // After loop, do nothing.
-            let after_loop = |gc: &mut GenerationContext<'c, 'm>,
+            let after_loop = |_gc: &mut GenerationContext<'c, 'm>,
                               _size: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {};
 
@@ -514,7 +514,7 @@ pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
     context.i64_type()
 }
 
-fn ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
+fn _ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     refcnt_type(context).ptr_type(AddressSpace::Generic)
 }
 
