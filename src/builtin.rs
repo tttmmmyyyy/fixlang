@@ -176,7 +176,6 @@ pub fn eq() -> Arc<ExprInfo> {
 fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
     let f_str = String::from(f);
     let x_str = String::from(x);
-    let b_str = String::from(b);
     let name = format!("fix {} {}", f_str, x_str);
     let free_vars = vec![String::from(SELF_NAME), f_str.clone(), x_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
