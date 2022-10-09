@@ -255,8 +255,8 @@ pub fn test22() {
     let n = 100000;
     let source = format!(
         r"
-                let g = fix<Int,Int=>Int> \f:Int=>Int=>Int -> \a:Int -> \x:Int -> 
-                            if eq<Int> x 0 then 
+                let g = fix \f:Int=>Int=>Int -> \a:Int -> \x:Int -> 
+                            if eq x 0 then 
                                 a 
                             else
                                 let a2 = add a x;
