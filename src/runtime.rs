@@ -4,7 +4,6 @@ use super::*;
 pub enum RuntimeFunctions {
     Abort,
     Printf,
-    Panic,
     ReportMalloc,
     ReportRetain,
     ReportRelease,
@@ -81,7 +80,7 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Func
     let retain_func = module.add_function("retain_obj", func_type, None);
     let bb = context.append_basic_block(retain_func, "entry");
 
-    let builder_guard = gc.push_builder();
+    let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
     // Get pointer to / value of reference counter.
@@ -117,7 +116,7 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
     let release_func = gc.module.add_function("release_obj", func_type, None);
     let bb = gc.context.append_basic_block(release_func, "entry");
 
-    let builder_guard = gc.push_builder();
+    let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
     // Get pointer to / value of reference counter.
