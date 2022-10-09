@@ -144,9 +144,9 @@ fn parse_expr_nlc(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     }
 }
 
-fn parse_tyapp_bracket(pair: Pair<Rule>) -> Vec<Arc<TypeNode>> {
+fn parse_tyapp_bracket(pair: Pair<Rule>) -> Vec<Arc<TypeInfo>> {
     let pairs = pair.into_inner();
-    let mut ret: Vec<Arc<TypeNode>> = vec![];
+    let mut ret: Vec<Arc<TypeInfo>> = vec![];
     for pair in pairs {
         ret.push(parse_type(pair));
     }
@@ -266,7 +266,7 @@ fn parse_expr_bool_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
     bool(val, Some(span))
 }
 
-fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
@@ -277,13 +277,13 @@ fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     }
 }
 
-fn parse_type_braced(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_braced(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     parse_type(pair)
 }
 
-fn parse_type_except_app_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_except_app_fun(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
@@ -296,15 +296,15 @@ fn parse_type_except_app_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     }
 }
 
-fn parse_type_var(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_var(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     type_tyvar(type_expr.as_str())
 }
 
-fn parse_type_lit(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_lit(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     make_bultin_type(type_expr.as_str())
 }
 
-fn parse_type_app(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_app(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     let mut pairs = type_expr.into_inner();
     let head = pairs.next().unwrap();
     let mut ret = parse_type_except_app_fun(head);
@@ -314,25 +314,25 @@ fn parse_type_app(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     ret
 }
 
-fn parse_type_tycon_app(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_tycon_app(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     let mut pairs = type_expr.into_inner();
     let tycon = pairs.next().unwrap();
     let tycon = parse_tycon(tycon);
-    let mut args: Vec<Arc<TypeNode>> = Default::default();
+    let mut args: Vec<Arc<TypeInfo>> = Default::default();
     for pair in pairs {
         args.push(parse_type(pair));
     }
     tycon_app(tycon, args)
 }
 
-fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     let mut pairs = type_expr.into_inner();
     let src_ty = parse_type_except_fun(pairs.next().unwrap());
     let dst_ty = parse_type(pairs.next().unwrap());
     type_fun(src_ty, dst_ty)
 }
 
-fn parse_type_except_fun(pair: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_except_fun(pair: Pair<Rule>) -> Arc<TypeInfo> {
     let mut pairs = pair.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
@@ -342,7 +342,7 @@ fn parse_type_except_fun(pair: Pair<Rule>) -> Arc<TypeNode> {
     }
 }
 
-fn parse_type_forall(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_forall(type_expr: Pair<Rule>) -> Arc<TypeInfo> {
     let mut pairs = type_expr.into_inner();
     let mut vars: Vec<Arc<TyVar>> = Default::default();
     let mut type_expr = loop {

@@ -48,7 +48,7 @@ fn add_builtin_symbols(program: Arc<ExprInfo>) -> Arc<ExprInfo> {
 }
 
 // Calculate type of ast.
-fn type_of_ast(program: Arc<ExprInfo>) -> Arc<TypeNode> {
+fn type_of_ast(program: Arc<ExprInfo>) -> Arc<TypeInfo> {
     // Add library functions to program.
     let program = add_builtin_symbols(program);
 
@@ -144,6 +144,6 @@ pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
 }
 
 // Calculate type of given source program.
-pub fn type_of_source(source: &str) -> Arc<TypeNode> {
+pub fn type_of_source(source: &str) -> Arc<TypeInfo> {
     type_of_ast(parse_source(source))
 }

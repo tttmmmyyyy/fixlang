@@ -21,12 +21,12 @@ fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
 
 #[derive(Clone)]
 struct LocalTermVar {
-    ty: Arc<TypeNode>,
+    ty: Arc<TypeInfo>,
 }
 
 #[derive(Clone)]
 struct LocalTypeVar {
-    ty: Arc<TypeNode>,
+    ty: Arc<TypeInfo>,
     /* field for type class */
 }
 
@@ -141,8 +141,8 @@ fn deduce_app(
     let arg = deduce_expr(arg, scope);
     let arg_ty = arg.deduced_type.clone().unwrap();
     let fun_ty = func.deduced_type.clone().unwrap();
-    let ty = match &*fun_ty {
-        TypeNode::FunTy(param_ty, result_ty) => {
+    let ty = match &fun_ty.ty {
+        Type::FunTy(param_ty, result_ty) => {
             if is_equivalent_type(param_ty.clone(), arg_ty.clone()) {
                 result_ty.clone()
             } else {
@@ -169,7 +169,7 @@ fn deduce_app(
 
 // Transform a type of form "for<...> x => y" to "for<a1,...,an> x => for<...> y" as far as possible,
 // where a1,...,an are type variables used in x.
-fn defer_forall_of_fun(ty: Arc<TypeNode>) -> Arc<TypeNode> {
+fn defer_forall_of_fun(ty: Arc<TypeInfo>) -> Arc<TypeInfo> {
     unimplemented!()
 }
 
@@ -263,13 +263,13 @@ fn deduce_if(
 fn deduce_apptype(
     ei: Arc<ExprInfo>,
     expr: Arc<ExprInfo>,
-    arg_ty: Arc<TypeNode>,
+    arg_ty: Arc<TypeInfo>,
     scope: &mut Scope<LocalTermVar>,
 ) -> Arc<ExprInfo> {
     let expr = deduce_expr(expr, scope);
     let arg_ty = reduce_type(arg_ty, &mut Scope::<LocalTypeVar>::empty());
-    let ty = match &*expr.deduced_type.clone().unwrap() {
-        TypeNode::ForAllTy(var, val_ty) => {
+    let ty = match &expr.deduced_type.clone().unwrap().ty {
+        Type::ForAllTy(var, val_ty) => {
             let mut ty_scope = Scope::<LocalTypeVar>::empty();
             ty_scope.push(&var.name, &LocalTypeVar { ty: arg_ty.clone() });
             reduce_type(val_ty.clone(), &mut ty_scope)
@@ -293,12 +293,12 @@ fn deduce_forall(
     expr_forall(tyvar, expr, ei.source.clone()).with_deduced_type(ty)
 }
 
-fn reduce_type(ty: Arc<TypeNode>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeNode> {
-    match &*ty {
-        TypeNode::AppTy(fun_ty, arg_ty) => {
+fn reduce_type(ty: Arc<TypeInfo>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeInfo> {
+    match &ty.ty {
+        Type::AppTy(fun_ty, arg_ty) => {
             let arg_ty = reduce_type(arg_ty.clone(), scope);
-            match &**fun_ty {
-                TypeNode::ForAllTy(param_ty, val_ty) => {
+            match &fun_ty.ty {
+                Type::ForAllTy(param_ty, val_ty) => {
                     scope.push(param_ty.name.as_str(), &LocalTypeVar { ty: arg_ty });
                     let val_ty = reduce_type(val_ty.clone(), scope);
                     scope.pop(param_ty.name.as_str());
@@ -307,13 +307,13 @@ fn reduce_type(ty: Arc<TypeNode>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeNo
                 _ => panic!("Applying type requires forall."),
             }
         }
-        TypeNode::TyVar(var) => match scope.get(var.name.as_str()) {
+        Type::TyVar(var) => match scope.get(var.name.as_str()) {
             Some(local_ty) => local_ty.ty,
             None => ty,
         },
-        TypeNode::LitTy(_) => ty,
-        TypeNode::TyConApp(tycon, arg_tys) => {
-            let arg_tys: Vec<Arc<TypeNode>> = arg_tys
+        Type::LitTy(_) => ty,
+        Type::TyConApp(tycon, arg_tys) => {
+            let arg_tys: Vec<Arc<TypeInfo>> = arg_tys
                 .iter()
                 .map(|ty| reduce_type(ty.clone(), scope))
                 .collect();
@@ -325,15 +325,15 @@ fn reduce_type(ty: Arc<TypeNode>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeNo
             }
             tycon_app(tycon.clone(), arg_tys)
         }
-        TypeNode::FunTy(param_ty, val_ty) => type_fun(
+        Type::FunTy(param_ty, val_ty) => type_fun(
             reduce_type(param_ty.clone(), scope),
             reduce_type(val_ty.clone(), scope),
         ),
-        TypeNode::ForAllTy(var, val_ty) => {
+        Type::ForAllTy(var, val_ty) => {
             scope.push(
                 &var.name,
                 &LocalTypeVar {
-                    ty: Arc::new(TypeNode::TyVar(var.clone())),
+                    ty: type_var_from_tyvar(var.clone()),
                 },
             );
             let val_ty = reduce_type(val_ty.clone(), scope);
@@ -343,7 +343,7 @@ fn reduce_type(ty: Arc<TypeNode>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeNo
     }
 }
 
-pub fn is_equivalent_type(lhs: Arc<TypeNode>, rhs: Arc<TypeNode>) -> bool {
+pub fn is_equivalent_type(lhs: Arc<TypeInfo>, rhs: Arc<TypeInfo>) -> bool {
     let mut lhs_scope = Scope::<u32>::empty();
     let mut rhs_scope = Scope::<u32>::empty();
     let mut next_id: u32 = 0;
@@ -352,22 +352,22 @@ pub fn is_equivalent_type(lhs: Arc<TypeNode>, rhs: Arc<TypeNode>) -> bool {
 
 // "for<a> a" is equivalent to "for<b> b".
 fn is_equivalent_type_inner(
-    lhs: Arc<TypeNode>,
-    rhs: Arc<TypeNode>,
+    lhs: Arc<TypeInfo>,
+    rhs: Arc<TypeInfo>,
     lhs_scope: &mut Scope<u32>, // name of type variable -> identifier
     rhs_scope: &mut Scope<u32>, // name of type variable -> identifier
     next_id: &mut u32,
 ) -> bool {
-    match &*lhs {
-        TypeNode::TyVar(lhs_var) => match &*rhs {
-            TypeNode::TyVar(rhs_var) => {
+    match &lhs.ty {
+        Type::TyVar(lhs_var) => match &rhs.ty {
+            Type::TyVar(rhs_var) => {
                 let lhs = lhs_scope.get(&lhs_var.name);
                 let rhs = rhs_scope.get(&rhs_var.name);
                 if lhs.is_none() {
                     if rhs.is_some() {
                         return false;
                     }
-                    lhs_var == rhs_var
+                    *lhs_var == *rhs_var
                 } else {
                     if rhs.is_none() {
                         return false;
@@ -379,12 +379,12 @@ fn is_equivalent_type_inner(
             }
             _ => false,
         },
-        TypeNode::LitTy(lhs_lit) => match &*rhs {
-            TypeNode::LitTy(rhs_lit) => lhs_lit.id == rhs_lit.id,
+        Type::LitTy(lhs_lit) => match &rhs.ty {
+            Type::LitTy(rhs_lit) => lhs_lit.id == rhs_lit.id,
             _ => false,
         },
-        TypeNode::AppTy(lhs_func_ty, lhs_arg_ty) => match &*rhs {
-            TypeNode::AppTy(rhs_func_ty, rhs_arg_ty) => {
+        Type::AppTy(lhs_func_ty, lhs_arg_ty) => match &rhs.ty {
+            Type::AppTy(rhs_func_ty, rhs_arg_ty) => {
                 is_equivalent_type_inner(
                     lhs_func_ty.clone(),
                     rhs_func_ty.clone(),
@@ -401,9 +401,9 @@ fn is_equivalent_type_inner(
             }
             _ => false,
         },
-        TypeNode::TyConApp(lhs_tycon, lhs_args) => match &*rhs {
-            TypeNode::TyConApp(rhs_tycon, rhs_args) => {
-                if lhs_tycon != rhs_tycon {
+        Type::TyConApp(lhs_tycon, lhs_args) => match &rhs.ty {
+            Type::TyConApp(rhs_tycon, rhs_args) => {
+                if *lhs_tycon != *rhs_tycon {
                     return false;
                 }
                 if lhs_args.len() != rhs_args.len() {
@@ -424,8 +424,8 @@ fn is_equivalent_type_inner(
             }
             _ => false,
         },
-        TypeNode::FunTy(lhs_param_ty, lhs_val_ty) => match &*rhs {
-            TypeNode::FunTy(rhs_param_ty, rhs_val_ty) => {
+        Type::FunTy(lhs_param_ty, lhs_val_ty) => match &rhs.ty {
+            Type::FunTy(rhs_param_ty, rhs_val_ty) => {
                 is_equivalent_type_inner(
                     lhs_param_ty.clone(),
                     rhs_param_ty.clone(),
@@ -442,8 +442,8 @@ fn is_equivalent_type_inner(
             }
             _ => false,
         },
-        TypeNode::ForAllTy(lhs_tyvar, lhs_val_ty) => match &*rhs {
-            TypeNode::ForAllTy(rhs_tyvar, rhs_val_ty) => {
+        Type::ForAllTy(lhs_tyvar, lhs_val_ty) => match &rhs.ty {
+            Type::ForAllTy(rhs_tyvar, rhs_val_ty) => {
                 lhs_scope.push(&lhs_tyvar.name, next_id);
                 rhs_scope.push(&rhs_tyvar.name, next_id);
                 *next_id += 1;
