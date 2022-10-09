@@ -1,7 +1,7 @@
 use super::*;
 
 fn execute_main_module<'c>(
-    context: &'c Context,
+    _context: &'c Context,
     module: &Module<'c>,
     opt_level: OptimizationLevel,
 ) -> i64 {
