@@ -342,19 +342,19 @@ pub fn test26() {
 pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r"
-            let arr = newArray<Int> 31 0;
-            let arr = writeArray!<Int> arr 0 0;
-            let arr = writeArray!<Int> arr 1 1;
-            let loop = fix<Array<Int>,Int=>Array<Int>> \f:Array<Int>=>Int=>Array<Int> -> \arr:Array<Int> -> \n:Int ->
-                if eq<Int> n 31 then
+            let arr = newArray 31 0;
+            let arr = writeArray! arr 0 0;
+            let arr = writeArray! arr 1 1;
+            let loop = fix \f:(Array<Int> => Int => Array<Int>) -> \arr:Array<Int> -> \n:Int ->
+                if eq n 31 then
                     arr
                 else
-                    let x = readArray<Int> arr (add n (-1));
-                    let y = readArray<Int> arr (add n (-2));
-                    let arr = writeArray!<Int> arr n (add x y);
+                    let x = readArray arr (add n (-1));
+                    let y = readArray arr (add n (-2));
+                    let arr = writeArray! arr n (add x y);
                     f arr (add n 1);
             let fib = loop arr 2;
-            readArray<Int> fib 30
+            readArray fib 30
         ";
     let answer = 832040;
     test_run_source(source, answer, OptimizationLevel::Default);
