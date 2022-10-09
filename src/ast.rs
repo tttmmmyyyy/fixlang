@@ -160,6 +160,27 @@ pub struct TypeNode<I> {
     pub info: Arc<I>,
 }
 
+impl<I> TypeNode<I> {
+    // Create new type node with default info.
+    fn new(ty: Type<I>) -> Self
+    where
+        I: Default,
+    {
+        Self {
+            ty: ty,
+            info: Arc::new(I::default()),
+        }
+    }
+
+    // Create shared new type node with default info.
+    fn new_arc(ty: Type<I>) -> Arc<Self>
+    where
+        I: Default,
+    {
+        Arc::new(Self::new(ty))
+    }
+}
+
 // Variant of type
 pub enum Type<I> {
     TyVar(Arc<TyVar>),
@@ -168,30 +189,6 @@ pub enum Type<I> {
     TyConApp(Arc<TyCon>, Vec<Arc<TypeNode<I>>>),
     FunTy(Arc<TypeNode<I>>, Arc<TypeNode<I>>),
     ForAllTy(Arc<TyVar>, Arc<TypeNode<I>>),
-}
-
-// Additional information on types.
-#[derive(Default)]
-pub struct TypeAdditionalInfo {
-    free_vars: HashSet<String>,
-}
-
-// Node of type ast tree that we usually use.
-pub type TypeInfo = TypeNode<TypeAdditionalInfo>;
-
-impl TypeInfo {
-    // create TypeInfo with no additional info
-    fn new(ty: Type<TypeAdditionalInfo>) -> Self {
-        Self {
-            ty,
-            info: Arc::new(TypeAdditionalInfo::default()),
-        }
-    }
-
-    // create TypeInfo on heap with no additional info
-    fn new_arc(ty: Type<TypeAdditionalInfo>) -> Arc<Self> {
-        Arc::new(Self::new(ty))
-    }
 }
 
 impl<I> TypeNode<I> {
@@ -308,8 +305,11 @@ pub fn arrow_kind(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
-pub fn type_func(src: Arc<TypeInfo>, dst: Arc<TypeInfo>) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::FunTy(src, dst))
+pub fn type_func<I>(src: Arc<TypeNode<I>>, dst: Arc<TypeNode<I>>) -> Arc<TypeNode<I>>
+where
+    I: Default,
+{
+    TypeNode::new_arc(Type::FunTy(src, dst))
 }
 
 pub fn var_tyvar(var_name: &str) -> Arc<TyVar> {

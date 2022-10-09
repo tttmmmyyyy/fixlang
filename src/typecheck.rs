@@ -86,6 +86,15 @@ pub fn check_type(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
     deduce_expr(ei, &mut scope)
 }
 
+// Additional information on types.
+#[derive(Default)]
+pub struct TypeAdditionalInfo {
+    free_vars: Option<HashSet<String>>,
+}
+
+// Node of type ast tree that we usually use.
+pub type TypeInfo = TypeNode<TypeAdditionalInfo>;
+
 fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
     match &*ei.expr {
         Expr::Var(v) => deduce_var(ei.clone(), v.clone(), scope),
