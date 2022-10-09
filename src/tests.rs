@@ -292,7 +292,7 @@ pub fn test22_5() {
 pub fn test23() {
     // Test newArray of size 0.
     let source = r"
-            let arr = newArray<Int> 0 42;
+            let arr = newArray 0 42;
             32
         ";
     let answer = 32;
