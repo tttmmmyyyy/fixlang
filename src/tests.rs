@@ -224,9 +224,9 @@ pub fn test20() {
 #[serial]
 pub fn test20_5() {
     let source = r"         
-        if eq<Int> 2 0 then 
+        if eq<Int> 2 0 then // type explicitly specified
             0 
-        else if eq<Int> 2 1 then 
+        else if eq 2 1 then 
             1
         else 2
     ";
