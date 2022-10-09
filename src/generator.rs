@@ -2,10 +2,7 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
-use std::{
-    cell::{Ref, RefCell},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use inkwell::values::{BasicMetadataValueEnum, CallSiteValue};
 
@@ -334,7 +331,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate expression.
     pub fn eval_expr(&mut self, expr: Arc<ExprInfo>) -> PointerValue<'c> {
-        let mut ret = match &*expr.expr {
+        let ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone()),
             Expr::Lit(lit) => self.eval_lit(lit.clone()),
             Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone()),
