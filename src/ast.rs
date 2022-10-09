@@ -24,7 +24,7 @@ use super::*;
 pub struct ExprInfo {
     pub expr: Arc<Expr>,
     pub free_vars: HashSet<String>,
-    pub deduced_type: Option<Arc<Type>>,
+    pub deduced_type: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
 
@@ -40,7 +40,7 @@ impl ExprInfo {
     }
 
     // Add deduced type
-    pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<Type>) -> Arc<Self> {
+    pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<TypeNode>) -> Arc<Self> {
         Arc::new(ExprInfo {
             expr: self.expr.clone(),
             free_vars: self.free_vars.clone(),
@@ -68,7 +68,7 @@ pub enum Expr {
     Lam(Arc<Var>, Arc<ExprInfo>),
     Let(Arc<Var>, Arc<ExprInfo>, Arc<ExprInfo>),
     If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>), // TODO: Implement case
-    AppType(Arc<ExprInfo>, Arc<Type>),
+    AppType(Arc<ExprInfo>, Arc<TypeNode>),
     ForAll(Arc<TyVar>, Arc<ExprInfo>),
 }
 
@@ -116,12 +116,12 @@ pub struct Literal {
     pub generator: Arc<LiteralGenerator>,
     pub free_vars: Vec<String>, // e.g. "+" literal has two free variables.
     name: String,
-    pub ty: Arc<Type>,
+    pub ty: Arc<TypeNode>,
 }
 
 pub struct Var {
     pub name: String,
-    pub type_annotation: Option<Arc<Type>>,
+    pub type_annotation: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
 
@@ -155,21 +155,21 @@ pub struct TyLit {
 }
 
 #[derive(Eq, PartialEq)]
-pub enum Type {
+pub enum TypeNode {
     TyVar(Arc<TyVar>),
     LitTy(Arc<TyLit>),
-    AppTy(Arc<Type>, Arc<Type>),
-    TyConApp(Arc<TyCon>, Vec<Arc<Type>>),
-    FunTy(Arc<Type>, Arc<Type>),
-    ForAllTy(Arc<TyVar>, Arc<Type>),
+    AppTy(Arc<TypeNode>, Arc<TypeNode>),
+    TyConApp(Arc<TyCon>, Vec<Arc<TypeNode>>),
+    FunTy(Arc<TypeNode>, Arc<TypeNode>),
+    ForAllTy(Arc<TyVar>, Arc<TypeNode>),
 }
 
-impl Type {
-    pub fn to_string(self: Arc<Type>) -> String {
+impl TypeNode {
+    pub fn to_string(self: Arc<TypeNode>) -> String {
         match &*self {
-            Type::TyVar(v) => v.name.clone(),
-            Type::LitTy(l) => l.name.clone(),
-            Type::AppTy(_, _) => {
+            TypeNode::TyVar(v) => v.name.clone(),
+            TypeNode::LitTy(l) => l.name.clone(),
+            TypeNode::AppTy(_, _) => {
                 let (ty, args) = self.decompose_appty();
                 let ty = ty.to_string();
                 let args: Vec<String> = args.iter().map(|a| a.clone().to_string()).collect();
@@ -180,7 +180,7 @@ impl Type {
                 res += ">";
                 res
             }
-            Type::TyConApp(tycon, args) => {
+            TypeNode::TyConApp(tycon, args) => {
                 let tycon = tycon.name.clone();
                 let args: Vec<String> = args.iter().map(|a| a.clone().to_string()).collect();
                 let mut res: String = Default::default();
@@ -190,10 +190,10 @@ impl Type {
                 res += ">";
                 res
             }
-            Type::FunTy(src, dst) => {
+            TypeNode::FunTy(src, dst) => {
                 let src_brace_needed = match &**src {
-                    Type::FunTy(_, _) => true,
-                    Type::ForAllTy(_, _) => true,
+                    TypeNode::FunTy(_, _) => true,
+                    TypeNode::ForAllTy(_, _) => true,
                     _ => false,
                 };
                 let src = src.clone().to_string();
@@ -210,7 +210,7 @@ impl Type {
                 res += &dst;
                 res
             }
-            Type::ForAllTy(_, _) => {
+            TypeNode::ForAllTy(_, _) => {
                 let (vars, ty) = self.decompose_forall();
                 let vars: Vec<String> = vars.iter().map(|v| v.name.clone()).collect();
                 let mut res: String = Default::default();
@@ -225,9 +225,9 @@ impl Type {
 
     // Decompose AppTy as many as possible.
     // Example: a<b, c> --> (a, vec![b, c])
-    fn decompose_appty(self: Arc<Type>) -> (Arc<Type>, Vec<Arc<Type>>) {
+    fn decompose_appty(self: Arc<TypeNode>) -> (Arc<TypeNode>, Vec<Arc<TypeNode>>) {
         match &*self {
-            Type::AppTy(ty, arg) => {
+            TypeNode::AppTy(ty, arg) => {
                 let (ty, mut args) = ty.clone().decompose_appty();
                 args.push(arg.clone());
                 (ty, args)
@@ -238,16 +238,16 @@ impl Type {
 
     // Decompose ForAllTy as many as possible.
     // Example: for<b, c> a --> (vec![b, c], a)
-    fn decompose_forall(self: Arc<Type>) -> (Vec<Arc<TyVar>>, Arc<Type>) {
+    fn decompose_forall(self: Arc<TypeNode>) -> (Vec<Arc<TyVar>>, Arc<TypeNode>) {
         let (mut vars, ty) = self.decompose_forall_inner();
         vars.reverse();
         (vars, ty)
     }
 
     // Decompose ForAllTy as many as possible. (vars reversed)
-    fn decompose_forall_inner(self: Arc<Type>) -> (Vec<Arc<TyVar>>, Arc<Type>) {
+    fn decompose_forall_inner(self: Arc<TypeNode>) -> (Vec<Arc<TyVar>>, Arc<TypeNode>) {
         match &*self {
-            Type::ForAllTy(var, ty) => {
+            TypeNode::ForAllTy(var, ty) => {
                 let (mut vars, ty) = ty.clone().decompose_forall();
                 vars.push(var.clone());
                 (vars, ty)
@@ -278,8 +278,8 @@ pub fn arrow_kind(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
-pub fn type_func(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::FunTy(src, dst))
+pub fn type_func(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    Arc::new(TypeNode::FunTy(src, dst))
 }
 
 pub fn var_tyvar(var_name: &str) -> Arc<TyVar> {
@@ -288,11 +288,15 @@ pub fn var_tyvar(var_name: &str) -> Arc<TyVar> {
     })
 }
 
-pub fn type_tyvar(var_name: &str) -> Arc<Type> {
-    Arc::new(Type::TyVar(var_tyvar(var_name)))
+pub fn type_tyvar(var_name: &str) -> Arc<TypeNode> {
+    Arc::new(TypeNode::TyVar(var_tyvar(var_name)))
 }
 
-pub fn var_var(var_name: &str, type_annotation: Option<Arc<Type>>, src: Option<Span>) -> Arc<Var> {
+pub fn var_var(
+    var_name: &str,
+    type_annotation: Option<Arc<TypeNode>>,
+    src: Option<Span>,
+) -> Arc<Var> {
     Arc::new(Var {
         name: String::from(var_name),
         type_annotation,
@@ -304,7 +308,7 @@ pub fn expr_lit(
     generator: Arc<LiteralGenerator>,
     free_vars: Vec<String>,
     name: String,
-    ty: Arc<Type>,
+    ty: Arc<TypeNode>,
     src: Option<Span>,
 ) -> Arc<ExprInfo> {
     Arc::new(Expr::Lit(Arc::new(Literal {
@@ -347,7 +351,7 @@ pub fn expr_if(
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
-pub fn expr_appty(expr: Arc<ExprInfo>, ty: Arc<Type>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_appty(expr: Arc<ExprInfo>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprInfo> {
     Arc::new(Expr::AppType(expr, ty)).into_expr_info(src)
 }
 
@@ -355,27 +359,27 @@ pub fn expr_forall(var: Arc<TyVar>, val: Arc<ExprInfo>, src: Option<Span>) -> Ar
     Arc::new(Expr::ForAll(var, val)).into_expr_info(src)
 }
 
-pub fn type_lit(id: u32, name: &str) -> Arc<Type> {
-    Arc::new(Type::LitTy(Arc::new(TyLit {
+pub fn type_lit(id: u32, name: &str) -> Arc<TypeNode> {
+    Arc::new(TypeNode::LitTy(Arc::new(TyLit {
         id,
         name: String::from(name),
     })))
 }
 
-pub fn type_app(head: Arc<Type>, param: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::AppTy(head, param))
+pub fn type_app(head: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
+    Arc::new(TypeNode::AppTy(head, param))
 }
 
-pub fn type_fun(src: Arc<Type>, dst: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::FunTy(src, dst))
+pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    Arc::new(TypeNode::FunTy(src, dst))
 }
 
-pub fn type_forall(var: Arc<TyVar>, ty: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::ForAllTy(var, ty))
+pub fn type_forall(var: Arc<TyVar>, ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    Arc::new(TypeNode::ForAllTy(var, ty))
 }
 
-pub fn tycon_app(tycon: Arc<TyCon>, params: Vec<Arc<Type>>) -> Arc<Type> {
-    Arc::new(Type::TyConApp(tycon, params))
+pub fn tycon_app(tycon: Arc<TyCon>, params: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+    Arc::new(TypeNode::TyConApp(tycon, params))
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
