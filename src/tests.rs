@@ -240,7 +240,7 @@ pub fn test21() {
     let n = 10000;
     let source = format!(
         r"
-                let g = fix<Int,Int> \f:Int=>Int -> \x: Int -> if eq<Int> x 0 then 0 else add x (f (add x -1));
+                let g = fix \f:Int=>Int -> \x: Int -> if eq x 0 then 0 else add x (f (add x -1));
                 g {}
         ",
         n
