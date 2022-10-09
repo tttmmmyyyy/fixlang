@@ -207,39 +207,51 @@ fn deduce_app(
     let arg = deduce_expr(arg, scope);
     let arg_ty = arg.deduced_type.clone().unwrap();
     let fun_ty = func.deduced_type.clone().unwrap();
-    let ty = match &fun_ty.ty {
-        Type::FunTy(param_ty, result_ty) => {
-            if is_eqv_type(param_ty, &arg_ty) {
-                result_ty.clone()
-            } else {
-                error_exit_with_src(
-                    &format!(
-                        "expected {}, found {}",
-                        &param_ty.clone().to_string(),
-                        &arg_ty.clone().to_string(),
-                    ),
-                    &arg.source,
-                )
-            }
-        }
-        _ => error_exit_with_src(
-            &format!(
-                "an expression of type {} is not a function but applied to something\n",
-                &fun_ty.clone().to_string()
-            ),
+
+    // If func_ty is for<...> x => y, then infer ... as long as possible by matching x to arg_ty.
+    let fun_ty = defer_forall_of_fun(fun_ty);
+    if fun_ty.is_none() {
+        error_exit_with_src(
+            &format!("an expression is not a function but applied\n",),
             &func.source,
-        ),
+        )
+    }
+    let fun_ty = fun_ty.unwrap();
+    let (vars, fun_ty) = fun_ty.decompose_forall_reversed();
+    let (param_ty, body_ty) = match &fun_ty.ty {
+        Type::FunTy(x, y) => (x, y),
+        _ => unreachable!(),
     };
+    let mut vars_infer = HashSet::<String>::default();
+    vars_infer.extend(vars.iter().map(|v| v.name.clone()));
+    let inferred = match_type(param_ty, &arg_ty, vars_infer);
+    if inferred.is_none() {
+        error_exit_with_src(
+            &format!(
+                "type mismatch: expected {}, found {}",
+                &param_ty.clone().to_string(),
+                &arg_ty.clone().to_string(),
+            ),
+            &arg.source,
+        )
+    }
+    let inferred = inferred.unwrap();
+    let mut reduce_scope = Scope::<LocalTypeVar>::empty();
+    for (var_name, ty) in inferred.iter() {
+        reduce_scope.push(var_name, &LocalTypeVar { ty: ty.clone() });
+    }
+    let ty = reduce_type(body_ty.clone(), &mut reduce_scope);
     expr_app(func, arg, ei.source.clone()).with_deduced_type(ty)
 }
 
 // Transform a type of form "for<...> x => y" to "for<a1,...,an> x => for<...> y" as far as possible,
 // where a1,...,an are type variables used in x.
-fn defer_forall_of_fun(ty: Arc<TypeInfo>) -> Arc<TypeInfo> {
+// Returns None if given type isn't of form for<...> x => y.
+fn defer_forall_of_fun(ty: Arc<TypeInfo>) -> Option<Arc<TypeInfo>> {
     let (vars, fun_ty) = ty.decompose_forall_reversed();
     let (x, mut y) = match &fun_ty.ty {
         Type::FunTy(x, y) => (x.clone(), y.clone()),
-        _ => unreachable!(),
+        _ => return None,
     };
 
     let used_in_x = x.calculate_free_vars().info.free_vars.clone().unwrap();
@@ -257,7 +269,7 @@ fn defer_forall_of_fun(ty: Arc<TypeInfo>) -> Arc<TypeInfo> {
         ret = type_forall(var.clone(), ret).calculate_free_vars();
     }
 
-    ret
+    Some(ret)
 }
 
 fn deduce_lam(
@@ -354,7 +366,7 @@ fn deduce_apptype(
     scope: &mut Scope<LocalTermVar>,
 ) -> Arc<ExprInfo> {
     let expr = deduce_expr(expr, scope);
-    let arg_ty = reduce_type(arg_ty, &mut Scope::<LocalTypeVar>::empty());
+    let arg_ty = reduce_type(arg_ty, &mut Scope::<LocalTypeVar>::empty()); // necessary?
     let ty = match &expr.deduced_type.clone().unwrap().ty {
         Type::ForAllTy(var, val_ty) => {
             let mut ty_scope = Scope::<LocalTypeVar>::empty();
