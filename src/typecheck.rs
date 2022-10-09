@@ -87,13 +87,65 @@ pub fn check_type(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
 }
 
 // Additional information on types.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct TypeAdditionalInfo {
     free_vars: Option<HashSet<String>>,
 }
 
 // Node of type ast tree that we usually use.
 pub type TypeInfo = TypeNode<TypeAdditionalInfo>;
+
+impl TypeInfo {
+    // Calculate free type variables.
+    pub fn calculate_free_vars(self: &Arc<Self>) -> Arc<Self> {
+        if self.info.free_vars.is_some() {
+            return self.clone();
+        }
+        let mut free_vars = HashSet::<String>::default();
+        let ty = match &self.ty {
+            Type::TyVar(tv) => {
+                free_vars.insert(tv.name.clone());
+                self.ty.clone()
+            }
+            Type::LitTy(_) => self.ty.clone(),
+            Type::AppTy(forallty, argty) => {
+                let forallty = forallty.calculate_free_vars();
+                let argty = argty.calculate_free_vars();
+                free_vars.extend(forallty.info.free_vars.clone().unwrap());
+                Type::AppTy(forallty, argty)
+            }
+            Type::TyConApp(tycon, args) => {
+                let tycon = tycon.clone();
+                let args: Vec<Arc<Self>> = args.iter().map(|ty| ty.calculate_free_vars()).collect();
+                for arg in args.iter() {
+                    free_vars.extend(arg.info.free_vars.clone().unwrap());
+                }
+                Type::TyConApp(tycon, args)
+            }
+            Type::FunTy(input, output) => {
+                let input = input.calculate_free_vars();
+                let output = output.calculate_free_vars();
+                free_vars.extend(input.info.free_vars.clone().unwrap());
+                free_vars.extend(output.info.free_vars.clone().unwrap());
+                Type::FunTy(input, output)
+            }
+            Type::ForAllTy(var, body) => {
+                let body = body.calculate_free_vars();
+                free_vars.extend(body.info.free_vars.clone().unwrap());
+                free_vars.remove(&var.name);
+                Type::ForAllTy(var.clone(), body)
+            }
+        };
+        self.set_ty(ty).set_free_vars(free_vars)
+    }
+
+    // Set free variables.
+    pub fn set_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<Self> {
+        let mut info = (*self.info).clone();
+        info.free_vars = Some(free_vars);
+        self.clone().set_info(Arc::new(info))
+    }
+}
 
 fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
     match &*ei.expr {

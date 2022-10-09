@@ -160,6 +160,15 @@ pub struct TypeNode<I> {
     pub info: Arc<I>,
 }
 
+impl<I> Clone for TypeNode<I> {
+    fn clone(&self) -> Self {
+        TypeNode {
+            ty: self.ty.clone(),
+            info: self.info.clone(),
+        }
+    }
+}
+
 impl<I> TypeNode<I> {
     // Create new type node with default info.
     fn new(ty: Type<I>) -> Self
@@ -179,6 +188,20 @@ impl<I> TypeNode<I> {
     {
         Arc::new(Self::new(ty))
     }
+
+    // Set new info for shared instance.
+    pub fn set_info(self: Arc<Self>, info: Arc<I>) -> Arc<Self> {
+        let mut ret = (*self).clone();
+        ret.info = info;
+        Arc::new(ret)
+    }
+
+    // Set new type for shared instance.
+    pub fn set_ty(self: &Arc<Self>, ty: Type<I>) -> Arc<Self> {
+        let mut ret = (**self).clone();
+        ret.ty = ty;
+        Arc::new(ret)
+    }
 }
 
 // Variant of type
@@ -189,6 +212,19 @@ pub enum Type<I> {
     TyConApp(Arc<TyCon>, Vec<Arc<TypeNode<I>>>),
     FunTy(Arc<TypeNode<I>>, Arc<TypeNode<I>>),
     ForAllTy(Arc<TyVar>, Arc<TypeNode<I>>),
+}
+
+impl<I> Clone for Type<I> {
+    fn clone(&self) -> Self {
+        match self {
+            Type::TyVar(x) => Type::TyVar(x.clone()),
+            Type::LitTy(x) => Type::LitTy(x.clone()),
+            Type::AppTy(x, y) => Type::AppTy(x.clone(), y.clone()),
+            Type::TyConApp(x, y) => Type::TyConApp(x.clone(), y.clone()),
+            Type::FunTy(x, y) => Type::FunTy(x.clone(), y.clone()),
+            Type::ForAllTy(x, y) => Type::ForAllTy(x.clone(), y.clone()),
+        }
+    }
 }
 
 impl<I> TypeNode<I> {
