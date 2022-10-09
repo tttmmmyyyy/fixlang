@@ -55,7 +55,7 @@ fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
     let program = check_type(program);
 
     let program_ty = program.deduced_type.clone().unwrap();
-    if !is_equivalent_type(program_ty.clone(), int_lit_ty()) {
+    if !is_eqv_type(&program_ty, &int_lit_ty()) {
         error_exit(&format!(
             "wrong program type: expected Int, found {}",
             program_ty.to_string(),

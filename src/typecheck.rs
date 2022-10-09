@@ -1,4 +1,5 @@
 use core::panic;
+use std::default;
 
 use super::*;
 
@@ -60,8 +61,11 @@ where
             self.var.remove(name);
         }
     }
-    fn get(self: &Self, name: &str) -> Option<T> {
-        self.var.get(name).map(|v| v.last().unwrap().clone())
+    fn get(self: &Self, name: &str) -> Option<&T> {
+        self.var.get(name).map(|v| v.last().unwrap())
+    }
+    fn get_mut(self: &mut Self, name: &str) -> Option<&mut T> {
+        self.var.get_mut(name).map(|v| v.last_mut().unwrap())
     }
 
     // fn push_type(self: &mut Self, name: &str) {
@@ -175,7 +179,8 @@ fn deduce_var(ei: Arc<ExprInfo>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>)
         .unwrap_or_else(|| {
             error_exit_with_src(&format!("unknown variable `{}`", var.name), &src);
         })
-        .ty;
+        .ty
+        .clone();
     Arc::new(Expr::Var(var))
         .into_expr_info(ei.source.clone())
         .with_deduced_type(ty)
@@ -204,7 +209,7 @@ fn deduce_app(
     let fun_ty = func.deduced_type.clone().unwrap();
     let ty = match &fun_ty.ty {
         Type::FunTy(param_ty, result_ty) => {
-            if is_equivalent_type(param_ty.clone(), arg_ty.clone()) {
+            if is_eqv_type(param_ty, &arg_ty) {
                 result_ty.clone()
             } else {
                 error_exit_with_src(
@@ -294,7 +299,7 @@ fn deduce_let(
     let val_ty = val.deduced_type.clone().unwrap();
     let ty = match var.type_annotation.clone() {
         Some(annotation) => {
-            if is_equivalent_type(annotation, bound_ty) {
+            if is_eqv_type(&annotation, &bound_ty) {
                 val_ty
             } else {
                 panic!("Type mismatch on let");
@@ -317,8 +322,8 @@ fn deduce_if(
     let else_expr = deduce_expr(else_expr, scope);
     let then_ty = then_expr.deduced_type.clone().unwrap();
     let else_ty = else_expr.deduced_type.clone().unwrap();
-    let ty = if is_equivalent_type(then_ty.clone(), else_ty.clone()) {
-        if is_equivalent_type(cond.deduced_type.clone().unwrap(), bool_lit_ty()) {
+    let ty = if is_eqv_type(&then_ty, &else_ty) {
+        if is_eqv_type(&cond.deduced_type.clone().unwrap(), &bool_lit_ty()) {
             then_ty
         } else {
             error_exit_with_src(
@@ -390,7 +395,7 @@ fn reduce_type(ty: Arc<TypeInfo>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeIn
             }
         }
         Type::TyVar(var) => match scope.get(var.name.as_str()) {
-            Some(local_ty) => local_ty.ty,
+            Some(local_ty) => local_ty.ty.clone(),
             None => ty,
         },
         Type::LitTy(_) => ty,
@@ -425,61 +430,150 @@ fn reduce_type(ty: Arc<TypeInfo>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeIn
     }
 }
 
-pub fn is_equivalent_type(lhs: Arc<TypeInfo>, rhs: Arc<TypeInfo>) -> bool {
-    let mut lhs_scope = Scope::<u32>::empty();
-    let mut rhs_scope = Scope::<u32>::empty();
-    let mut next_id: u32 = 0;
-    is_equivalent_type_inner(lhs, rhs, &mut lhs_scope, &mut rhs_scope, &mut next_id)
+// Info of local variable in type matching
+#[derive(Clone)]
+enum LocalTyVarInfo {
+    Free,                            // Free variable defined outer.
+    ForAll(u32), // local variable introduced in for<...> with identifier number.
+    Inferred(Option<Arc<TypeInfo>>), // local variable inferred (or waiting to be inferred when None).
 }
 
-// "for<a> a" is equivalent to "for<b> b".
-fn is_equivalent_type_inner(
-    lhs: Arc<TypeInfo>,
-    rhs: Arc<TypeInfo>,
-    lhs_scope: &mut Scope<u32>, // name of type variable -> identifier
-    rhs_scope: &mut Scope<u32>, // name of type variable -> identifier
+// Check two types are equivalent.
+// Equivalence is checked except naming of type variables introduced by for<...>.
+// Free type variables must coincide.
+// For example, "for<a> a => x" is equivalent to "for<b> b => x", but not to "for<b> b => y".
+pub fn is_eqv_type(lhs: &Arc<TypeInfo>, rhs: &Arc<TypeInfo>) -> bool {
+    match_type(lhs, rhs, HashSet::<String>::default()).is_some()
+}
+
+// Match a type to another type under equivalence.
+pub fn match_type(
+    lhs: &Arc<TypeInfo>,
+    rhs: &Arc<TypeInfo>,
+    lhs_vars_infer: HashSet<String>,
+) -> Option<HashMap<String, Arc<TypeInfo>>> {
+    let lhs = lhs.calculate_free_vars();
+    let rhs = rhs.calculate_free_vars();
+    let lhs_free_vars = lhs.info.free_vars.as_ref().unwrap();
+    let rhs_free_vars = rhs.info.free_vars.as_ref().unwrap();
+
+    // Check if lhs_free_vars = rhs_free_vars + lhs_vars_infer.
+    if lhs_free_vars.len() != rhs_free_vars.len() + lhs_vars_infer.len() {
+        return None;
+    }
+    let mut merged = HashSet::<String>::default();
+    merged.extend(rhs_free_vars.to_owned());
+    merged.extend(lhs_vars_infer.to_owned());
+    if *lhs_free_vars != merged {
+        return None;
+    }
+
+    // Set up scopes.
+    let mut lhs_scope = Scope::<LocalTyVarInfo>::empty();
+    for var_name in lhs_free_vars {
+        if lhs_vars_infer.contains(var_name) {
+            lhs_scope.push(&var_name, &LocalTyVarInfo::Inferred(None));
+        } else {
+            lhs_scope.push(&var_name, &LocalTyVarInfo::Free);
+        }
+    }
+    let mut rhs_scope = Scope::<LocalTyVarInfo>::empty();
+    for var_name in rhs_free_vars {
+        rhs_scope.push(&var_name, &LocalTyVarInfo::Free);
+    }
+
+    // Match and return result.
+    let mut next_id: u32 = 0;
+    let ok = match_type_core(&lhs, &rhs, &mut lhs_scope, &mut rhs_scope, &mut next_id);
+    if ok {
+        let mut ret = HashMap::<String, Arc<TypeInfo>>::default();
+        for var_name in lhs_vars_infer {
+            let inferred = lhs_scope.get(&var_name).unwrap();
+            match inferred {
+                LocalTyVarInfo::Inferred(inferred) => match inferred {
+                    Some(inferred) => {
+                        ret.insert(var_name, inferred.clone());
+                    }
+                    None => {
+                        return None;
+                    }
+                },
+                _ => unreachable!(),
+            }
+        }
+        Some(ret)
+    } else {
+        None
+    }
+}
+
+// Match two types.
+// Only lhs_scope can contain LocalTyVarInfo::Inferred.
+fn match_type_core(
+    lhs: &Arc<TypeInfo>,
+    rhs: &Arc<TypeInfo>,
+    lhs_scope: &mut Scope<LocalTyVarInfo>,
+    rhs_scope: &mut Scope<LocalTyVarInfo>,
     next_id: &mut u32,
 ) -> bool {
     match &lhs.ty {
-        Type::TyVar(lhs_var) => match &rhs.ty {
-            Type::TyVar(rhs_var) => {
-                let lhs = lhs_scope.get(&lhs_var.name);
-                let rhs = rhs_scope.get(&rhs_var.name);
-                if lhs.is_none() {
-                    if rhs.is_some() {
-                        return false;
+        Type::TyVar(lhs_var) => {
+            let lhs = lhs_scope.get(&lhs_var.name).unwrap().clone();
+            match lhs {
+                LocalTyVarInfo::ForAll(lhs_id) => {
+                    // Lhs was introduced at forall.
+                    match &rhs.ty {
+                        Type::TyVar(rhs_var) => {
+                            let rhs = rhs_scope.get(&rhs_var.name).unwrap();
+                            match rhs {
+                                LocalTyVarInfo::ForAll(rhs_id) => {
+                                    return lhs_id == *rhs_id;
+                                }
+                                _ => {
+                                    return false;
+                                }
+                            }
+                        }
+                        _ => {
+                            // Lhs is a type variable but rhs is not.
+                            return false;
+                        }
                     }
-                    *lhs_var == *rhs_var
-                } else {
-                    if rhs.is_none() {
-                        return false;
+                }
+                LocalTyVarInfo::Inferred(infer) => match infer {
+                    Some(inferred) => {
+                        // Lhs was already inferred.
+                        return match_type_core(&inferred, rhs, lhs_scope, rhs_scope, next_id);
                     }
-                    let lhs = lhs.unwrap();
-                    let rhs = rhs.unwrap();
-                    lhs == rhs
+                    None => {
+                        // Lhs is waiting to be inferred.
+                        *lhs_scope.get_mut(&lhs_var.name).unwrap() =
+                            LocalTyVarInfo::Inferred(Some(rhs.clone()));
+                        return true;
+                    }
+                },
+                LocalTyVarInfo::Free => {
+                    // Lhs is free variable defined outer.
+                    match &rhs.ty {
+                        Type::TyVar(rhs_var) => {
+                            return lhs_var.name == rhs_var.name;
+                        }
+                        _ => {
+                            // Lhs is a free type variable but rhs is not.
+                            return false;
+                        }
+                    }
                 }
             }
-            _ => false,
-        },
+        }
         Type::LitTy(lhs_lit) => match &rhs.ty {
             Type::LitTy(rhs_lit) => lhs_lit.id == rhs_lit.id,
             _ => false,
         },
         Type::AppTy(lhs_func_ty, lhs_arg_ty) => match &rhs.ty {
             Type::AppTy(rhs_func_ty, rhs_arg_ty) => {
-                is_equivalent_type_inner(
-                    lhs_func_ty.clone(),
-                    rhs_func_ty.clone(),
-                    lhs_scope,
-                    rhs_scope,
-                    next_id,
-                ) && is_equivalent_type_inner(
-                    lhs_arg_ty.clone(),
-                    rhs_arg_ty.clone(),
-                    lhs_scope,
-                    rhs_scope,
-                    next_id,
-                )
+                match_type_core(lhs_func_ty, rhs_func_ty, lhs_scope, rhs_scope, next_id)
+                    && match_type_core(lhs_arg_ty, rhs_arg_ty, lhs_scope, rhs_scope, next_id)
             }
             _ => false,
         },
@@ -492,13 +586,7 @@ fn is_equivalent_type_inner(
                     return false;
                 }
                 for i in 0..lhs_args.len() {
-                    if !is_equivalent_type_inner(
-                        lhs_args[i].clone(),
-                        rhs_args[i].clone(),
-                        lhs_scope,
-                        rhs_scope,
-                        next_id,
-                    ) {
+                    if !match_type_core(&lhs_args[i], &rhs_args[i], lhs_scope, rhs_scope, next_id) {
                         return false;
                     }
                 }
@@ -508,34 +596,17 @@ fn is_equivalent_type_inner(
         },
         Type::FunTy(lhs_param_ty, lhs_val_ty) => match &rhs.ty {
             Type::FunTy(rhs_param_ty, rhs_val_ty) => {
-                is_equivalent_type_inner(
-                    lhs_param_ty.clone(),
-                    rhs_param_ty.clone(),
-                    lhs_scope,
-                    rhs_scope,
-                    next_id,
-                ) && is_equivalent_type_inner(
-                    lhs_val_ty.clone(),
-                    rhs_val_ty.clone(),
-                    lhs_scope,
-                    rhs_scope,
-                    next_id,
-                )
+                match_type_core(lhs_param_ty, rhs_param_ty, lhs_scope, rhs_scope, next_id)
+                    && match_type_core(lhs_val_ty, rhs_val_ty, lhs_scope, rhs_scope, next_id)
             }
             _ => false,
         },
         Type::ForAllTy(lhs_tyvar, lhs_val_ty) => match &rhs.ty {
             Type::ForAllTy(rhs_tyvar, rhs_val_ty) => {
-                lhs_scope.push(&lhs_tyvar.name, next_id);
-                rhs_scope.push(&rhs_tyvar.name, next_id);
+                lhs_scope.push(&lhs_tyvar.name, &LocalTyVarInfo::ForAll(*next_id));
+                rhs_scope.push(&rhs_tyvar.name, &LocalTyVarInfo::ForAll(*next_id));
                 *next_id += 1;
-                let ret = is_equivalent_type_inner(
-                    lhs_val_ty.clone(),
-                    rhs_val_ty.clone(),
-                    lhs_scope,
-                    rhs_scope,
-                    next_id,
-                );
+                let ret = match_type_core(lhs_val_ty, rhs_val_ty, lhs_scope, rhs_scope, next_id);
                 rhs_scope.pop(&rhs_tyvar.name);
                 lhs_scope.pop(&lhs_tyvar.name);
                 ret
