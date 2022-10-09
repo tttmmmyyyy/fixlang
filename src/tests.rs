@@ -304,7 +304,7 @@ pub fn test23() {
 pub fn test24() {
     // Test newArray of size > 0.
     let source = r"
-            let arr = newArray<Int> 100 42;
+            let arr = newArray 100 42;
             32
         ";
     let answer = 32;
@@ -316,8 +316,8 @@ pub fn test24() {
 pub fn test25() {
     // Test readArray.
     let source = r"
-            let arr = newArray<Int> 100 42;
-            let elem = readArray<Int> arr 50;
+            let arr = newArray 100 42;
+            let elem = readArray arr 50;
             elem
         ";
     let answer = 42;
