@@ -207,7 +207,7 @@ pub fn test18() {
 #[test]
 #[serial]
 pub fn test19() {
-    let source = r"if eq<Int> 3 3 then 1 else 0";
+    let source = r"if eq 3 3 then 1 else 0";
     let answer = 1;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -368,6 +368,22 @@ pub fn test29() {
             if id<Bool> true then id<Int> 100 else 30
         ";
     let answer = 100;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test30() {
+    // Is type "for<a> a => a" is equivalent to "for<b> b => b"?
+    let source = r"
+            let id = if true 
+                then 
+                    for<a> \x: a -> x 
+                else 
+                    for<b> \y: b -> y;
+            id<Int> 5
+        ";
+    let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
