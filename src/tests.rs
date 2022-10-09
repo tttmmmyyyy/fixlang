@@ -476,14 +476,14 @@ pub fn test_print_type_6() {
 
 #[test]
 pub fn test_print_type_7() {
-    let source = r"newArray<Int> 30 0";
+    let source = r"newArray 30 0";
     let answer = "Array<Int>";
     assert_eq!(type_of_source(source).to_string(), answer);
 }
 
 #[test]
 pub fn test_print_type_8() {
-    let source = r"newArray<Array<Int=>Bool>> 30 (newArray<Int=>Bool> 30 \x: Int -> eq<Int> x 0)";
+    let source = r"newArray 30 (newArray 30 \x: Int -> eq x 0)";
     let answer = "Array<Array<Int => Bool>>";
     assert_eq!(type_of_source(source).to_string(), answer);
 }
