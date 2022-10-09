@@ -329,8 +329,8 @@ pub fn test25() {
 pub fn test26() {
     // Test writeArray.
     let source = r"
-            let arr = newArray<Int> 100 42;
-            let arr = writeArray<Int> arr 50 21;
+            let arr = newArray 100 42;
+            let arr = writeArray arr 50 21;
             readArray<Int> arr 50
         ";
     let answer = 21;
