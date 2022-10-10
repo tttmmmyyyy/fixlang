@@ -1,6 +1,7 @@
 use super::super::*;
 use std::{collections::HashSet, sync::Arc};
 
+#[derive(Clone)]
 pub struct ExprNode {
     pub expr: Arc<Expr>,
     pub free_vars: Option<HashSet<String>>,
@@ -10,34 +11,25 @@ pub struct ExprNode {
 
 impl ExprNode {
     // Add free vars
-    fn set_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<Self> {
-        Arc::new(ExprNode {
-            expr: self.expr.clone(),
-            free_vars: Some(free_vars),
-            deduced_type: self.deduced_type.clone(),
-            source: self.source.clone(),
-        })
+    fn set_free_vars(&self, free_vars: HashSet<String>) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.free_vars = Some(free_vars);
+        Arc::new(ret)
     }
 
     // Add deduced type
-    pub fn set_deduced_type(self: &Arc<Self>, ty: Arc<TypeNode>) -> Arc<Self> {
-        let ty = ty.calculate_free_vars();
-        Arc::new(ExprNode {
-            expr: self.expr.clone(),
-            free_vars: self.free_vars.clone(),
-            deduced_type: Some(ty),
-            source: self.source.clone(),
-        })
+    pub fn set_deduced_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
+        let ty = ty.calculate_free_vars(); // necessary?
+        let mut ret = self.clone();
+        ret.deduced_type = Some(ty);
+        Arc::new(ret)
     }
 
     // Add source
-    pub fn set_source(self: &Arc<Self>, src: Option<Span>) -> Arc<Self> {
-        Arc::new(ExprNode {
-            expr: self.expr.clone(),
-            free_vars: self.free_vars.clone(),
-            deduced_type: self.deduced_type.clone(),
-            source: src,
-        })
+    pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.source = src;
+        Arc::new(ret)
     }
 
     // Get free vars
