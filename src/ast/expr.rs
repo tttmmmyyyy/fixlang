@@ -10,14 +10,19 @@ pub struct ExprNode {
 }
 
 impl ExprNode {
-    // Add free vars
+    // Set free vars
     fn set_free_vars(&self, free_vars: HashSet<String>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.free_vars = Some(free_vars);
         Arc::new(ret)
     }
 
-    // Add deduced type
+    // Get free vars
+    pub fn free_vars(self: &Self) -> &HashSet<String> {
+        self.free_vars.as_ref().unwrap()
+    }
+
+    // Set deduced type
     pub fn set_deduced_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
         let ty = ty.calculate_free_vars(); // necessary?
         let mut ret = self.clone();
@@ -25,16 +30,11 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    // Add source
+    // Set source
     pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.source = src;
         Arc::new(ret)
-    }
-
-    // Get free vars
-    pub fn free_vars(self: &Self) -> &HashSet<String> {
-        self.free_vars.as_ref().unwrap()
     }
 }
 
