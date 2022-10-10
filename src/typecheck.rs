@@ -91,7 +91,7 @@ pub fn check_type(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
 
 // Additional information on types.
 #[derive(Default, Clone)]
-pub struct TypeAdditionalInfo {
+pub struct TypeInfo {
     free_vars: Option<HashSet<String>>,
 }
 

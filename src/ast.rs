@@ -137,7 +137,7 @@ pub struct TyLit {
 // Node of type ast tree with user defined additional information
 pub struct TypeNode {
     pub ty: Type,
-    pub info: Arc<TypeAdditionalInfo>,
+    pub info: Arc<TypeInfo>,
 }
 
 impl Clone for TypeNode {
@@ -154,7 +154,7 @@ impl TypeNode {
     fn new(ty: Type) -> Self {
         Self {
             ty: ty,
-            info: Arc::new(TypeAdditionalInfo::default()),
+            info: Arc::new(TypeInfo::default()),
         }
     }
 
@@ -164,7 +164,7 @@ impl TypeNode {
     }
 
     // Set new info for shared instance.
-    pub fn set_info(self: Arc<Self>, info: Arc<TypeAdditionalInfo>) -> Arc<Self> {
+    pub fn set_info(self: Arc<Self>, info: Arc<TypeInfo>) -> Arc<Self> {
         let mut ret = (*self).clone();
         ret.info = info;
         Arc::new(ret)
