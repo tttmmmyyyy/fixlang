@@ -95,9 +95,6 @@ pub struct TypeAdditionalInfo {
     free_vars: Option<HashSet<String>>,
 }
 
-// Node of type ast tree that we usually use.
-pub type TypeInfo = TypeNode<TypeAdditionalInfo>;
-
 impl TypeInfo {
     // Calculate free type variables.
     pub fn calculate_free_vars(self: &Arc<Self>) -> Arc<Self> {

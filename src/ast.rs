@@ -135,49 +135,43 @@ pub struct TyLit {
 }
 
 // Node of type ast tree with user defined additional information
-pub struct TypeNode<I> {
-    pub ty: Type<I>,
-    pub info: Arc<I>,
+pub struct TypeInfo {
+    pub ty: Type,
+    pub info: Arc<TypeAdditionalInfo>,
 }
 
-impl<I> Clone for TypeNode<I> {
+impl Clone for TypeInfo {
     fn clone(&self) -> Self {
-        TypeNode {
+        TypeInfo {
             ty: self.ty.clone(),
             info: self.info.clone(),
         }
     }
 }
 
-impl<I> TypeNode<I> {
+impl TypeInfo {
     // Create new type node with default info.
-    fn new(ty: Type<I>) -> Self
-    where
-        I: Default,
-    {
+    fn new(ty: Type) -> Self {
         Self {
             ty: ty,
-            info: Arc::new(I::default()),
+            info: Arc::new(TypeAdditionalInfo::default()),
         }
     }
 
     // Create shared new type node with default info.
-    fn new_arc(ty: Type<I>) -> Arc<Self>
-    where
-        I: Default,
-    {
+    fn new_arc(ty: Type) -> Arc<Self> {
         Arc::new(Self::new(ty))
     }
 
     // Set new info for shared instance.
-    pub fn set_info(self: Arc<Self>, info: Arc<I>) -> Arc<Self> {
+    pub fn set_info(self: Arc<Self>, info: Arc<TypeAdditionalInfo>) -> Arc<Self> {
         let mut ret = (*self).clone();
         ret.info = info;
         Arc::new(ret)
     }
 
     // Set new type for shared instance.
-    pub fn set_ty(self: &Arc<Self>, ty: Type<I>) -> Arc<Self> {
+    pub fn set_ty(self: &Arc<Self>, ty: Type) -> Arc<Self> {
         let mut ret = (**self).clone();
         ret.ty = ty;
         Arc::new(ret)
@@ -185,16 +179,16 @@ impl<I> TypeNode<I> {
 }
 
 // Variant of type
-pub enum Type<I> {
+pub enum Type {
     TyVar(Arc<TyVar>),
     LitTy(Arc<TyLit>),
-    AppTy(Arc<TypeNode<I>>, Arc<TypeNode<I>>),
-    TyConApp(Arc<TyCon>, Vec<Arc<TypeNode<I>>>),
-    FunTy(Arc<TypeNode<I>>, Arc<TypeNode<I>>),
-    ForAllTy(Arc<TyVar>, Arc<TypeNode<I>>),
+    AppTy(Arc<TypeInfo>, Arc<TypeInfo>),
+    TyConApp(Arc<TyCon>, Vec<Arc<TypeInfo>>),
+    FunTy(Arc<TypeInfo>, Arc<TypeInfo>),
+    ForAllTy(Arc<TyVar>, Arc<TypeInfo>),
 }
 
-impl<I> Clone for Type<I> {
+impl Clone for Type {
     fn clone(&self) -> Self {
         match self {
             Type::TyVar(x) => Type::TyVar(x.clone()),
@@ -207,7 +201,7 @@ impl<I> Clone for Type<I> {
     }
 }
 
-impl<I> TypeNode<I> {
+impl TypeInfo {
     pub fn to_string(self: Arc<Self>) -> String {
         match &self.ty {
             Type::TyVar(v) => v.name.clone(),
@@ -321,11 +315,8 @@ pub fn arrow_kind(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
-pub fn type_func<I>(src: Arc<TypeNode<I>>, dst: Arc<TypeNode<I>>) -> Arc<TypeNode<I>>
-where
-    I: Default,
-{
-    TypeNode::new_arc(Type::FunTy(src, dst))
+pub fn type_func(src: Arc<TypeInfo>, dst: Arc<TypeInfo>) -> Arc<TypeInfo> {
+    TypeInfo::new_arc(Type::FunTy(src, dst))
 }
 
 pub fn var_tyvar(var_name: &str) -> Arc<TyVar> {
