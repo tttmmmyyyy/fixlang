@@ -356,9 +356,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate application
     fn eval_app(&mut self, lambda: Arc<ExprNode>, arg: Arc<ExprNode>) -> PointerValue<'c> {
-        self.scope_lock_as_used_later(&arg.free_vars);
+        self.scope_lock_as_used_later(arg.free_vars());
         let lambda_code = self.eval_expr(lambda);
-        self.scope_unlock_as_used_later(&arg.free_vars);
+        self.scope_unlock_as_used_later(arg.free_vars());
         let arg_code = self.eval_expr(arg);
         self.apply_lambda(lambda_code, arg_code)
     }
@@ -373,7 +373,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let context = self.context;
         let module = self.module;
         // Fix ordering of captured names
-        let mut captured_names = val.free_vars.clone();
+        let mut captured_names = val.free_vars().clone();
         captured_names.remove(&arg.name);
         captured_names.remove(SELF_NAME);
         let captured_names: Vec<String> = captured_names.into_iter().collect();
@@ -417,10 +417,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.retain(ptr);
             }
             // Release SELF and arg if unused
-            if !val.free_vars.contains(SELF_NAME) {
+            if !val.free_vars().contains(SELF_NAME) {
                 self.release(closure_obj);
             }
-            if !val.free_vars.contains(&arg.name) {
+            if !val.free_vars().contains(&arg.name) {
                 self.release(arg_ptr);
             }
             // Generate value
@@ -454,13 +454,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         val: Arc<ExprNode>,
     ) -> PointerValue<'c> {
         let var_name = &var.name;
-        let mut used_in_val_except_var = val.free_vars.clone();
+        let mut used_in_val_except_var = val.free_vars().clone();
         used_in_val_except_var.remove(var_name);
         self.scope_lock_as_used_later(&used_in_val_except_var);
         let bound_code = self.eval_expr(bound.clone());
         self.scope_unlock_as_used_later(&used_in_val_except_var);
         self.scope_push(&var_name, &bound_code);
-        if !val.free_vars.contains(var_name) {
+        if !val.free_vars().contains(var_name) {
             self.release(bound_code);
         }
         let val_code = self.eval_expr(val.clone());
@@ -475,8 +475,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         then_expr: Arc<ExprNode>,
         else_expr: Arc<ExprNode>,
     ) -> PointerValue<'c> {
-        let mut used_then_or_else = then_expr.free_vars.clone();
-        used_then_or_else.extend(else_expr.free_vars.clone());
+        let mut used_then_or_else = then_expr.free_vars().clone();
+        used_then_or_else.extend(else_expr.free_vars().clone());
         self.scope_lock_as_used_later(&used_then_or_else);
         let ptr_to_cond_obj = self.eval_expr(cond_expr);
         self.scope_unlock_as_used_later(&used_then_or_else);
@@ -498,8 +498,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         self.builder().position_at_end(then_bb);
         // Release variables used only in the else block.
-        for var_name in &else_expr.free_vars {
-            if !then_expr.free_vars.contains(var_name) && self.scope_get(var_name).used_later == 0 {
+        for var_name in else_expr.free_vars() {
+            if !then_expr.free_vars().contains(var_name) && self.scope_get(var_name).used_later == 0
+            {
                 self.release(self.scope_get(var_name).ptr);
             }
         }
@@ -509,8 +510,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         self.builder().position_at_end(else_bb);
         // Release variables used only in the then block.
-        for var_name in &then_expr.free_vars {
-            if !else_expr.free_vars.contains(var_name) && self.scope_get(var_name).used_later == 0 {
+        for var_name in then_expr.free_vars() {
+            if !else_expr.free_vars().contains(var_name) && self.scope_get(var_name).used_later == 0
+            {
                 self.release(self.scope_get(var_name).ptr);
             }
         }

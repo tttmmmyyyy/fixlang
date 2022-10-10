@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 
 pub struct ExprNode {
     pub expr: Arc<Expr>,
-    pub free_vars: HashSet<String>,
+    pub free_vars: Option<HashSet<String>>,
     pub deduced_type: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
@@ -13,7 +13,7 @@ impl ExprNode {
     fn with_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<Self> {
         Arc::new(ExprNode {
             expr: self.expr.clone(),
-            free_vars,
+            free_vars: Some(free_vars),
             deduced_type: self.deduced_type.clone(),
             source: self.source.clone(),
         })
@@ -38,6 +38,11 @@ impl ExprNode {
             deduced_type: self.deduced_type.clone(),
             source: src,
         })
+    }
+
+    // Get free vars
+    pub fn free_vars(self: &Self) -> &HashSet<String> {
+        self.free_vars.as_ref().unwrap()
     }
 }
 
@@ -187,13 +192,13 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
         Expr::App(func, arg) => {
             let func = calculate_free_vars(func.clone());
             let arg = calculate_free_vars(arg.clone());
-            let mut free_vars = func.free_vars.clone();
-            free_vars.extend(arg.free_vars.clone());
+            let mut free_vars = func.free_vars.clone().unwrap();
+            free_vars.extend(arg.free_vars.clone().unwrap());
             expr_app(func, arg, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::Lam(arg, val) => {
             let val = calculate_free_vars(val.clone());
-            let mut free_vars = val.free_vars.clone();
+            let mut free_vars = val.free_vars.clone().unwrap();
             free_vars.remove(&arg.name);
             free_vars.remove(SELF_NAME);
             expr_abs(arg.clone(), val, ei.source.clone()).with_free_vars(free_vars)
@@ -204,29 +209,29 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
             let bound = calculate_free_vars(bound.clone());
             let val = calculate_free_vars(val.clone());
-            let mut free_vars = val.free_vars.clone();
+            let mut free_vars = val.free_vars.clone().unwrap();
             free_vars.remove(&var.name);
-            free_vars.extend(bound.free_vars.clone());
+            free_vars.extend(bound.free_vars.clone().unwrap());
             expr_let(var.clone(), bound, val, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::If(cond, then, else_expr) => {
             let cond = calculate_free_vars(cond.clone());
             let then = calculate_free_vars(then.clone());
             let else_expr = calculate_free_vars(else_expr.clone());
-            let mut free_vars = cond.free_vars.clone();
-            free_vars.extend(then.free_vars.clone());
-            free_vars.extend(else_expr.free_vars.clone());
+            let mut free_vars = cond.free_vars.clone().unwrap();
+            free_vars.extend(then.free_vars.clone().unwrap());
+            free_vars.extend(else_expr.free_vars.clone().unwrap());
             expr_if(cond, then, else_expr, ei.source.clone()).with_free_vars(free_vars)
         }
         Expr::AppType(ei, ty) => {
             let ei = calculate_free_vars(ei.clone());
             expr_appty(ei.clone(), ty.clone(), ei.source.clone())
-                .with_free_vars(ei.free_vars.clone())
+                .with_free_vars(ei.free_vars.clone().unwrap())
         }
         Expr::ForAll(tyvar, ei) => {
             let ei = calculate_free_vars(ei.clone());
             expr_forall(tyvar.clone(), ei.clone(), ei.source.clone())
-                .with_free_vars(ei.free_vars.clone())
+                .with_free_vars(ei.free_vars.clone().unwrap())
         }
     }
 }
