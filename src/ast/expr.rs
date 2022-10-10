@@ -10,7 +10,7 @@ pub struct ExprNode {
 
 impl ExprNode {
     // Add free vars
-    fn with_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<Self> {
+    fn set_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<Self> {
         Arc::new(ExprNode {
             expr: self.expr.clone(),
             free_vars: Some(free_vars),
@@ -20,7 +20,7 @@ impl ExprNode {
     }
 
     // Add deduced type
-    pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<TypeNode>) -> Arc<Self> {
+    pub fn set_deduced_type(self: &Arc<Self>, ty: Arc<TypeNode>) -> Arc<Self> {
         let ty = ty.calculate_free_vars();
         Arc::new(ExprNode {
             expr: self.expr.clone(),
@@ -31,7 +31,7 @@ impl ExprNode {
     }
 
     // Add source
-    pub fn with_source(self: &Arc<Self>, src: Option<Span>) -> Arc<Self> {
+    pub fn set_source(self: &Arc<Self>, src: Option<Span>) -> Arc<Self> {
         Arc::new(ExprNode {
             expr: self.expr.clone(),
             free_vars: self.free_vars.clone(),
@@ -183,25 +183,25 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
         Expr::Var(var) => {
             let free_vars = vec![var.name.clone()].into_iter().collect();
-            ei.with_free_vars(free_vars)
+            ei.set_free_vars(free_vars)
         }
         Expr::Lit(lit) => {
             let free_vars = lit.free_vars.clone().into_iter().collect();
-            ei.with_free_vars(free_vars)
+            ei.set_free_vars(free_vars)
         }
         Expr::App(func, arg) => {
             let func = calculate_free_vars(func.clone());
             let arg = calculate_free_vars(arg.clone());
             let mut free_vars = func.free_vars.clone().unwrap();
             free_vars.extend(arg.free_vars.clone().unwrap());
-            expr_app(func, arg, ei.source.clone()).with_free_vars(free_vars)
+            expr_app(func, arg, ei.source.clone()).set_free_vars(free_vars)
         }
         Expr::Lam(arg, val) => {
             let val = calculate_free_vars(val.clone());
             let mut free_vars = val.free_vars.clone().unwrap();
             free_vars.remove(&arg.name);
             free_vars.remove(SELF_NAME);
-            expr_abs(arg.clone(), val, ei.source.clone()).with_free_vars(free_vars)
+            expr_abs(arg.clone(), val, ei.source.clone()).set_free_vars(free_vars)
         }
         Expr::Let(var, bound, val) => {
             // NOTE: Our Let is non-recursive let, i.e.,
@@ -212,7 +212,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let mut free_vars = val.free_vars.clone().unwrap();
             free_vars.remove(&var.name);
             free_vars.extend(bound.free_vars.clone().unwrap());
-            expr_let(var.clone(), bound, val, ei.source.clone()).with_free_vars(free_vars)
+            expr_let(var.clone(), bound, val, ei.source.clone()).set_free_vars(free_vars)
         }
         Expr::If(cond, then, else_expr) => {
             let cond = calculate_free_vars(cond.clone());
@@ -221,17 +221,17 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let mut free_vars = cond.free_vars.clone().unwrap();
             free_vars.extend(then.free_vars.clone().unwrap());
             free_vars.extend(else_expr.free_vars.clone().unwrap());
-            expr_if(cond, then, else_expr, ei.source.clone()).with_free_vars(free_vars)
+            expr_if(cond, then, else_expr, ei.source.clone()).set_free_vars(free_vars)
         }
         Expr::AppType(ei, ty) => {
             let ei = calculate_free_vars(ei.clone());
             expr_appty(ei.clone(), ty.clone(), ei.source.clone())
-                .with_free_vars(ei.free_vars.clone().unwrap())
+                .set_free_vars(ei.free_vars.clone().unwrap())
         }
         Expr::ForAll(tyvar, ei) => {
             let ei = calculate_free_vars(ei.clone());
             expr_forall(tyvar.clone(), ei.clone(), ei.source.clone())
-                .with_free_vars(ei.free_vars.clone().unwrap())
+                .set_free_vars(ei.free_vars.clone().unwrap())
         }
     }
 }

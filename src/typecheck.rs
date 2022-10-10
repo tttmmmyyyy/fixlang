@@ -121,7 +121,7 @@ fn deduce_var(ei: Arc<ExprNode>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>)
         .clone();
     Arc::new(Expr::Var(var))
         .into_expr_info(ei.source.clone())
-        .with_deduced_type(ty)
+        .set_deduced_type(ty)
 }
 
 fn deduce_lit(
@@ -132,7 +132,7 @@ fn deduce_lit(
     let lit_ty = lit.ty.clone();
     Arc::new(Expr::Lit(lit))
         .into_expr_info(ei.source.clone())
-        .with_deduced_type(lit_ty.clone())
+        .set_deduced_type(lit_ty.clone())
 }
 
 fn deduce_app(
@@ -179,7 +179,7 @@ fn deduce_app(
         reduce_scope.push(var_name, &LocalTypeVar { ty: ty.clone() });
     }
     let ty = reduce_type(body_ty.clone(), &mut reduce_scope);
-    expr_app(func, arg, ei.source.clone()).with_deduced_type(ty)
+    expr_app(func, arg, ei.source.clone()).set_deduced_type(ty)
 }
 
 // Transform a type of form "for<...> x => y" to "for<a1,...,an> x => for<...> y" as far as possible,
@@ -226,7 +226,7 @@ fn deduce_lam(
     let val = deduce_expr(val, scope);
     scope.pop(&param.name);
     let val_ty = val.deduced_type.clone().unwrap();
-    expr_abs(param, val, ei.source.clone()).with_deduced_type(type_func(param_ty, val_ty))
+    expr_abs(param, val, ei.source.clone()).set_deduced_type(type_func(param_ty, val_ty))
 }
 
 fn deduce_let(
@@ -257,7 +257,7 @@ fn deduce_let(
         }
         None => val_ty,
     };
-    expr_let(var, bound, val, ei.source.clone()).with_deduced_type(ty)
+    expr_let(var, bound, val, ei.source.clone()).set_deduced_type(ty)
 }
 
 fn deduce_if(
@@ -294,7 +294,7 @@ fn deduce_if(
             &else_expr.source,
         )
     };
-    expr_if(cond, then_expr, else_expr, ei.source.clone()).with_deduced_type(ty)
+    expr_if(cond, then_expr, else_expr, ei.source.clone()).set_deduced_type(ty)
 }
 
 fn deduce_apptype(
@@ -316,7 +316,7 @@ fn deduce_apptype(
             &ei.source,
         ),
     };
-    expr_appty(expr, arg_ty, ei.source.clone()).with_deduced_type(ty)
+    expr_appty(expr, arg_ty, ei.source.clone()).set_deduced_type(ty)
 }
 
 fn deduce_forall(
@@ -327,7 +327,7 @@ fn deduce_forall(
 ) -> Arc<ExprNode> {
     let expr = deduce_expr(expr, scope);
     let ty = type_forall(tyvar.clone(), expr.deduced_type.clone().unwrap());
-    expr_forall(tyvar, expr, ei.source.clone()).with_deduced_type(ty)
+    expr_forall(tyvar, expr, ei.source.clone()).set_deduced_type(ty)
 }
 
 fn reduce_type(ty: Arc<TypeNode>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeNode> {

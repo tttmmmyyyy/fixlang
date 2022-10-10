@@ -251,7 +251,7 @@ fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 fn parse_bracket_expr(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let inner = expr.into_inner().next().unwrap();
-    parse_expr(inner, src).with_source(Some(span))
+    parse_expr(inner, src).set_source(Some(span))
 }
 
 fn parse_expr_int_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
