@@ -3,7 +3,7 @@ use super::*;
 pub struct ExprInfo {
     pub expr: Arc<Expr>,
     pub free_vars: HashSet<String>,
-    pub deduced_type: Option<Arc<TypeInfo>>,
+    pub deduced_type: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
 
@@ -19,7 +19,7 @@ impl ExprInfo {
     }
 
     // Add deduced type
-    pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<TypeInfo>) -> Arc<Self> {
+    pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<TypeNode>) -> Arc<Self> {
         let ty = ty.calculate_free_vars();
         Arc::new(ExprInfo {
             expr: self.expr.clone(),
@@ -48,7 +48,7 @@ pub enum Expr {
     Lam(Arc<Var>, Arc<ExprInfo>),
     Let(Arc<Var>, Arc<ExprInfo>, Arc<ExprInfo>),
     If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>), // TODO: Implement case
-    AppType(Arc<ExprInfo>, Arc<TypeInfo>),
+    AppType(Arc<ExprInfo>, Arc<TypeNode>),
     ForAll(Arc<TyVar>, Arc<ExprInfo>),
 }
 
@@ -96,12 +96,12 @@ pub struct Literal {
     pub generator: Arc<LiteralGenerator>,
     pub free_vars: Vec<String>, // e.g. "+" literal has two free variables.
     name: String,
-    pub ty: Arc<TypeInfo>,
+    pub ty: Arc<TypeNode>,
 }
 
 pub struct Var {
     pub name: String,
-    pub type_annotation: Option<Arc<TypeInfo>>,
+    pub type_annotation: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
 
@@ -135,21 +135,21 @@ pub struct TyLit {
 }
 
 // Node of type ast tree with user defined additional information
-pub struct TypeInfo {
+pub struct TypeNode {
     pub ty: Type,
     pub info: Arc<TypeAdditionalInfo>,
 }
 
-impl Clone for TypeInfo {
+impl Clone for TypeNode {
     fn clone(&self) -> Self {
-        TypeInfo {
+        TypeNode {
             ty: self.ty.clone(),
             info: self.info.clone(),
         }
     }
 }
 
-impl TypeInfo {
+impl TypeNode {
     // Create new type node with default info.
     fn new(ty: Type) -> Self {
         Self {
@@ -182,10 +182,10 @@ impl TypeInfo {
 pub enum Type {
     TyVar(Arc<TyVar>),
     LitTy(Arc<TyLit>),
-    AppTy(Arc<TypeInfo>, Arc<TypeInfo>),
-    TyConApp(Arc<TyCon>, Vec<Arc<TypeInfo>>),
-    FunTy(Arc<TypeInfo>, Arc<TypeInfo>),
-    ForAllTy(Arc<TyVar>, Arc<TypeInfo>),
+    AppTy(Arc<TypeNode>, Arc<TypeNode>),
+    TyConApp(Arc<TyCon>, Vec<Arc<TypeNode>>),
+    FunTy(Arc<TypeNode>, Arc<TypeNode>),
+    ForAllTy(Arc<TyVar>, Arc<TypeNode>),
 }
 
 impl Clone for Type {
@@ -201,7 +201,7 @@ impl Clone for Type {
     }
 }
 
-impl TypeInfo {
+impl TypeNode {
     pub fn to_string(self: Arc<Self>) -> String {
         match &self.ty {
             Type::TyVar(v) => v.name.clone(),
@@ -315,8 +315,8 @@ pub fn arrow_kind(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
-pub fn type_func(src: Arc<TypeInfo>, dst: Arc<TypeInfo>) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::FunTy(src, dst))
+pub fn type_func(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::FunTy(src, dst))
 }
 
 pub fn var_tyvar(var_name: &str) -> Arc<TyVar> {
@@ -325,13 +325,13 @@ pub fn var_tyvar(var_name: &str) -> Arc<TyVar> {
     })
 }
 
-pub fn type_tyvar(var_name: &str) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::TyVar(var_tyvar(var_name)))
+pub fn type_tyvar(var_name: &str) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::TyVar(var_tyvar(var_name)))
 }
 
 pub fn var_var(
     var_name: &str,
-    type_annotation: Option<Arc<TypeInfo>>,
+    type_annotation: Option<Arc<TypeNode>>,
     src: Option<Span>,
 ) -> Arc<Var> {
     Arc::new(Var {
@@ -345,7 +345,7 @@ pub fn expr_lit(
     generator: Arc<LiteralGenerator>,
     free_vars: Vec<String>,
     name: String,
-    ty: Arc<TypeInfo>,
+    ty: Arc<TypeNode>,
     src: Option<Span>,
 ) -> Arc<ExprInfo> {
     Arc::new(Expr::Lit(Arc::new(Literal {
@@ -388,7 +388,7 @@ pub fn expr_if(
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
-pub fn expr_appty(expr: Arc<ExprInfo>, ty: Arc<TypeInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_appty(expr: Arc<ExprInfo>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprInfo> {
     Arc::new(Expr::AppType(expr, ty)).into_expr_info(src)
 }
 
@@ -396,31 +396,31 @@ pub fn expr_forall(var: Arc<TyVar>, val: Arc<ExprInfo>, src: Option<Span>) -> Ar
     Arc::new(Expr::ForAll(var, val)).into_expr_info(src)
 }
 
-pub fn type_var_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::TyVar(tyvar))
+pub fn type_var_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::TyVar(tyvar))
 }
 
-pub fn type_lit(id: u32, name: &str) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::LitTy(Arc::new(TyLit {
+pub fn type_lit(id: u32, name: &str) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::LitTy(Arc::new(TyLit {
         id,
         name: String::from(name),
     })))
 }
 
-pub fn type_app(head: Arc<TypeInfo>, param: Arc<TypeInfo>) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::AppTy(head, param))
+pub fn type_app(head: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::AppTy(head, param))
 }
 
-pub fn type_fun(src: Arc<TypeInfo>, dst: Arc<TypeInfo>) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::FunTy(src, dst))
+pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::FunTy(src, dst))
 }
 
-pub fn type_forall(var: Arc<TyVar>, ty: Arc<TypeInfo>) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::ForAllTy(var, ty))
+pub fn type_forall(var: Arc<TyVar>, ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::ForAllTy(var, ty))
 }
 
-pub fn tycon_app(tycon: Arc<TyCon>, params: Vec<Arc<TypeInfo>>) -> Arc<TypeInfo> {
-    TypeInfo::new_arc(Type::TyConApp(tycon, params))
+pub fn tycon_app(tycon: Arc<TyCon>, params: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::TyConApp(tycon, params))
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.

@@ -19,22 +19,22 @@ pub fn builtin_type_id(name: &str) -> u32 {
 }
 
 // Make builtin type.
-pub fn make_bultin_type(name: &str) -> Arc<TypeInfo> {
+pub fn make_bultin_type(name: &str) -> Arc<TypeNode> {
     type_lit(builtin_type_id(name), name)
 }
 
 // Make Int type.
-pub fn int_lit_ty() -> Arc<TypeInfo> {
+pub fn int_lit_ty() -> Arc<TypeNode> {
     make_bultin_type(INT_NAME)
 }
 
 // Make Bool type.
-pub fn bool_lit_ty() -> Arc<TypeInfo> {
+pub fn bool_lit_ty() -> Arc<TypeNode> {
     make_bultin_type(BOOL_NAME)
 }
 
 // Make built-in literal type from type id.
-pub fn make_literal_type(type_id: u32) -> Arc<TypeInfo> {
+pub fn make_literal_type(type_id: u32) -> Arc<TypeNode> {
     match type_id {
         INT_TYPEID => int_lit_ty(),
         BOOL_TYPEID => bool_lit_ty(),

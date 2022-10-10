@@ -21,12 +21,12 @@ fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
 
 #[derive(Clone)]
 struct LocalTermVar {
-    ty: Arc<TypeInfo>,
+    ty: Arc<TypeNode>,
 }
 
 #[derive(Clone)]
 struct LocalTypeVar {
-    ty: Arc<TypeInfo>,
+    ty: Arc<TypeNode>,
     /* field for type class */
 }
 
@@ -95,7 +95,7 @@ pub struct TypeAdditionalInfo {
     free_vars: Option<HashSet<String>>,
 }
 
-impl TypeInfo {
+impl TypeNode {
     // Calculate free type variables.
     pub fn calculate_free_vars(self: &Arc<Self>) -> Arc<Self> {
         if self.info.free_vars.is_some() {
@@ -243,7 +243,7 @@ fn deduce_app(
 // Transform a type of form "for<...> x => y" to "for<a1,...,an> x => for<...> y" as far as possible,
 // where a1,...,an are type variables used in x.
 // Returns None if given type isn't of form for<...> x => y.
-fn defer_forall_of_fun(ty: Arc<TypeInfo>) -> Option<Arc<TypeInfo>> {
+fn defer_forall_of_fun(ty: Arc<TypeNode>) -> Option<Arc<TypeNode>> {
     let (vars, fun_ty) = ty.decompose_forall_reversed();
     let (x, mut y) = match &fun_ty.ty {
         Type::FunTy(x, y) => (x.clone(), y.clone()),
@@ -358,7 +358,7 @@ fn deduce_if(
 fn deduce_apptype(
     ei: Arc<ExprInfo>,
     expr: Arc<ExprInfo>,
-    arg_ty: Arc<TypeInfo>,
+    arg_ty: Arc<TypeNode>,
     scope: &mut Scope<LocalTermVar>,
 ) -> Arc<ExprInfo> {
     let expr = deduce_expr(expr, scope);
@@ -388,7 +388,7 @@ fn deduce_forall(
     expr_forall(tyvar, expr, ei.source.clone()).with_deduced_type(ty)
 }
 
-fn reduce_type(ty: Arc<TypeInfo>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeInfo> {
+fn reduce_type(ty: Arc<TypeNode>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeNode> {
     match &ty.ty {
         Type::AppTy(fun_ty, arg_ty) => {
             let arg_ty = reduce_type(arg_ty.clone(), scope);
@@ -408,7 +408,7 @@ fn reduce_type(ty: Arc<TypeInfo>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeIn
         },
         Type::LitTy(_) => ty,
         Type::TyConApp(tycon, arg_tys) => {
-            let arg_tys: Vec<Arc<TypeInfo>> = arg_tys
+            let arg_tys: Vec<Arc<TypeNode>> = arg_tys
                 .iter()
                 .map(|ty| reduce_type(ty.clone(), scope))
                 .collect();
@@ -443,23 +443,23 @@ fn reduce_type(ty: Arc<TypeInfo>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeIn
 enum LocalTyVarInfo {
     Free,                            // Free variable defined outer.
     ForAll(u32), // local variable introduced in for<...> with identifier number.
-    Inferred(Option<Arc<TypeInfo>>), // local variable inferred (or waiting to be inferred when None).
+    Inferred(Option<Arc<TypeNode>>), // local variable inferred (or waiting to be inferred when None).
 }
 
 // Check two types are equivalent.
 // Equivalence is checked except naming of type variables introduced by for<...>.
 // Free type variables must coincide.
 // For example, "for<a> a => x" is equivalent to "for<b> b => x", but not to "for<b> b => y".
-pub fn is_eqv_type(lhs: &Arc<TypeInfo>, rhs: &Arc<TypeInfo>) -> bool {
+pub fn is_eqv_type(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
     match_type(lhs, rhs, HashSet::<String>::default()).is_some()
 }
 
 // Match a type to another type under equivalence.
 pub fn match_type(
-    lhs: &Arc<TypeInfo>,
-    rhs: &Arc<TypeInfo>,
+    lhs: &Arc<TypeNode>,
+    rhs: &Arc<TypeNode>,
     lhs_vars_infer: HashSet<String>,
-) -> Option<HashMap<String, Arc<TypeInfo>>> {
+) -> Option<HashMap<String, Arc<TypeNode>>> {
     let lhs = lhs.calculate_free_vars();
     let rhs = rhs.calculate_free_vars();
     let lhs_free_vars = lhs.info.free_vars.as_ref().unwrap();
@@ -497,7 +497,7 @@ pub fn match_type(
         return None;
     }
 
-    let mut ret = HashMap::<String, Arc<TypeInfo>>::default();
+    let mut ret = HashMap::<String, Arc<TypeNode>>::default();
     for var_name in lhs_vars_infer {
         let inferred = lhs_scope.get(&var_name).unwrap();
         match inferred {
@@ -518,8 +518,8 @@ pub fn match_type(
 // Match two types.
 // Only lhs_scope can contain LocalTyVarInfo::Inferred.
 fn match_type_core(
-    lhs: &Arc<TypeInfo>,
-    rhs: &Arc<TypeInfo>,
+    lhs: &Arc<TypeNode>,
+    rhs: &Arc<TypeNode>,
     lhs_scope: &mut Scope<LocalTyVarInfo>,
     rhs_scope: &mut Scope<LocalTyVarInfo>,
     next_id: &mut u32,
