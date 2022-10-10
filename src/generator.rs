@@ -330,7 +330,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate expression.
-    pub fn eval_expr(&mut self, expr: Arc<ExprInfo>) -> PointerValue<'c> {
+    pub fn eval_expr(&mut self, expr: Arc<ExprNode>) -> PointerValue<'c> {
         let ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone()),
             Expr::Lit(lit) => self.eval_lit(lit.clone()),
@@ -355,7 +355,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate application
-    fn eval_app(&mut self, lambda: Arc<ExprInfo>, arg: Arc<ExprInfo>) -> PointerValue<'c> {
+    fn eval_app(&mut self, lambda: Arc<ExprNode>, arg: Arc<ExprNode>) -> PointerValue<'c> {
         self.scope_lock_as_used_later(&arg.free_vars);
         let lambda_code = self.eval_expr(lambda);
         self.scope_unlock_as_used_later(&arg.free_vars);
@@ -369,7 +369,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate lambda abstraction.
-    fn eval_lam(&mut self, arg: Arc<Var>, val: Arc<ExprInfo>) -> PointerValue<'c> {
+    fn eval_lam(&mut self, arg: Arc<Var>, val: Arc<ExprNode>) -> PointerValue<'c> {
         let context = self.context;
         let module = self.module;
         // Fix ordering of captured names
@@ -450,8 +450,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     fn eval_let(
         &mut self,
         var: Arc<Var>,
-        bound: Arc<ExprInfo>,
-        val: Arc<ExprInfo>,
+        bound: Arc<ExprNode>,
+        val: Arc<ExprNode>,
     ) -> PointerValue<'c> {
         let var_name = &var.name;
         let mut used_in_val_except_var = val.free_vars.clone();
@@ -471,9 +471,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate if
     fn eval_if(
         &mut self,
-        cond_expr: Arc<ExprInfo>,
-        then_expr: Arc<ExprInfo>,
-        else_expr: Arc<ExprInfo>,
+        cond_expr: Arc<ExprNode>,
+        then_expr: Arc<ExprNode>,
+        else_expr: Arc<ExprNode>,
     ) -> PointerValue<'c> {
         let mut used_then_or_else = then_expr.free_vars.clone();
         used_then_or_else.extend(else_expr.free_vars.clone());

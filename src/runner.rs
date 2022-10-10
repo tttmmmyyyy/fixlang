@@ -21,7 +21,7 @@ fn execute_main_module<'c>(
 }
 
 // Add library functions (such as fix) to given ast.
-fn add_builtin_symbols(program: Arc<ExprInfo>) -> Arc<ExprInfo> {
+fn add_builtin_symbols(program: Arc<ExprNode>) -> Arc<ExprNode> {
     let program = expr_let(var_var("add", None, None), add(), program, None);
     let program = expr_let(var_var("eq", None, None), eq(), program, None);
     let program = expr_let(var_var("fix", None, None), fix(), program, None);
@@ -47,7 +47,7 @@ fn add_builtin_symbols(program: Arc<ExprInfo>) -> Arc<ExprInfo> {
     program
 }
 
-fn run_ast(program: Arc<ExprInfo>, opt_level: OptimizationLevel) -> i64 {
+fn run_ast(program: Arc<ExprNode>, opt_level: OptimizationLevel) -> i64 {
     // Add library functions to program.
     let program = add_builtin_symbols(program);
 
@@ -134,7 +134,7 @@ pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
 
 #[cfg(test)]
 // Calculate type of ast.
-fn type_of_ast(program: Arc<ExprInfo>) -> Arc<TypeNode> {
+fn type_of_ast(program: Arc<ExprNode>) -> Arc<TypeNode> {
     // Add library functions to program.
     let program = add_builtin_symbols(program);
 

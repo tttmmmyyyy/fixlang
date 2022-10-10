@@ -84,12 +84,12 @@ where
     // }
 }
 
-pub fn check_type(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
+pub fn check_type(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     let mut scope = Scope::<LocalTermVar>::empty();
     deduce_expr(ei, &mut scope)
 }
 
-fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
+fn deduce_expr(ei: Arc<ExprNode>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprNode> {
     match &*ei.expr {
         Expr::Var(v) => deduce_var(ei.clone(), v.clone(), scope),
         Expr::Lit(lit) => deduce_lit(ei.clone(), lit.clone(), scope),
@@ -110,7 +110,7 @@ fn deduce_expr(ei: Arc<ExprInfo>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprIn
     }
 }
 
-fn deduce_var(ei: Arc<ExprInfo>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprInfo> {
+fn deduce_var(ei: Arc<ExprNode>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprNode> {
     let src = ei.source.clone();
     let ty = scope.get(&var.name);
     let ty = ty
@@ -125,10 +125,10 @@ fn deduce_var(ei: Arc<ExprInfo>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>)
 }
 
 fn deduce_lit(
-    ei: Arc<ExprInfo>,
+    ei: Arc<ExprNode>,
     lit: Arc<Literal>,
     _scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     let lit_ty = lit.ty.clone();
     Arc::new(Expr::Lit(lit))
         .into_expr_info(ei.source.clone())
@@ -136,11 +136,11 @@ fn deduce_lit(
 }
 
 fn deduce_app(
-    ei: Arc<ExprInfo>,
-    func: Arc<ExprInfo>,
-    arg: Arc<ExprInfo>,
+    ei: Arc<ExprNode>,
+    func: Arc<ExprNode>,
+    arg: Arc<ExprNode>,
     scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     let func = deduce_expr(func, scope);
     let arg = deduce_expr(arg, scope);
     let arg_ty = arg.deduced_type.clone().unwrap();
@@ -211,11 +211,11 @@ fn defer_forall_of_fun(ty: Arc<TypeNode>) -> Option<Arc<TypeNode>> {
 }
 
 fn deduce_lam(
-    ei: Arc<ExprInfo>,
+    ei: Arc<ExprNode>,
     param: Arc<Var>,
-    val: Arc<ExprInfo>,
+    val: Arc<ExprNode>,
     scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     let param_ty = param.type_annotation.clone().unwrap();
     scope.push(
         &param.name,
@@ -230,12 +230,12 @@ fn deduce_lam(
 }
 
 fn deduce_let(
-    ei: Arc<ExprInfo>,
+    ei: Arc<ExprNode>,
     var: Arc<Var>,
-    bound: Arc<ExprInfo>,
-    val: Arc<ExprInfo>,
+    bound: Arc<ExprNode>,
+    val: Arc<ExprNode>,
     scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     let bound = deduce_expr(bound, scope);
     let bound_ty = bound.deduced_type.clone().unwrap();
     scope.push(
@@ -261,12 +261,12 @@ fn deduce_let(
 }
 
 fn deduce_if(
-    ei: Arc<ExprInfo>,
-    cond: Arc<ExprInfo>,
-    then_expr: Arc<ExprInfo>,
-    else_expr: Arc<ExprInfo>,
+    ei: Arc<ExprNode>,
+    cond: Arc<ExprNode>,
+    then_expr: Arc<ExprNode>,
+    else_expr: Arc<ExprNode>,
     scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     let cond = deduce_expr(cond, scope);
     let then_expr = deduce_expr(then_expr, scope);
     let else_expr = deduce_expr(else_expr, scope);
@@ -298,11 +298,11 @@ fn deduce_if(
 }
 
 fn deduce_apptype(
-    ei: Arc<ExprInfo>,
-    expr: Arc<ExprInfo>,
+    ei: Arc<ExprNode>,
+    expr: Arc<ExprNode>,
     arg_ty: Arc<TypeNode>,
     scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     let expr = deduce_expr(expr, scope);
     let arg_ty = reduce_type(arg_ty, &mut Scope::<LocalTypeVar>::empty()); // necessary?
     let ty = match &expr.deduced_type.clone().unwrap().ty {
@@ -320,11 +320,11 @@ fn deduce_apptype(
 }
 
 fn deduce_forall(
-    ei: Arc<ExprInfo>,
+    ei: Arc<ExprNode>,
     tyvar: Arc<TyVar>,
-    expr: Arc<ExprInfo>,
+    expr: Arc<ExprNode>,
     scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     let expr = deduce_expr(expr, scope);
     let ty = type_forall(tyvar.clone(), expr.deduced_type.clone().unwrap());
     expr_forall(tyvar, expr, ei.source.clone()).with_deduced_type(ty)

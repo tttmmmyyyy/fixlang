@@ -1,17 +1,17 @@
 use super::super::*;
 use std::{collections::HashSet, sync::Arc};
 
-pub struct ExprInfo {
+pub struct ExprNode {
     pub expr: Arc<Expr>,
     pub free_vars: HashSet<String>,
     pub deduced_type: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
 
-impl ExprInfo {
+impl ExprNode {
     // Add free vars
     fn with_free_vars(self: &Arc<Self>, free_vars: HashSet<String>) -> Arc<Self> {
-        Arc::new(ExprInfo {
+        Arc::new(ExprNode {
             expr: self.expr.clone(),
             free_vars,
             deduced_type: self.deduced_type.clone(),
@@ -22,7 +22,7 @@ impl ExprInfo {
     // Add deduced type
     pub fn with_deduced_type(self: &Arc<Self>, ty: Arc<TypeNode>) -> Arc<Self> {
         let ty = ty.calculate_free_vars();
-        Arc::new(ExprInfo {
+        Arc::new(ExprNode {
             expr: self.expr.clone(),
             free_vars: self.free_vars.clone(),
             deduced_type: Some(ty),
@@ -32,7 +32,7 @@ impl ExprInfo {
 
     // Add source
     pub fn with_source(self: &Arc<Self>, src: Option<Span>) -> Arc<Self> {
-        Arc::new(ExprInfo {
+        Arc::new(ExprNode {
             expr: self.expr.clone(),
             free_vars: self.free_vars.clone(),
             deduced_type: self.deduced_type.clone(),
@@ -45,17 +45,17 @@ impl ExprInfo {
 pub enum Expr {
     Var(Arc<Var>),
     Lit(Arc<Literal>),
-    App(Arc<ExprInfo>, Arc<ExprInfo>),
-    Lam(Arc<Var>, Arc<ExprInfo>),
-    Let(Arc<Var>, Arc<ExprInfo>, Arc<ExprInfo>),
-    If(Arc<ExprInfo>, Arc<ExprInfo>, Arc<ExprInfo>), // TODO: Implement case
-    AppType(Arc<ExprInfo>, Arc<TypeNode>),
-    ForAll(Arc<TyVar>, Arc<ExprInfo>),
+    App(Arc<ExprNode>, Arc<ExprNode>),
+    Lam(Arc<Var>, Arc<ExprNode>),
+    Let(Arc<Var>, Arc<ExprNode>, Arc<ExprNode>),
+    If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>), // TODO: Implement case
+    AppType(Arc<ExprNode>, Arc<TypeNode>),
+    ForAll(Arc<TyVar>, Arc<ExprNode>),
 }
 
 impl Expr {
-    pub fn into_expr_info(self: &Arc<Self>, src: Option<Span>) -> Arc<ExprInfo> {
-        Arc::new(ExprInfo {
+    pub fn into_expr_info(self: &Arc<Self>, src: Option<Span>) -> Arc<ExprNode> {
+        Arc::new(ExprNode {
             expr: self.clone(),
             free_vars: Default::default(),
             deduced_type: None,
@@ -124,7 +124,7 @@ pub fn expr_lit(
     name: String,
     ty: Arc<TypeNode>,
     src: Option<Span>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     Arc::new(Expr::Lit(Arc::new(Literal {
         generator,
         free_vars,
@@ -136,45 +136,45 @@ pub fn expr_lit(
 
 pub fn expr_let(
     var: Arc<Var>,
-    bound: Arc<ExprInfo>,
-    expr: Arc<ExprInfo>,
+    bound: Arc<ExprNode>,
+    expr: Arc<ExprNode>,
     src: Option<Span>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     Arc::new(Expr::Let(var, bound, expr)).into_expr_info(src)
 }
 
-pub fn expr_abs(var: Arc<Var>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_abs(var: Arc<Var>, val: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Lam(var, val)).into_expr_info(src)
 }
 
-pub fn expr_app(lam: Arc<ExprInfo>, arg: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_app(lam: Arc<ExprNode>, arg: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::App(lam, arg)).into_expr_info(src)
 }
 
 // Make variable expression.
-pub fn expr_var(var_name: &str, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_var(var_name: &str, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Var(var_var(var_name, None, src.clone()))).into_expr_info(src)
 }
 
 pub fn expr_if(
-    cond: Arc<ExprInfo>,
-    then_expr: Arc<ExprInfo>,
-    else_expr: Arc<ExprInfo>,
+    cond: Arc<ExprNode>,
+    then_expr: Arc<ExprNode>,
+    else_expr: Arc<ExprNode>,
     src: Option<Span>,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
-pub fn expr_appty(expr: Arc<ExprInfo>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_appty(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::AppType(expr, ty)).into_expr_info(src)
 }
 
-pub fn expr_forall(var: Arc<TyVar>, val: Arc<ExprInfo>, src: Option<Span>) -> Arc<ExprInfo> {
+pub fn expr_forall(var: Arc<TyVar>, val: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::ForAll(var, val)).into_expr_info(src)
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
-pub fn calculate_free_vars(ei: Arc<ExprInfo>) -> Arc<ExprInfo> {
+pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
         Expr::Var(var) => {
             let free_vars = vec![var.name.clone()].into_iter().collect();

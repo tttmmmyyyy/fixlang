@@ -68,7 +68,7 @@ pub fn array_lit_tycon() -> Arc<TyCon> {
     make_bultin_tycon(ARRAY_NAME)
 }
 
-pub fn int(val: i64, source: Option<Span>) -> Arc<ExprInfo> {
+pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let ptr_to_int_obj =
             ObjectType::int_obj_type().create_obj(gc, Some(val.to_string().as_str()));
@@ -79,7 +79,7 @@ pub fn int(val: i64, source: Option<Span>) -> Arc<ExprInfo> {
     expr_lit(generator, vec![], val.to_string(), int_lit_ty(), source)
 }
 
-pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprInfo> {
+pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let ptr_to_obj = ObjectType::bool_obj_type().create_obj(gc, Some(val.to_string().as_str()));
         let value = gc.context.i8_type().const_int(val as u64, false);
@@ -89,7 +89,7 @@ pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprInfo> {
     expr_lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
 }
 
-fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
+fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
     let lhs_str = String::from(lhs);
     let rhs_str = String::from(rhs);
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
@@ -112,7 +112,7 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
     expr_lit(generator, free_vars, name, int_lit_ty(), None)
 }
 
-pub fn add() -> Arc<ExprInfo> {
+pub fn add() -> Arc<ExprNode> {
     expr_abs(
         var_var("lhs", Some(int_lit_ty()), None),
         expr_abs(
@@ -124,7 +124,7 @@ pub fn add() -> Arc<ExprInfo> {
     )
 }
 
-fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
+fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
     let lhs_str = String::from(lhs);
     let rhs_str = String::from(rhs);
     let name = format!("eq {} {}", lhs, rhs);
@@ -157,7 +157,7 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprInfo> {
 }
 
 // eq = for<a> \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
-pub fn eq() -> Arc<ExprInfo> {
+pub fn eq() -> Arc<ExprNode> {
     expr_forall(
         tyvar_from_name("a"),
         expr_abs(
@@ -173,7 +173,7 @@ pub fn eq() -> Arc<ExprInfo> {
     )
 }
 
-fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
+fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = String::from(f);
     let x_str = String::from(x);
     let name = format!("fix {} {}", f_str, x_str);
@@ -190,7 +190,7 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprInfo> {
 }
 
 // fix = for<a, b> \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
-pub fn fix() -> Arc<ExprInfo> {
+pub fn fix() -> Arc<ExprNode> {
     let fixed_ty = type_func(type_tyvar("a"), type_tyvar("b"));
     expr_forall(
         tyvar_from_name("a"),
@@ -212,7 +212,7 @@ pub fn fix() -> Arc<ExprInfo> {
 }
 
 // Implementation of newArray built-in function.
-fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprInfo> {
+fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let size_str = String::from(size);
     let value_str = String::from(value);
     let name = format!("newArray {} {}", size, value);
@@ -246,7 +246,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprInfo> {
 
 // "newArray" built-in function.
 // newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
-pub fn new_array() -> Arc<ExprInfo> {
+pub fn new_array() -> Arc<ExprNode> {
     expr_forall(
         tyvar_from_name("a"),
         expr_abs(
@@ -263,7 +263,7 @@ pub fn new_array() -> Arc<ExprInfo> {
 }
 
 // Implementation of readArray built-in function.
-fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprInfo> {
+fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let array_str = String::from(array);
     let idx_str = String::from(idx);
     let name = format!("readArray {} {}", array, idx);
@@ -290,7 +290,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprInfo> {
 
 // "readArray" built-in function.
 // readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
-pub fn read_array() -> Arc<ExprInfo> {
+pub fn read_array() -> Arc<ExprNode> {
     expr_forall(
         tyvar_from_name("a"),
         expr_abs(
@@ -318,7 +318,7 @@ fn write_array_lit(
     idx: &str,
     value: &str,
     is_unique_version: bool,
-) -> Arc<ExprInfo> {
+) -> Arc<ExprNode> {
     let array_str = String::from(array);
     let idx_str = String::from(idx);
     let value_str = String::from(value);
@@ -414,7 +414,7 @@ fn write_array_lit(
 
 // writeArray built-in function.
 // writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
-pub fn write_array_common(is_unique_version: bool) -> Arc<ExprInfo> {
+pub fn write_array_common(is_unique_version: bool) -> Arc<ExprNode> {
     expr_forall(
         tyvar_from_name("a"),
         expr_abs(
@@ -439,11 +439,11 @@ pub fn write_array_common(is_unique_version: bool) -> Arc<ExprInfo> {
 }
 
 // writeArray built-in function.
-pub fn write_array() -> Arc<ExprInfo> {
+pub fn write_array() -> Arc<ExprNode> {
     write_array_common(false)
 }
 
 // writeArray! built-in function.
-pub fn write_array_unique() -> Arc<ExprInfo> {
+pub fn write_array_unique() -> Arc<ExprNode> {
     write_array_common(true)
 }
