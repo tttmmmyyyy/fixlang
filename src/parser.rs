@@ -218,7 +218,7 @@ fn parse_forall_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprInfo> {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::type_var => {
-                vars.push(var_tyvar(pair.as_str()));
+                vars.push(tyvar_from_name(pair.as_str()));
             }
             Rule::expr => {
                 break parse_expr(pair, src);
@@ -349,7 +349,7 @@ fn parse_type_forall(type_expr: Pair<Rule>) -> Arc<TypeNode> {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::type_var => {
-                vars.push(var_tyvar(pair.as_str()));
+                vars.push(tyvar_from_name(pair.as_str()));
             }
             Rule::type_expr => {
                 break parse_type(pair);

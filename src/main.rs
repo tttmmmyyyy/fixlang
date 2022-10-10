@@ -17,7 +17,8 @@ mod tests;
 mod typecheck;
 mod types;
 
-use ast::*;
+use ast::expr::*;
+use ast::types::*;
 use builtin::*;
 use clap::{App, AppSettings, Arg};
 use generator::*;
