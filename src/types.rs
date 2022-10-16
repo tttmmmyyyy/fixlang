@@ -206,6 +206,7 @@ impl ObjectFieldType {
             };
 
             // Generate loop.
+            // NOTE: if you see error at here, try `cargo clean`.
             Self::loop_over_array(gc, array_ptr, loop_body, after_loop);
         }
     }

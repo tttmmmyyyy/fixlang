@@ -211,3 +211,30 @@ impl TypeNode {
         free_vars
     }
 }
+
+// Scheme = forall<a1,..,> (...type...)
+pub struct Scheme {
+    pub vars: HashSet<String>,
+    pub ty: Arc<TypeNode>,
+}
+
+impl Scheme {
+    // Create new instance.
+    pub fn new_arc(vars: HashSet<String>, ty: Arc<TypeNode>) -> Arc<Scheme> {
+        Arc::new(Scheme { vars, ty })
+    }
+
+    // Create new instance.
+    pub fn new_arc_from_str(vars: &[&str], ty: Arc<TypeNode>) -> Arc<Scheme> {
+        Self::new_arc(HashSet::from_iter(vars.iter().map(|s| s.to_string())), ty)
+    }
+
+    // Get free type variables.
+    pub fn free_vars(&self) -> HashSet<String> {
+        let mut ret = self.ty.free_vars();
+        for var in &self.vars {
+            ret.remove(var);
+        }
+        ret
+    }
+}

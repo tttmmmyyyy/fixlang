@@ -20,28 +20,6 @@ fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
     error_exit(&str)
 }
 
-// Scheme = forall<a1,..,> (...type...)
-struct Scheme {
-    vars: HashSet<String>,
-    ty: Arc<TypeNode>,
-}
-
-impl Scheme {
-    // Create new instance.
-    fn new_arc(vars: HashSet<String>, ty: Arc<TypeNode>) -> Arc<Scheme> {
-        Arc::new(Scheme { vars, ty })
-    }
-
-    // Get free type variables.
-    fn free_vars(&self) -> HashSet<String> {
-        let mut ret = self.ty.free_vars();
-        for var in &self.vars {
-            ret.remove(var);
-        }
-        ret
-    }
-}
-
 #[derive(Clone)]
 struct LocalTypeVar {
     ty: Arc<TypeNode>,
@@ -369,7 +347,22 @@ impl TypeCheckContext {
                 self.scope.pop(&arg.name);
             }
             Expr::Let(var, val, body) => {
-                let var_ty = type_tyvar(&self.new_tyvar());
+                let var_ty = match &var.type_annotation {
+                    Some(scm) => {
+                        let free_vars = scm.free_vars();
+                        if !free_vars.is_empty() {
+                            error_exit_with_src(
+                                &format!(
+                                    "unknown type variable `{}`",
+                                    free_vars.iter().next().unwrap()
+                                ),
+                                &var.source,
+                            )
+                        }
+                        self.instantiate_scheme(&scm)
+                    }
+                    None => type_tyvar(&self.new_tyvar()),
+                };
                 self.deduce_expr(val, var_ty.clone());
                 let var_scm = self.abstruct_to_scheme(&var_ty);
                 self.scope.push(&var.name, &var_scm);

@@ -112,16 +112,17 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
     expr_lit(generator, free_vars, name, int_lit_ty(), None)
 }
 
-pub fn add() -> Arc<ExprNode> {
-    expr_abs(
-        var_var("lhs", Some(int_lit_ty()), None),
-        expr_abs(
-            var_var("rhs", Some(int_lit_ty()), None),
-            add_lit("lhs", "rhs"),
-            None,
-        ),
+pub fn add() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let expr = expr_abs(
+        var_var("lhs", None, None),
+        expr_abs(var_var("rhs", None, None), add_lit("lhs", "rhs"), None),
         None,
-    )
+    );
+    let scm = Scheme::new_arc_from_str(
+        &[],
+        type_fun(int_lit_ty(), type_fun(int_lit_ty(), int_lit_ty())),
+    );
+    (expr, scm)
 }
 
 fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
@@ -157,16 +158,17 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
 }
 
 // eq = \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
-pub fn eq() -> Arc<ExprNode> {
-    expr_abs(
-        var_var("lhs", Some(type_tyvar("a")), None),
-        expr_abs(
-            var_var("rhs", Some(type_tyvar("a")), None),
-            eq_lit("lhs", "rhs"),
-            None,
-        ),
+pub fn eq() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let expr = expr_abs(
+        var_var("lhs", None, None),
+        expr_abs(var_var("rhs", None, None), eq_lit("lhs", "rhs"), None),
         None,
-    )
+    );
+    let scm = Scheme::new_arc_from_str(
+        &["a"],
+        type_fun(type_tyvar("a"), type_fun(type_tyvar("a"), bool_lit_ty())),
+    );
+    (expr, scm)
 }
 
 fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
@@ -186,17 +188,18 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
 }
 
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
-pub fn fix() -> Arc<ExprNode> {
-    let fixed_ty = type_fun(type_tyvar("a"), type_tyvar("b"));
-    expr_abs(
-        var_var("f", Some(type_fun(fixed_ty.clone(), fixed_ty)), None),
-        expr_abs(
-            var_var("x", Some(type_tyvar("a")), None),
-            fix_lit("b", "f", "x"),
-            None,
-        ),
+pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let expr = expr_abs(
+        var_var("f", None, None),
+        expr_abs(var_var("x", None, None), fix_lit("b", "f", "x"), None),
         None,
-    )
+    );
+    let fixed_ty = type_fun(type_tyvar("a"), type_tyvar("b"));
+    let scm = Scheme::new_arc_from_str(
+        &["a", "b"],
+        type_fun(type_fun(fixed_ty.clone(), fixed_ty.clone()), fixed_ty),
+    );
+    (expr, scm)
 }
 
 // Implementation of newArray built-in function.
@@ -234,16 +237,27 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
 
 // "newArray" built-in function.
 // newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
-pub fn new_array() -> Arc<ExprNode> {
-    expr_abs(
-        var_var("size", Some(int_lit_ty()), None),
+pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let expr = expr_abs(
+        var_var("size", None, None),
         expr_abs(
-            var_var("value", Some(type_tyvar("a")), None),
+            var_var("value", None, None),
             new_array_lit("a", "size", "value"),
             None,
         ),
         None,
-    )
+    );
+    let scm = Scheme::new_arc_from_str(
+        &["a"],
+        type_fun(
+            int_lit_ty(),
+            type_fun(
+                type_tyvar("a"),
+                type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")]),
+            ),
+        ),
+    );
+    (expr, scm)
 }
 
 // Implementation of readArray built-in function.
@@ -274,20 +288,24 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
 
 // "readArray" built-in function.
 // readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
-pub fn read_array() -> Arc<ExprNode> {
-    expr_abs(
-        var_var(
-            "array",
-            Some(type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
-            None,
-        ),
+pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let expr = expr_abs(
+        var_var("array", None, None),
         expr_abs(
-            var_var("idx", Some(int_lit_ty()), None),
+            var_var("idx", None, None),
             read_array_lit("a", "array", "idx"),
             None,
         ),
         None,
-    )
+    );
+    let scm = Scheme::new_arc_from_str(
+        &["a"],
+        type_fun(
+            type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")]),
+            type_fun(int_lit_ty(), type_tyvar("a")),
+        ),
+    );
+    (expr, scm)
 }
 
 // Implementation of writeArray / writeArray! built-in function.
@@ -394,32 +412,37 @@ fn write_array_lit(
 
 // writeArray built-in function.
 // writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
-pub fn write_array_common(is_unique_version: bool) -> Arc<ExprNode> {
-    expr_abs(
-        var_var(
-            "array",
-            Some(type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
-            None,
-        ),
+pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+    let expr = expr_abs(
+        var_var("array", None, None),
         expr_abs(
-            var_var("idx", Some(int_lit_ty()), None),
+            var_var("idx", None, None),
             expr_abs(
-                var_var("value", Some(type_tyvar("a")), None),
+                var_var("value", None, None),
                 write_array_lit("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
             None,
         ),
         None,
-    )
+    );
+    let array_ty = type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")]);
+    let scm = Scheme::new_arc_from_str(
+        &["a"],
+        type_fun(
+            array_ty.clone(),
+            type_fun(int_lit_ty(), type_fun(type_tyvar("a"), array_ty)),
+        ),
+    );
+    (expr, scm)
 }
 
 // writeArray built-in function.
-pub fn write_array() -> Arc<ExprNode> {
+pub fn write_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     write_array_common(false)
 }
 
 // writeArray! built-in function.
-pub fn write_array_unique() -> Arc<ExprNode> {
+pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
     write_array_common(true)
 }

@@ -81,13 +81,13 @@ pub struct Literal {
 
 pub struct Var {
     pub name: String,
-    pub type_annotation: Option<Arc<TypeNode>>,
+    pub type_annotation: Option<Arc<Scheme>>,
     pub source: Option<Span>,
 }
 
 pub fn var_var(
     var_name: &str,
-    type_annotation: Option<Arc<TypeNode>>,
+    type_annotation: Option<Arc<Scheme>>,
     src: Option<Span>,
 ) -> Arc<Var> {
     Arc::new(Var {
