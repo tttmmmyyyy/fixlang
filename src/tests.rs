@@ -215,7 +215,7 @@ pub fn test19() {
 #[test]
 #[serial]
 pub fn test20() {
-    let source = r"if eq<Int> 3 5 then 1 else 0";
+    let source = r"if eq 3 5 then 1 else 0";
     let answer = 0;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -224,7 +224,7 @@ pub fn test20() {
 #[serial]
 pub fn test20_5() {
     let source = r"         
-        if eq<Int> 2 0 then -- type explicitly specified
+        if eq 2 0 then
             0 
         else if eq 2 1 then 
             1
@@ -240,7 +240,7 @@ pub fn test21() {
     let n = 10000;
     let source = format!(
         r"
-                let g = fix \f:Int=>Int -> \x: Int -> if eq x 0 then 0 else add x (f (add x -1));
+                let g = fix \f -> \x -> if eq x 0 then 0 else add x (f (add x -1));
                 g {}
         ",
         n
@@ -255,7 +255,7 @@ pub fn test22() {
     let n = 100000;
     let source = format!(
         r"
-                let g = fix \f:Int=>Int=>Int -> \a:Int -> \x:Int -> 
+                let g = fix \f -> \a -> \x -> 
                             if eq x 0 then 
                                 a 
                             else
@@ -274,7 +274,7 @@ pub fn test22() {
 #[serial]
 pub fn test22_5() {
     let source = r"
-        let fib = fix \f:Int=>Int -> \n:Int ->
+        let fib = fix \f -> \n ->
                     if eq n 0 then
                         0
                     else if eq n 1 then
@@ -331,7 +331,7 @@ pub fn test26() {
     let source = r"
             let arr = newArray 100 42;
             let arr = writeArray arr 50 21;
-            readArray<Int> arr 50
+            readArray arr 50
         ";
     let answer = 21;
     test_run_source(source, answer, OptimizationLevel::Default);
@@ -345,7 +345,7 @@ pub fn test28() {
             let arr = newArray 31 0;
             let arr = writeArray! arr 0 0;
             let arr = writeArray! arr 1 1;
-            let loop = fix \f:(Array<Int> => Int => Array<Int>) -> \arr:Array<Int> -> \n:Int ->
+            let loop = fix \f -> \arr -> \n ->
                 if eq n 31 then
                     arr
                 else
@@ -364,26 +364,10 @@ pub fn test28() {
 #[serial]
 pub fn test29() {
     let source = r"
-            let id = for<a> \x: a -> x;
+            let id = \x -> x;
             if id true then id 100 else 30
         ";
     let answer = 100;
-    test_run_source(source, answer, OptimizationLevel::Default);
-}
-
-#[test]
-#[serial]
-pub fn test30() {
-    // Is type "for<a> a => a" is equivalent to "for<b> b => b"?
-    let source = r"
-            let id = if true 
-                then 
-                    for<a> \x: a -> x 
-                else 
-                    for<b> \y: b -> y;
-            id<Int> 5
-        ";
-    let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
