@@ -325,8 +325,8 @@ impl TypeCheckContext {
                     error_exit_with_src(
                         &format!(
                             "cannot match type `{}` to `{}`",
-                            &var_ty.to_string(),
-                            &ty.to_string()
+                            &self.substitute_type(&var_ty).to_string(),
+                            &self.substitute_type(&ty).to_string()
                         ),
                         &ei.source,
                     );
@@ -338,7 +338,7 @@ impl TypeCheckContext {
                         &format!(
                             "cannot match type `{}` to `{}`",
                             &lit.ty.to_string(),
-                            &ty.to_string()
+                            &self.substitute_type(&ty).to_string()
                         ),
                         &ei.source,
                     );
@@ -357,8 +357,8 @@ impl TypeCheckContext {
                     error_exit_with_src(
                         &format!(
                             "cannot match type `{}` to `{}`",
-                            &fun_ty.to_string(),
-                            &ty.to_string()
+                            &self.substitute_type(&fun_ty).to_string(),
+                            &self.substitute_type(&ty).to_string()
                         ),
                         &ei.source,
                     );
