@@ -22,28 +22,28 @@ fn execute_main_module<'c>(
 
 // Add library functions (such as fix) to given ast.
 fn add_builtin_symbols(program: Arc<ExprNode>) -> Arc<ExprNode> {
-    // let program = expr_let(var_var("add", None, None), add(), program, None);
-    // let program = expr_let(var_var("eq", None, None), eq(), program, None);
-    // let program = expr_let(var_var("fix", None, None), fix(), program, None);
-    // let program = expr_let(var_var("newArray", None, None), new_array(), program, None);
-    // let program = expr_let(
-    //     var_var("readArray", None, None),
-    //     read_array(),
-    //     program,
-    //     None,
-    // );
-    // let program = expr_let(
-    //     var_var("writeArray", None, None),
-    //     write_array(),
-    //     program,
-    //     None,
-    // );
-    // let program = expr_let(
-    //     var_var("writeArray!", None, None),
-    //     write_array_unique(),
-    //     program,
-    //     None,
-    // );
+    let program = expr_let(var_var("add", None, None), add(), program, None);
+    let program = expr_let(var_var("eq", None, None), eq(), program, None);
+    let program = expr_let(var_var("fix", None, None), fix(), program, None);
+    let program = expr_let(var_var("newArray", None, None), new_array(), program, None);
+    let program = expr_let(
+        var_var("readArray", None, None),
+        read_array(),
+        program,
+        None,
+    );
+    let program = expr_let(
+        var_var("writeArray", None, None),
+        write_array(),
+        program,
+        None,
+    );
+    let program = expr_let(
+        var_var("writeArray!", None, None),
+        write_array_unique(),
+        program,
+        None,
+    );
     program
 }
 
