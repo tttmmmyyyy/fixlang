@@ -159,6 +159,8 @@ impl Substitution {
                     let mut ret = Self::default();
                     for (i, ty1) in args1.iter().enumerate() {
                         let ty2 = &args2[i];
+                        let ty1 = &ret.substitute_type(ty1);
+                        let ty2 = &ret.substitute_type(ty2);
                         match Self::unify(ty1, &ty2) {
                             Some(sub) => ret.add_substitution(&sub),
                             None => return None,
@@ -177,6 +179,8 @@ impl Substitution {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
+                    let ret_ty1 = ret.substitute_type(ret_ty1);
+                    let ret_ty2 = ret.substitute_type(ret_ty2);
                     match Self::unify(&ret_ty1, &ret_ty2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,

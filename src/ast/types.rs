@@ -237,4 +237,21 @@ impl Scheme {
         }
         ret
     }
+
+    // Stringify.
+    pub fn to_string(&self) -> String {
+        let mut ret = String::default();
+        if self.vars.len() > 0 {
+            ret += "for<";
+            for (i, var) in self.vars.iter().enumerate() {
+                ret += var;
+                if i < self.vars.len() - 1 {
+                    ret += ",";
+                }
+            }
+            ret += "> ";
+        }
+        ret += &self.ty.to_string();
+        ret
+    }
 }
