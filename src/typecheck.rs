@@ -159,7 +159,11 @@ impl Substitution {
             Type::TyVar(_) => unreachable!(),
             Type::LitTy(lit1) => match &ty2.ty {
                 Type::LitTy(lit2) => {
-                    return Some(Self::default());
+                    if lit1.id == lit2.id {
+                        return Some(Self::default());
+                    } else {
+                        return None;
+                    }
                 }
                 _ => {
                     return None;
@@ -348,7 +352,17 @@ impl TypeCheckContext {
             Expr::Lam(arg, body) => {
                 let arg_ty = type_tyvar(&self.new_tyvar());
                 let body_ty = type_tyvar(&self.new_tyvar());
-                self.unify(&type_fun(arg_ty.clone(), body_ty.clone()), &ty);
+                let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
+                if !self.unify(&fun_ty, &ty) {
+                    error_exit_with_src(
+                        &format!(
+                            "cannot match type `{}` to `{}`",
+                            &fun_ty.to_string(),
+                            &ty.to_string()
+                        ),
+                        &ei.source,
+                    );
+                }
                 self.scope
                     .push(&arg.name, &Scheme::new_arc(Default::default(), arg_ty));
                 self.deduce_expr(body, body_ty);
