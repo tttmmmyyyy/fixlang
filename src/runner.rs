@@ -52,15 +52,7 @@ fn run_ast(program: Arc<ExprNode>, opt_level: OptimizationLevel) -> i64 {
     let program = add_builtin_symbols(program);
 
     // Check types.
-    let program = check_type(program);
-
-    let program_ty = program.deduced_type.clone().unwrap();
-    if !is_eqv_type(&program_ty, &int_lit_ty()) {
-        error_exit(&format!(
-            "wrong program type: expected Int, found {}",
-            program_ty.to_string(),
-        ))
-    }
+    check_type(program.clone(), int_lit_ty());
 
     // Calculate free variables of nodes.
     let program = calculate_free_vars(program);
@@ -130,22 +122,4 @@ pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
     }
 
     run_source(s.as_str(), opt_level)
-}
-
-#[cfg(test)]
-// Calculate type of ast.
-fn type_of_ast(program: Arc<ExprNode>) -> Arc<TypeNode> {
-    // Add library functions to program.
-    let program = add_builtin_symbols(program);
-
-    // Check types.
-    let program = check_type(program);
-
-    program.deduced_type.clone().unwrap()
-}
-
-#[cfg(test)]
-// Calculate type of given source program.
-pub fn type_of_source(source: &str) -> Arc<TypeNode> {
-    type_of_ast(parse_source(source))
 }

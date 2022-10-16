@@ -1,4 +1,5 @@
 use core::panic;
+use std::hash::Hash;
 
 use super::*;
 
@@ -19,9 +20,26 @@ fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
     error_exit(&str)
 }
 
-#[derive(Clone)]
-struct LocalTermVar {
+// Scheme = forall<a1,..,> (...type...)
+struct Scheme {
+    vars: HashSet<String>,
     ty: Arc<TypeNode>,
+}
+
+impl Scheme {
+    // Create new instance.
+    fn new_arc(vars: HashSet<String>, ty: Arc<TypeNode>) -> Arc<Scheme> {
+        Arc::new(Scheme { vars, ty })
+    }
+
+    // Get free type variables.
+    fn free_vars(&self) -> HashSet<String> {
+        let mut ret = self.ty.free_vars();
+        for var in &self.vars {
+            ret.remove(var);
+        }
+        ret
+    }
 }
 
 #[derive(Clone)]
@@ -29,16 +47,14 @@ struct LocalTypeVar {
     ty: Arc<TypeNode>,
     /* field for type class */
 }
-
 struct Scope<T> {
     var: HashMap<String, Vec<T>>,
-    // type_var: HashMap<String, Vec<LocalTypeVar>>,
 }
 
-impl<T> Scope<T> {
-    fn empty() -> Self {
+impl<T> Default for Scope<T> {
+    fn default() -> Self {
         Self {
-            var: HashMap::new(),
+            var: Default::default(),
         }
     }
 }
@@ -66,502 +82,291 @@ where
     fn get_mut(self: &mut Self, name: &str) -> Option<&mut T> {
         self.var.get_mut(name).map(|v| v.last_mut().unwrap())
     }
-
-    // fn push_type(self: &mut Self, name: &str) {
-    //     if !self.type_var.contains_key(name) {
-    //         self.type_var.insert(String::from(name), Default::default());
-    //     }
-    //     self.type_var.get_mut(name).unwrap().push(LocalTypeVar {});
-    // }
-    // fn pop_type(self: &mut Self, name: &str) {
-    //     self.type_var.get_mut(name).unwrap().pop();
-    //     if self.type_var.get(name).unwrap().is_empty() {
-    //         self.type_var.remove(name);
-    //     }
-    // }
-    // fn get_type(self: &Self, name: &str) -> LocalTypeVar {
-    //     self.type_var.get(name).unwrap().last().unwrap().clone()
-    // }
 }
 
-pub fn check_type(ei: Arc<ExprNode>) -> Arc<ExprNode> {
-    let mut scope = Scope::<LocalTermVar>::empty();
-    deduce_expr(ei, &mut scope)
+pub fn check_type(ei: Arc<ExprNode>, ty: Arc<TypeNode>) {
+    let mut ctx = TypeCheckContext::default();
+    ctx.deduce_expr(&ei, ty);
 }
 
-fn deduce_expr(ei: Arc<ExprNode>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprNode> {
-    match &*ei.expr {
-        Expr::Var(v) => deduce_var(ei.clone(), v.clone(), scope),
-        Expr::Lit(lit) => deduce_lit(ei.clone(), lit.clone(), scope),
-        Expr::App(func, arg) => deduce_app(ei.clone(), func.clone(), arg.clone(), scope),
-        Expr::Lam(arg, val) => deduce_lam(ei.clone(), arg.clone(), val.clone(), scope),
-        Expr::Let(var, bound, val) => {
-            deduce_let(ei.clone(), var.clone(), bound.clone(), val.clone(), scope)
+// Type substitution. Name of type variable -> type.
+// Managed so that the value (a type) of this HashMap doesn't contain a type variable that appears in keys. i.e.,
+// when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
+struct Substitution {
+    data: HashMap<String, Arc<TypeNode>>,
+}
+
+impl Default for Substitution {
+    fn default() -> Self {
+        Self {
+            data: Default::default(),
         }
-        Expr::If(cond, then_expr, else_expr) => deduce_if(
-            ei.clone(),
-            cond.clone(),
-            then_expr.clone(),
-            else_expr.clone(),
-            scope,
-        ),
-        Expr::AppType(expr, ty) => deduce_apptype(ei.clone(), expr.clone(), ty.clone(), scope),
-        Expr::ForAll(tyvar, expr) => deduce_forall(ei.clone(), tyvar.clone(), expr.clone(), scope),
     }
 }
 
-fn deduce_var(ei: Arc<ExprNode>, var: Arc<Var>, scope: &mut Scope<LocalTermVar>) -> Arc<ExprNode> {
-    let src = ei.source.clone();
-    let ty = scope.get(&var.name);
-    let ty = ty
-        .unwrap_or_else(|| {
-            error_exit_with_src(&format!("unknown variable `{}`", var.name), &src);
-        })
-        .ty
-        .clone();
-    Arc::new(Expr::Var(var))
-        .into_expr_info(ei.source.clone())
-        .set_deduced_type(ty)
-}
-
-fn deduce_lit(
-    ei: Arc<ExprNode>,
-    lit: Arc<Literal>,
-    _scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprNode> {
-    let lit_ty = lit.ty.clone();
-    Arc::new(Expr::Lit(lit))
-        .into_expr_info(ei.source.clone())
-        .set_deduced_type(lit_ty.clone())
-}
-
-fn deduce_app(
-    ei: Arc<ExprNode>,
-    func: Arc<ExprNode>,
-    arg: Arc<ExprNode>,
-    scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprNode> {
-    let func = deduce_expr(func, scope);
-    let arg = deduce_expr(arg, scope);
-    let arg_ty = arg.deduced_type.clone().unwrap();
-    let fun_ty = func.deduced_type.clone().unwrap();
-
-    // If func_ty is for<...> x => y, then infer ... as long as possible by matching x to arg_ty.
-    let fun_ty = defer_forall_of_fun(fun_ty);
-    if fun_ty.is_none() {
-        error_exit_with_src(
-            &format!("an expression is not a function but applied\n",),
-            &func.source,
-        )
-    }
-    let fun_ty = fun_ty.unwrap();
-    let (vars, fun_ty) = fun_ty.decompose_forall_reversed();
-    let (param_ty, body_ty) = match &fun_ty.ty {
-        Type::FunTy(x, y) => (x, y),
-        _ => unreachable!(),
-    };
-    let mut vars_infer = HashSet::<String>::default();
-    vars_infer.extend(vars.iter().map(|v| v.name.clone()));
-    let inferred = match_type(param_ty, &arg_ty, vars_infer);
-    if inferred.is_none() {
-        error_exit_with_src(
-            &format!(
-                "type mismatch: expected {}, found {}",
-                &param_ty.clone().to_string(),
-                &arg_ty.clone().to_string(),
-            ),
-            &arg.source,
-        )
-    }
-    let inferred = inferred.unwrap();
-    let mut reduce_scope = Scope::<LocalTypeVar>::empty();
-    for (var_name, ty) in inferred.iter() {
-        reduce_scope.push(var_name, &LocalTypeVar { ty: ty.clone() });
-    }
-    let ty = reduce_type(body_ty.clone(), &mut reduce_scope);
-    expr_app(func, arg, ei.source.clone()).set_deduced_type(ty)
-}
-
-// Transform a type of form "for<...> x => y" to "for<a1,...,an> x => for<...> y" as far as possible,
-// where a1,...,an are type variables used in x.
-// Returns None if given type isn't of form for<...> x => y.
-fn defer_forall_of_fun(ty: Arc<TypeNode>) -> Option<Arc<TypeNode>> {
-    let (vars, fun_ty) = ty.decompose_forall_reversed();
-    let (x, mut y) = match &fun_ty.ty {
-        Type::FunTy(x, y) => (x.clone(), y.clone()),
-        _ => return None,
-    };
-
-    let used_in_x = x.calculate_free_vars().info.free_vars.clone().unwrap();
-    let (outer_vars, inner_vars): (Vec<Arc<TyVar>>, Vec<Arc<TyVar>>) = vars
-        .iter()
-        .map(|var| var.clone())
-        .partition(|var| used_in_x.contains(&var.name));
-
-    for var in inner_vars.iter() {
-        y = type_forall(var.clone(), y).calculate_free_vars();
+impl Substitution {
+    // Make single substitution.
+    fn single(var: &str, ty: Arc<TypeNode>) -> Self {
+        let mut data = HashMap::<String, Arc<TypeNode>>::default();
+        data.insert(var.to_string(), ty);
+        Self { data }
     }
 
-    let mut ret = type_func(x, y).calculate_free_vars();
-    for var in outer_vars.iter() {
-        ret = type_forall(var.clone(), ret).calculate_free_vars();
+    // Add substitution.
+    fn add_substitution(&mut self, other: &Self) {
+        for (_var, ty) in self.data.iter_mut() {
+            let new_ty = other.substitute_type(&ty);
+            *ty = new_ty;
+        }
+        for (var, ty) in &other.data {
+            self.data.insert(var.to_string(), ty.clone());
+        }
     }
 
-    Some(ret)
-}
-
-fn deduce_lam(
-    ei: Arc<ExprNode>,
-    param: Arc<Var>,
-    val: Arc<ExprNode>,
-    scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprNode> {
-    let param_ty = param.type_annotation.clone().unwrap();
-    scope.push(
-        &param.name,
-        &LocalTermVar {
-            ty: param_ty.clone(),
-        },
-    );
-    let val = deduce_expr(val, scope);
-    scope.pop(&param.name);
-    let val_ty = val.deduced_type.clone().unwrap();
-    expr_abs(param, val, ei.source.clone()).set_deduced_type(type_func(param_ty, val_ty))
-}
-
-fn deduce_let(
-    ei: Arc<ExprNode>,
-    var: Arc<Var>,
-    bound: Arc<ExprNode>,
-    val: Arc<ExprNode>,
-    scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprNode> {
-    let bound = deduce_expr(bound, scope);
-    let bound_ty = bound.deduced_type.clone().unwrap();
-    scope.push(
-        &var.name,
-        &LocalTermVar {
-            ty: bound_ty.clone(),
-        },
-    );
-    let val = deduce_expr(val, scope);
-    scope.pop(&var.name);
-    let val_ty = val.deduced_type.clone().unwrap();
-    let ty = match var.type_annotation.clone() {
-        Some(annotation) => {
-            if is_eqv_type(&annotation, &bound_ty) {
-                val_ty
-            } else {
-                panic!("Type mismatch on let");
+    // Apply substitution.
+    fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+        match &ty.ty {
+            Type::TyVar(tyvar) => self
+                .data
+                .get(&tyvar.name)
+                .map_or(ty.clone(), |sub| sub.clone()),
+            Type::LitTy(_) => ty.clone(),
+            Type::TyConApp(tycon, args) => {
+                let args = args.iter().map(|arg| self.substitute_type(arg)).collect();
+                type_tycon_app(tycon.clone(), args)
+            }
+            Type::FunTy(param, body) => {
+                type_fun(self.substitute_type(&param), self.substitute_type(&body))
             }
         }
-        None => val_ty,
-    };
-    expr_let(var, bound, val, ei.source.clone()).set_deduced_type(ty)
-}
+    }
 
-fn deduce_if(
-    ei: Arc<ExprNode>,
-    cond: Arc<ExprNode>,
-    then_expr: Arc<ExprNode>,
-    else_expr: Arc<ExprNode>,
-    scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprNode> {
-    let cond = deduce_expr(cond, scope);
-    let then_expr = deduce_expr(then_expr, scope);
-    let else_expr = deduce_expr(else_expr, scope);
-    let then_ty = then_expr.deduced_type.clone().unwrap();
-    let else_ty = else_expr.deduced_type.clone().unwrap();
-    let ty = if is_eqv_type(&then_ty, &else_ty) {
-        if is_eqv_type(&cond.deduced_type.clone().unwrap(), &bool_lit_ty()) {
-            then_ty
-        } else {
-            error_exit_with_src(
-                &format!(
-                    "expected Bool, found {}",
-                    cond.deduced_type.clone().unwrap().to_string()
-                ),
-                &cond.source,
-            )
+    // Calculate minimum substitution to unify two types.
+    fn unify(ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> Option<Self> {
+        match &ty1.ty {
+            Type::TyVar(var1) => {
+                return Self::unify_tyvar(&var1, ty2);
+            }
+            _ => {}
         }
-    } else {
-        error_exit_with_src(
-            &format!(
-                "type mismatch between then and else: expected {}, found {}",
-                &then_ty.to_string(),
-                &else_ty.to_string()
-            ),
-            &else_expr.source,
-        )
-    };
-    expr_if(cond, then_expr, else_expr, ei.source.clone()).set_deduced_type(ty)
-}
-
-fn deduce_apptype(
-    ei: Arc<ExprNode>,
-    expr: Arc<ExprNode>,
-    arg_ty: Arc<TypeNode>,
-    scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprNode> {
-    let expr = deduce_expr(expr, scope);
-    let arg_ty = reduce_type(arg_ty, &mut Scope::<LocalTypeVar>::empty()); // necessary?
-    let ty = match &expr.deduced_type.clone().unwrap().ty {
-        Type::ForAllTy(var, val_ty) => {
-            let mut ty_scope = Scope::<LocalTypeVar>::empty();
-            ty_scope.push(&var.name, &LocalTypeVar { ty: arg_ty.clone() });
-            reduce_type(val_ty.clone(), &mut ty_scope)
+        match &ty2.ty {
+            Type::TyVar(var2) => {
+                return Self::unify_tyvar(&var2, ty1);
+            }
+            _ => {}
         }
-        _ => error_exit_with_src(
-            &format!("type argument given to non-polymorphic expression"),
-            &ei.source,
-        ),
-    };
-    expr_appty(expr, arg_ty, ei.source.clone()).set_deduced_type(ty)
-}
-
-fn deduce_forall(
-    ei: Arc<ExprNode>,
-    tyvar: Arc<TyVar>,
-    expr: Arc<ExprNode>,
-    scope: &mut Scope<LocalTermVar>,
-) -> Arc<ExprNode> {
-    let expr = deduce_expr(expr, scope);
-    let ty = type_forall(tyvar.clone(), expr.deduced_type.clone().unwrap());
-    expr_forall(tyvar, expr, ei.source.clone()).set_deduced_type(ty)
-}
-
-fn reduce_type(ty: Arc<TypeNode>, scope: &mut Scope<LocalTypeVar>) -> Arc<TypeNode> {
-    match &ty.ty {
-        Type::AppTy(fun_ty, arg_ty) => {
-            let arg_ty = reduce_type(arg_ty.clone(), scope);
-            match &fun_ty.ty {
-                Type::ForAllTy(param_ty, val_ty) => {
-                    scope.push(param_ty.name.as_str(), &LocalTypeVar { ty: arg_ty });
-                    let val_ty = reduce_type(val_ty.clone(), scope);
-                    scope.pop(param_ty.name.as_str());
-                    val_ty
+        match &ty1.ty {
+            Type::TyVar(_) => unreachable!(),
+            Type::LitTy(lit1) => match &ty2.ty {
+                Type::LitTy(lit2) => {
+                    return Some(Self::default());
                 }
-                _ => panic!("Applying type requires forall."),
-            }
-        }
-        Type::TyVar(var) => match scope.get(var.name.as_str()) {
-            Some(local_ty) => local_ty.ty.clone(),
-            None => ty,
-        },
-        Type::LitTy(_) => ty,
-        Type::TyConApp(tycon, arg_tys) => {
-            let arg_tys: Vec<Arc<TypeNode>> = arg_tys
-                .iter()
-                .map(|ty| reduce_type(ty.clone(), scope))
-                .collect();
-            if tycon.arity != arg_tys.len() as u32 {
-                panic!(
-                    "Type constructor {} requires {} argments.",
-                    tycon.name, tycon.arity
-                );
-            }
-            tycon_app(tycon.clone(), arg_tys)
-        }
-        Type::FunTy(param_ty, val_ty) => type_fun(
-            reduce_type(param_ty.clone(), scope),
-            reduce_type(val_ty.clone(), scope),
-        ),
-        Type::ForAllTy(var, val_ty) => {
-            scope.push(
-                &var.name,
-                &LocalTypeVar {
-                    ty: type_var_from_tyvar(var.clone()),
-                },
-            );
-            let val_ty = reduce_type(val_ty.clone(), scope);
-            scope.pop(&var.name);
-            type_forall(var.clone(), val_ty)
-        }
-    }
-}
-
-// Info of local variable in type matching
-#[derive(Clone)]
-enum LocalTyVarInfo {
-    Free,                            // Free variable defined outer.
-    ForAll(u32), // local variable introduced in for<...> with identifier number.
-    Inferred(Option<Arc<TypeNode>>), // local variable inferred (or waiting to be inferred when None).
-}
-
-// Check two types are equivalent.
-// Equivalence is checked except naming of type variables introduced by for<...>.
-// Free type variables must coincide.
-// For example, "for<a> a => x" is equivalent to "for<b> b => x", but not to "for<b> b => y".
-pub fn is_eqv_type(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
-    match_type(lhs, rhs, HashSet::<String>::default()).is_some()
-}
-
-// Match a type to another type under equivalence.
-pub fn match_type(
-    lhs: &Arc<TypeNode>,
-    rhs: &Arc<TypeNode>,
-    lhs_vars_infer: HashSet<String>,
-) -> Option<HashMap<String, Arc<TypeNode>>> {
-    let lhs = lhs.calculate_free_vars();
-    let rhs = rhs.calculate_free_vars();
-    let lhs_free_vars = lhs.info.free_vars.as_ref().unwrap();
-    let rhs_free_vars = rhs.info.free_vars.as_ref().unwrap();
-
-    // Check if lhs_free_vars = rhs_free_vars + lhs_vars_infer.
-    if lhs_free_vars.len() != rhs_free_vars.len() + lhs_vars_infer.len() {
-        return None;
-    }
-    let mut merged = HashSet::<String>::default();
-    merged.extend(rhs_free_vars.to_owned());
-    merged.extend(lhs_vars_infer.to_owned());
-    if *lhs_free_vars != merged {
-        return None;
-    }
-
-    // Set up scopes.
-    let mut lhs_scope = Scope::<LocalTyVarInfo>::empty();
-    for var_name in lhs_free_vars {
-        if lhs_vars_infer.contains(var_name) {
-            lhs_scope.push(&var_name, &LocalTyVarInfo::Inferred(None));
-        } else {
-            lhs_scope.push(&var_name, &LocalTyVarInfo::Free);
-        }
-    }
-    let mut rhs_scope = Scope::<LocalTyVarInfo>::empty();
-    for var_name in rhs_free_vars {
-        rhs_scope.push(&var_name, &LocalTyVarInfo::Free);
-    }
-
-    // Match and return result.
-    let mut next_id: u32 = 0;
-    let ok = match_type_core(&lhs, &rhs, &mut lhs_scope, &mut rhs_scope, &mut next_id);
-    if !ok {
-        return None;
-    }
-
-    let mut ret = HashMap::<String, Arc<TypeNode>>::default();
-    for var_name in lhs_vars_infer {
-        let inferred = lhs_scope.get(&var_name).unwrap();
-        match inferred {
-            LocalTyVarInfo::Inferred(inferred) => match inferred {
-                Some(inferred) => {
-                    ret.insert(var_name, inferred.clone());
-                }
-                None => {
+                _ => {
                     return None;
                 }
             },
-            _ => unreachable!(),
+            Type::TyConApp(tycon1, args1) => match &ty2.ty {
+                Type::TyConApp(tycon2, args2) => {
+                    if tycon1.name != tycon2.name {
+                        // TODO: check by id.
+                        return None;
+                    }
+                    if args1.len() != args2.len() {
+                        return None;
+                    }
+                    let mut ret = Self::default();
+                    for (i, ty1) in args1.iter().enumerate() {
+                        let ty2 = &args2[i];
+                        match Self::unify(ty1, &ty2) {
+                            Some(sub) => ret.add_substitution(&sub),
+                            None => return None,
+                        }
+                    }
+                    return Some(ret);
+                }
+                _ => {
+                    return None;
+                }
+            },
+            Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
+                Type::FunTy(arg_ty2, ret_ty2) => {
+                    let mut ret = Self::default();
+                    match Self::unify(&arg_ty1, &arg_ty2) {
+                        Some(sub) => ret.add_substitution(&sub),
+                        None => return None,
+                    };
+                    match Self::unify(&ret_ty1, &ret_ty2) {
+                        Some(sub) => ret.add_substitution(&sub),
+                        None => return None,
+                    };
+                    return Some(ret);
+                }
+                _ => {
+                    return None;
+                }
+            },
         }
     }
-    Some(ret)
+
+    // Subroutine of unify().
+    fn unify_tyvar(tyvar1: &Arc<TyVar>, ty2: &Arc<TypeNode>) -> Option<Self> {
+        match &ty2.ty {
+            Type::TyVar(tyvar2) => {
+                if tyvar1.name == tyvar2.name {
+                    // Avoid adding circular subsitution.
+                    return Some(Self::default());
+                }
+            }
+            _ => {}
+        };
+        Some(Self::single(&tyvar1.name, ty2.clone()))
+    }
 }
 
-// Match two types.
-// Only lhs_scope can contain LocalTyVarInfo::Inferred.
-fn match_type_core(
-    lhs: &Arc<TypeNode>,
-    rhs: &Arc<TypeNode>,
-    lhs_scope: &mut Scope<LocalTyVarInfo>,
-    rhs_scope: &mut Scope<LocalTyVarInfo>,
-    next_id: &mut u32,
-) -> bool {
-    match &lhs.ty {
-        Type::TyVar(lhs_var) => {
-            let lhs = lhs_scope.get(&lhs_var.name).unwrap().clone();
-            match lhs {
-                LocalTyVarInfo::ForAll(lhs_id) => {
-                    // Lhs was introduced at forall.
-                    match &rhs.ty {
-                        Type::TyVar(rhs_var) => {
-                            let rhs = rhs_scope.get(&rhs_var.name).unwrap();
-                            match rhs {
-                                LocalTyVarInfo::ForAll(rhs_id) => {
-                                    return lhs_id == *rhs_id;
-                                }
-                                _ => {
-                                    return false;
-                                }
-                            }
-                        }
-                        _ => {
-                            // Lhs is a type variable but rhs is not.
-                            return false;
-                        }
-                    }
-                }
-                LocalTyVarInfo::Inferred(infer) => match infer {
-                    Some(inferred) => {
-                        // Lhs was already inferred.
-                        return match_type_core(&inferred, rhs, lhs_scope, rhs_scope, next_id);
-                    }
-                    None => {
-                        // Lhs is waiting to be inferred.
-                        *lhs_scope.get_mut(&lhs_var.name).unwrap() =
-                            LocalTyVarInfo::Inferred(Some(rhs.clone()));
-                        return true;
-                    }
-                },
-                LocalTyVarInfo::Free => {
-                    // Lhs is free variable defined outer.
-                    match &rhs.ty {
-                        Type::TyVar(rhs_var) => {
-                            return lhs_var.name == rhs_var.name;
-                        }
-                        _ => {
-                            // Lhs is a free type variable but rhs is not.
-                            return false;
-                        }
-                    }
+// Context under type-checking.
+// Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
+struct TypeCheckContext {
+    // The identifier of type variables.
+    tyvar_id: u32,
+    // Scoped map of variable name -> scheme. (Assamptions of type inference.)
+    scope: Scope<Arc<Scheme>>,
+    // Substitution.
+    substitution: Substitution,
+}
+
+impl Default for TypeCheckContext {
+    fn default() -> Self {
+        Self {
+            tyvar_id: Default::default(),
+            scope: Default::default(),
+            substitution: Default::default(),
+        }
+    }
+}
+
+impl TypeCheckContext {
+    // Generate new type variable.
+    fn new_tyvar(&mut self) -> String {
+        let id = self.tyvar_id;
+        self.tyvar_id += 1;
+        "a".to_string() + &id.to_string()
+    }
+
+    // Apply substitution to type.
+    fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+        self.substitution.substitute_type(ty)
+    }
+
+    // Apply substitution to scheme.
+    fn substitute_scheme(&self, scm: &Arc<Scheme>) -> Arc<Scheme> {
+        Scheme::new_arc(scm.vars.clone(), self.substitute_type(&scm.ty))
+    }
+
+    // Instantiate a scheme.
+    fn instantiate_scheme(&mut self, scheme: &Arc<Scheme>) -> Arc<TypeNode> {
+        let mut sub = Substitution::default();
+        for var in &scheme.vars {
+            let new_var_name = self.new_tyvar();
+            sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name)));
+        }
+        sub.substitute_type(&scheme.ty)
+    }
+
+    // Make a scheme from a type by abstructing type variable that does not appear in scope.
+    fn abstruct_to_scheme(&self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
+        let ty = self.substitute_type(ty);
+        let mut vars = ty.free_vars();
+        for (_var, scms) in &self.scope.var {
+            for scm in scms {
+                for var_in_scope in self.substitute_scheme(&scm).free_vars() {
+                    vars.remove(&var_in_scope);
                 }
             }
         }
-        Type::LitTy(lhs_lit) => match &rhs.ty {
-            Type::LitTy(rhs_lit) => lhs_lit.id == rhs_lit.id,
-            _ => false,
-        },
-        Type::AppTy(lhs_func_ty, lhs_arg_ty) => match &rhs.ty {
-            Type::AppTy(rhs_func_ty, rhs_arg_ty) => {
-                match_type_core(lhs_func_ty, rhs_func_ty, lhs_scope, rhs_scope, next_id)
-                    && match_type_core(lhs_arg_ty, rhs_arg_ty, lhs_scope, rhs_scope, next_id)
-            }
-            _ => false,
-        },
-        Type::TyConApp(lhs_tycon, lhs_args) => match &rhs.ty {
-            Type::TyConApp(rhs_tycon, rhs_args) => {
-                if *lhs_tycon != *rhs_tycon {
-                    return false;
-                }
-                if lhs_args.len() != rhs_args.len() {
-                    return false;
-                }
-                for i in 0..lhs_args.len() {
-                    if !match_type_core(&lhs_args[i], &rhs_args[i], lhs_scope, rhs_scope, next_id) {
-                        return false;
-                    }
-                }
+        Scheme::new_arc(vars, ty)
+    }
+
+    // Update substitution to unify two types.
+    fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
+        let ty1 = &self.substitute_type(ty1);
+        let ty2 = &self.substitute_type(ty2);
+        match Substitution::unify(ty1, ty2) {
+            Some(sub) => {
+                self.substitution.add_substitution(&sub);
                 return true;
             }
-            _ => false,
-        },
-        Type::FunTy(lhs_param_ty, lhs_val_ty) => match &rhs.ty {
-            Type::FunTy(rhs_param_ty, rhs_val_ty) => {
-                match_type_core(lhs_param_ty, rhs_param_ty, lhs_scope, rhs_scope, next_id)
-                    && match_type_core(lhs_val_ty, rhs_val_ty, lhs_scope, rhs_scope, next_id)
+            None => {
+                return false;
             }
-            _ => false,
-        },
-        Type::ForAllTy(lhs_tyvar, lhs_val_ty) => match &rhs.ty {
-            Type::ForAllTy(rhs_tyvar, rhs_val_ty) => {
-                lhs_scope.push(&lhs_tyvar.name, &LocalTyVarInfo::ForAll(*next_id));
-                rhs_scope.push(&rhs_tyvar.name, &LocalTyVarInfo::ForAll(*next_id));
-                *next_id += 1;
-                let ret = match_type_core(lhs_val_ty, rhs_val_ty, lhs_scope, rhs_scope, next_id);
-                rhs_scope.pop(&rhs_tyvar.name);
-                lhs_scope.pop(&lhs_tyvar.name);
-                ret
+        }
+    }
+
+    // Update type substitution so that `ei` has type `ty`.
+    fn deduce_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) {
+        match &*ei.expr {
+            Expr::Var(var) => {
+                let scm = self
+                    .scope
+                    .get(&var.name)
+                    .unwrap_or_else(|| {
+                        error_exit_with_src(
+                            &format!("unknown variable `{}`", var.name),
+                            &var.source,
+                        );
+                    })
+                    .clone();
+                let var_ty = self.instantiate_scheme(&scm);
+                let var_ty = self.substitute_type(&var_ty);
+                if !self.unify(&var_ty, &ty) {
+                    error_exit_with_src(
+                        &format!(
+                            "cannot match type `{}` to `{}`",
+                            &var_ty.to_string(),
+                            &ty.to_string()
+                        ),
+                        &ei.source,
+                    );
+                }
             }
-            _ => false,
-        },
+            Expr::Lit(lit) => {
+                if !self.unify(&lit.ty, &ty) {
+                    error_exit_with_src(
+                        &format!(
+                            "cannot match type `{}` to `{}`",
+                            &lit.ty.to_string(),
+                            &ty.to_string()
+                        ),
+                        &ei.source,
+                    );
+                }
+            }
+            Expr::App(fun, arg) => {
+                let arg_ty = type_tyvar(&self.new_tyvar());
+                self.deduce_expr(fun, type_fun(arg_ty.clone(), ty));
+                self.deduce_expr(arg, arg_ty);
+            }
+            Expr::Lam(arg, body) => {
+                let arg_ty = type_tyvar(&self.new_tyvar());
+                let body_ty = type_tyvar(&self.new_tyvar());
+                self.unify(&type_fun(arg_ty.clone(), body_ty.clone()), &ty);
+                self.scope
+                    .push(&arg.name, &Scheme::new_arc(Default::default(), arg_ty));
+                self.deduce_expr(body, body_ty);
+                self.scope.pop(&arg.name);
+            }
+            Expr::Let(var, val, body) => {
+                let var_ty = type_tyvar(&self.new_tyvar());
+                self.deduce_expr(val, var_ty.clone());
+                let var_scm = self.abstruct_to_scheme(&var_ty);
+                self.scope.push(&var.name, &var_scm);
+                self.deduce_expr(body, ty);
+                self.scope.pop(&var.name);
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                self.deduce_expr(cond, bool_lit_ty());
+                self.deduce_expr(then_expr, ty.clone());
+                self.deduce_expr(else_expr, ty);
+            }
+        }
     }
 }

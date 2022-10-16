@@ -103,30 +103,13 @@ fn parse_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 fn parse_expr_app_seq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_app_seq);
     let mut pairs = pair.into_inner();
-    let mut ret = parse_expr_nlc_tyapp(pairs.next().unwrap(), src);
+    let mut ret = parse_expr_nlc(pairs.next().unwrap(), src);
     for pair in pairs {
-        let arg = parse_expr_nlc_tyapp(pair, src);
+        let arg = parse_expr_nlc(pair, src);
         let span = unite_span(&ret.source, &arg.source);
         ret = expr_app(ret, arg, span);
     }
     ret
-}
-
-fn parse_expr_nlc_tyapp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_nlc_tyapp);
-    let span = Span::from_pair(&src, &pair);
-    let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_nlc(pairs.next().unwrap(), src);
-    match pairs.next() {
-        Some(pair) => {
-            let types = parse_tyapp_bracket(pair);
-            for ty in types {
-                expr = expr_appty(expr, ty, Some(span.clone())); // TODO: each type should have span and call unite_span here.
-            }
-        }
-        _ => {}
-    };
-    expr
 }
 
 fn parse_expr_nlc(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
@@ -138,7 +121,6 @@ fn parse_expr_nlc(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         Rule::expr_let => parse_expr_let(pair, src),
         Rule::expr_if => parse_expr_if(pair, src),
         Rule::expr_lam => parse_expr_lam(pair, src),
-        Rule::expr_forall => parse_forall_expr(pair, src),
         Rule::expr_braced => parse_bracket_expr(pair, src),
         _ => unreachable!(),
     }
@@ -172,15 +154,6 @@ fn parse_var_as_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
     var_var(pair.as_str(), None, Some(Span::from_pair(&src, &pair)))
 }
 
-fn parse_var_typed_as_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
-    assert_eq!(pair.as_rule(), Rule::var_typed);
-    let span = Span::from_pair(&src, &pair);
-    let mut pairs = pair.into_inner();
-    let var = pairs.next().unwrap();
-    let ty = pairs.next().unwrap();
-    var_var(var.as_str(), Some(parse_type(ty)), Some(span))
-}
-
 fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
@@ -200,38 +173,10 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
-    let var_with_type = pairs.next().unwrap();
+    let var = pairs.next().unwrap();
     let _arrow_of_lam = pairs.next().unwrap();
     let val = pairs.next().unwrap();
-    expr_abs(
-        parse_var_typed_as_var(var_with_type, src),
-        parse_expr(val, src),
-        Some(span),
-    )
-}
-
-fn parse_forall_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    let span = Span::from_pair(&src, &pair);
-    let mut pairs = pair.into_inner();
-    let mut vars: Vec<Arc<TyVar>> = Default::default();
-    let mut expr = loop {
-        let pair = pairs.next().unwrap();
-        match pair.as_rule() {
-            Rule::type_var => {
-                vars.push(tyvar_from_name(pair.as_str()));
-            }
-            Rule::expr => {
-                break parse_expr(pair, src);
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    };
-    for var in vars.iter().rev() {
-        expr = expr_forall(var.clone(), expr, Some(span.clone())); // TODO: each type should have span and call unite_span here.
-    }
-    expr
+    expr_abs(parse_var_as_var(var, src), parse_expr(val, src), Some(span))
 }
 
 fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
@@ -270,9 +215,8 @@ fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
-        Rule::type_app => parse_type_app(pair),
         Rule::type_fun => parse_type_fun(pair),
-        Rule::type_except_app_fun => parse_type_except_app_fun(pair),
+        Rule::type_except_fun => parse_type_except_fun(pair),
         _ => unreachable!(),
     }
 }
@@ -283,14 +227,13 @@ fn parse_type_braced(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     parse_type(pair)
 }
 
-fn parse_type_except_app_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_except_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
         Rule::type_var => parse_type_var(pair),
         Rule::type_lit => parse_type_lit(pair),
         Rule::type_tycon_app => parse_type_tycon_app(pair),
-        Rule::type_forall => parse_type_forall(pair),
         Rule::type_braced => parse_type_braced(pair),
         _ => unreachable!(),
     }
@@ -304,16 +247,6 @@ fn parse_type_lit(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     make_bultin_type(type_expr.as_str())
 }
 
-fn parse_type_app(type_expr: Pair<Rule>) -> Arc<TypeNode> {
-    let mut pairs = type_expr.into_inner();
-    let head = pairs.next().unwrap();
-    let mut ret = parse_type_except_app_fun(head);
-    for pair in pairs {
-        ret = type_app(ret, parse_type(pair))
-    }
-    ret
-}
-
 fn parse_type_tycon_app(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     let mut pairs = type_expr.into_inner();
     let tycon = pairs.next().unwrap();
@@ -322,7 +255,7 @@ fn parse_type_tycon_app(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     for pair in pairs {
         args.push(parse_type(pair));
     }
-    tycon_app(tycon, args)
+    type_tycon_app(tycon, args)
 }
 
 fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
@@ -330,39 +263,6 @@ fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     let src_ty = parse_type_except_fun(pairs.next().unwrap());
     let dst_ty = parse_type(pairs.next().unwrap());
     type_fun(src_ty, dst_ty)
-}
-
-fn parse_type_except_fun(pair: Pair<Rule>) -> Arc<TypeNode> {
-    let mut pairs = pair.into_inner();
-    let pair = pairs.next().unwrap();
-    match pair.as_rule() {
-        Rule::type_app => parse_type_app(pair),
-        Rule::type_except_app_fun => parse_type_except_app_fun(pair),
-        _ => unreachable!(),
-    }
-}
-
-fn parse_type_forall(type_expr: Pair<Rule>) -> Arc<TypeNode> {
-    let mut pairs = type_expr.into_inner();
-    let mut vars: Vec<Arc<TyVar>> = Default::default();
-    let mut type_expr = loop {
-        let pair = pairs.next().unwrap();
-        match pair.as_rule() {
-            Rule::type_var => {
-                vars.push(tyvar_from_name(pair.as_str()));
-            }
-            Rule::type_expr => {
-                break parse_type(pair);
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    };
-    for var in vars.iter().rev() {
-        type_expr = type_forall(var.clone(), type_expr);
-    }
-    type_expr
 }
 
 fn parse_tycon(type_expr: Pair<Rule>) -> Arc<TyCon> {
@@ -377,9 +277,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::expr_nlc => "expression".to_string(),
         Rule::var => "variable".to_string(),
         Rule::in_of_let => "`in` or `;`".to_string(),
-        Rule::tyapp_bracket => "`<{types}>`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
-        Rule::var_typed => "variable with type annotation".to_string(),
         Rule::type_expr => "type".to_string(),
         Rule::arrow_of_lam => "`->`".to_string(),
         _ => format!("{:?}", r),

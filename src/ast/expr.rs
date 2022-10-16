@@ -5,7 +5,6 @@ use std::{collections::HashSet, sync::Arc};
 pub struct ExprNode {
     pub expr: Arc<Expr>,
     pub free_vars: Option<HashSet<String>>,
-    pub deduced_type: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
 
@@ -20,14 +19,6 @@ impl ExprNode {
     // Get free vars
     pub fn free_vars(self: &Self) -> &HashSet<String> {
         self.free_vars.as_ref().unwrap()
-    }
-
-    // Set deduced type
-    pub fn set_deduced_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
-        let ty = ty.calculate_free_vars(); // necessary?
-        let mut ret = self.clone();
-        ret.deduced_type = Some(ty);
-        Arc::new(ret)
     }
 
     // Set source
@@ -46,8 +37,6 @@ pub enum Expr {
     Lam(Arc<Var>, Arc<ExprNode>),
     Let(Arc<Var>, Arc<ExprNode>, Arc<ExprNode>),
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>), // TODO: Implement case
-    AppType(Arc<ExprNode>, Arc<TypeNode>),
-    ForAll(Arc<TyVar>, Arc<ExprNode>),
 }
 
 impl Expr {
@@ -55,7 +44,6 @@ impl Expr {
         Arc::new(ExprNode {
             expr: self.clone(),
             free_vars: Default::default(),
-            deduced_type: None,
             source: src,
         })
     }
@@ -77,12 +65,6 @@ impl Expr {
                 t.expr.to_string(),
                 e.expr.to_string()
             ),
-            Expr::AppType(expr, ty) => {
-                format!("({})<{}>", expr.expr.to_string(), ty.clone().to_string())
-            }
-            Expr::ForAll(tyvar, expr) => {
-                format!("for<{}> ({})", tyvar.name, expr.expr.to_string())
-            }
         }
     }
 }
@@ -162,14 +144,6 @@ pub fn expr_if(
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
-pub fn expr_appty(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::AppType(expr, ty)).into_expr_info(src)
-}
-
-pub fn expr_forall(var: Arc<TyVar>, val: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::ForAll(var, val)).into_expr_info(src)
-}
-
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
 pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
@@ -214,16 +188,6 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             free_vars.extend(then.free_vars.clone().unwrap());
             free_vars.extend(else_expr.free_vars.clone().unwrap());
             expr_if(cond, then, else_expr, ei.source.clone()).set_free_vars(free_vars)
-        }
-        Expr::AppType(ei, ty) => {
-            let ei = calculate_free_vars(ei.clone());
-            expr_appty(ei.clone(), ty.clone(), ei.source.clone())
-                .set_free_vars(ei.free_vars.clone().unwrap())
-        }
-        Expr::ForAll(tyvar, ei) => {
-            let ei = calculate_free_vars(ei.clone());
-            expr_forall(tyvar.clone(), ei.clone(), ei.source.clone())
-                .set_free_vars(ei.free_vars.clone().unwrap())
         }
     }
 }

@@ -340,11 +340,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::If(cond_expr, then_expr, else_expr) => {
                 self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone())
             }
-            Expr::AppType(ei, _) => self.eval_expr(ei.clone()),
-            Expr::ForAll(_, ei) => {
-                // TODO: For implementation of type class, push local variables of associated functions at here.
-                self.eval_expr(ei.clone())
-            }
         };
         self.cast_pointer(ret, ptr_to_object_type(self.context))
     }

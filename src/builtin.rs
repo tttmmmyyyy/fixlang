@@ -156,17 +156,13 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
     expr_lit(generator, free_vars, name, bool_lit_ty(), None)
 }
 
-// eq = for<a> \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
+// eq = \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
 pub fn eq() -> Arc<ExprNode> {
-    expr_forall(
-        tyvar_from_name("a"),
+    expr_abs(
+        var_var("lhs", Some(type_tyvar("a")), None),
         expr_abs(
-            var_var("lhs", Some(type_tyvar("a")), None),
-            expr_abs(
-                var_var("rhs", Some(type_tyvar("a")), None),
-                eq_lit("lhs", "rhs"),
-                None,
-            ),
+            var_var("rhs", Some(type_tyvar("a")), None),
+            eq_lit("lhs", "rhs"),
             None,
         ),
         None,
@@ -189,22 +185,14 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     expr_lit(generator, free_vars, name, type_tyvar(b), None)
 }
 
-// fix = for<a, b> \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
+// fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> Arc<ExprNode> {
-    let fixed_ty = type_func(type_tyvar("a"), type_tyvar("b"));
-    expr_forall(
-        tyvar_from_name("a"),
-        expr_forall(
-            tyvar_from_name("b"),
-            expr_abs(
-                var_var("f", Some(type_func(fixed_ty.clone(), fixed_ty)), None),
-                expr_abs(
-                    var_var("x", Some(type_tyvar("a")), None),
-                    fix_lit("b", "f", "x"),
-                    None,
-                ),
-                None,
-            ),
+    let fixed_ty = type_fun(type_tyvar("a"), type_tyvar("b"));
+    expr_abs(
+        var_var("f", Some(type_fun(fixed_ty.clone(), fixed_ty)), None),
+        expr_abs(
+            var_var("x", Some(type_tyvar("a")), None),
+            fix_lit("b", "f", "x"),
             None,
         ),
         None,
@@ -239,7 +227,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
         generator,
         free_vars,
         name,
-        tycon_app(array_lit_tycon(), vec![type_tyvar(a)]),
+        type_tycon_app(array_lit_tycon(), vec![type_tyvar(a)]),
         None,
     )
 }
@@ -247,15 +235,11 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
 // "newArray" built-in function.
 // newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
 pub fn new_array() -> Arc<ExprNode> {
-    expr_forall(
-        tyvar_from_name("a"),
+    expr_abs(
+        var_var("size", Some(int_lit_ty()), None),
         expr_abs(
-            var_var("size", Some(int_lit_ty()), None),
-            expr_abs(
-                var_var("value", Some(type_tyvar("a")), None),
-                new_array_lit("a", "size", "value"),
-                None,
-            ),
+            var_var("value", Some(type_tyvar("a")), None),
+            new_array_lit("a", "size", "value"),
             None,
         ),
         None,
@@ -291,19 +275,15 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
 // "readArray" built-in function.
 // readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
 pub fn read_array() -> Arc<ExprNode> {
-    expr_forall(
-        tyvar_from_name("a"),
+    expr_abs(
+        var_var(
+            "array",
+            Some(type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
+            None,
+        ),
         expr_abs(
-            var_var(
-                "array",
-                Some(tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
-                None,
-            ),
-            expr_abs(
-                var_var("idx", Some(int_lit_ty()), None),
-                read_array_lit("a", "array", "idx"),
-                None,
-            ),
+            var_var("idx", Some(int_lit_ty()), None),
+            read_array_lit("a", "array", "idx"),
             None,
         ),
         None,
@@ -407,7 +387,7 @@ fn write_array_lit(
         generator,
         free_vars,
         name,
-        tycon_app(array_lit_tycon(), vec![type_tyvar(a)]),
+        type_tycon_app(array_lit_tycon(), vec![type_tyvar(a)]),
         None,
     )
 }
@@ -415,21 +395,17 @@ fn write_array_lit(
 // writeArray built-in function.
 // writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
 pub fn write_array_common(is_unique_version: bool) -> Arc<ExprNode> {
-    expr_forall(
-        tyvar_from_name("a"),
+    expr_abs(
+        var_var(
+            "array",
+            Some(type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
+            None,
+        ),
         expr_abs(
-            var_var(
-                "array",
-                Some(tycon_app(array_lit_tycon(), vec![type_tyvar("a")])),
-                None,
-            ),
+            var_var("idx", Some(int_lit_ty()), None),
             expr_abs(
-                var_var("idx", Some(int_lit_ty()), None),
-                expr_abs(
-                    var_var("value", Some(type_tyvar("a")), None),
-                    write_array_lit("a", "array", "idx", "value", is_unique_version),
-                    None,
-                ),
+                var_var("value", Some(type_tyvar("a")), None),
+                write_array_lit("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
             None,

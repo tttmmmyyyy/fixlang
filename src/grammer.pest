@@ -19,7 +19,7 @@ var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
 var = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
-var_typed = { var ~ sep* ~ ":" ~ sep* ~ type_expr }
+// var_typed = { var ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 // === Expressions ===
 
@@ -27,44 +27,32 @@ expr_let = { "let" ~ sep+ ~ var ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
-expr_lam = { "\\" ~ sep* ~ var_typed ~ sep*  ~ arrow_of_lam ~ sep* ~ expr }
-
-expr_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ expr }
+expr_lam = { "\\" ~ sep* ~ var ~ sep*  ~ arrow_of_lam ~ sep* ~ expr }
 
 expr_braced = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 // nlc = non left recursive
-expr_nlc = { expr_lit | var | expr_let | expr_if | expr_lam | expr_forall | expr_braced }
+expr_nlc = { expr_lit | var | expr_let | expr_if | expr_lam | expr_braced }
 
-tyapp_bracket = { "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
-
-expr_nlc_tyapp = { expr_nlc ~ (sep* ~ tyapp_bracket)? }
-
-expr_app_seq = { expr_nlc_tyapp ~ (sep+ ~ expr_nlc_tyapp)* }
+expr_app_seq = { expr_nlc ~ (sep+ ~ expr_nlc)* }
 
 expr = { expr_app_seq }
 
 // === Types ===
-type_expr = { type_app | type_fun | type_except_app_fun }
+type_expr = { type_fun | type_except_fun }
 
 type_braced = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
 
-type_except_app_fun = { type_var | type_tycon_app | type_lit | type_forall | type_braced }
+type_except_fun = { type_var | type_tycon_app | type_lit | type_braced }
 // type_tycon_app has to precede to type_lit
-
-type_except_fun = { type_app | type_except_app_fun }
 
 type_var = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
 
 type_lit = { ASCII_ALPHA_UPPER ~ var_char* }
 
-type_app = { type_except_app_fun ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
-
 type_tycon_app = { tycon ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
 
 type_fun = { type_except_fun ~ sep* ~ "=>" ~ sep* ~ type_expr }
-
-type_forall = { "for" ~ sep* ~ "<" ~ sep* ~ type_var ~ ("," ~ sep* ~ type_var)* ~ sep* ~ ">" ~ sep* ~ type_expr }
 
 tycon = { ASCII_ALPHA_UPPER ~ var_char* }
 
