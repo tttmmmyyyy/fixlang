@@ -259,7 +259,7 @@ impl TypeCheckContext {
     }
 
     // Make a scheme from a type by abstructing type variable that does not appear in scope.
-    fn abstruct_to_scheme(&self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
+    fn abstract_to_scheme(&self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
         let ty = self.substitute_type(ty);
         let mut vars = ty.free_vars();
         for (_var, scms) in &self.scope.var {
@@ -368,7 +368,7 @@ impl TypeCheckContext {
                     None => type_tyvar(&self.new_tyvar()),
                 };
                 self.deduce_expr(val, var_ty.clone());
-                let var_scm = self.abstruct_to_scheme(&var_ty);
+                let var_scm = self.abstract_to_scheme(&var_ty);
                 self.scope.push(&var.name, &var_scm);
                 self.deduce_expr(body, ty);
                 self.scope.pop(&var.name);
