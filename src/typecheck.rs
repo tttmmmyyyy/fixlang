@@ -205,6 +205,9 @@ impl Substitution {
             }
             _ => {}
         };
+        if ty2.free_vars().contains(&tyvar1.name) {
+            panic!("unify_tyvar is making circular substitution.")
+        }
         Some(Self::single(&tyvar1.name, ty2.clone()))
     }
 }
