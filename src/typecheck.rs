@@ -331,8 +331,9 @@ impl TypeCheckContext {
             }
             Expr::App(fun, arg) => {
                 let arg_ty = type_tyvar(&self.new_tyvar());
-                self.deduce_expr(fun, type_fun(arg_ty.clone(), ty));
-                self.deduce_expr(arg, arg_ty);
+                self.deduce_expr(arg, arg_ty.clone());
+                // NOTE: to help name-resolution of fields, we should deduce_expr of arg before that of fun.
+                self.deduce_expr(fun, type_fun(arg_ty, ty));
             }
             Expr::Lam(arg, body) => {
                 let arg_ty = type_tyvar(&self.new_tyvar());
