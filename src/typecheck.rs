@@ -309,9 +309,9 @@ impl TypeCheckContext {
                 if !self.unify(&var_ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "cannot match type `{}` to `{}`",
+                            "type mismatch. Expected `{}`, Found `{}`",
+                            &self.substitute_type(&ty).to_string(),
                             &self.substitute_type(&var_ty).to_string(),
-                            &self.substitute_type(&ty).to_string()
                         ),
                         &ei.source,
                     );
@@ -321,9 +321,9 @@ impl TypeCheckContext {
                 if !self.unify(&lit.ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "cannot match type `{}` to `{}`",
+                            "type mismatch. Expected `{}`, FOund `{}`",
+                            &self.substitute_type(&ty).to_string(),
                             &lit.ty.to_string(),
-                            &self.substitute_type(&ty).to_string()
                         ),
                         &ei.source,
                     );
@@ -341,9 +341,9 @@ impl TypeCheckContext {
                 if !self.unify(&fun_ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "cannot match type `{}` to `{}`",
+                            "type mismatch. Expected `{}`, Found `{}`",
+                            &self.substitute_type(&ty).to_string(),
                             &self.substitute_type(&fun_ty).to_string(),
-                            &self.substitute_type(&ty).to_string()
                         ),
                         &ei.source,
                     );
