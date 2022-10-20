@@ -27,6 +27,9 @@
             "request": "launch",
             "name": "Debug unit tests in executable 'fixlang'",
             "cargo": {
+                "env": {
+                    "LLVM_SYS_120_PREFIX": "/usr/local/opt/llvm@12"
+                },
                 "args": [
                     "test",
                     "--no-run",
