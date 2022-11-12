@@ -1,5 +1,4 @@
 use core::panic;
-use std::hash::Hash;
 
 use super::*;
 
@@ -321,7 +320,7 @@ impl TypeCheckContext {
                 if !self.unify(&lit.ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "type mismatch. Expected `{}`, FOund `{}`",
+                            "type mismatch. Expected `{}`, Found `{}`",
                             &self.substitute_type(&ty).to_string(),
                             &lit.ty.to_string(),
                         ),

@@ -97,23 +97,61 @@ fn parse_file(mut file: Pairs<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 fn parse_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr);
     let pair = pair.into_inner().next().unwrap();
-    parse_expr_app_seq(pair, src)
+    parse_expr_rtl_app(pair, src)
 }
 
-fn parse_expr_app_seq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_app_seq);
-    let mut pairs = pair.into_inner();
-    let mut ret = parse_expr_nlc(pairs.next().unwrap(), src);
-    for pair in pairs {
-        let arg = parse_expr_nlc(pair, src);
-        let span = unite_span(&ret.source, &arg.source);
-        ret = expr_app(ret, arg, span);
+// Parse combinator sequence, e.g., `f x y` or `x & f & g`
+fn parse_combinator_sequence(
+    pair: Pair<Rule>,
+    src: &Arc<String>,
+    inner_parser: fn(Pair<Rule>, &Arc<String>) -> Arc<ExprNode>,
+) -> Vec<Arc<ExprNode>> {
+    pair.into_inner()
+        .map(|pair| inner_parser(pair, src))
+        .collect()
+}
+
+// Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
+fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
+    let exprs = parse_combinator_sequence(pair, src, parse_expr_ltr_app);
+    let mut exprs_iter = exprs.iter().rev();
+    let mut ret = exprs_iter.next().unwrap().clone();
+    for expr in exprs_iter {
+        let span = unite_span(&expr.source, &ret.source);
+        ret = expr_app(expr.clone(), ret, span);
     }
     ret
 }
 
-fn parse_expr_nlc(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_nlc);
+// Parse left to right application sequence, e.g., `x & f & g`. (left-associative)
+fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_ltr_app);
+    let exprs = parse_combinator_sequence(pair, src, parse_expr_app);
+    let mut exprs_iter = exprs.iter();
+    let mut ret = exprs_iter.next().unwrap().clone();
+    for expr in exprs_iter {
+        let span = unite_span(&expr.source, &ret.source);
+        ret = expr_app(expr.clone(), ret, span);
+    }
+    ret
+}
+
+// Parse application sequence, e.g., `f x y`. (left-associative)
+fn parse_expr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_app);
+    let exprs = parse_combinator_sequence(pair, src, parse_expr_nlr);
+    let mut exprs_iter = exprs.iter();
+    let mut ret = exprs_iter.next().unwrap().clone();
+    for expr in exprs_iter {
+        let span = unite_span(&expr.source, &ret.source);
+        ret = expr_app(ret, expr.clone(), span);
+    }
+    ret
+}
+
+fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_nlr);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_lit => parse_expr_lit(pair, src),
@@ -274,7 +312,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::EOI => "end-of-input".to_string(),
         Rule::expr_int_lit => "integer".to_string(),
         Rule::expr_bool_lit => "boolean".to_string(),
-        Rule::expr_nlc => "expression".to_string(),
+        Rule::expr_nlr => "expression".to_string(),
         Rule::var => "variable".to_string(),
         Rule::in_of_let => "`in` or `;`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),

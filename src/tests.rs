@@ -373,6 +373,34 @@ pub fn test29() {
 
 #[test]
 #[serial]
+pub fn test30() {
+    // Test dollar combinator
+    let source = r"
+            let f = \x -> add x 3;
+            let g = \x -> eq x 8;
+            let ans = g $ f $ 5;
+            if ans then 1 else 0
+        ";
+    let answer = 1;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test31() {
+    // Test & combinator
+    let source = r"
+            let f = \x -> add x 3;
+            let g = \x -> eq x 8;
+            let ans = 5 & f & g;
+            if ans then 1 else 0
+        ";
+    let answer = 1;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"{- head -}
