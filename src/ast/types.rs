@@ -5,28 +5,17 @@ pub struct TyVar {
     pub name: String,
 }
 
-// impl Var {
-//     pub fn name(self: &Self) -> &String {
-//         match self {
-//             Var::TermVar {
-//                 name,
-//                 type_annotation: _,
-//             } => name,
-//             Var::TyVar { name } => name,
-//         }
-//     }
-// }
-
 #[derive(Eq, PartialEq)]
 pub enum Kind {
     Star,
     Arrow(Arc<Kind>, Arc<Kind>),
 }
 
-#[derive(Eq, PartialEq)]
-pub struct TyLit {
-    pub id: u32,
+#[derive(Eq, PartialEq, Clone)]
+pub struct TyCon {
     pub name: String,
+    // pub kind: Option<Arc<Kind>>,
+    // pub id: i32, // 0 = unknown, >0 = user-defined, <0 = bulit-in
 }
 
 // Node of type ast tree with user defined additional information
@@ -76,22 +65,18 @@ impl TypeNode {
 // Variant of type
 pub enum Type {
     TyVar(Arc<TyVar>),
-    LitTy(Arc<TyLit>),
-    // AppTy(Arc<TypeNode>, Arc<TypeNode>),
-    TyConApp(Arc<TyCon>, Vec<Arc<TypeNode>>),
+    TyCon(Arc<TyCon>),
+    TyApp(Arc<TypeNode>, Arc<TypeNode>),
     FunTy(Arc<TypeNode>, Arc<TypeNode>),
-    // ForAllTy(Arc<TyVar>, Arc<TypeNode>),
 }
 
 impl Clone for Type {
     fn clone(&self) -> Self {
         match self {
             Type::TyVar(x) => Type::TyVar(x.clone()),
-            Type::LitTy(x) => Type::LitTy(x.clone()),
-            // Type::AppTy(x, y) => Type::AppTy(x.clone(), y.clone()),
-            Type::TyConApp(x, y) => Type::TyConApp(x.clone(), y.clone()),
+            Type::TyApp(x, y) => Type::TyApp(x.clone(), y.clone()),
             Type::FunTy(x, y) => Type::FunTy(x.clone(), y.clone()),
-            // Type::ForAllTy(x, y) => Type::ForAllTy(x.clone(), y.clone()),
+            Type::TyCon(tc) => Type::TyCon(tc.clone()),
         }
     }
 }
@@ -100,9 +85,23 @@ impl TypeNode {
     pub fn to_string(&self) -> String {
         match &self.ty {
             Type::TyVar(v) => v.name.clone(),
-            Type::LitTy(l) => l.name.clone(),
-            Type::TyConApp(tycon, args) => {
-                let tycon = tycon.name.clone();
+            Type::TyApp(tyfun, arg) => {
+                // Convert something like `(Pair<Int>)<Double>` to a form `(Pair, {Int, Double})`.
+                let mut args: Vec<Arc<TypeNode>> = vec![arg.clone()];
+                let mut now_tyfun = tyfun.clone();
+                loop {
+                    match &now_tyfun.ty {
+                        Type::TyApp(next_tyfun, arg) => {
+                            args.push(arg.clone());
+                            now_tyfun = next_tyfun.clone();
+                        }
+                        _ => {
+                            break;
+                        }
+                    }
+                }
+                args.reverse();
+                let tycon = now_tyfun.to_string();
                 let args: Vec<String> = args.iter().map(|a| a.clone().to_string()).collect();
                 let mut res: String = Default::default();
                 res += &tycon;
@@ -130,28 +129,16 @@ impl TypeNode {
                 res += &dst;
                 res
             }
+            Type::TyCon(tc) => tc.name.clone(),
         }
     }
 }
 
-#[derive(Eq, PartialEq, Clone)]
-pub struct TyCon {
-    pub name: String,
-    pub arity: u32, // kind: Arc<Kind>,
-}
-
-pub fn tycon(name: &str, arity: u32) -> Arc<TyCon> {
-    Arc::new(TyCon {
-        name: String::from(name),
-        arity,
-    })
-}
-
-pub fn star_kind() -> Arc<Kind> {
+pub fn kind_star() -> Arc<Kind> {
     Arc::new(Kind::Star)
 }
 
-pub fn arrow_kind(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
+pub fn kind_arrow(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
@@ -169,19 +156,24 @@ pub fn type_var_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyVar(tyvar))
 }
 
-pub fn type_lit(id: u32, name: &str) -> Arc<TypeNode> {
-    TypeNode::new_arc(Type::LitTy(Arc::new(TyLit {
-        id,
-        name: String::from(name),
-    })))
-}
-
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::FunTy(src, dst))
 }
 
-pub fn type_tycon_app(tycon: Arc<TyCon>, params: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    TypeNode::new_arc(Type::TyConApp(tycon, params))
+pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::TyApp(tyfun, param))
+}
+
+pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::TyCon(tycon.clone()))
+}
+
+pub fn tycon(name: &str /*, kind: &Arc<Kind>, id: i32*/) -> Arc<TyCon> {
+    Arc::new(TyCon {
+        name: String::from(name),
+        // kind: kind.clone(),
+        // id: id,
+    })
 }
 
 // Additional information of types.
@@ -196,17 +188,15 @@ impl TypeNode {
             Type::TyVar(tv) => {
                 free_vars.insert(tv.name.clone());
             }
-            Type::LitTy(_) => {}
-            Type::TyConApp(tycon, args) => {
-                let tycon = tycon.clone();
-                for arg in args.iter() {
-                    free_vars.extend(arg.free_vars());
-                }
+            Type::TyApp(tyfun, arg) => {
+                free_vars.extend(tyfun.free_vars());
+                free_vars.extend(arg.free_vars());
             }
             Type::FunTy(input, output) => {
                 free_vars.extend(input.free_vars());
                 free_vars.extend(output.free_vars());
             }
+            Type::TyCon(_) => {}
         };
         free_vars
     }

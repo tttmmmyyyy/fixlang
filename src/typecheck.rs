@@ -107,10 +107,11 @@ impl Substitution {
                 .data
                 .get(&tyvar.name)
                 .map_or(ty.clone(), |sub| sub.clone()),
-            Type::LitTy(_) => ty.clone(),
-            Type::TyConApp(tycon, args) => {
-                let args = args.iter().map(|arg| self.substitute_type(arg)).collect();
-                type_tycon_app(tycon.clone(), args)
+            Type::TyCon(tc) => ty.clone(),
+            Type::TyApp(fun, arg) => {
+                let fun = self.substitute_type(fun);
+                let arg = self.substitute_type(arg);
+                type_tyapp(fun, arg)
             }
             Type::FunTy(param, body) => {
                 type_fun(self.substitute_type(&param), self.substitute_type(&body))
@@ -134,9 +135,9 @@ impl Substitution {
         }
         match &ty1.ty {
             Type::TyVar(_) => unreachable!(),
-            Type::LitTy(lit1) => match &ty2.ty {
-                Type::LitTy(lit2) => {
-                    if lit1.id == lit2.id {
+            Type::TyCon(tc1) => match &ty2.ty {
+                Type::TyCon(tc2) => {
+                    if tc1.name == tc2.name {
                         return Some(Self::default());
                     } else {
                         return None;
@@ -146,25 +147,19 @@ impl Substitution {
                     return None;
                 }
             },
-            Type::TyConApp(tycon1, args1) => match &ty2.ty {
-                Type::TyConApp(tycon2, args2) => {
-                    if tycon1.name != tycon2.name {
-                        // TODO: check by id.
-                        return None;
-                    }
-                    if args1.len() != args2.len() {
-                        return None;
-                    }
+            Type::TyApp(fun1, arg1) => match &ty2.ty {
+                Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    for (i, ty1) in args1.iter().enumerate() {
-                        let ty2 = &args2[i];
-                        let ty1 = &ret.substitute_type(ty1);
-                        let ty2 = &ret.substitute_type(ty2);
-                        match Self::unify(ty1, &ty2) {
-                            Some(sub) => ret.add_substitution(&sub),
-                            None => return None,
-                        }
-                    }
+                    match Self::unify(&fun1, &fun2) {
+                        Some(sub) => ret.add_substitution(&sub),
+                        None => return None,
+                    };
+                    let arg1 = ret.substitute_type(arg1);
+                    let arg2 = ret.substitute_type(arg2);
+                    match Self::unify(&arg1, &arg2) {
+                        Some(sub) => ret.add_substitution(&sub),
+                        None => return None,
+                    };
                     return Some(ret);
                 }
                 _ => {

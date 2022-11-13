@@ -7,7 +7,7 @@ expr_bool_lit = { "true" | "false" }
 
 expr_lit = { expr_int_lit | expr_bool_lit }
 
-keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit | "type" }
+keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit | "type" | "struct" }
 
 in_of_let = { "in" | ";" }
 
@@ -39,11 +39,11 @@ expr_app = { expr_nlr ~ (sep+ ~ expr_nlr)* }
 
 // right to left composition sequence, e.g., `h . g . f`. (left-associative)
 // combinator_dot = _{ "." }
-// expr_rtl_comp = { expr_app ~ (seo* ~ combinator_dot ~ sep* ~ expr_app)* }
+// expr_rtl_comp = { expr_app ~ (seo* ~ combinator_dot ~ sep* ~ expr_app)* } // TODO: will be added later
 
 // left to right composition sequence, e.g., `f >> g >> h`. (left-associative)
 // combinator_gtgt = _{ ">>" }
-// expr_ltr_comp = { expr_rtl_comp ~ (sep* ~ combinator_gtgt ~ sep* ~ expr_rtl_comp)* }
+// expr_ltr_comp = { expr_rtl_comp ~ (sep* ~ combinator_gtgt ~ sep* ~ expr_rtl_comp)* } // TODO: will be added later
 
 // left to right application sequence, e.g., `x & f & g`. (left-associative)
 combinator_and = _{ "&" }
@@ -56,22 +56,17 @@ expr_rtl_app = { expr_ltr_app ~ (sep* ~ combinator_dollar ~ sep* ~ expr_ltr_app)
 expr = { expr_rtl_app }
 
 // === Types ===
-type_expr = { type_fun | type_except_fun }
+type_expr = { type_fun }
 
 type_braced = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
 
-type_except_fun = { type_var | type_tycon_app | type_lit | type_braced }
-// type_tycon_app has to precede to type_lit
+type_nlr = { type_tycon | type_braced }
 
-type_var = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
+type_tyapp = { type_nlr ~ (sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">")? }
 
-type_lit = { ASCII_ALPHA_UPPER ~ var_char* }
+type_fun = { type_tyapp ~ sep* ~ "=>" ~ sep* ~ type_expr }
 
-type_tycon_app = { tycon ~ sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">" }
-
-type_fun = { type_except_fun ~ sep* ~ "=>" ~ sep* ~ type_expr }
-
-tycon = { ASCII_ALPHA_UPPER ~ var_char* }
+type_tycon = { ASCII_ALPHA_UPPER ~ var_char* }
 
 // === Type declarations ===
 type_name = { ASCII_ALPHA_UPPER ~ var_char* }
@@ -80,7 +75,7 @@ type_field_name = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
 
 type_field_decl = _{ type_field_name ~ sep* ~ ":" ~ sep* ~ type_name }
 
-type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ "(" ~ sep* ~ type_field_decl ~ ( sep* ~ "," ~ sep* ~ type_field_decl )* ~ sep* ~ ")" ~ sep* ~ ";" }
+type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ "struct" ~ sep* ~ "(" ~ sep* ~ type_field_decl ~ ( sep* ~ "," ~ sep* ~ type_field_decl )* ~ sep* ~ ")" ~ sep* ~ ";" }
 
 // === Module ===
 // module_name = { ASCII_ALPHA_UPPER ~ var_char* }

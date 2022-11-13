@@ -250,61 +250,55 @@ fn parse_expr_bool_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+    assert_eq!(type_expr.as_rule(), Rule::type_expr);
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
         Rule::type_fun => parse_type_fun(pair),
-        Rule::type_except_fun => parse_type_except_fun(pair),
         _ => unreachable!(),
     }
 }
 
-fn parse_type_braced(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+    assert_eq!(type_expr.as_rule(), Rule::type_fun);
     let mut pairs = type_expr.into_inner();
-    let pair = pairs.next().unwrap();
-    parse_type(pair)
+    let src_ty = parse_type_tyapp(pairs.next().unwrap());
+    let dst_ty = parse_type(pairs.next().unwrap());
+    type_fun(src_ty, dst_ty)
 }
 
-fn parse_type_except_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_tyapp(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+    assert_eq!(type_expr.as_rule(), Rule::type_tyapp);
+    let mut pairs = type_expr.into_inner();
+    let mut pair = pairs.next().unwrap();
+    let mut ret = parse_type_nlr(pair);
+    for pair in pairs {
+        ret = type_tyapp(ret, parse_type(pair));
+    }
+    ret
+}
+
+fn parse_type_nlr(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+    assert_eq!(type_expr.as_rule(), Rule::type_nlr);
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
-        Rule::type_var => parse_type_var(pair),
-        Rule::type_lit => parse_type_lit(pair),
-        Rule::type_tycon_app => parse_type_tycon_app(pair),
+        Rule::type_tycon => parse_type_tycon(pair),
         Rule::type_braced => parse_type_braced(pair),
         _ => unreachable!(),
     }
 }
 
-fn parse_type_var(type_expr: Pair<Rule>) -> Arc<TypeNode> {
-    type_tyvar(type_expr.as_str())
+fn parse_type_tycon(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+    assert_eq!(type_expr.as_rule(), Rule::type_tycon);
+    type_tycon(&tycon(type_expr.as_str()))
 }
 
-fn parse_type_lit(type_expr: Pair<Rule>) -> Arc<TypeNode> {
-    make_bultin_type(type_expr.as_str())
-}
-
-fn parse_type_tycon_app(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_braced(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+    assert_eq!(type_expr.as_rule(), Rule::type_braced);
     let mut pairs = type_expr.into_inner();
-    let tycon = pairs.next().unwrap();
-    let tycon = parse_tycon(tycon);
-    let mut args: Vec<Arc<TypeNode>> = Default::default();
-    for pair in pairs {
-        args.push(parse_type(pair));
-    }
-    type_tycon_app(tycon, args)
-}
-
-fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
-    let mut pairs = type_expr.into_inner();
-    let src_ty = parse_type_except_fun(pairs.next().unwrap());
-    let dst_ty = parse_type(pairs.next().unwrap());
-    type_fun(src_ty, dst_ty)
-}
-
-fn parse_tycon(type_expr: Pair<Rule>) -> Arc<TyCon> {
-    make_bultin_tycon(type_expr.as_str())
+    let pair = pairs.next().unwrap();
+    parse_type(pair)
 }
 
 fn rule_to_string(r: &Rule) -> String {

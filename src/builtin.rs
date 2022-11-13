@@ -1,72 +1,76 @@
-// Implement built-in functions, (constructor of) types, etc.
+// Implement built-in functions, types, etc.
 use super::*;
 
 const INT_NAME: &str = "Int";
 const BOOL_NAME: &str = "Bool";
-
-// Array of literal types, which also defines type id of literal types.
-const BUILTIN_LITERAL_TYPES: [&str; 2] = [INT_NAME, BOOL_NAME];
-
-// Search type id of literal type from its name.
-pub fn builtin_type_id(name: &str) -> u32 {
-    // TODO: Avoid linear search by preparing HashMap from BUILTIN_LITERAL_TYPES using once_cell::Lazy.
-    for i in 0..BUILTIN_LITERAL_TYPES.len() {
-        if BUILTIN_LITERAL_TYPES[i] == name {
-            return i as u32;
-        }
-    }
-    panic!("Unknown literal type: {}", name);
-}
-
-// Make builtin type.
-pub fn make_bultin_type(name: &str) -> Arc<TypeNode> {
-    type_lit(builtin_type_id(name), name)
-}
-
-// Make Int type.
-pub fn int_lit_ty() -> Arc<TypeNode> {
-    make_bultin_type(INT_NAME)
-}
-
-// Make Bool type.
-pub fn bool_lit_ty() -> Arc<TypeNode> {
-    make_bultin_type(BOOL_NAME)
-}
-
-// Make built-in literal type from type id.
-pub fn make_literal_type(type_id: u32) -> Arc<TypeNode> {
-    match type_id {
-        INT_TYPEID => int_lit_ty(),
-        BOOL_TYPEID => bool_lit_ty(),
-        _ => unreachable!(),
-    }
-}
-
 const ARRAY_NAME: &str = "Array";
 
-// Array of typcons, which also defines type id of tycons.
-static BUILTIN_TYCONS: Lazy<Vec<Arc<TyCon>>> = Lazy::new(|| vec![tycon(ARRAY_NAME, 1)]);
+// Array of built-in tycons.
+static BUILTIN_TYCONS: Lazy<Vec<Arc<TyCon>>> = Lazy::new(|| {
+    vec![
+        tycon(INT_NAME /* , &kind_star(), -1*/),
+        tycon(BOOL_NAME /* , &kind_star(), -2*/),
+        tycon(
+            ARRAY_NAME, /*, &kind_arrow(kind_star(), kind_star()), -3*/
+        ),
+    ]
+});
 
-// Search tycon id of literal type from its name.
-pub fn builtin_tycon_id(name: &str) -> usize {
+// Search tycon id of tycon name
+pub fn builtin_tycon(name: &str) -> Arc<TypeNode> {
     // TODO: Avoid linear search by preparing HashMap from BUILTIN_LITERAL_TYPES using once_cell::Lazy.
     for i in 0..BUILTIN_TYCONS.len() {
         if BUILTIN_TYCONS[i].name == name {
-            return i;
+            return type_tycon(&BUILTIN_TYCONS[i]);
         }
     }
-    panic!("Unknown tycon: {}", name);
+    panic!("Unknown type constructor: {}", name);
 }
 
-// Make builtin tycon.
-pub fn make_bultin_tycon(name: &str) -> Arc<TyCon> {
-    BUILTIN_TYCONS[builtin_tycon_id(name)].clone()
+// Get Int type.
+pub fn int_lit_ty() -> Arc<TypeNode> {
+    builtin_tycon(INT_NAME)
 }
 
-// Make Array literay type constructor.
-pub fn array_lit_tycon() -> Arc<TyCon> {
-    make_bultin_tycon(ARRAY_NAME)
+// Get Bool type.
+pub fn bool_lit_ty() -> Arc<TypeNode> {
+    builtin_tycon(BOOL_NAME)
 }
+
+// Get Array type.
+pub fn array_lit_ty() -> Arc<TypeNode> {
+    builtin_tycon(ARRAY_NAME)
+}
+
+// // Make built-in literal type from type id.
+// pub fn make_literal_type(type_id: u32) -> Arc<TypeNode> {
+//     match type_id {
+//         INT_TYPEID => int_lit_ty(),
+//         BOOL_TYPEID => bool_lit_ty(),
+//         _ => unreachable!(),
+//     }
+// }
+
+// Search tycon id of literal type from its name.
+// pub fn builtin_tycon_id(name: &str) -> usize {
+//     // TODO: Avoid linear search by preparing HashMap from BUILTIN_LITERAL_TYPES using once_cell::Lazy.
+//     for i in 0..BUILTIN_TYCONS.len() {
+//         if BUILTIN_TYCONS[i].name == name {
+//             return i;
+//         }
+//     }
+//     panic!("Unknown tycon: {}", name);
+// }
+
+// // Make builtin tycon.
+// pub fn make_bultin_tycon(name: &str) -> Arc<TyCon> {
+//     BUILTIN_TYCONS[builtin_tycon_id(name)].clone()
+// }
+
+// // Make Array literay type constructor.
+// pub fn array_lit_tycon() -> Arc<TyCon> {
+//     make_bultin_tycon(ARRAY_NAME)
+// }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
@@ -230,7 +234,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
         generator,
         free_vars,
         name,
-        type_tycon_app(array_lit_tycon(), vec![type_tyvar(a)]),
+        type_tyapp(array_lit_ty(), type_tyvar(a)),
         None,
     )
 }
@@ -251,10 +255,7 @@ pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         &["a"],
         type_fun(
             int_lit_ty(),
-            type_fun(
-                type_tyvar("a"),
-                type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")]),
-            ),
+            type_fun(type_tyvar("a"), type_tyapp(array_lit_ty(), type_tyvar("a"))),
         ),
     );
     (expr, scm)
@@ -301,7 +302,7 @@ pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let scm = Scheme::new_arc_from_str(
         &["a"],
         type_fun(
-            type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")]),
+            type_tyapp(array_lit_ty(), type_tyvar("a")),
             type_fun(int_lit_ty(), type_tyvar("a")),
         ),
     );
@@ -405,7 +406,7 @@ fn write_array_lit(
         generator,
         free_vars,
         name,
-        type_tycon_app(array_lit_tycon(), vec![type_tyvar(a)]),
+        type_tyapp(array_lit_ty(), type_tyvar(a)),
         None,
     )
 }
@@ -426,7 +427,7 @@ pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
         ),
         None,
     );
-    let array_ty = type_tycon_app(array_lit_tycon(), vec![type_tyvar("a")]);
+    let array_ty = type_tyapp(array_lit_ty(), type_tyvar("a"));
     let scm = Scheme::new_arc_from_str(
         &["a"],
         type_fun(
