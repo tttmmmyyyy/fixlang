@@ -20,26 +20,6 @@ fn execute_main_module<'c>(
     }
 }
 
-// Add library functions (such as fix) to given ast.
-fn add_builtin_symbols(program: Arc<ExprNode>) -> Arc<ExprNode> {
-    fn add_let(
-        program: Arc<ExprNode>,
-        name: &str,
-        (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
-    ) -> Arc<ExprNode> {
-        expr_let(var_var(name, Some(scm), None), expr, program, None)
-    }
-
-    let program = add_let(program, "add", add());
-    let program = add_let(program, "eq", eq());
-    let program = add_let(program, "fix", fix());
-    let program = add_let(program, "newArray", new_array());
-    let program = add_let(program, "readArray", read_array());
-    let program = add_let(program, "writeArray", write_array());
-    let program = add_let(program, "writeArray!", write_array_unique());
-    program
-}
-
 fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::default();

@@ -1,6 +1,8 @@
 // Implement built-in functions, types, etc.
 use super::*;
 
+pub const PRELUDE_NAME: &str = "Prelude";
+
 const INT_NAME: &str = "Int";
 const BOOL_NAME: &str = "Bool";
 const ARRAY_NAME: &str = "Array";
@@ -74,8 +76,8 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
 
 pub fn add() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_var("lhs", None, None),
-        expr_abs(var_var("rhs", None, None), add_lit("lhs", "rhs"), None),
+        var_local("lhs", None, None),
+        expr_abs(var_local("rhs", None, None), add_lit("lhs", "rhs"), None),
         None,
     );
     let scm = Scheme::new_arc_from_str(
@@ -120,8 +122,8 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
 // eq = \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
 pub fn eq() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_var("lhs", None, None),
-        expr_abs(var_var("rhs", None, None), eq_lit("lhs", "rhs"), None),
+        var_local("lhs", None, None),
+        expr_abs(var_local("rhs", None, None), eq_lit("lhs", "rhs"), None),
         None,
     );
     let scm = Scheme::new_arc_from_str(
@@ -153,8 +155,8 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_var("f", None, None),
-        expr_abs(var_var("x", None, None), fix_lit("b", "f", "x"), None),
+        var_local("f", None, None),
+        expr_abs(var_local("x", None, None), fix_lit("b", "f", "x"), None),
         None,
     );
     let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
@@ -202,9 +204,9 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
 // newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
 pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_var("size", None, None),
+        var_local("size", None, None),
         expr_abs(
-            var_var("value", None, None),
+            var_local("value", None, None),
             new_array_lit("a", "size", "value"),
             None,
         ),
@@ -253,9 +255,9 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
 // readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
 pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_var("array", None, None),
+        var_local("array", None, None),
         expr_abs(
-            var_var("idx", None, None),
+            var_local("idx", None, None),
             read_array_lit("a", "array", "idx"),
             None,
         ),
@@ -377,11 +379,11 @@ fn write_array_lit(
 // writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
 pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_var("array", None, None),
+        var_local("array", None, None),
         expr_abs(
-            var_var("idx", None, None),
+            var_local("idx", None, None),
             expr_abs(
-                var_var("value", None, None),
+                var_local("value", None, None),
                 write_array_lit("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
@@ -408,4 +410,29 @@ pub fn write_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // writeArray! built-in function.
 pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
     write_array_common(true)
+}
+
+// Add bult-in functions to a given ast.
+pub fn add_builtin_symbols(program: Arc<ExprNode>) -> Arc<ExprNode> {
+    fn add_let(
+        program: Arc<ExprNode>,
+        name: &str,
+        (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
+    ) -> Arc<ExprNode> {
+        expr_let(
+            var_var(name, Some(vec![PRELUDE_NAME.to_string()]), Some(scm), None),
+            expr,
+            program,
+            None,
+        )
+    }
+
+    let program = add_let(program, "add", add());
+    let program = add_let(program, "eq", eq());
+    let program = add_let(program, "fix", fix());
+    let program = add_let(program, "newArray", new_array());
+    let program = add_let(program, "readArray", read_array());
+    let program = add_let(program, "writeArray", write_array());
+    let program = add_let(program, "writeArray!", write_array_unique());
+    program
 }

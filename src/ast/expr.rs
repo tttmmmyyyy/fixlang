@@ -81,20 +81,31 @@ pub struct Literal {
 
 pub struct Var {
     pub name: String,
+    pub namespace: Option<Vec<String>>, // None implies namespace to be inferred, and empty implies it is local.
     pub type_annotation: Option<Arc<Scheme>>,
     pub source: Option<Span>,
 }
 
 pub fn var_var(
     var_name: &str,
+    namespace: Option<Vec<String>>,
     type_annotation: Option<Arc<Scheme>>,
     src: Option<Span>,
 ) -> Arc<Var> {
     Arc::new(Var {
         name: String::from(var_name),
+        namespace,
         type_annotation,
         source: src,
     })
+}
+
+pub fn var_local(
+    var_name: &str,
+    type_annotation: Option<Arc<Scheme>>,
+    src: Option<Span>,
+) -> Arc<Var> {
+    var_var(var_name, Some(vec![]), type_annotation, src)
 }
 
 pub fn expr_lit(
@@ -132,7 +143,7 @@ pub fn expr_app(lam: Arc<ExprNode>, arg: Arc<ExprNode>, src: Option<Span>) -> Ar
 
 // Make variable expression.
 pub fn expr_var(var_name: &str, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Var(var_var(var_name, None, src.clone()))).into_expr_info(src)
+    Arc::new(Expr::Var(var_var(var_name, None, None, src.clone()))).into_expr_info(src)
 }
 
 pub fn expr_if(

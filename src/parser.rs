@@ -96,8 +96,9 @@ fn parse_file(mut file: Pairs<Rule>, src: &Arc<String>) -> FixModule {
 
 fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     assert_eq!(pair.as_rule(), Rule::module);
+    let mut pairs = pair.into_inner();
+    let name = pairs.next().unwrap().as_str();
     let mut type_decls: Vec<TypeDecl> = Vec::new();
-    let pairs = pair.into_inner();
     let mut expr: Option<Arc<ExprNode>> = None;
     for pair in pairs {
         match pair.as_rule() {
@@ -111,6 +112,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
         }
     }
     FixModule {
+        name: name.to_string(),
         type_decls,
         expr: expr.unwrap(),
     }
@@ -211,14 +213,14 @@ fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     }
 }
 
-fn parse_tyapp_bracket(pair: Pair<Rule>) -> Vec<Arc<TypeNode>> {
-    let pairs = pair.into_inner();
-    let mut ret: Vec<Arc<TypeNode>> = vec![];
-    for pair in pairs {
-        ret.push(parse_type(pair));
-    }
-    ret
-}
+// fn parse_tyapp_bracket(pair: Pair<Rule>) -> Vec<Arc<TypeNode>> {
+//     let pairs = pair.into_inner();
+//     let mut ret: Vec<Arc<TypeNode>> = vec![];
+//     for pair in pairs {
+//         ret.push(parse_type(pair));
+//     }
+//     ret
+// }
 
 fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let pair = expr.into_inner().next().unwrap();
@@ -236,7 +238,7 @@ fn parse_var_as_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 
 fn parse_var_as_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
     assert_eq!(pair.as_rule(), Rule::var);
-    var_var(pair.as_str(), None, Some(Span::from_pair(&src, &pair)))
+    var_local(pair.as_str(), None, Some(Span::from_pair(&src, &pair)))
 }
 
 fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
