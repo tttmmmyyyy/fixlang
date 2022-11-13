@@ -19,11 +19,6 @@ fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
     error_exit(&str)
 }
 
-#[derive(Clone)]
-struct LocalTypeVar {
-    ty: Arc<TypeNode>,
-    /* field for type class */
-}
 struct Scope<T> {
     var: HashMap<String, Vec<T>>,
 }
