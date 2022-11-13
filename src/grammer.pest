@@ -7,7 +7,7 @@ expr_bool_lit = { "true" | "false" }
 
 expr_lit = { expr_int_lit | expr_bool_lit }
 
-keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit }
+keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit | "type" }
 
 in_of_let = { "in" | ";" }
 
@@ -73,6 +73,21 @@ type_fun = { type_except_fun ~ sep* ~ "=>" ~ sep* ~ type_expr }
 
 tycon = { ASCII_ALPHA_UPPER ~ var_char* }
 
+// === Type declarations ===
+type_name = { ASCII_ALPHA_UPPER ~ var_char* }
+
+type_field_name = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
+
+type_field_decl = _{ type_field_name ~ sep* ~ ":" ~ sep* ~ type_name }
+
+type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ "(" ~ sep* ~ type_field_decl ~ ( sep* ~ "," ~ sep* ~ type_field_decl )* ~ sep* ~ ")" ~ sep* ~ ";" }
+
+// === Module ===
+// module_name = { ASCII_ALPHA_UPPER ~ var_char* }
+// module_decl = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" } // will be added later.
+
+module = _{ /*module_decl ~*/ (sep* ~ type_decl)* ~ sep* ~ expr }
+
 // === Comments ===
 block_comment = _{ "{-"  ~ block_commented_character*  ~ "-}" }
 
@@ -83,4 +98,4 @@ line_comment = _{"--" ~ line_commented_character* ~ ( NEWLINE | EOI )}
 line_commented_character = _{ !(NEWLINE | EOI) ~ ANY }
 
 // === File ===
-file = _{ SOI ~ sep* ~ expr ~ sep* ~ EOI }
+file = _{ SOI ~ sep* ~ module ~ sep* ~ EOI }
