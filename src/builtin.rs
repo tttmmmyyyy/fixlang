@@ -5,72 +5,28 @@ const INT_NAME: &str = "Int";
 const BOOL_NAME: &str = "Bool";
 const ARRAY_NAME: &str = "Array";
 
-// Array of built-in tycons.
-static BUILTIN_TYCONS: Lazy<Vec<Arc<TyCon>>> = Lazy::new(|| {
-    vec![
-        tycon(INT_NAME /* , &kind_star(), -1*/),
-        tycon(BOOL_NAME /* , &kind_star(), -2*/),
-        tycon(
-            ARRAY_NAME, /*, &kind_arrow(kind_star(), kind_star()), -3*/
-        ),
-    ]
-});
-
-// Search tycon id of tycon name
-pub fn builtin_tycon(name: &str) -> Arc<TypeNode> {
-    // TODO: Avoid linear search by preparing HashMap from BUILTIN_LITERAL_TYPES using once_cell::Lazy.
-    for i in 0..BUILTIN_TYCONS.len() {
-        if BUILTIN_TYCONS[i].name == name {
-            return type_tycon(&BUILTIN_TYCONS[i]);
-        }
-    }
-    panic!("Unknown type constructor: {}", name);
+pub fn bulitin_type_to_kind_map() -> HashMap<String, Arc<Kind>> {
+    let mut ret = HashMap::new();
+    ret.insert(INT_NAME.to_string(), kind_star());
+    ret.insert(BOOL_NAME.to_string(), kind_star());
+    ret.insert(ARRAY_NAME.to_string(), kind_arrow(kind_star(), kind_star()));
+    ret
 }
 
 // Get Int type.
 pub fn int_lit_ty() -> Arc<TypeNode> {
-    builtin_tycon(INT_NAME)
+    type_tycon(&tycon(INT_NAME))
 }
 
 // Get Bool type.
 pub fn bool_lit_ty() -> Arc<TypeNode> {
-    builtin_tycon(BOOL_NAME)
+    type_tycon(&tycon(BOOL_NAME))
 }
 
 // Get Array type.
 pub fn array_lit_ty() -> Arc<TypeNode> {
-    builtin_tycon(ARRAY_NAME)
+    type_tycon(&tycon(ARRAY_NAME))
 }
-
-// // Make built-in literal type from type id.
-// pub fn make_literal_type(type_id: u32) -> Arc<TypeNode> {
-//     match type_id {
-//         INT_TYPEID => int_lit_ty(),
-//         BOOL_TYPEID => bool_lit_ty(),
-//         _ => unreachable!(),
-//     }
-// }
-
-// Search tycon id of literal type from its name.
-// pub fn builtin_tycon_id(name: &str) -> usize {
-//     // TODO: Avoid linear search by preparing HashMap from BUILTIN_LITERAL_TYPES using once_cell::Lazy.
-//     for i in 0..BUILTIN_TYCONS.len() {
-//         if BUILTIN_TYCONS[i].name == name {
-//             return i;
-//         }
-//     }
-//     panic!("Unknown tycon: {}", name);
-// }
-
-// // Make builtin tycon.
-// pub fn make_bultin_tycon(name: &str) -> Arc<TyCon> {
-//     BUILTIN_TYCONS[builtin_tycon_id(name)].clone()
-// }
-
-// // Make Array literay type constructor.
-// pub fn array_lit_tycon() -> Arc<TyCon> {
-//     make_bultin_tycon(ARRAY_NAME)
-// }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
@@ -169,8 +125,11 @@ pub fn eq() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::new_arc_from_str(
-        &["a"],
-        type_fun(type_tyvar("a"), type_fun(type_tyvar("a"), bool_lit_ty())),
+        &[("a", kind_star())],
+        type_fun(
+            type_tyvar_star("a"),
+            type_fun(type_tyvar_star("a"), bool_lit_ty()),
+        ),
     );
     (expr, scm)
 }
@@ -188,7 +147,7 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
         f_fixf_x
     });
-    expr_lit(generator, free_vars, name, type_tyvar(b), None)
+    expr_lit(generator, free_vars, name, type_tyvar_star(b), None)
 }
 
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
@@ -198,9 +157,9 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(var_var("x", None, None), fix_lit("b", "f", "x"), None),
         None,
     );
-    let fixed_ty = type_fun(type_tyvar("a"), type_tyvar("b"));
+    let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
     let scm = Scheme::new_arc_from_str(
-        &["a", "b"],
+        &[("a", kind_star()), ("b", kind_star())],
         type_fun(type_fun(fixed_ty.clone(), fixed_ty.clone()), fixed_ty),
     );
     (expr, scm)
@@ -234,7 +193,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
         generator,
         free_vars,
         name,
-        type_tyapp(array_lit_ty(), type_tyvar(a)),
+        type_tyapp(array_lit_ty(), type_tyvar_star(a)),
         None,
     )
 }
@@ -252,10 +211,13 @@ pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::new_arc_from_str(
-        &["a"],
+        &[("a", kind_star())],
         type_fun(
             int_lit_ty(),
-            type_fun(type_tyvar("a"), type_tyapp(array_lit_ty(), type_tyvar("a"))),
+            type_fun(
+                type_tyvar_star("a"),
+                type_tyapp(array_lit_ty(), type_tyvar_star("a")),
+            ),
         ),
     );
     (expr, scm)
@@ -284,7 +246,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
         gc.release(array);
         elem
     });
-    expr_lit(generator, free_vars, name, type_tyvar(a), None)
+    expr_lit(generator, free_vars, name, type_tyvar_star(a), None)
 }
 
 // "readArray" built-in function.
@@ -300,10 +262,10 @@ pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::new_arc_from_str(
-        &["a"],
+        &[("a", kind_star())],
         type_fun(
-            type_tyapp(array_lit_ty(), type_tyvar("a")),
-            type_fun(int_lit_ty(), type_tyvar("a")),
+            type_tyapp(array_lit_ty(), type_tyvar_star("a")),
+            type_fun(int_lit_ty(), type_tyvar_star("a")),
         ),
     );
     (expr, scm)
@@ -406,7 +368,7 @@ fn write_array_lit(
         generator,
         free_vars,
         name,
-        type_tyapp(array_lit_ty(), type_tyvar(a)),
+        type_tyapp(array_lit_ty(), type_tyvar_star(a)),
         None,
     )
 }
@@ -427,12 +389,12 @@ pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
         ),
         None,
     );
-    let array_ty = type_tyapp(array_lit_ty(), type_tyvar("a"));
+    let array_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
     let scm = Scheme::new_arc_from_str(
-        &["a"],
+        &[("a", kind_star())],
         type_fun(
             array_ty.clone(),
-            type_fun(int_lit_ty(), type_fun(type_tyvar("a"), array_ty)),
+            type_fun(int_lit_ty(), type_fun(type_tyvar_star("a"), array_ty)),
         ),
     );
     (expr, scm)

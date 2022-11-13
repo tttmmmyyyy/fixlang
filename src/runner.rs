@@ -40,15 +40,21 @@ fn add_builtin_symbols(program: Arc<ExprNode>) -> Arc<ExprNode> {
     program
 }
 
-fn run_ast(program: Arc<ExprNode>, opt_level: OptimizationLevel) -> i64 {
-    // Add library functions to program.
-    let program = add_builtin_symbols(program);
+fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
+    // Create typeckecker.
+    let mut typechecker = TypeCheckContext::default();
+
+    // Read type declarations to create type-to-kind mapping.
+    typechecker.add_tycons(&program.type_decls);
+
+    // Add built-in functions to program.
+    program.expr = add_builtin_symbols(program.expr);
 
     // Check types.
-    check_type(program.clone(), int_lit_ty());
+    check_type(program.expr.clone(), int_lit_ty());
 
     // Calculate free variables of nodes.
-    let program = calculate_free_vars(program);
+    program.expr = calculate_free_vars(program.expr);
 
     // Create GenerationContext.
     let context = Context::create();
@@ -65,7 +71,7 @@ fn run_ast(program: Arc<ExprNode>, opt_level: OptimizationLevel) -> i64 {
     gc.builder().position_at_end(entry_bb);
 
     // Evaluate program and extract int value from result.
-    let program_result = gc.eval_expr(program);
+    let program_result = gc.eval_expr(program.expr);
     let result = gc.load_obj_field(program_result, int_type(&context), 1);
     gc.release(program_result);
 
@@ -96,8 +102,8 @@ fn run_ast(program: Arc<ExprNode>, opt_level: OptimizationLevel) -> i64 {
 }
 
 pub fn run_source(source: &str, opt_level: OptimizationLevel) -> i64 {
-    let ast = parse_source(source);
-    run_ast(ast, opt_level)
+    let module = parse_source(source);
+    run_module(module, opt_level)
 }
 
 pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {

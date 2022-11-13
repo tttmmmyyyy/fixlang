@@ -18,6 +18,8 @@ mod typecheck;
 mod types;
 
 use ast::expr::*;
+use ast::module::*;
+use ast::typedecl::*;
 use ast::types::*;
 use builtin::*;
 use clap::{App, AppSettings, Arg};

@@ -3,6 +3,7 @@ use super::*;
 #[derive(Eq, PartialEq)]
 pub struct TyVar {
     pub name: String,
+    pub kind: Arc<Kind>,
 }
 
 #[derive(Eq, PartialEq)]
@@ -14,8 +15,6 @@ pub enum Kind {
 #[derive(Eq, PartialEq, Clone)]
 pub struct TyCon {
     pub name: String,
-    // pub kind: Option<Arc<Kind>>,
-    // pub id: i32, // 0 = unknown, >0 = user-defined, <0 = bulit-in
 }
 
 // Node of type ast tree with user defined additional information
@@ -59,6 +58,36 @@ impl TypeNode {
         let mut ret = (**self).clone();
         ret.ty = ty;
         Arc::new(ret)
+    }
+
+    // Calculate kind.
+    pub fn kind(&self, tycons: &HashMap<String, Arc<Kind>>) -> Arc<Kind> {
+        match &self.ty {
+            Type::TyVar(tv) => tv.kind.clone(),
+            Type::TyCon(tc) => tycons[&tc.name].clone(),
+            Type::TyApp(fun, arg) => {
+                let arg_kind = arg.kind(tycons);
+                let fun_kind = fun.kind(tycons);
+                match &*fun_kind {
+                    Kind::Arrow(arg2, res) => {
+                        if arg_kind != *arg2 {
+                            error_exit("Kind mismatch.");
+                        }
+                        res.clone()
+                    }
+                    Kind::Star => error_exit("Kind mismatch."),
+                }
+            }
+            Type::FunTy(arg, ret) => {
+                if arg.kind(tycons) != kind_star() {
+                    error_exit("Kind mismatch.")
+                }
+                if ret.kind(tycons) != kind_star() {
+                    error_exit("Kind mismatch.")
+                }
+                kind_star()
+            }
+        }
     }
 }
 
@@ -142,14 +171,19 @@ pub fn kind_arrow(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
-pub fn tyvar_from_name(var_name: &str) -> Arc<TyVar> {
+pub fn tyvar_from_name(var_name: &str, kind: &Arc<Kind>) -> Arc<TyVar> {
     Arc::new(TyVar {
         name: String::from(var_name),
+        kind: kind.clone(),
     })
 }
 
-pub fn type_tyvar(var_name: &str) -> Arc<TypeNode> {
-    TypeNode::new_arc(Type::TyVar(tyvar_from_name(var_name)))
+pub fn type_tyvar(var_name: &str, kind: &Arc<Kind>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::TyVar(tyvar_from_name(var_name, kind)))
+}
+
+pub fn type_tyvar_star(var_name: &str) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::TyVar(tyvar_from_name(var_name, &kind_star())))
 }
 
 pub fn type_var_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
@@ -168,11 +202,9 @@ pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }
 
-pub fn tycon(name: &str /*, kind: &Arc<Kind>, id: i32*/) -> Arc<TyCon> {
+pub fn tycon(name: &str) -> Arc<TyCon> {
     Arc::new(TyCon {
         name: String::from(name),
-        // kind: kind.clone(),
-        // id: id,
     })
 }
 
@@ -182,11 +214,11 @@ pub struct TypeInfo {}
 
 impl TypeNode {
     // Calculate free type variables.
-    pub fn free_vars(self: &Arc<Self>) -> HashSet<String> {
-        let mut free_vars = HashSet::<String>::default();
+    pub fn free_vars(self: &Arc<Self>) -> HashMap<String, Arc<Kind>> {
+        let mut free_vars: HashMap<String, Arc<Kind>> = HashMap::default();
         let ty = match &self.ty {
             Type::TyVar(tv) => {
-                free_vars.insert(tv.name.clone());
+                free_vars.insert(tv.name.clone(), tv.kind.clone());
             }
             Type::TyApp(tyfun, arg) => {
                 free_vars.extend(tyfun.free_vars());
@@ -204,26 +236,32 @@ impl TypeNode {
 
 // Scheme = forall<a1,..,> (...type...)
 pub struct Scheme {
-    pub vars: HashSet<String>,
+    pub vars: HashMap<String, Arc<Kind>>,
     pub ty: Arc<TypeNode>,
 }
 
 impl Scheme {
     // Create new instance.
-    pub fn new_arc(vars: HashSet<String>, ty: Arc<TypeNode>) -> Arc<Scheme> {
+    pub fn new_arc(vars: HashMap<String, Arc<Kind>>, ty: Arc<TypeNode>) -> Arc<Scheme> {
         Arc::new(Scheme { vars, ty })
     }
 
     // Create new instance.
-    pub fn new_arc_from_str(vars: &[&str], ty: Arc<TypeNode>) -> Arc<Scheme> {
-        Self::new_arc(HashSet::from_iter(vars.iter().map(|s| s.to_string())), ty)
+    pub fn new_arc_from_str(vars: &[(&str, Arc<Kind>)], ty: Arc<TypeNode>) -> Arc<Scheme> {
+        Self::new_arc(
+            HashMap::from_iter(
+                vars.iter()
+                    .map(|(name, kind)| (name.to_string(), kind.clone())),
+            ),
+            ty,
+        )
     }
 
     // Get free type variables.
-    pub fn free_vars(&self) -> HashSet<String> {
+    pub fn free_vars(&self) -> HashMap<String, Arc<Kind>> {
         let mut ret = self.ty.free_vars();
         for var in &self.vars {
-            ret.remove(var);
+            ret.remove(var.0);
         }
         ret
     }
@@ -234,7 +272,7 @@ impl Scheme {
         if self.vars.len() > 0 {
             ret += "for<";
             for (i, var) in self.vars.iter().enumerate() {
-                ret += var;
+                ret += var.0;
                 if i < self.vars.len() - 1 {
                     ret += ",";
                 }

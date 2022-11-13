@@ -120,16 +120,20 @@ impl Substitution {
     }
 
     // Calculate minimum substitution to unify two types.
-    fn unify(ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> Option<Self> {
+    fn unify(
+        tycons: &HashMap<String, Arc<Kind>>,
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
+    ) -> Option<Self> {
         match &ty1.ty {
             Type::TyVar(var1) => {
-                return Self::unify_tyvar(&var1, ty2);
+                return Self::unify_tyvar(tycons, &var1, ty2);
             }
             _ => {}
         }
         match &ty2.ty {
             Type::TyVar(var2) => {
-                return Self::unify_tyvar(&var2, ty1);
+                return Self::unify_tyvar(tycons, &var2, ty1);
             }
             _ => {}
         }
@@ -150,13 +154,13 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::unify(&fun1, &fun2) {
+                    match Self::unify(tycons, &fun1, &fun2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
                     let arg1 = ret.substitute_type(arg1);
                     let arg2 = ret.substitute_type(arg2);
-                    match Self::unify(&arg1, &arg2) {
+                    match Self::unify(tycons, &arg1, &arg2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
@@ -169,13 +173,13 @@ impl Substitution {
             Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
                 Type::FunTy(arg_ty2, ret_ty2) => {
                     let mut ret = Self::default();
-                    match Self::unify(&arg_ty1, &arg_ty2) {
+                    match Self::unify(tycons, &arg_ty1, &arg_ty2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
                     let ret_ty1 = ret.substitute_type(ret_ty1);
                     let ret_ty2 = ret.substitute_type(ret_ty2);
-                    match Self::unify(&ret_ty1, &ret_ty2) {
+                    match Self::unify(tycons, &ret_ty1, &ret_ty2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
@@ -189,7 +193,11 @@ impl Substitution {
     }
 
     // Subroutine of unify().
-    fn unify_tyvar(tyvar1: &Arc<TyVar>, ty2: &Arc<TypeNode>) -> Option<Self> {
+    fn unify_tyvar(
+        tycons: &HashMap<String, Arc<Kind>>,
+        tyvar1: &Arc<TyVar>,
+        ty2: &Arc<TypeNode>,
+    ) -> Option<Self> {
         match &ty2.ty {
             Type::TyVar(tyvar2) => {
                 if tyvar1.name == tyvar2.name {
@@ -199,8 +207,11 @@ impl Substitution {
             }
             _ => {}
         };
-        if ty2.free_vars().contains(&tyvar1.name) {
+        if ty2.free_vars().contains_key(&tyvar1.name) {
             panic!("unify_tyvar is making circular substitution.")
+        }
+        if tyvar1.kind != ty2.kind(tycons) {
+            error_exit_with_src("Kinds do not match.", &None);
         }
         Some(Self::single(&tyvar1.name, ty2.clone()))
     }
@@ -208,13 +219,15 @@ impl Substitution {
 
 // Context under type-checking.
 // Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
-struct TypeCheckContext {
+pub struct TypeCheckContext {
     // The identifier of type variables.
     tyvar_id: u32,
     // Scoped map of variable name -> scheme. (Assamptions of type inference.)
     scope: Scope<Arc<Scheme>>,
     // Substitution.
     substitution: Substitution,
+    // Set of TyCons associated with kinds
+    tycons: HashMap<String, Arc<Kind>>,
 }
 
 impl Default for TypeCheckContext {
@@ -223,6 +236,7 @@ impl Default for TypeCheckContext {
             tyvar_id: Default::default(),
             scope: Default::default(),
             substitution: Default::default(),
+            tycons: bulitin_type_to_kind_map(),
         }
     }
 }
@@ -248,20 +262,20 @@ impl TypeCheckContext {
     // Instantiate a scheme.
     fn instantiate_scheme(&mut self, scheme: &Arc<Scheme>) -> Arc<TypeNode> {
         let mut sub = Substitution::default();
-        for var in &scheme.vars {
+        for (var, kind) in &scheme.vars {
             let new_var_name = self.new_tyvar();
-            sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name)));
+            sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
         }
         sub.substitute_type(&scheme.ty)
     }
 
-    // Make a scheme from a type by abstructing type variable that does not appear in scope.
+    // Make a scheme from a type by abstracting type variable that does not appear in scope.
     fn abstract_to_scheme(&self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
         let ty = self.substitute_type(ty);
         let mut vars = ty.free_vars();
         for (_var, scms) in &self.scope.var {
             for scm in scms {
-                for var_in_scope in self.substitute_scheme(&scm).free_vars() {
+                for (var_in_scope, _) in self.substitute_scheme(&scm).free_vars() {
                     vars.remove(&var_in_scope);
                 }
             }
@@ -273,7 +287,7 @@ impl TypeCheckContext {
     fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         let ty1 = &self.substitute_type(ty1);
         let ty2 = &self.substitute_type(ty2);
-        match Substitution::unify(ty1, ty2) {
+        match Substitution::unify(&self.tycons, ty1, ty2) {
             Some(sub) => {
                 self.substitution.add_substitution(&sub);
                 return true;
@@ -324,14 +338,14 @@ impl TypeCheckContext {
                 }
             }
             Expr::App(fun, arg) => {
-                let arg_ty = type_tyvar(&self.new_tyvar());
+                let arg_ty = type_tyvar_star(&self.new_tyvar());
                 self.deduce_expr(arg, arg_ty.clone());
                 // NOTE: to help name-resolution of fields, we should deduce_expr of arg before that of fun.
                 self.deduce_expr(fun, type_fun(arg_ty, ty));
             }
             Expr::Lam(arg, body) => {
-                let arg_ty = type_tyvar(&self.new_tyvar());
-                let body_ty = type_tyvar(&self.new_tyvar());
+                let arg_ty = type_tyvar_star(&self.new_tyvar());
+                let body_ty = type_tyvar_star(&self.new_tyvar());
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
                 if !self.unify(&fun_ty, &ty) {
                     error_exit_with_src(
@@ -356,14 +370,14 @@ impl TypeCheckContext {
                             error_exit_with_src(
                                 &format!(
                                     "unknown type variable `{}`",
-                                    free_vars.iter().next().unwrap()
+                                    free_vars.iter().next().unwrap().0
                                 ),
                                 &var.source,
                             )
                         }
                         self.instantiate_scheme(&scm)
                     }
-                    None => type_tyvar(&self.new_tyvar()),
+                    None => type_tyvar_star(&self.new_tyvar()),
                 };
                 self.deduce_expr(val, var_ty.clone());
                 let var_scm = self.abstract_to_scheme(&var_ty);
@@ -377,5 +391,20 @@ impl TypeCheckContext {
                 self.deduce_expr(else_expr, ty);
             }
         }
+    }
+
+    // Read type declarations to verity it and extend type-to-kind mapping.
+    pub fn add_tycons(&mut self, type_decls: &Vec<TypeDecl>) {
+        for type_decl in type_decls {
+            self.add_tycon(type_decl);
+        }
+    }
+
+    // Read type declaration to verity it and extend type-to-kind mapping.
+    fn add_tycon(&mut self, decl: &TypeDecl) {
+        if self.tycons.contains_key(&decl.name) {
+            error_exit_with_src(&format!("Type `{}` is already defined.", decl.name), &None);
+        }
+        self.tycons.insert(decl.name.clone(), kind_star());
     }
 }

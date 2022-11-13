@@ -73,15 +73,15 @@ type_name = { ASCII_ALPHA_UPPER ~ var_char* }
 
 type_field_name = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
 
-type_field_decl = _{ type_field_name ~ sep* ~ ":" ~ sep* ~ type_name }
+type_field = _{ type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ "struct" ~ sep* ~ "(" ~ sep* ~ type_field_decl ~ ( sep* ~ "," ~ sep* ~ type_field_decl )* ~ sep* ~ ")" ~ sep* ~ ";" }
+type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ "struct" ~ sep* ~ "(" ~ sep* ~ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* ~ sep* ~ ")" ~ sep* ~ ";" }
 
 // === Module ===
 // module_name = { ASCII_ALPHA_UPPER ~ var_char* }
 // module_decl = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" } // will be added later.
 
-module = _{ /*module_decl ~*/ (sep* ~ type_decl)* ~ sep* ~ expr }
+module = { /*module_decl ~*/ (sep* ~ type_decl)* ~ sep* ~ expr }
 
 // === Comments ===
 block_comment = _{ "{-"  ~ block_commented_character*  ~ "-}" }

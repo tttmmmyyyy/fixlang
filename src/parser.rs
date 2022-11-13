@@ -76,7 +76,7 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
     }
 }
 
-pub fn parse_source(source: &str) -> Arc<ExprNode> {
+pub fn parse_source(source: &str) -> FixModule {
     let source = Arc::new(String::from(source));
     let file = FixParser::parse(Rule::file, &source);
     let file = match file {
@@ -86,11 +86,58 @@ pub fn parse_source(source: &str) -> Arc<ExprNode> {
     parse_file(file, &source)
 }
 
-fn parse_file(mut file: Pairs<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_file(mut file: Pairs<Rule>, src: &Arc<String>) -> FixModule {
     let pair = file.next().unwrap();
     match pair.as_rule() {
-        Rule::expr => return parse_expr(pair, src),
+        Rule::module => return parse_module(pair, src),
         _ => unreachable!(),
+    }
+}
+
+fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
+    assert_eq!(pair.as_rule(), Rule::module);
+    let mut type_decls: Vec<TypeDecl> = Vec::new();
+    let pairs = pair.into_inner();
+    let mut expr: Option<Arc<ExprNode>> = None;
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::type_decl => {
+                type_decls.push(parse_type_decl(pair, src));
+            }
+            Rule::expr => {
+                expr = Some(parse_expr(pair, src));
+            }
+            _ => unreachable!(),
+        }
+    }
+    FixModule {
+        type_decls,
+        expr: expr.unwrap(),
+    }
+}
+
+fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
+    assert_eq!(pair.as_rule(), Rule::type_decl);
+    let mut pairs = pair.into_inner();
+    let name = pairs.next().unwrap().as_str();
+    let mut fields: Vec<StructField> = Vec::new();
+    for pair in pairs {
+        fields.push(parse_type_field(pair, src));
+    }
+    TypeDecl {
+        name: name.to_string(),
+        value: TypeDeclValue::Struct(fields),
+    }
+}
+
+fn parse_type_field(pair: Pair<Rule>, src: &Arc<String>) -> StructField {
+    assert_eq!(pair.as_rule(), Rule::type_field);
+    let mut pairs = pair.into_inner();
+    let name = pairs.next().unwrap().as_str();
+    let ty = parse_type(pairs.next().unwrap());
+    StructField {
+        name: name.to_string(),
+        ty,
     }
 }
 
