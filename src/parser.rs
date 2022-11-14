@@ -236,7 +236,7 @@ fn parse_var_as_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     expr_var(pair.as_str(), Some(Span::from_pair(&src, &pair)))
 }
 
-fn parse_var_as_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
+fn parse_var_as_localvar(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
     assert_eq!(pair.as_rule(), Rule::var);
     var_local(pair.as_str(), None, Some(Span::from_pair(&src, &pair)))
 }
@@ -250,7 +250,7 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let _in_of_let = pairs.next().unwrap();
     let val = pairs.next().unwrap();
     expr_let(
-        parse_var_as_var(var, src),
+        parse_var_as_localvar(var, src),
         parse_expr(bound, src),
         parse_expr(val, src),
         Some(span),
@@ -263,7 +263,11 @@ fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let var = pairs.next().unwrap();
     let _arrow_of_lam = pairs.next().unwrap();
     let val = pairs.next().unwrap();
-    expr_abs(parse_var_as_var(var, src), parse_expr(val, src), Some(span))
+    expr_abs(
+        parse_var_as_localvar(var, src),
+        parse_expr(val, src),
+        Some(span),
+    )
 }
 
 fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {

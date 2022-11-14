@@ -19,8 +19,24 @@ fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
     error_exit(&str)
 }
 
+#[derive(Clone)]
 struct Scope<T> {
-    var: HashMap<String, Vec<T>>,
+    var: HashMap<String, ScopeValue<T>>,
+}
+
+#[derive(Clone)]
+struct ScopeValue<T> {
+    global: HashMap<NameSpace, T>,
+    local: Vec<T>,
+}
+
+impl<T> Default for ScopeValue<T> {
+    fn default() -> Self {
+        Self {
+            global: Default::default(),
+            local: Default::default(),
+        }
+    }
 }
 
 impl<T> Default for Scope<T> {
@@ -40,19 +56,78 @@ where
         if !self.var.contains_key(name) {
             self.var.insert(String::from(name), Default::default());
         }
-        self.var.get_mut(name).unwrap().push(ty.clone());
+        self.var.get_mut(name).unwrap().local.push(ty.clone());
     }
     fn pop(self: &mut Self, name: &str) {
-        self.var.get_mut(name).unwrap().pop();
-        if self.var.get(name).unwrap().is_empty() {
+        self.var.get_mut(name).unwrap().local.pop();
+        if self.var.get(name).unwrap().local.is_empty() {
             self.var.remove(name);
         }
     }
-    fn get(self: &Self, name: &str) -> Option<&T> {
-        self.var.get(name).map(|v| v.last().unwrap())
+    fn get(self: &Self, name: &str) -> Option<&ScopeValue<T>> {
+        self.var.get(name)
     }
-    fn get_mut(self: &mut Self, name: &str) -> Option<&mut T> {
-        self.var.get_mut(name).map(|v| v.last_mut().unwrap())
+    fn get_mut(self: &mut Self, name: &str) -> Option<&mut ScopeValue<T>> {
+        self.var.get_mut(name)
+    }
+    fn add_global(&mut self, name: &str, namespace: &NameSpace, value: &T) {
+        if !self.var.contains_key(name) {
+            self.var.insert(String::from(name), Default::default());
+        }
+        if self.var[name].global.contains_key(namespace) {
+            error_exit(&format!(
+                "duplicate definition for `{}::{}`",
+                namespace.to_string(),
+                name
+            ))
+        }
+        self.get_mut(name)
+            .unwrap()
+            .global
+            .insert(namespace.clone(), value.clone());
+    }
+
+    // Get candidates list for overload resolution.
+    // If `namespace` is unspecified (None) and a local variable `name` is found, then that local variable is returned.
+    // If `namespace` is unspecified and no local variable `name` is found, then all global variables are returned.
+    // If `namespace` is specified and non-empty, then returns all global variables whose namespaces have `namespace` as suffix.
+    // If `namespace` is specified and empty, then returns local variable `name`.
+    fn overloaded_candidates(
+        &self,
+        name: &str,
+        namespace: &Option<NameSpace>,
+    ) -> Vec<(NameSpace, T)> {
+        if !self.var.contains_key(name) {
+            return vec![];
+        }
+        let sv = &self.var[name];
+        match namespace {
+            None => {
+                if sv.local.len() > 0 {
+                    vec![(NameSpace::local(), sv.local.last().unwrap().clone())]
+                } else {
+                    sv.global
+                        .iter()
+                        .map(|(ns, v)| (ns.clone(), v.clone()))
+                        .collect()
+                }
+            }
+            Some(ns) => {
+                if ns.is_local() {
+                    if sv.local.len() > 0 {
+                        vec![(NameSpace::local(), sv.local.last().unwrap().clone())]
+                    } else {
+                        vec![]
+                    }
+                } else {
+                    sv.global
+                        .iter()
+                        .filter(|(ns2, v)| ns.is_suffix(ns2))
+                        .map(|(ns2, v)| (ns2.clone(), v.clone()))
+                        .collect()
+                }
+            }
+        }
     }
 }
 
@@ -64,6 +139,7 @@ pub fn check_type(ei: Arc<ExprNode>, ty: Arc<TypeNode>) {
 // Type substitution. Name of type variable -> type.
 // Managed so that the value (a type) of this HashMap doesn't contain a type variable that appears in keys. i.e.,
 // when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
+#[derive(Clone)]
 struct Substitution {
     data: HashMap<String, Arc<TypeNode>>,
 }
@@ -214,6 +290,7 @@ impl Substitution {
 
 // Context under type-checking.
 // Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
+#[derive(Clone)]
 pub struct TypeCheckContext {
     // The identifier of type variables.
     tyvar_id: u32,
@@ -268,8 +345,8 @@ impl TypeCheckContext {
     fn abstract_to_scheme(&self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
         let ty = self.substitute_type(ty);
         let mut vars = ty.free_vars();
-        for (_var, scms) in &self.scope.var {
-            for scm in scms {
+        for (_var, scp) in &self.scope.var {
+            for scm in &scp.local {
                 for (var_in_scope, _) in self.substitute_scheme(&scm).free_vars() {
                     vars.remove(&var_in_scope);
                 }
@@ -297,27 +374,47 @@ impl TypeCheckContext {
     fn deduce_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) {
         match &*ei.expr {
             Expr::Var(var) => {
-                let scm = self
-                    .scope
-                    .get(&var.name)
-                    .unwrap_or_else(|| {
-                        error_exit_with_src(
-                            &format!("unknown variable `{}`", var.name),
-                            &var.source,
-                        );
+                let candidates = self.scope.overloaded_candidates(&var.name, &var.namespace);
+                let candidates: Vec<(TypeCheckContext, NameSpace)> = candidates
+                    .iter()
+                    .filter_map(|(ns, scm)| {
+                        let mut tc = self.clone();
+                        let var_ty = tc.instantiate_scheme(&scm);
+                        let var_ty = tc.substitute_type(&var_ty);
+                        if tc.unify(&var_ty, &ty) {
+                            Some((tc, ns.clone()))
+                        } else {
+                            None
+                        }
                     })
-                    .clone();
-                let var_ty = self.instantiate_scheme(&scm);
-                let var_ty = self.substitute_type(&var_ty);
-                if !self.unify(&var_ty, &ty) {
+                    .collect();
+                if candidates.is_empty() {
                     error_exit_with_src(
                         &format!(
-                            "type mismatch. Expected `{}`, Found `{}`",
-                            &self.substitute_type(&ty).to_string(),
-                            &self.substitute_type(&var_ty).to_string(),
+                            "no name `{}` of required type `{}` is found.",
+                            var.name,
+                            &self.substitute_type(&ty).to_string()
                         ),
-                        &ei.source,
+                        &var.source,
                     );
+                } else if candidates.len() >= 2 {
+                    let candidates_str = candidates
+                        .iter()
+                        .map(|(_, ns)| ns.to_string() + "::" + &var.name)
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    error_exit_with_src(
+                        &format!(
+                            "name `{}` is ambiguous: there are {}.",
+                            var.name, candidates_str
+                        ),
+                        &var.source,
+                    );
+                } else {
+                    // candidates.len() == 1
+                    let (tc, ns) = candidates[0].clone();
+                    *self = tc;
+                    // TODO: write ns to variable here.
                 }
             }
             Expr::Lit(lit) => {
@@ -376,9 +473,17 @@ impl TypeCheckContext {
                 };
                 self.deduce_expr(val, var_ty.clone());
                 let var_scm = self.abstract_to_scheme(&var_ty);
-                self.scope.push(&var.name, &var_scm);
-                self.deduce_expr(body, ty);
-                self.scope.pop(&var.name);
+
+                if var.namespace.as_ref().unwrap().is_local() {
+                    self.scope.push(&var.name, &var_scm);
+                    self.deduce_expr(body, ty);
+                    self.scope.pop(&var.name);
+                } else {
+                    // NOTE: currently, top-level definition is treated as let-binding.
+                    self.scope
+                        .add_global(&var.name, &var.namespace.as_ref().unwrap(), &var_scm);
+                    self.deduce_expr(body, ty);
+                }
             }
             Expr::If(cond, then_expr, else_expr) => {
                 self.deduce_expr(cond, bool_lit_ty());

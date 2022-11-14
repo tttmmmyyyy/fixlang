@@ -420,7 +420,12 @@ pub fn add_builtin_symbols(program: Arc<ExprNode>) -> Arc<ExprNode> {
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
     ) -> Arc<ExprNode> {
         expr_let(
-            var_var(name, Some(vec![PRELUDE_NAME.to_string()]), Some(scm), None),
+            var_var(
+                name,
+                Some(NameSpace::new(vec![PRELUDE_NAME.to_string()])),
+                Some(scm),
+                None,
+            ),
             expr,
             program,
             None,

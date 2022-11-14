@@ -79,16 +79,53 @@ pub struct Literal {
     pub ty: Arc<TypeNode>,
 }
 
+#[derive(Eq, Hash, PartialEq, Clone)]
+pub struct NameSpace {
+    names: Vec<String>, // Empty implies it is local.
+}
+
+impl NameSpace {
+    pub fn local() -> Self {
+        Self { names: vec![] }
+    }
+
+    pub fn new(names: Vec<String>) -> Self {
+        Self { names }
+    }
+
+    pub fn is_local(&self) -> bool {
+        self.names.len() == 0
+    }
+
+    pub fn to_string(&self) -> String {
+        self.names.join("::")
+    }
+
+    pub fn is_suffix(&self, rhs: &NameSpace) -> bool {
+        let n = self.names.len();
+        let m = rhs.names.len();
+        if n > m {
+            return false;
+        }
+        for i in 0..n {
+            if self.names[n - 1 - i] != rhs.names[m - i - 1] {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 pub struct Var {
     pub name: String,
-    pub namespace: Option<Vec<String>>, // None implies namespace to be inferred, and empty implies it is local.
+    pub namespace: Option<NameSpace>, // None implies namespace to be inferred
     pub type_annotation: Option<Arc<Scheme>>,
     pub source: Option<Span>,
 }
 
 pub fn var_var(
     var_name: &str,
-    namespace: Option<Vec<String>>,
+    namespace: Option<NameSpace>,
     type_annotation: Option<Arc<Scheme>>,
     src: Option<Span>,
 ) -> Arc<Var> {
@@ -105,7 +142,7 @@ pub fn var_local(
     type_annotation: Option<Arc<Scheme>>,
     src: Option<Span>,
 ) -> Arc<Var> {
-    var_var(var_name, Some(vec![]), type_annotation, src)
+    var_var(var_name, Some(NameSpace::local()), type_annotation, src)
 }
 
 pub fn expr_lit(
