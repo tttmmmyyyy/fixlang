@@ -8,7 +8,11 @@ pub struct TypeDecl {
 
 // Right hand side of type declaration.
 pub enum TypeDeclValue {
-    Struct(Vec<StructField>),
+    Struct(Struct),
+}
+
+pub struct Struct {
+    pub fields: Vec<StructField>,
 }
 
 pub struct StructField {

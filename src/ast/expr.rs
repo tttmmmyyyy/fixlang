@@ -212,6 +212,10 @@ impl NameSpace {
         Self { names }
     }
 
+    pub fn new_str(names: &[&str]) -> Self {
+        Self::new(names.iter().map(|s| s.to_string()).collect())
+    }
+
     pub fn is_local(&self) -> bool {
         self.names.len() == 0
     }

@@ -1,3 +1,5 @@
+use std::iter;
+
 use super::*;
 
 #[derive(Eq, Hash, PartialEq, Clone)]
@@ -383,6 +385,13 @@ impl ObjectType {
 
     pub fn array_type() -> Self {
         let fields = vec![ObjectFieldType::Array];
+        Self::shared_obj_type(fields)
+    }
+
+    pub fn struct_type(field_count: usize) -> Self {
+        let fields: Vec<ObjectFieldType> = iter::repeat(ObjectFieldType::SubObject)
+            .take(field_count)
+            .collect();
         Self::shared_obj_type(fields)
     }
 

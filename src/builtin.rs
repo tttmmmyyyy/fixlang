@@ -412,32 +412,116 @@ pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
     write_array_common(true)
 }
 
+// `new` built-in function for a given struct.
+pub fn struct_new_lit(struct_name: &str, field_names: Vec<String>) -> Arc<ExprNode> {
+    let free_vars = field_names.clone();
+    let name = format!("{}.new {}", struct_name, field_names.join(" "));
+    let name_cloned = name.clone();
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        // Get field values.
+        let field_ptrs: Vec<PointerValue> = field_names
+            .iter()
+            .map(|name| gc.scope_get(name).ptr)
+            .collect();
+
+        // Create struct object.
+        let obj_ty = ObjectType::struct_type(field_names.len());
+        let str_ptr = obj_ty.create_obj(gc, Some(&name_cloned));
+
+        // Set fields.
+        let struct_ty = obj_ty.to_struct_type(gc.context);
+        for (i, field_ptr) in field_ptrs.iter().enumerate() {
+            gc.store_obj_field(
+                str_ptr,
+                struct_ty,
+                i as u32 + 1,
+                field_ptr.as_basic_value_enum(),
+            );
+        }
+
+        str_ptr
+    });
+    expr_lit(
+        generator,
+        free_vars,
+        name,
+        type_tycon(&tycon(struct_name)),
+        None,
+    )
+}
+
+// `new` built-in function for a given struct.
+pub fn struct_new(struct_name: &str, definition: &Struct) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // First, check there is no duplication of field names.
+    let mut fields_set: HashMap<String, i32> = HashMap::new();
+    for field in &definition.fields {
+        if !fields_set.contains_key(&field.name) {
+            fields_set.insert(field.name.clone(), 0);
+        }
+        *fields_set.get_mut(&field.name).unwrap() += 1;
+        if fields_set[&field.name] >= 2 {
+            error_exit(&format!(
+                "error: in definition of struct `{}`, field `{}` is duplicated.",
+                struct_name, &field.name
+            ));
+        }
+    }
+    let mut expr = struct_new_lit(
+        struct_name,
+        definition.fields.iter().map(|f| f.name.clone()).collect(),
+    );
+    let mut ty = type_tycon(&tycon(struct_name));
+    for field in definition.fields.iter().rev() {
+        expr = expr_abs(var_local(&field.name, None, None), expr, None);
+        ty = type_fun(field.ty.clone(), ty);
+    }
+    let scm = Scheme::new_arc(HashMap::new(), ty);
+    (expr, scm)
+}
+
 // Add bult-in functions to a given ast.
-pub fn add_builtin_symbols(program: Arc<ExprNode>) -> Arc<ExprNode> {
+pub fn add_builtin_symbols(program: &mut FixModule) {
     fn add_let(
         program: Arc<ExprNode>,
+        namespace: NameSpace,
         name: &str,
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
     ) -> Arc<ExprNode> {
         expr_let(
-            var_var(
-                name,
-                Some(NameSpace::new(vec![PRELUDE_NAME.to_string()])),
-                Some(scm),
-                None,
-            ),
+            var_var(name, Some(namespace), Some(scm), None),
             expr,
             program,
             None,
         )
     }
 
-    let program = add_let(program, "add", add());
-    let program = add_let(program, "eq", eq());
-    let program = add_let(program, "fix", fix());
-    let program = add_let(program, "newArray", new_array());
-    let program = add_let(program, "readArray", read_array());
-    let program = add_let(program, "writeArray", write_array());
-    let program = add_let(program, "writeArray!", write_array_unique());
-    program
+    let expr = program.expr.clone();
+    let expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "add", add());
+    let expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "eq", eq());
+    let expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "fix", fix());
+    let expr = add_let(
+        expr,
+        NameSpace::new_str(&[PRELUDE_NAME]),
+        "newArray",
+        new_array(),
+    );
+    let expr = add_let(
+        expr,
+        NameSpace::new_str(&[PRELUDE_NAME]),
+        "readArray",
+        read_array(),
+    );
+    let expr = add_let(
+        expr,
+        NameSpace::new_str(&[PRELUDE_NAME]),
+        "writeArray",
+        write_array(),
+    );
+    let expr = add_let(
+        expr,
+        NameSpace::new_str(&[PRELUDE_NAME]),
+        "writeArray!",
+        write_array_unique(),
+    );
+    program.expr = expr;
 }

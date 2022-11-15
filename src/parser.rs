@@ -128,7 +128,7 @@ fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
     }
     TypeDecl {
         name: name.to_string(),
-        value: TypeDeclValue::Struct(fields),
+        value: TypeDeclValue::Struct(Struct { fields }),
     }
 }
 

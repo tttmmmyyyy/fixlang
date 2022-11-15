@@ -24,11 +24,11 @@ fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::default();
 
-    // Read type declarations to create type-to-kind mapping.
+    // Read type declarations to register user-defined types to typechecker.
     typechecker.add_tycons(&program.type_decls);
 
     // Add built-in functions to program.
-    program.expr = add_builtin_symbols(program.expr);
+    add_builtin_symbols(&mut program);
 
     // Check types.
     check_type(program.expr.clone(), int_lit_ty());
