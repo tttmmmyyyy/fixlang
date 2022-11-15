@@ -431,9 +431,13 @@ impl TypeCheckContext {
             }
             Expr::App(fun, arg) => {
                 let arg_ty = type_tyvar_star(&self.new_tyvar());
-                self.deduce_expr(arg, arg_ty.clone());
-                // NOTE: to help name-resolution of fields, we should deduce_expr of arg before that of fun.
-                self.deduce_expr(fun, type_fun(arg_ty, ty));
+                if ei.app_order == AppSourceCodeOrderType::ArgumentIsFormer {
+                    self.deduce_expr(arg, arg_ty.clone());
+                    self.deduce_expr(fun, type_fun(arg_ty.clone(), ty));
+                } else {
+                    self.deduce_expr(fun, type_fun(arg_ty.clone(), ty));
+                    self.deduce_expr(arg, arg_ty.clone());
+                }
             }
             Expr::Lam(arg, body) => {
                 let arg_ty = type_tyvar_star(&self.new_tyvar());

@@ -1,11 +1,18 @@
 use super::*;
 use std::{collections::HashSet, sync::Arc};
 
+#[derive(Clone, PartialEq)]
+pub enum AppSourceCodeOrderType {
+    FunctionIsFormer,
+    ArgumentIsFormer,
+}
+
 #[derive(Clone)]
 pub struct ExprNode {
     pub expr: Arc<Expr>,
     pub free_vars: Option<HashSet<String>>,
     pub source: Option<Span>,
+    pub app_order: AppSourceCodeOrderType,
 }
 
 impl ExprNode {
@@ -27,6 +34,117 @@ impl ExprNode {
         ret.source = src;
         Arc::new(ret)
     }
+
+    // Set app order
+    pub fn set_app_order(&self, app_order: AppSourceCodeOrderType) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.app_order = app_order;
+        Arc::new(ret)
+    }
+
+    pub fn set_app_func(&self, func: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::App(_, arg) => {
+                ret.expr = Arc::new(Expr::App(func, arg.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_app_arg(&self, arg: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::App(func, _) => {
+                ret.expr = Arc::new(Expr::App(func.clone(), arg));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_lam_body(&self, body: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Lam(arg, _) => {
+                ret.expr = Arc::new(Expr::Lam(arg.clone(), body));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_let_bound(&self, bound: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Let(var, _, val) => {
+                ret.expr = Arc::new(Expr::Let(var.clone(), bound, val.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_let_value(&self, value: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Let(var, bound, _) => {
+                ret.expr = Arc::new(Expr::Let(var.clone(), bound.clone(), value));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_if_cond(&self, cond: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::If(_, then_expr, else_expr) => {
+                ret.expr = Arc::new(Expr::If(cond, then_expr.clone(), else_expr.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_if_then(&self, then_expr: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::If(cond, _, else_expr) => {
+                ret.expr = Arc::new(Expr::If(cond.clone(), then_expr, else_expr.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_if_else(&self, else_expr: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::If(cond, then_expr, _) => {
+                ret.expr = Arc::new(Expr::If(cond.clone(), then_expr.clone(), else_expr));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
 }
 
 #[derive(Clone)]
@@ -45,6 +163,7 @@ impl Expr {
             expr: self.clone(),
             free_vars: Default::default(),
             source: src,
+            app_order: AppSourceCodeOrderType::FunctionIsFormer,
         })
     }
     pub fn to_string(&self) -> String {
@@ -192,7 +311,7 @@ pub fn expr_if(
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
-// TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_aux_info.
+// TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
 pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
         Expr::Var(var) => {
@@ -208,14 +327,16 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let arg = calculate_free_vars(arg.clone());
             let mut free_vars = func.free_vars.clone().unwrap();
             free_vars.extend(arg.free_vars.clone().unwrap());
-            expr_app(func, arg, ei.source.clone()).set_free_vars(free_vars)
+            ei.set_app_func(func)
+                .set_app_arg(arg)
+                .set_free_vars(free_vars)
         }
-        Expr::Lam(arg, val) => {
-            let val = calculate_free_vars(val.clone());
-            let mut free_vars = val.free_vars.clone().unwrap();
+        Expr::Lam(arg, body) => {
+            let body = calculate_free_vars(body.clone());
+            let mut free_vars = body.free_vars.clone().unwrap();
             free_vars.remove(&arg.name);
             free_vars.remove(SELF_NAME);
-            expr_abs(arg.clone(), val, ei.source.clone()).set_free_vars(free_vars)
+            ei.set_lam_body(body).set_free_vars(free_vars)
         }
         Expr::Let(var, bound, val) => {
             // NOTE: Our Let is non-recursive let, i.e.,
@@ -226,16 +347,21 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let mut free_vars = val.free_vars.clone().unwrap();
             free_vars.remove(&var.name);
             free_vars.extend(bound.free_vars.clone().unwrap());
-            expr_let(var.clone(), bound, val, ei.source.clone()).set_free_vars(free_vars)
+            ei.set_let_bound(bound)
+                .set_let_value(val)
+                .set_free_vars(free_vars)
         }
-        Expr::If(cond, then, else_expr) => {
+        Expr::If(cond, then_expr, else_expr) => {
             let cond = calculate_free_vars(cond.clone());
-            let then = calculate_free_vars(then.clone());
+            let then_expr = calculate_free_vars(then_expr.clone());
             let else_expr = calculate_free_vars(else_expr.clone());
             let mut free_vars = cond.free_vars.clone().unwrap();
-            free_vars.extend(then.free_vars.clone().unwrap());
+            free_vars.extend(then_expr.free_vars.clone().unwrap());
             free_vars.extend(else_expr.free_vars.clone().unwrap());
-            expr_if(cond, then, else_expr, ei.source.clone()).set_free_vars(free_vars)
+            ei.set_if_cond(cond)
+                .set_if_then(then_expr)
+                .set_if_else(else_expr)
+                .set_free_vars(free_vars)
         }
     }
 }

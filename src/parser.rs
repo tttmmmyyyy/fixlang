@@ -181,7 +181,8 @@ fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let mut ret = exprs_iter.next().unwrap().clone();
     for expr in exprs_iter {
         let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(expr.clone(), ret, span);
+        ret = expr_app(expr.clone(), ret, span)
+            .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
     }
     ret
 }
