@@ -452,7 +452,7 @@ pub fn struct_new_lit(struct_name: &str, field_names: Vec<String>) -> Arc<ExprNo
 
 // `new` built-in function for a given struct.
 pub fn struct_new(struct_name: &str, definition: &Struct) -> (Arc<ExprNode>, Arc<Scheme>) {
-    // First, check there is no duplication of field names.
+    // Check there is no duplication of field names.
     let mut fields_set: HashMap<String, i32> = HashMap::new();
     for field in &definition.fields {
         if !fields_set.contains_key(&field.name) {
@@ -475,6 +475,75 @@ pub fn struct_new(struct_name: &str, definition: &Struct) -> (Arc<ExprNode>, Arc
         expr = expr_abs(var_local(&field.name, None, None), expr, None);
         ty = type_fun(field.ty.clone(), ty);
     }
+    let scm = Scheme::new_arc(HashMap::new(), ty);
+    (expr, scm)
+}
+
+// `get` built-in function for a given struct.
+pub fn struct_get_lit(
+    var_name: &str,
+    field_count: usize, // number of fields in this struct
+    field_idx: usize,
+    field_ty: Arc<TypeNode>,
+    struct_name: &str,
+    field_name: &str,
+) -> Arc<ExprNode> {
+    let var_name_clone = var_name.to_string();
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        // Get struct object.
+        let str_ptr = gc.scope_get(&var_name_clone).ptr;
+
+        // Extract field.
+        let str_ty = ObjectType::struct_type(field_count).to_struct_type(gc.context);
+        let field_ptr = gc.load_obj_field(str_ptr, str_ty, field_idx as u32 + 1);
+        let field_ptr = field_ptr.into_pointer_value();
+
+        // Retain field and release struct.
+        gc.retain(field_ptr);
+        gc.release(str_ptr);
+
+        field_ptr
+    });
+    let free_vars = vec![var_name.to_string()];
+    let name = format!("{}.get{}", struct_name, field_name);
+    expr_lit(generator, free_vars, name, field_ty, None)
+}
+
+// `get` built-in function for a given struct.
+pub fn struct_get(
+    struct_name: &str,
+    definition: &Struct,
+    field_name: &str,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // Find the index of `field_name` in the given struct.
+    let field = definition
+        .fields
+        .iter()
+        .enumerate()
+        .find(|(_i, f)| f.name == field_name);
+    if field.is_none() {
+        error_exit(&format!(
+            "error: no field `{}` found in the struct `{}`.",
+            &field_name, struct_name,
+        ));
+    }
+    let (field_idx, field) = field.unwrap();
+
+    let field_count = definition.fields.len();
+    let str_ty = type_tycon(&tycon(struct_name));
+    let expr = expr_abs(
+        var_local("f", None, None),
+        struct_get_lit(
+            "f",
+            field_count,
+            field_idx,
+            field.ty.clone(),
+            struct_name,
+            field_name,
+        ),
+        None,
+    );
+    let ty = type_fun(str_ty, field.ty.clone());
     let scm = Scheme::new_arc(HashMap::new(), ty);
     (expr, scm)
 }
