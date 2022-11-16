@@ -9,6 +9,7 @@ extern crate serial_test;
 mod ast;
 mod builtin;
 mod generator;
+mod misc;
 mod parser;
 mod runner;
 mod runtime;
@@ -33,7 +34,7 @@ use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
-use once_cell::sync::Lazy;
+use misc::*;
 use parser::*;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
@@ -50,11 +51,6 @@ use typecheck::*;
 use types::*;
 
 const SANITIZE_MEMORY: bool = true;
-
-fn error_exit(msg: &str) -> ! {
-    eprintln!("{}", msg);
-    process::exit(1)
-}
 
 fn main() {
     let source_file = Arg::new("source-file").required(true);

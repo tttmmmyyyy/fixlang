@@ -1,3 +1,7 @@
+use std::fmt::format;
+
+use pest::unicode::MODIFIER_LETTER;
+
 // Implement built-in functions, types, etc.
 use super::*;
 
@@ -316,7 +320,7 @@ fn write_array_lit(
             .load_obj_field(array, control_block_type(gc.context), 0)
             .into_int_value();
 
-        // Add unique / shared / cont bbs.
+        // Add shared / cont bbs.
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
@@ -505,7 +509,7 @@ pub fn struct_get_lit(
         field_ptr
     });
     let free_vars = vec![var_name.to_string()];
-    let name = format!("{}.get{}", struct_name, field_name);
+    let name = format!("{}.get{}", struct_name, capitalize_head(field_name));
     expr_lit(generator, free_vars, name, field_ty, None)
 }
 
@@ -544,6 +548,153 @@ pub fn struct_get(
         None,
     );
     let ty = type_fun(str_ty, field.ty.clone());
+    let scm = Scheme::new_arc(HashMap::new(), ty);
+    (expr, scm)
+}
+
+// `get` built-in function for a given struct.
+pub fn struct_mod_lit(
+    f_name: &str,
+    x_name: &str,
+    field_count: usize, // number of fields in this struct
+    field_idx: usize,
+    str_ty: Arc<TypeNode>,
+    struct_name: &str,
+    field_name: &str,
+    is_unique_version: bool,
+) -> Arc<ExprNode> {
+    let name = format!(
+        "{}.mod{}{} {} {}",
+        struct_name,
+        field_name,
+        if is_unique_version { "!" } else { "" },
+        f_name,
+        x_name
+    );
+    let free_vars = vec![f_name.to_string(), x_name.to_string()];
+    let f_name = f_name.to_string();
+    let x_name = x_name.to_string();
+    let name_cloned = name.clone();
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        // Make types
+        let obj_ty = ObjectType::struct_type(field_count);
+        let str_ty = obj_ty.to_struct_type(gc.context);
+
+        // Get arguments
+        let modfier = gc.scope_get(&f_name).ptr;
+        let str = gc.scope_get(&x_name).ptr;
+
+        // If str is not unique, then first clone it.
+        let refcnt = gc
+            .load_obj_field(str, control_block_type(gc.context), 0)
+            .into_int_value();
+
+        // Add shared / cont bbs.
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
+        let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
+
+        // Jump to shared_bb if refcnt > 1.
+        let one = refcnt_type(gc.context).const_int(1, false);
+        let is_unique = gc
+            .builder()
+            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+        gc.builder()
+            .build_conditional_branch(is_unique, cont_bb, shared_bb);
+
+        // In shared_bb, create new struct and clone fields.
+        gc.builder().position_at_end(shared_bb);
+        if is_unique_version {
+            // In case of unique version, panic in this case.
+            gc.panic(&format!("The argument of mod! is shared!\n"));
+        }
+        let cloned_str = obj_ty.create_obj(gc, Some(name_cloned.as_str()));
+        let cloned_str = gc.cast_pointer(cloned_str, ptr_type(str_ty));
+        for i in 0..field_count {
+            let field_idx = 1 as u32 + i as u32;
+            let field = gc
+                .load_obj_field(str, str_ty, field_idx)
+                .into_pointer_value();
+            gc.retain(field);
+            gc.store_obj_field(cloned_str, str_ty, field_idx, field);
+        }
+        gc.release(str); // Given struct should be released here.
+        let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
+        gc.builder().build_unconditional_branch(cont_bb);
+
+        // Implement cont_bb
+        gc.builder().position_at_end(cont_bb);
+
+        // Build phi value
+        let str_phi = gc.builder().build_phi(str.get_type(), "str_phi");
+        assert_eq!(str.get_type(), cloned_str.get_type());
+        str_phi.add_incoming(&[(&str, current_bb), (&cloned_str, succ_of_shared_bb)]);
+        let str = str_phi.as_basic_value().into_pointer_value();
+
+        // Modify field
+        let field = gc
+            .load_obj_field(str, str_ty, 1 + field_idx as u32)
+            .into_pointer_value();
+        let field = gc.apply_lambda(modfier, field);
+        gc.store_obj_field(str, str_ty, 1 + field_idx as u32, field);
+
+        str
+    });
+    expr_lit(
+        generator,
+        free_vars,
+        name,
+        type_tycon(&tycon(struct_name)),
+        None,
+    )
+}
+
+// `mod` built-in function for a given struct.
+pub fn struct_mod(
+    struct_name: &str,
+    definition: &Struct,
+    field_name: &str,
+    is_unique_version: bool,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // Find the index of `field_name` in the given struct.
+    let field = definition
+        .fields
+        .iter()
+        .enumerate()
+        .find(|(_i, f)| f.name == field_name);
+    if field.is_none() {
+        error_exit(&format!(
+            "error: no field `{}` found in the struct `{}`.",
+            &field_name, struct_name,
+        ));
+    }
+    let (field_idx, field) = field.unwrap();
+
+    let field_count = definition.fields.len();
+    let str_ty = type_tycon(&tycon(struct_name));
+    let expr = expr_abs(
+        var_local("f", None, None),
+        expr_abs(
+            var_local("x", None, None),
+            struct_mod_lit(
+                "f",
+                "x",
+                field_count,
+                field_idx,
+                str_ty.clone(),
+                struct_name,
+                field_name,
+                is_unique_version,
+            ),
+            None,
+        ),
+        None,
+    );
+    let ty = type_fun(
+        type_fun(field.ty.clone(), field.ty.clone()),
+        type_fun(str_ty.clone(), str_ty.clone()),
+    );
     let scm = Scheme::new_arc(HashMap::new(), ty);
     (expr, scm)
 }
