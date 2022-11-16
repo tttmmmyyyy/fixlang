@@ -428,6 +428,18 @@ pub fn test32() {
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
+// #[test]
+// #[serial]
+// pub fn test33() {
+//     // Test & and $ combinator
+//     let source = r"module Main;
+//             let f = \x -> add x 10;
+//             5 & add $ 3 & f
+//         ";
+//     let answer = 18;
+//     test_run_source(source, answer, OptimizationLevel::Default);
+// }
+
 #[test]
 #[serial]
 pub fn test_comment_0() {

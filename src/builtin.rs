@@ -746,17 +746,19 @@ pub fn add_builtin_symbols(program: &mut FixModule) {
     for decl in &program.type_decls {
         match &decl.value {
             TypeDeclValue::Struct(str) => {
+                let ns = NameSpace::new_str(&[&program.name, &decl.name]);
+                expr = add_let(expr, ns.clone(), "new", struct_new(&decl.name, str));
                 for field in &str.fields {
                     expr = add_let(
                         expr,
-                        NameSpace::new_str(&[&program.name, &decl.name]),
+                        ns.clone(),
                         &format!("get{}", capitalize_head(&field.name)),
                         struct_get(&decl.name, str, &field.name),
                     );
                     for is_unique in [false, true] {
                         expr = add_let(
                             expr,
-                            NameSpace::new_str(&[&program.name, &decl.name]),
+                            ns.clone(),
                             &format!("mod{}", capitalize_head(&field.name)),
                             struct_mod(&decl.name, str, &field.name, is_unique),
                         )
