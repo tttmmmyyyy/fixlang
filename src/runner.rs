@@ -31,7 +31,7 @@ fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
     add_builtin_symbols(&mut program);
 
     // Check types.
-    check_type(program.expr.clone(), int_lit_ty());
+    typechecker.deduce_expr(&program.expr, int_lit_ty());
 
     // Calculate free variables of nodes.
     program.expr = calculate_free_vars(program.expr);

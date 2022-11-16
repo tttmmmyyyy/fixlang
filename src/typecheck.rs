@@ -131,11 +131,6 @@ where
     }
 }
 
-pub fn check_type(ei: Arc<ExprNode>, ty: Arc<TypeNode>) {
-    let mut ctx = TypeCheckContext::default();
-    ctx.deduce_expr(&ei, ty);
-}
-
 // Type substitution. Name of type variable -> type.
 // Managed so that the value (a type) of this HashMap doesn't contain a type variable that appears in keys. i.e.,
 // when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
@@ -370,8 +365,9 @@ impl TypeCheckContext {
         }
     }
 
+    // Perform typechecking.
     // Update type substitution so that `ei` has type `ty`.
-    fn deduce_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) {
+    pub fn deduce_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) {
         match &*ei.expr {
             Expr::Var(var) => {
                 let candidates = self.scope.overloaded_candidates(&var.name, &var.namespace);

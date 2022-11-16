@@ -583,6 +583,7 @@ pub fn struct_mod_lit(
         // Get arguments
         let modfier = gc.scope_get(&f_name).ptr;
         let str = gc.scope_get(&x_name).ptr;
+        let str = gc.cast_pointer(str, ptr_type(str_ty));
 
         // If str is not unique, then first clone it.
         let refcnt = gc
@@ -759,7 +760,11 @@ pub fn add_builtin_symbols(program: &mut FixModule) {
                         expr = add_let(
                             expr,
                             ns.clone(),
-                            &format!("mod{}", capitalize_head(&field.name)),
+                            &format!(
+                                "mod{}{}",
+                                capitalize_head(&field.name),
+                                if is_unique { "!" } else { "" }
+                            ),
                             struct_mod(&decl.name, str, &field.name, is_unique),
                         )
                     }

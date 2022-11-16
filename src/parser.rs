@@ -97,7 +97,7 @@ fn parse_file(mut file: Pairs<Rule>, src: &Arc<String>) -> FixModule {
 fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut pairs = pair.into_inner();
-    let name = pairs.next().unwrap().as_str();
+    let module_name = parse_module_decl(pairs.next().unwrap(), src);
     let mut type_decls: Vec<TypeDecl> = Vec::new();
     let mut expr: Option<Arc<ExprNode>> = None;
     for pair in pairs {
@@ -112,10 +112,14 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
         }
     }
     FixModule {
-        name: name.to_string(),
+        name: module_name.to_string(),
         type_decls,
         expr: expr.unwrap(),
     }
+}
+
+fn parse_module_decl(pair: Pair<Rule>, src: &Arc<String>) -> String {
+    pair.into_inner().next().unwrap().as_str().to_string()
 }
 
 fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
@@ -317,8 +321,13 @@ fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_fun);
     let mut pairs = type_expr.into_inner();
     let src_ty = parse_type_tyapp(pairs.next().unwrap());
-    let dst_ty = parse_type(pairs.next().unwrap());
-    type_fun(src_ty, dst_ty)
+    match pairs.next() {
+        Some(pair) => {
+            let dst_ty = parse_type(pair);
+            type_fun(src_ty, dst_ty)
+        }
+        None => src_ty,
+    }
 }
 
 fn parse_type_tyapp(type_expr: Pair<Rule>) -> Arc<TypeNode> {
