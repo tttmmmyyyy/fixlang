@@ -715,33 +715,55 @@ pub fn add_builtin_symbols(program: &mut FixModule) {
         )
     }
 
-    let expr = program.expr.clone();
-    let expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "add", add());
-    let expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "eq", eq());
-    let expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "fix", fix());
-    let expr = add_let(
+    let mut expr = program.expr.clone();
+    expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "add", add());
+    expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "eq", eq());
+    expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "fix", fix());
+    expr = add_let(
         expr,
         NameSpace::new_str(&[PRELUDE_NAME]),
         "newArray",
         new_array(),
     );
-    let expr = add_let(
+    expr = add_let(
         expr,
         NameSpace::new_str(&[PRELUDE_NAME]),
         "readArray",
         read_array(),
     );
-    let expr = add_let(
+    expr = add_let(
         expr,
         NameSpace::new_str(&[PRELUDE_NAME]),
         "writeArray",
         write_array(),
     );
-    let expr = add_let(
+    expr = add_let(
         expr,
         NameSpace::new_str(&[PRELUDE_NAME]),
         "writeArray!",
         write_array_unique(),
     );
+    for decl in &program.type_decls {
+        match &decl.value {
+            TypeDeclValue::Struct(str) => {
+                for field in &str.fields {
+                    expr = add_let(
+                        expr,
+                        NameSpace::new_str(&[&program.name, &decl.name]),
+                        &format!("get{}", capitalize_head(&field.name)),
+                        struct_get(&decl.name, str, &field.name),
+                    );
+                    for is_unique in [false, true] {
+                        expr = add_let(
+                            expr,
+                            NameSpace::new_str(&[&program.name, &decl.name]),
+                            &format!("mod{}", capitalize_head(&field.name)),
+                            struct_mod(&decl.name, str, &field.name, is_unique),
+                        )
+                    }
+                }
+            }
+        }
+    }
     program.expr = expr;
 }
