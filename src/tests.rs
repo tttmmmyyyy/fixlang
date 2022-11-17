@@ -434,10 +434,11 @@ pub fn test33() {
     // Test struct declaration and new.
     let source = r"module Main;
             type IntBool = (x: Int, y: Bool);
-            let obj = IntBool.new 18 False;
-            10
+            let obj = IntBool.new 18 false;
+            let obj = IntBool.modX (\x -> add x 42) obj;
+            IntBool.getX obj
         ";
-    let answer = 18;
+    let answer = 60;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 

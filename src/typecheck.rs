@@ -387,7 +387,7 @@ impl TypeCheckContext {
                 if candidates.is_empty() {
                     error_exit_with_src(
                         &format!(
-                            "no name `{}` of required type `{}` is found.",
+                            "name `{}` of required type `{}` is not found.",
                             var.name,
                             &self.substitute_type(&ty).to_string()
                         ),
@@ -396,7 +396,7 @@ impl TypeCheckContext {
                 } else if candidates.len() >= 2 {
                     let candidates_str = candidates
                         .iter()
-                        .map(|(_, ns)| ns.to_string() + "::" + &var.name)
+                        .map(|(_, ns)| ns.to_string() + "." + &var.name)
                         .collect::<Vec<_>>()
                         .join(", ");
                     error_exit_with_src(

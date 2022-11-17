@@ -209,7 +209,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_lit => parse_expr_lit(pair, src),
-        Rule::var => parse_var_as_expr(pair, src),
+        Rule::expr_var => parse_expr_var(pair, src),
         Rule::expr_let => parse_expr_let(pair, src),
         Rule::expr_if => parse_expr_if(pair, src),
         Rule::expr_lam => parse_expr_lam(pair, src),
@@ -218,14 +218,29 @@ fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     }
 }
 
-// fn parse_tyapp_bracket(pair: Pair<Rule>) -> Vec<Arc<TypeNode>> {
-//     let pairs = pair.into_inner();
-//     let mut ret: Vec<Arc<TypeNode>> = vec![];
-//     for pair in pairs {
-//         ret.push(parse_type(pair));
-//     }
-//     ret
-// }
+fn parse_expr_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_var);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let names = parse_namespace(pairs.next().unwrap(), src);
+    let var = pairs.next().unwrap().as_str().to_string();
+    let ns = if names.len() > 0 {
+        Some(NameSpace::new(names))
+    } else {
+        None
+    };
+    expr_var(&var, ns, Some(span))
+}
+
+fn parse_namespace(pair: Pair<Rule>, src: &Arc<String>) -> Vec<String> {
+    assert_eq!(pair.as_rule(), Rule::namespace);
+    let pairs = pair.into_inner();
+    let mut ret: Vec<String> = Vec::new();
+    for pair in pairs {
+        ret.push(pair.as_str().to_string());
+    }
+    ret
+}
 
 fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let pair = expr.into_inner().next().unwrap();
@@ -234,11 +249,6 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         Rule::expr_bool_lit => parse_expr_bool_lit(pair, src),
         _ => unreachable!(),
     }
-}
-
-fn parse_var_as_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::var);
-    expr_var(pair.as_str(), Some(Span::from_pair(&src, &pair)))
 }
 
 fn parse_var_as_localvar(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {

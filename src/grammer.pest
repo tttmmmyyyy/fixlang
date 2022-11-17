@@ -23,6 +23,12 @@ var = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
 // === Expressions ===
 
+namespace_item = { ASCII_ALPHA_UPPER ~ var_char* }
+
+namespace = { (namespace_item ~ ".")* }
+
+expr_var = { namespace ~ var }
+
 expr_let = { "let" ~ sep+ ~ var ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
@@ -32,7 +38,7 @@ expr_lam = { "\\" ~ sep* ~ var ~ sep*  ~ arrow_of_lam ~ sep* ~ expr }
 expr_braced = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
 
 // nlr = non left recursive
-expr_nlr = { expr_lit | var | expr_let | expr_if | expr_lam | expr_braced }
+expr_nlr = { expr_lit | expr_var | expr_let | expr_if | expr_lam | expr_braced }
 
 // application sequence, e.g., `f x y`. (left-associative)
 expr_app = { expr_nlr ~ (sep+ ~ expr_nlr)* }

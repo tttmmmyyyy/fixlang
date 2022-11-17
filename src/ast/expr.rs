@@ -221,7 +221,7 @@ impl NameSpace {
     }
 
     pub fn to_string(&self) -> String {
-        self.names.join("::")
+        self.names.join(".")
     }
 
     pub fn is_suffix(&self, rhs: &NameSpace) -> bool {
@@ -302,8 +302,8 @@ pub fn expr_app(lam: Arc<ExprNode>, arg: Arc<ExprNode>, src: Option<Span>) -> Ar
 }
 
 // Make variable expression.
-pub fn expr_var(var_name: &str, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Var(var_var(var_name, None, None, src.clone()))).into_expr_info(src)
+pub fn expr_var(var_name: &str, ns: Option<NameSpace>, src: Option<Span>) -> Arc<ExprNode> {
+    Arc::new(Expr::Var(var_var(var_name, ns, None, src.clone()))).into_expr_info(src)
 }
 
 pub fn expr_if(
