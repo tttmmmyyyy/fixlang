@@ -460,6 +460,38 @@ pub fn test34() {
 
 #[test]
 #[serial]
+pub fn test35() {
+    // Test overloading resolution.
+    let source = r"module Main;
+            type A = (x: Int, y: Bool);
+            type B = (x: Bool, y: Int);
+            
+            let a = A.new 3 true;
+            let b = B.new true 5;
+            add (if a & getY then a & getX else 0) (if b & getX then b & getY else 0)
+        ";
+    let answer = 8;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test36() {
+    // Test modifier composition.
+    let source = r"module Main;
+            type A = (x: B);
+            type B = (y: Int);
+            
+            let a = A.new (B.new 16);
+            let a = a & (modX $ modY $ \x -> add x 15);
+            a & getX & getY
+        ";
+    let answer = 31;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"{- head -} module Main; 
