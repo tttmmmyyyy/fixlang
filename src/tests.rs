@@ -480,11 +480,27 @@ pub fn test36() {
     // Test modifier composition.
     let source = r"module Main;
             type A = (x: B);
-            type B = (y: Int);
+            type B = (x: Int);
             
             let a = A.new (B.new 16);
-            let a = a & (modX $ modY $ \x -> add x 15);
-            a & getX & getY
+            let a = a & (modX $ modX $ \x -> add x 15);
+            a & getX & getX
+        ";
+    let answer = 31;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test37() {
+    // Test unique modField.
+    let source = r"module Main;
+            type A = (x: B);
+            type B = (x: Int);
+            
+            let a = A.new (B.new 16);
+            let b = a & (modX! $ modX! $ \x -> add x 15);
+            b & getX & getX
         ";
     let answer = 31;
     test_run_source(source, answer, OptimizationLevel::Default);
