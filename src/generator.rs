@@ -16,43 +16,47 @@ pub struct LocalVariable<'c> {
 
 #[derive(Default)]
 pub struct Scope<'c> {
-    data: HashMap<String, Vec<LocalVariable<'c>>>,
+    data: HashMap<NameSpacedName, Vec<LocalVariable<'c>>>,
 }
 
 impl<'c> Scope<'c> {
-    fn push(self: &mut Self, var_name: &str, code: &PointerValue<'c>) {
-        if !self.data.contains_key(var_name) {
-            self.data.insert(String::from(var_name), Default::default());
+    fn push(self: &mut Self, var: &NameSpacedName, code: &PointerValue<'c>) {
+        if !self.data.contains_key(var) {
+            self.data.insert(var.clone(), Default::default());
         }
-        self.data.get_mut(var_name).unwrap().push(LocalVariable {
+        self.data.get_mut(var).unwrap().push(LocalVariable {
             ptr: code.clone(),
             used_later: 0,
         });
     }
-    fn pop(self: &mut Self, var_name: &str) {
-        self.data.get_mut(var_name).unwrap().pop();
-        if self.data.get(var_name).unwrap().is_empty() {
-            self.data.remove(var_name);
+
+    fn pop(self: &mut Self, var: &NameSpacedName) {
+        self.data.get_mut(var).unwrap().pop();
+        if self.data.get(var).unwrap().is_empty() {
+            self.data.remove(var);
         }
     }
-    pub fn get(self: &Self, var_name: &str) -> LocalVariable<'c> {
-        self.data.get(var_name).unwrap().last().unwrap().clone()
+
+    pub fn get(self: &Self, var: &NameSpacedName) -> LocalVariable<'c> {
+        self.data.get(var).unwrap().last().unwrap().clone()
     }
+
     pub fn get_field<'m, 'b>(
         self: &Self,
-        var_name: &str,
+        var: &NameSpacedName,
         field_idx: u32,
         ty: StructType<'c>,
         gc: &GenerationContext<'c, 'm>,
     ) -> BasicValueEnum<'c> {
-        let expr = self.get(var_name);
+        let expr = self.get(var);
         gc.load_obj_field(expr.ptr, ty, field_idx)
     }
-    fn modify_used_later(self: &mut Self, names: &HashSet<String>, by: i32) {
-        for name in names {
+
+    fn modify_used_later(self: &mut Self, vars: &HashSet<NameSpacedName>, by: i32) {
+        for var in vars {
             let used_later = &mut self
                 .data
-                .get_mut(name)
+                .get_mut(var)
                 .unwrap()
                 .last_mut()
                 .unwrap()
@@ -60,10 +64,10 @@ impl<'c> Scope<'c> {
             *used_later = add_i32_to_u32(*used_later, by);
         }
     }
-    fn increment_used_later(self: &mut Self, names: &HashSet<String>) {
+    fn increment_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
         self.modify_used_later(names, 1);
     }
-    fn decrement_used_later(self: &mut Self, names: &HashSet<String>) {
+    fn decrement_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
         self.modify_used_later(names, -1);
     }
 }
@@ -141,12 +145,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get a variable from scope.
-    pub fn scope_get(&self, var_name: &str) -> LocalVariable<'c> {
-        self.scope.borrow().last().unwrap().get(var_name)
+    pub fn scope_get(&self, var: &NameSpacedName) -> LocalVariable<'c> {
+        self.scope.borrow().last().unwrap().get(var)
     }
 
     // Lock variables in scope from moved out.
-    fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<String>) {
+    fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -155,7 +159,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Release lock variables in scope from moved out.
-    fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<String>) {
+    fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -166,7 +170,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Get field of object in the scope.
     pub fn scope_get_field(
         self: &Self,
-        var_name: &str,
+        var: &NameSpacedName,
         field_idx: u32,
         ty: StructType<'c>,
     ) -> BasicValueEnum<'c> {
@@ -174,25 +178,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .borrow_mut()
             .last()
             .unwrap()
-            .get_field(var_name, field_idx, ty, self)
+            .get_field(var, field_idx, ty, self)
     }
 
     // Push scope.
-    fn scope_push(self: &mut Self, var_name: &str, code: &PointerValue<'c>) {
-        self.scope
-            .borrow_mut()
-            .last_mut()
-            .unwrap()
-            .push(var_name, code)
+    fn scope_push(self: &mut Self, var: &NameSpacedName, code: &PointerValue<'c>) {
+        self.scope.borrow_mut().last_mut().unwrap().push(var, code)
     }
 
     // Pop scope.
-    fn scope_pop(self: &mut Self, var_name: &str) {
-        self.scope.borrow_mut().last_mut().unwrap().pop(var_name);
+    fn scope_pop(self: &mut Self, var: &NameSpacedName) {
+        self.scope.borrow_mut().last_mut().unwrap().pop(var);
     }
 
-    pub fn get_var_retained_if_used_later(&mut self, var_name: &str) -> PointerValue<'c> {
-        let var = self.scope_get(var_name);
+    pub fn get_var_retained_if_used_later(&mut self, var: &NameSpacedName) -> PointerValue<'c> {
+        let var = self.scope_get(var);
         let code = var.ptr;
         if var.used_later > 0 {
             self.retain(code);
@@ -346,7 +346,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate variable.
     fn eval_var(&mut self, var: Arc<Var>) -> PointerValue<'c> {
-        self.get_var_retained_if_used_later(&var.name)
+        self.get_var_retained_if_used_later(&var.namespaced_name())
     }
 
     // Evaluate application
@@ -369,9 +369,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let module = self.module;
         // Fix ordering of captured names
         let mut captured_names = val.free_vars().clone();
-        captured_names.remove(&arg.name);
-        captured_names.remove(SELF_NAME);
-        let captured_names: Vec<String> = captured_names.into_iter().collect();
+        captured_names.remove(&arg.namespaced_name());
+        captured_names.remove(&NameSpacedName::local(SELF_NAME));
+        let captured_names: Vec<NameSpacedName> = captured_names.into_iter().collect();
         // Determine the type of closure
         let mut field_types = vec![
             ObjectFieldType::ControlBlock,
@@ -397,9 +397,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // Set up new scope
             let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
-            self.scope_push(&arg.name, &arg_ptr);
+            self.scope_push(&arg.namespaced_name(), &arg_ptr);
             let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
-            self.scope_push(SELF_NAME, &closure_obj);
+            self.scope_push(&NameSpacedName::local(SELF_NAME), &closure_obj);
             for (i, cap_name) in captured_names.iter().enumerate() {
                 let cap_obj = self
                     .load_obj_field(closure_obj, closure_ty, i as u32 + 2)
@@ -412,10 +412,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.retain(ptr);
             }
             // Release SELF and arg if unused
-            if !val.free_vars().contains(SELF_NAME) {
+            if !val.free_vars().contains(&NameSpacedName::local(SELF_NAME)) {
                 self.release(closure_obj);
             }
-            if !val.free_vars().contains(&arg.name) {
+            if !val.free_vars().contains(&arg.namespaced_name()) {
                 self.release(arg_ptr);
             }
             // Generate value
@@ -448,7 +448,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         bound: Arc<ExprNode>,
         val: Arc<ExprNode>,
     ) -> PointerValue<'c> {
-        let var_name = &var.name;
+        let var_name = &var.namespaced_name();
         let mut used_in_val_except_var = val.free_vars().clone();
         used_in_val_except_var.remove(var_name);
         self.scope_lock_as_used_later(&used_in_val_except_var);

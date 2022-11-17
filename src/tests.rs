@@ -444,6 +444,22 @@ pub fn test33() {
 
 #[test]
 #[serial]
+pub fn test34() {
+    // Test namespace inference.
+    let source = r"module Main;
+            type OtherStruct = (y: Int, x: Bool);
+            type IntBool = (x: Int, y: Bool);
+
+            let obj = IntBool.new 18 false;
+            let obj = obj & modX (\x -> add x 42);
+            obj & getX
+        ";
+    let answer = 60;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"{- head -} module Main; 

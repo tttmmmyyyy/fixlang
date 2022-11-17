@@ -56,8 +56,8 @@ pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
 }
 
 fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
-    let lhs_str = String::from(lhs);
-    let rhs_str = String::from(rhs);
+    let lhs_str = NameSpacedName::local(lhs);
+    let rhs_str = NameSpacedName::local(rhs);
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
     let name = format!("add {} {}", lhs, rhs);
     let name_cloned = name.clone();
@@ -92,8 +92,8 @@ pub fn add() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
-    let lhs_str = String::from(lhs);
-    let rhs_str = String::from(rhs);
+    let lhs_str = NameSpacedName::local(lhs);
+    let rhs_str = NameSpacedName::local(rhs);
     let name = format!("eq {} {}", lhs, rhs);
     let name_cloned = name.clone();
     let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
@@ -141,12 +141,16 @@ pub fn eq() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
-    let f_str = String::from(f);
-    let x_str = String::from(x);
-    let name = format!("fix {} {}", f_str, x_str);
-    let free_vars = vec![String::from(SELF_NAME), f_str.clone(), x_str.clone()];
+    let f_str = NameSpacedName::local(f);
+    let x_str = NameSpacedName::local(x);
+    let name = format!("fix {} {}", f_str.to_string(), x_str.to_string());
+    let free_vars = vec![
+        NameSpacedName::local(SELF_NAME),
+        f_str.clone(),
+        x_str.clone(),
+    ];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let fixf = gc.scope_get(SELF_NAME).ptr;
+        let fixf = gc.scope_get(&NameSpacedName::local(SELF_NAME)).ptr;
         let x = gc.scope_get(&x_str).ptr;
         let f = gc.scope_get(&f_str).ptr;
         let f_fixf = gc.apply_lambda(f, fixf);
@@ -173,8 +177,8 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Implementation of newArray built-in function.
 fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
-    let size_str = String::from(size);
-    let value_str = String::from(value);
+    let size_str = NameSpacedName::local(size);
+    let value_str = NameSpacedName::local(value);
     let name = format!("newArray {} {}", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
@@ -231,14 +235,14 @@ pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Implementation of readArray built-in function.
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
-    let array_str = String::from(array);
-    let idx_str = String::from(idx);
+    let array_str = NameSpacedName::local(array);
+    let idx_str = NameSpacedName::local(idx);
     let name = format!("readArray {} {}", array, idx);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
-        let array = gc.scope_get(array_str.as_str()).ptr;
+        let array = gc.scope_get(&array_str).ptr;
         let array = gc.cast_pointer(array, array_ptr_ty);
         let array_field = gc
             .builder()
@@ -286,9 +290,9 @@ fn write_array_lit(
     value: &str,
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
-    let array_str = String::from(array);
-    let idx_str = String::from(idx);
-    let value_str = String::from(value);
+    let array_str = NameSpacedName::local(array);
+    let idx_str = NameSpacedName::local(idx);
+    let value_str = NameSpacedName::local(value);
     let func_name = String::from({
         if is_unique_version {
             "writeArray!"
@@ -303,12 +307,12 @@ fn write_array_lit(
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
 
         // Get argments
-        let array = gc.scope_get(array_str.as_str()).ptr;
+        let array = gc.scope_get(&array_str).ptr;
         let idx = gc
-            .scope_get_field(idx_str.as_str(), 1, int_type(gc.context))
+            .scope_get_field(&idx_str, 1, int_type(gc.context))
             .into_int_value();
-        gc.release(gc.scope_get(idx_str.as_str()).ptr);
-        let value = gc.scope_get(value_str.as_str()).ptr;
+        gc.release(gc.scope_get(&idx_str).ptr);
+        let value = gc.scope_get(&value_str).ptr;
 
         // Get array field.
         let array_str_ty = ObjectType::array_type().to_struct_type(gc.context);
@@ -418,14 +422,17 @@ pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // `new` built-in function for a given struct.
 pub fn struct_new_lit(struct_name: &str, field_names: Vec<String>) -> Arc<ExprNode> {
-    let free_vars = field_names.clone();
+    let free_vars = field_names
+        .iter()
+        .map(|name| NameSpacedName::local(name))
+        .collect();
     let name = format!("{}.new {}", struct_name, field_names.join(" "));
     let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Get field values.
         let field_ptrs: Vec<PointerValue> = field_names
             .iter()
-            .map(|name| gc.scope_get(name).ptr)
+            .map(|name| gc.scope_get(&NameSpacedName::local(name)).ptr)
             .collect();
 
         // Create struct object.
@@ -492,7 +499,7 @@ pub fn struct_get_lit(
     struct_name: &str,
     field_name: &str,
 ) -> Arc<ExprNode> {
-    let var_name_clone = var_name.to_string();
+    let var_name_clone = NameSpacedName::local(var_name);
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Get struct object.
         let str_ptr = gc.scope_get(&var_name_clone).ptr;
@@ -508,7 +515,7 @@ pub fn struct_get_lit(
 
         field_ptr
     });
-    let free_vars = vec![var_name.to_string()];
+    let free_vars = vec![NameSpacedName::local(var_name)];
     let name = format!("{}.get{}", struct_name, capitalize_head(field_name));
     expr_lit(generator, free_vars, name, field_ty, None)
 }
@@ -571,9 +578,9 @@ pub fn struct_mod_lit(
         f_name,
         x_name
     );
-    let free_vars = vec![f_name.to_string(), x_name.to_string()];
-    let f_name = f_name.to_string();
-    let x_name = x_name.to_string();
+    let f_name = NameSpacedName::local(f_name);
+    let x_name = NameSpacedName::local(x_name);
+    let free_vars = vec![f_name.clone(), x_name.clone()];
     let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Make types

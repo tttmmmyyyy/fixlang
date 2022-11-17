@@ -10,21 +10,21 @@ pub enum AppSourceCodeOrderType {
 #[derive(Clone)]
 pub struct ExprNode {
     pub expr: Arc<Expr>,
-    pub free_vars: Option<HashSet<String>>,
+    pub free_vars: Option<HashSet<NameSpacedName>>,
     pub source: Option<Span>,
     pub app_order: AppSourceCodeOrderType,
 }
 
 impl ExprNode {
     // Set free vars
-    fn set_free_vars(&self, free_vars: HashSet<String>) -> Arc<Self> {
+    fn set_free_vars(&self, free_vars: HashSet<NameSpacedName>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.free_vars = Some(free_vars);
         Arc::new(ret)
     }
 
     // Get free vars
-    pub fn free_vars(self: &Self) -> &HashSet<String> {
+    pub fn free_vars(self: &Self) -> &HashSet<NameSpacedName> {
         self.free_vars.as_ref().unwrap()
     }
 
@@ -39,6 +39,20 @@ impl ExprNode {
     pub fn set_app_order(&self, app_order: AppSourceCodeOrderType) -> Arc<Self> {
         let mut ret = self.clone();
         ret.app_order = app_order;
+        Arc::new(ret)
+    }
+
+    pub fn set_var_namespace(&self, ns: &NameSpace) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Var(var) => {
+                let var = var.set_namsapce(ns);
+                ret.expr = Arc::new(Expr::Var(var))
+            }
+            _ => {
+                panic!()
+            }
+        }
         Arc::new(ret)
     }
 
@@ -193,7 +207,7 @@ pub type LiteralGenerator =
 
 pub struct Literal {
     pub generator: Arc<LiteralGenerator>,
-    pub free_vars: Vec<String>, // e.g. "+" literal has two free variables.
+    pub free_vars: Vec<NameSpacedName>, // e.g. "+" literal has two free variables.
     name: String,
     pub ty: Arc<TypeNode>,
 }
@@ -239,11 +253,50 @@ impl NameSpace {
     }
 }
 
+#[derive(Clone)]
 pub struct Var {
     pub name: String,
     pub namespace: Option<NameSpace>, // None implies namespace to be inferred
     pub type_annotation: Option<Arc<Scheme>>,
     pub source: Option<Span>,
+}
+
+#[derive(Eq, Hash, PartialEq, Clone)]
+pub struct NameSpacedName {
+    pub namespace: NameSpace,
+    pub name: String,
+}
+
+impl NameSpacedName {
+    pub fn new(ns: &NameSpace, name: &str) -> Self {
+        Self {
+            namespace: ns.clone(),
+            name: name.to_string(),
+        }
+    }
+
+    pub fn local(name: &str) -> Self {
+        Self::new(&NameSpace::local(), name)
+    }
+
+    pub fn to_string(&self) -> String {
+        self.namespace.to_string() + "." + &self.name
+    }
+}
+
+impl Var {
+    pub fn set_namsapce(&self, ns: &NameSpace) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.namespace = Some(ns.clone());
+        Arc::new(ret)
+    }
+
+    pub fn namespaced_name(&self) -> NameSpacedName {
+        match &self.namespace {
+            Some(ns) => NameSpacedName::new(ns, &self.name),
+            None => panic!(),
+        }
+    }
 }
 
 pub fn var_var(
@@ -270,7 +323,7 @@ pub fn var_local(
 
 pub fn expr_lit(
     generator: Arc<LiteralGenerator>,
-    free_vars: Vec<String>,
+    free_vars: Vec<NameSpacedName>,
     name: String,
     ty: Arc<TypeNode>,
     src: Option<Span>,
@@ -319,7 +372,7 @@ pub fn expr_if(
 pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
         Expr::Var(var) => {
-            let free_vars = vec![var.name.clone()].into_iter().collect();
+            let free_vars = vec![var.namespaced_name()].into_iter().collect();
             ei.set_free_vars(free_vars)
         }
         Expr::Lit(lit) => {
@@ -338,8 +391,8 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
         Expr::Lam(arg, body) => {
             let body = calculate_free_vars(body.clone());
             let mut free_vars = body.free_vars.clone().unwrap();
-            free_vars.remove(&arg.name);
-            free_vars.remove(SELF_NAME);
+            free_vars.remove(&arg.namespaced_name());
+            free_vars.remove(&NameSpacedName::local(SELF_NAME));
             ei.set_lam_body(body).set_free_vars(free_vars)
         }
         Expr::Let(var, bound, val) => {
@@ -349,7 +402,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let bound = calculate_free_vars(bound.clone());
             let val = calculate_free_vars(val.clone());
             let mut free_vars = val.free_vars.clone().unwrap();
-            free_vars.remove(&var.name);
+            free_vars.remove(&var.namespaced_name());
             free_vars.extend(bound.free_vars.clone().unwrap());
             ei.set_let_bound(bound)
                 .set_let_value(val)
