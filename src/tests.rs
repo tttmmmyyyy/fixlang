@@ -532,7 +532,7 @@ pub fn test39() {
             type B = (x: Int);
             
             let a = A.new (B.new 16);
-            let f = \a -> a & ((modX! : ((B => B) => A => A)) $ modX! $ \x -> add x 15);
+            let f = \a -> a & ((modX! : (B => B) => A => A) $ modX! $ \x -> add x 15);
             let a = a & f;
             a & getX & getX
         ";
