@@ -397,7 +397,9 @@ impl TypeCheckContext {
                 } else if candidates.len() >= 2 {
                     let candidates_str = candidates
                         .iter()
-                        .map(|(_, ns)| ns.to_string() + "." + &var.name)
+                        .map(|(_, ns)| {
+                            "`".to_string() + &NameSpacedName::new(ns, &var.name).to_string() + "`"
+                        })
                         .collect::<Vec<_>>()
                         .join(", ");
                     error_exit_with_src(
