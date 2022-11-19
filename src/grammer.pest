@@ -59,7 +59,9 @@ expr_ltr_app = { expr_app ~ (sep* ~ combinator_and ~ sep* ~ expr_app)* }
 combinator_dollar = _{ "$" }
 expr_rtl_app = { expr_ltr_app ~ (sep* ~ combinator_dollar ~ sep* ~ expr_ltr_app)* }
 
-expr = { expr_rtl_app }
+expr_type_annotation = { expr_rtl_app ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
+
+expr = { expr_type_annotation }
 
 // === Types ===
 type_expr = { type_fun }

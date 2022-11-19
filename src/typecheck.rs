@@ -502,6 +502,26 @@ impl TypeCheckContext {
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
+            Expr::TyAnno(e, anno_ty) => {
+                if anno_ty.free_vars().len() > 0 {
+                    error_exit(&format!(
+                        "unknown type variable `{}`",
+                        ty.free_vars().iter().next().unwrap().0
+                    ))
+                }
+                if !self.unify(&ty, anno_ty) {
+                    error_exit_with_src(
+                        &format!(
+                            "type mismatch. Expected `{}`, Found `{}`",
+                            &self.substitute_type(&ty).to_string(),
+                            &self.substitute_type(&anno_ty).to_string(),
+                        ),
+                        &ei.source,
+                    );
+                }
+                let e = self.deduce_expr(e, ty.clone());
+                ei.set_tyanno_expr(e)
+            }
         }
     }
 

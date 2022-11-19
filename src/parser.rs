@@ -150,7 +150,21 @@ fn parse_type_field(pair: Pair<Rule>, src: &Arc<String>) -> StructField {
 fn parse_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr);
     let pair = pair.into_inner().next().unwrap();
-    parse_expr_rtl_app(pair, src)
+    parse_expr_type_annotation(pair, src)
+}
+
+fn parse_expr_type_annotation(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_type_annotation);
+    let span = Span::from_pair(src, &pair);
+    let mut pairs = pair.into_inner();
+    let mut expr = parse_expr_rtl_app(pairs.next().unwrap(), src);
+    match pairs.next() {
+        None => {}
+        Some(ty) => {
+            expr = expr_tyanno(expr, parse_type(ty), Some(span));
+        }
+    }
+    expr
 }
 
 // Parse combinator sequence, e.g., `f x y` or `x & f & g`

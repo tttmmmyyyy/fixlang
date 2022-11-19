@@ -159,6 +159,19 @@ impl ExprNode {
         }
         Arc::new(ret)
     }
+
+    pub fn set_tyanno_expr(&self, expr: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::TyAnno(_, t) => {
+                ret.expr = Arc::new(Expr::TyAnno(expr, t.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
 }
 
 #[derive(Clone)]
@@ -169,6 +182,7 @@ pub enum Expr {
     Lam(Arc<Var>, Arc<ExprNode>),
     Let(Arc<Var>, Arc<ExprNode>, Arc<ExprNode>),
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>), // TODO: Implement case
+    TyAnno(Arc<ExprNode>, Arc<TypeNode>),
 }
 
 impl Expr {
@@ -198,6 +212,7 @@ impl Expr {
                 t.expr.to_string(),
                 e.expr.to_string()
             ),
+            Expr::TyAnno(e, t) => format!("({} : {})", e.expr.to_string(), t.to_string()),
         }
     }
 }
@@ -368,6 +383,10 @@ pub fn expr_if(
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
+pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
+    Arc::new(Expr::TyAnno(expr, ty)).into_expr_info(src)
+}
+
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
 pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
@@ -419,6 +438,11 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
                 .set_if_then(then_expr)
                 .set_if_else(else_expr)
                 .set_free_vars(free_vars)
+        }
+        Expr::TyAnno(e, _) => {
+            let e = calculate_free_vars(e.clone());
+            let free_vars = e.free_vars.clone().unwrap();
+            ei.set_tyanno_expr(e).set_free_vars(free_vars)
         }
     }
 }

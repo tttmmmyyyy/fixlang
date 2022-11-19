@@ -340,6 +340,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::If(cond_expr, then_expr, else_expr) => {
                 self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone())
             }
+            Expr::TyAnno(e, _) => self.eval_expr(e.clone()),
         };
         self.cast_pointer(ret, ptr_to_object_type(self.context))
     }

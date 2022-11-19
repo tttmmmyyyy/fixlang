@@ -508,6 +508,40 @@ pub fn test37() {
 
 #[test]
 #[serial]
+pub fn test38() {
+    // Test type annotation.
+    let source = r"module Main;
+            type A = (x: B);
+            type B = (x: Int);
+            
+            let a = A.new (B.new 16);
+            let f = \a -> (a : A) & (modX! $ modX! $ \x -> add x 15);
+            let a = a & f;
+            a & getX & getX
+        ";
+    let answer = 31;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test39() {
+    // Test type annotation.
+    let source = r"module Main;
+            type A = (x: B);
+            type B = (x: Int);
+            
+            let a = A.new (B.new 16);
+            let f = \a -> a & ((modX! : ((B => B) => A => A)) $ modX! $ \x -> add x 15);
+            let a = a & f;
+            a & getX & getX
+        ";
+    let answer = 31;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"{- head -} module Main; 
