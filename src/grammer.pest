@@ -19,7 +19,7 @@ var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 
 var = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
 
-// var_typed = { var ~ sep* ~ ":" ~ sep* ~ type_expr }
+var_with_type = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 // === Expressions ===
 
@@ -29,7 +29,7 @@ namespace = { (namespace_item ~ ".")* }
 
 expr_var = { namespace ~ var }
 
-expr_let = { "let" ~ sep+ ~ var ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
+expr_let = { "let" ~ sep+ ~ var_with_type ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
