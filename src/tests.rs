@@ -543,7 +543,7 @@ pub fn test39() {
 #[test]
 #[serial]
 pub fn test40() {
-    // Test type annotation.
+    // Test type annotation at let-binding.
     let source = r"module Main;
             type A = (x: B);
             type B = (x: Int);
@@ -554,6 +554,19 @@ pub fn test40() {
             a & getX & getX
         ";
     let answer = 31;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test41() {
+    // Test type annotation at let-binding.
+    let source = r"module Main;
+            
+            let x: Int => Int = \x -> x;
+            x 42
+        ";
+    let answer = 42;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
