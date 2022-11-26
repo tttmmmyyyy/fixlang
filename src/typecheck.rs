@@ -135,7 +135,7 @@ where
 // Managed so that the value (a type) of this HashMap doesn't contain a type variable that appears in keys. i.e.,
 // when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
 #[derive(Clone)]
-struct Substitution {
+pub struct Substitution {
     data: HashMap<String, Arc<TypeNode>>,
 }
 

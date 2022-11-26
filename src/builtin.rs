@@ -1,6 +1,4 @@
-use std::fmt::format;
-
-use pest::unicode::MODIFIER_LETTER;
+use once_cell::sync::Lazy;
 
 // Implement built-in functions, types, etc.
 use super::*;

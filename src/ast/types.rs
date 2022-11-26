@@ -1,3 +1,5 @@
+use core::panic;
+
 use super::*;
 
 #[derive(Eq, PartialEq)]
@@ -21,6 +23,44 @@ pub struct TyCon {
 pub struct TypeNode {
     pub ty: Type,
     pub info: Arc<TypeInfo>,
+}
+
+impl TypeNode {
+    pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::TyApp(_, arg) => ret.ty = Type::TyApp(fun, arg.clone()),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_tyapp_arg(&self, arg: Arc<TypeNode>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::TyApp(fun, _) => ret.ty = Type::TyApp(fun.clone(), arg),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_funty_src(&self, src: Arc<TypeNode>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::FunTy(_, dst) => ret.ty = Type::FunTy(src, dst.clone()),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_funty_dst(&self, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::FunTy(src, _) => ret.ty = Type::FunTy(src.clone(), dst),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
 }
 
 impl Clone for TypeNode {
@@ -235,9 +275,18 @@ impl TypeNode {
 }
 
 // Scheme = forall<a1,..,> (...type...)
+#[derive(Clone)]
 pub struct Scheme {
     pub vars: HashMap<String, Arc<Kind>>,
     pub ty: Arc<TypeNode>,
+}
+
+impl Scheme {
+    pub fn set_ty(&self, ty: Arc<TypeNode>) -> Arc<Scheme> {
+        let mut ret = self.clone();
+        ret.ty = ty;
+        Arc::new(ret)
+    }
 }
 
 impl Scheme {

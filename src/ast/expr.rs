@@ -82,11 +82,37 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_lam_param(&self, param: Arc<Var>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Lam(_, body) => {
+                ret.expr = Arc::new(Expr::Lam(param, body.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
     pub fn set_lam_body(&self, body: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Lam(arg, _) => {
                 ret.expr = Arc::new(Expr::Lam(arg.clone(), body));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_let_var(&self, var: Arc<Var>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Let(_, bound, val) => {
+                ret.expr = Arc::new(Expr::Let(var, bound.clone(), val.clone()));
             }
             _ => {
                 panic!()
