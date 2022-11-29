@@ -42,6 +42,16 @@ impl PartialEq for TypeNode {
 impl Eq for TypeNode {}
 
 impl TypeNode {
+    // Is this type head normal form? i.e., begins with type variable.
+    pub fn isHnf(&self) -> bool {
+        match &self.ty {
+            Type::TyVar(_) => true,
+            Type::TyCon(_) => false,
+            Type::TyApp(head, _) => head.isHnf(),
+            Type::FunTy(head, _) => head.isHnf(),
+        }
+    }
+
     pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {

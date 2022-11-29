@@ -2,7 +2,7 @@ use super::*;
 
 // Identifier to spacify trait.
 #[derive(Hash, Eq, PartialEq, Clone)]
-struct TraitId {
+pub struct TraitId {
     name: String,
     // TODO: add namespace.
 }
@@ -43,8 +43,9 @@ struct QualPredicate {
 }
 
 // Statement such as "String: Show" or "a: Eq".
+#[derive(Clone)]
 pub struct Predicate {
-    trait_id: TraitId,
+    pub trait_id: TraitId,
     pub ty: Arc<TypeNode>,
 }
 
@@ -81,10 +82,57 @@ impl TraitEnv {
             .add_instance(inst, tycons)
     }
 
-    // Entailment
+    // Reduce predicate using trait instances.
+    // Returns None when p cannot be reduced anymore.
+    pub fn reduce_to_instance_contexts_one(
+        &self,
+        p: &Predicate,
+        tycons: &HashMap<String, Arc<Kind>>,
+    ) -> Option<Vec<Predicate>> {
+        for qual in &self.traits[&p.trait_id].instances {
+            match Substitution::matching(tycons, &qual.predicate.ty, &p.ty) {
+                Some(s) => {
+                    let ret = qual
+                        .context
+                        .iter()
+                        .map(|c| {
+                            let mut c = c.clone();
+                            s.substitute_predicate(&mut c);
+                            c
+                        })
+                        .collect();
+                    return Some(ret);
+                }
+                None => {}
+            }
+        }
+        return None;
+    }
+
+    // Reduce predicate using trait instances (as long as possible).
+    pub fn reduce_to_instance_contexts_alap(
+        &self,
+        p: &Predicate,
+        tycons: &HashMap<String, Arc<Kind>>,
+    ) -> Vec<Predicate> {
+        let mut ret: Vec<Predicate> = Default::default();
+        match self.reduce_to_instance_contexts_one(p, tycons) {
+            Some(qs) => {
+                for q in qs {
+                    ret.append(&mut self.reduce_to_instance_contexts_alap(&q, tycons));
+                }
+            }
+            None => {
+                ret.push(p.clone());
+            }
+        }
+        ret
+    }
+
+    // Entailment.
     pub fn entail(
         &self,
-        ps: &[&Predicate],
+        ps: &Vec<Predicate>,
         p: &Predicate,
         tycons: &HashMap<String, Arc<Kind>>,
     ) -> bool {
@@ -96,24 +144,87 @@ impl TraitEnv {
                 }
             }
         }
-        // Try instances.
-        for qual in &self.traits[&p.trait_id].instances {
-            match Substitution::matching(tycons, &qual.predicate.ty, &p.ty) {
-                Some(s) => {
-                    let mut all_context_ok = true;
-                    for c in &qual.context {
-                        if !self.entail(ps, &c, tycons) {
-                            all_context_ok = false;
-                            break;
-                        }
-                    }
-                    if all_context_ok {
-                        return true;
+        // Try reducing by instances.
+        match self.reduce_to_instance_contexts_one(p, tycons) {
+            Some(ctxs) => {
+                let mut all_ok = true;
+                for ctx in ctxs {
+                    if !self.entail(ps, &ctx, tycons) {
+                        all_ok = false;
+                        break;
                     }
                 }
-                None => {}
+                all_ok
+            }
+            None => false,
+        }
+    }
+
+    // // Reduce a predicate to head normal form.
+    // pub fn reduce_to_hnf(
+    //     &self,
+    //     p: &Predicate,
+    //     tycons: &HashMap<String, Arc<Kind>>,
+    // ) -> Option<Vec<Predicate>> {
+    //     if p.ty.isHnf() {
+    //         return Some(vec![p.clone()]);
+    //     }
+    //     self.reduce_to_instance_contexts_one(p, tycons)
+    //         .map(|ctxs| self.reduce_to_hnfs(&ctxs, tycons))
+    //         .flatten()
+    // }
+
+    // // Reduce predicates to head normal form.
+    // pub fn reduce_to_hnfs(
+    //     &self,
+    //     ps: &Vec<Predicate>,
+    //     tycons: &HashMap<String, Arc<Kind>>,
+    // ) -> Option<Vec<Predicate>> {
+    //     let mut ret: Vec<Predicate> = Default::default();
+    //     for p in ps {
+    //         match self.reduce_to_hnf(p, tycons) {
+    //             Some(mut v) => ret.append(&mut v),
+    //             None => return None,
+    //         }
+    //     }
+    //     Some(ret)
+    // }
+
+    // Simplify a set of predicates by entail.
+    pub fn simplify_predicates(
+        &self,
+        ps: &Vec<Predicate>,
+        tycons: &HashMap<String, Arc<Kind>>,
+    ) -> Vec<Predicate> {
+        let mut ps = ps.clone();
+        let mut i = 0 as usize;
+        while i < ps.len() {
+            let qs: Vec<Predicate> = ps
+                .iter()
+                .enumerate()
+                .filter_map(|(j, p)| if i == j { None } else { Some(p.clone()) })
+                .collect();
+            if self.entail(&qs, &ps[i], tycons) {
+                ps.remove(i);
+            } else {
+                i += 1;
             }
         }
-        return false;
+        ps
+    }
+
+    // Context reduction.
+    // Returns Some(qs) when satisfaction of ps are reduced to qs.
+    // In particular, returns empty when ps are satisfied.
+    pub fn reduce(
+        &self,
+        ps: &Vec<Predicate>,
+        tycons: &HashMap<String, Arc<Kind>>,
+    ) -> Vec<Predicate> {
+        let mut ret: Vec<Predicate> = Default::default();
+        for p in ps {
+            ret.append(&mut self.reduce_to_instance_contexts_alap(p, tycons));
+        }
+        self.simplify_predicates(ps, tycons)
     }
 }

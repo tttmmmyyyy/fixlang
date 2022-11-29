@@ -181,8 +181,13 @@ impl Substitution {
         return true;
     }
 
-    // Apply substitution.
-    fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+    // Apply substitution to predicate.
+    pub fn substitute_predicate(&self, p: &mut Predicate) {
+        p.ty = self.substitute_type(&p.ty);
+    }
+
+    // Apply substitution to type
+    pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self
                 .data
@@ -419,7 +424,7 @@ impl TypeCheckContext {
     }
 
     // Make a scheme from a type by abstracting type variable that does not appear in scope.
-    fn abstract_to_scheme(&self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
+    fn generalize_to_scheme(&self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
         let ty = self.substitute_type(ty);
         let mut vars = ty.free_vars();
         for (_var, scp) in &self.scope.var {
@@ -561,7 +566,7 @@ impl TypeCheckContext {
                     None => type_tyvar_star(&self.new_tyvar()),
                 };
                 let val = self.deduce_expr(val, var_ty.clone());
-                let var_scm = self.abstract_to_scheme(&var_ty);
+                let var_scm = self.generalize_to_scheme(&var_ty);
 
                 let body = if var.namespace.as_ref().unwrap().is_local() {
                     self.scope.push(&var.name, &var_scm);
