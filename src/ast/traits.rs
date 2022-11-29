@@ -214,7 +214,7 @@ impl TraitEnv {
     }
 
     // Context reduction.
-    // Returns Some(qs) when satisfaction of ps are reduced to qs.
+    // Returns qs when satisfaction of ps are reduced to qs.
     // In particular, returns empty when ps are satisfied.
     pub fn reduce(
         &self,
