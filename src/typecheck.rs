@@ -155,7 +155,7 @@ impl Substitution {
         Self { data }
     }
 
-    // Add substitution.
+    // Add (=compose) substitution.
     fn add_substitution(&mut self, other: &Self) {
         for (_var, ty) in self.data.iter_mut() {
             let new_ty = other.substitute_type(&ty);
@@ -164,6 +164,21 @@ impl Substitution {
         for (var, ty) in &other.data {
             self.data.insert(var.to_string(), ty.clone());
         }
+    }
+
+    // Merge substitution.
+    // Returns true when merge succeeds.
+    fn merge_substitution(&mut self, other: &Self) -> bool {
+        for (var, ty) in &other.data {
+            if self.data.contains_key(var) {
+                if self.data[var] != *ty {
+                    return false;
+                }
+            } else {
+                self.data.insert(var.to_string(), ty.clone());
+            }
+        }
+        return true;
     }
 
     // Apply substitution.
@@ -186,7 +201,7 @@ impl Substitution {
     }
 
     // Calculate minimum substitution to unify two types.
-    fn unify(
+    pub fn unify(
         tycons: &HashMap<String, Arc<Kind>>,
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
@@ -207,7 +222,7 @@ impl Substitution {
             Type::TyVar(_) => unreachable!(),
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
-                    if tc1.name == tc2.name {
+                    if tc1 == tc2 {
                         return Some(Self::default());
                     } else {
                         return None;
@@ -280,6 +295,73 @@ impl Substitution {
             error_exit_with_src("Kinds do not match.", &None);
         }
         Some(Self::single(&tyvar1.name, ty2.clone()))
+    }
+
+    // Calculate minimum substitution s such that `s(ty1) = ty2`.
+    pub fn matching(
+        tycons: &HashMap<String, Arc<Kind>>,
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
+    ) -> Option<Self> {
+        match &ty1.ty {
+            Type::TyVar(v1) => Self::unify_tyvar(tycons, v1, ty2),
+            Type::TyCon(tc1) => match &ty2.ty {
+                Type::TyCon(tc2) => {
+                    if tc1 == tc2 {
+                        Some(Self::default())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+            Type::TyApp(fun1, arg1) => match &ty2.ty {
+                Type::TyApp(fun2, arg2) => {
+                    let mut ret = Self::default();
+                    match Self::matching(tycons, fun1, fun2) {
+                        Some(s) => {
+                            if !ret.merge_substitution(&s) {
+                                return None;
+                            }
+                        }
+                        None => return None,
+                    }
+                    match Self::matching(tycons, arg1, arg2) {
+                        Some(s) => {
+                            if !ret.merge_substitution(&s) {
+                                return None;
+                            }
+                        }
+                        None => return None,
+                    }
+                    Some(ret)
+                }
+                _ => None,
+            },
+            Type::FunTy(src1, dst1) => match &ty2.ty {
+                Type::FunTy(src2, dst2) => {
+                    let mut ret = Self::default();
+                    match Self::matching(tycons, src1, src2) {
+                        Some(s) => {
+                            if !ret.merge_substitution(&s) {
+                                return None;
+                            }
+                        }
+                        None => return None,
+                    }
+                    match Self::matching(tycons, dst1, dst2) {
+                        Some(s) => {
+                            if !ret.merge_substitution(&s) {
+                                return None;
+                            }
+                        }
+                        None => return None,
+                    }
+                    Some(ret)
+                }
+                _ => None,
+            },
+        }
     }
 }
 

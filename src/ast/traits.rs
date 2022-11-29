@@ -16,29 +16,36 @@ impl TraitId {
 // Information on trait.
 struct TraitInfo {
     id: TraitId,
-    instances: Vec<TraitInstance>,
+    instances: Vec<QualPredicate>,
 }
 
 impl TraitInfo {
     // Add a instance to a trait.
-    pub fn add_instance(&mut self, inst: TraitInstance) {
+    pub fn add_instance(&mut self, inst: QualPredicate, tycons: &HashMap<String, Arc<Kind>>) {
+        // Check trait id.
+        assert!(self.id == inst.predicate.trait_id);
+
         // Check overlapping instance.
         for i in &self.instances {
-            let subst = Substitution::default();
+            if Substitution::unify(tycons, &inst.predicate.ty, &i.predicate.ty).is_some() {
+                error_exit("overlapping instance.");
+            }
         }
+
+        self.instances.push(inst)
     }
 }
 
-// Trait instance declaration such as "impl Array a : Eq for a : Eq {}".
-struct TraitInstance {
-    restriction: Vec<Predicate>,
-    instance: Predicate,
+// Qualified predicate. Statement such as "impl Array a : Eq for a : Eq {}".
+struct QualPredicate {
+    context: Vec<Predicate>,
+    predicate: Predicate,
 }
 
 // Statement such as "String: Show" or "a: Eq".
-struct Predicate {
+pub struct Predicate {
     trait_id: TraitId,
-    ty: Arc<TypeNode>,
+    pub ty: Arc<TypeNode>,
 }
 
 // Trait environments.
@@ -59,5 +66,54 @@ impl TraitEnv {
         self.traits.insert(info.id.clone(), info);
     }
 
-    // Add a instance to a trait.
+    // Add a instance.
+    pub fn add_instance(&mut self, inst: QualPredicate, tycons: &HashMap<String, Arc<Kind>>) {
+        let trait_id = &inst.predicate.trait_id;
+
+        // Check existaice of trait.
+        if !self.traits.contains_key(trait_id) {
+            error_exit(&format!("no trait `{}` defined", trait_id.to_string()));
+        }
+
+        self.traits
+            .get_mut(trait_id)
+            .unwrap()
+            .add_instance(inst, tycons)
+    }
+
+    // Entailment
+    pub fn entail(
+        &self,
+        ps: &[&Predicate],
+        p: &Predicate,
+        tycons: &HashMap<String, Arc<Kind>>,
+    ) -> bool {
+        // If p in contained in ps, then ok.
+        for q in ps {
+            if q.trait_id == p.trait_id {
+                if Substitution::matching(tycons, &q.ty, &p.ty).is_some() {
+                    return true;
+                }
+            }
+        }
+        // Try instances.
+        for qual in &self.traits[&p.trait_id].instances {
+            match Substitution::matching(tycons, &qual.predicate.ty, &p.ty) {
+                Some(s) => {
+                    let mut all_context_ok = true;
+                    for c in &qual.context {
+                        if !self.entail(ps, &c, tycons) {
+                            all_context_ok = false;
+                            break;
+                        }
+                    }
+                    if all_context_ok {
+                        return true;
+                    }
+                }
+                None => {}
+            }
+        }
+        return false;
+    }
 }

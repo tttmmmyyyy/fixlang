@@ -21,6 +21,7 @@ mod types;
 
 use ast::expr::*;
 use ast::module::*;
+use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
 use builtin::*;

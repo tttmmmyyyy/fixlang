@@ -14,16 +14,32 @@ pub enum Kind {
     Arrow(Arc<Kind>, Arc<Kind>),
 }
 
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Clone)]
 pub struct TyCon {
     pub name: String,
 }
+
+impl PartialEq for TyCon {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for TyCon {}
 
 // Node of type ast tree with user defined additional information
 pub struct TypeNode {
     pub ty: Type,
     pub info: Arc<TypeInfo>,
 }
+
+impl PartialEq for TypeNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.ty == other.ty
+    }
+}
+
+impl Eq for TypeNode {}
 
 impl TypeNode {
     pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
@@ -132,6 +148,7 @@ impl TypeNode {
 }
 
 // Variant of type
+#[derive(PartialEq, Eq)]
 pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),
