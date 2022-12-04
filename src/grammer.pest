@@ -68,13 +68,15 @@ type_expr = { type_fun }
 
 type_braced = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
 
-type_nlr = { type_tycon | type_braced }
+type_nlr = { type_tycon | type_var | type_braced }
 
 type_tyapp = { type_nlr ~ (sep* ~ "<" ~ sep* ~ type_expr ~ ("," ~ sep* ~ type_expr)* ~ sep* ~ ">")? }
 
 type_fun = { type_tyapp ~ (sep* ~ "=>" ~ sep* ~ type_expr)? }
 
 type_tycon = { ASCII_ALPHA_UPPER ~ var_char* }
+
+type_var = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
 
 // === Type declarations ===
 type_name = { ASCII_ALPHA_UPPER ~ var_char* }
@@ -84,6 +86,24 @@ type_field_name = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~  "(" ~ sep* ~ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* ~ sep* ~ ")" ~ sep* ~ ";" }
+
+// === Trait definitions ===
+trait_name = { ASCII_ALPHA_UPPER ~ var_char* }
+
+trait_defn = { "trait" ~ sep+ ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
+
+trait_member_defn = { trait_member_name ~ sep* ~ ":" ~ sep* ~ type_expr ~ sep* ~ ";" }
+
+trait_member_name = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
+
+// === Trait implementations ===
+predicate = { type_expr ~ sep* ~ ":" ~ sep* ~ trait_name }
+
+trait_impl_context = { predicate ~ (sep* ~ "," ~ sep* ~ predicate)* }
+
+trait_impl = { "impl" ~ sep+ ~ predicate ~ (sep+ ~ "for" ~ sep+ ~ trait_impl_context)? ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
+
+trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
 // === Module ===
 module_name = { ASCII_ALPHA_UPPER ~ var_char* }
