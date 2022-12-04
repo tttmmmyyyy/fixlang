@@ -62,12 +62,24 @@ impl<'c> Scope<'c> {
         });
     }
 
-    fn pop_local(self: &mut Self, var: &NameSpacedName) {
+    fn pop_local(&mut self, var: &NameSpacedName) {
         // TODO: add assertion that var is local (or change var to Name).
         self.data.get_mut(var).unwrap().pop();
         if self.data.get(var).unwrap().is_empty() {
             self.data.remove(var);
         }
+    }
+
+    pub fn add_global(&mut self, var: &NameSpacedName, fun: FunctionValue<'c>) {
+        if self.data.contains_key(&var) {
+            error_exit(&format!("duplicate symbol: {}", var.to_string()));
+        } else {
+            self.data.insert(var.clone(), Default::default());
+        }
+        self.data.get_mut(&var).unwrap().push(Variable {
+            ptr: ObjPointer::Global(fun),
+            used_later: 0,
+        });
     }
 
     pub fn get(self: &Self, var: &NameSpacedName) -> Variable<'c> {
