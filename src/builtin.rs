@@ -67,8 +67,8 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
         let value = gc.builder().build_int_add(lhs_val, rhs_val, "add");
         let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(gc, Some(name_cloned.as_str()));
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        gc.release(gc.scope_get(&lhs_str).ptr);
-        gc.release(gc.scope_get(&rhs_str).ptr);
+        gc.release(gc.scope_get(&lhs_str).ptr.get(gc));
+        gc.release(gc.scope_get(&rhs_str).ptr.get(gc));
         ptr_to_int_obj
     });
     expr_lit(generator, free_vars, name, int_lit_ty(), None)
@@ -109,8 +109,8 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
         );
         let ptr_to_obj = ObjectType::bool_obj_type().create_obj(gc, Some(name_cloned.as_str()));
         gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
-        gc.release(gc.scope_get(&lhs_str).ptr);
-        gc.release(gc.scope_get(&rhs_str).ptr);
+        gc.release(gc.scope_get(&lhs_str).ptr.get(gc));
+        gc.release(gc.scope_get(&rhs_str).ptr.get(gc));
         ptr_to_obj
     });
     expr_lit(generator, free_vars, name, bool_lit_ty(), None)
@@ -144,9 +144,9 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
         x_str.clone(),
     ];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let fixf = gc.scope_get(&NameSpacedName::local(SELF_NAME)).ptr;
-        let x = gc.scope_get(&x_str).ptr;
-        let f = gc.scope_get(&f_str).ptr;
+        let fixf = gc.scope_get(&NameSpacedName::local(SELF_NAME)).ptr.get(gc);
+        let x = gc.scope_get(&x_str).ptr.get(gc);
+        let f = gc.scope_get(&f_str).ptr.get(gc);
         let f_fixf = gc.apply_lambda(f, fixf);
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
         f_fixf_x
@@ -185,8 +185,8 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
         let size = gc
             .scope_get_field(&size_str, 1, int_type(gc.context))
             .into_int_value();
-        gc.release(gc.scope_get(&size_str).ptr);
-        let value = gc.scope_get(&value_str).ptr;
+        gc.release(gc.scope_get(&size_str).ptr.get(gc));
+        let value = gc.scope_get(&value_str).ptr.get(gc);
         let array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
         let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
         let array = gc.cast_pointer(array, array_ptr_ty);
@@ -241,7 +241,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
-        let array = gc.scope_get(&array_str).ptr;
+        let array = gc.scope_get(&array_str).ptr.get(gc);
         let array = gc.cast_pointer(array, array_ptr_ty);
         let array_field = gc
             .builder()
@@ -250,7 +250,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
         let idx = gc
             .scope_get_field(&idx_str, 1, int_type(gc.context))
             .into_int_value();
-        gc.release(gc.scope_get(&idx_str).ptr);
+        gc.release(gc.scope_get(&idx_str).ptr.get(gc));
         let elem = ObjectFieldType::read_array(gc, array_field, idx);
         gc.release(array);
         elem
@@ -307,12 +307,12 @@ fn write_array_lit(
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
 
         // Get argments
-        let array = gc.scope_get(&array_str).ptr;
+        let array = gc.scope_get(&array_str).ptr.get(gc);
         let idx = gc
             .scope_get_field(&idx_str, 1, int_type(gc.context))
             .into_int_value();
-        gc.release(gc.scope_get(&idx_str).ptr);
-        let value = gc.scope_get(&value_str).ptr;
+        gc.release(gc.scope_get(&idx_str).ptr.get(gc));
+        let value = gc.scope_get(&value_str).ptr.get(gc);
 
         // Get array field.
         let array_str_ty = ObjectType::array_type().to_struct_type(gc.context);
@@ -433,7 +433,7 @@ pub fn struct_new_lit(struct_name: &str, field_names: Vec<String>) -> Arc<ExprNo
         // Get field values.
         let field_ptrs: Vec<PointerValue> = field_names
             .iter()
-            .map(|name| gc.scope_get(&NameSpacedName::local(name)).ptr)
+            .map(|name| gc.scope_get(&NameSpacedName::local(name)).ptr.get(gc))
             .collect();
 
         // Create struct object.
@@ -503,7 +503,7 @@ pub fn struct_get_lit(
     let var_name_clone = NameSpacedName::local(var_name);
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Get struct object.
-        let str_ptr = gc.scope_get(&var_name_clone).ptr;
+        let str_ptr = gc.scope_get(&var_name_clone).ptr.get(gc);
 
         // Extract field.
         let str_ty = ObjectType::struct_type(field_count).to_struct_type(gc.context);
@@ -588,8 +588,8 @@ pub fn struct_mod_lit(
         let str_ty = obj_ty.to_struct_type(gc.context);
 
         // Get arguments
-        let modfier = gc.scope_get(&f_name).ptr;
-        let str = gc.scope_get(&x_name).ptr;
+        let modfier = gc.scope_get(&f_name).ptr.get(gc);
+        let str = gc.scope_get(&x_name).ptr.get(gc);
         let str = gc.cast_pointer(str, ptr_type(str_ty));
 
         // If str is not unique, then first clone it.

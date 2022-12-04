@@ -9,8 +9,38 @@ use inkwell::values::{BasicMetadataValueEnum, CallSiteValue};
 use super::*;
 
 #[derive(Clone)]
+pub enum ObjPointer<'c> {
+    Local(PointerValue<'c>),
+    Global(FunctionValue<'c>),
+}
+
+impl<'c> ObjPointer<'c> {
+    // Get pointer.
+    pub fn get<'m>(&self, gc: &GenerationContext<'c, 'm>) -> PointerValue<'c> {
+        match self {
+            ObjPointer::Local(ptr) => ptr.clone(),
+            ObjPointer::Global(fun) => gc
+                .builder()
+                .build_call(fun.clone(), &[], "get_ptr")
+                .try_as_basic_value()
+                .left()
+                .unwrap()
+                .into_pointer_value(),
+        }
+    }
+
+    pub fn local(ptr: PointerValue<'c>) -> ObjPointer<'c> {
+        ObjPointer::Local(ptr)
+    }
+
+    pub fn global(fun: FunctionValue<'c>) -> ObjPointer<'c> {
+        ObjPointer::Global(fun)
+    }
+}
+
+#[derive(Clone)]
 pub struct Variable<'c> {
-    pub ptr: PointerValue<'c>,
+    pub ptr: ObjPointer<'c>,
     used_later: u32,
     // TODO: add type for removing destructor pointers.
 }
@@ -21,17 +51,19 @@ pub struct Scope<'c> {
 }
 
 impl<'c> Scope<'c> {
-    fn push(self: &mut Self, var: &NameSpacedName, code: &PointerValue<'c>) {
+    fn push_local(self: &mut Self, var: &NameSpacedName, ptr: &PointerValue<'c>) {
+        // TODO: add assertion that var is local (or change var to Name).
         if !self.data.contains_key(var) {
             self.data.insert(var.clone(), Default::default());
         }
         self.data.get_mut(var).unwrap().push(Variable {
-            ptr: code.clone(),
+            ptr: ObjPointer::Local(ptr.clone()),
             used_later: 0,
         });
     }
 
-    fn pop(self: &mut Self, var: &NameSpacedName) {
+    fn pop_local(self: &mut Self, var: &NameSpacedName) {
+        // TODO: add assertion that var is local (or change var to Name).
         self.data.get_mut(var).unwrap().pop();
         if self.data.get(var).unwrap().is_empty() {
             self.data.remove(var);
@@ -50,7 +82,7 @@ impl<'c> Scope<'c> {
         gc: &GenerationContext<'c, 'm>,
     ) -> BasicValueEnum<'c> {
         let expr = self.get(var);
-        gc.load_obj_field(expr.ptr, ty, field_idx)
+        gc.load_obj_field(expr.ptr.get(gc), ty, field_idx)
     }
 
     fn modify_used_later(self: &mut Self, vars: &HashSet<NameSpacedName>, by: i32) {
@@ -184,17 +216,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Push scope.
     fn scope_push(self: &mut Self, var: &NameSpacedName, code: &PointerValue<'c>) {
-        self.scope.borrow_mut().last_mut().unwrap().push(var, code)
+        self.scope
+            .borrow_mut()
+            .last_mut()
+            .unwrap()
+            .push_local(var, code)
     }
 
     // Pop scope.
     fn scope_pop(self: &mut Self, var: &NameSpacedName) {
-        self.scope.borrow_mut().last_mut().unwrap().pop(var);
+        self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
     pub fn get_var_retained_if_used_later(&mut self, var: &NameSpacedName) -> PointerValue<'c> {
         let var = self.scope_get(var);
-        let code = var.ptr;
+        let code = var.ptr.get(self);
         if var.used_later > 0 {
             self.retain(code);
         }
@@ -411,7 +447,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Retain captured objects
             for cap_name in &captured_names {
                 let ptr = self.scope_get(cap_name).ptr;
-                self.retain(ptr);
+                self.retain(ptr.get(self));
             }
             // Release SELF and arg if unused
             if !val.free_vars().contains(&NameSpacedName::local(SELF_NAME)) {
@@ -498,7 +534,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         for var_name in else_expr.free_vars() {
             if !then_expr.free_vars().contains(var_name) && self.scope_get(var_name).used_later == 0
             {
-                self.release(self.scope_get(var_name).ptr);
+                self.release(self.scope_get(var_name).ptr.get(self));
             }
         }
         let then_code = self.eval_expr(then_expr.clone());
@@ -510,7 +546,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         for var_name in then_expr.free_vars() {
             if !else_expr.free_vars().contains(var_name) && self.scope_get(var_name).used_later == 0
             {
-                self.release(self.scope_get(var_name).ptr);
+                self.release(self.scope_get(var_name).ptr.get(self));
             }
         }
         let else_code = self.eval_expr(else_expr);
