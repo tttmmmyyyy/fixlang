@@ -9,14 +9,14 @@ use inkwell::values::{BasicMetadataValueEnum, CallSiteValue};
 use super::*;
 
 #[derive(Clone)]
-pub struct LocalVariable<'c> {
+pub struct Variable<'c> {
     pub ptr: PointerValue<'c>,
     used_later: u32,
 }
 
 #[derive(Default)]
 pub struct Scope<'c> {
-    data: HashMap<NameSpacedName, Vec<LocalVariable<'c>>>,
+    data: HashMap<NameSpacedName, Vec<Variable<'c>>>,
 }
 
 impl<'c> Scope<'c> {
@@ -24,7 +24,7 @@ impl<'c> Scope<'c> {
         if !self.data.contains_key(var) {
             self.data.insert(var.clone(), Default::default());
         }
-        self.data.get_mut(var).unwrap().push(LocalVariable {
+        self.data.get_mut(var).unwrap().push(Variable {
             ptr: code.clone(),
             used_later: 0,
         });
@@ -37,7 +37,7 @@ impl<'c> Scope<'c> {
         }
     }
 
-    pub fn get(self: &Self, var: &NameSpacedName) -> LocalVariable<'c> {
+    pub fn get(self: &Self, var: &NameSpacedName) -> Variable<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
 
@@ -145,7 +145,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get a variable from scope.
-    pub fn scope_get(&self, var: &NameSpacedName) -> LocalVariable<'c> {
+    pub fn scope_get(&self, var: &NameSpacedName) -> Variable<'c> {
         self.scope.borrow().last().unwrap().get(var)
     }
 
