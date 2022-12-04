@@ -12,6 +12,7 @@ use super::*;
 pub struct Variable<'c> {
     pub ptr: PointerValue<'c>,
     used_later: u32,
+    // TODO: add type for removing destructor pointers.
 }
 
 #[derive(Default)]

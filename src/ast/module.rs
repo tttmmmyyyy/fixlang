@@ -22,4 +22,11 @@ impl FixModule {
     pub fn get_namespace(&self) -> NameSpace {
         NameSpace::new(vec![self.name.clone()])
     }
+
+    pub fn get_namespaced_name(&self, name: &Name) -> NameSpacedName {
+        NameSpacedName {
+            namespace: self.get_namespace(),
+            name: name.clone(),
+        }
+    }
 }

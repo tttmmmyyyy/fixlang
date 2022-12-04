@@ -1,3 +1,5 @@
+use inkwell::module::Linkage;
+
 use super::*;
 
 fn execute_main_module<'c>(
@@ -61,6 +63,57 @@ fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
 
     // Build runtime functions.
     build_runtime(&mut gc);
+
+    // Create global symbols.
+    for (name, defn) in &program.global_symbol {
+        let ptr_to_obj_ty = ptr_to_object_type(&gc.context);
+        let ptr_name = format!("PtrTo{}", program.get_namespaced_name(name).to_string());
+        let acc_fn_name = format!("Get{}", program.get_namespaced_name(name).to_string());
+
+        // Add global pointer to the value of this symbol.
+        let ptr_to_obj = gc.module.add_global(
+            ptr_to_obj_ty.ptr_type(AddressSpace::Local),
+            Some(AddressSpace::Local),
+            &ptr_name,
+        );
+        let null = ptr_to_obj_ty.const_null().as_basic_value_enum();
+        ptr_to_obj.set_initializer(&null);
+
+        // Implement accessor function.
+        let acc_fn_type = ptr_to_obj_ty.fn_type(&[], false);
+        let acc_fn = gc
+            .module
+            .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
+        let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
+        gc.builder().position_at_end(entry_bb);
+        let is_null = gc.builder().build_int_compare(
+            IntPredicate::EQ,
+            ptr_to_obj.as_basic_value_enum().into_int_value(),
+            null.into_int_value(),
+            &format!("{}_is_null", ptr_name),
+        );
+        let init_bb = gc.context.append_basic_block(acc_fn, "ptr_is_null");
+        let end_bb = gc.context.append_basic_block(acc_fn, "ptr_is_non_null");
+        gc.builder()
+            .build_conditional_branch(is_null, init_bb, end_bb);
+
+        // If ptr is null, then create object and initialize the pointer.
+        gc.builder().position_at_end(init_bb);
+        let obj = gc.eval_expr(defn.expr.clone());
+        gc.builder().build_store(ptr_to_obj.as_pointer_value(), obj);
+        gc.builder().position_at_end(init_bb);
+        gc.builder().build_unconditional_branch(end_bb);
+
+        // Return object.
+        gc.builder().position_at_end(end_bb);
+        let ret = gc
+            .builder()
+            .build_load(ptr_to_obj.as_pointer_value(), "PtrToObj");
+        gc.builder().build_return(Some(&ret));
+
+        // Register the accessor function to gc.
+        todo!()
+    }
 
     // Add main function.
     let main_fn_type = context.i64_type().fn_type(&[], false);
