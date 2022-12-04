@@ -32,6 +32,9 @@ fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
 
     // Check types.
     program.expr = typechecker.deduce_expr(&program.expr, int_lit_ty());
+    if !typechecker.reduce_predicates() {
+        typechecker.error_exit_on_predicates();
+    }
 
     // Calculate free variables of nodes.
     program.expr = calculate_free_vars(program.expr);

@@ -450,14 +450,7 @@ impl TypeCheckContext {
         }
         let preds = match self.trait_env.reduce(&preds, &self.tycons) {
             Some(ps) => ps,
-            None => error_exit(&format!(
-                "predicates are unsatisfiable: {}",
-                preds
-                    .iter()
-                    .map(|p| p.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
+            None => self.error_exit_on_predicates(),
         };
 
         // Collect variables that appear in scope.
@@ -505,6 +498,18 @@ impl TypeCheckContext {
         Scheme::generalize(gen_vars, gen_preds, ty)
     }
 
+    // Show an error message that predicates are unsatisfiable.
+    pub fn error_exit_on_predicates(&self) -> ! {
+        error_exit(&format!(
+            "predicates are unsatisfiable: {}",
+            self.predicates
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+    }
+
     // Update substitution to unify two types.
     fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         let ty1 = &self.substitute_type(ty1);
@@ -522,7 +527,7 @@ impl TypeCheckContext {
 
     // Reduce predicates.
     // If predicates are unsatisfiable, do nothing and return false.
-    fn reduce_predicates(&mut self) -> bool {
+    pub fn reduce_predicates(&mut self) -> bool {
         let mut preds = std::mem::replace(&mut self.predicates, vec![]);
         for p in &mut preds {
             self.substitute_predicate(p);
