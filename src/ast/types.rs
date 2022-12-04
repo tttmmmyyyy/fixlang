@@ -43,12 +43,12 @@ impl Eq for TypeNode {}
 
 impl TypeNode {
     // Is this type head normal form? i.e., begins with type variable.
-    pub fn isHnf(&self) -> bool {
+    pub fn is_hnf(&self) -> bool {
         match &self.ty {
             Type::TyVar(_) => true,
             Type::TyCon(_) => false,
-            Type::TyApp(head, _) => head.isHnf(),
-            Type::FunTy(head, _) => head.isHnf(),
+            Type::TyApp(head, _) => head.is_hnf(),
+            Type::FunTy(head, _) => head.is_hnf(),
         }
     }
 
@@ -283,7 +283,7 @@ impl TypeNode {
     // Calculate free type variables.
     pub fn free_vars(self: &Arc<Self>) -> HashMap<String, Arc<Kind>> {
         let mut free_vars: HashMap<String, Arc<Kind>> = HashMap::default();
-        let ty = match &self.ty {
+        match &self.ty {
             Type::TyVar(tv) => {
                 free_vars.insert(tv.name.clone(), tv.kind.clone());
             }
@@ -301,10 +301,11 @@ impl TypeNode {
     }
 }
 
-// Scheme = forall<a1,..,> (...type...)
+// Type scheme.
 #[derive(Clone)]
 pub struct Scheme {
     pub vars: HashMap<String, Arc<Kind>>,
+    pub preds: Vec<Predicate>,
     pub ty: Arc<TypeNode>,
 }
 
@@ -318,19 +319,64 @@ impl Scheme {
 
 impl Scheme {
     // Create new instance.
-    pub fn new_arc(vars: HashMap<String, Arc<Kind>>, ty: Arc<TypeNode>) -> Arc<Scheme> {
-        Arc::new(Scheme { vars, ty })
+    fn new_arc(
+        vars: HashMap<String, Arc<Kind>>,
+        preds: Vec<Predicate>,
+        ty: Arc<TypeNode>,
+    ) -> Arc<Scheme> {
+        Arc::new(Scheme { vars, preds, ty })
     }
 
     // Create new instance.
-    pub fn new_arc_from_str(vars: &[(&str, Arc<Kind>)], ty: Arc<TypeNode>) -> Arc<Scheme> {
-        Self::new_arc(
-            HashMap::from_iter(
-                vars.iter()
-                    .map(|(name, kind)| (name.to_string(), kind.clone())),
-            ),
-            ty,
-        )
+    // fn new_arc_from_str(
+    //     vars: &[(&str, Arc<Kind>)],
+    //     preds: Vec<Predicate>,
+    //     ty: Arc<TypeNode>,
+    // ) -> Arc<Scheme> {
+    //     Self::new_arc(
+    //         HashMap::from_iter(
+    //             vars.iter()
+    //                 .map(|(name, kind)| (name.to_string(), kind.clone())),
+    //         ),
+    //         preds,
+    //         ty,
+    //     )
+    // }
+
+    pub fn substitute(&self, s: &Substitution) -> Arc<Scheme> {
+        // Generalized variables cannot be replaced.
+        for (v, _) in &self.vars {
+            assert!(!s.data.contains_key(v));
+        }
+        let mut preds = self.preds.clone();
+        for p in &mut preds {
+            s.substitute_predicate(p)
+        }
+        Scheme::new_arc(self.vars.clone(), preds, s.substitute_type(&self.ty))
+    }
+
+    // Create instance by generalizaing type.
+    pub fn generalize(
+        vars: HashMap<String, Arc<Kind>>,
+        mut preds: Vec<Predicate>,
+        ty: Arc<TypeNode>,
+    ) -> Arc<Scheme> {
+        let mut s = Substitution::default();
+        let mut gen_vars: HashMap<String, Arc<Kind>> = Default::default();
+        for (i, (v, k)) in vars.iter().enumerate() {
+            let gen_name = format!("%g{}", i); // To avoid confliction with user-defined type varible, add prefix %.
+            s.add_substitution(&Substitution::single(v, type_tyvar(&gen_name, k)));
+            gen_vars.insert(gen_name, k.clone());
+        }
+        for p in &mut preds {
+            s.substitute_predicate(p);
+        }
+        let ty = s.substitute_type(&ty);
+        Scheme::new_arc(gen_vars, preds, ty)
+    }
+
+    pub fn from_type(ty: Arc<TypeNode>) -> Arc<Scheme> {
+        Scheme::generalize(HashMap::default(), vec![], ty)
     }
 
     // Get free type variables.

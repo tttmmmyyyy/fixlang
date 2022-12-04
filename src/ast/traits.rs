@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use super::*;
 
 // Identifier to spacify trait.
@@ -14,7 +16,8 @@ impl TraitId {
 }
 
 // Information on trait.
-struct TraitInfo {
+#[derive(Clone)]
+pub struct TraitInfo {
     id: TraitId,
     instances: Vec<QualPredicate>,
 }
@@ -37,7 +40,8 @@ impl TraitInfo {
 }
 
 // Qualified predicate. Statement such as "impl Array a : Eq for a : Eq {}".
-struct QualPredicate {
+#[derive(Clone)]
+pub struct QualPredicate {
     context: Vec<Predicate>,
     predicate: Predicate,
 }
@@ -49,8 +53,15 @@ pub struct Predicate {
     pub ty: Arc<TypeNode>,
 }
 
+impl Predicate {
+    pub fn to_string(&self) -> String {
+        format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
+    }
+}
+
 // Trait environments.
-struct TraitEnv {
+#[derive(Clone, Default)]
+pub struct TraitEnv {
     traits: HashMap<TraitId, TraitInfo>,
 }
 
@@ -83,7 +94,7 @@ impl TraitEnv {
     }
 
     // Reduce predicate using trait instances.
-    // Returns None when p cannot be reduced anymore.
+    // Returns None when p cannot be satisfied.
     pub fn reduce_to_instance_contexts_one(
         &self,
         p: &Predicate,
@@ -110,23 +121,20 @@ impl TraitEnv {
     }
 
     // Reduce predicate using trait instances (as long as possible).
+    // Returns None when p cannot be satisfied.
     pub fn reduce_to_instance_contexts_alap(
         &self,
         p: &Predicate,
         tycons: &HashMap<String, Arc<Kind>>,
-    ) -> Vec<Predicate> {
-        let mut ret: Vec<Predicate> = Default::default();
-        match self.reduce_to_instance_contexts_one(p, tycons) {
-            Some(qs) => {
-                for q in qs {
-                    ret.append(&mut self.reduce_to_instance_contexts_alap(&q, tycons));
-                }
-            }
-            None => {
-                ret.push(p.clone());
-            }
-        }
-        ret
+    ) -> Option<Vec<Predicate>> {
+        self.reduce_to_instance_contexts_one(p, tycons)
+            .map(|qs| {
+                qs.iter()
+                    .map(|q| self.reduce_to_instance_contexts_alap(&q, tycons))
+                    .collect::<Option<Vec<_>>>()
+            })
+            .flatten()
+            .map(|vs| vs.concat())
     }
 
     // Entailment.
@@ -211,20 +219,27 @@ impl TraitEnv {
             }
         }
         ps
+        // TODO: Improve performance. See scEntail in Typing Haskell in Haskell.
     }
 
     // Context reduction.
     // Returns qs when satisfaction of ps are reduced to qs.
     // In particular, returns empty when ps are satisfied.
+    // Returns None when p cannot be satisfied.
     pub fn reduce(
         &self,
         ps: &Vec<Predicate>,
         tycons: &HashMap<String, Arc<Kind>>,
-    ) -> Vec<Predicate> {
-        let mut ret: Vec<Predicate> = Default::default();
-        for p in ps {
-            ret.append(&mut self.reduce_to_instance_contexts_alap(p, tycons));
-        }
-        self.simplify_predicates(ps, tycons)
+    ) -> Option<Vec<Predicate>> {
+        let ret = ps
+            .iter()
+            .map(|p| self.reduce_to_instance_contexts_alap(p, tycons))
+            .collect::<Option<Vec<_>>>()
+            .map(|vs| vs.concat())
+            .map(|ps| self.simplify_predicates(&ps, tycons));
+
+        // Every predicate has to be hnf.
+        assert!(ret.is_none() || ret.as_ref().unwrap().iter().all(|p| p.ty.is_hnf()));
+        ret
     }
 }

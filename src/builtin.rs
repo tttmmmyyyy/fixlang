@@ -1,5 +1,3 @@
-use once_cell::sync::Lazy;
-
 // Implement built-in functions, types, etc.
 use super::*;
 
@@ -82,10 +80,7 @@ pub fn add() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(var_local("rhs", None, None), add_lit("lhs", "rhs"), None),
         None,
     );
-    let scm = Scheme::new_arc_from_str(
-        &[],
-        type_fun(int_lit_ty(), type_fun(int_lit_ty(), int_lit_ty())),
-    );
+    let scm = Scheme::from_type(type_fun(int_lit_ty(), type_fun(int_lit_ty(), int_lit_ty())));
     (expr, scm)
 }
 
@@ -128,8 +123,9 @@ pub fn eq() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(var_local("rhs", None, None), eq_lit("lhs", "rhs"), None),
         None,
     );
-    let scm = Scheme::new_arc_from_str(
-        &[("a", kind_star())],
+    let scm = Scheme::generalize(
+        HashMap::from([("a".to_string(), kind_star())]),
+        vec![],
         type_fun(
             type_tyvar_star("a"),
             type_fun(type_tyvar_star("a"), bool_lit_ty()),
@@ -166,8 +162,12 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
-    let scm = Scheme::new_arc_from_str(
-        &[("a", kind_star()), ("b", kind_star())],
+    let scm = Scheme::generalize(
+        HashMap::from([
+            ("a".to_string(), kind_star()),
+            ("b".to_string(), kind_star()),
+        ]),
+        vec![],
         type_fun(type_fun(fixed_ty.clone(), fixed_ty.clone()), fixed_ty),
     );
     (expr, scm)
@@ -218,8 +218,9 @@ pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
         None,
     );
-    let scm = Scheme::new_arc_from_str(
-        &[("a", kind_star())],
+    let scm = Scheme::generalize(
+        HashMap::from([("a".to_string(), kind_star())]),
+        vec![],
         type_fun(
             int_lit_ty(),
             type_fun(
@@ -269,8 +270,9 @@ pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
         None,
     );
-    let scm = Scheme::new_arc_from_str(
-        &[("a", kind_star())],
+    let scm = Scheme::generalize(
+        HashMap::from([("a".to_string(), kind_star())]),
+        vec![],
         type_fun(
             type_tyapp(array_lit_ty(), type_tyvar_star("a")),
             type_fun(int_lit_ty(), type_tyvar_star("a")),
@@ -398,8 +400,9 @@ pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
         None,
     );
     let array_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
-    let scm = Scheme::new_arc_from_str(
-        &[("a", kind_star())],
+    let scm = Scheme::generalize(
+        HashMap::from([("a".to_string(), kind_star())]),
+        vec![],
         type_fun(
             array_ty.clone(),
             type_fun(int_lit_ty(), type_fun(type_tyvar_star("a"), array_ty)),
@@ -484,7 +487,7 @@ pub fn struct_new(struct_name: &str, definition: &Struct) -> (Arc<ExprNode>, Arc
         expr = expr_abs(var_local(&field.name, None, None), expr, None);
         ty = type_fun(field.ty.clone(), ty);
     }
-    let scm = Scheme::new_arc(HashMap::new(), ty);
+    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
     (expr, scm)
 }
 
@@ -553,7 +556,7 @@ pub fn struct_get(
         None,
     );
     let ty = type_fun(str_ty, field.ty.clone());
-    let scm = Scheme::new_arc(HashMap::new(), ty);
+    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
     (expr, scm)
 }
 
@@ -563,7 +566,6 @@ pub fn struct_mod_lit(
     x_name: &str,
     field_count: usize, // number of fields in this struct
     field_idx: usize,
-    str_ty: Arc<TypeNode>,
     struct_name: &str,
     field_name: &str,
     is_unique_version: bool,
@@ -688,7 +690,6 @@ pub fn struct_mod(
                 "x",
                 field_count,
                 field_idx,
-                str_ty.clone(),
                 struct_name,
                 field_name,
                 is_unique_version,
@@ -701,7 +702,7 @@ pub fn struct_mod(
         type_fun(field.ty.clone(), field.ty.clone()),
         type_fun(str_ty.clone(), str_ty.clone()),
     );
-    let scm = Scheme::new_arc(HashMap::new(), ty);
+    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
     (expr, scm)
 }
 

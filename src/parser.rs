@@ -288,7 +288,7 @@ fn parse_var_with_type(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
     let var_name = pairs.next().unwrap().as_str();
     let scm = pairs.next().map(|ty| {
         let ty = parse_type(ty);
-        Scheme::new_arc(ty.free_vars(), ty)
+        Scheme::generalize(ty.free_vars(), vec![], ty)
     });
     var_local(var_name, scm, Some(span))
 }

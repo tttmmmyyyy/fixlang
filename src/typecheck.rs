@@ -122,7 +122,7 @@ where
                 } else {
                     sv.global
                         .iter()
-                        .filter(|(ns2, v)| ns.is_suffix(ns2))
+                        .filter(|(ns2, _)| ns.is_suffix(ns2))
                         .map(|(ns2, v)| (ns2.clone(), v.clone()))
                         .collect()
                 }
@@ -136,7 +136,7 @@ where
 // when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
 #[derive(Clone)]
 pub struct Substitution {
-    data: HashMap<String, Arc<TypeNode>>,
+    pub data: HashMap<String, Arc<TypeNode>>,
 }
 
 impl Default for Substitution {
@@ -149,14 +149,14 @@ impl Default for Substitution {
 
 impl Substitution {
     // Make single substitution.
-    fn single(var: &str, ty: Arc<TypeNode>) -> Self {
+    pub fn single(var: &str, ty: Arc<TypeNode>) -> Self {
         let mut data = HashMap::<String, Arc<TypeNode>>::default();
         data.insert(var.to_string(), ty);
         Self { data }
     }
 
     // Add (=compose) substitution.
-    fn add_substitution(&mut self, other: &Self) {
+    pub fn add_substitution(&mut self, other: &Self) {
         for (_var, ty) in self.data.iter_mut() {
             let new_ty = other.substitute_type(&ty);
             *ty = new_ty;
@@ -193,7 +193,7 @@ impl Substitution {
                 .data
                 .get(&tyvar.name)
                 .map_or(ty.clone(), |sub| sub.clone()),
-            Type::TyCon(tc) => ty.clone(),
+            Type::TyCon(_) => ty.clone(),
             Type::TyApp(fun, arg) => {
                 let fun = self.substitute_type(fun);
                 let arg = self.substitute_type(arg);
@@ -380,8 +380,12 @@ pub struct TypeCheckContext {
     scope: Scope<Arc<Scheme>>,
     // Substitution.
     substitution: Substitution,
+    // Predicates:
+    pub predicates: Vec<Predicate>,
     // Set of TyCons associated with kinds
     tycons: HashMap<String, Arc<Kind>>,
+    // Trait environment.
+    trait_env: TraitEnv,
 }
 
 impl Default for TypeCheckContext {
@@ -390,7 +394,9 @@ impl Default for TypeCheckContext {
             tyvar_id: Default::default(),
             scope: Default::default(),
             substitution: Default::default(),
+            predicates: Default::default(),
             tycons: bulitin_type_to_kind_map(),
+            trait_env: Default::default(),
         }
     }
 }
@@ -400,7 +406,7 @@ impl TypeCheckContext {
     fn new_tyvar(&mut self) -> String {
         let id = self.tyvar_id;
         self.tyvar_id += 1;
-        "a".to_string() + &id.to_string()
+        "%a".to_string() + &id.to_string() // To avlid confliction with user-defined type variable, we add prefix #.
     }
 
     // Apply substitution to type.
@@ -408,9 +414,14 @@ impl TypeCheckContext {
         self.substitution.substitute_type(ty)
     }
 
+    // Apply substitution to a predicate.
+    fn substitute_predicate(&self, p: &mut Predicate) {
+        self.substitution.substitute_predicate(p)
+    }
+
     // Apply substitution to scheme.
     fn substitute_scheme(&self, scm: &Arc<Scheme>) -> Arc<Scheme> {
-        Scheme::new_arc(scm.vars.clone(), self.substitute_type(&scm.ty))
+        scm.substitute(&self.substitution)
     }
 
     // Instantiate a scheme.
@@ -423,18 +434,71 @@ impl TypeCheckContext {
         sub.substitute_type(&scheme.ty)
     }
 
-    // Make a scheme from a type by abstracting type variable that does not appear in scope.
-    fn generalize_to_scheme(&self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
+    // Make a scheme from a type by generalizing type variable that does not appear in scope.
+    fn generalize_to_scheme(&mut self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
+        // Get generalized type and predicates.
         let ty = self.substitute_type(ty);
-        let mut vars = ty.free_vars();
+        let mut preds = std::mem::replace(&mut self.predicates, vec![]);
+
+        // Reduce predicates.
+        for p in &mut preds {
+            self.substitute_predicate(p);
+        }
+        let preds = match self.trait_env.reduce(&preds, &self.tycons) {
+            Some(ps) => ps,
+            None => error_exit(&format!(
+                "predicates are unsatisfiable: {}",
+                preds
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+        };
+
+        // Collect variables that appear in scope.
+        let mut vars_in_scope: HashSet<String> = Default::default();
         for (_var, scp) in &self.scope.var {
             for scm in &scp.local {
                 for (var_in_scope, _) in self.substitute_scheme(&scm).free_vars() {
-                    vars.remove(&var_in_scope);
+                    vars_in_scope.insert(var_in_scope);
                 }
             }
         }
-        Scheme::new_arc(vars, ty)
+
+        // Calculate genealized variables.
+        let mut gen_vars = ty.free_vars();
+        for v in &vars_in_scope {
+            gen_vars.remove(v);
+        }
+
+        // Split predicates to generalized and deferred.
+        let mut gen_preds: Vec<Predicate> = Default::default(); // Generalized predicates.
+        let mut def_preds: Vec<Predicate> = Default::default(); // Deferred predicates.
+        for p in preds {
+            if p.ty
+                .free_vars()
+                .iter()
+                .all(|(v, _)| vars_in_scope.contains(v))
+            {
+                // All free variables of p appears in scope.
+                def_preds.push(p);
+            } else if p
+                .ty
+                .free_vars()
+                .iter()
+                .any(|(v, _)| !vars_in_scope.contains(v) && gen_vars.contains_key(v))
+            {
+                // A free variable of p appears neither in scope and generalized variables.
+                error_exit(&format!("ambiguous type variable in `{}`", p.to_string()))
+            } else {
+                // A free variable of p appears in generalized variables.
+                gen_preds.push(p);
+            }
+        }
+
+        self.predicates = def_preds;
+        Scheme::generalize(gen_vars, gen_preds, ty)
     }
 
     // Update substitution to unify two types.
@@ -542,8 +606,7 @@ impl TypeCheckContext {
                         &ei.source,
                     );
                 }
-                self.scope
-                    .push(&arg.name, &Scheme::new_arc(Default::default(), arg_ty));
+                self.scope.push(&arg.name, &Scheme::from_type(arg_ty));
                 let body = self.deduce_expr(body, body_ty);
                 self.scope.pop(&arg.name);
                 ei.set_lam_body(body)

@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, process};
+use std::process;
 
 pub fn error_exit(msg: &str) -> ! {
     eprintln!("{}", msg);
