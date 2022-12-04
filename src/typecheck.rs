@@ -743,7 +743,7 @@ impl TypeCheckContext {
             s.substitute_predicate(&mut p);
             if !self.trait_env.entail(&given_preds, &p, &self.tycons) {
                 error_exit(&format!(
-                    "condition `{}` is necessary for this epxression but not assumed in the specified type.",
+                    "condition `{}` is necessary for this expression but not assumed in the specified type.",
                     p.to_string()
                 ));
             }
