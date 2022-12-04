@@ -56,7 +56,7 @@ fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
 
     // Create GenerationContext.
     let context = Context::create();
-    let module = context.create_module("main");
+    let module = context.create_module(&program.name);
     let mut gc = GenerationContext::new(&context, &module);
 
     // Build runtime functions.
