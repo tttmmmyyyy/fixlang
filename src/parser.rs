@@ -99,11 +99,39 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     let mut pairs = pair.into_inner();
     let module_name = parse_module_decl(pairs.next().unwrap(), src);
     let mut type_decls: Vec<TypeDecl> = Vec::new();
+    let mut global_symbols_defns: HashMap<Name, (Option<Arc<Scheme>>, Option<Arc<ExprNode>>)> =
+        Default::default();
     let mut expr: Option<Arc<ExprNode>> = None;
     for pair in pairs {
         match pair.as_rule() {
             Rule::type_decl => {
                 type_decls.push(parse_type_decl(pair, src));
+            }
+            Rule::global_symbol_type_defn => {
+                let (name, ty) = parse_global_symbol_type_defn(pair, src);
+                if !global_symbols_defns.contains_key(&name) {
+                    global_symbols_defns.insert(name, (Some(ty), None));
+                } else {
+                    let gs = global_symbols_defns.get_mut(&name).unwrap();
+                    if gs.0.is_some() {
+                        error_exit(&format!("duplicated type declaration for `{}`", name));
+                    } else {
+                        gs.0 = Some(ty);
+                    }
+                }
+            }
+            Rule::global_symbol_defn => {
+                let (name, expr) = parse_global_symbol_defn(pair, src);
+                if !global_symbols_defns.contains_key(&name) {
+                    global_symbols_defns.insert(name, (None, Some(expr)));
+                } else {
+                    let gs = global_symbols_defns.get_mut(&name).unwrap();
+                    if gs.1.is_some() {
+                        error_exit(&format!("duplicated definition for `{}`", name));
+                    } else {
+                        gs.1 = Some(expr);
+                    }
+                }
             }
             Rule::expr => {
                 expr = Some(parse_expr(pair, src));
@@ -111,10 +139,77 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
             _ => unreachable!(),
         }
     }
+
+    let mut global_symbols: HashMap<Name, GlobalSymbol> = Default::default();
+    for (name, (ty, expr)) in global_symbols_defns {
+        if ty.is_none() {
+            error_exit(&format!("symbol `{}` has no type declaration", name));
+        }
+        if expr.is_none() {
+            error_exit(&format!("symbol `{}` has no definition", name));
+        }
+        global_symbols.insert(
+            name,
+            GlobalSymbol {
+                ty: ty.unwrap(),
+                expr: expr.unwrap(),
+            },
+        );
+    }
+
     FixModule {
         name: module_name.to_string(),
         type_decls,
         expr: expr.unwrap(),
+        global_symbol: global_symbols,
+    }
+}
+
+fn parse_global_symbol_type_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<Scheme>) {
+    assert_eq!(pair.as_rule(), Rule::global_symbol_type_defn);
+    let mut pairs = pair.into_inner();
+    let name = pairs.next().unwrap().as_str().to_string();
+    let (preds, ty) = parse_qualified_type(pairs.next().unwrap(), src);
+    (name, Scheme::generalize(ty.free_vars(), preds, ty))
+}
+
+fn parse_global_symbol_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<ExprNode>) {
+    assert_eq!(pair.as_rule(), Rule::global_symbol_defn);
+    let mut pairs = pair.into_inner();
+    let name = pairs.next().unwrap().as_str().to_string();
+    let expr = parse_expr(pairs.next().unwrap(), src);
+    (name, expr)
+}
+
+fn parse_qualified_type(pair: Pair<Rule>, src: &Arc<String>) -> (Vec<Predicate>, Arc<TypeNode>) {
+    assert_eq!(pair.as_rule(), Rule::type_qualified);
+    let mut pairs = pair.into_inner();
+    let ty = parse_type(pairs.next().unwrap());
+    let preds = match pairs.next() {
+        Some(pair) => parse_predicates(pair, src),
+        None => vec![],
+    };
+    (preds, ty)
+}
+
+fn parse_predicates(pair: Pair<Rule>, src: &Arc<String>) -> Vec<Predicate> {
+    assert_eq!(pair.as_rule(), Rule::predicates);
+    let mut pairs = pair.into_inner();
+    let mut ps: Vec<Predicate> = Default::default();
+    for pair in pairs {
+        ps.push(parse_predicate(pair, src));
+    }
+    ps
+}
+
+fn parse_predicate(pair: Pair<Rule>, src: &Arc<String>) -> Predicate {
+    assert_eq!(pair.as_rule(), Rule::predicate);
+    let mut pairs = pair.into_inner();
+    let ty = parse_type(pairs.next().unwrap());
+    let trait_name = pairs.next().unwrap().as_str().to_string();
+    Predicate {
+        trait_id: TraitId { name: trait_name },
+        ty,
     }
 }
 

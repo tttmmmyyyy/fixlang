@@ -5,7 +5,7 @@ use super::*;
 // Identifier to spacify trait.
 #[derive(Hash, Eq, PartialEq, Clone)]
 pub struct TraitId {
-    name: String,
+    pub name: Name,
     // TODO: add namespace.
 }
 

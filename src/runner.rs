@@ -30,7 +30,19 @@ fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Add built-in functions to program.
     add_builtin_symbols(&mut program);
 
+    // Register type declarations of global symbols to typechecker.
+    for (name, defn) in &program.global_symbol {
+        typechecker
+            .scope
+            .add_global(name.clone(), &program.get_namespace(), &defn.ty);
+    }
+
     // Check types.
+    for (_name, defn) in &mut program.global_symbol {
+        let mut tc = typechecker.clone();
+        defn.expr = tc.check_type_nofree(defn.expr.clone(), defn.ty.clone());
+    }
+    // Check types of root expression // will be removed in future.
     program.expr = typechecker.deduce_expr(&program.expr, int_lit_ty());
     if !typechecker.reduce_predicates() || !typechecker.predicates.is_empty() {
         typechecker.error_exit_on_predicates();

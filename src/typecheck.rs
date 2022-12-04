@@ -20,7 +20,7 @@ fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
 }
 
 #[derive(Clone)]
-struct Scope<T> {
+pub struct Scope<T> {
     var: HashMap<String, ScopeValue<T>>,
 }
 
@@ -70,18 +70,18 @@ where
     fn get_mut(self: &mut Self, name: &str) -> Option<&mut ScopeValue<T>> {
         self.var.get_mut(name)
     }
-    fn add_global(&mut self, name: &str, namespace: &NameSpace, value: &T) {
-        if !self.var.contains_key(name) {
-            self.var.insert(String::from(name), Default::default());
+    pub fn add_global(&mut self, name: Name, namespace: &NameSpace, value: &T) {
+        if !self.var.contains_key(&name) {
+            self.var.insert(name.clone(), Default::default());
         }
-        if self.var[name].global.contains_key(namespace) {
+        if self.var[&name].global.contains_key(namespace) {
             error_exit(&format!(
-                "duplicate definition for `{}::{}`",
+                "duplicate definition for `{}.{}`",
                 namespace.to_string(),
                 name
             ))
         }
-        self.get_mut(name)
+        self.get_mut(&name)
             .unwrap()
             .global
             .insert(namespace.clone(), value.clone());
@@ -377,7 +377,7 @@ pub struct TypeCheckContext {
     // The identifier of type variables.
     tyvar_id: u32,
     // Scoped map of variable name -> scheme. (Assamptions of type inference.)
-    scope: Scope<Arc<Scheme>>,
+    pub scope: Scope<Arc<Scheme>>,
     // Substitution.
     substitution: Substitution,
     // Predicates
@@ -425,7 +425,12 @@ impl TypeCheckContext {
     }
 
     // Instantiate a scheme.
-    fn instantiate_scheme(&mut self, scheme: &Arc<Scheme>) -> (Vec<Predicate>, Arc<TypeNode>) {
+    // Returns predicates if append_predicates = false or append them to self if append_predicates = true.
+    fn instantiate_scheme(
+        &mut self,
+        scheme: &Arc<Scheme>,
+        append_predicates: bool,
+    ) -> (Vec<Predicate>, Arc<TypeNode>) {
         let mut sub = Substitution::default();
         for (var, kind) in &scheme.vars {
             let new_var_name = self.new_tyvar();
@@ -434,6 +439,9 @@ impl TypeCheckContext {
         let mut preds = scheme.preds.clone();
         for p in &mut preds {
             sub.substitute_predicate(p);
+        }
+        if append_predicates {
+            self.predicates.append(&mut preds);
         }
         (preds, sub.substitute_type(&scheme.ty))
     }
@@ -553,9 +561,7 @@ impl TypeCheckContext {
                     .iter()
                     .filter_map(|(ns, scm)| {
                         let mut tc = self.clone();
-                        let (mut preds, var_ty) = tc.instantiate_scheme(&scm);
-                        tc.predicates.append(&mut preds);
-                        let var_ty = tc.substitute_type(&var_ty);
+                        let (_, var_ty) = tc.instantiate_scheme(&scm, true);
                         // if var_ty is unifiable to the required type and predicates are satisfiable, then thie candidate is ok.
                         if tc.unify(&var_ty, &ty) {
                             if tc.reduce_predicates() {
@@ -644,7 +650,7 @@ impl TypeCheckContext {
                 ei.set_lam_body(body)
             }
             Expr::Let(var, val, body) => {
-                let (mut preds, var_ty) = match &var.type_annotation {
+                let var_ty = match &var.type_annotation {
                     Some(scm) => {
                         let free_vars = scm.free_vars();
                         if !free_vars.is_empty() {
@@ -656,11 +662,11 @@ impl TypeCheckContext {
                                 &var.source,
                             )
                         }
-                        self.instantiate_scheme(&scm)
+                        self.instantiate_scheme(&scm, true).1
                     }
-                    None => (vec![], type_tyvar_star(&self.new_tyvar())),
+                    None => type_tyvar_star(&self.new_tyvar()),
                 };
-                self.predicates.append(&mut preds);
+                // TODO: Maybe this is wrong. We should check if "deduced type is more general than specified type".
                 let val = self.deduce_expr(val, var_ty.clone());
                 let var_scm = self.generalize_to_scheme(&var_ty);
 
@@ -671,8 +677,11 @@ impl TypeCheckContext {
                     body
                 } else {
                     // NOTE: currently, top-level definition is treated as let-binding.
-                    self.scope
-                        .add_global(&var.name, &var.namespace.as_ref().unwrap(), &var_scm);
+                    self.scope.add_global(
+                        var.name.clone(),
+                        &var.namespace.as_ref().unwrap(),
+                        &var_scm,
+                    );
                     self.deduce_expr(body, ty)
                 };
                 ei.set_let_bound(val).set_let_value(body)
@@ -692,6 +701,7 @@ impl TypeCheckContext {
                         ty.free_vars().iter().next().unwrap().0
                     ))
                 }
+                // TODO: Maybe this is wrong. We should check if "deduced type is more general than specified type".
                 if !self.unify(&ty, anno_ty) {
                     error_exit_with_src(
                         &format!(
@@ -706,6 +716,73 @@ impl TypeCheckContext {
                 ei.set_tyanno_expr(e)
             }
         }
+    }
+
+    // Check if expr has type scm.
+    // Returns given AST augmented with inferred information.
+    pub fn check_type_nofree(
+        &mut self,
+        expr: Arc<ExprNode>,
+        expect_scm: Arc<Scheme>,
+    ) -> Arc<ExprNode> {
+        assert!(self.predicates.is_empty()); // This function is available only when predicates are empty.
+        let (expr, deduced_scm) = self.deduce_scheme_nofree(expr);
+        let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
+        let (required_preds, most_general_ty) = self.instantiate_scheme(&deduced_scm, false);
+        let s = Substitution::matching(&self.tycons, &most_general_ty, &specified_ty);
+        if s.is_none() {
+            error_exit(&format!(
+                "type mismatch. Expected `{}`, found `{}`",
+                specified_ty.to_string(),
+                most_general_ty.to_string()
+            ));
+        }
+        let s = s.unwrap();
+        for p in required_preds {
+            let mut p = p.clone();
+            s.substitute_predicate(&mut p);
+            if !self.trait_env.entail(&given_preds, &p, &self.tycons) {
+                error_exit(&format!(
+                    "condition `{}` is necessary for this epxression but not assumed in the specified type.",
+                    p.to_string()
+                ));
+            }
+        }
+
+        expr
+    }
+
+    // Deduce scheme of a expression. It may leave free variables and predicates.
+    // Returns given AST augmented with inferred information.
+    fn deduce_scheme(&mut self, expr: Arc<ExprNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+        let ty = type_tyvar_star(&self.new_tyvar());
+        let expr = self.deduce_expr(&expr, ty.clone());
+        let scm = self.generalize_to_scheme(&ty);
+        (expr, scm)
+    }
+
+    // Deduce scheme of a expression with no free variable and deferred predicates.
+    // Returns given AST augmented with inferred information.
+    fn deduce_scheme_nofree(&mut self, expr: Arc<ExprNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+        assert!(self.predicates.is_empty()); // This function is available only when predicates are empty.
+        let (expr, scm) = self.deduce_scheme(expr);
+
+        // If free variables are left, raise an error.
+        let free_vars = scm.free_vars();
+        if !free_vars.is_empty() {
+            let free_vars: Vec<Name> = free_vars
+                .iter()
+                .map(|(k, _)| "`".to_string() + k + "`")
+                .collect();
+            error_exit(&format!("unknown type variables {}", free_vars.join(", ")));
+        }
+
+        // If predicates are unsatisfiable or deferred, raise an error.
+        if !self.reduce_predicates() || !self.predicates.is_empty() {
+            self.error_exit_on_predicates();
+        }
+
+        (expr, scm)
     }
 
     // Read type declarations to verity it and extend type-to-kind mapping.

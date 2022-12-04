@@ -1,6 +1,8 @@
 use super::*;
 use std::{collections::HashSet, sync::Arc};
 
+pub type Name = String;
+
 #[derive(Clone, PartialEq)]
 pub enum AppSourceCodeOrderType {
     FunctionIsFormer,
