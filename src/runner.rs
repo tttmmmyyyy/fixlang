@@ -42,13 +42,16 @@ fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
         let mut tc = typechecker.clone();
         defn.expr = tc.check_type_nofree(defn.expr.clone(), defn.ty.clone());
     }
-    // Check types of root expression // will be removed in future.
-    program.expr = typechecker.deduce_expr(&program.expr, int_lit_ty());
+    // Check types of root expression. Note: root expression will be removed in future.
+    program.expr = typechecker.unify_type_of_expr(&program.expr, int_lit_ty());
     if !typechecker.reduce_predicates() || !typechecker.predicates.is_empty() {
         typechecker.error_exit_on_predicates();
     }
 
     // Calculate free variables of nodes.
+    for (_name, defn) in &mut program.global_symbol {
+        defn.expr = calculate_free_vars(defn.expr.clone());
+    }
     program.expr = calculate_free_vars(program.expr);
 
     // Create GenerationContext.

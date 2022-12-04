@@ -553,7 +553,7 @@ impl TypeCheckContext {
     // Perform typechecking.
     // Update type substitution so that `ei` has type `ty`.
     // Returns given AST augmented with inferred information.
-    pub fn deduce_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) -> Arc<ExprNode> {
+    pub fn unify_type_of_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) -> Arc<ExprNode> {
         match &*ei.expr {
             Expr::Var(var) => {
                 let candidates = self.scope.overloaded_candidates(&var.name, &var.namespace);
@@ -621,12 +621,12 @@ impl TypeCheckContext {
             Expr::App(fun, arg) => {
                 let arg_ty = type_tyvar_star(&self.new_tyvar());
                 if ei.app_order == AppSourceCodeOrderType::ArgumentIsFormer {
-                    let arg = self.deduce_expr(arg, arg_ty.clone());
-                    let fun = self.deduce_expr(fun, type_fun(arg_ty.clone(), ty));
+                    let arg = self.unify_type_of_expr(arg, arg_ty.clone());
+                    let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty));
                     ei.set_app_arg(arg).set_app_func(fun)
                 } else {
-                    let fun = self.deduce_expr(fun, type_fun(arg_ty.clone(), ty));
-                    let arg = self.deduce_expr(arg, arg_ty.clone());
+                    let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty));
+                    let arg = self.unify_type_of_expr(arg, arg_ty.clone());
                     ei.set_app_arg(arg).set_app_func(fun)
                 }
             }
@@ -645,7 +645,7 @@ impl TypeCheckContext {
                     );
                 }
                 self.scope.push(&arg.name, &Scheme::from_type(arg_ty));
-                let body = self.deduce_expr(body, body_ty);
+                let body = self.unify_type_of_expr(body, body_ty);
                 self.scope.pop(&arg.name);
                 ei.set_lam_body(body)
             }
@@ -667,12 +667,12 @@ impl TypeCheckContext {
                     None => type_tyvar_star(&self.new_tyvar()),
                 };
                 // TODO: Maybe this is wrong. We should check if "deduced type is more general than specified type".
-                let val = self.deduce_expr(val, var_ty.clone());
+                let val = self.unify_type_of_expr(val, var_ty.clone());
                 let var_scm = self.generalize_to_scheme(&var_ty);
 
                 let body = if var.namespace.as_ref().unwrap().is_local() {
                     self.scope.push(&var.name, &var_scm);
-                    let body = self.deduce_expr(body, ty);
+                    let body = self.unify_type_of_expr(body, ty);
                     self.scope.pop(&var.name);
                     body
                 } else {
@@ -682,14 +682,14 @@ impl TypeCheckContext {
                         &var.namespace.as_ref().unwrap(),
                         &var_scm,
                     );
-                    self.deduce_expr(body, ty)
+                    self.unify_type_of_expr(body, ty)
                 };
                 ei.set_let_bound(val).set_let_value(body)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.deduce_expr(cond, bool_lit_ty());
-                let then_expr = self.deduce_expr(then_expr, ty.clone());
-                let else_expr = self.deduce_expr(else_expr, ty);
+                let cond = self.unify_type_of_expr(cond, bool_lit_ty());
+                let then_expr = self.unify_type_of_expr(then_expr, ty.clone());
+                let else_expr = self.unify_type_of_expr(else_expr, ty);
                 ei.set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
@@ -712,7 +712,7 @@ impl TypeCheckContext {
                         &ei.source,
                     );
                 }
-                let e = self.deduce_expr(e, ty.clone());
+                let e = self.unify_type_of_expr(e, ty.clone());
                 ei.set_tyanno_expr(e)
             }
         }
@@ -756,7 +756,7 @@ impl TypeCheckContext {
     // Returns given AST augmented with inferred information.
     fn deduce_scheme(&mut self, expr: Arc<ExprNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
         let ty = type_tyvar_star(&self.new_tyvar());
-        let expr = self.deduce_expr(&expr, ty.clone());
+        let expr = self.unify_type_of_expr(&expr, ty.clone());
         let scm = self.generalize_to_scheme(&ty);
         (expr, scm)
     }
