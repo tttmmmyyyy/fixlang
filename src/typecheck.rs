@@ -380,7 +380,7 @@ pub struct TypeCheckContext {
     scope: Scope<Arc<Scheme>>,
     // Substitution.
     substitution: Substitution,
-    // Predicates:
+    // Predicates
     pub predicates: Vec<Predicate>,
     // Set of TyCons associated with kinds
     tycons: HashMap<String, Arc<Kind>>,
@@ -425,13 +425,17 @@ impl TypeCheckContext {
     }
 
     // Instantiate a scheme.
-    fn instantiate_scheme(&mut self, scheme: &Arc<Scheme>) -> Arc<TypeNode> {
+    fn instantiate_scheme(&mut self, scheme: &Arc<Scheme>) -> (Vec<Predicate>, Arc<TypeNode>) {
         let mut sub = Substitution::default();
         for (var, kind) in &scheme.vars {
             let new_var_name = self.new_tyvar();
             sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
         }
-        sub.substitute_type(&scheme.ty)
+        let mut preds = scheme.preds.clone();
+        for p in &mut preds {
+            sub.substitute_predicate(p);
+        }
+        (preds, sub.substitute_type(&scheme.ty))
     }
 
     // Make a scheme from a type by generalizing type variable that does not appear in scope.
@@ -516,6 +520,23 @@ impl TypeCheckContext {
         }
     }
 
+    // Reduce predicates.
+    // If predicates are unsatisfiable, do nothing and return false.
+    fn reduce_predicates(&mut self) -> bool {
+        let mut preds = std::mem::replace(&mut self.predicates, vec![]);
+        for p in &mut preds {
+            self.substitute_predicate(p);
+        }
+        self.predicates.append(&mut preds);
+        match self.trait_env.reduce(&self.predicates, &self.tycons) {
+            Some(ps) => {
+                self.predicates = ps;
+                return true;
+            }
+            None => return false,
+        }
+    }
+
     // Perform typechecking.
     // Update type substitution so that `ei` has type `ty`.
     // Returns given AST augmented with inferred information.
@@ -527,10 +548,16 @@ impl TypeCheckContext {
                     .iter()
                     .filter_map(|(ns, scm)| {
                         let mut tc = self.clone();
-                        let var_ty = tc.instantiate_scheme(&scm);
+                        let (mut preds, var_ty) = tc.instantiate_scheme(&scm);
+                        tc.predicates.append(&mut preds);
                         let var_ty = tc.substitute_type(&var_ty);
+                        // if var_ty is unifiable to the required type and predicates are satisfiable, then thie candidate is ok.
                         if tc.unify(&var_ty, &ty) {
-                            Some((tc, ns.clone()))
+                            if tc.reduce_predicates() {
+                                Some((tc, ns.clone()))
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }
@@ -612,7 +639,7 @@ impl TypeCheckContext {
                 ei.set_lam_body(body)
             }
             Expr::Let(var, val, body) => {
-                let var_ty = match &var.type_annotation {
+                let (mut preds, var_ty) = match &var.type_annotation {
                     Some(scm) => {
                         let free_vars = scm.free_vars();
                         if !free_vars.is_empty() {
@@ -626,8 +653,9 @@ impl TypeCheckContext {
                         }
                         self.instantiate_scheme(&scm)
                     }
-                    None => type_tyvar_star(&self.new_tyvar()),
+                    None => (vec![], type_tyvar_star(&self.new_tyvar())),
                 };
+                self.predicates.append(&mut preds);
                 let val = self.deduce_expr(val, var_ty.clone());
                 let var_scm = self.generalize_to_scheme(&var_ty);
 
