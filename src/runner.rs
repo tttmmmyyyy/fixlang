@@ -105,7 +105,6 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
         gc.builder().position_at_end(init_bb);
         let obj = gc.eval_expr(defn.expr.clone());
         gc.builder().build_store(global_var, obj);
-        gc.builder().position_at_end(init_bb);
         if SANITIZE_MEMORY {
             // Mark this object as global.
             let obj_id = gc.get_obj_id(obj);
