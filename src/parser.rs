@@ -101,7 +101,6 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     let mut type_decls: Vec<TypeDecl> = Vec::new();
     let mut global_symbols_defns: HashMap<Name, (Option<Arc<Scheme>>, Option<Arc<ExprNode>>)> =
         Default::default();
-    let mut expr: Option<Arc<ExprNode>> = None;
     for pair in pairs {
         match pair.as_rule() {
             Rule::type_decl => {
