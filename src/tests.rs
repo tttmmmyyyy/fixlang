@@ -749,7 +749,8 @@ pub fn test41() {
 #[serial]
 pub fn test42() {
     // Recursion function using global variable.
-    // TODO: make n more big: currently tail-call optimization not working in global recursion!
+    // TODO: make n more big:
+    // currently tail-call optimization not working in global recursion! (maybe by relasing "loop" at end of "loop").
     let n = 10000;
     let source = format!(
         r"
