@@ -596,6 +596,28 @@ pub fn test41() {
 
 #[test]
 #[serial]
+pub fn test42() {
+    // Recursion function using global variable.
+    // TODO: make n more big: currently tail-call optimization not working in global recursion!
+    let n = 10000;
+    let source = format!(
+        r"
+            module Main;
+            
+            loop : Int => Int;
+            loop = \x -> if eq x 0 then 0 else add x $ loop $ add x -1;
+    
+            main : Int;
+            main = loop {};
+        ",
+        n
+    );
+    let answer = (n * (n + 1)) / 2;
+    test_run_source(source.as_str(), answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"{- head -} module Main; 
