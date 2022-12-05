@@ -110,7 +110,7 @@ trait_impl = { "impl" ~ sep+ ~ predicate ~ (sep+ ~ "for" ~ sep+ ~ trait_impl_con
 trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
 // === Global symbols === 
-global_symbol_type_defn = { var ~ sep* ~ ":" ~ type_qualified ~ sep* ~ ";" }
+global_symbol_type_defn = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
 
 global_symbol_defn = { var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 

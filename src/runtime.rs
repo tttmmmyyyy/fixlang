@@ -7,6 +7,7 @@ pub enum RuntimeFunctions {
     ReportMalloc,
     ReportRetain,
     ReportRelease,
+    MarkGlobal,
     CheckLeak,
     RetainObj,
     ReleaseObj,
@@ -65,6 +66,14 @@ fn build_report_release_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Func
         false,
     );
     gc.module.add_function("report_release", fn_ty, None)
+}
+
+fn build_mark_global_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+    let fn_ty = gc
+        .context
+        .void_type()
+        .fn_type(&[obj_id_type(gc.context).into()], false);
+    gc.module.add_function("mark_as_global", fn_ty, None)
 }
 
 fn build_check_leak_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -187,6 +196,8 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
             RuntimeFunctions::ReportRelease,
             build_report_release_function(gc),
         );
+        gc.runtimes
+            .insert(RuntimeFunctions::MarkGlobal, build_mark_global_function(gc));
         gc.runtimes
             .insert(RuntimeFunctions::CheckLeak, build_check_leak_function(gc));
     }

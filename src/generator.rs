@@ -47,7 +47,7 @@ pub struct Variable<'c> {
 
 #[derive(Default)]
 pub struct Scope<'c> {
-    data: HashMap<NameSpacedName, Vec<Variable<'c>>>,
+    data: HashMap<NameSpacedName, Vec<Variable<'c>>>, // Change NameSpacedName to Name.
 }
 
 impl<'c> Scope<'c> {
@@ -70,35 +70,15 @@ impl<'c> Scope<'c> {
         }
     }
 
-    pub fn add_global(&mut self, var: &NameSpacedName, fun: FunctionValue<'c>) {
-        if self.data.contains_key(&var) {
-            error_exit(&format!("duplicate symbol: {}", var.to_string()));
-        } else {
-            self.data.insert(var.clone(), Default::default());
-        }
-        self.data.get_mut(&var).unwrap().push(Variable {
-            ptr: ObjPointer::Global(fun),
-            used_later: 0,
-        });
-    }
-
     pub fn get(self: &Self, var: &NameSpacedName) -> Variable<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
 
-    pub fn get_field<'m, 'b>(
-        self: &Self,
-        var: &NameSpacedName,
-        field_idx: u32,
-        ty: StructType<'c>,
-        gc: &GenerationContext<'c, 'm>,
-    ) -> BasicValueEnum<'c> {
-        let expr = self.get(var);
-        gc.load_obj_field(expr.ptr.get(gc), ty, field_idx)
-    }
-
     fn modify_used_later(self: &mut Self, vars: &HashSet<NameSpacedName>, by: i32) {
         for var in vars {
+            if !var.is_local() {
+                continue;
+            }
             let used_later = &mut self
                 .data
                 .get_mut(var)
@@ -130,6 +110,7 @@ pub struct GenerationContext<'c, 'm> {
     pub module: &'m Module<'c>,
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
+    global: HashMap<NameSpacedName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
 }
 
@@ -161,6 +142,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             module,
             builders: Rc::new(RefCell::new(vec![Rc::new(ctx.create_builder())])),
             scope: Rc::new(RefCell::new(vec![Default::default()])),
+            global: Default::default(),
             runtimes: Default::default(),
         };
         ret
@@ -181,6 +163,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
+    // Add a global object.
+    pub fn add_global_object(&mut self, name: NameSpacedName, accessor: FunctionValue<'c>) {
+        if self.global.contains_key(&name) {
+            error_exit(&format!("duplicate symbol: {}", name.to_string()));
+        } else {
+            self.global.insert(
+                name.clone(),
+                Variable {
+                    ptr: ObjPointer::Global(accessor),
+                    used_later: u32::MAX / 2,
+                },
+            );
+        }
+    }
+
     // Push a new scope.
     pub fn push_scope(&mut self) -> PopScopeGuard<'c> {
         self.scope.borrow_mut().push(Default::default());
@@ -189,12 +186,16 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    // Get a variable from scope.
-    pub fn scope_get(&self, var: &NameSpacedName) -> Variable<'c> {
-        self.scope.borrow().last().unwrap().get(var)
+    // Get the value of a variable.
+    pub fn get_var(&self, var: &NameSpacedName) -> Variable<'c> {
+        if var.is_local() {
+            self.scope.borrow().last().unwrap().get(var)
+        } else {
+            self.global.get(var).unwrap().clone()
+        }
     }
 
-    // Lock variables in scope from moved out.
+    // Lock variables in scope to avoid being moved out.
     fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
         self.scope
             .borrow_mut()
@@ -203,7 +204,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .increment_used_later(names);
     }
 
-    // Release lock variables in scope from moved out.
+    // Unlock variables in scope.
     fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
         self.scope
             .borrow_mut()
@@ -213,17 +214,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get field of object in the scope.
-    pub fn scope_get_field(
+    pub fn get_var_field(
         self: &Self,
         var: &NameSpacedName,
         field_idx: u32,
         ty: StructType<'c>,
     ) -> BasicValueEnum<'c> {
-        self.scope
-            .borrow_mut()
-            .last()
-            .unwrap()
-            .get_field(var, field_idx, ty, self)
+        self.load_obj_field(self.get_var(var).ptr.get(self), ty, field_idx)
     }
 
     // Push scope.
@@ -240,13 +237,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
-    pub fn get_var_retained_if_used_later(&mut self, var: &NameSpacedName) -> PointerValue<'c> {
-        let var = self.scope_get(var);
-        let code = var.ptr.get(self);
-        if var.used_later > 0 {
-            self.retain(code);
+    pub fn get_var_retained_if_used_later(
+        &mut self,
+        var_name: &NameSpacedName,
+    ) -> PointerValue<'c> {
+        let var = self.get_var(var_name);
+        let ptr = var.ptr.get(self);
+        if !var_name.is_local() {
+            if var.used_later > 0 {
+                self.retain(ptr);
+            }
         }
-        code
+        ptr
     }
 
     pub fn cast_pointer(&self, from: PointerValue<'c>, to: PointerType<'c>) -> PointerValue<'c> {
@@ -458,7 +460,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
             // Retain captured objects
             for cap_name in &captured_names {
-                let ptr = self.scope_get(cap_name).ptr;
+                let ptr = self.get_var(cap_name).ptr;
                 self.retain(ptr.get(self));
             }
             // Release SELF and arg if unused
@@ -544,9 +546,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().position_at_end(then_bb);
         // Release variables used only in the else block.
         for var_name in else_expr.free_vars() {
-            if !then_expr.free_vars().contains(var_name) && self.scope_get(var_name).used_later == 0
-            {
-                self.release(self.scope_get(var_name).ptr.get(self));
+            if !then_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
+                self.release(self.get_var(var_name).ptr.get(self));
             }
         }
         let then_code = self.eval_expr(then_expr.clone());
@@ -556,9 +557,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().position_at_end(else_bb);
         // Release variables used only in the then block.
         for var_name in then_expr.free_vars() {
-            if !else_expr.free_vars().contains(var_name) && self.scope_get(var_name).used_later == 0
-            {
-                self.release(self.scope_get(var_name).ptr.get(self));
+            if !else_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
+                self.release(self.get_var(var_name).ptr.get(self));
             }
         }
         let else_code = self.eval_expr(else_expr);

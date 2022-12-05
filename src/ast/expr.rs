@@ -322,6 +322,10 @@ impl NameSpacedName {
         Self::new(&NameSpace::local(), name)
     }
 
+    pub fn is_local(&self) -> bool {
+        return self.namespace.is_local();
+    }
+
     pub fn to_string(&self) -> String {
         self.namespace.to_string() + "." + &self.name
     }
