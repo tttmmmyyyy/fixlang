@@ -11,7 +11,7 @@ pub fn test0() {
     let source = r"module Main;
         main: Int;
         main = 5;
-        main";
+        5";
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }

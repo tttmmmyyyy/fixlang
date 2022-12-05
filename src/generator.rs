@@ -417,11 +417,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     fn eval_lam(&mut self, arg: Arc<Var>, val: Arc<ExprNode>) -> PointerValue<'c> {
         let context = self.context;
         let module = self.module;
-        // Fix ordering of captured names
+        // Calculate captured variables.
         let mut captured_names = val.free_vars().clone();
         captured_names.remove(&arg.namespaced_name());
         captured_names.remove(&NameSpacedName::local(SELF_NAME));
-        let captured_names: Vec<NameSpacedName> = captured_names.into_iter().collect();
+        // We need not and should not capture global variable
+        // If we capture global variable, then global recursive function such as
+        // "main = \x -> if x == 0 then 0 else x + main (x-1)" results in infinite recursion at it's initialization.
+        let captured_names = captured_names.into_iter().filter(|name| name.is_local());
+        // Fix ordering of captured names by converting to Vec.
+        let captured_names: Vec<NameSpacedName> = captured_names.collect();
+
         // Determine the type of closure
         let mut field_types = vec![
             ObjectFieldType::ControlBlock,
