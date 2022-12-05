@@ -708,75 +708,53 @@ pub fn struct_mod(
 
 // Add bult-in functions to a given ast.
 pub fn add_builtin_symbols(program: &mut FixModule) {
-    fn add_let(
-        program: Arc<ExprNode>,
-        namespace: NameSpace,
+    fn add_global(
+        program: &mut FixModule,
+        ns: &[&str],
         name: &str,
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
-    ) -> Arc<ExprNode> {
-        expr_let(
-            var_var(name, Some(namespace), Some(scm), None),
-            expr,
-            program,
-            None,
-        )
+    ) {
+        program.add_global_object(NameSpacedName::from_strs(ns, name), (expr, scm));
     }
-
-    let mut expr = program.expr.clone();
-    expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "add", add());
-    expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "eq", eq());
-    expr = add_let(expr, NameSpace::new_str(&[PRELUDE_NAME]), "fix", fix());
-    expr = add_let(
-        expr,
-        NameSpace::new_str(&[PRELUDE_NAME]),
-        "newArray",
-        new_array(),
-    );
-    expr = add_let(
-        expr,
-        NameSpace::new_str(&[PRELUDE_NAME]),
-        "readArray",
-        read_array(),
-    );
-    expr = add_let(
-        expr,
-        NameSpace::new_str(&[PRELUDE_NAME]),
-        "writeArray",
-        write_array(),
-    );
-    expr = add_let(
-        expr,
-        NameSpace::new_str(&[PRELUDE_NAME]),
+    add_global(program, &[PRELUDE_NAME], "add", add());
+    add_global(program, &[PRELUDE_NAME], "eq", eq());
+    add_global(program, &[PRELUDE_NAME], "fix", fix());
+    add_global(program, &[PRELUDE_NAME], "newArray", new_array());
+    add_global(program, &[PRELUDE_NAME], "readArray", read_array());
+    add_global(program, &[PRELUDE_NAME], "writeArray", write_array());
+    add_global(
+        program,
+        &[PRELUDE_NAME],
         "writeArray!",
         write_array_unique(),
     );
-    for decl in &program.type_decls {
+    for decl in &program.type_decls.clone() {
         match &decl.value {
             TypeDeclValue::Struct(str) => {
-                let ns = NameSpace::new_str(&[&program.name, &decl.name]);
-                expr = add_let(expr, ns.clone(), "new", struct_new(&decl.name, str));
+                let module_name = program.name.clone();
+                let ns = vec![module_name.as_str(), decl.name.as_str()];
+                add_global(program, ns.as_slice(), "new", struct_new(&decl.name, str));
                 for field in &str.fields {
-                    expr = add_let(
-                        expr,
-                        ns.clone(),
+                    add_global(
+                        program,
+                        ns.as_slice(),
                         &format!("get{}", capitalize_head(&field.name)),
                         struct_get(&decl.name, str, &field.name),
                     );
                     for is_unique in [false, true] {
-                        expr = add_let(
-                            expr,
-                            ns.clone(),
+                        add_global(
+                            program,
+                            ns.as_slice(),
                             &format!(
                                 "mod{}{}",
                                 capitalize_head(&field.name),
                                 if is_unique { "!" } else { "" }
                             ),
                             struct_mod(&decl.name, str, &field.name, is_unique),
-                        )
+                        );
                     }
                 }
             }
         }
     }
-    program.expr = expr;
 }

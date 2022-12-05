@@ -8,11 +8,10 @@ pub fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) 
 #[test]
 #[serial]
 pub fn test0() {
-    let source = r"module Main; 
-        hoge: Int;
-        hoge = 5;
-        
-        hoge";
+    let source = r"module Main;
+        main: Int;
+        main = add 1 4;
+        main";
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }

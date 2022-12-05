@@ -318,6 +318,10 @@ impl NameSpacedName {
         }
     }
 
+    pub fn from_strs(ns: &[&str], name: &str) -> Self {
+        Self::new(&NameSpace::new_str(ns), name)
+    }
+
     pub fn local(name: &str) -> Self {
         Self::new(&NameSpace::local(), name)
     }

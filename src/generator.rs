@@ -243,10 +243,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     ) -> PointerValue<'c> {
         let var = self.get_var(var_name);
         let ptr = var.ptr.get(self);
-        if !var_name.is_local() {
-            if var.used_later > 0 {
-                self.retain(ptr);
-            }
+        if var.used_later > 0 {
+            self.retain(ptr);
         }
         ptr
     }
