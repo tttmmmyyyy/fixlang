@@ -22,50 +22,44 @@ fn execute_main_module<'c>(
     }
 }
 
-fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
+fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::default();
 
     // Read type declarations to register user-defined types to typechecker.
-    typechecker.add_tycons(&program.type_decls);
+    typechecker.add_tycons(&fix_mod.type_decls);
 
     // Add built-in functions to program.
-    add_builtin_symbols(&mut program);
+    add_builtin_symbols(&mut fix_mod);
 
     // Register type declarations of global symbols to typechecker.
-    for (name, defn) in &program.global_symbol {
+    for (name, defn) in &fix_mod.global_symbol {
         typechecker
             .scope
             .add_global(name.name.clone(), &name.namespace, &defn.ty);
     }
 
     // Check types.
-    for (_name, defn) in &mut program.global_symbol {
+    for (_name, defn) in &mut fix_mod.global_symbol {
         let mut tc = typechecker.clone();
         defn.expr = tc.check_type_nofree(defn.expr.clone(), defn.ty.clone());
     }
-    // Check types of root expression. Note: root expression will be removed in future.
-    program.expr = typechecker.unify_type_of_expr(&program.expr, int_lit_ty());
-    if !typechecker.reduce_predicates() || !typechecker.predicates.is_empty() {
-        typechecker.error_exit_on_predicates();
-    }
 
     // Calculate free variables of nodes.
-    for (_name, defn) in &mut program.global_symbol {
+    for (_name, defn) in &mut fix_mod.global_symbol {
         defn.expr = calculate_free_vars(defn.expr.clone());
     }
-    program.expr = calculate_free_vars(program.expr);
 
     // Create GenerationContext.
     let context = Context::create();
-    let module = context.create_module(&program.name);
+    let module = context.create_module(&fix_mod.name);
     let mut gc = GenerationContext::new(&context, &module);
 
     // Build runtime functions.
     build_runtime(&mut gc);
 
     // Create global objects, global variable and accessor function.
-    let global_objs = program
+    let global_objs = fix_mod
         .global_symbol
         .iter()
         .map(|(name, defn)| {
@@ -135,9 +129,8 @@ fn run_module(mut program: FixModule, opt_level: OptimizationLevel) -> i64 {
     gc.builder().position_at_end(entry_bb);
 
     // Evaluate program and extract int value from result.
-    let program_result = gc.eval_expr(program.expr);
+    let program_result = gc.eval_expr(fix_mod.main_function());
     let result = gc.load_obj_field(program_result, int_type(&context), 1);
-    gc.release(program_result);
 
     // Perform leak check
     if SANITIZE_MEMORY {

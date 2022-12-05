@@ -121,7 +121,7 @@ module_decl = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" }
 
 toplevel_defns = _{ type_decl | global_symbol_type_defn | global_symbol_defn }
 
-module = { module_decl ~ (sep* ~ toplevel_defns)* ~ sep* ~ expr }
+module = { module_decl ~ (sep* ~ toplevel_defns)* }
 
 // === Comments ===
 block_comment = _{ "{-"  ~ block_commented_character*  ~ "-}" }

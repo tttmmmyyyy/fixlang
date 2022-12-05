@@ -3,11 +3,12 @@ use super::*;
 // Module of fix-lang.
 // Avoiding name confliction with "Module" of inkwell.
 
+const MAIN_FUNCTION_NAME: &str = "main";
+
 pub struct FixModule {
     pub name: Name,
     pub type_decls: Vec<TypeDecl>,
     pub global_symbol: HashMap<NameSpacedName, GlobalSymbol>,
-    pub expr: Arc<ExprNode>,
 }
 
 pub struct GlobalSymbol {
@@ -42,5 +43,19 @@ impl FixModule {
         }
         self.global_symbol
             .insert(name, GlobalSymbol { ty: scm, expr });
+    }
+
+    // Get main function of this module.
+    pub fn main_function(&self) -> Arc<ExprNode> {
+        match self
+            .global_symbol
+            .get(&self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string()))
+        {
+            Some(gs) => {
+                // TODO: Here check if gs has required type.
+                expr_var(MAIN_FUNCTION_NAME, Some(self.get_namespace()), None)
+            }
+            None => error_exit("main function not found."),
+        }
     }
 }

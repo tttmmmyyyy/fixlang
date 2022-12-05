@@ -8,10 +8,11 @@ pub fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) 
 #[test]
 #[serial]
 pub fn test0() {
-    let source = r"module Main;
+    let source = r"
+        module Main;
         main: Int;
         main = 5;
-        5";
+    ";
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -19,8 +20,11 @@ pub fn test0() {
 #[test]
 #[serial]
 pub fn test1() {
-    let source = r"module Main;
-        let x = 5 in x";
+    let source = r"
+        module Main;
+        main: Int;
+        main = let x = 5 in x;
+    ";
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -28,8 +32,11 @@ pub fn test1() {
 #[test]
 #[serial]
 pub fn test2() {
-    let source = r"module Main;
-        let x = 5 in 3";
+    let source = r"
+        module Main;
+        main : Int;
+        main = let x = 5 in 3;
+    ";
     let answer = 3;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -37,8 +44,11 @@ pub fn test2() {
 #[test]
 #[serial]
 pub fn test3() {
-    let source = r"module Main;
-        let n = -5 in let p = 5 in n";
+    let source = r"
+        module Main;
+        main :Int;
+        main = let n = -5 in let p = 5 in n;
+    ";
     let answer = -5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -46,8 +56,11 @@ pub fn test3() {
 #[test]
 #[serial]
 pub fn test4() {
-    let source = r"module Main;
-        let n = -5 in let p = 5 in p";
+    let source = r"
+        module Main;
+        main : Int;
+        main = let n = -5 in let p = 5 in p;
+    ";
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -55,8 +68,11 @@ pub fn test4() {
 #[test]
 #[serial]
 pub fn test5() {
-    let source = r"module Main;
-        let x = -5 in let x = 5 in x";
+    let source = r"
+        module Main;
+        main : Int;
+        main = let x = -5 in let x = 5 in x;
+    ";
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -64,8 +80,11 @@ pub fn test5() {
 #[test]
 #[serial]
 pub fn test6() {
-    let source = r"module Main;
-        let x = let y = 3 in y in x";
+    let source = r"
+        module Main;
+        main : Int;
+        main = let x = let y = 3 in y in x;
+    ";
     let answer = 3;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -73,8 +92,11 @@ pub fn test6() {
 #[test]
 #[serial]
 pub fn test7() {
-    let source = r"module Main;
-        (\x -> 5) 10";
+    let source = r"
+        module Main;
+        main : Int;
+        main = (\x -> 5) 10;
+    ";
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }

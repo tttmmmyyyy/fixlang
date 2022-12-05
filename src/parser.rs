@@ -133,9 +133,6 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
                     }
                 }
             }
-            Rule::expr => {
-                expr = Some(parse_expr(pair, src));
-            }
             _ => unreachable!(),
         }
     }
@@ -143,7 +140,6 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     let mut fix_mod = FixModule {
         name: module_name.to_string(),
         type_decls,
-        expr: expr.unwrap(),
         global_symbol: Default::default(),
     };
 
