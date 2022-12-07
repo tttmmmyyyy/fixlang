@@ -361,6 +361,9 @@ impl Scheme {
         mut preds: Vec<Predicate>,
         ty: Arc<TypeNode>,
     ) -> Arc<Scheme> {
+        // All predicates should be head normal form.
+        assert!(preds.iter().all(|p| p.ty.is_hnf()));
+
         let mut s = Substitution::default();
         let mut gen_vars: HashMap<String, Arc<Kind>> = Default::default();
         for (i, (v, k)) in vars.iter().enumerate() {

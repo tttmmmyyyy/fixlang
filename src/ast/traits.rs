@@ -87,6 +87,19 @@ impl TraitEnv {
             error_exit(&format!("no trait `{}` defined", trait_id.to_string()));
         }
 
+        // Check instance is not head-normal-form.
+        if inst.predicate.ty.is_hnf() {
+            error_exit("trait implementation cannot be a head-normal-form."); // TODO: better message?
+        }
+
+        // Check context is head-normal-form.
+        for ctx in &inst.context {
+            if !ctx.ty.is_hnf() {
+                error_exit("trait implementation context must be a head-normal-form.");
+                // TODO: better message?
+            }
+        }
+
         self.traits
             .get_mut(trait_id)
             .unwrap()
@@ -168,35 +181,35 @@ impl TraitEnv {
         }
     }
 
-    // // Reduce a predicate to head normal form.
-    // pub fn reduce_to_hnf(
-    //     &self,
-    //     p: &Predicate,
-    //     tycons: &HashMap<String, Arc<Kind>>,
-    // ) -> Option<Vec<Predicate>> {
-    //     if p.ty.isHnf() {
-    //         return Some(vec![p.clone()]);
-    //     }
-    //     self.reduce_to_instance_contexts_one(p, tycons)
-    //         .map(|ctxs| self.reduce_to_hnfs(&ctxs, tycons))
-    //         .flatten()
-    // }
+    // Reduce a predicate to head normal form.
+    pub fn reduce_to_hnf(
+        &self,
+        p: &Predicate,
+        tycons: &HashMap<String, Arc<Kind>>,
+    ) -> Option<Vec<Predicate>> {
+        if p.ty.is_hnf() {
+            return Some(vec![p.clone()]);
+        }
+        self.reduce_to_instance_contexts_one(p, tycons)
+            .map(|ctxs| self.reduce_to_hnfs(&ctxs, tycons))
+            .flatten()
+    }
 
-    // // Reduce predicates to head normal form.
-    // pub fn reduce_to_hnfs(
-    //     &self,
-    //     ps: &Vec<Predicate>,
-    //     tycons: &HashMap<String, Arc<Kind>>,
-    // ) -> Option<Vec<Predicate>> {
-    //     let mut ret: Vec<Predicate> = Default::default();
-    //     for p in ps {
-    //         match self.reduce_to_hnf(p, tycons) {
-    //             Some(mut v) => ret.append(&mut v),
-    //             None => return None,
-    //         }
-    //     }
-    //     Some(ret)
-    // }
+    // Reduce predicates to head normal form.
+    pub fn reduce_to_hnfs(
+        &self,
+        ps: &Vec<Predicate>,
+        tycons: &HashMap<String, Arc<Kind>>,
+    ) -> Option<Vec<Predicate>> {
+        let mut ret: Vec<Predicate> = Default::default();
+        for p in ps {
+            match self.reduce_to_hnf(p, tycons) {
+                Some(mut v) => ret.append(&mut v),
+                None => return None,
+            }
+        }
+        Some(ret)
+    }
 
     // Simplify a set of predicates by entail.
     pub fn simplify_predicates(
@@ -226,16 +239,34 @@ impl TraitEnv {
     // Returns qs when satisfaction of ps are reduced to qs.
     // In particular, returns empty when ps are satisfied.
     // Returns None when p cannot be satisfied.
+    // pub fn reduce(
+    //     &self,
+    //     ps: &Vec<Predicate>,
+    //     tycons: &HashMap<String, Arc<Kind>>,
+    // ) -> Option<Vec<Predicate>> {
+    //     let ret = ps
+    //         .iter()
+    //         .map(|p| self.reduce_to_instance_contexts_alap(p, tycons))
+    //         .collect::<Option<Vec<_>>>()
+    //         .map(|vs| vs.concat())
+    //         .map(|ps| self.simplify_predicates(&ps, tycons));
+
+    //     // Every predicate has to be hnf.
+    //     assert!(ret.is_none() || ret.as_ref().unwrap().iter().all(|p| p.ty.is_hnf()));
+    //     ret
+    // }
+
+    // Context reduction.
+    // Returns qs when satisfaction of ps are reduced to qs.
+    // In particular, returns empty when ps are satisfied.
+    // Returns None when p cannot be satisfied.
     pub fn reduce(
         &self,
         ps: &Vec<Predicate>,
         tycons: &HashMap<String, Arc<Kind>>,
     ) -> Option<Vec<Predicate>> {
-        let ret = ps
-            .iter()
-            .map(|p| self.reduce_to_instance_contexts_alap(p, tycons))
-            .collect::<Option<Vec<_>>>()
-            .map(|vs| vs.concat())
+        let ret = self
+            .reduce_to_hnfs(ps, tycons)
             .map(|ps| self.simplify_predicates(&ps, tycons));
 
         // Every predicate has to be hnf.
