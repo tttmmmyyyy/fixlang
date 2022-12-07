@@ -39,7 +39,7 @@ impl TraitInfo {
     }
 }
 
-// Qualified predicate. Statement such as "impl Array a : Eq for a : Eq {}".
+// Qualified predicate. Statement such as "Array a : Eq for a : Eq".
 #[derive(Clone)]
 pub struct QualPredicate {
     context: Vec<Predicate>,
