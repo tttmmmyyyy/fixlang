@@ -19,21 +19,46 @@ impl TraitId {
 #[derive(Clone)]
 pub struct TraitInfo {
     id: TraitId,
-    instances: Vec<QualPredicate>,
+    num_instance: u64,
+    type_var: Arc<TyVar>,              // Type variable used in trait definition.
+    methods: Vec<(Name, Arc<Scheme>)>, // To fix ording in vtable, we use Vec instead of HashMap.
+    // Here, for example, in case "trait a : Show { show : a -> String }",
+    // the scheme of method "show" is "a -> String" (a is remains as a free variable and is not generalized),
+    // and not "a -> String for a : Show".
+    instances: Vec<TraitInstance>,
+}
+
+// Trait instance.
+#[derive(Clone)]
+struct TraitInstance {
+    id: u64,
+    qual_pred: QualPredicate,
+    methods: Vec<(Name, Arc<ExprNode>)>,
 }
 
 impl TraitInfo {
     // Add a instance to a trait.
-    pub fn add_instance(&mut self, inst: QualPredicate, tycons: &HashMap<String, Arc<Kind>>) {
+    pub fn add_instance(&mut self, mut inst: TraitInstance, tycons: &HashMap<String, Arc<Kind>>) {
         // Check trait id.
-        assert!(self.id == inst.predicate.trait_id);
+        assert!(self.id == inst.qual_pred.predicate.trait_id);
 
         // Check overlapping instance.
         for i in &self.instances {
-            if Substitution::unify(tycons, &inst.predicate.ty, &i.predicate.ty).is_some() {
+            if Substitution::unify(
+                tycons,
+                &inst.qual_pred.predicate.ty,
+                &i.qual_pred.predicate.ty,
+            )
+            .is_some()
+            {
                 error_exit("overlapping instance.");
             }
         }
+
+        // TODO: check validity of method implementation, etc.
+
+        inst.id = self.num_instance;
+        self.num_instance += 1;
 
         self.instances.push(inst)
     }
@@ -79,8 +104,8 @@ impl TraitEnv {
     }
 
     // Add a instance.
-    pub fn add_instance(&mut self, inst: QualPredicate, tycons: &HashMap<String, Arc<Kind>>) {
-        let trait_id = &inst.predicate.trait_id;
+    pub fn add_instance(&mut self, inst: TraitInstance, tycons: &HashMap<String, Arc<Kind>>) {
+        let trait_id = &inst.qual_pred.predicate.trait_id;
 
         // Check existaice of trait.
         if !self.traits.contains_key(trait_id) {
@@ -88,12 +113,12 @@ impl TraitEnv {
         }
 
         // Check instance is not head-normal-form.
-        if inst.predicate.ty.is_hnf() {
+        if inst.qual_pred.predicate.ty.is_hnf() {
             error_exit("trait implementation cannot be a head-normal-form."); // TODO: better message?
         }
 
         // Check context is head-normal-form.
-        for ctx in &inst.context {
+        for ctx in &inst.qual_pred.context {
             if !ctx.ty.is_hnf() {
                 error_exit("trait implementation context must be a head-normal-form.");
                 // TODO: better message?
@@ -113,10 +138,11 @@ impl TraitEnv {
         p: &Predicate,
         tycons: &HashMap<String, Arc<Kind>>,
     ) -> Option<Vec<Predicate>> {
-        for qual in &self.traits[&p.trait_id].instances {
-            match Substitution::matching(tycons, &qual.predicate.ty, &p.ty) {
+        for inst in &self.traits[&p.trait_id].instances {
+            match Substitution::matching(tycons, &inst.qual_pred.predicate.ty, &p.ty) {
                 Some(s) => {
-                    let ret = qual
+                    let ret = inst
+                        .qual_pred
                         .context
                         .iter()
                         .map(|c| {
@@ -135,20 +161,20 @@ impl TraitEnv {
 
     // Reduce predicate using trait instances (as long as possible).
     // Returns None when p cannot be satisfied.
-    pub fn reduce_to_instance_contexts_alap(
-        &self,
-        p: &Predicate,
-        tycons: &HashMap<String, Arc<Kind>>,
-    ) -> Option<Vec<Predicate>> {
-        self.reduce_to_instance_contexts_one(p, tycons)
-            .map(|qs| {
-                qs.iter()
-                    .map(|q| self.reduce_to_instance_contexts_alap(&q, tycons))
-                    .collect::<Option<Vec<_>>>()
-            })
-            .flatten()
-            .map(|vs| vs.concat())
-    }
+    // pub fn reduce_to_instance_contexts_alap(
+    //     &self,
+    //     p: &Predicate,
+    //     tycons: &HashMap<String, Arc<Kind>>,
+    // ) -> Option<Vec<Predicate>> {
+    //     self.reduce_to_instance_contexts_one(p, tycons)
+    //         .map(|qs| {
+    //             qs.iter()
+    //                 .map(|q| self.reduce_to_instance_contexts_alap(&q, tycons))
+    //                 .collect::<Option<Vec<_>>>()
+    //         })
+    //         .flatten()
+    //         .map(|vs| vs.concat())
+    // }
 
     // Entailment.
     pub fn entail(
