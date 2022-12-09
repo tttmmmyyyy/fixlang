@@ -20,10 +20,10 @@ impl TraitId {
 pub struct TraitInfo {
     id: TraitId,
     num_instance: u64,
-    type_var: Arc<TyVar>,              // Type variable used in trait definition.
-    methods: Vec<(Name, Arc<Scheme>)>, // To fix ording in vtable, we use Vec instead of HashMap.
-    // Here, for example, in case "trait a : Show { show : a -> String }",
-    // the scheme of method "show" is "a -> String" (a is remains as a free variable and is not generalized),
+    type_var: Arc<TyVar>, // Type variable used in trait definition.
+    methods: Vec<(Name, Arc<TypeNode>)>, // To fix ording in vtable, we use Vec instead of HashMap.
+    // Here, for example, in case "trait a: Show { show: a -> String }",
+    // the type of method "show" is "a -> String",
     // and not "a -> String for a : Show".
     instances: Vec<TraitInstance>,
 }
@@ -33,7 +33,31 @@ pub struct TraitInfo {
 struct TraitInstance {
     id: u64,
     qual_pred: QualPredicate,
-    methods: Vec<(Name, Arc<ExprNode>)>,
+    methods: Vec<(Name, Arc<ExprNode>, Arc<TypeNode>)>,
+    // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
+    // the type of method "show" is "(a, b) -> String",
+    // and not "a -> String for a: Show, b: Show".
+}
+
+impl TraitInstance {
+    // Export methods with information to register them as global symbols.
+    pub fn methods_as_global(&self) -> Vec<(NameSpacedName, Arc<ExprNode>, Arc<Scheme>)> {
+        self.methods
+            .iter()
+            .map(|(name, expr, ty)| {
+                let name = format!("{}%{}", name, self.id);
+                let nsn = NameSpacedName::from_strs(&[&self.trait_id().name], &name);
+                let scm =
+                    Scheme::generalize(ty.free_vars(), self.qual_pred.context.clone(), ty.clone());
+                (nsn, expr.clone(), scm)
+            })
+            .collect()
+    }
+
+    // Get trait id.
+    fn trait_id(&self) -> TraitId {
+        self.qual_pred.predicate.trait_id.clone()
+    }
 }
 
 impl TraitInfo {

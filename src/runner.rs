@@ -26,27 +26,27 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::default();
 
-    // Read type declarations to register user-defined types to typechecker.
+    // Let typechecker read type declarations to register user-defined types.
     typechecker.add_tycons(&fix_mod.type_decls);
 
     // Add built-in functions to program.
     add_builtin_symbols(&mut fix_mod);
 
     // Register type declarations of global symbols to typechecker.
-    for (name, defn) in &fix_mod.global_symbol {
+    for (name, defn) in &fix_mod.global_symbols {
         typechecker
             .scope
             .add_global(name.name.clone(), &name.namespace, &defn.ty);
     }
 
     // Check types.
-    for (_name, defn) in &mut fix_mod.global_symbol {
+    for (_name, defn) in &mut fix_mod.global_symbols {
         let mut tc = typechecker.clone();
         defn.expr = tc.check_type_nofree(defn.expr.clone(), defn.ty.clone());
     }
 
     // Calculate free variables of expressions.
-    for (_name, defn) in &mut fix_mod.global_symbol {
+    for (_name, defn) in &mut fix_mod.global_symbols {
         defn.expr = calculate_free_vars(defn.expr.clone());
     }
 

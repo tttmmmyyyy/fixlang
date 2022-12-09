@@ -139,7 +139,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     let mut fix_mod = FixModule {
         name: module_name.to_string(),
         type_decls,
-        global_symbol: Default::default(),
+        global_symbols: Default::default(),
     };
 
     let mut global_symbols: HashMap<NameSpacedName, GlobalSymbol> = Default::default();
@@ -159,7 +159,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
         );
     }
 
-    fix_mod.global_symbol = global_symbols;
+    fix_mod.global_symbols = global_symbols;
     fix_mod
 }
 

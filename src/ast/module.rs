@@ -10,7 +10,7 @@ const MAIN_FUNCTION_NAME: &str = "main";
 pub struct FixModule {
     pub name: Name,
     pub type_decls: Vec<TypeDecl>,
-    pub global_symbol: HashMap<NameSpacedName, GlobalSymbol>,
+    pub global_symbols: HashMap<NameSpacedName, GlobalSymbol>,
 }
 
 pub struct GlobalSymbol {
@@ -40,17 +40,17 @@ impl FixModule {
         name: NameSpacedName,
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
     ) {
-        if self.global_symbol.contains_key(&name) {
+        if self.global_symbols.contains_key(&name) {
             error_exit(&format!("duplicated global object: `{}`", name.to_string()));
         }
-        self.global_symbol
+        self.global_symbols
             .insert(name, GlobalSymbol { ty: scm, expr });
     }
 
     // Get main function of this module.
     pub fn main_function(&self) -> Arc<ExprNode> {
         match self
-            .global_symbol
+            .global_symbols
             .get(&self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string()))
         {
             Some(gs) => {
@@ -65,7 +65,7 @@ impl FixModule {
     pub fn generate_code(&self, gc: &mut GenerationContext) {
         // Create global objects, global variable and accessor function.
         let global_objs = self
-            .global_symbol
+            .global_symbols
             .iter()
             .map(|(name, defn)| {
                 let ptr_to_obj_ty = ptr_to_object_type(&gc.context);
