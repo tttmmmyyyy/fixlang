@@ -281,7 +281,7 @@ pub struct TypeInfo {}
 
 impl TypeNode {
     // Calculate free type variables.
-    pub fn free_vars(self: &Arc<Self>) -> HashMap<String, Arc<Kind>> {
+    pub fn free_vars(self: &Arc<Self>) -> HashMap<Name, Arc<Kind>> {
         let mut free_vars: HashMap<String, Arc<Kind>> = HashMap::default();
         match &self.ty {
             Type::TyVar(tv) => {

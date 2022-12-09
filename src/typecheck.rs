@@ -557,7 +557,7 @@ impl TypeCheckContext {
         match &*ei.expr {
             Expr::Var(var) => {
                 let candidates = self.scope.overloaded_candidates(&var.name, &var.namespace);
-                let candidates: Vec<(TypeCheckContext, NameSpace)> = candidates
+                let candidates: Vec<(TypeCheckContext, NameSpace, Arc<TypeNode>)> = candidates
                     .iter()
                     .filter_map(|(ns, scm)| {
                         let mut tc = self.clone();
@@ -565,7 +565,7 @@ impl TypeCheckContext {
                         // if var_ty is unifiable to the required type and predicates are satisfiable, then thie candidate is ok.
                         if tc.unify(&var_ty, &ty) {
                             if tc.reduce_predicates() {
-                                Some((tc, ns.clone()))
+                                Some((tc, ns.clone(), var_ty))
                             } else {
                                 None
                             }
@@ -586,7 +586,7 @@ impl TypeCheckContext {
                 } else if candidates.len() >= 2 {
                     let candidates_str = candidates
                         .iter()
-                        .map(|(_, ns)| {
+                        .map(|(_, ns, _)| {
                             "`".to_string() + &NameSpacedName::new(ns, &var.name).to_string() + "`"
                         })
                         .collect::<Vec<_>>()
@@ -600,9 +600,15 @@ impl TypeCheckContext {
                     );
                 } else {
                     // candidates.len() == 1
-                    let (tc, ns) = candidates[0].clone();
+                    let (tc, ns, instance) = candidates[0].clone();
                     *self = tc;
+                    let instantiated_vars: HashSet<Name> = instance
+                        .free_vars()
+                        .iter()
+                        .map(|(k, _)| k.clone())
+                        .collect();
                     ei.set_var_namespace(&ns)
+                        .set_var_instantiated_tyvars(instantiated_vars)
                 }
             }
             Expr::Lit(lit) => {

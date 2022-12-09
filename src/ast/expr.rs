@@ -58,6 +58,20 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_var_instantiated_tyvars(&self, tyvars: HashSet<Name>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Var(var) => {
+                let var = var.set_instantiated_tyvars(tyvars);
+                ret.expr = Arc::new(Expr::Var(var))
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
     pub fn set_app_func(&self, func: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
@@ -300,8 +314,9 @@ impl NameSpace {
 pub struct Var {
     pub name: String,
     pub namespace: Option<NameSpace>, // None implies namespace to be inferred
-    pub type_annotation: Option<Arc<Scheme>>,
+    pub type_annotation: Option<Arc<Scheme>>, // TODO: maybe unused?
     pub source: Option<Span>,
+    pub instantiated_tyvars: Option<HashSet<Name>>,
 }
 
 #[derive(Eq, Hash, PartialEq, Clone)]
@@ -348,6 +363,12 @@ impl Var {
             None => panic!(),
         }
     }
+
+    pub fn set_instantiated_tyvars(&self, tyvars: HashSet<Name>) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.instantiated_tyvars = Some(tyvars);
+        Arc::new(ret)
+    }
 }
 
 pub fn var_var(
@@ -361,6 +382,7 @@ pub fn var_var(
         namespace,
         type_annotation,
         source: src,
+        instantiated_tyvars: None,
     })
 }
 
