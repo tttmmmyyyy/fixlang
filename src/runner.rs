@@ -41,8 +41,9 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
 
     // Check types.
     for (_name, defn) in &mut fix_mod.global_symbols {
-        let mut tc = typechecker.clone();
-        defn.expr = tc.check_type_nofree(defn.expr.clone(), defn.ty.clone());
+        // let mut tc = typechecker.clone();
+        // defn.expr = tc.check_type_nofree(defn.expr.clone(), defn.ty.clone());
+        defn.expr = typechecker.check_type_nofree(defn.expr.clone(), defn.ty.clone());
     }
 
     // Calculate free variables of expressions.
@@ -53,7 +54,7 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Create GenerationContext.
     let context = Context::create();
     let module = context.create_module(&fix_mod.name);
-    let mut gc = GenerationContext::new(&context, &module);
+    let mut gc = GenerationContext::new(&context, &module, typechecker);
 
     // Build runtime functions.
     build_runtime(&mut gc);
