@@ -15,6 +15,7 @@ pub struct ExprNode {
     pub free_vars: Option<HashSet<NameSpacedName>>,
     pub source: Option<Span>,
     pub app_order: AppSourceCodeOrderType,
+    pub inferred_ty: Option<Arc<TypeNode>>,
 }
 
 impl ExprNode {
@@ -41,6 +42,13 @@ impl ExprNode {
     pub fn set_app_order(&self, app_order: AppSourceCodeOrderType) -> Arc<Self> {
         let mut ret = self.clone();
         ret.app_order = app_order;
+        Arc::new(ret)
+    }
+
+    // Set inferred type.
+    pub fn set_inferred_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.inferred_ty = Some(ty);
         Arc::new(ret)
     }
 
@@ -234,6 +242,7 @@ impl Expr {
             free_vars: Default::default(),
             source: src,
             app_order: AppSourceCodeOrderType::FunctionIsFormer,
+            inferred_ty: None,
         })
     }
     pub fn to_string(&self) -> String {

@@ -554,6 +554,7 @@ impl TypeCheckContext {
     // Update type substitution so that `ei` has type `ty`.
     // Returns given AST augmented with inferred information.
     pub fn unify_type_of_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) -> Arc<ExprNode> {
+        let ei = ei.set_inferred_type(ty.clone());
         match &*ei.expr {
             Expr::Var(var) => {
                 let candidates = self.scope.overloaded_candidates(&var.name, &var.namespace);
