@@ -1,7 +1,7 @@
 // Implement built-in functions, types, etc.
 use super::*;
 
-pub const PRELUDE_NAME: &str = "Prelude";
+pub const STD_NAME: &str = "Std";
 
 const INT_NAME: &str = "Int";
 const BOOL_NAME: &str = "Bool";
@@ -716,18 +716,13 @@ pub fn add_builtin_symbols(program: &mut FixModule) {
     ) {
         program.add_global_object(NameSpacedName::from_strs(ns, name), (expr, scm));
     }
-    add_global(program, &[PRELUDE_NAME], "add", add());
-    add_global(program, &[PRELUDE_NAME], "eq", eq());
-    add_global(program, &[PRELUDE_NAME], "fix", fix());
-    add_global(program, &[PRELUDE_NAME], "newArray", new_array());
-    add_global(program, &[PRELUDE_NAME], "readArray", read_array());
-    add_global(program, &[PRELUDE_NAME], "writeArray", write_array());
-    add_global(
-        program,
-        &[PRELUDE_NAME],
-        "writeArray!",
-        write_array_unique(),
-    );
+    add_global(program, &[STD_NAME], "add", add());
+    add_global(program, &[STD_NAME], "eq", eq());
+    add_global(program, &[STD_NAME], "fix", fix());
+    add_global(program, &[STD_NAME], "newArray", new_array());
+    add_global(program, &[STD_NAME], "readArray", read_array());
+    add_global(program, &[STD_NAME], "writeArray", write_array());
+    add_global(program, &[STD_NAME], "writeArray!", write_array_unique());
     for decl in &program.type_decls.clone() {
         match &decl.value {
             TypeDeclValue::Struct(str) => {
