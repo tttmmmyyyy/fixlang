@@ -378,6 +378,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .build_call(*self.runtimes.get(&func).unwrap(), args, "call_runtime")
     }
 
+    // Instantiate generics so that it has specified type.
+
     // Evaluate expression.
     pub fn eval_expr(&mut self, expr: Arc<ExprNode>) -> PointerValue<'c> {
         let ret = match &*expr.expr {
