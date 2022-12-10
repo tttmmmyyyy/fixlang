@@ -103,6 +103,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_lam_param(&self, param: Arc<Var>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
@@ -129,6 +130,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_let_var(&self, var: Arc<Var>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {

@@ -52,6 +52,7 @@ impl TypeNode {
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -61,6 +62,7 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_tyapp_arg(&self, arg: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -70,6 +72,7 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_funty_src(&self, src: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -79,6 +82,7 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_funty_dst(&self, dst: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -113,6 +117,7 @@ impl TypeNode {
     }
 
     // Set new info for shared instance.
+    #[allow(dead_code)]
     pub fn set_info(self: Arc<Self>, info: Arc<TypeInfo>) -> Arc<Self> {
         let mut ret = (*self).clone();
         ret.info = info;
@@ -120,6 +125,7 @@ impl TypeNode {
     }
 
     // Set new type for shared instance.
+    #[allow(dead_code)]
     pub fn set_ty(self: &Arc<Self>, ty: Type) -> Arc<Self> {
         let mut ret = (**self).clone();
         ret.ty = ty;
@@ -333,6 +339,7 @@ pub struct Scheme {
 }
 
 impl Scheme {
+    #[allow(dead_code)]
     pub fn set_ty(&self, ty: Arc<TypeNode>) -> Arc<Scheme> {
         let mut ret = self.clone();
         ret.ty = ty;
