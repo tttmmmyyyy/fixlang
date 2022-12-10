@@ -21,8 +21,11 @@ fn execute_main_module<'c>(
 }
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
-    // Add built-in symbols to program.
+    // Add built-in symbols to module.
     add_builtin_symbols(&mut fix_mod);
+
+    // Add trait methods to module.
+    fix_mod.create_trait_method_symbols();
 
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone());

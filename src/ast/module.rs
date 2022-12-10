@@ -301,4 +301,26 @@ impl FixModule {
         name.name += &hash;
         name
     }
+
+    // Create symbols of trait methods from TraitEnv.
+    pub fn create_trait_method_symbols(&mut self) {
+        for (trait_id, trait_info) in &self.trait_env.traits {
+            for (method_name, _) in &trait_info.methods {
+                let method_ty = trait_info.method_scheme(method_name);
+                let mut method_impls: Vec<MethodImpl> = vec![];
+                for trait_impl in &trait_info.instances {
+                    let ty = trait_impl.method_scheme(method_name);
+                    let expr = trait_impl.method_expr(method_name);
+                    method_impls.push(MethodImpl { ty, expr });
+                }
+                self.global_symbols.insert(
+                    self.get_namespaced_name(&trait_id.name),
+                    GlobalSymbol {
+                        ty: method_ty,
+                        expr: SymbolExpr::Method(method_impls),
+                    },
+                );
+            }
+        }
+    }
 }

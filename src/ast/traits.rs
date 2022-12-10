@@ -20,43 +20,80 @@ impl TraitId {
 pub struct TraitInfo {
     id: TraitId,
     num_instance: u64,
-    type_var: Arc<TyVar>, // Type variable used in trait definition.
-    methods: Vec<(Name, Arc<TypeNode>)>,
+    // Type variable used in trait definition.
+    type_var: Arc<TyVar>,
+    // Methods of this trait.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String",
     // and not "a -> String for a : Show".
-    instances: Vec<TraitInstance>,
+    pub methods: HashMap<Name, Arc<TypeNode>>,
+    pub instances: Vec<TraitInstance>,
+}
+
+impl TraitInfo {
+    // Get type-scheme of a method.
+    // Here, for example, in case "trait a: Show { show: a -> String }",
+    // this function returns "a -> String for a: Show" as type of "show" method.
+    pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
+        let ty = self.methods.get(name).unwrap().clone();
+        let pred = Predicate {
+            trait_id: self.id.clone(),
+            ty: type_var_from_tyvar(self.type_var.clone()),
+        };
+        let vars = ty.free_vars();
+        if !vars.contains_key(&self.type_var.name) {
+            error_exit("type of trait method must contain bounded type.");
+            // TODO: check this in more early stage.
+        }
+        Scheme::generalize(vars, vec![pred], ty)
+    }
 }
 
 // Trait instance.
 #[derive(Clone)]
-struct TraitInstance {
+pub struct TraitInstance {
     id: u64,
     qual_pred: QualPredicate,
-    methods: Vec<(Name, Arc<ExprNode>, Arc<TypeNode>)>,
+    // Method implementation.
     // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
     // the type of method "show" is "(a, b) -> String",
     // and is not "a -> String for a: Show, b: Show".
+    methods: HashMap<Name, (Arc<ExprNode>, Arc<TypeNode>)>,
 }
 
 impl TraitInstance {
     // Export methods with information to register them as global symbols.
-    pub fn methods_as_global(&self) -> Vec<(NameSpacedName, Arc<ExprNode>, Arc<Scheme>)> {
-        self.methods
-            .iter()
-            .map(|(name, expr, ty)| {
-                let name = format!("{}%{}", name, self.id);
-                let nsn = NameSpacedName::from_strs(&[&self.trait_id().name], &name);
-                let scm =
-                    Scheme::generalize(ty.free_vars(), self.qual_pred.context.clone(), ty.clone());
-                (nsn, expr.clone(), scm)
-            })
-            .collect()
-    }
+    // pub fn methods_as_global(&self) -> Vec<(NameSpacedName, Arc<ExprNode>, Arc<Scheme>)> {
+    //     self.methods
+    //         .iter()
+    //         .map(|(name, expr, ty)| {
+    //             let name = format!("{}%{}", name, self.id);
+    //             let nsn = NameSpacedName::from_strs(&[&self.trait_id().name], &name);
+    //             let scm =
+    //                 Scheme::generalize(ty.free_vars(), self.qual_pred.context.clone(), ty.clone());
+    //             (nsn, expr.clone(), scm)
+    //         })
+    //         .collect()
+    // }
 
     // Get trait id.
     fn trait_id(&self) -> TraitId {
         self.qual_pred.predicate.trait_id.clone()
+    }
+
+    // Get type-scheme of a method implementation.
+    // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
+    // this function returns "a -> String for a: Show, b: Show" as the type of "show".
+    pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
+        let (_, ty) = self.methods.get(name).unwrap().clone();
+        let preds = self.qual_pred.context.clone();
+        let vars = ty.free_vars();
+        Scheme::generalize(vars, preds, ty)
+    }
+
+    // Get expression that implements a method.
+    pub fn method_expr(&self, name: &Name) -> Arc<ExprNode> {
+        self.methods.get(name).unwrap().0.clone()
     }
 }
 
@@ -111,7 +148,7 @@ impl Predicate {
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
-    traits: HashMap<TraitId, TraitInfo>,
+    pub traits: HashMap<TraitId, TraitInfo>,
 }
 
 impl TraitEnv {
