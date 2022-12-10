@@ -25,9 +25,27 @@ pub struct InstantiatedSymbol {
 
 pub struct GlobalSymbol {
     pub ty: Arc<Scheme>,
-    pub expr: Arc<ExprNode>,
+    pub expr: SymbolExpr,
     // TODO: add ty_src: Span
     // TODO: add expr_src: Span
+}
+
+// Expression of global symbol.
+#[derive(Clone)]
+pub enum SymbolExpr {
+    Simple(Arc<ExprNode>),   // Definition such as "id : a -> a; id = \x -> x".
+    Method(Vec<MethodImpl>), // Trait method implementations.
+}
+
+// Trait method implementation
+#[derive(Clone)]
+pub struct MethodImpl {
+    // Type of this method.
+    // For example, in case "impl (a, b): Show for a: Show, b: Show",
+    // the type of method "show" is "(a, b) -> String for a: Show, b: Show",
+    ty: Arc<Scheme>,
+    // Expression of this implementation
+    expr: Arc<ExprNode>,
 }
 
 impl FixModule {
@@ -44,7 +62,7 @@ impl FixModule {
         }
     }
 
-    // Add a global object.
+    // Add a global symbol.
     pub fn add_global_object(
         &mut self,
         name: NameSpacedName,
@@ -53,8 +71,13 @@ impl FixModule {
         if self.global_symbols.contains_key(&name) {
             error_exit(&format!("duplicated global object: `{}`", name.to_string()));
         }
-        self.global_symbols
-            .insert(name, GlobalSymbol { ty: scm, expr });
+        self.global_symbols.insert(
+            name,
+            GlobalSymbol {
+                ty: scm,
+                expr: SymbolExpr::Simple(expr),
+            },
+        );
     }
 
     // Generate codes of global symbols.
@@ -127,12 +150,11 @@ impl FixModule {
     fn instantiate_symbol(&mut self, tc: &TypeCheckContext, sym: &mut InstantiatedSymbol) {
         assert!(sym.expr.is_none());
         let mut tc = tc.clone();
-        let template_expr = self
-            .global_symbols
-            .get(&sym.template_name)
-            .unwrap()
-            .expr
-            .clone();
+        let global_sym = self.global_symbols.get(&sym.template_name).unwrap();
+        let template_expr = match &global_sym.expr {
+            SymbolExpr::Simple(e) => e.clone(),
+            SymbolExpr::Method(_) => todo!(),
+        };
         tc.unify(&template_expr.inferred_ty.as_ref().unwrap(), &sym.ty);
         sym.expr = Some(self.instantiate_expr(&tc, &template_expr));
     }

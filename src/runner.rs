@@ -21,7 +21,7 @@ fn execute_main_module<'c>(
 }
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
-    // Add built-in functions to program.
+    // Add built-in symbols to program.
     add_builtin_symbols(&mut fix_mod);
 
     // Create typeckecker.
@@ -38,15 +38,25 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     }
 
     // Check types.
-    for (_name, defn) in &mut fix_mod.global_symbols {
-        // let mut tc = typechecker.clone();
-        // defn.expr = tc.check_type_nofree(defn.expr.clone(), defn.ty.clone());
-        defn.expr = typechecker.check_type_nofree(defn.expr.clone(), defn.ty.clone());
+    for (_name, sym) in &mut fix_mod.global_symbols {
+        match &sym.expr {
+            SymbolExpr::Simple(e) => {
+                let e = typechecker.check_type_nofree(e.clone(), sym.ty.clone());
+                sym.expr = SymbolExpr::Simple(e);
+            }
+            SymbolExpr::Method(_) => todo!(),
+        }
     }
 
     // Calculate free variables of expressions.
-    for (_name, defn) in &mut fix_mod.global_symbols {
-        defn.expr = calculate_free_vars(defn.expr.clone());
+    for (_name, sym) in &mut fix_mod.global_symbols {
+        match &sym.expr {
+            SymbolExpr::Simple(e) => {
+                let e = calculate_free_vars(e.clone());
+                sym.expr = SymbolExpr::Simple(e);
+            }
+            SymbolExpr::Method(_) => todo!(),
+        }
     }
 
     // Create GenerationContext.

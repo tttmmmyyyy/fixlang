@@ -157,7 +157,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
             fix_mod.get_namespaced_name(&name),
             GlobalSymbol {
                 ty: ty.unwrap(),
-                expr: expr.unwrap(),
+                expr: SymbolExpr::Simple(expr.unwrap()),
             },
         );
     }

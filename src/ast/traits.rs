@@ -21,7 +21,7 @@ pub struct TraitInfo {
     id: TraitId,
     num_instance: u64,
     type_var: Arc<TyVar>, // Type variable used in trait definition.
-    methods: Vec<(Name, Arc<TypeNode>)>, // To fix ording in vtable, we use Vec instead of HashMap.
+    methods: Vec<(Name, Arc<TypeNode>)>,
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String",
     // and not "a -> String for a : Show".
@@ -36,7 +36,7 @@ struct TraitInstance {
     methods: Vec<(Name, Arc<ExprNode>, Arc<TypeNode>)>,
     // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
     // the type of method "show" is "(a, b) -> String",
-    // and not "a -> String for a: Show, b: Show".
+    // and is not "a -> String for a: Show, b: Show".
 }
 
 impl TraitInstance {
