@@ -446,8 +446,12 @@ impl TypeCheckContext {
         (preds, sub.substitute_type(&scheme.ty))
     }
 
-    // Make a scheme from a type by generalizing type variable that does not appear in scope.
-    fn generalize_to_scheme(&mut self, ty: &Arc<TypeNode>) -> Arc<Scheme> {
+    // Make a scheme from a type by generalizing type variable that does not appear in fixed_vars.
+    fn generalize_to_scheme(
+        &mut self,
+        ty: &Arc<TypeNode>,
+        fixed_vars: &HashSet<Name>,
+    ) -> Arc<Scheme> {
         // Get generalized type and predicates.
         let ty = self.substitute_type(ty);
         let mut preds = std::mem::replace(&mut self.predicates, vec![]);
@@ -462,18 +466,18 @@ impl TypeCheckContext {
         };
 
         // Collect variables that appear in scope.
-        let mut vars_in_scope: HashSet<String> = Default::default();
-        for (_var, scp) in &self.scope.var {
-            for scm in &scp.local {
-                for (var_in_scope, _) in self.substitute_scheme(&scm).free_vars() {
-                    vars_in_scope.insert(var_in_scope);
-                }
-            }
-        }
+        // let mut vars_in_scope: HashSet<String> = Default::default();
+        // for (_var, scp) in &self.scope.var {
+        //     for scm in &scp.local {
+        //         for (var_in_scope, _) in self.substitute_scheme(&scm).free_vars() {
+        //             vars_in_scope.insert(var_in_scope);
+        //         }
+        //     }
+        // }
 
         // Calculate genealized variables.
         let mut gen_vars = ty.free_vars();
-        for v in &vars_in_scope {
+        for v in fixed_vars {
             gen_vars.remove(v);
         }
 
@@ -481,20 +485,16 @@ impl TypeCheckContext {
         let mut gen_preds: Vec<Predicate> = Default::default(); // Generalized predicates.
         let mut def_preds: Vec<Predicate> = Default::default(); // Deferred predicates.
         for p in preds {
-            if p.ty
-                .free_vars()
-                .iter()
-                .all(|(v, _)| vars_in_scope.contains(v))
-            {
-                // All free variables of p appears in scope.
+            if p.ty.free_vars().iter().all(|(v, _)| fixed_vars.contains(v)) {
+                // All free variables of p appears in fixed_vars.
                 def_preds.push(p);
             } else if p
                 .ty
                 .free_vars()
                 .iter()
-                .any(|(v, _)| !vars_in_scope.contains(v) && gen_vars.contains_key(v))
+                .any(|(v, _)| !fixed_vars.contains(v) && gen_vars.contains_key(v))
             {
-                // A free variable of p appears neither in scope and generalized variables.
+                // A free variable of p appears neither in fixed_vars and generalized variables.
                 error_exit(&format!("ambiguous type variable in `{}`", p.to_string()))
             } else {
                 // A free variable of p appears in generalized variables.
@@ -667,9 +667,8 @@ impl TypeCheckContext {
                     }
                     None => type_tyvar_star(&self.new_tyvar()),
                 };
-                // TODO: Maybe this is wrong. We should check if "deduced type is more general than specified type".
                 let val = self.unify_type_of_expr(val, var_ty.clone());
-                let var_scm = self.generalize_to_scheme(&var_ty);
+                let var_scm = self.generalize_to_scheme(&var_ty, &HashSet::default());
 
                 let body = if var.namespace.as_ref().unwrap().is_local() {
                     self.scope.push(&var.name, &var_scm);
@@ -758,7 +757,7 @@ impl TypeCheckContext {
     fn deduce_scheme(&mut self, expr: Arc<ExprNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
         let ty = type_tyvar_star(&self.new_tyvar());
         let expr = self.unify_type_of_expr(&expr, ty.clone());
-        let scm = self.generalize_to_scheme(&ty);
+        let scm = self.generalize_to_scheme(&ty, &ty.free_vars_set());
         (expr, scm)
     }
 

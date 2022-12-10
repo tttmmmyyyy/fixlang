@@ -328,6 +328,11 @@ impl TypeNode {
         };
         free_vars
     }
+
+    // Get set of free type variables.
+    pub fn free_vars_set(self: &Arc<Self>) -> HashSet<Name> {
+        self.free_vars().iter().map(|(k, _)| k.clone()).collect()
+    }
 }
 
 // Type scheme.
@@ -413,7 +418,7 @@ impl Scheme {
     }
 
     // Get free type variables.
-    pub fn free_vars(&self) -> HashMap<String, Arc<Kind>> {
+    pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
         let mut ret = self.ty.free_vars();
         for var in &self.vars {
             ret.remove(var.0);

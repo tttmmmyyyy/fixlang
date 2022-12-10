@@ -770,7 +770,7 @@ pub fn test42() {
 #[serial]
 pub fn test43() {
     // Recursion function using global variable (tail call).
-    let n = 1000000;
+    let n = 10000;
     let source = format!(
         r"
             module Main;
