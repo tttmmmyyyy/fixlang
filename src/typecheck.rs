@@ -684,13 +684,12 @@ impl TypeCheckContext {
                     .set_if_else(else_expr)
             }
             Expr::TyAnno(e, anno_ty) => {
-                if anno_ty.free_vars().len() > 0 {
+                if !anno_ty.free_vars().is_empty() {
                     error_exit(&format!(
                         "unknown type variable `{}`",
                         ty.free_vars().iter().next().unwrap().0
                     ))
                 }
-                // TODO: Maybe this is wrong. We should check if "deduced type is more general than specified type".
                 if !self.unify(&ty, anno_ty) {
                     error_exit_with_src(
                         &format!(
