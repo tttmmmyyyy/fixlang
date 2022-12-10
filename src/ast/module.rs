@@ -24,6 +24,9 @@ pub struct InstantiatedSymbol {
 }
 
 pub struct GlobalSymbol {
+    // Type of this symbol.
+    // For example, in case "trait a: Show { show: a -> String }",
+    // the type of method "show" is "a -> String for a: Show",
     pub ty: Arc<Scheme>,
     pub expr: SymbolExpr,
     // TODO: add ty_src: Span
