@@ -44,7 +44,13 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
                 let e = typechecker.check_type_nofree(e.clone(), sym.ty.clone());
                 sym.expr = SymbolExpr::Simple(e);
             }
-            SymbolExpr::Method(_) => todo!(),
+            SymbolExpr::Method(methods) => {
+                let mut methods = methods.clone();
+                for m in &mut methods {
+                    m.expr = typechecker.check_type_nofree(m.expr.clone(), m.ty.clone());
+                }
+                sym.expr = SymbolExpr::Method(methods);
+            }
         }
     }
 
@@ -55,7 +61,13 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
                 let e = calculate_free_vars(e.clone());
                 sym.expr = SymbolExpr::Simple(e);
             }
-            SymbolExpr::Method(_) => todo!(),
+            SymbolExpr::Method(methods) => {
+                let mut methods = methods.clone();
+                for m in &mut methods {
+                    m.expr = calculate_free_vars(m.expr.clone());
+                }
+                sym.expr = SymbolExpr::Method(methods);
+            }
         }
     }
 

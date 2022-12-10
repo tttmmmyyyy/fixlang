@@ -46,9 +46,9 @@ pub struct MethodImpl {
     // Type of this method.
     // For example, in case "impl (a, b): Show for a: Show, b: Show",
     // the type of method "show" is "(a, b) -> String for a: Show, b: Show",
-    ty: Arc<Scheme>,
+    pub ty: Arc<Scheme>,
     // Expression of this implementation
-    expr: Arc<ExprNode>,
+    pub expr: Arc<ExprNode>,
 }
 
 impl FixModule {
