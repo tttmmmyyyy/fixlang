@@ -518,6 +518,7 @@ impl TypeCheckContext {
     }
 
     // Update substitution to unify two types.
+    // When substitution fails, it has no side effect to self.
     pub fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         let ty1 = &self.substitute_type(ty1);
         let ty2 = &self.substitute_type(ty2);

@@ -152,10 +152,23 @@ impl FixModule {
         let mut tc = tc.clone();
         let global_sym = self.global_symbols.get(&sym.template_name).unwrap();
         let template_expr = match &global_sym.expr {
-            SymbolExpr::Simple(e) => e.clone(),
-            SymbolExpr::Method(_) => todo!(),
+            SymbolExpr::Simple(e) => {
+                tc.unify(&e.inferred_ty.as_ref().unwrap(), &sym.ty);
+                e.clone()
+            }
+            SymbolExpr::Method(impls) => {
+                // Find method implementation that unifies to "sym.ty".
+                let mut e: Option<Arc<ExprNode>> = None;
+                for method in impls {
+                    let mut tc2 = tc.clone();
+                    if tc2.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
+                        e = Some(method.expr.clone());
+                        break;
+                    }
+                }
+                e.unwrap()
+            }
         };
-        tc.unify(&template_expr.inferred_ty.as_ref().unwrap(), &sym.ty);
         sym.expr = Some(self.instantiate_expr(&tc, &template_expr));
     }
 
