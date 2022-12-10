@@ -149,16 +149,6 @@ impl FixModule {
         }
     }
 
-    // // Get main function of this module.
-    // pub fn main_function(&self) -> Arc<ExprNode> {
-    //     for (name, sym) in &self.instantiated_global_symbols {
-    //         if sym.template_name == self.get_namespaced_name() {
-    //             return;
-    //         }
-    //     }
-    //     error_exit("main function not found.")
-    // }
-
     // Instantiate main function.
     pub fn instantiate_main_function(&mut self, tc: &TypeCheckContext) -> Arc<ExprNode> {
         let main_func_name = self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string());
