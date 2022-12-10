@@ -21,14 +21,14 @@ fn execute_main_module<'c>(
 }
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
+    // Add built-in functions to program.
+    add_builtin_symbols(&mut fix_mod);
+
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone());
 
     // Let typechecker read type declarations to register user-defined types.
     typechecker.add_tycons(&fix_mod.type_decls);
-
-    // Add built-in functions to program.
-    add_builtin_symbols(&mut fix_mod);
 
     // Register type declarations of global symbols to typechecker.
     for (name, defn) in &fix_mod.global_symbols {
