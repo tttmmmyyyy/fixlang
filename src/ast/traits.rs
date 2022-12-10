@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use super::*;
 
 // Identifier to spacify trait.
