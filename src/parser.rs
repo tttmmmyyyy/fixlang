@@ -142,6 +142,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
         global_symbols: Default::default(),
         instantiated_global_symbols: Default::default(),
         deferred_instantiation: Default::default(),
+        trait_env: Default::default(),
     };
 
     let mut global_symbols: HashMap<NameSpacedName, GlobalSymbol> = Default::default();

@@ -388,20 +388,19 @@ pub struct TypeCheckContext {
     trait_env: TraitEnv,
 }
 
-impl Default for TypeCheckContext {
-    fn default() -> Self {
+impl TypeCheckContext {
+    // Creaate instance.
+    pub fn new(trait_env: TraitEnv) -> Self {
         Self {
             tyvar_id: Default::default(),
             scope: Default::default(),
             substitution: Default::default(),
             predicates: Default::default(),
             tycons: bulitin_type_to_kind_map(),
-            trait_env: Default::default(),
+            trait_env,
         }
     }
-}
 
-impl TypeCheckContext {
     // Generate new type variable.
     fn new_tyvar(&mut self) -> String {
         let id = self.tyvar_id;

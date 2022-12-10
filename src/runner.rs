@@ -22,7 +22,7 @@ fn execute_main_module<'c>(
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Create typeckecker.
-    let mut typechecker = TypeCheckContext::default();
+    let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone());
 
     // Let typechecker read type declarations to register user-defined types.
     typechecker.add_tycons(&fix_mod.type_decls);

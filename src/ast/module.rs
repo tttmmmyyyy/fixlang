@@ -13,6 +13,7 @@ pub struct FixModule {
     pub global_symbols: HashMap<NameSpacedName, GlobalSymbol>,
     pub instantiated_global_symbols: HashMap<NameSpacedName, InstantiatedSymbol>,
     pub deferred_instantiation: HashMap<NameSpacedName, InstantiatedSymbol>,
+    pub trait_env: TraitEnv,
 }
 
 #[derive(Clone)]
