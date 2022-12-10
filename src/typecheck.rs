@@ -670,20 +670,9 @@ impl TypeCheckContext {
                 let val = self.unify_type_of_expr(val, var_ty.clone());
                 let var_scm = self.generalize_to_scheme(&var_ty, &HashSet::default());
 
-                let body = if var.namespace.as_ref().unwrap().is_local() {
-                    self.scope.push(&var.name, &var_scm);
-                    let body = self.unify_type_of_expr(body, ty);
-                    self.scope.pop(&var.name);
-                    body
-                } else {
-                    // NOTE: currently, top-level definition is treated as let-binding.
-                    self.scope.add_global(
-                        var.name.clone(),
-                        &var.namespace.as_ref().unwrap(),
-                        &var_scm,
-                    );
-                    self.unify_type_of_expr(body, ty)
-                };
+                self.scope.push(&var.name, &var_scm);
+                let body = self.unify_type_of_expr(body, ty);
+                self.scope.pop(&var.name);
                 ei.set_let_bound(val).set_let_value(body)
             }
             Expr::If(cond, then_expr, else_expr) => {
