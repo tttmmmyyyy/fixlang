@@ -18,7 +18,6 @@ pub struct FixModule {
 #[derive(Clone)]
 pub struct InstantiatedSymbol {
     template_name: NameSpacedName,
-    name: NameSpacedName,
     ty: Arc<TypeNode>,
     expr: Option<Arc<ExprNode>>,
 }
@@ -217,7 +216,6 @@ impl FixModule {
             self.deferred_instantiation.insert(
                 inst_name.clone(),
                 InstantiatedSymbol {
-                    name: inst_name.clone(),
                     template_name: name.clone(),
                     ty: ty.clone(),
                     expr: None,
