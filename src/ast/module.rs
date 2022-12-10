@@ -163,8 +163,7 @@ impl FixModule {
                 // Find method implementation that unifies to "sym.ty".
                 let mut e: Option<Arc<ExprNode>> = None;
                 for method in impls {
-                    let mut tc2 = tc.clone();
-                    if tc2.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
+                    if tc.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
                         e = Some(method.expr.clone());
                         break;
                     }
