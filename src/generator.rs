@@ -113,7 +113,17 @@ pub struct GenerationContext<'c, 'm> {
     global: HashMap<NameSpacedName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     typechecker: TypeCheckContext,
+    // deferred_generation: Vec<DeferredGenerationInfo<'c>>,
 }
+
+// Symbol which should be generated later.
+// When code generation ("eval_expr" function) encounter a call to global symbol and it is not still declared,
+// then it generateds DeferredGenerationInfo and push it to "deferred_generation" field.
+// struct DeferredGenerationInfo<'c> {
+//     name: NameSpacedName,
+//     ty: Arc<TypeNode>,
+//     accessor: FunctionValue<'c>,
+// }
 
 pub struct PopBuilderGuard<'c> {
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
@@ -146,6 +156,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             global: Default::default(),
             runtimes: Default::default(),
             typechecker,
+            // deferred_generation: vec![],
         };
         ret
     }
@@ -381,7 +392,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Instantiate generics so that it has specified type.
-    // pub fn instantiate_generics(expr: Arc<ExprNode>, ty: Arc<TypeNode>) -> PointerValue<'c> {}
+    pub fn instantiate_generics(
+        &mut self,
+        expr: Arc<ExprNode>,
+        ty: Arc<TypeNode>,
+    ) -> PointerValue<'c> {
+        let tc_bak = self.typechecker.clone();
+        self.typechecker
+            .unify(&expr.inferred_ty.as_ref().unwrap().clone(), &ty);
+        let ret = self.eval_expr(expr);
+        self.typechecker = tc_bak;
+        ret
+    }
 
     // Evaluate expression.
     pub fn eval_expr(&mut self, expr: Arc<ExprNode>) -> PointerValue<'c> {

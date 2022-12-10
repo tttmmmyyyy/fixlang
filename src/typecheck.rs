@@ -136,7 +136,7 @@ where
 // when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
 #[derive(Clone)]
 pub struct Substitution {
-    pub data: HashMap<String, Arc<TypeNode>>,
+    pub data: HashMap<Name, Arc<TypeNode>>,
 }
 
 impl Default for Substitution {
@@ -410,23 +410,23 @@ impl TypeCheckContext {
     }
 
     // Apply substitution to type.
-    fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+    pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         self.substitution.substitute_type(ty)
     }
 
     // Apply substitution to a predicate.
-    fn substitute_predicate(&self, p: &mut Predicate) {
+    pub fn substitute_predicate(&self, p: &mut Predicate) {
         self.substitution.substitute_predicate(p)
     }
 
     // Apply substitution to scheme.
-    fn substitute_scheme(&self, scm: &Arc<Scheme>) -> Arc<Scheme> {
+    pub fn substitute_scheme(&self, scm: &Arc<Scheme>) -> Arc<Scheme> {
         scm.substitute(&self.substitution)
     }
 
     // Instantiate a scheme.
     // Returns predicates if append_predicates = false or append them to self if append_predicates = true.
-    fn instantiate_scheme(
+    pub fn instantiate_scheme(
         &mut self,
         scheme: &Arc<Scheme>,
         append_predicates: bool,
@@ -519,7 +519,7 @@ impl TypeCheckContext {
     }
 
     // Update substitution to unify two types.
-    fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
+    pub fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         let ty1 = &self.substitute_type(ty1);
         let ty2 = &self.substitute_type(ty2);
         match Substitution::unify(&self.tycons, ty1, ty2) {

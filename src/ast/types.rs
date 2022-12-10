@@ -178,11 +178,31 @@ impl Clone for Type {
 }
 
 impl TypeNode {
+    // Stringify.
     pub fn to_string(&self) -> String {
+        self.to_string_inner(&mut None)
+    }
+
+    // Stringify. Name of type variables are normalized to names such as "a0", "a1", etc.
+    pub fn to_string_normalize(&self) -> String {
+        let mut id: u32 = 0;
+        self.to_string_inner(&mut Some(&mut id))
+    }
+
+    // Stringify.
+    // If "tyvar_id" is specified, then names of type variables are normalized to names such as "a0", "a1", etc.
+    fn to_string_inner(&self, tyvar_id: &mut Option<&mut u32>) -> String {
         match &self.ty {
-            Type::TyVar(v) => v.name.clone(),
+            Type::TyVar(v) => match tyvar_id {
+                Some(id) => {
+                    let ret = format!("a{}", *id);
+                    **id += 1;
+                    ret
+                }
+                None => v.name.clone(),
+            },
             Type::TyApp(tyfun, arg) => {
-                // Convert something like `(Pair<Int>)<Double>` to a form `(Pair, {Int, Double})`.
+                // Convert type like `(Pair<Int>)<Double>` to a form `(Pair, {Int, Double})`.
                 let mut args: Vec<Arc<TypeNode>> = vec![arg.clone()];
                 let mut now_tyfun = tyfun.clone();
                 loop {
@@ -197,12 +217,15 @@ impl TypeNode {
                     }
                 }
                 args.reverse();
-                let tycon = now_tyfun.to_string();
-                let args: Vec<String> = args.iter().map(|a| a.clone().to_string()).collect();
+                let tycon = now_tyfun.to_string_inner(tyvar_id);
+                let mut args_str: Vec<String> = vec![];
+                for arg in args {
+                    args_str.push(arg.to_string_inner(tyvar_id));
+                }
                 let mut res: String = Default::default();
                 res += &tycon;
                 res += "<";
-                res += &args.join(", ");
+                res += &args_str.join(", ");
                 res += ">";
                 res
             }
@@ -211,8 +234,8 @@ impl TypeNode {
                     Type::FunTy(_, _) => true,
                     _ => false,
                 };
-                let src = src.clone().to_string();
-                let dst = dst.clone().to_string();
+                let src = src.clone().to_string_inner(tyvar_id);
+                let dst = dst.clone().to_string_inner(tyvar_id);
                 let mut res: String = Default::default();
                 if src_brace_needed {
                     res += "(";

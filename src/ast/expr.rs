@@ -66,6 +66,17 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_var_var(&self, v: Arc<Var>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Var(_) => ret.expr = Arc::new(Expr::Var(v)),
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
     pub fn set_app_func(&self, func: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
@@ -356,6 +367,13 @@ impl Var {
             Some(ns) => NameSpacedName::new(ns, &self.name),
             None => panic!(),
         }
+    }
+
+    pub fn set_namespaced_name(&self, nsn: NameSpacedName) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.name = nsn.name;
+        ret.namespace = Some(nsn.namespace);
+        Arc::new(ret)
     }
 }
 

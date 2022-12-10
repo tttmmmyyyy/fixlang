@@ -11,6 +11,16 @@ pub struct FixModule {
     pub name: Name,
     pub type_decls: Vec<TypeDecl>,
     pub global_symbols: HashMap<NameSpacedName, GlobalSymbol>,
+    pub instantiated_global_symbols: HashMap<NameSpacedName, InstantiatedSymbol>,
+    pub deferred_instantiation: HashMap<NameSpacedName, InstantiatedSymbol>,
+}
+
+#[derive(Clone)]
+pub struct InstantiatedSymbol {
+    template_name: NameSpacedName,
+    name: NameSpacedName,
+    ty: Arc<TypeNode>,
+    expr: Option<Arc<ExprNode>>,
 }
 
 pub struct GlobalSymbol {
@@ -125,5 +135,135 @@ impl FixModule {
                 .into_pointer_value();
             gc.builder().build_return(Some(&ret));
         }
+    }
+
+    // Instantiate symbol.
+    fn instantiate_symbol(&mut self, tc: &TypeCheckContext, sym: &mut InstantiatedSymbol) {
+        assert!(sym.expr.is_none());
+        let mut tc = tc.clone();
+        let template_expr = self
+            .global_symbols
+            .get(&sym.template_name)
+            .unwrap()
+            .expr
+            .clone();
+        tc.unify(&template_expr.inferred_ty.as_ref().unwrap(), &sym.ty);
+        sym.expr = Some(self.instantiate_expr(&tc, &template_expr))
+    }
+
+    // Instantiate all symbols.
+    pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) {
+        while !self.deferred_instantiation.is_empty() {
+            let (name, sym) = self.deferred_instantiation.iter().next().unwrap();
+            let name = name.clone();
+            let mut sym = sym.clone();
+            self.instantiate_symbol(tc, &mut sym);
+            self.deferred_instantiation.remove(&name);
+            self.instantiated_global_symbols.insert(name, sym);
+        }
+    }
+
+    // Instantiate expression.
+    fn instantiate_expr(&mut self, tc: &TypeCheckContext, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+        match &*expr.expr {
+            Expr::Var(v) => {
+                if v.namespace.as_ref().unwrap().is_local() {
+                    expr.clone()
+                } else {
+                    let ty = tc.substitute_type(&expr.inferred_ty.as_ref().unwrap());
+                    let instance = self.require_instantiated_symbol(tc, &v.namespaced_name(), &ty);
+                    let v = v.set_namespaced_name(instance);
+                    expr.set_var_var(v)
+                }
+            }
+            Expr::Lit(_) => expr.clone(),
+            Expr::App(fun, arg) => {
+                let fun = self.instantiate_expr(tc, fun);
+                let arg = self.instantiate_expr(tc, arg);
+                expr.set_app_func(fun).set_app_arg(arg)
+            }
+            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(tc, body)),
+            Expr::Let(_, bound, val) => {
+                let bound = self.instantiate_expr(tc, bound);
+                let val = self.instantiate_expr(tc, val);
+                expr.set_let_bound(bound).set_let_value(val)
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                let cond = self.instantiate_expr(tc, cond);
+                let then_expr = self.instantiate_expr(tc, then_expr);
+                let else_expr = self.instantiate_expr(tc, else_expr);
+                expr.set_if_cond(cond)
+                    .set_if_then(then_expr)
+                    .set_if_else(else_expr)
+            }
+            Expr::TyAnno(e, _) => {
+                let e = self.instantiate_expr(tc, e);
+                expr.set_tyanno_expr(e)
+            }
+        }
+    }
+
+    // Require instantiate generic symbol such that it has a specified type.
+    fn require_instantiated_symbol(
+        &mut self,
+        tc: &TypeCheckContext,
+        name: &NameSpacedName,
+        ty: &Arc<TypeNode>,
+    ) -> NameSpacedName {
+        assert!(ty.free_vars().is_empty());
+        let inst_name = self.determine_instantiated_symbol_name(tc, name, ty);
+        if !self.instantiated_global_symbols.contains_key(&inst_name)
+            && !self.deferred_instantiation.contains_key(&inst_name)
+        {
+            self.deferred_instantiation.insert(
+                inst_name.clone(),
+                InstantiatedSymbol {
+                    name: inst_name.clone(),
+                    template_name: name.clone(),
+                    ty: ty.clone(),
+                    expr: None,
+                },
+            );
+        }
+        inst_name
+    }
+
+    // Determine the name of instantiated generic symbol so that it has a specified type.
+    fn determine_instantiated_symbol_name(
+        &self,
+        tc: &TypeCheckContext,
+        name: &NameSpacedName,
+        ty: &Arc<TypeNode>,
+    ) -> NameSpacedName {
+        assert!(ty.free_vars().is_empty());
+        let mut tc = tc.clone();
+        let gs = self.global_symbols.get(name).unwrap();
+
+        // Calculate free variables that is instantiated. They are variables that appear in context predicates.
+        let (preds, generic_ty) = tc.instantiate_scheme(&gs.ty, false);
+        let mut inst_fvs: HashMap<Name, Arc<Kind>> = Default::default();
+        for pred in preds {
+            for (k, v) in pred.ty.free_vars() {
+                inst_fvs.insert(k, v);
+            }
+        }
+
+        // Calculate instantiation of free variables.
+        let mut sub = Substitution::default();
+        tc.unify(&generic_ty, &ty);
+        for (name, kind) in inst_fvs {
+            let tyvar = type_tyvar(&name, &kind);
+            let inst_ty = tc.substitute_type(&tyvar);
+            sub.add_substitution(&Substitution::single(&name, inst_ty))
+        }
+
+        // Return the name.
+        let inst_ty = sub.substitute_type(&generic_ty);
+        let type_string = inst_ty.to_string_normalize();
+        let hash = format!("{:x}", md5::compute(type_string));
+        let mut name = name.clone();
+        name.name += "@";
+        name.name += &hash;
+        name
     }
 }
