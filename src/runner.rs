@@ -1,5 +1,3 @@
-use inkwell::{module::Linkage, values::InstructionOpcode};
-
 use super::*;
 
 fn execute_main_module<'c>(
@@ -54,10 +52,13 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Create GenerationContext.
     let context = Context::create();
     let module = context.create_module(&fix_mod.name);
-    let mut gc = GenerationContext::new(&context, &module, typechecker);
+    let mut gc = GenerationContext::new(&context, &module);
 
     // Build runtime functions.
     build_runtime(&mut gc);
+
+    // Instanciate main function and all called functions.
+    let main_expr = fix_mod.instantiate_main_function(&typechecker);
 
     // Generate codes.
     fix_mod.generate_code(&mut gc);
@@ -69,7 +70,7 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     gc.builder().position_at_end(entry_bb);
 
     // Evaluate program and extract int value from result.
-    let program_result = gc.eval_expr(fix_mod.main_function());
+    let program_result = gc.eval_expr(main_expr);
     let result = gc.load_obj_field(program_result, int_type(&context), 1);
 
     // Perform leak check

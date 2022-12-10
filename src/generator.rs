@@ -112,18 +112,7 @@ pub struct GenerationContext<'c, 'm> {
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
     global: HashMap<NameSpacedName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
-    typechecker: TypeCheckContext,
-    // deferred_generation: Vec<DeferredGenerationInfo<'c>>,
 }
-
-// Symbol which should be generated later.
-// When code generation ("eval_expr" function) encounter a call to global symbol and it is not still declared,
-// then it generateds DeferredGenerationInfo and push it to "deferred_generation" field.
-// struct DeferredGenerationInfo<'c> {
-//     name: NameSpacedName,
-//     ty: Arc<TypeNode>,
-//     accessor: FunctionValue<'c>,
-// }
 
 pub struct PopBuilderGuard<'c> {
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
@@ -147,7 +136,7 @@ impl<'c> Drop for PopScopeGuard<'c> {
 
 impl<'c, 'm> GenerationContext<'c, 'm> {
     // Create new gc.
-    pub fn new(ctx: &'c Context, module: &'m Module<'c>, typechecker: TypeCheckContext) -> Self {
+    pub fn new(ctx: &'c Context, module: &'m Module<'c>) -> Self {
         let ret = Self {
             context: ctx,
             module,
@@ -155,8 +144,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             scope: Rc::new(RefCell::new(vec![Default::default()])),
             global: Default::default(),
             runtimes: Default::default(),
-            typechecker,
-            // deferred_generation: vec![],
         };
         ret
     }
@@ -389,20 +376,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     ) -> CallSiteValue<'c> {
         self.builder()
             .build_call(*self.runtimes.get(&func).unwrap(), args, "call_runtime")
-    }
-
-    // Instantiate generics so that it has specified type.
-    pub fn instantiate_generics(
-        &mut self,
-        expr: Arc<ExprNode>,
-        ty: Arc<TypeNode>,
-    ) -> PointerValue<'c> {
-        let tc_bak = self.typechecker.clone();
-        self.typechecker
-            .unify(&expr.inferred_ty.as_ref().unwrap().clone(), &ty);
-        let ret = self.eval_expr(expr);
-        self.typechecker = tc_bak;
-        ret
     }
 
     // Evaluate expression.

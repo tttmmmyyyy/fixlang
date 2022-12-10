@@ -57,27 +57,13 @@ impl FixModule {
             .insert(name, GlobalSymbol { ty: scm, expr });
     }
 
-    // Get main function of this module.
-    pub fn main_function(&self) -> Arc<ExprNode> {
-        match self
-            .global_symbols
-            .get(&self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string()))
-        {
-            Some(gs) => {
-                // TODO: Here check if gs has required type.
-                expr_var(MAIN_FUNCTION_NAME, Some(self.get_namespace()), None)
-            }
-            None => error_exit("main function not found."),
-        }
-    }
-
-    // Generate codes of global objects.
+    // Generate codes of global symbols.
     pub fn generate_code(&self, gc: &mut GenerationContext) {
-        // Create global objects, global variable and accessor function.
+        // Create global symbols, global variable and accessor function.
         let global_objs = self
-            .global_symbols
+            .instantiated_global_symbols
             .iter()
-            .map(|(name, defn)| {
+            .map(|(name, sym)| {
                 let ptr_to_obj_ty = ptr_to_object_type(&gc.context);
                 let ptr_name = format!("PtrTo{}", name.to_string());
                 let acc_fn_name = format!("Get{}", name.to_string());
@@ -98,12 +84,12 @@ impl FixModule {
                 gc.add_global_object(name.clone(), acc_fn);
 
                 // Return global variable and accessor.
-                (global_var, acc_fn, defn.clone())
+                (global_var, acc_fn, sym.clone())
             })
             .collect::<Vec<_>>();
 
         // Implement global accessor function.
-        for (global_var, acc_fn, defn) in global_objs {
+        for (global_var, acc_fn, sym) in global_objs {
             let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
             gc.builder().position_at_end(entry_bb);
             let ptr_to_obj = gc
@@ -118,7 +104,7 @@ impl FixModule {
 
             // If ptr is null, then create object and initialize the pointer.
             gc.builder().position_at_end(init_bb);
-            let obj = gc.eval_expr(defn.expr.clone());
+            let obj = gc.eval_expr(sym.expr.unwrap().clone());
             gc.builder().build_store(global_var, obj);
             if SANITIZE_MEMORY {
                 // Mark this object as global.
@@ -148,7 +134,7 @@ impl FixModule {
             .expr
             .clone();
         tc.unify(&template_expr.inferred_ty.as_ref().unwrap(), &sym.ty);
-        sym.expr = Some(self.instantiate_expr(&tc, &template_expr))
+        sym.expr = Some(self.instantiate_expr(&tc, &template_expr));
     }
 
     // Instantiate all symbols.
@@ -163,9 +149,31 @@ impl FixModule {
         }
     }
 
+    // // Get main function of this module.
+    // pub fn main_function(&self) -> Arc<ExprNode> {
+    //     for (name, sym) in &self.instantiated_global_symbols {
+    //         if sym.template_name == self.get_namespaced_name() {
+    //             return;
+    //         }
+    //     }
+    //     error_exit("main function not found.")
+    // }
+
+    // Instantiate main function.
+    pub fn instantiate_main_function(&mut self, tc: &TypeCheckContext) -> Arc<ExprNode> {
+        let main_func_name = self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string());
+        if !self.global_symbols.contains_key(&main_func_name) {
+            error_exit("main function not found.")
+        } else {
+            let inst_name = self.require_instantiated_symbol(tc, &main_func_name, &int_lit_ty());
+            self.instantiate_symbols(tc);
+            expr_var(&inst_name.name, Some(inst_name.namespace.clone()), None)
+        }
+    }
+
     // Instantiate expression.
     fn instantiate_expr(&mut self, tc: &TypeCheckContext, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-        match &*expr.expr {
+        let ret = match &*expr.expr {
             Expr::Var(v) => {
                 if v.namespace.as_ref().unwrap().is_local() {
                     expr.clone()
@@ -200,7 +208,8 @@ impl FixModule {
                 let e = self.instantiate_expr(tc, e);
                 expr.set_tyanno_expr(e)
             }
-        }
+        };
+        calculate_free_vars(ret)
     }
 
     // Require instantiate generic symbol such that it has a specified type.
