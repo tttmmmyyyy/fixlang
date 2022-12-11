@@ -78,13 +78,13 @@ type_tycon = { ASCII_ALPHA_UPPER ~ var_char* }
 
 type_var = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
 
-type_qualified = { type_expr ~ (sep+ ~ "for" ~ sep+ ~ predicates)? }
+type_qualified = { predicates? ~ sep* ~ type_expr }
 
 predicate = { type_expr ~ sep* ~ ":" ~ sep* ~ trait_name }
 
-predicates = { predicate ~ (sep* ~ "," ~ sep* ~ predicate)* }
+predicates = { "[" ~ (sep* ~ predicate)* ~ sep* ~ "]" }
 
-qual_predicate = { predicate ~ (sep+ ~ "for" ~ sep+ ~ predicates)? }
+predicate_qualified = { predicates? ~ sep* ~ predicate }
 
 // === Type declarations ===
 type_name = { ASCII_ALPHA_UPPER ~ var_char* }
@@ -105,7 +105,7 @@ trait_member_defn = { trait_member_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ s
 trait_member_name = _{ var }
 
 // === Trait implementations ===
-trait_impl = { "impl" ~ sep+ ~ qual_predicate ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
+trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
 
 trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
