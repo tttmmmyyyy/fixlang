@@ -815,9 +815,20 @@ pub fn test44() {
         );
 
         main : Int;
-        main = add (toInt 5) (toInt false);
+        main = (
+            let arr0 = newArray 2 false;
+            let arr0 = writeArray! arr0 0 true;
+            let x = addHeadAndNext arr0;
+
+            let arr1 = newArray 2 3;
+            let arr1 = writeArray! arr1 1 5;
+            let z = addHeadAndNext arr1;
+
+            let y = add (toInt 5) (toInt false);
+            add (add x y) z
+        );
     ";
-    let answer = 4;
+    let answer = 11;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
