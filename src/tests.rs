@@ -789,6 +789,29 @@ pub fn test43() {
 
 #[test]
 #[serial]
+pub fn test44() {
+    // Test basic use of traits.
+    let n = 10000;
+    let source = r"
+        module Main;
+
+        trait a : ToInt {
+            toInt : a => Int;
+        }
+
+        impl Int : ToInt {
+            toInt = \x -> x;
+        }
+
+        main : Int;
+        main = toInt 5;
+    ";
+    let answer = (n * (n + 1)) / 2;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"{- head -} module Main; 

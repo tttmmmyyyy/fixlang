@@ -102,7 +102,7 @@ trait_defn = { "trait" ~ sep+ ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep*
 
 trait_member_defn = { trait_member_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
 
-trait_member_name = _{ var ~ sep* ~ ":" ~ sep* ~ type_expr }
+trait_member_name = _{ var }
 
 // === Trait implementations ===
 trait_impl = { "impl" ~ sep+ ~ qual_predicate ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
