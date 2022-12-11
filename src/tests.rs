@@ -10,6 +10,7 @@ pub fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) 
 pub fn test0() {
     let source = r"
         module Main;
+
         main: Int;
         main = 5;
     ";

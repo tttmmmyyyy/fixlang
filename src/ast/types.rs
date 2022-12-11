@@ -196,44 +196,31 @@ impl TypeNode {
     }
 
     // Stringify.
-    // If "tyvar_id" is specified, then names of type variables are normalized to names such as "a0", "a1", etc.
+    // If "tyvar_id" is specified, then names of type variables are normalized to names such as "t0", "t1", etc.
     fn to_string_inner(&self, tyvar_id: &mut Option<&mut u32>) -> String {
         match &self.ty {
             Type::TyVar(v) => match tyvar_id {
                 Some(id) => {
-                    let ret = format!("a{}", *id);
+                    let ret = format!("t{}", *id);
                     **id += 1;
                     ret
                 }
                 None => v.name.clone(),
             },
             Type::TyApp(tyfun, arg) => {
-                // Convert type like `(Pair<Int>)<Double>` to a form `(Pair, {Int, Double})`.
-                let mut args: Vec<Arc<TypeNode>> = vec![arg.clone()];
-                let mut now_tyfun = tyfun.clone();
-                loop {
-                    match &now_tyfun.ty {
-                        Type::TyApp(next_tyfun, arg) => {
-                            args.push(arg.clone());
-                            now_tyfun = next_tyfun.clone();
-                        }
-                        _ => {
-                            break;
-                        }
-                    }
+                let arg_brace_needed = match arg.ty {
+                    Type::TyVar(_) => false,
+                    Type::TyCon(_) => false,
+                    Type::TyApp(_, _) => true,
+                    Type::FunTy(_, _) => true,
+                };
+                let tyfun = tyfun.to_string_inner(tyvar_id);
+                let arg = arg.to_string_inner(tyvar_id);
+                if arg_brace_needed {
+                    format!("{} ({})", tyfun, arg)
+                } else {
+                    format!("{} {}", tyfun, arg)
                 }
-                args.reverse();
-                let tycon = now_tyfun.to_string_inner(tyvar_id);
-                let mut args_str: Vec<String> = vec![];
-                for arg in args {
-                    args_str.push(arg.to_string_inner(tyvar_id));
-                }
-                let mut res: String = Default::default();
-                res += &tycon;
-                res += "<";
-                res += &args_str.join(", ");
-                res += ">";
-                res
             }
             Type::FunTy(src, dst) => {
                 let src_brace_needed = match src.ty {

@@ -528,7 +528,7 @@ fn parse_type_tyapp(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     let pair = pairs.next().unwrap();
     let mut ret = parse_type_nlr(pair);
     for pair in pairs {
-        ret = type_tyapp(ret, parse_type(pair));
+        ret = type_tyapp(ret, parse_type_nlr(pair));
     }
     ret
 }
