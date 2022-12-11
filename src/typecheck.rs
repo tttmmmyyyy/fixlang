@@ -2,23 +2,6 @@ use core::panic;
 
 use super::*;
 
-// #[derive(Debug)]
-// pub struct TypeError {}
-
-fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
-    let mut str = String::default();
-    str += "error: ";
-    str += msg;
-    str += "\n";
-    match src {
-        None => todo!(),
-        Some(v) => {
-            str += &v.to_string();
-        }
-    };
-    error_exit(&str)
-}
-
 #[derive(Clone)]
 pub struct Scope<T> {
     var: HashMap<String, ScopeValue<T>>,
@@ -382,21 +365,21 @@ pub struct TypeCheckContext {
     substitution: Substitution,
     // Predicates
     pub predicates: Vec<Predicate>,
-    // Set of TyCons associated with kinds
-    tycons: HashMap<String, Arc<Kind>>,
     // Trait environment.
     trait_env: TraitEnv,
+    // List of type constructors.
+    tycons: Arc<HashMap<Name, Arc<Kind>>>,
 }
 
 impl TypeCheckContext {
     // Creaate instance.
-    pub fn new(trait_env: TraitEnv) -> Self {
+    pub fn new(trait_env: TraitEnv, tycons: Arc<HashMap<Name, Arc<Kind>>>) -> Self {
         Self {
             tyvar_id: Default::default(),
             scope: Default::default(),
             substitution: Default::default(),
             predicates: Default::default(),
-            tycons: bulitin_type_to_kind_map(),
+            tycons,
             trait_env,
         }
     }
@@ -771,20 +754,5 @@ impl TypeCheckContext {
         }
 
         (expr, scm)
-    }
-
-    // Read type declarations to verity it and extend type-to-kind mapping.
-    pub fn add_tycons(&mut self, type_decls: &Vec<TypeDecl>) {
-        for type_decl in type_decls {
-            self.add_tycon(type_decl);
-        }
-    }
-
-    // Read type declaration to verity it and extend type-to-kind mapping.
-    fn add_tycon(&mut self, decl: &TypeDecl) {
-        if self.tycons.contains_key(&decl.name) {
-            error_exit_with_src(&format!("Type `{}` is already defined.", decl.name), &None);
-        }
-        self.tycons.insert(decl.name.clone(), kind_star());
     }
 }

@@ -28,10 +28,7 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     fix_mod.create_trait_method_symbols();
 
     // Create typeckecker.
-    let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone());
-
-    // Let typechecker read type declarations to register user-defined types.
-    typechecker.add_tycons(&fix_mod.type_decls);
+    let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone(), fix_mod.tycons());
 
     // Register type declarations of global symbols to typechecker.
     for (name, defn) in &fix_mod.global_symbols {

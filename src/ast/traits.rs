@@ -16,15 +16,15 @@ impl TraitId {
 // Information on trait.
 #[derive(Clone)]
 pub struct TraitInfo {
-    id: TraitId,
-    num_instance: u64,
+    // Identifier of this trait (i.e. the name).
+    pub id: TraitId,
     // Type variable used in trait definition.
-    type_var: Arc<TyVar>,
+    pub type_var: Arc<TyVar>,
     // Methods of this trait.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String",
     // and not "a -> String for a : Show".
-    pub methods: HashMap<Name, Arc<TypeNode>>,
+    pub methods: HashMap<Name, QualType>,
     pub instances: Vec<TraitInstance>,
 }
 
@@ -33,30 +33,35 @@ impl TraitInfo {
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // this function returns "a -> String for a: Show" as type of "show" method.
     pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
-        let ty = self.methods.get(name).unwrap().clone();
-        let pred = Predicate {
-            trait_id: self.id.clone(),
-            ty: type_var_from_tyvar(self.type_var.clone()),
-        };
+        let mut ty = self.methods.get(name).unwrap().clone();
         let vars = ty.free_vars();
         if !vars.contains_key(&self.type_var.name) {
             error_exit("type of trait method must contain bounded type.");
             // TODO: check this in more early stage.
         }
-        Scheme::generalize(vars, vec![pred], ty)
+        let mut preds = vec![Predicate {
+            trait_id: self.id.clone(),
+            ty: type_var_from_tyvar(self.type_var.clone()),
+        }];
+        preds.append(&mut ty.preds);
+        Scheme::generalize(vars, preds, ty.ty)
+    }
+
+    // Get the type of a method.
+    // Here, for example, in case "trait a: Show { show: a -> String }",
+    // this function returns "a -> String" as type of "show" method.
+    pub fn method_ty(&self, name: &Name) -> QualType {
+        self.methods.get(name).unwrap().clone()
     }
 }
 
 // Trait instance.
 #[derive(Clone)]
 pub struct TraitInstance {
-    id: u64,
-    qual_pred: QualPredicate,
+    // Statement such as "(a, b): Show for a: Show, b: Show".
+    pub qual_pred: QualPredicate,
     // Method implementation.
-    // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
-    // the type of method "show" is "(a, b) -> String",
-    // and is not "a -> String for a: Show, b: Show".
-    methods: HashMap<Name, (Arc<ExprNode>, Arc<TypeNode>)>,
+    pub methods: HashMap<Name, Arc<ExprNode>>,
 }
 
 impl TraitInstance {
@@ -82,16 +87,18 @@ impl TraitInstance {
     // Get type-scheme of a method implementation.
     // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
     // this function returns "a -> String for a: Show, b: Show" as the type of "show".
-    pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
-        let (_, ty) = self.methods.get(name).unwrap().clone();
-        let preds = self.qual_pred.context.clone();
+    // Give type of this method, e.g., "a -> String".
+    pub fn method_scheme(&self, name: &Name, mut qual_ty: QualType) -> Arc<Scheme> {
+        let ty = qual_ty.ty.clone();
         let vars = ty.free_vars();
+        let mut preds = self.qual_pred.context.clone();
+        preds.append(&mut qual_ty.preds);
         Scheme::generalize(vars, preds, ty)
     }
 
     // Get expression that implements a method.
     pub fn method_expr(&self, name: &Name) -> Arc<ExprNode> {
-        self.methods.get(name).unwrap().0.clone()
+        self.methods.get(name).unwrap().clone()
     }
 }
 
@@ -116,9 +123,6 @@ impl TraitInfo {
 
         // TODO: check validity of method implementation, etc.
 
-        inst.id = self.num_instance;
-        self.num_instance += 1;
-
         self.instances.push(inst)
     }
 }
@@ -126,8 +130,21 @@ impl TraitInfo {
 // Qualified predicate. Statement such as "Array a : Eq for a : Eq".
 #[derive(Clone)]
 pub struct QualPredicate {
-    context: Vec<Predicate>,
-    predicate: Predicate,
+    pub context: Vec<Predicate>,
+    pub predicate: Predicate,
+}
+
+#[derive(Clone)]
+pub struct QualType {
+    pub preds: Vec<Predicate>,
+    pub ty: Arc<TypeNode>,
+}
+
+impl QualType {
+    // Calculate free type variables.
+    pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
+        self.ty.free_vars()
+    }
 }
 
 // Statement such as "String: Show" or "a: Eq".
@@ -150,6 +167,21 @@ pub struct TraitEnv {
 }
 
 impl TraitEnv {
+    // Set traits.
+    pub fn set(
+        &mut self,
+        trait_infos: Vec<TraitInfo>,
+        trait_impls: Vec<TraitInstance>,
+        tycons: &HashMap<Name, Arc<Kind>>,
+    ) {
+        for trait_info in trait_infos {
+            self.add_trait(trait_info);
+        }
+        for trait_impl in trait_impls {
+            self.add_instance(trait_impl, tycons);
+        }
+    }
+
     // Add a trait to TraitEnv.
     pub fn add_trait(&mut self, info: TraitInfo) {
         // Check duplicate definition.

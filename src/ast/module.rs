@@ -14,6 +14,8 @@ pub struct FixModule {
     pub instantiated_global_symbols: HashMap<NameSpacedName, InstantiatedSymbol>,
     pub deferred_instantiation: HashMap<NameSpacedName, InstantiatedSymbol>,
     pub trait_env: TraitEnv,
+    // List of type constructors including user-defined types.
+    pub tycons: Arc<HashMap<Name, Arc<Kind>>>,
 }
 
 #[derive(Clone)]
@@ -52,6 +54,49 @@ pub struct MethodImpl {
 }
 
 impl FixModule {
+    // Create empty module.
+    pub fn new(name: Name) -> FixModule {
+        FixModule {
+            name,
+            type_decls: Default::default(),
+            global_symbols: Default::default(),
+            instantiated_global_symbols: Default::default(),
+            deferred_instantiation: Default::default(),
+            trait_env: Default::default(),
+            tycons: Default::default(),
+        }
+    }
+
+    // Set traits.
+    pub fn set_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
+        self.trait_env.set(trait_infos, trait_impls, &self.tycons);
+    }
+
+    // Register declarations of user-defined types.
+    pub fn set_type_decls(&mut self, type_decls: Vec<TypeDecl>) {
+        self.type_decls = type_decls;
+    }
+
+    // Calculate list of type constructors including user-defined types.
+    pub fn calculate_tycons(&mut self) {
+        let mut tycons: HashMap<Name, Arc<Kind>> = bulitin_type_to_kind_map();
+        for type_decl in &self.type_decls {
+            if tycons.contains_key(&type_decl.name) {
+                error_exit_with_src(
+                    &format!("Type `{}` is already defined.", type_decl.name),
+                    &None,
+                );
+            }
+            tycons.insert(type_decl.name.clone(), kind_star());
+        }
+        self.tycons = Arc::new(tycons);
+    }
+
+    // Get list of type constructors including user-defined types.
+    pub fn tycons(&self) -> Arc<HashMap<Name, Arc<Kind>>> {
+        self.tycons.clone()
+    }
+
     // Get this module's namespace.
     pub fn get_namespace(&self) -> NameSpace {
         NameSpace::new(vec![self.name.clone()])
@@ -309,12 +354,15 @@ impl FixModule {
                 let method_ty = trait_info.method_scheme(method_name);
                 let mut method_impls: Vec<MethodImpl> = vec![];
                 for trait_impl in &trait_info.instances {
-                    let ty = trait_impl.method_scheme(method_name);
+                    let ty =
+                        trait_impl.method_scheme(method_name, trait_info.method_ty(method_name));
                     let expr = trait_impl.method_expr(method_name);
                     method_impls.push(MethodImpl { ty, expr });
                 }
+                let method_name =
+                    NameSpacedName::from_strs(&[&self.name, &trait_id.name], &method_name);
                 self.global_symbols.insert(
-                    self.get_namespaced_name(&trait_id.name),
+                    method_name,
                     GlobalSymbol {
                         ty: method_ty,
                         expr: SymbolExpr::Method(method_impls),

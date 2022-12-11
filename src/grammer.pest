@@ -7,7 +7,7 @@ expr_bool_lit = { "true" | "false" }
 
 expr_lit = { expr_int_lit | expr_bool_lit }
 
-keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit | "type" | "struct" }
+keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit | "type" | "trait" | "impl" }
 
 in_of_let = { "in" | ";" }
 
@@ -84,6 +84,8 @@ predicate = { type_expr ~ sep* ~ ":" ~ sep* ~ trait_name }
 
 predicates = { predicate ~ (sep* ~ "," ~ sep* ~ predicate)* }
 
+qual_predicate = { predicate ~ (sep+ ~ "for" ~ sep+ ~ predicates)? }
+
 // === Type declarations ===
 type_name = { ASCII_ALPHA_UPPER ~ var_char* }
 
@@ -103,9 +105,7 @@ trait_member_defn = { trait_member_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ s
 trait_member_name = _{ var ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 // === Trait implementations ===
-trait_impl_context = { predicate ~ (sep* ~ "," ~ sep* ~ predicate)* }
-
-trait_impl = { "impl" ~ sep+ ~ predicate ~ (sep+ ~ "for" ~ sep+ ~ trait_impl_context)? ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
+trait_impl = { "impl" ~ sep+ ~ qual_predicate ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
 
 trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
@@ -119,7 +119,7 @@ module_name = { ASCII_ALPHA_UPPER ~ var_char* }
 
 module_decl = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" }
 
-toplevel_defns = _{ type_decl | global_symbol_type_defn | global_symbol_defn }
+toplevel_defns = _{ type_decl | global_symbol_type_defn | global_symbol_defn | trait_defn | trait_impl }
 
 module = { module_decl ~ (sep* ~ toplevel_defns)* }
 

@@ -98,9 +98,14 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut pairs = pair.into_inner();
     let module_name = parse_module_decl(pairs.next().unwrap(), src);
+    let mut fix_mod = FixModule::new(module_name);
+
     let mut type_decls: Vec<TypeDecl> = Vec::new();
     let mut global_symbols_defns: HashMap<Name, (Option<Arc<Scheme>>, Option<Arc<ExprNode>>)> =
         Default::default();
+    let mut trait_infos: Vec<TraitInfo> = vec![];
+    let mut trait_impls: Vec<TraitInstance> = vec![];
+
     for pair in pairs {
         match pair.as_rule() {
             Rule::type_decl => {
@@ -132,18 +137,19 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
                     }
                 }
             }
+            Rule::trait_defn => {
+                trait_infos.push(parse_trait_defn(pair, src));
+            }
+            Rule::trait_impl => {
+                trait_impls.push(parse_trait_impl(pair, src));
+            }
             _ => unreachable!(),
         }
     }
 
-    let mut fix_mod = FixModule {
-        name: module_name.to_string(),
-        type_decls,
-        global_symbols: Default::default(),
-        instantiated_global_symbols: Default::default(),
-        deferred_instantiation: Default::default(),
-        trait_env: Default::default(),
-    };
+    fix_mod.set_type_decls(type_decls);
+    fix_mod.calculate_tycons();
+    fix_mod.set_traits(trait_infos, trait_impls);
 
     let mut global_symbols: HashMap<NameSpacedName, GlobalSymbol> = Default::default();
     for (name, (ty, expr)) in global_symbols_defns {
@@ -166,11 +172,69 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     fix_mod
 }
 
+fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>) -> TraitInfo {
+    assert_eq!(pair.as_rule(), Rule::trait_defn);
+    let mut pairs = pair.into_inner();
+    let tyvar = pairs.next().unwrap().as_str().to_string();
+    let trait_name = pairs.next().unwrap().as_str().to_string();
+    let methods: HashMap<Name, QualType> = pairs
+        .map(|pair| parse_trait_member_defn(pair, src))
+        .collect();
+    TraitInfo {
+        id: TraitId { name: trait_name },
+        type_var: tyvar_from_name(&tyvar, &kind_star()),
+        methods,
+        instances: vec![],
+    }
+}
+
+fn parse_trait_member_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, QualType) {
+    assert_eq!(pair.as_rule(), Rule::trait_member_defn);
+    let mut pairs = pair.into_inner();
+    let method_name = pairs.next().unwrap().as_str().to_string();
+    let qual_type = parse_qualified_type(pairs.next().unwrap(), src);
+    (method_name, qual_type)
+}
+
+fn parse_trait_impl(pair: Pair<Rule>, src: &Arc<String>) -> TraitInstance {
+    assert_eq!(pair.as_rule(), Rule::trait_impl);
+    let mut pairs = pair.into_inner();
+    let qual_pred = parse_qual_predicate(pairs.next().unwrap(), src);
+    let methods: HashMap<Name, Arc<ExprNode>> = pairs
+        .map(|pair| parse_trait_member_impl(pair, src))
+        .collect();
+    TraitInstance { qual_pred, methods }
+}
+
+fn parse_trait_member_impl(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<ExprNode>) {
+    assert_eq!(pair.as_rule(), Rule::trait_member_impl);
+    let mut pairs = pair.into_inner();
+    let method_name = pairs.next().unwrap().as_str().to_string();
+    let expr = parse_expr(pairs.next().unwrap(), src);
+    (method_name, expr)
+}
+
+fn parse_qual_predicate(pair: Pair<Rule>, src: &Arc<String>) -> QualPredicate {
+    assert_eq!(pair.as_rule(), Rule::qual_predicate);
+    let mut pairs = pair.into_inner();
+    let predicate = parse_predicate(pairs.next().unwrap(), src);
+    let mut context: Vec<Predicate> = vec![];
+    match pairs.next() {
+        Some(pair) => {
+            context = parse_predicates(pair, src);
+        }
+        None => {}
+    }
+    QualPredicate { context, predicate }
+}
+
 fn parse_global_symbol_type_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<Scheme>) {
     assert_eq!(pair.as_rule(), Rule::global_symbol_type_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
-    let (preds, ty) = parse_qualified_type(pairs.next().unwrap(), src);
+    let qual_type = parse_qualified_type(pairs.next().unwrap(), src);
+    let preds = qual_type.preds.clone();
+    let ty = qual_type.ty.clone();
     (name, Scheme::generalize(ty.free_vars(), preds, ty))
 }
 
@@ -182,7 +246,7 @@ fn parse_global_symbol_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<E
     (name, expr)
 }
 
-fn parse_qualified_type(pair: Pair<Rule>, src: &Arc<String>) -> (Vec<Predicate>, Arc<TypeNode>) {
+fn parse_qualified_type(pair: Pair<Rule>, src: &Arc<String>) -> QualType {
     assert_eq!(pair.as_rule(), Rule::type_qualified);
     let mut pairs = pair.into_inner();
     let ty = parse_type(pairs.next().unwrap());
@@ -190,7 +254,7 @@ fn parse_qualified_type(pair: Pair<Rule>, src: &Arc<String>) -> (Vec<Predicate>,
         Some(pair) => parse_predicates(pair, src),
         None => vec![],
     };
-    (preds, ty)
+    QualType { preds, ty }
 }
 
 fn parse_predicates(pair: Pair<Rule>, src: &Arc<String>) -> Vec<Predicate> {
