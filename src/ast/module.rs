@@ -354,7 +354,7 @@ impl FixModule {
                 let method_ty = trait_info.method_scheme(method_name);
                 let mut method_impls: Vec<MethodImpl> = vec![];
                 for trait_impl in &trait_info.instances {
-                    let ty = trait_impl.method_scheme(trait_info.method_ty(method_name));
+                    let ty = trait_impl.method_scheme(method_name, trait_info);
                     let expr = trait_impl.method_expr(method_name);
                     method_impls.push(MethodImpl { ty, expr });
                 }

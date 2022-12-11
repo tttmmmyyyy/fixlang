@@ -806,7 +806,7 @@ pub fn test44() {
         main : Int;
         main = toInt 5;
     ";
-    let answer = (n * (n + 1)) / 2;
+    let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 

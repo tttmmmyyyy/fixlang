@@ -88,11 +88,16 @@ impl TraitInstance {
     // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
     // this function returns "a -> String for a: Show, b: Show" as the type of "show".
     // Give type of this method, e.g., "a -> String".
-    pub fn method_scheme(&self, mut qual_ty: QualType) -> Arc<Scheme> {
-        let ty = qual_ty.ty.clone();
+    pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
+        let trait_tyvar = &trait_info.type_var.name;
+        let impl_type = self.qual_pred.predicate.ty.clone();
+        let s = Substitution::single(&trait_tyvar, impl_type);
+        let mut method_qualty = s.substitute_qualtype(&trait_info.method_ty(method_name));
+
+        let ty = method_qualty.ty.clone();
         let vars = ty.free_vars();
         let mut preds = self.qual_pred.context.clone();
-        preds.append(&mut qual_ty.preds);
+        preds.append(&mut method_qualty.preds);
         Scheme::generalize(vars, preds, ty)
     }
 

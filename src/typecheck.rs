@@ -188,6 +188,16 @@ impl Substitution {
         }
     }
 
+    // Apply substitution to qualified type.
+    pub fn substitute_qualtype(&self, qual_type: &QualType) -> QualType {
+        let mut preds = qual_type.preds.clone();
+        for pred in &mut preds {
+            self.substitute_predicate(pred);
+        }
+        let ty = self.substitute_type(&qual_type.ty);
+        QualType { preds, ty }
+    }
+
     // Calculate minimum substitution to unify two types.
     pub fn unify(
         tycons: &HashMap<String, Arc<Kind>>,
