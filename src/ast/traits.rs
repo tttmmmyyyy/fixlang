@@ -88,7 +88,7 @@ impl TraitInstance {
     // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
     // this function returns "a -> String for a: Show, b: Show" as the type of "show".
     // Give type of this method, e.g., "a -> String".
-    pub fn method_scheme(&self, name: &Name, mut qual_ty: QualType) -> Arc<Scheme> {
+    pub fn method_scheme(&self, mut qual_ty: QualType) -> Arc<Scheme> {
         let ty = qual_ty.ty.clone();
         let vars = ty.free_vars();
         let mut preds = self.qual_pred.context.clone();
