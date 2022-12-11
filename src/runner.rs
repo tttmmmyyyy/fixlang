@@ -41,13 +41,13 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     for (_name, sym) in &mut fix_mod.global_symbols {
         match &sym.expr {
             SymbolExpr::Simple(e) => {
-                let e = typechecker.check_type_nofree(e.clone(), sym.ty.clone());
+                let e = typechecker.check_type(e.clone(), sym.ty.clone());
                 sym.expr = SymbolExpr::Simple(e);
             }
             SymbolExpr::Method(methods) => {
                 let mut methods = methods.clone();
                 for m in &mut methods {
-                    m.expr = typechecker.check_type_nofree(m.expr.clone(), m.ty.clone());
+                    m.expr = typechecker.check_type(m.expr.clone(), m.ty.clone());
                 }
                 sym.expr = SymbolExpr::Method(methods);
             }

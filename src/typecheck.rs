@@ -701,21 +701,20 @@ impl TypeCheckContext {
 
     // Check if expr has type scm.
     // Returns given AST augmented with inferred information.
-    pub fn check_type_nofree(
-        &mut self,
-        expr: Arc<ExprNode>,
-        expect_scm: Arc<Scheme>,
-    ) -> Arc<ExprNode> {
+    pub fn check_type(&mut self, expr: Arc<ExprNode>, expect_scm: Arc<Scheme>) -> Arc<ExprNode> {
         assert!(self.predicates.is_empty()); // This function is available only when predicates are empty.
-        let (expr, deduced_scm) = self.deduce_scheme_nofree(expr);
         let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
-        let (required_preds, most_general_ty) = self.instantiate_scheme(&deduced_scm, false);
-        let s = Substitution::matching(&self.tycons, &most_general_ty, &specified_ty);
+        let expr = self.unify_type_of_expr(&expr, specified_ty.clone());
+        let deduced_ty = self.substitute_type(&specified_ty);
+        self.reduce_predicates();
+        let required_preds = std::mem::replace(&mut self.predicates, Default::default());
+
+        let s = Substitution::matching(&self.tycons, &deduced_ty, &specified_ty);
         if s.is_none() {
             error_exit(&format!(
                 "type mismatch. Expected `{}`, found `{}`",
                 specified_ty.to_string(),
-                most_general_ty.to_string()
+                deduced_ty.to_string()
             ));
         }
         let s = s.unwrap();
@@ -738,7 +737,7 @@ impl TypeCheckContext {
     fn deduce_scheme(&mut self, expr: Arc<ExprNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
         let ty = type_tyvar_star(&self.new_tyvar());
         let expr = self.unify_type_of_expr(&expr, ty.clone());
-        let scm = self.generalize_to_scheme(&ty, &ty.free_vars_set());
+        let scm = self.generalize_to_scheme(&ty, &Default::default());
         (expr, scm)
     }
 

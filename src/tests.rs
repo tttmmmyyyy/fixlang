@@ -807,6 +807,13 @@ pub fn test44() {
             toInt = \b -> if b then 0 else -1;
         }
 
+        addHeadAndNext : [a: ToInt] Array a => Int; 
+        addHeadAndNext = \arr -> (
+            let head = toInt $ readArray arr 0;
+            let next = toInt $ readArray arr 1;
+            add head next
+        );
+
         main : Int;
         main = add (toInt 5) (toInt false);
     ";
