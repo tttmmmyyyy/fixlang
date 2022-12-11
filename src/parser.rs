@@ -539,9 +539,15 @@ fn parse_type_nlr(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
         Rule::type_tycon => parse_type_tycon(pair),
+        Rule::type_var => parse_type_var(pair),
         Rule::type_braced => parse_type_braced(pair),
         _ => unreachable!(),
     }
+}
+
+fn parse_type_var(pair: Pair<Rule>) -> Arc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_var);
+    type_tyvar(pair.as_str(), &kind_star())
 }
 
 fn parse_type_tycon(type_expr: Pair<Rule>) -> Arc<TypeNode> {
