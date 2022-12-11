@@ -791,7 +791,6 @@ pub fn test43() {
 #[serial]
 pub fn test44() {
     // Test basic use of traits.
-    let n = 10000;
     let source = r"
         module Main;
 
@@ -803,10 +802,14 @@ pub fn test44() {
             toInt = \x -> x;
         }
 
+        impl Bool : ToInt {
+            toInt = \b -> if b then 1 else 0;
+        }
+
         main : Int;
-        main = toInt 5;
+        main = add (toInt 5) (toInt true);
     ";
-    let answer = 5;
+    let answer = 6;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
