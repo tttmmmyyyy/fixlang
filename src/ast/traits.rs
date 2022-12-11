@@ -109,7 +109,7 @@ impl TraitInstance {
 
 impl TraitInfo {
     // Add a instance to a trait.
-    pub fn add_instance(&mut self, mut inst: TraitInstance, tycons: &HashMap<String, Arc<Kind>>) {
+    pub fn add_instance(&mut self, inst: TraitInstance, tycons: &HashMap<String, Arc<Kind>>) {
         // Check trait id.
         assert!(self.id == inst.qual_pred.predicate.trait_id);
 
