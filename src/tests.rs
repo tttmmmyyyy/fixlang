@@ -803,13 +803,13 @@ pub fn test44() {
         }
 
         impl Bool : ToInt {
-            toInt = \b -> if b then 1 else 0;
+            toInt = \b -> if b then 0 else -1;
         }
 
         main : Int;
-        main = add (toInt 5) (toInt true);
+        main = add (toInt 5) (toInt false);
     ";
-    let answer = 6;
+    let answer = 4;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
