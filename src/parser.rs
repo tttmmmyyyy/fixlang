@@ -525,7 +525,7 @@ fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
 fn parse_type_tyapp(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_tyapp);
     let mut pairs = type_expr.into_inner();
-    let mut pair = pairs.next().unwrap();
+    let pair = pairs.next().unwrap();
     let mut ret = parse_type_nlr(pair);
     for pair in pairs {
         ret = type_tyapp(ret, parse_type(pair));
