@@ -731,37 +731,4 @@ impl TypeCheckContext {
 
         expr
     }
-
-    // Deduce scheme of a expression. It may leave free variables and predicates.
-    // Returns given AST augmented with inferred information.
-    fn deduce_scheme(&mut self, expr: Arc<ExprNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
-        let ty = type_tyvar_star(&self.new_tyvar());
-        let expr = self.unify_type_of_expr(&expr, ty.clone());
-        let scm = self.generalize_to_scheme(&ty, &Default::default());
-        (expr, scm)
-    }
-
-    // Deduce scheme of a expression with no free variable and deferred predicates.
-    // Returns given AST augmented with inferred information.
-    fn deduce_scheme_nofree(&mut self, expr: Arc<ExprNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
-        assert!(self.predicates.is_empty()); // This function is available only when predicates are empty.
-        let (expr, scm) = self.deduce_scheme(expr);
-
-        // If free variables are left, raise an error.
-        let free_vars = scm.free_vars();
-        if !free_vars.is_empty() {
-            let free_vars: Vec<Name> = free_vars
-                .iter()
-                .map(|(k, _)| "`".to_string() + k + "`")
-                .collect();
-            error_exit(&format!("unknown type variables {}", free_vars.join(", ")));
-        }
-
-        // If predicates are unsatisfiable or deferred, raise an error.
-        if !self.reduce_predicates() || !self.predicates.is_empty() {
-            self.error_exit_on_predicates();
-        }
-
-        (expr, scm)
-    }
 }
