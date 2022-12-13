@@ -288,7 +288,7 @@ impl Substitution {
             panic!("unify_tyvar is making circular substitution.")
         }
         if tyvar1.kind != ty2.kind(tycons) {
-            error_exit_with_src("Kinds do not match.", &None);
+            error_exit("Kinds do not match.");
         }
         Some(Self::single(&tyvar1.name, ty2.clone()))
     }
