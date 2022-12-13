@@ -698,7 +698,7 @@ pub fn test39() {
         main : Int;
         main = (
             let a = A.new (B.new 16);
-            let f = \a -> a & ((modX! : (B => B) => A => A) $ modX! $ \x -> add x 15);
+            let f = \a -> a & ((modX! : (B -> B) -> A -> A) $ modX! $ \x -> add x 15);
             let a = a & f;
             a & getX & getX
         );
@@ -720,7 +720,7 @@ pub fn test40() {
         main : Int;
         main = (
             let a = A.new (B.new 16);
-            let f: A => A = \a -> a & (modX! $ modX! $ \x -> add x 15);
+            let f: A -> A = \a -> a & (modX! $ modX! $ \x -> add x 15);
             let a = a & f;
             a & getX & getX
         );
@@ -738,7 +738,7 @@ pub fn test41() {
         
         main : Int;
         main = (
-            let x: Int => Int = \x -> x;
+            let x: Int -> Int = \x -> x;
             x 42
         );
         ";
@@ -755,7 +755,7 @@ pub fn test42() {
         r"
             module Main;
             
-            loop : Int => Int;
+            loop : Int -> Int;
             loop = \x -> if eq x 0 then 0 else add x $ loop $ add x -1;
     
             main : Int;
@@ -776,7 +776,7 @@ pub fn test43() {
         r"
             module Main;
             
-            loop : Int => Int => Int;
+            loop : Int -> Int -> Int;
             loop = \x -> \acc -> if eq x 0 then acc else loop (add x -1) (add acc x);
     
             main : Int;
@@ -796,7 +796,7 @@ pub fn test44() {
         module Main;
 
         trait a : ToInt {
-            toInt : a => Int;
+            toInt : a -> Int;
         }
 
         impl Int : ToInt {
@@ -807,7 +807,7 @@ pub fn test44() {
             toInt = \b -> if b then 0 else -1;
         }
 
-        addHeadAndNext : [a: ToInt] Array a => Int; 
+        addHeadAndNext : [a: ToInt] Array a -> Int; 
         addHeadAndNext = \arr -> (
             let head = toInt $ readArray arr 0;
             let next = toInt $ readArray arr 1;
@@ -840,7 +840,7 @@ pub fn test45() {
         module Main;
 
         trait [f:*->*] f : Functor {
-            map : (a => b) => f a => f b;
+            map : (a -> b) -> f a -> f b;
         }
 
         impl Array : Functor {

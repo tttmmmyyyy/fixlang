@@ -72,7 +72,7 @@ type_nlr = { type_tycon | type_var | type_braced }
 
 type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)? }
 
-type_fun = { type_tyapp ~ (sep* ~ "=>" ~ sep* ~ type_expr)? }
+type_fun = { type_tyapp ~ (sep* ~ "->" ~ sep* ~ type_expr)? }
 
 type_tycon = { ASCII_ALPHA_UPPER ~ var_char* }
 
