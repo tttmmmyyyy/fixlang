@@ -82,9 +82,20 @@ type_qualified = { predicates? ~ sep* ~ type_expr }
 
 predicate = { type_expr ~ sep* ~ ":" ~ sep* ~ trait_name }
 
-predicates = { "[" ~ (sep* ~ predicate)* ~ sep* ~ "]" }
+predicate_kind = { type_var ~ sep* ~ ":" ~ sep* ~ kind }
+
+predicates = { "[" ~ (sep* ~ (predicate | predicate_kind))* ~ sep* ~ "]" }
 
 predicate_qualified = { predicates? ~ sep* ~ predicate }
+
+// === Kinds ===
+kind_star = { "*" }
+
+kind_braced = { "(" ~ sep* ~ kind ~ sep* ~ ")" }
+
+kind_nlr = { kind_star | kind_braced }
+
+kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 
 // === Type declarations ===
 type_name = { ASCII_ALPHA_UPPER ~ var_char* }

@@ -2,10 +2,18 @@ use core::panic;
 
 use super::*;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone)]
 pub struct TyVar {
     pub name: String,
     pub kind: Arc<Kind>,
+}
+
+impl TyVar {
+    pub fn set_kind(&self, kind: Arc<Kind>) -> Arc<TyVar> {
+        let mut ret = self.clone();
+        ret.kind = kind;
+        Arc::new(ret)
+    }
 }
 
 #[derive(Eq, PartialEq)]
@@ -42,6 +50,35 @@ impl PartialEq for TypeNode {
 impl Eq for TypeNode {}
 
 impl TypeNode {
+    // Set kinds to type variables.
+    pub fn set_kinds(self: &Arc<TypeNode>, kinds: &HashMap<Name, Arc<Kind>>) -> Arc<TypeNode> {
+        match &self.ty {
+            Type::TyVar(tv) => {
+                if kinds.contains_key(&tv.name) {
+                    self.set_tyvar_kind(kinds[&tv.name].clone())
+                } else {
+                    self.clone()
+                }
+            }
+            Type::TyCon(_tc) => self.clone(),
+            Type::TyApp(fun, arg) => self
+                .set_tyapp_fun(fun.set_kinds(kinds))
+                .set_tyapp_arg(arg.set_kinds(kinds)),
+            Type::FunTy(src, dst) => self
+                .set_funty_src(src.set_kinds(kinds))
+                .set_funty_dst(dst.set_kinds(kinds)),
+        }
+    }
+
+    // Set kinds to type variables.
+    pub fn set_kinds_vec(self: &Arc<TypeNode>, kinds: &Vec<KindPredicate>) -> Arc<TypeNode> {
+        let mut kinds_map: HashMap<Name, Arc<Kind>> = Default::default();
+        for kp in kinds {
+            kinds_map.insert(kp.name.clone(), kp.kind.clone());
+        }
+        self.set_kinds(&kinds_map)
+    }
+
     // Is this type head normal form? i.e., begins with type variable.
     pub fn is_hnf(&self) -> bool {
         match &self.ty {
@@ -50,6 +87,17 @@ impl TypeNode {
             Type::TyApp(head, _) => head.is_hnf(),
             Type::FunTy(head, _) => head.is_hnf(),
         }
+    }
+
+    pub fn set_tyvar_kind(&self, kind: Arc<Kind>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::TyVar(tv) => {
+                ret.ty = Type::TyVar(tv.set_kind(kind));
+            }
+            _ => panic!(),
+        }
+        Arc::new(ret)
     }
 
     #[allow(dead_code)]

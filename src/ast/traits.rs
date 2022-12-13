@@ -139,6 +139,15 @@ pub struct QualPredicate {
     pub predicate: Predicate,
 }
 
+impl QualPredicate {
+    pub fn set_kinds_vec(&mut self, kinds: &Vec<KindPredicate>) {
+        for ctx in &mut self.context {
+            ctx.set_kinds_vec(kinds);
+        }
+        self.predicate.set_kinds_vec(kinds);
+    }
+}
+
 #[derive(Clone)]
 pub struct QualType {
     pub preds: Vec<Predicate>,
@@ -149,6 +158,13 @@ impl QualType {
     // Calculate free type variables.
     pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
         self.ty.free_vars()
+    }
+
+    pub fn set_kinds_vec(&mut self, kinds: &Vec<KindPredicate>) {
+        for p in &mut self.preds {
+            p.set_kinds_vec(kinds);
+        }
+        self.ty = self.ty.set_kinds_vec(kinds);
     }
 }
 
@@ -163,6 +179,16 @@ impl Predicate {
     pub fn to_string(&self) -> String {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
+
+    pub fn set_kinds_vec(&mut self, kinds: &Vec<KindPredicate>) {
+        self.ty.set_kinds_vec(kinds);
+    }
+}
+
+// Statement such as "f: * -> *".
+pub struct KindPredicate {
+    pub name: Name,
+    pub kind: Arc<Kind>,
 }
 
 // Trait environments.

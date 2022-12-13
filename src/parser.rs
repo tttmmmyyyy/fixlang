@@ -217,16 +217,18 @@ fn parse_trait_member_impl(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<Ex
 fn parse_predicate_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualPredicate {
     assert_eq!(pair.as_rule(), Rule::predicate_qualified);
     let mut pairs = pair.into_inner();
-    let predicates = if pairs.peek().unwrap().as_rule() == Rule::predicates {
+    let (predicates, kinds) = if pairs.peek().unwrap().as_rule() == Rule::predicates {
         parse_predicates(pairs.next().unwrap(), src)
     } else {
-        vec![]
+        (vec![], vec![])
     };
     let predicate = parse_predicate(pairs.next().unwrap(), src);
-    QualPredicate {
+    let mut qp = QualPredicate {
         context: predicates,
         predicate,
-    }
+    };
+    qp.set_kinds_vec(&kinds);
+    qp
 }
 
 fn parse_global_symbol_type_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<Scheme>) {
@@ -250,23 +252,40 @@ fn parse_global_symbol_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<E
 fn parse_type_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualType {
     assert_eq!(pair.as_rule(), Rule::type_qualified);
     let mut pairs = pair.into_inner();
-    let preds = if pairs.peek().unwrap().as_rule() == Rule::predicates {
+    let (preds, kinds) = if pairs.peek().unwrap().as_rule() == Rule::predicates {
         parse_predicates(pairs.next().unwrap(), src)
     } else {
-        vec![]
+        (vec![], vec![])
     };
     let ty = parse_type(pairs.next().unwrap());
-    QualType { preds, ty }
+    let mut qt = QualType { preds, ty };
+    qt.set_kinds_vec(&kinds);
+    qt
 }
 
-fn parse_predicates(pair: Pair<Rule>, src: &Arc<String>) -> Vec<Predicate> {
+fn parse_predicates(pair: Pair<Rule>, src: &Arc<String>) -> (Vec<Predicate>, Vec<KindPredicate>) {
     assert_eq!(pair.as_rule(), Rule::predicates);
     let pairs = pair.into_inner();
     let mut ps: Vec<Predicate> = Default::default();
+    let mut ks: Vec<KindPredicate> = Default::default();
     for pair in pairs {
-        ps.push(parse_predicate(pair, src));
+        if pair.as_rule() == Rule::predicate {
+            ps.push(parse_predicate(pair, src));
+        } else if pair.as_rule() == Rule::predicate_kind {
+            ks.push(parse_predicate_kind(pair, src));
+        } else {
+            unreachable!()
+        }
     }
-    ps
+    (ps, ks)
+}
+
+fn parse_predicate_kind(pair: Pair<Rule>, src: &Arc<String>) -> KindPredicate {
+    assert_eq!(pair.as_rule(), Rule::predicate_kind);
+    let mut pairs = pair.into_inner();
+    let name = pairs.next().unwrap().as_str().to_string();
+    let kind = parse_kind(pairs.next().unwrap(), src);
+    KindPredicate { name, kind }
 }
 
 fn parse_predicate(pair: Pair<Rule>, src: &Arc<String>) -> Predicate {
@@ -278,6 +297,41 @@ fn parse_predicate(pair: Pair<Rule>, src: &Arc<String>) -> Predicate {
         trait_id: TraitId { name: trait_name },
         ty,
     }
+}
+
+fn parse_kind(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
+    assert_eq!(pair.as_rule(), Rule::kind);
+    let mut pairs = pair.into_inner();
+    let mut res: Arc<Kind> = parse_kind_nlr(pairs.next().unwrap(), src);
+    for pair in pairs {
+        res = kind_arrow(res, parse_kind_nlr(pair, src));
+    }
+    res
+}
+
+fn parse_kind_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
+    assert_eq!(pair.as_rule(), Rule::kind_nlr);
+    let mut pairs = pair.into_inner();
+    let pair = pairs.next().unwrap();
+    if pair.as_rule() == Rule::kind_star {
+        parse_kind_star(pair, src)
+    } else if pair.as_rule() == Rule::kind_braced {
+        parse_kind_braced(pair, src)
+    } else {
+        unreachable!()
+    }
+}
+
+fn parse_kind_star(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
+    assert_eq!(pair.as_rule(), Rule::kind_star);
+    kind_star()
+}
+
+fn parse_kind_braced(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
+    assert_eq!(pair.as_rule(), Rule::kind_braced);
+    let mut pairs = pair.into_inner();
+    let pair = pairs.next().unwrap();
+    parse_kind(pair, src)
 }
 
 fn parse_module_decl(pair: Pair<Rule>, src: &Arc<String>) -> String {
