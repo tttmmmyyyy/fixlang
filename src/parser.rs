@@ -175,24 +175,45 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
 fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>) -> TraitInfo {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let mut pairs = pair.into_inner();
+    let kinds = if pairs.peek().unwrap().as_rule() == Rule::predicates {
+        let pair = pairs.next().unwrap();
+        let (preds, kinds) = parse_predicates(pair, src);
+        if !preds.is_empty() {
+            error_exit("in trait definition, specification of the kind of the type variable is only allowed.");
+        }
+        kinds
+    } else {
+        vec![]
+    };
     let tyvar = pairs.next().unwrap().as_str().to_string();
     let trait_name = pairs.next().unwrap().as_str().to_string();
     let methods: HashMap<Name, QualType> = pairs
-        .map(|pair| parse_trait_member_defn(pair, src))
+        .map(|pair| parse_trait_member_defn(pair, src, &tyvar))
         .collect();
-    TraitInfo {
+    let mut ti = TraitInfo {
         id: TraitId { name: trait_name },
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
         instances: vec![],
-    }
+        kind_predicates: kinds,
+    };
+    ti.apply_kind_predicates();
+    ti
 }
 
-fn parse_trait_member_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, QualType) {
+fn parse_trait_member_defn(
+    pair: Pair<Rule>,
+    src: &Arc<String>,
+    trait_tyvar_name: &Name,
+) -> (Name, QualType) {
     assert_eq!(pair.as_rule(), Rule::trait_member_defn);
     let mut pairs = pair.into_inner();
     let method_name = pairs.next().unwrap().as_str().to_string();
-    let qual_type = parse_type_qualified(pairs.next().unwrap(), src);
+    let qual_type = parse_type_qualified(
+        pairs.next().unwrap(),
+        src,
+        &HashSet::from([trait_tyvar_name.clone()]),
+    );
     (method_name, qual_type)
 }
 
@@ -235,7 +256,7 @@ fn parse_global_symbol_type_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, 
     assert_eq!(pair.as_rule(), Rule::global_symbol_type_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
-    let qual_type = parse_type_qualified(pairs.next().unwrap(), src);
+    let qual_type = parse_type_qualified(pairs.next().unwrap(), src, &HashSet::default());
     let preds = qual_type.preds.clone();
     let ty = qual_type.ty.clone();
     (name, Scheme::generalize(ty.free_vars(), preds, ty))
@@ -249,7 +270,11 @@ fn parse_global_symbol_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<E
     (name, expr)
 }
 
-fn parse_type_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualType {
+fn parse_type_qualified(
+    pair: Pair<Rule>,
+    src: &Arc<String>,
+    tyvars_already_kind_specified: &HashSet<Name>,
+) -> QualType {
     assert_eq!(pair.as_rule(), Rule::type_qualified);
     let mut pairs = pair.into_inner();
     let (preds, kinds) = if pairs.peek().unwrap().as_rule() == Rule::predicates {
@@ -257,6 +282,11 @@ fn parse_type_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualType {
     } else {
         (vec![], vec![])
     };
+    for kp in &kinds {
+        if tyvars_already_kind_specified.contains(&kp.name) {
+            error_exit("the kind of `{}` is already specified and cannot be specified here.");
+        }
+    }
     let ty = parse_type(pairs.next().unwrap());
     let mut qt = QualType { preds, ty };
     qt.set_kinds_vec(&kinds);

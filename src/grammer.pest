@@ -109,7 +109,7 @@ type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~  "(" ~ sep* ~ type
 // === Trait definitions ===
 trait_name = { ASCII_ALPHA_UPPER ~ var_char* }
 
-trait_defn = { "trait" ~ sep+ ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
+trait_defn = { "trait" ~ sep+ ~ predicates? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 
 trait_member_defn = { trait_member_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
 

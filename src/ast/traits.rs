@@ -26,6 +26,8 @@ pub struct TraitInfo {
     // and not "a -> String for a : Show".
     pub methods: HashMap<Name, QualType>,
     pub instances: Vec<TraitInstance>,
+    // Predicates at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
+    pub kind_predicates: Vec<KindPredicate>,
 }
 
 impl TraitInfo {
@@ -52,6 +54,25 @@ impl TraitInfo {
     // this function returns "a -> String" as type of "show" method.
     pub fn method_ty(&self, name: &Name) -> QualType {
         self.methods.get(name).unwrap().clone()
+    }
+
+    // Set kinds specififed kind_predicates to type variables
+    pub fn apply_kind_predicates(&mut self) {
+        if self.kind_predicates.len() >= 2 {
+            error_exit("in trait declaration, only one constraint is allowed.");
+        }
+        if self.kind_predicates.len() > 0 {
+            if self.kind_predicates[0].name != self.type_var.name {
+                error_exit(&format!(
+                    "the type variable {} is not used in trait declaration.",
+                    self.kind_predicates[0].name
+                ));
+            }
+            self.type_var.set_kind(self.kind_predicates[0].kind.clone());
+            for (_, method_ty) in &mut self.methods {
+                method_ty.set_kinds_vec(&self.kind_predicates)
+            }
+        }
     }
 }
 
@@ -186,6 +207,7 @@ impl Predicate {
 }
 
 // Statement such as "f: * -> *".
+#[derive(Clone)]
 pub struct KindPredicate {
     pub name: Name,
     pub kind: Arc<Kind>,
