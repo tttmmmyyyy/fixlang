@@ -179,7 +179,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>) -> TraitInfo {
         let pair = pairs.next().unwrap();
         let (preds, kinds) = parse_predicates(pair, src);
         if !preds.is_empty() {
-            error_exit("in trait definition, specification of the kind of the type variable is only allowed.");
+            error_exit("in trait definition, specification of the kinds are only allowed.");
         }
         kinds
     } else {
@@ -197,7 +197,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>) -> TraitInfo {
         instances: vec![],
         kind_predicates: kinds,
     };
-    ti.apply_kind_predicates();
+    ti.validate_set_kinds();
     ti
 }
 
@@ -246,9 +246,9 @@ fn parse_predicate_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualPredica
     let predicate = parse_predicate(pairs.next().unwrap(), src);
     let mut qp = QualPredicate {
         context: predicates,
+        kind_preds: kinds,
         predicate,
     };
-    qp.set_kinds_vec(&kinds);
     qp
 }
 
@@ -282,14 +282,12 @@ fn parse_type_qualified(
     } else {
         (vec![], vec![])
     };
-    for kp in &kinds {
-        if tyvars_already_kind_specified.contains(&kp.name) {
-            error_exit("the kind of `{}` is already specified and cannot be specified here.");
-        }
-    }
     let ty = parse_type(pairs.next().unwrap());
-    let mut qt = QualType { preds, ty };
-    qt.set_kinds_vec(&kinds);
+    let mut qt = QualType {
+        preds,
+        ty,
+        kind_preds: kinds,
+    };
     qt
 }
 

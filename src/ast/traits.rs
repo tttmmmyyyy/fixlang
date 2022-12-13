@@ -57,7 +57,7 @@ impl TraitInfo {
     }
 
     // Set kinds specififed kind_predicates to type variables
-    pub fn apply_kind_predicates(&mut self) {
+    pub fn validate_set_kinds(&mut self) {
         if self.kind_predicates.len() >= 2 {
             error_exit("in trait declaration, only one constraint is allowed.");
         }
@@ -73,6 +73,7 @@ impl TraitInfo {
                 method_ty.set_kinds_vec(&self.kind_predicates)
             }
         }
+        // todo!("also check kinds in global symbols.")
     }
 }
 
@@ -113,7 +114,8 @@ impl TraitInstance {
         let trait_tyvar = &trait_info.type_var.name;
         let impl_type = self.qual_pred.predicate.ty.clone();
         let s = Substitution::single(&trait_tyvar, impl_type);
-        let mut method_qualty = s.substitute_qualtype(&trait_info.method_ty(method_name));
+        let mut method_qualty = trait_info.method_ty(method_name);
+        s.substitute_qualtype(&mut method_qualty);
 
         let ty = method_qualty.ty.clone();
         let vars = ty.free_vars();
@@ -157,6 +159,7 @@ impl TraitInfo {
 #[derive(Clone)]
 pub struct QualPredicate {
     pub context: Vec<Predicate>,
+    pub kind_preds: Vec<KindPredicate>,
     pub predicate: Predicate,
 }
 
@@ -172,6 +175,7 @@ impl QualPredicate {
 #[derive(Clone)]
 pub struct QualType {
     pub preds: Vec<Predicate>,
+    pub kind_preds: Vec<KindPredicate>,
     pub ty: Arc<TypeNode>,
 }
 

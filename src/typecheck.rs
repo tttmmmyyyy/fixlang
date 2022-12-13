@@ -189,13 +189,11 @@ impl Substitution {
     }
 
     // Apply substitution to qualified type.
-    pub fn substitute_qualtype(&self, qual_type: &QualType) -> QualType {
-        let mut preds = qual_type.preds.clone();
-        for pred in &mut preds {
+    pub fn substitute_qualtype(&self, qual_type: &mut QualType) {
+        for pred in &mut qual_type.preds {
             self.substitute_predicate(pred);
         }
-        let ty = self.substitute_type(&qual_type.ty);
-        QualType { preds, ty }
+        qual_type.ty = self.substitute_type(&qual_type.ty);
     }
 
     // Calculate minimum substitution to unify two types.
