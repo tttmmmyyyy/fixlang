@@ -190,15 +190,13 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>) -> TraitInfo {
     let methods: HashMap<Name, QualType> = pairs
         .map(|pair| parse_trait_member_defn(pair, src, &tyvar))
         .collect();
-    let mut ti = TraitInfo {
+    TraitInfo {
         id: TraitId { name: trait_name },
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
         instances: vec![],
         kind_predicates: kinds,
-    };
-    ti.validate_set_kinds();
-    ti
+    }
 }
 
 fn parse_trait_member_defn(

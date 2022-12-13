@@ -373,7 +373,7 @@ impl TypeNode {
 // Type scheme.
 #[derive(Clone)]
 pub struct Scheme {
-    pub vars: HashMap<String, Arc<Kind>>,
+    pub vars: HashMap<Name, Arc<Kind>>,
     pub preds: Vec<Predicate>,
     pub ty: Arc<TypeNode>,
 }
@@ -383,6 +383,22 @@ impl Scheme {
     pub fn set_ty(&self, ty: Arc<TypeNode>) -> Arc<Scheme> {
         let mut ret = self.clone();
         ret.ty = ty;
+        Arc::new(ret)
+    }
+
+    pub fn set_kinds(&self, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) -> Arc<Scheme> {
+        let mut ret = self.clone();
+        let mut scope: HashMap<Name, Arc<Kind>> = Default::default();
+        QualPredicate::extend_kind_scope(&mut scope, &ret.preds, &vec![], trait_kind_map);
+        for p in &mut ret.preds {
+            p.set_kinds(&scope);
+        }
+        ret.ty = ret.ty.set_kinds(&scope);
+        for (v, k) in &mut ret.vars {
+            if scope.contains_key(v) {
+                *k = scope[v].clone();
+            }
+        }
         Arc::new(ret)
     }
 }

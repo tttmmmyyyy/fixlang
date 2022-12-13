@@ -370,4 +370,12 @@ impl FixModule {
             }
         }
     }
+
+    pub fn set_kinds(&mut self) {
+        self.trait_env.set_validate_kinds();
+        let trait_kind_map = self.trait_env.trait_kind_map();
+        for (_, sym) in &mut self.global_symbols {
+            sym.ty = sym.ty.set_kinds(&trait_kind_map);
+        }
+    }
 }

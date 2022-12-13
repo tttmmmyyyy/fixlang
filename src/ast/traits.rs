@@ -56,10 +56,10 @@ impl TraitInfo {
         self.methods.get(name).unwrap().clone()
     }
 
-    // Set kinds specififed kind_predicates to type variables
-    pub fn validate_set_kinds(&mut self) {
+    // Validate kind_predicates and set it to self.type_var.
+    pub fn set_trait_kind(&mut self) {
         if self.kind_predicates.len() >= 2 {
-            error_exit("in trait declaration, only one constraint is allowed.");
+            error_exit("in trait declaration, only one constraint (specification of kind of the type variable trait is implemented to) is allowed.");
         }
         if self.kind_predicates.len() > 0 {
             if self.kind_predicates[0].name != self.type_var.name {
@@ -69,11 +69,14 @@ impl TraitInfo {
                 ));
             }
             self.type_var.set_kind(self.kind_predicates[0].kind.clone());
-            for (_, method_ty) in &mut self.methods {
-                method_ty.set_kinds_vec(&self.kind_predicates)
-            }
         }
-        // todo!("also check kinds in global symbols.")
+    }
+
+    fn set_kinds_to_methods(&mut self, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
+        let mut scope = KindPredicate::vec_to_map(self.kind_predicates.clone());
+        for (_, method_ty) in &mut self.methods {
+            method_ty.set_kinds(&mut scope, trait_kind_map)
+        }
     }
 }
 
@@ -164,11 +167,53 @@ pub struct QualPredicate {
 }
 
 impl QualPredicate {
-    pub fn set_kinds_vec(&mut self, kinds: &Vec<KindPredicate>) {
-        for ctx in &mut self.context {
-            ctx.set_kinds_vec(kinds);
+    pub fn extend_kind_scope(
+        scope: &mut HashMap<Name, Arc<Kind>>,
+        preds: &Vec<Predicate>,
+        kind_preds: &Vec<KindPredicate>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+    ) {
+        let mut new_kind_bounds: HashMap<Name, Arc<Kind>> = Default::default();
+        for p in preds {
+            let tyvar = match &p.ty.ty {
+                Type::TyVar(tv) => tv.name.clone(),
+                _ => {
+                    error_exit("currently, trait bound in the context has to be a form `type-variable : trait`.");
+                }
+            };
+            let trait_id = &p.trait_id;
+            if !trait_kind_map.contains_key(trait_id) {
+                error_exit(&format!("unknown kind: {}", trait_id.to_string()));
+            }
+            let kind = trait_kind_map[trait_id].clone();
+            new_kind_bounds.insert(tyvar, kind);
         }
-        self.predicate.set_kinds_vec(kinds);
+        for kp in kind_preds {
+            let tyvar = kp.name.clone();
+            let kind = kp.kind.clone();
+            new_kind_bounds.insert(tyvar, kind);
+        }
+        for (tyvar, kind) in new_kind_bounds {
+            if scope.contains_key(&tyvar) {
+                if scope[&tyvar] != kind {
+                    error_exit(&format!("kind mismatch on {}", tyvar));
+                }
+            } else {
+                scope.insert(tyvar, kind);
+            }
+        }
+    }
+
+    pub fn set_kinds(
+        &mut self,
+        scope: &mut HashMap<Name, Arc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+    ) {
+        Self::extend_kind_scope(scope, &self.context, &self.kind_preds, trait_kind_map);
+        for ctx in &mut self.context {
+            ctx.set_kinds(scope);
+        }
+        self.predicate.set_kinds(scope);
     }
 }
 
@@ -185,11 +230,16 @@ impl QualType {
         self.ty.free_vars()
     }
 
-    pub fn set_kinds_vec(&mut self, kinds: &Vec<KindPredicate>) {
+    pub fn set_kinds(
+        &mut self,
+        scope: &mut HashMap<Name, Arc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+    ) {
+        QualPredicate::extend_kind_scope(scope, &self.preds, &self.kind_preds, trait_kind_map);
         for p in &mut self.preds {
-            p.set_kinds_vec(kinds);
+            p.set_kinds(scope);
         }
-        self.ty = self.ty.set_kinds_vec(kinds);
+        self.ty = self.ty.set_kinds(scope);
     }
 }
 
@@ -205,8 +255,8 @@ impl Predicate {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
 
-    pub fn set_kinds_vec(&mut self, kinds: &Vec<KindPredicate>) {
-        self.ty.set_kinds_vec(kinds);
+    pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
+        self.ty.set_kinds(scope);
     }
 }
 
@@ -215,6 +265,16 @@ impl Predicate {
 pub struct KindPredicate {
     pub name: Name,
     pub kind: Arc<Kind>,
+}
+
+impl KindPredicate {
+    pub fn vec_to_map(vec: Vec<KindPredicate>) -> HashMap<Name, Arc<Kind>> {
+        let mut map: HashMap<Name, Arc<Kind>> = Default::default();
+        for kp in vec {
+            map.insert(kp.name, kp.kind);
+        }
+        map
+    }
 }
 
 // Trait environments.
@@ -446,5 +506,24 @@ impl TraitEnv {
         // Every predicate has to be hnf.
         assert!(ret.is_none() || ret.as_ref().unwrap().iter().all(|p| p.ty.is_hnf()));
         ret
+    }
+
+    // See each TraitInfo's kind_predicates and set kinds of traits and methods.
+    pub fn set_validate_kinds(&mut self) {
+        for (id, ti) in &mut self.traits {
+            ti.set_trait_kind();
+        }
+        let trait_kind_map = self.trait_kind_map();
+        for (id, ti) in &mut self.traits {
+            ti.set_kinds_to_methods(&trait_kind_map);
+        }
+    }
+
+    pub fn trait_kind_map(&self) -> HashMap<TraitId, Arc<Kind>> {
+        let mut res: HashMap<TraitId, Arc<Kind>> = HashMap::default();
+        for (id, ti) in &self.traits {
+            res.insert(id.clone(), ti.type_var.kind.clone());
+        }
+        res
     }
 }

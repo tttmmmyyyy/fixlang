@@ -21,6 +21,9 @@ fn execute_main_module<'c>(
 }
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
+    // Set kinds that appear in the module.
+    fix_mod.set_kinds();
+
     // Add built-in symbols to module.
     add_builtin_symbols(&mut fix_mod);
 
