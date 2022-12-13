@@ -834,6 +834,36 @@ pub fn test44() {
 
 #[test]
 #[serial]
+pub fn test45() {
+    // Test HKT.
+    let source = r"
+        module Main;
+
+        trait [f:*->*] f : Functor {
+            map : (a => b) => f a => f b;
+        }
+
+        impl Array : Functor {
+            map = \f -> \arr -> (
+                let e = readArray arr 0;
+                let e = f e;
+                newArray 1 e
+            );
+        }
+
+        main : Int;
+        main = (
+            let arr = newArray 1 false;
+            let arr = arr & map (\e -> if e then 0 else -1);
+            readArray arr 0
+        );
+    ";
+    let answer = -1;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"{- head -} module Main; 
