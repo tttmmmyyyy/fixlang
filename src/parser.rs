@@ -98,7 +98,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut pairs = pair.into_inner();
     let module_name = parse_module_decl(pairs.next().unwrap(), src);
-    let mut fix_mod = FixModule::new(module_name);
+    let mut fix_mod = FixModule::new(module_name.clone());
 
     let mut type_decls: Vec<TypeDecl> = Vec::new();
     let mut global_symbols_defns: HashMap<Name, (Option<Arc<Scheme>>, Option<Arc<ExprNode>>)> =
@@ -138,7 +138,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
                 }
             }
             Rule::trait_defn => {
-                trait_infos.push(parse_trait_defn(pair, src));
+                trait_infos.push(parse_trait_defn(pair, src, &module_name));
             }
             Rule::trait_impl => {
                 trait_impls.push(parse_trait_impl(pair, src));
@@ -148,7 +148,6 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     }
 
     fix_mod.set_type_decls(type_decls);
-    fix_mod.calculate_tycons();
     fix_mod.set_traits(trait_infos, trait_impls);
 
     let mut global_symbols: HashMap<NameSpacedName, GlobalSymbol> = Default::default();
@@ -172,7 +171,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     fix_mod
 }
 
-fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>) -> TraitInfo {
+fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>, module_name: &str) -> TraitInfo {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let mut pairs = pair.into_inner();
     let kinds = if pairs.peek().unwrap().as_rule() == Rule::predicates {
@@ -191,7 +190,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>) -> TraitInfo {
         .map(|pair| parse_trait_member_defn(pair, src, &tyvar))
         .collect();
     TraitInfo {
-        id: TraitId { name: trait_name },
+        id: TraitId::new(&[module_name], trait_name),
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
         instances: vec![],
@@ -320,7 +319,7 @@ fn parse_predicate(pair: Pair<Rule>, src: &Arc<String>) -> Predicate {
     let ty = parse_type(pairs.next().unwrap());
     let trait_name = pairs.next().unwrap().as_str().to_string();
     Predicate {
-        trait_id: TraitId { name: trait_name },
+        trait_id: TraitId::new_by_name(trait_name),
         ty,
     }
 }
@@ -634,7 +633,7 @@ fn parse_type_var(pair: Pair<Rule>) -> Arc<TypeNode> {
 
 fn parse_type_tycon(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_tycon);
-    type_tycon(&tycon(type_expr.as_str()))
+    type_tycon(&tycon(NameSpacedName::from_strs(&[], type_expr.as_str())))
 }
 
 fn parse_type_braced(type_expr: Pair<Rule>) -> Arc<TypeNode> {

@@ -316,6 +316,14 @@ impl NameSpace {
         }
         return true;
     }
+
+    pub fn len(&self) -> usize {
+        self.names.len()
+    }
+
+    pub fn module(&self) -> Name {
+        self.names[0].clone()
+    }
 }
 
 #[derive(Clone)]
@@ -354,6 +362,10 @@ impl NameSpacedName {
 
     pub fn to_string(&self) -> String {
         self.namespace.to_string() + "." + &self.name
+    }
+
+    pub fn is_suffix(&self, other: &NameSpacedName) -> bool {
+        self.name == other.name && self.namespace.is_suffix(&other.namespace)
     }
 }
 

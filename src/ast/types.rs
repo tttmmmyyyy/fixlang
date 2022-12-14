@@ -41,18 +41,20 @@ impl Kind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Hash, Eq)]
 pub struct TyCon {
-    pub name: String,
+    pub name: NameSpacedName,
 }
 
-impl PartialEq for TyCon {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+impl TyCon {
+    pub fn new(nsn: NameSpacedName) -> TyCon {
+        TyCon { name: nsn }
+    }
+
+    pub fn to_string(&self) -> String {
+        self.name.to_string()
     }
 }
-
-impl Eq for TyCon {}
 
 // Node of type ast tree with user defined additional information
 pub struct TypeNode {
@@ -200,13 +202,13 @@ impl TypeNode {
     }
 
     // Calculate kind.
-    pub fn kind(&self, tycons: &HashMap<String, Arc<Kind>>) -> Arc<Kind> {
+    pub fn kind(&self, type_env: &TypeEnv) -> Arc<Kind> {
         match &self.ty {
             Type::TyVar(tv) => tv.kind.clone(),
-            Type::TyCon(tc) => tycons[&tc.name].clone(),
+            Type::TyCon(tc) => type_env.kind(&tc),
             Type::TyApp(fun, arg) => {
-                let arg_kind = arg.kind(tycons);
-                let fun_kind = fun.kind(tycons);
+                let arg_kind = arg.kind(type_env);
+                let fun_kind = fun.kind(type_env);
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
@@ -218,10 +220,10 @@ impl TypeNode {
                 }
             }
             Type::FunTy(arg, ret) => {
-                if arg.kind(tycons) != kind_star() {
+                if arg.kind(type_env) != kind_star() {
                     error_exit("Kind mismatch.")
                 }
-                if ret.kind(tycons) != kind_star() {
+                if ret.kind(type_env) != kind_star() {
                     error_exit("Kind mismatch.")
                 }
                 kind_star()
@@ -308,7 +310,7 @@ impl TypeNode {
                 res += &dst;
                 res
             }
-            Type::TyCon(tc) => tc.name.clone(),
+            Type::TyCon(tc) => tc.to_string(),
         }
     }
 }
@@ -352,10 +354,8 @@ pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }
 
-pub fn tycon(name: &str) -> Arc<TyCon> {
-    Arc::new(TyCon {
-        name: String::from(name),
-    })
+pub fn tycon(name: NameSpacedName) -> Arc<TyCon> {
+    Arc::new(TyCon { name })
 }
 
 // Additional information of types.
@@ -421,15 +421,11 @@ impl Scheme {
         Arc::new(ret)
     }
 
-    pub fn check_kinds(
-        &self,
-        tycons: &HashMap<Name, Arc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
-    ) {
+    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
         for p in &self.preds {
-            p.check_kinds(tycons, trait_kind_map);
+            p.check_kinds(type_env, trait_kind_map);
         }
-        self.ty.kind(tycons);
+        self.ty.kind(type_env);
     }
 
     // Create new instance.

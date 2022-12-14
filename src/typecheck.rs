@@ -197,20 +197,16 @@ impl Substitution {
     }
 
     // Calculate minimum substitution to unify two types.
-    pub fn unify(
-        tycons: &HashMap<String, Arc<Kind>>,
-        ty1: &Arc<TypeNode>,
-        ty2: &Arc<TypeNode>,
-    ) -> Option<Self> {
+    pub fn unify(type_env: &TypeEnv, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> Option<Self> {
         match &ty1.ty {
             Type::TyVar(var1) => {
-                return Self::unify_tyvar(tycons, &var1, ty2);
+                return Self::unify_tyvar(type_env, &var1, ty2);
             }
             _ => {}
         }
         match &ty2.ty {
             Type::TyVar(var2) => {
-                return Self::unify_tyvar(tycons, &var2, ty1);
+                return Self::unify_tyvar(type_env, &var2, ty1);
             }
             _ => {}
         }
@@ -231,13 +227,13 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::unify(tycons, &fun1, &fun2) {
+                    match Self::unify(type_env, &fun1, &fun2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
                     let arg1 = ret.substitute_type(arg1);
                     let arg2 = ret.substitute_type(arg2);
-                    match Self::unify(tycons, &arg1, &arg2) {
+                    match Self::unify(type_env, &arg1, &arg2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
@@ -250,13 +246,13 @@ impl Substitution {
             Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
                 Type::FunTy(arg_ty2, ret_ty2) => {
                     let mut ret = Self::default();
-                    match Self::unify(tycons, &arg_ty1, &arg_ty2) {
+                    match Self::unify(type_env, &arg_ty1, &arg_ty2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
                     let ret_ty1 = ret.substitute_type(ret_ty1);
                     let ret_ty2 = ret.substitute_type(ret_ty2);
-                    match Self::unify(tycons, &ret_ty1, &ret_ty2) {
+                    match Self::unify(type_env, &ret_ty1, &ret_ty2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
@@ -270,11 +266,7 @@ impl Substitution {
     }
 
     // Subroutine of unify().
-    fn unify_tyvar(
-        tycons: &HashMap<String, Arc<Kind>>,
-        tyvar1: &Arc<TyVar>,
-        ty2: &Arc<TypeNode>,
-    ) -> Option<Self> {
+    fn unify_tyvar(type_env: &TypeEnv, tyvar1: &Arc<TyVar>, ty2: &Arc<TypeNode>) -> Option<Self> {
         match &ty2.ty {
             Type::TyVar(tyvar2) => {
                 if tyvar1.name == tyvar2.name {
@@ -287,20 +279,16 @@ impl Substitution {
         if ty2.free_vars().contains_key(&tyvar1.name) {
             panic!("unify_tyvar is making circular substitution.")
         }
-        if tyvar1.kind != ty2.kind(tycons) {
+        if tyvar1.kind != ty2.kind(type_env) {
             error_exit("Kinds do not match.");
         }
         Some(Self::single(&tyvar1.name, ty2.clone()))
     }
 
     // Calculate minimum substitution s such that `s(ty1) = ty2`.
-    pub fn matching(
-        tycons: &HashMap<String, Arc<Kind>>,
-        ty1: &Arc<TypeNode>,
-        ty2: &Arc<TypeNode>,
-    ) -> Option<Self> {
+    pub fn matching(type_env: &TypeEnv, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> Option<Self> {
         match &ty1.ty {
-            Type::TyVar(v1) => Self::unify_tyvar(tycons, v1, ty2),
+            Type::TyVar(v1) => Self::unify_tyvar(type_env, v1, ty2),
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
                     if tc1 == tc2 {
@@ -314,7 +302,7 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::matching(tycons, fun1, fun2) {
+                    match Self::matching(type_env, fun1, fun2) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -322,7 +310,7 @@ impl Substitution {
                         }
                         None => return None,
                     }
-                    match Self::matching(tycons, arg1, arg2) {
+                    match Self::matching(type_env, arg1, arg2) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -337,7 +325,7 @@ impl Substitution {
             Type::FunTy(src1, dst1) => match &ty2.ty {
                 Type::FunTy(src2, dst2) => {
                     let mut ret = Self::default();
-                    match Self::matching(tycons, src1, src2) {
+                    match Self::matching(type_env, src1, src2) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -345,7 +333,7 @@ impl Substitution {
                         }
                         None => return None,
                     }
-                    match Self::matching(tycons, dst1, dst2) {
+                    match Self::matching(type_env, dst1, dst2) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -376,18 +364,18 @@ pub struct TypeCheckContext {
     // Trait environment.
     trait_env: TraitEnv,
     // List of type constructors.
-    tycons: Arc<HashMap<Name, Arc<Kind>>>,
+    type_env: TypeEnv,
 }
 
 impl TypeCheckContext {
     // Creaate instance.
-    pub fn new(trait_env: TraitEnv, tycons: Arc<HashMap<Name, Arc<Kind>>>) -> Self {
+    pub fn new(trait_env: TraitEnv, type_env: TypeEnv) -> Self {
         Self {
             tyvar_id: Default::default(),
             scope: Default::default(),
             substitution: Default::default(),
             predicates: Default::default(),
-            tycons,
+            type_env,
             trait_env,
         }
     }
@@ -450,7 +438,7 @@ impl TypeCheckContext {
         for p in &mut preds {
             self.substitute_predicate(p);
         }
-        let preds = match self.trait_env.reduce(&preds, &self.tycons) {
+        let preds = match self.trait_env.reduce(&preds, &self.type_env) {
             Some(ps) => ps,
             None => self.error_exit_on_predicates(),
         };
@@ -513,7 +501,7 @@ impl TypeCheckContext {
     pub fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         let ty1 = &self.substitute_type(ty1);
         let ty2 = &self.substitute_type(ty2);
-        match Substitution::unify(&self.tycons, ty1, ty2) {
+        match Substitution::unify(&self.type_env, ty1, ty2) {
             Some(sub) => {
                 self.substitution.add_substitution(&sub);
                 return true;
@@ -532,7 +520,7 @@ impl TypeCheckContext {
             self.substitute_predicate(p);
         }
         self.predicates.append(&mut preds);
-        match self.trait_env.reduce(&self.predicates, &self.tycons) {
+        match self.trait_env.reduce(&self.predicates, &self.type_env) {
             Some(ps) => {
                 self.predicates = ps;
                 return true;
@@ -707,7 +695,7 @@ impl TypeCheckContext {
         self.reduce_predicates();
         let required_preds = std::mem::replace(&mut self.predicates, Default::default());
 
-        let s = Substitution::matching(&self.tycons, &deduced_ty, &specified_ty);
+        let s = Substitution::matching(&self.type_env, &deduced_ty, &specified_ty);
         if s.is_none() {
             error_exit(&format!(
                 "type mismatch. Expected `{}`, found `{}`",
@@ -719,7 +707,7 @@ impl TypeCheckContext {
         for p in required_preds {
             let mut p = p.clone();
             s.substitute_predicate(&mut p);
-            if !self.trait_env.entail(&given_preds, &p, &self.tycons) {
+            if !self.trait_env.entail(&given_preds, &p, &self.type_env) {
                 error_exit(&format!(
                     "condition `{}` is necessary for this expression but not assumed in the specified type.",
                     p.to_string()

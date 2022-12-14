@@ -21,6 +21,13 @@ fn execute_main_module<'c>(
 }
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
+    // Calculate list of tyoe constructors.
+    fix_mod.calculate_type_env();
+
+    // Set Namespaces to tycons that appear in the module.
+    fix_mod.set_namespace_of_tycons();
+    fix_mod.set_namespace_of_traits();
+
     // Set and check kinds that appear in the module.
     fix_mod.set_kinds();
     fix_mod.check_kinds();
@@ -32,7 +39,7 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     fix_mod.create_trait_method_symbols();
 
     // Create typeckecker.
-    let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone(), fix_mod.tycons());
+    let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone(), fix_mod.type_env());
 
     // Register type declarations of global symbols to typechecker.
     for (name, defn) in &fix_mod.global_symbols {

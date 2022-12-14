@@ -4,12 +4,30 @@ use super::*;
 #[derive(Hash, Eq, PartialEq, Clone)]
 pub struct TraitId {
     pub name: Name,
-    // TODO: add namespace.
+    pub namespace: Option<NameSpace>,
 }
 
 impl TraitId {
+    pub fn new(ns: &[&str], name: Name) -> TraitId {
+        TraitId {
+            name,
+            namespace: Some(NameSpace::new_str(ns)),
+        }
+    }
+
+    pub fn new_by_name(name: Name) -> TraitId {
+        TraitId {
+            name,
+            namespace: None,
+        }
+    }
+
     pub fn to_string(&self) -> String {
-        self.name.clone()
+        self.namespaced_name().to_string()
+    }
+
+    pub fn namespaced_name(&self) -> NameSpacedName {
+        NameSpacedName::new(&self.namespace.as_ref().unwrap().clone(), &self.name)
     }
 }
 
@@ -135,14 +153,14 @@ impl TraitInstance {
 
 impl TraitInfo {
     // Add a instance to a trait.
-    pub fn add_instance(&mut self, inst: TraitInstance, tycons: &HashMap<String, Arc<Kind>>) {
+    pub fn add_instance(&mut self, inst: TraitInstance, type_env: &TypeEnv) {
         // Check trait id.
         assert!(self.id == inst.qual_pred.predicate.trait_id);
 
         // Check overlapping instance.
         for i in &self.instances {
             if Substitution::unify(
-                tycons,
+                type_env,
                 &inst.qual_pred.predicate.ty,
                 &i.qual_pred.predicate.ty,
             )
@@ -259,13 +277,9 @@ impl Predicate {
         self.ty.set_kinds(scope);
     }
 
-    pub fn check_kinds(
-        &self,
-        tycons: &HashMap<Name, Arc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
-    ) {
+    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
         let expected = &trait_kind_map[&self.trait_id];
-        let found = self.ty.kind(tycons);
+        let found = self.ty.kind(type_env);
         if *expected != found {
             error_exit(&format!(
                 "kind mismatch. Expect: {}, found: {}",
@@ -305,13 +319,13 @@ impl TraitEnv {
         &mut self,
         trait_infos: Vec<TraitInfo>,
         trait_impls: Vec<TraitInstance>,
-        tycons: &HashMap<Name, Arc<Kind>>,
+        type_env: &TypeEnv,
     ) {
         for trait_info in trait_infos {
             self.add_trait(trait_info);
         }
         for trait_impl in trait_impls {
-            self.add_instance(trait_impl, tycons);
+            self.add_instance(trait_impl, type_env);
         }
     }
 
@@ -328,7 +342,7 @@ impl TraitEnv {
     }
 
     // Add a instance.
-    pub fn add_instance(&mut self, inst: TraitInstance, tycons: &HashMap<String, Arc<Kind>>) {
+    pub fn add_instance(&mut self, inst: TraitInstance, type_env: &TypeEnv) {
         let trait_id = &inst.qual_pred.predicate.trait_id;
 
         // Check existaice of trait.
@@ -352,7 +366,7 @@ impl TraitEnv {
         self.traits
             .get_mut(trait_id)
             .unwrap()
-            .add_instance(inst, tycons)
+            .add_instance(inst, type_env)
     }
 
     // Reduce predicate using trait instances.
@@ -360,10 +374,10 @@ impl TraitEnv {
     pub fn reduce_to_instance_contexts_one(
         &self,
         p: &Predicate,
-        tycons: &HashMap<String, Arc<Kind>>,
+        type_env: &TypeEnv,
     ) -> Option<Vec<Predicate>> {
         for inst in &self.traits[&p.trait_id].instances {
-            match Substitution::matching(tycons, &inst.qual_pred.predicate.ty, &p.ty) {
+            match Substitution::matching(type_env, &inst.qual_pred.predicate.ty, &p.ty) {
                 Some(s) => {
                     let ret = inst
                         .qual_pred
@@ -401,26 +415,21 @@ impl TraitEnv {
     // }
 
     // Entailment.
-    pub fn entail(
-        &self,
-        ps: &Vec<Predicate>,
-        p: &Predicate,
-        tycons: &HashMap<String, Arc<Kind>>,
-    ) -> bool {
+    pub fn entail(&self, ps: &Vec<Predicate>, p: &Predicate, type_env: &TypeEnv) -> bool {
         // If p in contained in ps, then ok.
         for q in ps {
             if q.trait_id == p.trait_id {
-                if Substitution::matching(tycons, &q.ty, &p.ty).is_some() {
+                if Substitution::matching(type_env, &q.ty, &p.ty).is_some() {
                     return true;
                 }
             }
         }
         // Try reducing by instances.
-        match self.reduce_to_instance_contexts_one(p, tycons) {
+        match self.reduce_to_instance_contexts_one(p, type_env) {
             Some(ctxs) => {
                 let mut all_ok = true;
                 for ctx in ctxs {
-                    if !self.entail(ps, &ctx, tycons) {
+                    if !self.entail(ps, &ctx, type_env) {
                         all_ok = false;
                         break;
                     }
@@ -432,16 +441,12 @@ impl TraitEnv {
     }
 
     // Reduce a predicate to head normal form.
-    pub fn reduce_to_hnf(
-        &self,
-        p: &Predicate,
-        tycons: &HashMap<String, Arc<Kind>>,
-    ) -> Option<Vec<Predicate>> {
+    pub fn reduce_to_hnf(&self, p: &Predicate, type_env: &TypeEnv) -> Option<Vec<Predicate>> {
         if p.ty.is_hnf() {
             return Some(vec![p.clone()]);
         }
-        self.reduce_to_instance_contexts_one(p, tycons)
-            .map(|ctxs| self.reduce_to_hnfs(&ctxs, tycons))
+        self.reduce_to_instance_contexts_one(p, type_env)
+            .map(|ctxs| self.reduce_to_hnfs(&ctxs, type_env))
             .flatten()
     }
 
@@ -449,11 +454,11 @@ impl TraitEnv {
     pub fn reduce_to_hnfs(
         &self,
         ps: &Vec<Predicate>,
-        tycons: &HashMap<String, Arc<Kind>>,
+        type_env: &TypeEnv,
     ) -> Option<Vec<Predicate>> {
         let mut ret: Vec<Predicate> = Default::default();
         for p in ps {
-            match self.reduce_to_hnf(p, tycons) {
+            match self.reduce_to_hnf(p, type_env) {
                 Some(mut v) => ret.append(&mut v),
                 None => return None,
             }
@@ -462,11 +467,7 @@ impl TraitEnv {
     }
 
     // Simplify a set of predicates by entail.
-    pub fn simplify_predicates(
-        &self,
-        ps: &Vec<Predicate>,
-        tycons: &HashMap<String, Arc<Kind>>,
-    ) -> Vec<Predicate> {
+    pub fn simplify_predicates(&self, ps: &Vec<Predicate>, type_env: &TypeEnv) -> Vec<Predicate> {
         let mut ps = ps.clone();
         let mut i = 0 as usize;
         while i < ps.len() {
@@ -475,7 +476,7 @@ impl TraitEnv {
                 .enumerate()
                 .filter_map(|(j, p)| if i == j { None } else { Some(p.clone()) })
                 .collect();
-            if self.entail(&qs, &ps[i], tycons) {
+            if self.entail(&qs, &ps[i], type_env) {
                 ps.remove(i);
             } else {
                 i += 1;
@@ -510,14 +511,10 @@ impl TraitEnv {
     // Returns qs when satisfaction of ps are reduced to qs.
     // In particular, returns empty when ps are satisfied.
     // Returns None when p cannot be satisfied.
-    pub fn reduce(
-        &self,
-        ps: &Vec<Predicate>,
-        tycons: &HashMap<String, Arc<Kind>>,
-    ) -> Option<Vec<Predicate>> {
+    pub fn reduce(&self, ps: &Vec<Predicate>, type_env: &TypeEnv) -> Option<Vec<Predicate>> {
         let ret = self
-            .reduce_to_hnfs(ps, tycons)
-            .map(|ps| self.simplify_predicates(&ps, tycons));
+            .reduce_to_hnfs(ps, type_env)
+            .map(|ps| self.simplify_predicates(&ps, type_env));
 
         // Every predicate has to be hnf.
         assert!(ret.is_none() || ret.as_ref().unwrap().iter().all(|p| p.ty.is_hnf()));
@@ -543,16 +540,12 @@ impl TraitEnv {
         res
     }
 
-    pub fn check_kinds(
-        &self,
-        tycons: &HashMap<Name, Arc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
-    ) {
+    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
         for (_, trait_info) in &self.traits {
             for (name, _) in &trait_info.methods {
                 trait_info
                     .method_scheme(&name)
-                    .check_kinds(tycons, trait_kind_map);
+                    .check_kinds(type_env, trait_kind_map);
             }
         }
     }

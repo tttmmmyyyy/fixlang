@@ -7,27 +7,36 @@ const INT_NAME: &str = "Int";
 const BOOL_NAME: &str = "Bool";
 const ARRAY_NAME: &str = "Array";
 
-pub fn bulitin_type_to_kind_map() -> HashMap<String, Arc<Kind>> {
+pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
     let mut ret = HashMap::new();
-    ret.insert(INT_NAME.to_string(), kind_star());
-    ret.insert(BOOL_NAME.to_string(), kind_star());
-    ret.insert(ARRAY_NAME.to_string(), kind_arrow(kind_star(), kind_star()));
+    ret.insert(
+        TyCon::new(NameSpacedName::from_strs(&[STD_NAME], INT_NAME)),
+        kind_star(),
+    );
+    ret.insert(
+        TyCon::new(NameSpacedName::from_strs(&[STD_NAME], BOOL_NAME)),
+        kind_star(),
+    );
+    ret.insert(
+        TyCon::new(NameSpacedName::from_strs(&[STD_NAME], ARRAY_NAME)),
+        kind_arrow(kind_star(), kind_star()),
+    );
     ret
 }
 
 // Get Int type.
 pub fn int_lit_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(INT_NAME))
+    type_tycon(&tycon(NameSpacedName::from_strs(&[STD_NAME], INT_NAME)))
 }
 
 // Get Bool type.
 pub fn bool_lit_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(BOOL_NAME))
+    type_tycon(&tycon(NameSpacedName::from_strs(&[STD_NAME], BOOL_NAME)))
 }
 
 // Get Array type.
 pub fn array_lit_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(ARRAY_NAME))
+    type_tycon(&tycon(NameSpacedName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
@@ -422,12 +431,12 @@ pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // `new` built-in function for a given struct.
-pub fn struct_new_lit(struct_name: &str, field_names: Vec<String>) -> Arc<ExprNode> {
+pub fn struct_new_lit(struct_name: &NameSpacedName, field_names: Vec<String>) -> Arc<ExprNode> {
     let free_vars = field_names
         .iter()
         .map(|name| NameSpacedName::local(name))
         .collect();
-    let name = format!("{}.new {}", struct_name, field_names.join(" "));
+    let name = format!("{}.new {}", struct_name.to_string(), field_names.join(" "));
     let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Get field values.
@@ -457,13 +466,16 @@ pub fn struct_new_lit(struct_name: &str, field_names: Vec<String>) -> Arc<ExprNo
         generator,
         free_vars,
         name,
-        type_tycon(&tycon(struct_name)),
+        type_tycon(&tycon(struct_name.clone())),
         None,
     )
 }
 
 // `new` built-in function for a given struct.
-pub fn struct_new(struct_name: &str, definition: &Struct) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn struct_new(
+    struct_name: &NameSpacedName,
+    definition: &Struct,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Check there is no duplication of field names.
     let mut fields_set: HashMap<String, i32> = HashMap::new();
     for field in &definition.fields {
@@ -474,7 +486,8 @@ pub fn struct_new(struct_name: &str, definition: &Struct) -> (Arc<ExprNode>, Arc
         if fields_set[&field.name] >= 2 {
             error_exit(&format!(
                 "error: in definition of struct `{}`, field `{}` is duplicated.",
-                struct_name, &field.name
+                struct_name.to_string(),
+                &field.name
             ));
         }
     }
@@ -482,7 +495,7 @@ pub fn struct_new(struct_name: &str, definition: &Struct) -> (Arc<ExprNode>, Arc
         struct_name,
         definition.fields.iter().map(|f| f.name.clone()).collect(),
     );
-    let mut ty = type_tycon(&tycon(struct_name));
+    let mut ty = type_tycon(&tycon(struct_name.clone()));
     for field in definition.fields.iter().rev() {
         expr = expr_abs(var_local(&field.name, None, None), expr, None);
         ty = type_fun(field.ty.clone(), ty);
@@ -497,7 +510,7 @@ pub fn struct_get_lit(
     field_count: usize, // number of fields in this struct
     field_idx: usize,
     field_ty: Arc<TypeNode>,
-    struct_name: &str,
+    struct_name: &NameSpacedName,
     field_name: &str,
 ) -> Arc<ExprNode> {
     let var_name_clone = NameSpacedName::local(var_name);
@@ -517,13 +530,17 @@ pub fn struct_get_lit(
         field_ptr
     });
     let free_vars = vec![NameSpacedName::local(var_name)];
-    let name = format!("{}.get{}", struct_name, capitalize_head(field_name));
+    let name = format!(
+        "{}.get{}",
+        struct_name.to_string(),
+        capitalize_head(field_name)
+    );
     expr_lit(generator, free_vars, name, field_ty, None)
 }
 
 // `get` built-in function for a given struct.
 pub fn struct_get(
-    struct_name: &str,
+    struct_name: &NameSpacedName,
     definition: &Struct,
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -536,13 +553,14 @@ pub fn struct_get(
     if field.is_none() {
         error_exit(&format!(
             "error: no field `{}` found in the struct `{}`.",
-            &field_name, struct_name,
+            &field_name,
+            struct_name.to_string(),
         ));
     }
     let (field_idx, field) = field.unwrap();
 
     let field_count = definition.fields.len();
-    let str_ty = type_tycon(&tycon(struct_name));
+    let str_ty = type_tycon(&tycon(struct_name.clone()));
     let expr = expr_abs(
         var_local("f", None, None),
         struct_get_lit(
@@ -566,13 +584,13 @@ pub fn struct_mod_lit(
     x_name: &str,
     field_count: usize, // number of fields in this struct
     field_idx: usize,
-    struct_name: &str,
+    struct_name: &NameSpacedName,
     field_name: &str,
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
     let name = format!(
         "{}.mod{}{} {} {}",
-        struct_name,
+        struct_name.to_string(),
         field_name,
         if is_unique_version { "!" } else { "" },
         f_name,
@@ -653,14 +671,14 @@ pub fn struct_mod_lit(
         generator,
         free_vars,
         name,
-        type_tycon(&tycon(struct_name)),
+        type_tycon(&tycon(struct_name.clone())),
         None,
     )
 }
 
 // `mod` built-in function for a given struct.
 pub fn struct_mod(
-    struct_name: &str,
+    struct_name: &NameSpacedName,
     definition: &Struct,
     field_name: &str,
     is_unique_version: bool,
@@ -674,13 +692,14 @@ pub fn struct_mod(
     if field.is_none() {
         error_exit(&format!(
             "error: no field `{}` found in the struct `{}`.",
-            &field_name, struct_name,
+            &field_name,
+            struct_name.to_string(),
         ));
     }
     let (field_idx, field) = field.unwrap();
 
     let field_count = definition.fields.len();
-    let str_ty = type_tycon(&tycon(struct_name));
+    let str_ty = type_tycon(&tycon(struct_name.clone()));
     let expr = expr_abs(
         var_local("f", None, None),
         expr_abs(
@@ -728,13 +747,14 @@ pub fn add_builtin_symbols(program: &mut FixModule) {
             TypeDeclValue::Struct(str) => {
                 let module_name = program.name.clone();
                 let ns = vec![module_name.as_str(), decl.name.as_str()];
-                add_global(program, ns.as_slice(), "new", struct_new(&decl.name, str));
+                let struct_name = NameSpacedName::from_strs(&[module_name.as_str()], &decl.name);
+                add_global(program, ns.as_slice(), "new", struct_new(&struct_name, str));
                 for field in &str.fields {
                     add_global(
                         program,
                         ns.as_slice(),
                         &format!("get{}", capitalize_head(&field.name)),
-                        struct_get(&decl.name, str, &field.name),
+                        struct_get(&struct_name, str, &field.name),
                     );
                     for is_unique in [false, true] {
                         add_global(
@@ -745,7 +765,7 @@ pub fn add_builtin_symbols(program: &mut FixModule) {
                                 capitalize_head(&field.name),
                                 if is_unique { "!" } else { "" }
                             ),
-                            struct_mod(&decl.name, str, &field.name, is_unique),
+                            struct_mod(&struct_name, str, &field.name, is_unique),
                         );
                     }
                 }

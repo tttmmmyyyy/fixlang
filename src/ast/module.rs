@@ -14,8 +14,63 @@ pub struct FixModule {
     pub instantiated_global_symbols: HashMap<NameSpacedName, InstantiatedSymbol>,
     pub deferred_instantiation: HashMap<NameSpacedName, InstantiatedSymbol>,
     pub trait_env: TraitEnv,
+    pub type_env: TypeEnv,
+}
+
+#[derive(Clone)]
+pub struct TypeEnv {
     // List of type constructors including user-defined types.
-    pub tycons: Arc<HashMap<Name, Arc<Kind>>>,
+    pub tycons: Arc<HashMap<TyCon, Arc<Kind>>>,
+}
+
+impl Default for TypeEnv {
+    fn default() -> Self {
+        Self {
+            tycons: Arc::new(Default::default()),
+        }
+    }
+}
+
+impl TypeEnv {
+    pub fn new(tycons: HashMap<TyCon, Arc<Kind>>) -> TypeEnv {
+        TypeEnv {
+            tycons: Arc::new(tycons),
+        }
+    }
+
+    pub fn kind(&self, tycon: &TyCon) -> Arc<Kind> {
+        self.tycons.get(tycon).unwrap().clone()
+    }
+
+    pub fn infer_namespace(&self, ns: &NameSpacedName, module_name: &Name) -> NameSpacedName {
+        let candidates = self
+            .tycons
+            .iter()
+            .filter_map(|(id, _)| {
+                if ns.is_suffix(&id.name) {
+                    Some(id.name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if candidates.len() == 0 {
+            error_exit(&format!("unknown type: {}", ns.to_string()))
+        } else if candidates.len() == 1 {
+            candidates[0].clone()
+        } else {
+            // candidates.len() >= 2
+            let candidates = candidates
+                .iter()
+                .filter(|name| name.namespace.len() >= 1 && name.namespace.module() == *module_name)
+                .collect::<Vec<_>>();
+            if candidates.len() == 1 {
+                candidates[0].clone()
+            } else {
+                error_exit("Type name `{}` is ambiguous.");
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -63,13 +118,13 @@ impl FixModule {
             instantiated_global_symbols: Default::default(),
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
-            tycons: Default::default(),
+            type_env: Default::default(),
         }
     }
 
     // Set traits.
     pub fn set_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
-        self.trait_env.set(trait_infos, trait_impls, &self.tycons);
+        self.trait_env.set(trait_infos, trait_impls, &self.type_env);
     }
 
     // Register declarations of user-defined types.
@@ -78,23 +133,24 @@ impl FixModule {
     }
 
     // Calculate list of type constructors including user-defined types.
-    pub fn calculate_tycons(&mut self) {
-        let mut tycons: HashMap<Name, Arc<Kind>> = bulitin_type_to_kind_map();
+    pub fn calculate_type_env(&mut self) {
+        let mut tycons: HashMap<TyCon, Arc<Kind>> = bulitin_type_to_kind_map();
         for type_decl in &self.type_decls {
-            if tycons.contains_key(&type_decl.name) {
+            let tycon = TyCon::new(NameSpacedName::from_strs(&[&self.name], &type_decl.name));
+            if tycons.contains_key(&tycon) {
                 error_exit_with_src(
                     &format!("Type `{}` is already defined.", type_decl.name),
                     &None,
                 );
             }
-            tycons.insert(type_decl.name.clone(), kind_star());
+            tycons.insert(tycon, kind_star());
         }
-        self.tycons = Arc::new(tycons);
+        self.type_env = TypeEnv::new(tycons);
     }
 
     // Get list of type constructors including user-defined types.
-    pub fn tycons(&self) -> Arc<HashMap<Name, Arc<Kind>>> {
-        self.tycons.clone()
+    pub fn type_env(&self) -> TypeEnv {
+        self.type_env.clone()
     }
 
     // Get this module's namespace.
@@ -380,11 +436,20 @@ impl FixModule {
     }
 
     pub fn check_kinds(&self) {
-        let tycons = self.tycons();
+        let type_env = self.type_env();
         let trait_to_kind = self.trait_env.trait_kind_map();
-        self.trait_env.check_kinds(&tycons, &trait_to_kind);
+        self.trait_env.check_kinds(&type_env, &trait_to_kind);
         for (_, sym) in &self.global_symbols {
-            sym.ty.check_kinds(&tycons, &trait_to_kind);
+            sym.ty.check_kinds(&type_env, &trait_to_kind);
         }
+    }
+
+    pub fn set_namespace_of_tycons(&mut self) {
+        let type_env = self.type_env();
+        todo!()
+    }
+
+    pub fn set_namespace_of_traits(&mut self) {
+        todo!()
     }
 }
