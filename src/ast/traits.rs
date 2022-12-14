@@ -68,7 +68,7 @@ impl TraitInfo {
                     self.kind_predicates[0].name
                 ));
             }
-            self.type_var.set_kind(self.kind_predicates[0].kind.clone());
+            self.type_var = self.type_var.set_kind(self.kind_predicates[0].kind.clone());
         }
     }
 
@@ -257,6 +257,22 @@ impl Predicate {
 
     pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
         self.ty.set_kinds(scope);
+    }
+
+    pub fn check_kinds(
+        &self,
+        tycons: &HashMap<Name, Arc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+    ) {
+        let expected = &trait_kind_map[&self.trait_id];
+        let found = self.ty.kind(tycons);
+        if *expected != found {
+            error_exit(&format!(
+                "kind mismatch. Expect: {}, found: {}",
+                expected.to_string(),
+                found.to_string()
+            ))
+        }
     }
 }
 
@@ -510,11 +526,11 @@ impl TraitEnv {
 
     // See each TraitInfo's kind_predicates and set kinds of traits and methods.
     pub fn set_validate_kinds(&mut self) {
-        for (id, ti) in &mut self.traits {
+        for (_id, ti) in &mut self.traits {
             ti.set_trait_kind();
         }
         let trait_kind_map = self.trait_kind_map();
-        for (id, ti) in &mut self.traits {
+        for (_id, ti) in &mut self.traits {
             ti.set_kinds_to_methods(&trait_kind_map);
         }
     }
@@ -525,5 +541,19 @@ impl TraitEnv {
             res.insert(id.clone(), ti.type_var.kind.clone());
         }
         res
+    }
+
+    pub fn check_kinds(
+        &self,
+        tycons: &HashMap<Name, Arc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+    ) {
+        for (_, trait_info) in &self.traits {
+            for (name, _) in &trait_info.methods {
+                trait_info
+                    .method_scheme(&name)
+                    .check_kinds(tycons, trait_kind_map);
+            }
+        }
     }
 }

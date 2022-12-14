@@ -22,6 +22,25 @@ pub enum Kind {
     Arrow(Arc<Kind>, Arc<Kind>),
 }
 
+impl Kind {
+    pub fn to_string(&self) -> String {
+        match self {
+            Kind::Star => "*".to_string(),
+            Kind::Arrow(src, dst) => {
+                let src_braced = match **src {
+                    Kind::Star => false,
+                    Kind::Arrow(_, _) => true,
+                };
+                if src_braced {
+                    format!("({})->{}", src.to_string(), dst.to_string())
+                } else {
+                    format!("{}->{}", src.to_string(), dst.to_string())
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct TyCon {
     pub name: String,
@@ -401,9 +420,18 @@ impl Scheme {
         }
         Arc::new(ret)
     }
-}
 
-impl Scheme {
+    pub fn check_kinds(
+        &self,
+        tycons: &HashMap<Name, Arc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+    ) {
+        for p in &self.preds {
+            p.check_kinds(tycons, trait_kind_map);
+        }
+        self.ty.kind(tycons);
+    }
+
     // Create new instance.
     fn new_arc(
         vars: HashMap<String, Arc<Kind>>,

@@ -378,4 +378,13 @@ impl FixModule {
             sym.ty = sym.ty.set_kinds(&trait_kind_map);
         }
     }
+
+    pub fn check_kinds(&self) {
+        let tycons = self.tycons();
+        let trait_to_kind = self.trait_env.trait_kind_map();
+        self.trait_env.check_kinds(&tycons, &trait_to_kind);
+        for (_, sym) in &self.global_symbols {
+            sym.ty.check_kinds(&tycons, &trait_to_kind);
+        }
+    }
 }
