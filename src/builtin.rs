@@ -530,11 +530,7 @@ pub fn struct_get_lit(
         field_ptr
     });
     let free_vars = vec![NameSpacedName::local(var_name)];
-    let name = format!(
-        "{}.get{}",
-        struct_name.to_string(),
-        capitalize_head(field_name)
-    );
+    let name = format!("{}.get_{}", struct_name.to_string(), field_name);
     expr_lit(generator, free_vars, name, field_ty, None)
 }
 
@@ -753,18 +749,14 @@ pub fn add_builtin_symbols(program: &mut FixModule) {
                     add_global(
                         program,
                         ns.as_slice(),
-                        &format!("get{}", capitalize_head(&field.name)),
+                        &format!("get_{}", &field.name),
                         struct_get(&struct_name, str, &field.name),
                     );
                     for is_unique in [false, true] {
                         add_global(
                             program,
                             ns.as_slice(),
-                            &format!(
-                                "mod{}{}",
-                                capitalize_head(&field.name),
-                                if is_unique { "!" } else { "" }
-                            ),
+                            &format!("mod_{}{}", &field.name, if is_unique { "!" } else { "" }),
                             struct_mod(&struct_name, str, &field.name, is_unique),
                         );
                     }
