@@ -139,11 +139,11 @@ toplevel_defns = _{ type_decl | global_symbol_type_defn | global_symbol_defn | t
 module = { module_decl ~ (sep* ~ toplevel_defns)* }
 
 // === Comments ===
-block_comment = _{ "{-"  ~ block_commented_character*  ~ "-}" }
+block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }
 
-block_commented_character = _{ !"-}" ~ ANY }
+block_commented_character = _{ !"*/" ~ ANY }
 
-line_comment = _{"--" ~ line_commented_character* ~ ( NEWLINE | EOI )}
+line_comment = _{"//" ~ line_commented_character* ~ ( NEWLINE | EOI )}
 
 line_commented_character = _{ !(NEWLINE | EOI) ~ ANY }
 

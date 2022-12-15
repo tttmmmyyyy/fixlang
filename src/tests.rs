@@ -869,22 +869,23 @@ pub fn test45() {
 #[serial]
 pub fn test_comment_0() {
     // block comment
-    let source = r"{- head -} module Main; 
+    let source = r"/* head */ module Main; 
         main : Int;
         main = (
             let x = 5 in 
             let y = -3 in
-            {- If the closing symbol is put on the end of this line, g will evaluate.
+            /* If the closing symbol is put on the end of this line, g will evaluate.
             let g = fix \f -> \x -> if eq x 0 then 0 else add x (f (add x -1));
             g 100
-            {--}
-            {- 
+            /* */
+            //
+            /*
             multiple line 
             block comment
-            -}
-            {- sub 1 -}add x{- This comment is parsed as a separater -}y{- comment -}
+            */
+            /* sub 1 */add x/* This comment is parsed as a separater */y/* comment */
         );
-        {-tail-}";
+        /*tail*/";
     let answer = 2;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
@@ -894,15 +895,15 @@ pub fn test_comment_0() {
 pub fn test_comment_1() {
     // ilne comment
     let source = r"
-        module Main; ----
+        module Main; //// /* */
         main : Int;
         main = (
             let x = 5 in
-            -- let x = 3 in
--- some excellent and brilliant comment
-            let y = -3 in-- comment
+            // let x = 3 in
+// some excellent and brilliant comment
+            let y = -3 in// comment
             add x y
-        --
+        //
         );";
     let answer = 2;
     test_run_source(source, answer, OptimizationLevel::Default);
