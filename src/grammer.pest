@@ -15,15 +15,19 @@ eq_of_let = { "=" }
 
 arrow_of_lam = { "->" }
 
-var_char = _{ ASCII_ALPHA | ASCII_DIGIT }
+var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 
-var = { !keywords ~ (ASCII_ALPHA_LOWER ~ var_char* ~ "!"? ) }
+name_head_small = _{ ASCII_ALPHA_LOWER | "_" }
+
+name_head_large = _{ ASCII_ALPHA_UPPER }
+
+var = { !keywords ~ (name_head_small ~ var_char* ~ "!"? ) }
 
 var_with_type = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 // === Expressions ===
 
-namespace_item = { ASCII_ALPHA_UPPER ~ var_char* }
+namespace_item = { name_head_large ~ var_char* }
 
 namespace = { (namespace_item ~ ".")* }
 
@@ -74,9 +78,9 @@ type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)? }
 
 type_fun = { type_tyapp ~ (sep* ~ "->" ~ sep* ~ type_expr)? }
 
-type_tycon = { ASCII_ALPHA_UPPER ~ var_char* }
+type_tycon = { name_head_large ~ var_char* }
 
-type_var = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
+type_var = { !keywords ~ name_head_small ~ var_char* }
 
 type_qualified = { predicates? ~ sep* ~ type_expr }
 
@@ -98,16 +102,16 @@ kind_nlr = { kind_star | kind_braced }
 kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 
 // === Type declarations ===
-type_name = { ASCII_ALPHA_UPPER ~ var_char* }
+type_name = { name_head_large ~ var_char* }
 
-type_field_name = { !keywords ~ ASCII_ALPHA_LOWER ~ var_char* }
+type_field_name = { !keywords ~ name_head_small ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~  "(" ~ sep* ~ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* ~ sep* ~ ")" ~ sep* ~ ";" }
 
 // === Trait definitions ===
-trait_name = { ASCII_ALPHA_UPPER ~ var_char* }
+trait_name = { name_head_large ~ var_char* }
 
 trait_defn = { "trait" ~ sep+ ~ predicates? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 
@@ -126,7 +130,7 @@ global_symbol_type_defn = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";
 global_symbol_defn = { var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
 // === Module ===
-module_name = { ASCII_ALPHA_UPPER ~ var_char* }
+module_name = { name_head_large ~ var_char* }
 
 module_decl = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" }
 

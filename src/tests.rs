@@ -807,8 +807,8 @@ pub fn test44() {
             toInt = \b -> if b then 0 else -1;
         }
 
-        addHeadAndNext : [a: ToInt] Array a -> Int; 
-        addHeadAndNext = \arr -> (
+        add_head_and_next : [a: ToInt] Array a -> Int; 
+        add_head_and_next = \arr -> (
             let head = toInt $ readArray arr 0;
             let next = toInt $ readArray arr 1;
             add head next
@@ -818,11 +818,11 @@ pub fn test44() {
         main = (
             let arr0 = newArray 2 false;
             let arr0 = writeArray! arr0 0 true;
-            let x = addHeadAndNext arr0;
+            let x = add_head_and_next arr0;
 
             let arr1 = newArray 2 3;
             let arr1 = writeArray! arr1 1 5;
-            let z = addHeadAndNext arr1;
+            let z = add_head_and_next arr1;
 
             let y = add (toInt 5) (toInt false);
             add (add x y) z
