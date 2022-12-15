@@ -851,6 +851,9 @@ pub fn test45() {
             );
         }
 
+        map2 : [f: Functor] (a -> b) -> f a -> f b;
+        map2 = map;
+
         main : Int;
         main = (
             let arr = newArray 1 false;
