@@ -392,7 +392,6 @@ impl NameSpace {
 pub struct Var {
     pub name: String,
     pub namespace: Option<NameSpace>, // None implies namespace to be inferred
-    pub type_annotation: Option<Arc<Scheme>>, // TODO: maybe unused?
     pub source: Option<Span>,
 }
 
@@ -459,26 +458,16 @@ impl Var {
     }
 }
 
-pub fn var_var(
-    var_name: &str,
-    namespace: Option<NameSpace>,
-    type_annotation: Option<Arc<Scheme>>,
-    src: Option<Span>,
-) -> Arc<Var> {
+pub fn var_var(var_name: &str, namespace: Option<NameSpace>, src: Option<Span>) -> Arc<Var> {
     Arc::new(Var {
         name: String::from(var_name),
         namespace,
-        type_annotation,
         source: src,
     })
 }
 
-pub fn var_local(
-    var_name: &str,
-    type_annotation: Option<Arc<Scheme>>,
-    src: Option<Span>,
-) -> Arc<Var> {
-    var_var(var_name, Some(NameSpace::local()), type_annotation, src)
+pub fn var_local(var_name: &str, src: Option<Span>) -> Arc<Var> {
+    var_var(var_name, Some(NameSpace::local()), src)
 }
 
 pub fn expr_lit(
@@ -516,7 +505,7 @@ pub fn expr_app(lam: Arc<ExprNode>, arg: Arc<ExprNode>, src: Option<Span>) -> Ar
 
 // Make variable expression.
 pub fn expr_var(var_name: &str, ns: Option<NameSpace>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Var(var_var(var_name, ns, None, src.clone()))).into_expr_info(src)
+    Arc::new(Expr::Var(var_var(var_name, ns, src.clone()))).into_expr_info(src)
 }
 
 pub fn expr_if(

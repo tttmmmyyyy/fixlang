@@ -514,29 +514,29 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let bound = pairs.next().unwrap();
     let _in_of_let = pairs.next().unwrap();
     let val = pairs.next().unwrap();
-    expr_let(
-        parse_var_with_type(var, src),
-        parse_expr(bound, src),
-        parse_expr(val, src),
-        Some(span),
-    )
+    let (var, ty_anno) = parse_var_with_type(var, src);
+    let mut bound = parse_expr(bound, src);
+    match ty_anno {
+        Some(ty_anno) => {
+            bound = expr_tyanno(bound, ty_anno, Some(span.clone()));
+        }
+        None => {}
+    }
+    expr_let(var, bound, parse_expr(val, src), Some(span))
 }
 
-fn parse_var_with_type(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
+fn parse_var_with_type(pair: Pair<Rule>, src: &Arc<String>) -> (Arc<Var>, Option<Arc<TypeNode>>) {
     assert_eq!(pair.as_rule(), Rule::var_with_type);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
-    let scm = pairs.next().map(|ty| {
-        let ty = parse_type(ty);
-        Scheme::generalize(ty.free_vars(), vec![], ty)
-    });
-    var_local(var_name, scm, Some(span))
+    let ty = pairs.next().map(|ty| parse_type(ty));
+    (var_local(var_name, Some(span)), ty)
 }
 
 fn parse_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
     assert_eq!(pair.as_rule(), Rule::var);
-    var_local(pair.as_str(), None, Some(Span::from_pair(&src, &pair)))
+    var_local(pair.as_str(), Some(Span::from_pair(&src, &pair)))
 }
 
 fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {

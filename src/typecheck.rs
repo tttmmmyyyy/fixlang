@@ -630,25 +630,9 @@ impl TypeCheckContext {
                 ei.set_lam_body(body)
             }
             Expr::Let(var, val, body) => {
-                let var_ty = match &var.type_annotation {
-                    Some(scm) => {
-                        let free_vars = scm.free_vars();
-                        if !free_vars.is_empty() {
-                            error_exit_with_src(
-                                &format!(
-                                    "unknown type variable `{}`",
-                                    free_vars.iter().next().unwrap().0
-                                ),
-                                &var.source,
-                            )
-                        }
-                        self.instantiate_scheme(&scm, true).1
-                    }
-                    None => type_tyvar_star(&self.new_tyvar()),
-                };
+                let var_ty = type_tyvar_star(&self.new_tyvar());
                 let val = self.unify_type_of_expr(val, var_ty.clone());
                 let var_scm = self.generalize_to_scheme(&var_ty, &HashSet::default());
-
                 self.scope.push(&var.name, &var_scm);
                 let body = self.unify_type_of_expr(body, ty);
                 self.scope.pop(&var.name);

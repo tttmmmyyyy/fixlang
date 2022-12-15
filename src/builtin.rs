@@ -85,8 +85,8 @@ fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
 
 pub fn add() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("lhs", None, None),
-        expr_abs(var_local("rhs", None, None), add_lit("lhs", "rhs"), None),
+        var_local("lhs", None),
+        expr_abs(var_local("rhs", None), add_lit("lhs", "rhs"), None),
         None,
     );
     let scm = Scheme::from_type(type_fun(int_lit_ty(), type_fun(int_lit_ty(), int_lit_ty())));
@@ -128,8 +128,8 @@ fn eq_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
 // eq = \lhs: a -> \rhs: a -> eq_lit(lhs, rhs): Bool
 pub fn eq() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("lhs", None, None),
-        expr_abs(var_local("rhs", None, None), eq_lit("lhs", "rhs"), None),
+        var_local("lhs", None),
+        expr_abs(var_local("rhs", None), eq_lit("lhs", "rhs"), None),
         None,
     );
     let scm = Scheme::generalize(
@@ -166,8 +166,8 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("f", None, None),
-        expr_abs(var_local("x", None, None), fix_lit("b", "f", "x"), None),
+        var_local("f", None),
+        expr_abs(var_local("x", None), fix_lit("b", "f", "x"), None),
         None,
     );
     let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
@@ -219,9 +219,9 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
 // newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
 pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("size", None, None),
+        var_local("size", None),
         expr_abs(
-            var_local("value", None, None),
+            var_local("value", None),
             new_array_lit("a", "size", "value"),
             None,
         ),
@@ -271,9 +271,9 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
 // readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
 pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("array", None, None),
+        var_local("array", None),
         expr_abs(
-            var_local("idx", None, None),
+            var_local("idx", None),
             read_array_lit("a", "array", "idx"),
             None,
         ),
@@ -396,11 +396,11 @@ fn write_array_lit(
 // writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
 pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("array", None, None),
+        var_local("array", None),
         expr_abs(
-            var_local("idx", None, None),
+            var_local("idx", None),
             expr_abs(
-                var_local("value", None, None),
+                var_local("value", None),
                 write_array_lit("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
@@ -497,7 +497,7 @@ pub fn struct_new(
     );
     let mut ty = type_tycon(&tycon(struct_name.clone()));
     for field in definition.fields.iter().rev() {
-        expr = expr_abs(var_local(&field.name, None, None), expr, None);
+        expr = expr_abs(var_local(&field.name, None), expr, None);
         ty = type_fun(field.ty.clone(), ty);
     }
     let scm = Scheme::generalize(HashMap::new(), vec![], ty);
@@ -562,7 +562,7 @@ pub fn struct_get(
     let field_count = definition.fields.len();
     let str_ty = type_tycon(&tycon(struct_name.clone()));
     let expr = expr_abs(
-        var_local("f", None, None),
+        var_local("f", None),
         struct_get_lit(
             "f",
             field_count,
@@ -701,9 +701,9 @@ pub fn struct_mod(
     let field_count = definition.fields.len();
     let str_ty = type_tycon(&tycon(struct_name.clone()));
     let expr = expr_abs(
-        var_local("f", None, None),
+        var_local("f", None),
         expr_abs(
-            var_local("x", None, None),
+            var_local("x", None),
             struct_mod_lit(
                 "f",
                 "x",
