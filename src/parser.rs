@@ -190,7 +190,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>, module_name: &str) -> T
         .map(|pair| parse_trait_member_defn(pair, src, &tyvar))
         .collect();
     TraitInfo {
-        id: TraitId::new(&[module_name], trait_name),
+        id: TraitId::new(&[module_name], &trait_name),
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
         instances: vec![],
@@ -319,7 +319,7 @@ fn parse_predicate(pair: Pair<Rule>, src: &Arc<String>) -> Predicate {
     let ty = parse_type(pairs.next().unwrap());
     let trait_name = pairs.next().unwrap().as_str().to_string();
     Predicate {
-        trait_id: TraitId::new_by_name(trait_name),
+        trait_id: TraitId::new_by_name(&trait_name),
         ty,
     }
 }

@@ -160,6 +160,36 @@ impl TypeNode {
         }
         Arc::new(ret)
     }
+
+    pub fn set_tycon_tc(&self, tc: Arc<TyCon>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::TyCon(_) => ret.ty = Type::TyCon(tc),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_namespace_of_tycons(
+        self: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+        module_name: &Name,
+    ) -> Arc<TypeNode> {
+        match &self.ty {
+            Type::TyVar(tv) => self.clone(),
+            Type::TyCon(tc) => {
+                let mut tc = tc.as_ref().clone();
+                tc.name = type_env.infer_namespace(&tc.name, module_name);
+                self.set_tycon_tc(Arc::new(tc))
+            }
+            Type::TyApp(fun, arg) => self
+                .set_tyapp_fun(fun.set_namespace_of_tycons(type_env, module_name))
+                .set_tyapp_arg(arg.set_namespace_of_tycons(type_env, module_name)),
+            Type::FunTy(src, dst) => self
+                .set_funty_src(src.set_namespace_of_tycons(type_env, module_name))
+                .set_funty_dst(dst.set_namespace_of_tycons(type_env, module_name)),
+        }
+    }
 }
 
 impl Clone for TypeNode {
@@ -499,5 +529,19 @@ impl Scheme {
             ret.remove(var.0);
         }
         ret
+    }
+
+    pub fn set_namespace_of_tycons_and_traits(
+        &self,
+        type_env: &TypeEnv,
+        trait_env: &TraitEnv,
+        module_name: &Name,
+    ) -> Arc<Scheme> {
+        let mut res = self.clone();
+        for p in &mut res.preds {
+            p.set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
+        }
+        res.ty = res.ty.set_namespace_of_tycons(type_env, module_name);
+        Arc::new(res)
     }
 }

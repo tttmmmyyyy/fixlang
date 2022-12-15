@@ -12,7 +12,7 @@ pub fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
     str += msg;
     str += "\n";
     match src {
-        None => todo!(),
+        None => {}
         Some(v) => {
             str += &v.to_string();
         }

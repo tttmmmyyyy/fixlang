@@ -221,6 +221,67 @@ impl ExprNode {
         }
         Arc::new(ret)
     }
+
+    pub fn set_tyanno_ty(&self, ty: Arc<TypeNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::TyAnno(e, _) => {
+                ret.expr = Arc::new(Expr::TyAnno(e.clone(), ty));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_lit_lit(&self, lit: Arc<Literal>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Lit(_) => {
+                ret.expr = Arc::new(Expr::Lit(lit));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_namespace_of_tycons(
+        self: &Arc<ExprNode>,
+        type_env: &TypeEnv,
+        module_name: &Name,
+    ) -> Arc<ExprNode> {
+        match &*self.expr {
+            Expr::Var(_) => self.clone(),
+            Expr::Lit(lit) => {
+                let mut lit = lit.as_ref().clone();
+                lit.ty = lit.ty.set_namespace_of_tycons(type_env, module_name);
+                self.clone().set_lit_lit(Arc::new(lit))
+            }
+            Expr::App(fun, arg) => self
+                .clone()
+                .set_app_func(fun.set_namespace_of_tycons(type_env, module_name))
+                .set_app_arg(arg.set_namespace_of_tycons(type_env, module_name)),
+            Expr::Lam(_, body) => self
+                .clone()
+                .set_lam_body(body.set_namespace_of_tycons(type_env, module_name)),
+            Expr::Let(_, bound, value) => self
+                .clone()
+                .set_let_bound(bound.set_namespace_of_tycons(type_env, module_name))
+                .set_let_value(value.set_namespace_of_tycons(type_env, module_name)),
+            Expr::If(cond, then_expr, else_expr) => self
+                .clone()
+                .set_if_cond(cond.set_namespace_of_tycons(type_env, module_name))
+                .set_if_then(then_expr.set_namespace_of_tycons(type_env, module_name))
+                .set_if_else(else_expr.set_namespace_of_tycons(type_env, module_name)),
+            Expr::TyAnno(expr, ty) => self
+                .clone()
+                .set_tyanno_expr(expr.set_namespace_of_tycons(type_env, module_name))
+                .set_tyanno_ty(ty.set_namespace_of_tycons(type_env, module_name)),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -270,6 +331,7 @@ impl Expr {
 pub type LiteralGenerator =
     dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm>) -> PointerValue<'c>;
 
+#[derive(Clone)]
 pub struct Literal {
     pub generator: Arc<LiteralGenerator>,
     pub free_vars: Vec<NameSpacedName>, // e.g. "+" literal has two free variables.
@@ -366,6 +428,12 @@ impl NameSpacedName {
 
     pub fn is_suffix(&self, other: &NameSpacedName) -> bool {
         self.name == other.name && self.namespace.is_suffix(&other.namespace)
+    }
+
+    pub fn to_namespace(&self) -> NameSpace {
+        let mut names = self.namespace.names.clone();
+        names.push(self.name.clone());
+        NameSpace { names }
     }
 }
 

@@ -3,22 +3,19 @@ use super::*;
 // Identifier to spacify trait.
 #[derive(Hash, Eq, PartialEq, Clone)]
 pub struct TraitId {
-    pub name: Name,
-    pub namespace: Option<NameSpace>,
+    pub name: NameSpacedName,
 }
 
 impl TraitId {
-    pub fn new(ns: &[&str], name: Name) -> TraitId {
+    pub fn new(ns: &[&str], name: &Name) -> TraitId {
         TraitId {
-            name,
-            namespace: Some(NameSpace::new_str(ns)),
+            name: NameSpacedName::from_strs(ns, &name),
         }
     }
 
-    pub fn new_by_name(name: Name) -> TraitId {
+    pub fn new_by_name(name: &Name) -> TraitId {
         TraitId {
-            name,
-            namespace: None,
+            name: NameSpacedName::from_strs(&[], name),
         }
     }
 
@@ -27,7 +24,11 @@ impl TraitId {
     }
 
     pub fn namespaced_name(&self) -> NameSpacedName {
-        NameSpacedName::new(&self.namespace.as_ref().unwrap().clone(), &self.name)
+        self.name.clone()
+    }
+
+    pub fn set_namespace_of_traits(&mut self, trait_env: &TraitEnv, module_name: &Name) {
+        self.name = trait_env.infer_namespace(&self.name, module_name);
     }
 }
 
@@ -288,6 +289,17 @@ impl Predicate {
             ))
         }
     }
+
+    pub fn set_namespace_of_tycons_and_traits(
+        &mut self,
+        type_env: &TypeEnv,
+        trait_env: &TraitEnv,
+        module_name: &Name,
+    ) {
+        self.trait_id
+            .set_namespace_of_traits(trait_env, module_name);
+        self.ty = self.ty.set_namespace_of_tycons(type_env, module_name);
+    }
 }
 
 // Statement such as "f: * -> *".
@@ -314,18 +326,50 @@ pub struct TraitEnv {
 }
 
 impl TraitEnv {
+    // TODO: fix duplication with TypeEnv::infer_namespace
+    pub fn infer_namespace(&self, ns: &NameSpacedName, module_name: &Name) -> NameSpacedName {
+        let candidates = self
+            .traits
+            .iter()
+            .filter_map(|(id, _)| {
+                if ns.is_suffix(&id.name) {
+                    Some(id.name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if candidates.len() == 0 {
+            error_exit(&format!("unknown type: {}", ns.to_string()))
+        } else if candidates.len() == 1 {
+            candidates[0].clone()
+        } else {
+            // candidates.len() >= 2
+            let candidates = candidates
+                .iter()
+                .filter(|name| name.namespace.len() >= 1 && name.namespace.module() == *module_name)
+                .collect::<Vec<_>>();
+            if candidates.len() == 1 {
+                candidates[0].clone()
+            } else {
+                error_exit("Trait name `{}` is ambiguous.");
+            }
+        }
+    }
+
     // Set traits.
     pub fn set(
         &mut self,
         trait_infos: Vec<TraitInfo>,
         trait_impls: Vec<TraitInstance>,
         type_env: &TypeEnv,
+        module_name: &Name,
     ) {
         for trait_info in trait_infos {
             self.add_trait(trait_info);
         }
         for trait_impl in trait_impls {
-            self.add_instance(trait_impl, type_env);
+            self.add_instance(trait_impl, type_env, module_name);
         }
     }
 
@@ -342,13 +386,16 @@ impl TraitEnv {
     }
 
     // Add a instance.
-    pub fn add_instance(&mut self, inst: TraitInstance, type_env: &TypeEnv) {
-        let trait_id = &inst.qual_pred.predicate.trait_id;
+    pub fn add_instance(
+        &mut self,
+        mut inst: TraitInstance,
+        type_env: &TypeEnv,
+        module_name: &Name,
+    ) {
+        let trait_id = &mut inst.qual_pred.predicate.trait_id;
 
         // Check existaice of trait.
-        if !self.traits.contains_key(trait_id) {
-            error_exit(&format!("no trait `{}` defined", trait_id.to_string()));
-        }
+        trait_id.name = self.infer_namespace(&trait_id.name, module_name).clone();
 
         // Check instance is not head-normal-form.
         if inst.qual_pred.predicate.ty.is_hnf() {
@@ -521,14 +568,10 @@ impl TraitEnv {
         ret
     }
 
-    // See each TraitInfo's kind_predicates and set kinds of traits and methods.
-    pub fn set_validate_kinds(&mut self) {
+    // Set each TraitInfo's kind.
+    pub fn set_kinds(&mut self) {
         for (_id, ti) in &mut self.traits {
             ti.set_trait_kind();
-        }
-        let trait_kind_map = self.trait_kind_map();
-        for (_id, ti) in &mut self.traits {
-            ti.set_kinds_to_methods(&trait_kind_map);
         }
     }
 

@@ -90,6 +90,35 @@ pub struct GlobalSymbol {
     // TODO: add expr_src: Span
 }
 
+impl GlobalSymbol {
+    pub fn set_namespace_of_tycons_and_traits(
+        &mut self,
+        type_env: &TypeEnv,
+        trait_env: &TraitEnv,
+        module_name: &Name,
+    ) {
+        self.ty = self
+            .ty
+            .set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
+        self.expr
+            .set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
+    }
+
+    pub fn set_kinds(&mut self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
+        self.ty = self.ty.set_kinds(trait_kind_map);
+        self.ty.check_kinds(type_env, trait_kind_map);
+        match &mut self.expr {
+            SymbolExpr::Simple(_) => {}
+            SymbolExpr::Method(ms) => {
+                for m in ms {
+                    m.ty = m.ty.set_kinds(trait_kind_map);
+                    m.ty.check_kinds(type_env, trait_kind_map);
+                }
+            }
+        }
+    }
+}
+
 // Expression of global symbol.
 #[derive(Clone)]
 pub enum SymbolExpr {
@@ -97,15 +126,49 @@ pub enum SymbolExpr {
     Method(Vec<MethodImpl>), // Trait method implementations.
 }
 
+impl SymbolExpr {
+    pub fn set_namespace_of_tycons_and_traits(
+        &mut self,
+        type_env: &TypeEnv,
+        trait_env: &TraitEnv,
+        module_name: &Name,
+    ) {
+        match self {
+            SymbolExpr::Simple(e) => {
+                *self = SymbolExpr::Simple(e.set_namespace_of_tycons(type_env, module_name));
+            }
+            SymbolExpr::Method(mis) => {
+                for mi in mis {
+                    mi.set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
+                }
+            }
+        }
+    }
+}
+
 // Trait method implementation
 #[derive(Clone)]
 pub struct MethodImpl {
     // Type of this method.
-    // For example, in case "impl (a, b): Show for a: Show, b: Show",
-    // the type of method "show" is "(a, b) -> String for a: Show, b: Show",
+    // For example, in case "impl [a: Show, b: Show] (a, b): Show {...}",
+    // the type of method "show" is "[a: Show, b: Show] (a, b) -> String",
     pub ty: Arc<Scheme>,
     // Expression of this implementation
     pub expr: Arc<ExprNode>,
+}
+
+impl MethodImpl {
+    pub fn set_namespace_of_tycons_and_traits(
+        &mut self,
+        type_env: &TypeEnv,
+        trait_env: &TraitEnv,
+        module_name: &Name,
+    ) {
+        self.ty = self
+            .ty
+            .set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
+        self.expr = self.expr.set_namespace_of_tycons(type_env, module_name);
+    }
 }
 
 impl FixModule {
@@ -124,7 +187,8 @@ impl FixModule {
 
     // Set traits.
     pub fn set_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
-        self.trait_env.set(trait_infos, trait_impls, &self.type_env);
+        self.trait_env
+            .set(trait_infos, trait_impls, &self.type_env, &self.name);
     }
 
     // Register declarations of user-defined types.
@@ -414,8 +478,7 @@ impl FixModule {
                     let expr = trait_impl.method_expr(method_name);
                     method_impls.push(MethodImpl { ty, expr });
                 }
-                let method_name =
-                    NameSpacedName::from_strs(&[&self.name, &trait_id.name], &method_name);
+                let method_name = NameSpacedName::new(&trait_id.name.to_namespace(), &method_name);
                 self.global_symbols.insert(
                     method_name,
                     GlobalSymbol {
@@ -428,28 +491,21 @@ impl FixModule {
     }
 
     pub fn set_kinds(&mut self) {
-        self.trait_env.set_validate_kinds();
+        self.trait_env.set_kinds();
+        let type_env = &self.type_env();
         let trait_kind_map = self.trait_env.trait_kind_map();
         for (_, sym) in &mut self.global_symbols {
-            sym.ty = sym.ty.set_kinds(&trait_kind_map);
+            sym.set_kinds(type_env, &trait_kind_map);
         }
     }
 
-    pub fn check_kinds(&self) {
+    pub fn set_namespace_of_tycons_and_traits(&mut self) {
+        // Currently we don't need to pass trait_env to expressions, since
+        // trait name appears in expression only in the namespace of a variable and it will be resolved by typechecker.
         let type_env = self.type_env();
-        let trait_to_kind = self.trait_env.trait_kind_map();
-        self.trait_env.check_kinds(&type_env, &trait_to_kind);
-        for (_, sym) in &self.global_symbols {
-            sym.ty.check_kinds(&type_env, &trait_to_kind);
+        let trait_env = &self.trait_env;
+        for (_, sym) in &mut self.global_symbols {
+            sym.set_namespace_of_tycons_and_traits(&type_env, trait_env, &self.name);
         }
-    }
-
-    pub fn set_namespace_of_tycons(&mut self) {
-        let type_env = self.type_env();
-        todo!()
-    }
-
-    pub fn set_namespace_of_traits(&mut self) {
-        todo!()
     }
 }
