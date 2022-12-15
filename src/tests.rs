@@ -721,7 +721,7 @@ pub fn test40() {
         main = (
             let a = A::new (B::new 16);
             let f: A -> A = \a -> a . (mod_x! $ mod_x! $ \x -> add x 15);
-            let a = a . f;
+            let a = a .f;
             a .get_x .get_x
         );
         ";

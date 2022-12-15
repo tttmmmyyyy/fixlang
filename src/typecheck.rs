@@ -43,9 +43,6 @@ where
     }
     fn pop(self: &mut Self, name: &str) {
         self.var.get_mut(name).unwrap().local.pop();
-        if self.var.get(name).unwrap().local.is_empty() {
-            self.var.remove(name);
-        }
     }
     fn get(self: &Self, name: &str) -> Option<&ScopeValue<T>> {
         self.var.get(name)
