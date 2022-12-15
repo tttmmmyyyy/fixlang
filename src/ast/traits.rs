@@ -282,7 +282,7 @@ impl Predicate {
     }
 
     pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
-        self.ty.set_kinds(scope);
+        self.ty = self.ty.set_kinds(scope);
     }
 
     pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {

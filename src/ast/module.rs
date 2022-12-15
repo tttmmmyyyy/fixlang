@@ -494,7 +494,7 @@ impl FixModule {
         self.trait_env.set_kinds();
         let type_env = &self.type_env();
         let trait_kind_map = self.trait_env.trait_kind_map();
-        for (_, sym) in &mut self.global_symbols {
+        for (_name, sym) in &mut self.global_symbols {
             sym.set_kinds(type_env, &trait_kind_map);
         }
     }
