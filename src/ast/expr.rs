@@ -362,7 +362,7 @@ impl NameSpace {
     }
 
     pub fn to_string(&self) -> String {
-        self.names.join(".")
+        self.names.join("::")
     }
 
     pub fn is_suffix(&self, rhs: &NameSpace) -> bool {
@@ -422,7 +422,12 @@ impl NameSpacedName {
     }
 
     pub fn to_string(&self) -> String {
-        self.namespace.to_string() + "." + &self.name
+        let ns = self.namespace.to_string();
+        if ns.is_empty() {
+            self.name.clone()
+        } else {
+            ns + "::" + &self.name
+        }
     }
 
     pub fn is_suffix(&self, other: &NameSpacedName) -> bool {
