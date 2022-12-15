@@ -50,6 +50,12 @@ pub struct TraitInfo {
 }
 
 impl TraitInfo {
+    pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
+        for inst in &mut self.instances {
+            inst.set_namespace_of_tycons(type_env, module_name);
+        }
+    }
+
     // Get type-scheme of a method.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // this function returns "a -> String for a: Show" as type of "show" method.
@@ -109,19 +115,10 @@ pub struct TraitInstance {
 }
 
 impl TraitInstance {
-    // Export methods with information to register them as global symbols.
-    // pub fn methods_as_global(&self) -> Vec<(NameSpacedName, Arc<ExprNode>, Arc<Scheme>)> {
-    //     self.methods
-    //         .iter()
-    //         .map(|(name, expr, ty)| {
-    //             let name = format!("{}%{}", name, self.id);
-    //             let nsn = NameSpacedName::from_strs(&[&self.trait_id().name], &name);
-    //             let scm =
-    //                 Scheme::generalize(ty.free_vars(), self.qual_pred.context.clone(), ty.clone());
-    //             (nsn, expr.clone(), scm)
-    //         })
-    //         .collect()
-    // }
+    pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
+        self.qual_pred
+            .set_namespace_of_tycons(type_env, module_name);
+    }
 
     // Get trait id.
     fn trait_id(&self) -> TraitId {
@@ -186,6 +183,16 @@ pub struct QualPredicate {
 }
 
 impl QualPredicate {
+    pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
+        for p in &mut self.context {
+            p.ty = p.ty.set_namespace_of_tycons(type_env, module_name);
+        }
+        self.predicate.ty = self
+            .predicate
+            .ty
+            .set_namespace_of_tycons(type_env, module_name);
+    }
+
     pub fn extend_kind_scope(
         scope: &mut HashMap<Name, Arc<Kind>>,
         preds: &Vec<Predicate>,
@@ -326,6 +333,12 @@ pub struct TraitEnv {
 }
 
 impl TraitEnv {
+    pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
+        for (_, trait_info) in &mut self.traits {
+            trait_info.set_namespace_of_tycons(type_env, module_name);
+        }
+    }
+
     // TODO: fix duplication with TypeEnv::infer_namespace
     pub fn infer_namespace(&self, ns: &NameSpacedName, module_name: &Name) -> NameSpacedName {
         let candidates = self

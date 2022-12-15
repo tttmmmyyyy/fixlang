@@ -503,6 +503,8 @@ impl FixModule {
         // Currently we don't need to pass trait_env to expressions, since
         // trait name appears in expression only in the namespace of a variable and it will be resolved by typechecker.
         let type_env = self.type_env();
+        self.trait_env
+            .set_namespace_of_tycons(&type_env, &self.name);
         let trait_env = &self.trait_env;
         for (_, sym) in &mut self.global_symbols {
             sym.set_namespace_of_tycons_and_traits(&type_env, trait_env, &self.name);
