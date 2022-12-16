@@ -367,14 +367,33 @@ fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
     assert_eq!(pair.as_rule(), Rule::type_decl);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
+    let pair = pairs.next().unwrap();
+    let type_value = if pair.as_rule() == Rule::struct_defn {
+        parse_struct_defn(pair, src)
+    } else if pair.as_rule() == Rule::union_defn {
+        parse_union_defn(pair, src)
+    } else {
+        unreachable!();
+    };
+    TypeDecl {
+        name: name.to_string(),
+        value: type_value,
+    }
+}
+
+fn parse_struct_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
+    assert_eq!(pair.as_rule(), Rule::struct_defn);
+    let pairs = pair.into_inner();
     let mut fields: Vec<StructField> = Vec::new();
     for pair in pairs {
         fields.push(parse_type_field(pair, src));
     }
-    TypeDecl {
-        name: name.to_string(),
-        value: TypeDeclValue::Struct(Struct { fields }),
-    }
+    TypeDeclValue::Struct(Struct { fields })
+}
+
+fn parse_union_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
+    assert_eq!(pair.as_rule(), Rule::union_defn);
+    todo!()
 }
 
 fn parse_type_field(pair: Pair<Rule>, src: &Arc<String>) -> StructField {

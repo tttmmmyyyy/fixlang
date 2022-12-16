@@ -7,7 +7,7 @@ expr_bool_lit = { "true" | "false" }
 
 expr_lit = { expr_int_lit | expr_bool_lit }
 
-keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit | "type" | "trait" | "impl" }
+keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit | "type" | "trait" | "impl" | "struct" | "union" }
 
 in_of_let = { "in" | ";" }
 
@@ -108,7 +108,15 @@ type_field_name = { !keywords ~ name_head_small ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ "struct" ~ sep* ~ "(" ~ sep* ~ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* ~ sep* ~ ")" ~ sep* ~ ";" }
+type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn) ~ sep* ~ ";" }
+
+comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* }
+
+// === struct definitions ===
+struct_defn = { "struct" ~ sep* ~ "(" ~ sep* ~ comma_separated_type_fields ~ sep* ~ ")" }
+
+// === union definitions ===
+union_defn = { "union" ~ sep* ~ "(" ~ sep* ~ comma_separated_type_fields ~ sep* ~ ")" }
 
 // === Trait definitions ===
 trait_name = { name_head_large ~ var_char* }
