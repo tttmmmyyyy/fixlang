@@ -867,6 +867,28 @@ pub fn test45() {
 
 #[test]
 #[serial]
+pub fn test46() {
+    // Test confliction of global name and local name.
+    let source = r"
+        module Main;
+
+        x : Int;
+        x = 5;
+
+        y : Int;
+        y = 7;
+
+        main : Int;
+        main = (
+            add (let x = 3 in let y = 2 in add x Main::y) x
+        );
+    ";
+    let answer = 15;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 
