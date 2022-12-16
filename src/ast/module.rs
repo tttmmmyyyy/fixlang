@@ -510,4 +510,50 @@ impl FixModule {
             sym.set_namespace_of_tycons_and_traits(&type_env, trait_env, &self.name);
         }
     }
+
+    // Add bult-in functions to a given ast.
+    pub fn add_builtin_symbols(self: &mut FixModule) {
+        fn add_global(
+            program: &mut FixModule,
+            ns: &[&str],
+            name: &str,
+            (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
+        ) {
+            program.add_global_object(NameSpacedName::from_strs(ns, name), (expr, scm));
+        }
+        add_global(self, &[STD_NAME], "add", add());
+        add_global(self, &[STD_NAME], "eq", eq());
+        add_global(self, &[STD_NAME], "fix", fix());
+        add_global(self, &[STD_NAME, ARRAY_NAME], "new", new_array());
+        add_global(self, &[STD_NAME, ARRAY_NAME], "get", read_array());
+        add_global(self, &[STD_NAME, ARRAY_NAME], "set", write_array());
+        add_global(self, &[STD_NAME, ARRAY_NAME], "set!", write_array_unique());
+        for decl in &self.type_decls.clone() {
+            match &decl.value {
+                TypeDeclValue::Struct(str) => {
+                    let module_name = self.name.clone();
+                    let ns = vec![module_name.as_str(), decl.name.as_str()];
+                    let struct_name =
+                        NameSpacedName::from_strs(&[module_name.as_str()], &decl.name);
+                    add_global(self, ns.as_slice(), "new", struct_new(&struct_name, str));
+                    for field in &str.fields {
+                        add_global(
+                            self,
+                            ns.as_slice(),
+                            &format!("get_{}", &field.name),
+                            struct_get(&struct_name, str, &field.name),
+                        );
+                        for is_unique in [false, true] {
+                            add_global(
+                                self,
+                                ns.as_slice(),
+                                &format!("mod_{}{}", &field.name, if is_unique { "!" } else { "" }),
+                                struct_mod(&struct_name, str, &field.name, is_unique),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

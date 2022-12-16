@@ -3,9 +3,9 @@ use super::*;
 
 pub const STD_NAME: &str = "Std";
 
-const INT_NAME: &str = "Int";
-const BOOL_NAME: &str = "Bool";
-const ARRAY_NAME: &str = "Array";
+pub const INT_NAME: &str = "Int";
+pub const BOOL_NAME: &str = "Bool";
+pub const ARRAY_NAME: &str = "Array";
 
 pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
     let mut ret = HashMap::new();
@@ -722,54 +722,4 @@ pub fn struct_mod(
     );
     let scm = Scheme::generalize(HashMap::new(), vec![], ty);
     (expr, scm)
-}
-
-// Add bult-in functions to a given ast.
-pub fn add_builtin_symbols(program: &mut FixModule) {
-    fn add_global(
-        program: &mut FixModule,
-        ns: &[&str],
-        name: &str,
-        (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
-    ) {
-        program.add_global_object(NameSpacedName::from_strs(ns, name), (expr, scm));
-    }
-    add_global(program, &[STD_NAME], "add", add());
-    add_global(program, &[STD_NAME], "eq", eq());
-    add_global(program, &[STD_NAME], "fix", fix());
-    add_global(program, &[STD_NAME, ARRAY_NAME], "new", new_array());
-    add_global(program, &[STD_NAME, ARRAY_NAME], "get", read_array());
-    add_global(program, &[STD_NAME, ARRAY_NAME], "set", write_array());
-    add_global(
-        program,
-        &[STD_NAME, ARRAY_NAME],
-        "set!",
-        write_array_unique(),
-    );
-    for decl in &program.type_decls.clone() {
-        match &decl.value {
-            TypeDeclValue::Struct(str) => {
-                let module_name = program.name.clone();
-                let ns = vec![module_name.as_str(), decl.name.as_str()];
-                let struct_name = NameSpacedName::from_strs(&[module_name.as_str()], &decl.name);
-                add_global(program, ns.as_slice(), "new", struct_new(&struct_name, str));
-                for field in &str.fields {
-                    add_global(
-                        program,
-                        ns.as_slice(),
-                        &format!("get_{}", &field.name),
-                        struct_get(&struct_name, str, &field.name),
-                    );
-                    for is_unique in [false, true] {
-                        add_global(
-                            program,
-                            ns.as_slice(),
-                            &format!("mod_{}{}", &field.name, if is_unique { "!" } else { "" }),
-                            struct_mod(&struct_name, str, &field.name, is_unique),
-                        );
-                    }
-                }
-            }
-        }
-    }
 }

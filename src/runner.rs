@@ -22,7 +22,7 @@ fn execute_main_module<'c>(
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Add create global symbols
-    add_builtin_symbols(&mut fix_mod);
+    fix_mod.add_builtin_symbols();
     fix_mod.create_trait_method_symbols();
 
     // Calculate list of type constructors.
