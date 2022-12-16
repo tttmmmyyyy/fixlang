@@ -553,6 +553,7 @@ impl FixModule {
                         }
                     }
                 }
+                TypeDeclValue::Union(_) => todo!(),
             }
         }
     }

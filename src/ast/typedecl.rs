@@ -11,15 +11,21 @@ pub struct TypeDecl {
 #[derive(Clone)]
 pub enum TypeDeclValue {
     Struct(Struct),
+    Union(Union),
 }
 
 #[derive(Clone)]
 pub struct Struct {
-    pub fields: Vec<StructField>,
+    pub fields: Vec<Field>,
 }
 
 #[derive(Clone)]
-pub struct StructField {
+pub struct Union {
+    pub fields: Vec<Field>,
+}
+
+#[derive(Clone)]
+pub struct Field {
     pub name: String,
     pub ty: Arc<TypeNode>,
 }

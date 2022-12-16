@@ -384,7 +384,7 @@ fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
 fn parse_struct_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
     assert_eq!(pair.as_rule(), Rule::struct_defn);
     let pairs = pair.into_inner();
-    let mut fields: Vec<StructField> = Vec::new();
+    let mut fields: Vec<Field> = Vec::new();
     for pair in pairs {
         fields.push(parse_type_field(pair, src));
     }
@@ -393,15 +393,20 @@ fn parse_struct_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
 
 fn parse_union_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
     assert_eq!(pair.as_rule(), Rule::union_defn);
-    todo!()
+    let pairs = pair.into_inner();
+    let mut fields: Vec<Field> = Vec::new();
+    for pair in pairs {
+        fields.push(parse_type_field(pair, src));
+    }
+    TypeDeclValue::Union(Union { fields })
 }
 
-fn parse_type_field(pair: Pair<Rule>, src: &Arc<String>) -> StructField {
+fn parse_type_field(pair: Pair<Rule>, src: &Arc<String>) -> Field {
     assert_eq!(pair.as_rule(), Rule::type_field);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
     let ty = parse_type(pairs.next().unwrap());
-    StructField {
+    Field {
         name: name.to_string(),
         ty,
     }
