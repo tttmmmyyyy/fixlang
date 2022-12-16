@@ -566,7 +566,7 @@ pub fn test33() {
     // Test struct declaration and new.
     let source = r"
         module Main;
-        type IntBool = (x: Int, y: Bool);
+        type IntBool = struct (x: Int, y: Bool);
 
         main : Int;
         main = (
@@ -586,8 +586,8 @@ pub fn test34() {
     let source = r"
         module Main;        
         
-        type OtherStruct = (y: Int, x: Bool);
-        type IntBool = (x: Int, y: Bool);
+        type OtherStruct = struct (y: Int, x: Bool);
+        type IntBool = struct (x: Int, y: Bool);
 
         main : Int;
         main = (
@@ -607,8 +607,8 @@ pub fn test35() {
     let source = r"
         module Main;
 
-        type A = (x: Int, y: Bool);
-        type B = (x: Bool, y: Int);
+        type A = struct (x: Int, y: Bool);
+        type B = struct (x: Bool, y: Int);
             
         main : Int;
         main = (
@@ -628,8 +628,8 @@ pub fn test36() {
     let source = r"
         module Main;
 
-        type A = (x: B);
-        type B = (x: Int);
+        type A = struct (x: B);
+        type B = struct (x: Int);
             
         main : Int;
         main = (
@@ -649,8 +649,8 @@ pub fn test37() {
     let source = r"
         module Main;
 
-        type A = (x: B);
-        type B = (x: Int);
+        type A = struct (x: B);
+        type B = struct (x: Int);
 
         main : Int;
         main = (
@@ -670,8 +670,8 @@ pub fn test38() {
     let source = r"
         module Main;
 
-        type A = (x: B);
-        type B = (x: Int);
+        type A = struct (x: B);
+        type B = struct (x: Int);
 
         main : Int;
         main = (    
@@ -692,8 +692,8 @@ pub fn test39() {
     let source = r"
         module Main;
 
-        type A = (x: B);
-        type B = (x: Int);
+        type A = struct (x: B);
+        type B = struct (x: Int);
         
         main : Int;
         main = (
@@ -714,8 +714,8 @@ pub fn test40() {
     let source = r"
         module Main;
 
-        type A = (x: B);
-        type B = (x: Int);
+        type A = struct (x: B);
+        type B = struct (x: Int);
         
         main : Int;
         main = (

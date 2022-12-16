@@ -108,7 +108,7 @@ type_field_name = { !keywords ~ name_head_small ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~  "(" ~ sep* ~ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* ~ sep* ~ ")" ~ sep* ~ ";" }
+type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ "struct" ~ sep* ~ "(" ~ sep* ~ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* ~ sep* ~ ")" ~ sep* ~ ";" }
 
 // === Trait definitions ===
 trait_name = { name_head_large ~ var_char* }
