@@ -344,6 +344,8 @@ pub struct NameSpace {
     names: Vec<String>, // Empty implies it is local.
 }
 
+const NAMESPACE_SEPARATOR: &str = ".";
+
 impl NameSpace {
     pub fn local() -> Self {
         Self { names: vec![] }
@@ -362,7 +364,7 @@ impl NameSpace {
     }
 
     pub fn to_string(&self) -> String {
-        self.names.join("::")
+        self.names.join(NAMESPACE_SEPARATOR)
     }
 
     pub fn is_suffix(&self, rhs: &NameSpace) -> bool {
@@ -425,7 +427,7 @@ impl NameSpacedName {
         if ns.is_empty() {
             self.name.clone()
         } else {
-            ns + "::" + &self.name
+            ns + NAMESPACE_SEPARATOR + &self.name
         }
     }
 

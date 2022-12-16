@@ -570,9 +570,9 @@ pub fn test33() {
 
         main : Int;
         main = (
-            let obj = IntBool::new 18 false;
-            let obj = IntBool::mod_x (\x -> add x 42) obj;
-            IntBool::get_x obj
+            let obj = IntBool.new 18 false;
+            let obj = IntBool.mod_x (\x -> add x 42) obj;
+            IntBool.get_x obj
         );
         ";
     let answer = 60;
@@ -591,7 +591,7 @@ pub fn test34() {
 
         main : Int;
         main = (
-            let obj = IntBool::new 18 false;
+            let obj = IntBool.new 18 false;
             let obj = obj . mod_x (\x -> add x 42);
             obj . get_x
         );
@@ -612,8 +612,8 @@ pub fn test35() {
             
         main : Int;
         main = (
-            let a = A::new 3 true;
-            let b = B::new true 5;
+            let a = A.new 3 true;
+            let b = B.new true 5;
             add (if a.get_y then a.get_x else 0) (if b.get_x then b.get_y else 0)
         );
         ";
@@ -633,7 +633,7 @@ pub fn test36() {
             
         main : Int;
         main = (
-            let a = A::new (B::new 16);
+            let a = A.new (B.new 16);
             let a = a.(mod_x $ mod_x $ \x -> add x 15);
             a . get_x . get_x
         );
@@ -654,7 +654,7 @@ pub fn test37() {
 
         main : Int;
         main = (
-            let a = A::new (B::new 16);
+            let a = A.new (B.new 16);
             let b = a . (mod_x! $ mod_x! $ \x -> add x 15);
             b . get_x . get_x
         );
@@ -675,7 +675,7 @@ pub fn test38() {
 
         main : Int;
         main = (    
-            let a = A::new (B::new 16);
+            let a = A.new (B.new 16);
             let f = \a -> (a : A) . (mod_x! $ mod_x! $ \x -> add x 15);
             let a = a.f;
             a.get_x.get_x
@@ -697,7 +697,7 @@ pub fn test39() {
         
         main : Int;
         main = (
-            let a = A::new (B::new 16);
+            let a = A.new (B.new 16);
             let f = \a -> a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ \x -> add x 15);
             let a = a.f;
             a.get_x.get_x
@@ -719,7 +719,7 @@ pub fn test40() {
         
         main : Int;
         main = (
-            let a = A::new (B::new 16);
+            let a = A.new (B.new 16);
             let f: A -> A = \a -> a . (mod_x! $ mod_x! $ \x -> add x 15);
             let a = a .f;
             a .get_x .get_x
@@ -880,7 +880,7 @@ pub fn test46() {
 
         main : Int;
         main = (
-            add (let x = 3 in let y = 2 in add x Main::y) x
+            add (let x = 3 in let y = 2 in add x Main.y) x
         );
     ";
     let answer = 15;

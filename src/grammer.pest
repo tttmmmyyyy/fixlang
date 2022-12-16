@@ -29,7 +29,7 @@ var_with_type = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 namespace_item = { name_head_large ~ var_char* }
 
-namespace = { (namespace_item ~ "::")* }
+namespace = { (namespace_item ~ ".")* }
 
 expr_var = { namespace ~ var }
 
