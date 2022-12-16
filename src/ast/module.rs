@@ -359,7 +359,7 @@ impl FixModule {
         } else {
             let inst_name = self.require_instantiated_symbol(tc, &main_func_name, &int_lit_ty());
             self.instantiate_symbols(tc);
-            expr_var(&inst_name.name, Some(inst_name.namespace.clone()), None)
+            expr_var(inst_name, None)
         }
     }
 
@@ -367,12 +367,12 @@ impl FixModule {
     fn instantiate_expr(&mut self, tc: &TypeCheckContext, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
-                if v.namespace.as_ref().unwrap().is_local() {
+                if v.name.is_local() {
                     expr.clone()
                 } else {
                     let ty = tc.substitute_type(&expr.inferred_ty.as_ref().unwrap());
-                    let instance = self.require_instantiated_symbol(tc, &v.namespaced_name(), &ty);
-                    let v = v.set_namespaced_name(instance);
+                    let instance = self.require_instantiated_symbol(tc, &v.name, &ty);
+                    let v = v.set_name(instance);
                     expr.set_var_var(v)
                 }
             }

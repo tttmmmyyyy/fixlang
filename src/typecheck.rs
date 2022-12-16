@@ -72,41 +72,19 @@ where
     // If `namespace` is unspecified and no local variable `name` is found, then all global variables are returned.
     // If `namespace` is specified and non-empty, then returns all global variables whose namespaces have `namespace` as suffix.
     // If `namespace` is specified and empty, then returns local variable `name`.
-    fn overloaded_candidates(
-        &self,
-        name: &str,
-        namespace: &Option<NameSpace>,
-    ) -> Vec<(NameSpace, T)> {
-        if !self.var.contains_key(name) {
+    fn overloaded_candidates(&self, name: &NameSpacedName) -> Vec<(NameSpace, T)> {
+        if !self.var.contains_key(&name.name) {
             return vec![];
         }
-        let sv = &self.var[name];
-        match namespace {
-            None => {
-                if sv.local.len() > 0 {
-                    vec![(NameSpace::local(), sv.local.last().unwrap().clone())]
-                } else {
-                    sv.global
-                        .iter()
-                        .map(|(ns, v)| (ns.clone(), v.clone()))
-                        .collect()
-                }
-            }
-            Some(ns) => {
-                if ns.is_local() {
-                    if sv.local.len() > 0 {
-                        vec![(NameSpace::local(), sv.local.last().unwrap().clone())]
-                    } else {
-                        vec![]
-                    }
-                } else {
-                    sv.global
-                        .iter()
-                        .filter(|(ns2, _)| ns.is_suffix(ns2))
-                        .map(|(ns2, v)| (ns2.clone(), v.clone()))
-                        .collect()
-                }
-            }
+        let sv = &self.var[&name.name];
+        if name.is_local() && sv.local.len() > 0 {
+            vec![(NameSpace::local(), sv.local.last().unwrap().clone())]
+        } else {
+            sv.global
+                .iter()
+                .filter(|(ns, _)| name.namespace.is_suffix(ns))
+                .map(|(ns, v)| (ns.clone(), v.clone()))
+                .collect()
         }
     }
 }
@@ -538,7 +516,7 @@ impl TypeCheckContext {
         let ei = ei.set_inferred_type(ty.clone());
         match &*ei.expr {
             Expr::Var(var) => {
-                let candidates = self.scope.overloaded_candidates(&var.name, &var.namespace);
+                let candidates = self.scope.overloaded_candidates(&var.name);
                 let candidates: Vec<(TypeCheckContext, NameSpace)> = candidates
                     .iter()
                     .filter_map(|(ns, scm)| {
@@ -560,7 +538,7 @@ impl TypeCheckContext {
                     error_exit_with_src(
                         &format!(
                             "name `{}` of required type `{}` is not found.",
-                            var.name,
+                            var.name.to_string(),
                             &self.substitute_type(&ty).to_string()
                         ),
                         &var.source,
@@ -568,15 +546,14 @@ impl TypeCheckContext {
                 } else if candidates.len() >= 2 {
                     let candidates_str = candidates
                         .iter()
-                        .map(|(_, ns)| {
-                            "`".to_string() + &NameSpacedName::new(ns, &var.name).to_string() + "`"
-                        })
+                        .map(|(_, ns)| "`".to_string() + &var.name.to_string() + "`")
                         .collect::<Vec<_>>()
                         .join(", ");
                     error_exit_with_src(
                         &format!(
                             "name `{}` is ambiguous: there are {}.",
-                            var.name, candidates_str
+                            var.name.to_string(),
+                            candidates_str
                         ),
                         &var.source,
                     );
@@ -584,7 +561,7 @@ impl TypeCheckContext {
                     // candidates.len() == 1
                     let (tc, ns) = candidates[0].clone();
                     *self = tc;
-                    ei.set_var_namespace(&ns)
+                    ei.set_var_namespace(ns)
                 }
             }
             Expr::Lit(lit) => {
@@ -626,18 +603,20 @@ impl TypeCheckContext {
                         &ei.source,
                     );
                 }
-                self.scope.push(&arg.name, &Scheme::from_type(arg_ty));
+                assert!(arg.name.is_local());
+                self.scope.push(&arg.name.name, &Scheme::from_type(arg_ty));
                 let body = self.unify_type_of_expr(body, body_ty);
-                self.scope.pop(&arg.name);
+                self.scope.pop(&arg.name.name);
                 ei.set_lam_body(body)
             }
             Expr::Let(var, val, body) => {
                 let var_ty = type_tyvar_star(&self.new_tyvar());
                 let val = self.unify_type_of_expr(val, var_ty.clone());
                 let var_scm = self.generalize_to_scheme(&var_ty, &HashSet::default());
-                self.scope.push(&var.name, &var_scm);
+                assert!(var.name.is_local());
+                self.scope.push(&var.name.name, &var_scm);
                 let body = self.unify_type_of_expr(body, ty);
-                self.scope.pop(&var.name);
+                self.scope.pop(&var.name.name);
                 ei.set_let_bound(val).set_let_value(body)
             }
             Expr::If(cond, then_expr, else_expr) => {

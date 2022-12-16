@@ -52,7 +52,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_var_namespace(&self, ns: &NameSpace) -> Arc<Self> {
+    pub fn set_var_namespace(&self, ns: NameSpace) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Var(var) => {
@@ -307,13 +307,13 @@ impl Expr {
     }
     pub fn to_string(&self) -> String {
         match self {
-            Expr::Var(v) => v.name.clone(),
+            Expr::Var(v) => v.name.to_string(),
             Expr::Lit(l) => l.name.clone(),
             Expr::App(f, a) => format!("({}) ({})", f.expr.to_string(), a.expr.to_string()),
-            Expr::Lam(x, fx) => format!("\\{}->({})", x.name, fx.expr.to_string()),
+            Expr::Lam(x, fx) => format!("\\{}->({})", x.name.to_string(), fx.expr.to_string()),
             Expr::Let(x, b, v) => format!(
                 "let {}={} in ({})",
-                x.name,
+                x.name.to_string(),
                 b.expr.to_string(),
                 v.expr.to_string()
             ),
@@ -390,8 +390,7 @@ impl NameSpace {
 
 #[derive(Clone)]
 pub struct Var {
-    pub name: String,
-    pub namespace: Option<NameSpace>, // None implies namespace to be inferred
+    pub name: NameSpacedName,
     pub source: Option<Span>,
 }
 
@@ -442,37 +441,25 @@ impl NameSpacedName {
 }
 
 impl Var {
-    pub fn set_namsapce(&self, ns: &NameSpace) -> Arc<Self> {
+    pub fn set_namsapce(&self, ns: NameSpace) -> Arc<Self> {
         let mut ret = self.clone();
-        ret.namespace = Some(ns.clone());
+        ret.name.namespace = ns;
         Arc::new(ret)
     }
 
-    pub fn namespaced_name(&self) -> NameSpacedName {
-        match &self.namespace {
-            Some(ns) => NameSpacedName::new(ns, &self.name),
-            None => panic!(),
-        }
-    }
-
-    pub fn set_namespaced_name(&self, nsn: NameSpacedName) -> Arc<Self> {
+    pub fn set_name(&self, nsn: NameSpacedName) -> Arc<Self> {
         let mut ret = self.clone();
-        ret.name = nsn.name;
-        ret.namespace = Some(nsn.namespace);
+        ret.name = nsn;
         Arc::new(ret)
     }
 }
 
-pub fn var_var(var_name: &str, namespace: Option<NameSpace>, src: Option<Span>) -> Arc<Var> {
-    Arc::new(Var {
-        name: String::from(var_name),
-        namespace,
-        source: src,
-    })
+pub fn var_var(name: NameSpacedName, src: Option<Span>) -> Arc<Var> {
+    Arc::new(Var { name, source: src })
 }
 
 pub fn var_local(var_name: &str, src: Option<Span>) -> Arc<Var> {
-    var_var(var_name, Some(NameSpace::local()), src)
+    var_var(NameSpacedName::local(var_name), src)
 }
 
 pub fn expr_lit(
@@ -509,8 +496,8 @@ pub fn expr_app(lam: Arc<ExprNode>, arg: Arc<ExprNode>, src: Option<Span>) -> Ar
 }
 
 // Make variable expression.
-pub fn expr_var(var_name: &str, ns: Option<NameSpace>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Var(var_var(var_name, ns, src.clone()))).into_expr_info(src)
+pub fn expr_var(name: NameSpacedName, src: Option<Span>) -> Arc<ExprNode> {
+    Arc::new(Expr::Var(var_var(name, src.clone()))).into_expr_info(src)
 }
 
 pub fn expr_if(
@@ -530,7 +517,7 @@ pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) ->
 pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
         Expr::Var(var) => {
-            let free_vars = vec![var.namespaced_name()].into_iter().collect();
+            let free_vars = vec![var.name.clone()].into_iter().collect();
             ei.set_free_vars(free_vars)
         }
         Expr::Lit(lit) => {
@@ -549,7 +536,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
         Expr::Lam(arg, body) => {
             let body = calculate_free_vars(body.clone());
             let mut free_vars = body.free_vars.clone().unwrap();
-            free_vars.remove(&arg.namespaced_name());
+            free_vars.remove(&arg.name);
             free_vars.remove(&NameSpacedName::local(SELF_NAME));
             ei.set_lam_body(body).set_free_vars(free_vars)
         }
@@ -560,7 +547,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let bound = calculate_free_vars(bound.clone());
             let val = calculate_free_vars(val.clone());
             let mut free_vars = val.free_vars.clone().unwrap();
-            free_vars.remove(&var.namespaced_name());
+            free_vars.remove(&var.name);
             free_vars.extend(bound.free_vars.clone().unwrap());
             ei.set_let_bound(bound)
                 .set_let_value(val)

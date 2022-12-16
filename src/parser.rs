@@ -479,12 +479,11 @@ fn parse_expr_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let mut pairs = pair.into_inner();
     let names = parse_namespace(pairs.next().unwrap(), src);
     let var = pairs.next().unwrap().as_str().to_string();
-    let ns = if names.len() > 0 {
-        Some(NameSpace::new(names))
-    } else {
-        None
+    let name = NameSpacedName {
+        namespace: NameSpace::new(names),
+        name: var,
     };
-    expr_var(&var, ns, Some(span))
+    expr_var(name, Some(span))
 }
 
 fn parse_namespace(pair: Pair<Rule>, src: &Arc<String>) -> Vec<String> {

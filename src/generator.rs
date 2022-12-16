@@ -396,7 +396,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate variable.
     fn eval_var(&mut self, var: Arc<Var>) -> PointerValue<'c> {
-        self.get_var_retained_if_used_later(&var.namespaced_name())
+        self.get_var_retained_if_used_later(&var.name)
     }
 
     // Evaluate application
@@ -419,7 +419,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let module = self.module;
         // Calculate captured variables.
         let mut captured_names = val.free_vars().clone();
-        captured_names.remove(&arg.namespaced_name());
+        captured_names.remove(&arg.name);
         captured_names.remove(&NameSpacedName::local(SELF_NAME));
         // We need not and should not capture global variable
         // If we capture global variable, then global recursive function such as
@@ -453,7 +453,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // Set up new scope
             let arg_ptr = lam_fn.get_first_param().unwrap().into_pointer_value();
-            self.scope_push(&arg.namespaced_name(), &arg_ptr);
+            self.scope_push(&arg.name, &arg_ptr);
             let closure_obj = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
             self.scope_push(&NameSpacedName::local(SELF_NAME), &closure_obj);
             for (i, cap_name) in captured_names.iter().enumerate() {
@@ -471,7 +471,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             if !val.free_vars().contains(&NameSpacedName::local(SELF_NAME)) {
                 self.release(closure_obj);
             }
-            if !val.free_vars().contains(&arg.namespaced_name()) {
+            if !val.free_vars().contains(&arg.name) {
                 self.release(arg_ptr);
             }
             // Generate value
@@ -504,7 +504,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         bound: Arc<ExprNode>,
         val: Arc<ExprNode>,
     ) -> PointerValue<'c> {
-        let var_name = &var.namespaced_name();
+        let var_name = &var.name;
         let mut used_in_val_except_var = val.free_vars().clone();
         used_in_val_except_var.remove(var_name);
         self.scope_lock_as_used_later(&used_in_val_except_var);
