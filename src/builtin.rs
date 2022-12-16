@@ -245,7 +245,7 @@ pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let array_str = NameSpacedName::local(array);
     let idx_str = NameSpacedName::local(idx);
-    let name = format!("readArray {} {}", array, idx);
+    let name = format!("Array.get {} {}", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
@@ -271,9 +271,9 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
 // readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
 pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("array", None),
+        var_local("idx", None),
         expr_abs(
-            var_local("idx", None),
+            var_local("array", None),
             read_array_lit("a", "array", "idx"),
             None,
         ),
@@ -283,8 +283,11 @@ pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         HashMap::from([("a".to_string(), kind_star())]),
         vec![],
         type_fun(
-            type_tyapp(array_lit_ty(), type_tyvar_star("a")),
-            type_fun(int_lit_ty(), type_tyvar_star("a")),
+            int_lit_ty(),
+            type_fun(
+                type_tyapp(array_lit_ty(), type_tyvar_star("a")),
+                type_tyvar_star("a"),
+            ),
         ),
     );
     (expr, scm)
@@ -304,9 +307,9 @@ fn write_array_lit(
     let value_str = NameSpacedName::local(value);
     let func_name = String::from({
         if is_unique_version {
-            "writeArray!"
+            "set!"
         } else {
-            "writeArray"
+            "set"
         }
     });
     let name = format!("{} {} {} {}", func_name, array, idx, value);
@@ -396,11 +399,11 @@ fn write_array_lit(
 // writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
 pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("array", None),
+        var_local("idx", None),
         expr_abs(
-            var_local("idx", None),
+            var_local("value", None),
             expr_abs(
-                var_local("value", None),
+                var_local("array", None),
                 write_array_lit("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
@@ -413,8 +416,8 @@ pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
         HashMap::from([("a".to_string(), kind_star())]),
         vec![],
         type_fun(
-            array_ty.clone(),
-            type_fun(int_lit_ty(), type_fun(type_tyvar_star("a"), array_ty)),
+            int_lit_ty(),
+            type_fun(type_tyvar_star("a"), type_fun(array_ty.clone(), array_ty)),
         ),
     );
     (expr, scm)
@@ -734,10 +737,15 @@ pub fn add_builtin_symbols(program: &mut FixModule) {
     add_global(program, &[STD_NAME], "add", add());
     add_global(program, &[STD_NAME], "eq", eq());
     add_global(program, &[STD_NAME], "fix", fix());
-    add_global(program, &[STD_NAME], "newArray", new_array());
-    add_global(program, &[STD_NAME], "readArray", read_array());
-    add_global(program, &[STD_NAME], "writeArray", write_array());
-    add_global(program, &[STD_NAME], "writeArray!", write_array_unique());
+    add_global(program, &[STD_NAME, ARRAY_NAME], "new", new_array());
+    add_global(program, &[STD_NAME, ARRAY_NAME], "get", read_array());
+    add_global(program, &[STD_NAME, ARRAY_NAME], "set", write_array());
+    add_global(
+        program,
+        &[STD_NAME, ARRAY_NAME],
+        "set!",
+        write_array_unique(),
+    );
     for decl in &program.type_decls.clone() {
         match &decl.value {
             TypeDeclValue::Struct(str) => {

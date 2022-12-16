@@ -408,7 +408,7 @@ pub fn test23() {
         module Main;
         main : Int;
         main = (
-            let arr = newArray 0 42;
+            let arr = Array.new 0 42;
             32
         );
         ";
@@ -424,7 +424,7 @@ pub fn test24() {
         module Main;
         main : Int;
         main = (
-            let arr = newArray 100 42;
+            let arr = Array.new 100 42;
             32
         );
         ";
@@ -440,8 +440,8 @@ pub fn test25() {
         module Main;
         main : Int;
         main = (
-            let arr = newArray 100 42;
-            let elem = readArray arr 50;
+            let arr = Array.new 100 42;
+            let elem = arr.get 50;
             elem
         );
         ";
@@ -457,9 +457,9 @@ pub fn test26() {
         module Main;
         main : Int;
         main = (
-            let arr = newArray 100 42;
-            let arr = writeArray arr 50 21;
-            readArray arr 50
+            let arr = Array.new 100 42;
+            let arr = arr.set 50 21;
+            arr.get 50
         );
         ";
     let answer = 21;
@@ -474,19 +474,19 @@ pub fn test28() {
         module Main;
         main : Int;
         main = (
-            let arr = newArray 31 0;
-            let arr = writeArray! arr 0 0;
-            let arr = writeArray! arr 1 1;
+            let arr = Array.new 31 0;
+            let arr = arr.set! 0 0;
+            let arr = arr.set! 1 1;
             let loop = fix \f -> \arr -> \n ->
                 if eq n 31 then
                     arr
                 else
-                    let x = readArray arr (add n (-1));
-                    let y = readArray arr (add n (-2));
-                    let arr = writeArray! arr n (add x y);
+                    let x = arr.get (add n (-1));
+                    let y = arr.get (add n (-2));
+                    let arr = arr.set! n (add x y);
                     f arr (add n 1);
             let fib = loop arr 2;
-            readArray fib 30
+            fib.get 30
         );
         ";
     let answer = 832040;
@@ -809,19 +809,19 @@ pub fn test44() {
 
         add_head_and_next : [a: ToInt] Array a -> Int; 
         add_head_and_next = \arr -> (
-            let head = toInt $ readArray arr 0;
-            let next = toInt $ readArray arr 1;
+            let head = toInt $ arr.get 0;
+            let next = toInt $ arr.get 1;
             add head next
         );
 
         main : Int;
         main = (
-            let arr0 = newArray 2 false;
-            let arr0 = writeArray! arr0 0 true;
+            let arr0 = Array.new 2 false;
+            let arr0 = arr0.set! 0 true;
             let x = add_head_and_next arr0;
 
-            let arr1 = newArray 2 3;
-            let arr1 = writeArray! arr1 1 5;
+            let arr1 = Array.new 2 3;
+            let arr1 = arr1.set! 1 5;
             let z = add_head_and_next arr1;
 
             let y = add (toInt 5) (toInt false);
@@ -845,9 +845,9 @@ pub fn test45() {
 
         impl Array : Functor {
             map = \f -> \arr -> (
-                let e = readArray arr 0;
+                let e = arr.get 0;
                 let e = f e;
-                newArray 1 e
+                Array.new 1 e
             );
         }
 
@@ -856,9 +856,9 @@ pub fn test45() {
 
         main : Int;
         main = (
-            let arr = newArray 1 false;
+            let arr = Array.new 1 false;
             let arr = arr . map (\e -> if e then 0 else -1);
-            readArray arr 0
+            arr.get 0
         );
     ";
     let answer = -1;
