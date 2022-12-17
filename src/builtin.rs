@@ -832,6 +832,7 @@ pub fn union_as(
             field_name,
             field_idx,
             union.fields.len(),
+            union.fields[field_idx].ty.clone(),
         ),
         None,
     );
@@ -849,6 +850,7 @@ pub fn union_as_lit(
     field_name: &Name,
     field_idx: usize,
     field_count: usize,
+    field_ty: Arc<TypeNode>,
 ) -> Arc<ExprNode> {
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
     let free_vars = vec![NameSpacedName::local(union_arg_name)];
@@ -895,13 +897,7 @@ pub fn union_as_lit(
 
         field_value
     });
-    expr_lit(
-        generator,
-        free_vars,
-        name,
-        type_tycon(&tycon(union_name.clone())),
-        None,
-    )
+    expr_lit(generator, free_vars, name, field_ty, None)
 }
 
 // `is_{field}` built-in function for a given union.

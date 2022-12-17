@@ -889,6 +889,28 @@ pub fn test46() {
 
 #[test]
 #[serial]
+pub fn test47() {
+    // Basic use of union.
+    let source = r"
+        module Main;
+
+        type IntOrBool = union (i : Int, b: Bool);
+
+        main : Int;
+        main = (
+            let i_val = from_i 3;
+            let b_val = from_b true;
+            let i_val = if i_val.is_i then i_val.as_i else 0;
+            let b_val = if b_val.is_b then b_val.as_b else false;
+            if b_val then i_val else 0
+        );
+    ";
+    let answer = 3;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 
