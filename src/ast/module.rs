@@ -553,7 +553,31 @@ impl FixModule {
                         }
                     }
                 }
-                TypeDeclValue::Union(_) => todo!(),
+                TypeDeclValue::Union(union) => {
+                    let module_name = self.name.clone();
+                    let ns = vec![module_name.as_str(), decl.name.as_str()];
+                    let union_name = NameSpacedName::from_strs(&[module_name.as_str()], &decl.name);
+                    for field in &union.fields {
+                        add_global(
+                            self,
+                            ns.as_slice(),
+                            &format!("from_{}", field.name),
+                            union_from(&union_name, &field.name, union),
+                        );
+                        add_global(
+                            self,
+                            ns.as_slice(),
+                            &format!("as_{}", field.name),
+                            union_as(&union_name, &field.name, union),
+                        );
+                        add_global(
+                            self,
+                            ns.as_slice(),
+                            &format!("is_{}", field.name),
+                            union_is(&union_name, &field.name, union),
+                        );
+                    }
+                }
             }
         }
     }

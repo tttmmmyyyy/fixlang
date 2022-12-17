@@ -521,6 +521,8 @@ pub fn struct_get_lit(
         // Get struct object.
         let str_ptr = gc.get_var(&var_name_clone).ptr.get(gc);
 
+        // TODO: implement index out of range error.
+
         // Extract field.
         let str_ty = ObjectType::struct_type(field_count).to_struct_type(gc.context);
         let field_ptr = gc.load_obj_field(str_ptr, str_ty, field_idx as u32 + 1);
@@ -722,4 +724,285 @@ pub fn struct_mod(
     );
     let scm = Scheme::generalize(HashMap::new(), vec![], ty);
     (expr, scm)
+}
+
+// `from_{field}` built-in function for a given union.
+pub fn union_from(
+    union_name: &NameSpacedName,
+    field_name: &Name,
+    union: &Union,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // Get field index.
+    let mut field_idx = 0;
+    for field in &union.fields {
+        if *field_name == field.name {
+            break;
+        }
+        field_idx += 1;
+    }
+    if field_idx == union.fields.len() {
+        error_exit(&format!(
+            "unknown field `{}` for union `{}`",
+            field_name,
+            union_name.to_string()
+        ));
+    }
+    let expr = expr_abs(
+        var_local(field_name, None),
+        union_from_lit(union_name, field_name, field_idx, union.fields.len()),
+        None,
+    );
+    let union_ty = type_tycon(&tycon(union_name.clone()));
+    let field_ty = union.fields[field_idx].ty.clone();
+    let ty = type_fun(field_ty, union_ty);
+    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    todo!("add field duplication checker.");
+    (expr, scm)
+}
+
+// `from_{field}` built-in function for a given union.
+pub fn union_from_lit(
+    union_name: &NameSpacedName,
+    field_name: &Name,
+    field_idx: usize,
+    field_count: usize,
+) -> Arc<ExprNode> {
+    let free_vars = vec![NameSpacedName::local(field_name)];
+    let name = format!("{}.from_{}", union_name.to_string(), field_name);
+    let name_cloned = name.clone();
+    let field_name_cloned = field_name.clone();
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        // Get field values.
+        let field_ptr: PointerValue = gc
+            .get_var(&NameSpacedName::local(&field_name_cloned))
+            .ptr
+            .get(gc);
+
+        // Create struct object.
+        let union_ty = ObjectType::union_type(field_count);
+        let union_ptr = union_ty.create_obj(gc, Some(&name_cloned));
+        let struct_ty = union_ty.to_struct_type(gc.context);
+
+        // Create tag value.
+        let tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+
+        // Set tag.
+        gc.store_obj_field(union_ptr, struct_ty, 1, tag_value.as_basic_value_enum());
+
+        // Set value.
+        gc.store_obj_field(union_ptr, struct_ty, 2, field_ptr.as_basic_value_enum());
+
+        union_ptr
+    });
+    expr_lit(
+        generator,
+        free_vars,
+        name,
+        type_tycon(&tycon(union_name.clone())),
+        None,
+    )
+}
+
+// `as_{field}` built-in function for a given union.
+pub fn union_as(
+    union_name: &NameSpacedName,
+    field_name: &Name,
+    union: &Union,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // Get field index.
+    let mut field_idx = 0;
+    for field in &union.fields {
+        if *field_name == field.name {
+            break;
+        }
+        field_idx += 1;
+    }
+    if field_idx == union.fields.len() {
+        error_exit(&format!(
+            "unknown field `{}` for union `{}`",
+            field_name,
+            union_name.to_string()
+        ));
+    }
+    let union_arg_name = "union".to_string();
+    let expr = expr_abs(
+        var_local(&union_arg_name, None),
+        union_as_lit(
+            union_name,
+            &union_arg_name,
+            field_name,
+            field_idx,
+            union.fields.len(),
+        ),
+        None,
+    );
+    let union_ty = type_tycon(&tycon(union_name.clone()));
+    let field_ty = union.fields[field_idx].ty.clone();
+    let ty = type_fun(union_ty, field_ty);
+    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    (expr, scm)
+}
+
+// `from_{field}` built-in function for a given union.
+pub fn union_as_lit(
+    union_name: &NameSpacedName,
+    union_arg_name: &Name,
+    field_name: &Name,
+    field_idx: usize,
+    field_count: usize,
+) -> Arc<ExprNode> {
+    let name = format!("{}.as_{}", union_name.to_string(), field_name);
+    let free_vars = vec![NameSpacedName::local(union_arg_name)];
+    let union_arg_name = union_arg_name.clone();
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        // Get union object.
+        let union_ptr: PointerValue = gc
+            .get_var(&NameSpacedName::local(&union_arg_name))
+            .ptr
+            .get(gc);
+
+        // Create specified tag value.
+        let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+
+        // Get tag value.
+        let union_ty = ObjectType::union_type(field_count);
+        let struct_ty = union_ty.to_struct_type(gc.context);
+        let tag_value = gc.load_obj_field(union_ptr, struct_ty, 1).into_int_value();
+
+        // If tag unmatch, panic.
+        let is_tag_unmatch = gc.builder().build_int_compare(
+            IntPredicate::NE,
+            specified_tag_value,
+            tag_value,
+            "is_tag_unmatch",
+        );
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
+        let match_bb = gc.context.append_basic_block(current_func, "match_bb");
+        gc.builder()
+            .build_conditional_branch(is_tag_unmatch, unmatch_bb, match_bb);
+        gc.builder().position_at_end(unmatch_bb);
+        gc.panic("tag unmatch.");
+        gc.builder().build_unconditional_branch(match_bb);
+
+        // When match, return the value.
+        gc.builder().position_at_end(match_bb);
+        let field_value = gc
+            .load_obj_field(union_ptr, struct_ty, 2)
+            .into_pointer_value();
+        gc.retain(field_value);
+        gc.release(union_ptr);
+
+        field_value
+    });
+    expr_lit(
+        generator,
+        free_vars,
+        name,
+        type_tycon(&tycon(union_name.clone())),
+        None,
+    )
+}
+
+// `is_{field}` built-in function for a given union.
+pub fn union_is(
+    union_name: &NameSpacedName,
+    field_name: &Name,
+    union: &Union,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // Get field index.
+    let mut field_idx = 0;
+    for field in &union.fields {
+        if *field_name == field.name {
+            break;
+        }
+        field_idx += 1;
+    }
+    if field_idx == union.fields.len() {
+        error_exit(&format!(
+            "unknown field `{}` for union `{}`",
+            field_name,
+            union_name.to_string()
+        ));
+    }
+    let union_arg_name = "union".to_string();
+    let expr = expr_abs(
+        var_local(&union_arg_name, None),
+        union_is_lit(
+            union_name,
+            &union_arg_name,
+            field_name,
+            field_idx,
+            union.fields.len(),
+        ),
+        None,
+    );
+    let union_ty = type_tycon(&tycon(union_name.clone()));
+    let ty = type_fun(union_ty, bool_lit_ty());
+    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    (expr, scm)
+}
+
+// `is_{field}` built-in function for a given union.
+pub fn union_is_lit(
+    union_name: &NameSpacedName,
+    union_arg_name: &Name,
+    field_name: &Name,
+    field_idx: usize,
+    field_count: usize,
+) -> Arc<ExprNode> {
+    let name = format!("{}.is_{}", union_name.to_string(), field_name);
+    let name_cloned = name.clone();
+    let free_vars = vec![NameSpacedName::local(union_arg_name)];
+    let union_arg_name = union_arg_name.clone();
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        // Get union object.
+        let union_ptr: PointerValue = gc
+            .get_var(&NameSpacedName::local(&union_arg_name))
+            .ptr
+            .get(gc);
+
+        // Create specified tag value.
+        let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+
+        // Get tag value.
+        let union_ty = ObjectType::union_type(field_count);
+        let struct_ty = union_ty.to_struct_type(gc.context);
+        let tag_value = gc.load_obj_field(union_ptr, struct_ty, 1).into_int_value();
+
+        // Create returned value.
+        let ret_ptr = ObjectType::bool_obj_type().create_obj(gc, Some(&name_cloned));
+
+        // Branch and store result to ret_ptr.
+        let is_tag_match = gc.builder().build_int_compare(
+            IntPredicate::EQ,
+            specified_tag_value,
+            tag_value,
+            "is_tag_match",
+        );
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let match_bb = gc.context.append_basic_block(current_func, "match_bb");
+        let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
+        let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
+        gc.builder()
+            .build_conditional_branch(is_tag_match, match_bb, unmatch_bb);
+
+        gc.builder().position_at_end(match_bb);
+        let value = gc.context.i8_type().const_int(1 as u64, false);
+        gc.store_obj_field(ret_ptr, bool_type(gc.context), 1, value);
+        gc.builder().build_unconditional_branch(cont_bb);
+
+        gc.builder().position_at_end(unmatch_bb);
+        let value = gc.context.i8_type().const_int(0 as u64, false);
+        gc.store_obj_field(ret_ptr, bool_type(gc.context), 1, value);
+        gc.builder().build_unconditional_branch(cont_bb);
+
+        // Return the value.
+        gc.builder().position_at_end(cont_bb);
+        gc.release(union_ptr);
+        ret_ptr
+    });
+    expr_lit(generator, free_vars, name, bool_lit_ty(), None)
 }

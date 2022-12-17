@@ -395,6 +395,14 @@ impl ObjectType {
         Self::shared_obj_type(fields)
     }
 
+    pub fn union_type(field_count: usize) -> Self {
+        let fields = vec![
+            ObjectFieldType::Int, /* tag */
+            ObjectFieldType::SubObject,
+        ];
+        Self::shared_obj_type(fields)
+    }
+
     fn generate_func_dtor<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
         if gc
             .runtimes
