@@ -756,7 +756,6 @@ pub fn union_from(
     let field_ty = union.fields[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
     let scm = Scheme::generalize(HashMap::new(), vec![], ty);
-    todo!("add field duplication checker.");
     (expr, scm)
 }
 

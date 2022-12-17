@@ -511,6 +511,33 @@ impl FixModule {
         }
     }
 
+    // Validate user-defined types
+    pub fn validate_user_defined_types(&self) {
+        for type_defn in &self.type_decls {
+            let type_name = &type_defn.name;
+            match &type_defn.value {
+                TypeDeclValue::Struct(str) => match Field::check_duplication(&str.fields) {
+                    Some(field_name) => {
+                        error_exit(&format!(
+                            "duplicate field `{}` for struct `{}`",
+                            field_name, type_name
+                        ));
+                    }
+                    _ => {}
+                },
+                TypeDeclValue::Union(union) => match Field::check_duplication(&union.fields) {
+                    Some(field_name) => {
+                        error_exit(&format!(
+                            "duplicate field `{}` for union `{}`",
+                            field_name, type_name
+                        ));
+                    }
+                    _ => {}
+                },
+            }
+        }
+    }
+
     // Add bult-in functions to a given ast.
     pub fn add_builtin_symbols(self: &mut FixModule) {
         fn add_global(

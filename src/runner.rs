@@ -21,7 +21,10 @@ fn execute_main_module<'c>(
 }
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
-    // Add create global symbols
+    // Validate user-defined types.
+    fix_mod.validate_user_defined_types();
+
+    // Add global symbols
     fix_mod.add_builtin_symbols();
     fix_mod.create_trait_method_symbols();
 

@@ -29,3 +29,17 @@ pub struct Field {
     pub name: String,
     pub ty: Arc<TypeNode>,
 }
+
+impl Field {
+    pub fn check_duplication(fields: &Vec<Field>) -> Option<Name> {
+        let mut names: HashSet<Name> = Default::default();
+        for field in fields {
+            if names.contains(&field.name) {
+                return Some(field.name.clone());
+            } else {
+                names.insert(field.name.clone());
+            }
+        }
+        return None;
+    }
+}
