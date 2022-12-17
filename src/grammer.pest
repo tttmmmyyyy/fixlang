@@ -7,7 +7,7 @@ expr_bool_lit = { "true" | "false" }
 
 expr_lit = { expr_int_lit | expr_bool_lit }
 
-keywords = _{ "let" | "in" | "if" | "then" | "else" | "for" | expr_bool_lit | "type" | "trait" | "impl" | "struct" | "union" }
+keywords = _{ ("let" | "in" | "if" | "then" | "else" | "for" | "true" | "false" | "type" | "trait" | "impl" | "struct" | "union") ~ sep+ }
 
 in_of_let = { "in" | ";" }
 

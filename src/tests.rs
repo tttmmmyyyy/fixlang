@@ -894,15 +894,15 @@ pub fn test47() {
     let source = r"
         module Main;
 
-        type IntOrBool = union (i : Int, b: Bool);
+        type IntOrBool = union (int : Int, bool: Bool);
 
         main : Int;
         main = (
-            let i_val = from_i 3;
-            let b_val = from_b true;
-            let i_val = if i_val.is_i then i_val.as_i else 0;
-            let b_val = if b_val.is_b then b_val.as_b else false;
-            if b_val then i_val else 0
+            let int_union = from_int 3;
+            let bool_union = from_bool true;
+            let int_val = if int_union.is_int then int_union.as_int else 0;
+            let bool_val = if bool_union.is_bool then bool_union.as_bool else false;
+            if bool_val then int_val else 0
         );
     ";
     let answer = 3;
