@@ -612,7 +612,7 @@ impl TypeCheckContext {
             Expr::Let(var, val, body) => {
                 let var_ty = type_tyvar_star(&self.new_tyvar());
                 let val = self.unify_type_of_expr(val, var_ty.clone());
-                let var_scm = self.generalize_to_scheme(&var_ty, &HashSet::default());
+                let var_scm = Scheme::generalize(HashMap::default(), vec![], var_ty.clone());
                 assert!(var.name.is_local());
                 self.scope.push(&var.name.name, &var_scm);
                 let body = self.unify_type_of_expr(body, ty);

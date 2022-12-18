@@ -498,11 +498,12 @@ pub fn test28() {
 pub fn test29() {
     let source = r"
         module Main;
+
+        id : a -> a;
+        id = \x -> x;
+
         main : Int;
-        main = (
-            let id = \x -> x;
-            if id true then id 100 else 30
-        );
+        main = if id true then id 100 else 30;
         ";
     let answer = 100;
     test_run_source(source, answer, OptimizationLevel::Default);
@@ -898,8 +899,8 @@ pub fn test47() {
 
         main : Int;
         main = (
-            let int_union = from_int 3;
-            let bool_union = from_bool true;
+            let int_union = new_int 3;
+            let bool_union = new_bool true;
             let int_val = if int_union.is_int then int_union.as_int else 0;
             let bool_val = if bool_union.is_bool then bool_union.as_bool else false;
             if bool_val then int_val else 0
