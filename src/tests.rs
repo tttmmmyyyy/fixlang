@@ -945,8 +945,7 @@ pub fn test49() {
             let int_left = Either.new_left 5;
             if int_left.is_left 
                 then int_left.as_left 
-                else 
-                    if int_left.as_right then 1 else 0
+                else if int_left.as_right then 1 else 0
         );
     ";
     let answer = 5;
