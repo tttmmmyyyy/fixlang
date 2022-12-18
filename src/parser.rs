@@ -109,7 +109,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     for pair in pairs {
         match pair.as_rule() {
             Rule::type_decl => {
-                type_decls.push(parse_type_decl(pair, src));
+                type_decls.push(parse_type_decl(pair, &module_name, src));
             }
             Rule::global_symbol_type_defn => {
                 let (name, ty) = parse_global_symbol_type_defn(pair, src);
@@ -364,7 +364,7 @@ fn parse_module_decl(pair: Pair<Rule>, src: &Arc<String>) -> String {
     pair.into_inner().next().unwrap().as_str().to_string()
 }
 
-fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
+fn parse_type_decl(pair: Pair<Rule>, module_name: &str, src: &Arc<String>) -> TypeDecl {
     assert_eq!(pair.as_rule(), Rule::type_decl);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
@@ -381,7 +381,7 @@ fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
         unreachable!();
     };
     TypeDecl {
-        name: name.to_string(),
+        name: NameSpacedName::from_strs(&[module_name], name),
         value: type_value,
         tyvars,
     }

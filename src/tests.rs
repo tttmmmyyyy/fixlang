@@ -777,11 +777,11 @@ pub fn test43() {
         r"
             module Main;
             
-            loop : Int -> Int -> Int;
-            loop = \x -> \acc -> if eq x 0 then acc else loop (add x -1) (add acc x);
+            my_loop : Int -> Int -> Int;
+            my_loop = \x -> \acc -> if eq x 0 then acc else my_loop (add x -1) (add acc x);
     
             main : Int;
-            main = loop {} 0;
+            main = my_loop {} 0;
         ",
         n
     );
@@ -953,7 +953,7 @@ pub fn test50() {
         ",
         n
     );
-    let answer = 8;
+    let answer = (n * (n - 1)) / 2;
     test_run_source(&source, answer, OptimizationLevel::Default);
 }
 

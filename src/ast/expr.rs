@@ -341,7 +341,7 @@ pub struct Literal {
 
 #[derive(Eq, Hash, PartialEq, Clone)]
 pub struct NameSpace {
-    names: Vec<String>, // Empty implies it is local.
+    pub names: Vec<String>, // Empty implies it is local.
 }
 
 const NAMESPACE_SEPARATOR: &str = ".";

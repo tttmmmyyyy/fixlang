@@ -3,14 +3,14 @@ use super::*;
 // Declaration of user-defind types.
 #[derive(Clone)]
 pub struct TypeDecl {
-    pub name: Name,
+    pub name: NameSpacedName,
     pub value: TypeDeclValue,
     pub tyvars: Vec<Name>,
 }
 
 impl TypeDecl {
-    pub fn tycon(&self, namespace: &NameSpace) -> TyCon {
-        TyCon::new(NameSpacedName::new(namespace, &self.name))
+    pub fn tycon(&self) -> TyCon {
+        TyCon::new(self.name.clone())
     }
 
     pub fn kind(&self) -> Arc<Kind> {
@@ -21,8 +21,8 @@ impl TypeDecl {
         kind
     }
 
-    pub fn ty(&self, namespace: &NameSpace) -> Arc<TypeNode> {
-        let mut ty = type_tycon(&tycon(NameSpacedName::new(namespace, &self.name)));
+    pub fn ty(&self) -> Arc<TypeNode> {
+        let mut ty = type_tycon(&Arc::new(self.tycon()));
         for tyvar in &self.tyvars {
             ty = type_tyapp(ty, type_tyvar(tyvar, &kind_star()));
         }
@@ -45,7 +45,9 @@ impl TypeDecl {
                 if !tyvars.contains(v) {
                     error_exit(&format!(
                         "unknown type variable `{}` in the definition of field `{}` of type `{}`",
-                        v, field.name, self.name
+                        v,
+                        field.name,
+                        self.name.to_string()
                     ))
                 }
             }

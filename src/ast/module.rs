@@ -202,7 +202,7 @@ impl FixModule {
     pub fn calculate_type_env(&mut self) {
         let mut tycons: HashMap<TyCon, Arc<Kind>> = bulitin_type_to_kind_map();
         for type_decl in &self.type_decls {
-            let tycon = type_decl.tycon(&NameSpace::new(vec![self.name.clone()]));
+            let tycon = type_decl.tycon();
             if tycons.contains_key(&tycon) {
                 error_exit_with_src(
                     &format!("Type `{}` is already defined.", tycon.to_string()),
@@ -534,7 +534,8 @@ impl FixModule {
                     Some(field_name) => {
                         error_exit(&format!(
                             "duplicate field `{}` for struct `{}`",
-                            field_name, type_name
+                            field_name,
+                            type_name.to_string()
                         ));
                     }
                     _ => {}
@@ -543,7 +544,8 @@ impl FixModule {
                     Some(field_name) => {
                         error_exit(&format!(
                             "duplicate field `{}` for union `{}`",
-                            field_name, type_name
+                            field_name,
+                            type_name.to_string()
                         ));
                     }
                     _ => {}
@@ -556,67 +558,99 @@ impl FixModule {
     pub fn add_builtin_symbols(self: &mut FixModule) {
         fn add_global(
             program: &mut FixModule,
-            ns: &[&str],
-            name: &str,
+            name: NameSpacedName,
             (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
         ) {
-            program.add_global_object(NameSpacedName::from_strs(ns, name), (expr, scm));
+            program.add_global_object(name, (expr, scm));
         }
-        add_global(self, &[STD_NAME], "add", add());
-        add_global(self, &[STD_NAME], "eq", eq());
-        add_global(self, &[STD_NAME], "fix", fix());
+        add_global(self, NameSpacedName::from_strs(&[STD_NAME], "add"), add());
+        add_global(self, NameSpacedName::from_strs(&[STD_NAME], "eq"), eq());
+        add_global(self, NameSpacedName::from_strs(&[STD_NAME], "fix"), fix());
         self.type_decls.push(loop_result_defn());
-        add_global(self, &[STD_NAME, LOOP_RESULT_NAME], "loop", state_loop());
-        add_global(self, &[STD_NAME, ARRAY_NAME], "new", new_array());
-        add_global(self, &[STD_NAME, ARRAY_NAME], "get", read_array());
-        add_global(self, &[STD_NAME, ARRAY_NAME], "set", write_array());
-        add_global(self, &[STD_NAME, ARRAY_NAME], "set!", write_array_unique());
+        add_global(
+            self,
+            NameSpacedName::from_strs(&[STD_NAME, LOOP_RESULT_NAME], "loop"),
+            state_loop(),
+        );
+        add_global(
+            self,
+            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "new"),
+            new_array(),
+        );
+        add_global(
+            self,
+            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),
+            read_array(),
+        );
+        add_global(
+            self,
+            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
+            write_array(),
+        );
+        add_global(
+            self,
+            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "set!"),
+            write_array_unique(),
+        );
         for decl in &self.type_decls.clone() {
             match &decl.value {
                 TypeDeclValue::Struct(str) => {
-                    let module_name = self.name.clone();
-                    let ns = vec![module_name.as_str(), decl.name.as_str()];
-                    let struct_name =
-                        NameSpacedName::from_strs(&[module_name.as_str()], &decl.name);
-                    add_global(self, ns.as_slice(), "new", struct_new(&struct_name, decl));
+                    let struct_name = decl.name.clone();
+                    add_global(
+                        self,
+                        NameSpacedName::new(&decl.name.to_namespace(), "new"),
+                        struct_new(&struct_name, decl),
+                    );
                     for field in &str.fields {
                         add_global(
                             self,
-                            ns.as_slice(),
-                            &format!("get_{}", &field.name),
+                            NameSpacedName::new(
+                                &decl.name.to_namespace(),
+                                &format!("get_{}", &field.name),
+                            ),
                             struct_get(&struct_name, decl, &field.name),
                         );
                         for is_unique in [false, true] {
                             add_global(
                                 self,
-                                ns.as_slice(),
-                                &format!("mod_{}{}", &field.name, if is_unique { "!" } else { "" }),
+                                NameSpacedName::new(
+                                    &decl.name.to_namespace(),
+                                    &format!(
+                                        "mod_{}{}",
+                                        &field.name,
+                                        if is_unique { "!" } else { "" }
+                                    ),
+                                ),
                                 struct_mod(&struct_name, decl, &field.name, is_unique),
                             );
                         }
                     }
                 }
                 TypeDeclValue::Union(union) => {
-                    let module_name = self.name.clone();
-                    let ns = vec![module_name.as_str(), decl.name.as_str()];
-                    let union_name = NameSpacedName::from_strs(&[module_name.as_str()], &decl.name);
+                    let union_name = &decl.name;
                     for field in &union.fields {
                         add_global(
                             self,
-                            ns.as_slice(),
-                            &format!("new_{}", field.name),
+                            NameSpacedName::new(
+                                &decl.name.to_namespace(),
+                                &format!("new_{}", field.name),
+                            ),
                             union_new(&union_name, &field.name, decl),
                         );
                         add_global(
                             self,
-                            ns.as_slice(),
-                            &format!("as_{}", field.name),
+                            NameSpacedName::new(
+                                &decl.name.to_namespace(),
+                                &format!("as_{}", field.name),
+                            ),
                             union_as(&union_name, &field.name, decl),
                         );
                         add_global(
                             self,
-                            ns.as_slice(),
-                            &format!("is_{}", field.name),
+                            NameSpacedName::new(
+                                &decl.name.to_namespace(),
+                                &format!("is_{}", field.name),
+                            ),
                             union_is(&union_name, &field.name, decl),
                         );
                     }

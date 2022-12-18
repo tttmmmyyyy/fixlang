@@ -24,10 +24,6 @@ pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
         TyCon::new(NameSpacedName::from_strs(&[STD_NAME], ARRAY_NAME)),
         kind_arrow(kind_star(), kind_star()),
     );
-    ret.insert(
-        TyCon::new(NameSpacedName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)),
-        kind_arrow(kind_star(), kind_arrow(kind_star(), kind_star())),
-    );
     ret
 }
 
@@ -484,13 +480,7 @@ pub fn struct_new_lit(
 
         str_ptr
     });
-    expr_lit(
-        generator,
-        free_vars,
-        name,
-        struct_defn.ty(&struct_name.namespace),
-        None,
-    )
+    expr_lit(generator, free_vars, name, struct_defn.ty(), None)
 }
 
 // `new` built-in function for a given struct.
@@ -503,7 +493,7 @@ pub fn struct_new(
         definition,
         definition.fields().iter().map(|f| f.name.clone()).collect(),
     );
-    let mut ty = definition.ty(&struct_name.namespace);
+    let mut ty = definition.ty();
     for field in definition.fields().iter().rev() {
         expr = expr_abs(var_local(&field.name, None), expr, None);
         ty = type_fun(field.ty.clone(), ty);
@@ -564,7 +554,7 @@ pub fn struct_get(
     let (field_idx, field) = field.unwrap();
 
     let field_count = definition.fields().len();
-    let str_ty = definition.ty(&struct_name.namespace);
+    let str_ty = definition.ty();
     let expr = expr_abs(
         var_local("f", None),
         struct_get_lit(
@@ -672,13 +662,7 @@ pub fn struct_mod_lit(
 
         str
     });
-    expr_lit(
-        generator,
-        free_vars,
-        name,
-        struct_defn.ty(&struct_name.namespace),
-        None,
-    )
+    expr_lit(generator, free_vars, name, struct_defn.ty(), None)
 }
 
 // `mod` built-in function for a given struct.
@@ -704,7 +688,7 @@ pub fn struct_mod(
     let (field_idx, field) = field.unwrap();
 
     let field_count = definition.fields().len();
-    let str_ty = definition.ty(&struct_name.namespace);
+    let str_ty = definition.ty();
     let expr = expr_abs(
         var_local("f", None),
         expr_abs(
@@ -763,7 +747,7 @@ pub fn union_new(
         ),
         None,
     );
-    let union_ty = union.ty(&union_name.namespace);
+    let union_ty = union.ty();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
@@ -779,7 +763,7 @@ pub fn union_new_lit(
     field_count: usize,
 ) -> Arc<ExprNode> {
     let free_vars = vec![NameSpacedName::local(field_name)];
-    let name = format!("{}.from_{}", union_name.to_string(), field_name);
+    let name = format!("{}.new_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
     let field_name_cloned = field_name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
@@ -805,13 +789,7 @@ pub fn union_new_lit(
 
         union_ptr
     });
-    expr_lit(
-        generator,
-        free_vars,
-        name,
-        union_defn.ty(&union_name.namespace),
-        None,
-    )
+    expr_lit(generator, free_vars, name, union_defn.ty(), None)
 }
 
 // `as_{field}` built-in function for a given union.
@@ -848,7 +826,7 @@ pub fn union_as(
         ),
         None,
     );
-    let union_ty = union.ty(&union_name.namespace);
+    let union_ty = union.ty();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(union_ty, field_ty);
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
@@ -945,7 +923,7 @@ pub fn union_is(
         ),
         None,
     );
-    let union_ty = union.ty(&union_name.namespace);
+    let union_ty = union.ty();
     let ty = type_fun(union_ty, bool_lit_ty());
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
@@ -1018,7 +996,7 @@ const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 const LOOP_RESULT_FIELD_COUNT: usize = 2;
 pub fn loop_result_defn() -> TypeDecl {
     TypeDecl {
-        name: LOOP_RESULT_NAME.to_string(),
+        name: NameSpacedName::from_strs(&[STD_NAME], LOOP_RESULT_NAME),
         tyvars: vec!["s".to_string(), "b".to_string()],
         value: TypeDeclValue::Union(Union {
             fields: vec![
@@ -1110,10 +1088,12 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         // Implement break.
         gc.builder().position_at_end(break_bb);
         gc.release(loop_body);
-        let loop_result = gc
+        let result = gc
             .load_obj_field(loop_res, loop_result_ty, 2)
             .into_pointer_value();
-        loop_result
+        gc.retain(result);
+        gc.release(loop_res);
+        result
     });
 
     let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
