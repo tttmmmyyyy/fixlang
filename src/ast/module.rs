@@ -631,10 +631,7 @@ impl FixModule {
                     for field in &union.fields {
                         add_global(
                             self,
-                            NameSpacedName::new(
-                                &decl.name.to_namespace(),
-                                &format!("new_{}", field.name),
-                            ),
+                            NameSpacedName::new(&decl.name.to_namespace(), &field.name),
                             union_new(&union_name, &field.name, decl),
                         );
                         add_global(

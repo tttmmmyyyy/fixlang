@@ -899,8 +899,8 @@ pub fn test47() {
 
         main : Int;
         main = (
-            let int_union = new_int 3;
-            let bool_union = new_bool true;
+            let int_union = int 3;
+            let bool_union = bool true;
             let int_val = if int_union.is_int then int_union.as_int else 0;
             let bool_val = if bool_union.is_bool then bool_union.as_bool else false;
             if bool_val then int_val else 0
@@ -948,7 +948,7 @@ pub fn test50() {
                 loop (Pair.new 0 0) \state -> 
                     let i = state.get_fst;
                     let sum = state.get_snd;
-                    if eq i {} then new_break sum else new_continue $ Pair.new (add i 1) (add i sum)
+                    if eq i {} then break sum else continue $ Pair.new (add i 1) (add i sum)
             );
         ",
         n
@@ -968,7 +968,7 @@ pub fn test49() {
 
         main : Int;
         main = (
-            let int_left = Either.new_left 5;
+            let int_left = Either.left 5;
             if int_left.is_left 
                 then int_left.as_left 
                 else if int_left.as_right then 1 else 0
