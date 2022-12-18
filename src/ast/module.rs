@@ -86,6 +86,8 @@ pub struct GlobalSymbol {
     // the type of method "show" is "a -> String for a: Show",
     pub ty: Arc<Scheme>,
     pub expr: SymbolExpr,
+    // Result of typechecking (mainly, substitution) of this symbol.
+    pub typecheck_log: Option<TypeCheckContext>,
     // TODO: add ty_src: Span
     // TODO: add expr_src: Span
 }
@@ -244,6 +246,7 @@ impl FixModule {
             GlobalSymbol {
                 ty: scm,
                 expr: SymbolExpr::Simple(expr),
+                typecheck_log: None,
             },
         );
     }
@@ -315,9 +318,8 @@ impl FixModule {
     }
 
     // Instantiate symbol.
-    fn instantiate_symbol(&mut self, tc: &TypeCheckContext, sym: &mut InstantiatedSymbol) {
+    fn instantiate_symbol(&mut self, mut tc: TypeCheckContext, sym: &mut InstantiatedSymbol) {
         assert!(sym.expr.is_none());
-        let mut tc = tc.clone();
         let global_sym = self.global_symbols.get(&sym.template_name).unwrap();
         let template_expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
@@ -340,9 +342,11 @@ impl FixModule {
     }
 
     // Instantiate all symbols.
-    pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) {
+    pub fn instantiate_symbols(&mut self) {
         while !self.deferred_instantiation.is_empty() {
             let (name, sym) = self.deferred_instantiation.iter().next().unwrap();
+            let gs = &self.global_symbols[&sym.template_name];
+            let tc = gs.typecheck_log.as_ref().unwrap().clone();
             let name = name.clone();
             let mut sym = sym.clone();
             self.instantiate_symbol(tc, &mut sym);
@@ -352,15 +356,20 @@ impl FixModule {
     }
 
     // Instantiate main function.
-    pub fn instantiate_main_function(&mut self, tc: &TypeCheckContext) -> Arc<ExprNode> {
+    pub fn instantiate_main_function(&mut self) -> Arc<ExprNode> {
         let main_func_name = self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string());
         if !self.global_symbols.contains_key(&main_func_name) {
-            error_exit("main function not found.")
-        } else {
-            let inst_name = self.require_instantiated_symbol(tc, &main_func_name, &int_lit_ty());
-            self.instantiate_symbols(tc);
-            expr_var(inst_name, None)
+            error_exit("main function not found.");
         }
+        let typecheck_log = self.global_symbols[&main_func_name]
+            .typecheck_log
+            .as_ref()
+            .unwrap()
+            .clone();
+        let inst_name =
+            self.require_instantiated_symbol(&typecheck_log, &main_func_name, &int_lit_ty());
+        self.instantiate_symbols();
+        expr_var(inst_name, None)
     }
 
     // Instantiate expression.
@@ -431,6 +440,7 @@ impl FixModule {
     }
 
     // Determine the name of instantiated generic symbol so that it has a specified type.
+    // tc: a typechecker (substituion) under which ty should be interpret.
     fn determine_instantiated_symbol_name(
         &self,
         tc: &TypeCheckContext,
@@ -486,6 +496,7 @@ impl FixModule {
                     GlobalSymbol {
                         ty: method_ty,
                         expr: SymbolExpr::Method(method_impls),
+                        typecheck_log: None,
                     },
                 );
             }

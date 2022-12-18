@@ -49,19 +49,21 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
 
     // Check types.
     for (_name, sym) in &mut fix_mod.global_symbols {
+        let mut tc = typechecker.clone();
         match &sym.expr {
             SymbolExpr::Simple(e) => {
-                let e = typechecker.check_type(e.clone(), sym.ty.clone());
+                let e = tc.check_type(e.clone(), sym.ty.clone());
                 sym.expr = SymbolExpr::Simple(e);
             }
             SymbolExpr::Method(methods) => {
                 let mut methods = methods.clone();
                 for m in &mut methods {
-                    m.expr = typechecker.check_type(m.expr.clone(), m.ty.clone());
+                    m.expr = tc.check_type(m.expr.clone(), m.ty.clone());
                 }
                 sym.expr = SymbolExpr::Method(methods);
             }
         }
+        sym.typecheck_log = Some(tc);
     }
 
     // Calculate free variables of expressions.
@@ -90,7 +92,7 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     build_runtime(&mut gc);
 
     // Instanciate main function and all called functions.
-    let main_expr = fix_mod.instantiate_main_function(&typechecker);
+    let main_expr = fix_mod.instantiate_main_function();
 
     // Generate codes.
     fix_mod.generate_code(&mut gc);

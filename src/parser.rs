@@ -163,6 +163,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
             GlobalSymbol {
                 ty: ty.unwrap(),
                 expr: SymbolExpr::Simple(expr.unwrap()),
+                typecheck_log: None,
             },
         );
     }
