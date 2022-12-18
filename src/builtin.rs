@@ -1,3 +1,5 @@
+use crate::ast::typedecl;
+
 // Implement built-in functions, types, etc.
 use super::*;
 
@@ -477,29 +479,14 @@ pub fn struct_new_lit(struct_name: &NameSpacedName, field_names: Vec<String>) ->
 // `new` built-in function for a given struct.
 pub fn struct_new(
     struct_name: &NameSpacedName,
-    definition: &Struct,
+    definition: &TypeDecl,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
-    // Check there is no duplication of field names.
-    let mut fields_set: HashMap<String, i32> = HashMap::new();
-    for field in &definition.fields {
-        if !fields_set.contains_key(&field.name) {
-            fields_set.insert(field.name.clone(), 0);
-        }
-        *fields_set.get_mut(&field.name).unwrap() += 1;
-        if fields_set[&field.name] >= 2 {
-            error_exit(&format!(
-                "error: in definition of struct `{}`, field `{}` is duplicated.",
-                struct_name.to_string(),
-                &field.name
-            ));
-        }
-    }
     let mut expr = struct_new_lit(
         struct_name,
-        definition.fields.iter().map(|f| f.name.clone()).collect(),
+        definition.fields().iter().map(|f| f.name.clone()).collect(),
     );
-    let mut ty = type_tycon(&tycon(struct_name.clone()));
-    for field in definition.fields.iter().rev() {
+    let mut ty = definition.ty(&struct_name.namespace);
+    for field in definition.fields().iter().rev() {
         expr = expr_abs(var_local(&field.name, None), expr, None);
         ty = type_fun(field.ty.clone(), ty);
     }
@@ -521,8 +508,6 @@ pub fn struct_get_lit(
         // Get struct object.
         let str_ptr = gc.get_var(&var_name_clone).ptr.get(gc);
 
-        // TODO: implement index out of range error.
-
         // Extract field.
         let str_ty = ObjectType::struct_type(field_count).to_struct_type(gc.context);
         let field_ptr = gc.load_obj_field(str_ptr, str_ty, field_idx as u32 + 1);
@@ -542,12 +527,12 @@ pub fn struct_get_lit(
 // `get` built-in function for a given struct.
 pub fn struct_get(
     struct_name: &NameSpacedName,
-    definition: &Struct,
+    definition: &TypeDecl,
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let field = definition
-        .fields
+        .fields()
         .iter()
         .enumerate()
         .find(|(_i, f)| f.name == field_name);
@@ -560,8 +545,8 @@ pub fn struct_get(
     }
     let (field_idx, field) = field.unwrap();
 
-    let field_count = definition.fields.len();
-    let str_ty = type_tycon(&tycon(struct_name.clone()));
+    let field_count = definition.fields().len();
+    let str_ty = definition.ty(&struct_name.namespace);
     let expr = expr_abs(
         var_local("f", None),
         struct_get_lit(
@@ -586,6 +571,7 @@ pub fn struct_mod_lit(
     field_count: usize, // number of fields in this struct
     field_idx: usize,
     struct_name: &NameSpacedName,
+    struct_defn: &TypeDecl,
     field_name: &str,
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
@@ -672,7 +658,7 @@ pub fn struct_mod_lit(
         generator,
         free_vars,
         name,
-        type_tycon(&tycon(struct_name.clone())),
+        struct_defn.ty(&struct_name.namespace),
         None,
     )
 }
@@ -680,13 +666,13 @@ pub fn struct_mod_lit(
 // `mod` built-in function for a given struct.
 pub fn struct_mod(
     struct_name: &NameSpacedName,
-    definition: &Struct,
+    definition: &TypeDecl,
     field_name: &str,
     is_unique_version: bool,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let field = definition
-        .fields
+        .fields()
         .iter()
         .enumerate()
         .find(|(_i, f)| f.name == field_name);
@@ -699,7 +685,7 @@ pub fn struct_mod(
     }
     let (field_idx, field) = field.unwrap();
 
-    let field_count = definition.fields.len();
+    let field_count = definition.fields().len();
     let str_ty = type_tycon(&tycon(struct_name.clone()));
     let expr = expr_abs(
         var_local("f", None),
@@ -711,6 +697,7 @@ pub fn struct_mod(
                 field_count,
                 field_idx,
                 struct_name,
+                definition,
                 field_name,
                 is_unique_version,
             ),
@@ -730,17 +717,17 @@ pub fn struct_mod(
 pub fn union_from(
     union_name: &NameSpacedName,
     field_name: &Name,
-    union: &Union,
+    union: &TypeDecl,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
-    for field in &union.fields {
+    for field in union.fields() {
         if *field_name == field.name {
             break;
         }
         field_idx += 1;
     }
-    if field_idx == union.fields.len() {
+    if field_idx == union.fields().len() {
         error_exit(&format!(
             "unknown field `{}` for union `{}`",
             field_name,
@@ -749,11 +736,17 @@ pub fn union_from(
     }
     let expr = expr_abs(
         var_local(field_name, None),
-        union_from_lit(union_name, field_name, field_idx, union.fields.len()),
+        union_from_lit(
+            union_name,
+            union,
+            field_name,
+            field_idx,
+            union.fields().len(),
+        ),
         None,
     );
-    let union_ty = type_tycon(&tycon(union_name.clone()));
-    let field_ty = union.fields[field_idx].ty.clone();
+    let union_ty = union.ty(&union_name.namespace);
+    let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
     let scm = Scheme::generalize(HashMap::new(), vec![], ty);
     (expr, scm)
@@ -762,6 +755,7 @@ pub fn union_from(
 // `from_{field}` built-in function for a given union.
 pub fn union_from_lit(
     union_name: &NameSpacedName,
+    union_defn: &TypeDecl,
     field_name: &Name,
     field_idx: usize,
     field_count: usize,
@@ -797,7 +791,7 @@ pub fn union_from_lit(
         generator,
         free_vars,
         name,
-        type_tycon(&tycon(union_name.clone())),
+        union_defn.ty(&union_name.namespace),
         None,
     )
 }
@@ -806,17 +800,17 @@ pub fn union_from_lit(
 pub fn union_as(
     union_name: &NameSpacedName,
     field_name: &Name,
-    union: &Union,
+    union: &TypeDecl,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
-    for field in &union.fields {
+    for field in union.fields() {
         if *field_name == field.name {
             break;
         }
         field_idx += 1;
     }
-    if field_idx == union.fields.len() {
+    if field_idx == union.fields().len() {
         error_exit(&format!(
             "unknown field `{}` for union `{}`",
             field_name,
@@ -831,13 +825,13 @@ pub fn union_as(
             &union_arg_name,
             field_name,
             field_idx,
-            union.fields.len(),
-            union.fields[field_idx].ty.clone(),
+            union.fields().len(),
+            union.fields()[field_idx].ty.clone(),
         ),
         None,
     );
-    let union_ty = type_tycon(&tycon(union_name.clone()));
-    let field_ty = union.fields[field_idx].ty.clone();
+    let union_ty = union.ty(&union_name.namespace);
+    let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(union_ty, field_ty);
     let scm = Scheme::generalize(HashMap::new(), vec![], ty);
     (expr, scm)
@@ -904,17 +898,17 @@ pub fn union_as_lit(
 pub fn union_is(
     union_name: &NameSpacedName,
     field_name: &Name,
-    union: &Union,
+    union: &TypeDecl,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
-    for field in &union.fields {
+    for field in union.fields() {
         if *field_name == field.name {
             break;
         }
         field_idx += 1;
     }
-    if field_idx == union.fields.len() {
+    if field_idx == union.fields().len() {
         error_exit(&format!(
             "unknown field `{}` for union `{}`",
             field_name,
@@ -929,11 +923,11 @@ pub fn union_is(
             &union_arg_name,
             field_name,
             field_idx,
-            union.fields.len(),
+            union.fields().len(),
         ),
         None,
     );
-    let union_ty = type_tycon(&tycon(union_name.clone()));
+    let union_ty = union.ty(&union_name.namespace);
     let ty = type_fun(union_ty, bool_lit_ty());
     let scm = Scheme::generalize(HashMap::new(), vec![], ty);
     (expr, scm)

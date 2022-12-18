@@ -108,7 +108,7 @@ type_field_name = { !keywords ~ name_head_small ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_decl = { "type" ~ sep+ ~ type_name ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn) ~ sep* ~ ";" }
+type_decl = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn) ~ sep* ~ ";" }
 
 comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* }
 

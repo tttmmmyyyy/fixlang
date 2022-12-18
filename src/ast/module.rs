@@ -200,14 +200,14 @@ impl FixModule {
     pub fn calculate_type_env(&mut self) {
         let mut tycons: HashMap<TyCon, Arc<Kind>> = bulitin_type_to_kind_map();
         for type_decl in &self.type_decls {
-            let tycon = TyCon::new(NameSpacedName::from_strs(&[&self.name], &type_decl.name));
+            let tycon = type_decl.tycon(&NameSpace::new(vec![self.name.clone()]));
             if tycons.contains_key(&tycon) {
                 error_exit_with_src(
-                    &format!("Type `{}` is already defined.", type_decl.name),
+                    &format!("Type `{}` is already defined.", tycon.to_string()),
                     &None,
                 );
             }
-            tycons.insert(tycon, kind_star());
+            tycons.insert(tycon, type_decl.kind());
         }
         self.type_env = TypeEnv::new(tycons);
     }
@@ -562,20 +562,20 @@ impl FixModule {
                     let ns = vec![module_name.as_str(), decl.name.as_str()];
                     let struct_name =
                         NameSpacedName::from_strs(&[module_name.as_str()], &decl.name);
-                    add_global(self, ns.as_slice(), "new", struct_new(&struct_name, str));
+                    add_global(self, ns.as_slice(), "new", struct_new(&struct_name, decl));
                     for field in &str.fields {
                         add_global(
                             self,
                             ns.as_slice(),
                             &format!("get_{}", &field.name),
-                            struct_get(&struct_name, str, &field.name),
+                            struct_get(&struct_name, decl, &field.name),
                         );
                         for is_unique in [false, true] {
                             add_global(
                                 self,
                                 ns.as_slice(),
                                 &format!("mod_{}{}", &field.name, if is_unique { "!" } else { "" }),
-                                struct_mod(&struct_name, str, &field.name, is_unique),
+                                struct_mod(&struct_name, decl, &field.name, is_unique),
                             );
                         }
                     }
@@ -589,19 +589,19 @@ impl FixModule {
                             self,
                             ns.as_slice(),
                             &format!("from_{}", field.name),
-                            union_from(&union_name, &field.name, union),
+                            union_from(&union_name, &field.name, decl),
                         );
                         add_global(
                             self,
                             ns.as_slice(),
                             &format!("as_{}", field.name),
-                            union_as(&union_name, &field.name, union),
+                            union_as(&union_name, &field.name, decl),
                         );
                         add_global(
                             self,
                             ns.as_slice(),
                             &format!("is_{}", field.name),
-                            union_is(&union_name, &field.name, union),
+                            union_is(&union_name, &field.name, decl),
                         );
                     }
                 }

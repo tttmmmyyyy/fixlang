@@ -367,6 +367,10 @@ fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
     assert_eq!(pair.as_rule(), Rule::type_decl);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
+    let mut tyvars: Vec<Name> = vec![];
+    while pairs.peek().unwrap().as_rule() == Rule::type_var {
+        tyvars.push(pairs.next().unwrap().as_str().to_string());
+    }
     let pair = pairs.next().unwrap();
     let type_value = if pair.as_rule() == Rule::struct_defn {
         parse_struct_defn(pair, src)
@@ -378,6 +382,7 @@ fn parse_type_decl(pair: Pair<Rule>, src: &Arc<String>) -> TypeDecl {
     TypeDecl {
         name: name.to_string(),
         value: type_value,
+        tyvars,
     }
 }
 

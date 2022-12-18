@@ -3,8 +3,38 @@ use super::*;
 // Declaration of user-defind types.
 #[derive(Clone)]
 pub struct TypeDecl {
-    pub name: String,
+    pub name: Name,
     pub value: TypeDeclValue,
+    pub tyvars: Vec<Name>,
+}
+
+impl TypeDecl {
+    pub fn tycon(&self, namespace: &NameSpace) -> TyCon {
+        TyCon::new(NameSpacedName::new(namespace, &self.name))
+    }
+
+    pub fn kind(&self) -> Arc<Kind> {
+        let mut kind = kind_star();
+        for _ in &self.tyvars {
+            kind = kind_arrow(kind_star(), kind);
+        }
+        kind
+    }
+
+    pub fn ty(&self, namespace: &NameSpace) -> Arc<TypeNode> {
+        let mut ty = type_tycon(&tycon(NameSpacedName::new(namespace, &self.name)));
+        for tyvar in &self.tyvars {
+            ty = type_tyapp(ty, type_tyvar(tyvar, &kind_star()));
+        }
+        ty
+    }
+
+    pub fn fields(&self) -> &Vec<Field> {
+        match self.value {
+            TypeDeclValue::Struct(ref s) => &s.fields,
+            TypeDeclValue::Union(ref u) => &u.fields,
+        }
+    }
 }
 
 // Right hand side of type declaration.
