@@ -934,6 +934,31 @@ pub fn test48() {
 
 #[test]
 #[serial]
+pub fn test50() {
+    // test loop.
+    let n = 100;
+    let source = format!(
+        r"
+            module Main;
+
+            type Pair a b = struct (fst: a, snd: b);
+    
+            main : Int;
+            main = (
+                loop (Pair.new 0 0) \state -> 
+                    let i = state.get_fst;
+                    let sum = state.get_snd;
+                    if eq i {} then new_break sum else new_continue $ Pair.new (add i 1) (add i sum)
+            );
+        ",
+        n
+    );
+    let answer = 8;
+    test_run_source(&source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test49() {
     // Parametrised union.
     let source = r"

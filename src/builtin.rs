@@ -8,6 +8,7 @@ pub const STD_NAME: &str = "Std";
 pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
+pub const LOOP_RESULT_NAME: &str = "LoopResult";
 
 pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
     let mut ret = HashMap::new();
@@ -22,6 +23,10 @@ pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
     ret.insert(
         TyCon::new(NameSpacedName::from_strs(&[STD_NAME], ARRAY_NAME)),
         kind_arrow(kind_star(), kind_star()),
+    );
+    ret.insert(
+        TyCon::new(NameSpacedName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)),
+        kind_arrow(kind_star(), kind_arrow(kind_star(), kind_star())),
     );
     ret
 }
@@ -39,6 +44,14 @@ pub fn bool_lit_ty() -> Arc<TypeNode> {
 // Get Array type.
 pub fn array_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(NameSpacedName::from_strs(&[STD_NAME], ARRAY_NAME)))
+}
+
+// Get LoopResult type.
+pub fn loop_result_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(NameSpacedName::from_strs(
+        &[STD_NAME],
+        LOOP_RESULT_NAME,
+    )))
 }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
@@ -999,4 +1012,145 @@ pub fn union_is_lit(
         ret_ptr
     });
     expr_lit(generator, free_vars, name, bool_lit_ty(), None)
+}
+
+const LOOP_RESULT_CONTINUE_IDX: usize = 0;
+const LOOP_RESULT_FIELD_COUNT: usize = 2;
+pub fn loop_result_defn() -> TypeDecl {
+    TypeDecl {
+        name: LOOP_RESULT_NAME.to_string(),
+        tyvars: vec!["s".to_string(), "b".to_string()],
+        value: TypeDeclValue::Union(Union {
+            fields: vec![
+                Field {
+                    name: "continue".to_string(),
+                    ty: type_tyvar("s", &kind_star()),
+                },
+                Field {
+                    name: "break".to_string(),
+                    ty: type_tyvar("b", &kind_star()),
+                },
+            ],
+        }),
+    }
+}
+
+// `loop` built-in function.
+// loop : s -> (s -> LoopResult s b) -> b;
+pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const S_NAME: &str = "s";
+    const B_NAME: &str = "b";
+    const INITIAL_STATE_NAME: &str = "initial_state";
+    const LOOP_BODY_NAME: &str = "loop_body";
+
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
+        let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
+
+        // Get argments.
+        let init_state = gc.get_var(&initial_state_name).ptr.get(gc);
+        let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
+
+        // Allocate a variable to store loop state on stack.
+        let state_ptr = gc
+            .builder()
+            .build_alloca(ptr_to_object_type(gc.context), "loop_state");
+
+        // Initialize state.
+        gc.builder().build_store(state_ptr, init_state);
+
+        // Create loop body bb and implement it.
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let loop_bb = gc.context.append_basic_block(current_func, "loop_bb");
+        gc.builder().build_unconditional_branch(loop_bb);
+
+        // Implement loop body.
+        gc.builder().position_at_end(loop_bb);
+        let loop_state = gc
+            .builder()
+            .build_load(state_ptr, "loop_state")
+            .into_pointer_value();
+
+        // Run loop_body on init_state.
+        gc.retain(loop_body);
+        let loop_res = gc.apply_lambda(loop_body, loop_state);
+
+        // Branch due to loop_res.
+        let loop_result_ty =
+            ObjectType::union_type(LOOP_RESULT_FIELD_COUNT).to_struct_type(gc.context);
+        let tag_value = gc
+            .load_obj_field(loop_res, loop_result_ty, 1)
+            .into_int_value();
+        let cont_tag_value = gc
+            .context
+            .i64_type()
+            .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
+        let is_continue = gc.builder().build_int_compare(
+            IntPredicate::EQ,
+            tag_value,
+            cont_tag_value,
+            "is_continue",
+        );
+        let continue_bb = gc.context.append_basic_block(current_func, "continue_bb");
+        let break_bb = gc.context.append_basic_block(current_func, "break_bb");
+        gc.builder()
+            .build_conditional_branch(is_continue, continue_bb, break_bb);
+
+        // Implement continue.
+        gc.builder().position_at_end(continue_bb);
+        let next_state = gc
+            .load_obj_field(loop_res, loop_result_ty, 2)
+            .into_pointer_value();
+        gc.retain(next_state);
+        gc.release(loop_res);
+        gc.builder().build_store(state_ptr, next_state);
+        gc.builder().build_unconditional_branch(loop_bb);
+
+        // Implement break.
+        gc.builder().position_at_end(break_bb);
+        gc.release(loop_body);
+        let loop_result = gc
+            .load_obj_field(loop_res, loop_result_ty, 2)
+            .into_pointer_value();
+        loop_result
+    });
+
+    let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
+    let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
+    let expr = expr_abs(
+        var_var(initial_state_name.clone(), None),
+        expr_abs(
+            var_var(loop_body_name.clone(), None),
+            expr_lit(
+                generator,
+                vec![initial_state_name, loop_body_name],
+                format!("loop {} {}", INITIAL_STATE_NAME, LOOP_BODY_NAME),
+                type_tyvar_star(B_NAME),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    let tyvar_s = type_tyvar(S_NAME, &kind_star());
+    let tyvar_b = type_tyvar(B_NAME, &kind_star());
+    let scm = Scheme::generalize(
+        HashMap::from([
+            (S_NAME.to_string(), kind_star()),
+            (B_NAME.to_string(), kind_star()),
+        ]),
+        vec![],
+        type_fun(
+            tyvar_s.clone(),
+            type_fun(
+                type_fun(
+                    tyvar_s.clone(),
+                    type_tyapp(type_tyapp(loop_result_ty(), tyvar_s), tyvar_b.clone()),
+                ),
+                tyvar_b,
+            ),
+        ),
+    );
+    (expr, scm)
 }

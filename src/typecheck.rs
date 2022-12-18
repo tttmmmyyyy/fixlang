@@ -537,7 +537,7 @@ impl TypeCheckContext {
                 if candidates.is_empty() {
                     error_exit_with_src(
                         &format!(
-                            "name `{}` of required type `{}` is not found.",
+                            "name `{}` of type `{}` is not found.",
                             var.name.to_string(),
                             &self.substitute_type(&ty).to_string()
                         ),

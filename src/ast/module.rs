@@ -565,6 +565,8 @@ impl FixModule {
         add_global(self, &[STD_NAME], "add", add());
         add_global(self, &[STD_NAME], "eq", eq());
         add_global(self, &[STD_NAME], "fix", fix());
+        self.type_decls.push(loop_result_defn());
+        add_global(self, &[STD_NAME, LOOP_RESULT_NAME], "loop", state_loop());
         add_global(self, &[STD_NAME, ARRAY_NAME], "new", new_array());
         add_global(self, &[STD_NAME, ARRAY_NAME], "get", read_array());
         add_global(self, &[STD_NAME, ARRAY_NAME], "set", write_array());
