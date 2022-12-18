@@ -411,7 +411,9 @@ impl FixModule {
         name: &NameSpacedName,
         ty: &Arc<TypeNode>,
     ) -> NameSpacedName {
-        assert!(ty.free_vars().is_empty());
+        if !ty.free_vars().is_empty() {
+            error_exit(&format!("cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", name.to_string(), ty.to_string()));
+        }
         let inst_name = self.determine_instantiated_symbol_name(tc, name, ty);
         if !self.instantiated_global_symbols.contains_key(&inst_name)
             && !self.deferred_instantiation.contains_key(&inst_name)
@@ -589,8 +591,8 @@ impl FixModule {
                         add_global(
                             self,
                             ns.as_slice(),
-                            &format!("from_{}", field.name),
-                            union_from(&union_name, &field.name, decl),
+                            &format!("new_{}", field.name),
+                            union_new(&union_name, &field.name, decl),
                         );
                         add_global(
                             self,

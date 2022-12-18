@@ -720,7 +720,7 @@ pub fn test40() {
         main : Int;
         main = (
             let a = A.new (B.new 16);
-            let f: A -> A = \a -> a . (mod_x! $ mod_x! $ \x -> add x 15);
+            let f: A -> A = \a -> a.mod_x! $ mod_x! $ \x -> add x 15;
             let a = a .f;
             a .get_x .get_x
         );
@@ -809,8 +809,8 @@ pub fn test44() {
 
         add_head_and_next : [a: ToInt] Array a -> Int; 
         add_head_and_next = \arr -> (
-            let head = toInt $ arr.get 0;
-            let next = toInt $ arr.get 1;
+            let head = arr.get 0.toInt;
+            let next = arr.get 1.toInt;
             add head next
         );
 
@@ -906,6 +906,50 @@ pub fn test47() {
         );
     ";
     let answer = 3;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test48() {
+    // Parametrised struct.
+    let source = r"
+        module Main;
+
+        type Vec a = struct (data: Array a);
+
+        main : Int;
+        main = (
+            let int_vec = Vec.new $ Array.new 2 5;
+            let int_vec = int_vec.mod_data! $ \arr -> arr.set 0 3;
+            let head = int_vec.get_data.get 0;
+            let next = int_vec.get_data.get 1;
+            add head next
+        );
+    ";
+    let answer = 8;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test49() {
+    // Parametrised union.
+    let source = r"
+        module Main;
+
+        type Either a b = union (left: a, right: b);
+
+        main : Int;
+        main = (
+            let int_left = Either.new_left 5;
+            if int_left.is_left 
+                then int_left.as_left 
+                else 
+                    if int_left.as_right then 1 else 0
+        );
+    ";
+    let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 

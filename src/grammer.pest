@@ -55,15 +55,15 @@ expr_app = { expr_nlr ~ (sep+ ~ expr_nlr)* }
 // combinator_gtgt = _{ ">>" }
 // expr_ltr_comp = { expr_rtl_comp ~ (sep* ~ combinator_gtgt ~ sep* ~ expr_rtl_comp)* } // TODO: will be added later
 
-// left to right application sequence, e.g., `x . f . g`. (left-associative)
-combinator_and = _{ "." }
-expr_ltr_app = { expr_app ~ (sep* ~ combinator_and ~ sep* ~ expr_app)* }
-
 // right to left application sequence, e.g., `g $ f $ x`. (right-associative)
 combinator_dollar = _{ "$" }
-expr_rtl_app = { expr_ltr_app ~ (sep* ~ combinator_dollar ~ sep* ~ expr_ltr_app)* }
+expr_rtl_app = { expr_app ~ (sep* ~ combinator_dollar ~ sep* ~ expr_app)* }
 
-expr_type_annotation = { expr_rtl_app ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
+// left to right application sequence, e.g., `x . f . g`. (left-associative)
+combinator_and = _{ "." }
+expr_ltr_app = { expr_rtl_app ~ (sep* ~ combinator_and ~ sep* ~ expr_rtl_app)* }
+
+expr_type_annotation = { expr_ltr_app ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 expr = { expr_type_annotation }
 
@@ -74,7 +74,7 @@ type_braced = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
 
 type_nlr = { type_tycon | type_var | type_braced }
 
-type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)? }
+type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)* }
 
 type_fun = { type_tyapp ~ (sep* ~ "->" ~ sep* ~ type_expr)? }
 

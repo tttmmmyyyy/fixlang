@@ -436,7 +436,11 @@ pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // `new` built-in function for a given struct.
-pub fn struct_new_lit(struct_name: &NameSpacedName, field_names: Vec<String>) -> Arc<ExprNode> {
+pub fn struct_new_lit(
+    struct_name: &NameSpacedName,
+    struct_defn: &TypeDecl,
+    field_names: Vec<String>,
+) -> Arc<ExprNode> {
     let free_vars = field_names
         .iter()
         .map(|name| NameSpacedName::local(name))
@@ -471,7 +475,7 @@ pub fn struct_new_lit(struct_name: &NameSpacedName, field_names: Vec<String>) ->
         generator,
         free_vars,
         name,
-        type_tycon(&tycon(struct_name.clone())),
+        struct_defn.ty(&struct_name.namespace),
         None,
     )
 }
@@ -483,6 +487,7 @@ pub fn struct_new(
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     let mut expr = struct_new_lit(
         struct_name,
+        definition,
         definition.fields().iter().map(|f| f.name.clone()).collect(),
     );
     let mut ty = definition.ty(&struct_name.namespace);
@@ -490,7 +495,7 @@ pub fn struct_new(
         expr = expr_abs(var_local(&field.name, None), expr, None);
         ty = type_fun(field.ty.clone(), ty);
     }
-    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
 }
 
@@ -560,7 +565,7 @@ pub fn struct_get(
         None,
     );
     let ty = type_fun(str_ty, field.ty.clone());
-    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
 }
 
@@ -686,7 +691,7 @@ pub fn struct_mod(
     let (field_idx, field) = field.unwrap();
 
     let field_count = definition.fields().len();
-    let str_ty = type_tycon(&tycon(struct_name.clone()));
+    let str_ty = definition.ty(&struct_name.namespace);
     let expr = expr_abs(
         var_local("f", None),
         expr_abs(
@@ -709,12 +714,12 @@ pub fn struct_mod(
         type_fun(field.ty.clone(), field.ty.clone()),
         type_fun(str_ty.clone(), str_ty.clone()),
     );
-    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
 }
 
-// `from_{field}` built-in function for a given union.
-pub fn union_from(
+// `new_{field}` built-in function for a given union.
+pub fn union_new(
     union_name: &NameSpacedName,
     field_name: &Name,
     union: &TypeDecl,
@@ -736,7 +741,7 @@ pub fn union_from(
     }
     let expr = expr_abs(
         var_local(field_name, None),
-        union_from_lit(
+        union_new_lit(
             union_name,
             union,
             field_name,
@@ -748,12 +753,12 @@ pub fn union_from(
     let union_ty = union.ty(&union_name.namespace);
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
-    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
 }
 
-// `from_{field}` built-in function for a given union.
-pub fn union_from_lit(
+// `new_{field}` built-in function for a given union.
+pub fn union_new_lit(
     union_name: &NameSpacedName,
     union_defn: &TypeDecl,
     field_name: &Name,
@@ -833,7 +838,7 @@ pub fn union_as(
     let union_ty = union.ty(&union_name.namespace);
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(union_ty, field_ty);
-    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
 }
 
@@ -929,7 +934,7 @@ pub fn union_is(
     );
     let union_ty = union.ty(&union_name.namespace);
     let ty = type_fun(union_ty, bool_lit_ty());
-    let scm = Scheme::generalize(HashMap::new(), vec![], ty);
+    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
 }
 
