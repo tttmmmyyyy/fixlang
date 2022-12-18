@@ -35,6 +35,22 @@ impl TypeDecl {
             TypeDeclValue::Union(ref u) => &u.fields,
         }
     }
+
+    // Check if all of type variables in field types appear in lhs of type definition.
+    pub fn check_tyvars(&self) {
+        let tyvars = HashSet::<String>::from_iter(self.tyvars.iter().map(|s| s.clone()));
+        for field in self.fields() {
+            let free_vars = field.ty.free_vars();
+            for (v, _) in &free_vars {
+                if !tyvars.contains(v) {
+                    error_exit(&format!(
+                        "unknown type variable `{}` in the definition of field `{}` of type `{}`",
+                        v, field.name, self.name
+                    ))
+                }
+            }
+        }
+    }
 }
 
 // Right hand side of type declaration.
@@ -61,6 +77,7 @@ pub struct Field {
 }
 
 impl Field {
+    // Check if fields are duplicated. If duplication found, it returns the duplicated field.
     pub fn check_duplication(fields: &Vec<Field>) -> Option<Name> {
         let mut names: HashSet<Name> = Default::default();
         for field in fields {

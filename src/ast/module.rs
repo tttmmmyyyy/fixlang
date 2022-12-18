@@ -514,6 +514,7 @@ impl FixModule {
     // Validate user-defined types
     pub fn validate_user_defined_types(&self) {
         for type_defn in &self.type_decls {
+            type_defn.check_tyvars();
             let type_name = &type_defn.name;
             match &type_defn.value {
                 TypeDeclValue::Struct(str) => match Field::check_duplication(&str.fields) {
