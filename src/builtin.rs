@@ -1085,8 +1085,8 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-const EQ_TRAIT_NAME: &str = "Eq";
-const EQ_TRAIT_EQ_NAME: &str = "eq";
+pub const EQ_TRAIT_NAME: &str = "Eq";
+pub const EQ_TRAIT_EQ_NAME: &str = "eq";
 
 pub fn eq_trait_id() -> TraitId {
     TraitId {

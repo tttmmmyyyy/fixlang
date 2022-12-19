@@ -298,7 +298,7 @@ pub fn test19() {
     let source = r"
         module Main;
         main : Int;
-        main = if eq 3 3 then 1 else 0;
+        main = if 3 == 3 then 1 else 0;
     ";
     let answer = 1;
     test_run_source(source, answer, OptimizationLevel::Default);
@@ -310,7 +310,7 @@ pub fn test20() {
     let source = r"
         module Main;
         main : Int;        
-        main = if eq 3 5 then 1 else 0;
+        main = if 3 == 5 then 1 else 0;
     ";
     let answer = 0;
     test_run_source(source, answer, OptimizationLevel::Default);
@@ -323,9 +323,9 @@ pub fn test20_5() {
         module Main;
         main : Int;
         main = (
-            if eq 2 0 then
+            if 2 == 0 then
                 0 
-            else if eq 2 1 then 
+            else if 2 == 1 then 
                 1
             else 2
         );
@@ -344,7 +344,7 @@ pub fn test21() {
 
             main : Int;
             main = (
-                let g = fix \f -> \x -> if eq x 0 then 0 else add x (f (add x -1));
+                let g = fix \f -> \x -> if x == 0 then 0 else add x (f (add x -1));
                 g {}
             );
         ",
@@ -364,7 +364,7 @@ pub fn test22() {
             main : Int;
             main = (
                 let g = fix \f -> \a -> \x -> 
-                            if eq x 0 then 
+                            if x == 0 then 
                                 a 
                             else
                                 let a2 = add a x;
@@ -387,9 +387,9 @@ pub fn test22_5() {
         main : Int;
         main = (
             let fib = fix \f -> \n ->
-                        if eq n 0 then
+                        if n == 0 then
                             0
-                        else if eq n 1 then
+                        else if n == 1 then
                             1
                         else
                             add (f (add n -1)) (f (add n -2))
@@ -478,7 +478,7 @@ pub fn test28() {
             let arr = arr.set! 0 0;
             let arr = arr.set! 1 1;
             let loop = fix \f -> \arr -> \n ->
-                if eq n 31 then
+                if n == 31 then
                     arr
                 else
                     let x = arr.get (add n (-1));
@@ -518,7 +518,7 @@ pub fn test30() {
         main : Int;
         main = (
             let f = \x -> add x 3;
-            let g = \x -> eq x 8;
+            let g = \x -> x == 8;
             let ans = g $ f $ 5;
             if ans then 1 else 0
         );
@@ -536,7 +536,7 @@ pub fn test31() {
         main : Int;
         main = (
             let f = \x -> add x 3;
-            let g = \x -> eq x 8;
+            let g = \x -> x == 8;
             let ans = 5 .f. g;
             if ans then 1 else 0
         );
@@ -757,7 +757,7 @@ pub fn test42() {
             module Main;
             
             loop : Int -> Int;
-            loop = \x -> if eq x 0 then 0 else add x $ loop $ add x -1;
+            loop = \x -> if x == 0 then 0 else add x $ loop $ add x -1;
     
             main : Int;
             main = loop {};
@@ -778,7 +778,7 @@ pub fn test43() {
             module Main;
             
             my_loop : Int -> Int -> Int;
-            my_loop = \x -> \acc -> if eq x 0 then acc else my_loop (add x -1) (add acc x);
+            my_loop = \x -> \acc -> if x == 0 then acc else my_loop (add x -1) (add acc x);
     
             main : Int;
             main = my_loop {} 0;
@@ -948,7 +948,7 @@ pub fn test50() {
                 loop (Pair.new 0 0) \state -> 
                     let i = state.get_fst;
                     let sum = state.get_snd;
-                    if eq i {} then break sum else continue $ Pair.new (add i 1) (add i sum)
+                    if i == {} then break sum else continue $ Pair.new (add i 1) (add i sum)
             );
         ",
         n
@@ -988,7 +988,7 @@ pub fn test_comment_0() {
             let x = 5 in 
             let y = -3 in
             /* If the closing symbol is put on the end of this line, g will evaluate.
-            let g = fix \f -> \x -> if eq x 0 then 0 else add x (f (add x -1));
+            let g = fix \f -> \x -> if x == 0 then 0 else add x (f (add x -1));
             g 100
             /* */
             //

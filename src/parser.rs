@@ -448,10 +448,35 @@ fn parse_combinator_sequence(
         .collect()
 }
 
+fn parse_expr_eq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_eq);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let lhs = parse_expr_app(pairs.next().unwrap(), src);
+    match pairs.next() {
+        Some(pair) => {
+            let rhs = parse_expr_app(pair, src);
+            expr_app(
+                expr_app(
+                    expr_var(
+                        NameSpacedName::from_strs(&[STD_NAME, EQ_TRAIT_NAME], EQ_TRAIT_EQ_NAME),
+                        Some(span.clone()),
+                    ),
+                    lhs,
+                    Some(span.clone()),
+                ),
+                rhs,
+                Some(span),
+            )
+        }
+        None => lhs,
+    }
+}
+
 // Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
 fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
-    let exprs = parse_combinator_sequence(pair, src, parse_expr_app);
+    let exprs = parse_combinator_sequence(pair, src, parse_expr_eq);
     let mut exprs_iter = exprs.iter().rev();
     let mut ret = exprs_iter.next().unwrap().clone();
     for expr in exprs_iter {
