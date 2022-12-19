@@ -71,39 +71,6 @@ pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
 }
 
-fn add_lit(lhs: &str, rhs: &str) -> Arc<ExprNode> {
-    let lhs_str = NameSpacedName::local(lhs);
-    let rhs_str = NameSpacedName::local(rhs);
-    let free_vars = vec![lhs_str.clone(), rhs_str.clone()];
-    let name = format!("add {} {}", lhs, rhs);
-    let name_cloned = name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let lhs_val = gc
-            .get_var_field(&lhs_str, 1, int_type(gc.context))
-            .into_int_value();
-        let rhs_val = gc
-            .get_var_field(&rhs_str, 1, int_type(gc.context))
-            .into_int_value();
-        let value = gc.builder().build_int_add(lhs_val, rhs_val, "add");
-        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(gc, Some(name_cloned.as_str()));
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        gc.release(gc.get_var(&lhs_str).ptr.get(gc));
-        gc.release(gc.get_var(&rhs_str).ptr.get(gc));
-        ptr_to_int_obj
-    });
-    expr_lit(generator, free_vars, name, int_lit_ty(), None)
-}
-
-pub fn add() -> (Arc<ExprNode>, Arc<Scheme>) {
-    let expr = expr_abs(
-        var_local("lhs", None),
-        expr_abs(var_local("rhs", None), add_lit("lhs", "rhs"), None),
-        None,
-    );
-    let scm = Scheme::from_type(type_fun(int_lit_ty(), type_fun(int_lit_ty(), int_lit_ty())));
-    (expr, scm)
-}
-
 fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = NameSpacedName::local(f);
     let x_str = NameSpacedName::local(x);
@@ -1166,6 +1133,90 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
                         ],
                         EQ_TRAIT_EQ_NAME.to_string(),
                         bool_lit_ty(),
+                        None,
+                    ),
+                    None,
+                ),
+                None,
+            ),
+        )]),
+    }
+}
+
+pub const ADD_TRAIT_NAME: &str = "Add";
+pub const ADD_TRAIT_ADD_NAME: &str = "add";
+
+pub fn add_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], ADD_TRAIT_NAME),
+    }
+}
+
+pub fn add_trait() -> TraitInfo {
+    const TYVAR_NAME: &str = "a";
+    let kind = kind_star();
+    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
+    let tv_type = type_tyvar(TYVAR_NAME, &kind);
+    TraitInfo {
+        id: add_trait_id(),
+        type_var: tv_tyvar,
+        methods: HashMap::from([(
+            ADD_TRAIT_ADD_NAME.to_string(),
+            QualType {
+                preds: vec![],
+                kind_preds: vec![],
+                ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), tv_type.clone())),
+            },
+        )]),
+        kind_predicates: vec![],
+    }
+}
+
+pub fn add_trait_instance_int() -> TraitInstance {
+    const LHS_NAME: &str = "lhs";
+    const RHS_NAME: &str = "rhs";
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let lhs = NameSpacedName::local(LHS_NAME);
+        let rhs = NameSpacedName::local(RHS_NAME);
+        let lhs_val = gc
+            .get_var_field(&lhs, 1, int_type(gc.context))
+            .into_int_value();
+        gc.release(gc.get_var(&lhs).ptr.get(gc));
+        let rhs_val = gc
+            .get_var_field(&rhs, 1, int_type(gc.context))
+            .into_int_value();
+        gc.release(gc.get_var(&rhs).ptr.get(gc));
+        let value = gc
+            .builder()
+            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
+        let ptr_to_int_obj = ObjectType::int_obj_type()
+            .create_obj(gc, Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)));
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
+        ptr_to_int_obj
+    });
+    TraitInstance {
+        qual_pred: QualPredicate {
+            context: vec![],
+            kind_preds: vec![],
+            predicate: Predicate {
+                trait_id: add_trait_id(),
+                ty: int_lit_ty(),
+            },
+        },
+        methods: HashMap::from([(
+            ADD_TRAIT_ADD_NAME.to_string(),
+            expr_abs(
+                var_local(LHS_NAME, None),
+                expr_abs(
+                    var_local(RHS_NAME, None),
+                    expr_lit(
+                        generator,
+                        vec![
+                            NameSpacedName::local(LHS_NAME),
+                            NameSpacedName::local(RHS_NAME),
+                        ],
+                        ADD_TRAIT_ADD_NAME.to_string(),
+                        int_lit_ty(),
                         None,
                     ),
                     None,
