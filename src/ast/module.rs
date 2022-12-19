@@ -563,8 +563,8 @@ impl FixModule {
         ) {
             program.add_global_object(name, (expr, scm));
         }
-        add_global(self, NameSpacedName::from_strs(&[STD_NAME], "add"), add());
         add_global(self, NameSpacedName::from_strs(&[STD_NAME], "eq"), eq());
+        add_global(self, NameSpacedName::from_strs(&[STD_NAME], "add"), add());
         add_global(self, NameSpacedName::from_strs(&[STD_NAME], "fix"), fix());
         self.type_decls.push(loop_result_defn());
         add_global(

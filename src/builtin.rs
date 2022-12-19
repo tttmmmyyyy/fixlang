@@ -1134,3 +1134,29 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     (expr, scm)
 }
+
+const EQ_TRAIT_NAME: &str = "Eq";
+const EQ_TRAIT_EQ_NAME: &str = "eq";
+
+pub fn eq_trait() -> TraitInfo {
+    const TYVAR_NAME: &str = "a";
+    let kind = kind_star();
+    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
+    let tv_type = type_tyvar(TYVAR_NAME, &kind);
+    TraitInfo {
+        id: TraitId {
+            name: NameSpacedName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
+        },
+        type_var: tv_tyvar,
+        methods: HashMap::from([(
+            EQ_TRAIT_EQ_NAME.to_string(),
+            QualType {
+                preds: vec![],
+                kind_preds: vec![],
+                ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), bool_lit_ty())),
+            },
+        )]),
+        instances: vec![],
+        kind_predicates: vec![],
+    }
+}
