@@ -194,7 +194,6 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>, module_name: &str) -> T
         id: TraitId::new(&[module_name], &trait_name),
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
-        instances: vec![],
         kind_predicates: kinds,
     }
 }

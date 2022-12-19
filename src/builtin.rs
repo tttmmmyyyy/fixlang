@@ -1156,7 +1156,6 @@ pub fn eq_trait() -> TraitInfo {
                 ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), bool_lit_ty())),
             },
         )]),
-        instances: vec![],
         kind_predicates: vec![],
     }
 }

@@ -189,8 +189,7 @@ impl FixModule {
 
     // Set traits.
     pub fn set_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
-        self.trait_env
-            .set(trait_infos, trait_impls, &self.type_env, &self.name);
+        self.trait_env.set(trait_infos, trait_impls);
     }
 
     // Register declarations of user-defined types.
@@ -485,7 +484,7 @@ impl FixModule {
             for (method_name, _) in &trait_info.methods {
                 let method_ty = trait_info.method_scheme(method_name);
                 let mut method_impls: Vec<MethodImpl> = vec![];
-                for trait_impl in &trait_info.instances {
+                for trait_impl in self.trait_env.instances.get(trait_id).unwrap() {
                     let ty = trait_impl.method_scheme(method_name, trait_info);
                     let expr = trait_impl.method_expr(method_name);
                     method_impls.push(MethodImpl { ty, expr });
@@ -552,6 +551,10 @@ impl FixModule {
                 },
             }
         }
+    }
+
+    pub fn validate_trait_env(&mut self) {
+        self.trait_env.validate(&self.type_env, &self.name);
     }
 
     // Add bult-in functions to a given ast.

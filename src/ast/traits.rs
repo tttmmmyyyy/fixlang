@@ -44,18 +44,11 @@ pub struct TraitInfo {
     // the type of method "show" is "a -> String",
     // and not "a -> String for a : Show".
     pub methods: HashMap<Name, QualType>,
-    pub instances: Vec<TraitInstance>,
     // Predicates at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_predicates: Vec<KindPredicate>,
 }
 
 impl TraitInfo {
-    pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
-        for inst in &mut self.instances {
-            inst.set_namespace_of_tycons(type_env, module_name);
-        }
-    }
-
     // Get type-scheme of a method.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // this function returns "a -> String for a: Show" as type of "show" method.
@@ -146,31 +139,6 @@ impl TraitInstance {
     // Get expression that implements a method.
     pub fn method_expr(&self, name: &Name) -> Arc<ExprNode> {
         self.methods.get(name).unwrap().clone()
-    }
-}
-
-impl TraitInfo {
-    // Add a instance to a trait.
-    pub fn add_instance(&mut self, inst: TraitInstance, type_env: &TypeEnv) {
-        // Check trait id.
-        assert!(self.id == inst.qual_pred.predicate.trait_id);
-
-        // Check overlapping instance.
-        for i in &self.instances {
-            if Substitution::unify(
-                type_env,
-                &inst.qual_pred.predicate.ty,
-                &i.qual_pred.predicate.ty,
-            )
-            .is_some()
-            {
-                error_exit("overlapping instance.");
-            }
-        }
-
-        // TODO: check validity of method implementation, etc.
-
-        self.instances.push(inst)
     }
 }
 
@@ -330,12 +298,66 @@ impl KindPredicate {
 #[derive(Clone, Default)]
 pub struct TraitEnv {
     pub traits: HashMap<TraitId, TraitInfo>,
+    pub instances: HashMap<TraitId, Vec<TraitInstance>>,
 }
 
 impl TraitEnv {
+    pub fn validate(&mut self, type_env: &TypeEnv, module_name: &str) {
+        let mut new_instances: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
+        for (trait_id, insts) in &self.instances {
+            // Check existaice of trait.
+            let new_trait_id = TraitId {
+                name: self
+                    .infer_namespace(&trait_id.name, &module_name.to_string())
+                    .clone(),
+            };
+            new_instances.insert(new_trait_id, insts.clone());
+        }
+        self.instances = new_instances;
+
+        for (trait_id, insts) in &mut self.instances {
+            for inst in insts.iter_mut() {
+                inst.qual_pred.predicate.trait_id = trait_id.clone();
+
+                // Check instance is not head-normal-form.
+                if inst.qual_pred.predicate.ty.is_hnf() {
+                    error_exit("trait implementation cannot be a head-normal-form.");
+                    // TODO: better message?
+                }
+
+                // Check context is head-normal-form.
+                for ctx in &inst.qual_pred.context {
+                    if !ctx.ty.is_hnf() {
+                        error_exit("trait implementation context must be a head-normal-form.");
+                        // TODO: better message?
+                    }
+                }
+            }
+
+            // Check overlapping instance.
+            for i in 0..insts.len() {
+                for j in (i + 1)..insts.len() {
+                    let inst_i = &insts[i];
+                    let inst_j = &insts[j];
+                    if Substitution::unify(
+                        type_env,
+                        &inst_i.qual_pred.predicate.ty,
+                        &inst_j.qual_pred.predicate.ty,
+                    )
+                    .is_some()
+                    {
+                        error_exit("overlapping instance.");
+                    }
+                }
+            }
+        }
+    }
+
     pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
-        for (_, trait_info) in &mut self.traits {
-            trait_info.set_namespace_of_tycons(type_env, module_name);
+        for (_, insts) in &mut self.instances {
+            for inst in insts {
+                inst.set_namespace_of_tycons(type_env, module_name);
+            }
         }
     }
 
@@ -371,18 +393,12 @@ impl TraitEnv {
     }
 
     // Set traits.
-    pub fn set(
-        &mut self,
-        trait_infos: Vec<TraitInfo>,
-        trait_impls: Vec<TraitInstance>,
-        type_env: &TypeEnv,
-        module_name: &Name,
-    ) {
+    pub fn set(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
         for trait_info in trait_infos {
             self.add_trait(trait_info);
         }
         for trait_impl in trait_impls {
-            self.add_instance(trait_impl, type_env, module_name);
+            self.add_instance(trait_impl);
         }
     }
 
@@ -399,34 +415,12 @@ impl TraitEnv {
     }
 
     // Add a instance.
-    pub fn add_instance(
-        &mut self,
-        mut inst: TraitInstance,
-        type_env: &TypeEnv,
-        module_name: &Name,
-    ) {
-        let trait_id = &mut inst.qual_pred.predicate.trait_id;
-
-        // Check existaice of trait.
-        trait_id.name = self.infer_namespace(&trait_id.name, module_name).clone();
-
-        // Check instance is not head-normal-form.
-        if inst.qual_pred.predicate.ty.is_hnf() {
-            error_exit("trait implementation cannot be a head-normal-form."); // TODO: better message?
+    pub fn add_instance(&mut self, mut inst: TraitInstance) {
+        let trait_id = inst.trait_id();
+        if !self.instances.contains_key(&trait_id) {
+            self.instances.insert(trait_id.clone(), vec![]);
         }
-
-        // Check context is head-normal-form.
-        for ctx in &inst.qual_pred.context {
-            if !ctx.ty.is_hnf() {
-                error_exit("trait implementation context must be a head-normal-form.");
-                // TODO: better message?
-            }
-        }
-
-        self.traits
-            .get_mut(trait_id)
-            .unwrap()
-            .add_instance(inst, type_env)
+        self.instances.get_mut(&trait_id).unwrap().push(inst);
     }
 
     // Reduce predicate using trait instances.
@@ -436,7 +430,7 @@ impl TraitEnv {
         p: &Predicate,
         type_env: &TypeEnv,
     ) -> Option<Vec<Predicate>> {
-        for inst in &self.traits[&p.trait_id].instances {
+        for inst in &self.instances[&p.trait_id] {
             match Substitution::matching(type_env, &inst.qual_pred.predicate.ty, &p.ty) {
                 Some(s) => {
                     let ret = inst

@@ -26,10 +26,15 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
 
     // Add global symbols
     fix_mod.add_builtin_symbols();
-    fix_mod.create_trait_method_symbols();
 
     // Calculate list of type constructors.
     fix_mod.calculate_type_env();
+
+    // Validate trait env.
+    fix_mod.validate_trait_env();
+
+    // Create symbols.
+    fix_mod.create_trait_method_symbols();
 
     // Set Namespaces to tycons and traits that appear in the module.
     fix_mod.set_namespace_of_tycons_and_traits();
