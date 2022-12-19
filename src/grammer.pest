@@ -47,21 +47,21 @@ expr_nlr = { expr_lit | expr_var | expr_let | expr_if | expr_lam | expr_braced }
 // application sequence, e.g., `f x y`. (left-associative)
 expr_app = { expr_nlr ~ (sep+ ~ expr_nlr)* }
 
-// operator==
-combinator_eq = _{ "==" }
-expr_eq = { expr_app ~ (sep* ~ combinator_eq ~ sep* ~ expr_app)? }
-
 // TODO: two composition operator "<<" and ">>"" will be added.
 
 // right to left application sequence, e.g., `g $ f $ x`. (right-associative)
 combinator_dollar = _{ "$" }
-expr_rtl_app = { expr_eq ~ (sep* ~ combinator_dollar ~ sep* ~ expr_eq)* }
+expr_rtl_app = { expr_app ~ (sep* ~ combinator_dollar ~ sep* ~ expr_app)* }
 
 // left to right application sequence, e.g., `x . f . g`. (left-associative)
 combinator_dot = _{ "." }
 expr_ltr_app = { expr_rtl_app ~ (sep* ~ combinator_dot ~ sep* ~ expr_rtl_app)* }
 
-expr_type_annotation = { expr_ltr_app ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
+// operator==
+combinator_eq = _{ "==" }
+expr_eq = { expr_ltr_app ~ (sep* ~ combinator_eq ~ sep* ~ expr_ltr_app)? }
+
+expr_type_annotation = { expr_eq ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 expr = { expr_type_annotation }
 
