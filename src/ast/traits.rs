@@ -118,6 +118,11 @@ impl TraitInstance {
         self.qual_pred.predicate.trait_id.clone()
     }
 
+    // Get mutable trait id.
+    fn trait_id_mut(&mut self) -> &mut TraitId {
+        &mut self.qual_pred.predicate.trait_id
+    }
+
     // Get type-scheme of a method implementation.
     // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
     // this function returns "a -> String for a: Show, b: Show" as the type of "show".
@@ -317,7 +322,7 @@ impl TraitEnv {
 
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
-                inst.qual_pred.predicate.trait_id = trait_id.clone();
+                *inst.trait_id_mut() = trait_id.clone();
 
                 // Check instance is not head-normal-form.
                 if inst.qual_pred.predicate.ty.is_hnf() {

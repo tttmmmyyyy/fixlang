@@ -566,7 +566,11 @@ impl FixModule {
         ) {
             program.add_global_object(name, (expr, scm));
         }
-        add_global(self, NameSpacedName::from_strs(&[STD_NAME], "eq"), eq());
+        self.trait_env.add_trait(eq_trait());
+        self.trait_env
+            .add_instance(eq_trait_instance_primitive(int_lit_ty()));
+        self.trait_env
+            .add_instance(eq_trait_instance_primitive(bool_lit_ty()));
         add_global(self, NameSpacedName::from_strs(&[STD_NAME], "add"), add());
         add_global(self, NameSpacedName::from_strs(&[STD_NAME], "fix"), fix());
         self.type_decls.push(loop_result_defn());
