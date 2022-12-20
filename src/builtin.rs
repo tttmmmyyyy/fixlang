@@ -1,3 +1,5 @@
+use inkwell::values::BasicMetadataValueEnum;
+
 use crate::ast::typedecl;
 
 // Implement built-in functions, types, etc.
@@ -1052,75 +1054,67 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-pub const EQ_TRAIT_NAME: &str = "Eq";
-pub const EQ_TRAIT_EQ_NAME: &str = "eq";
-
-pub fn eq_trait_id() -> TraitId {
-    TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
-    }
-}
-
-pub fn eq_trait() -> TraitInfo {
+pub fn binary_operator_trait(
+    trait_id: TraitId,
+    method_name: Name,
+    output_ty: Option<Arc<TypeNode>>,
+) -> TraitInfo {
     const TYVAR_NAME: &str = "a";
     let kind = kind_star();
     let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
     let tv_type = type_tyvar(TYVAR_NAME, &kind);
+    let output_ty = match output_ty {
+        Some(t) => t,
+        None => tv_type.clone(),
+    };
     TraitInfo {
-        id: eq_trait_id(),
+        id: trait_id,
         type_var: tv_tyvar,
         methods: HashMap::from([(
-            EQ_TRAIT_EQ_NAME.to_string(),
+            method_name,
             QualType {
                 preds: vec![],
                 kind_preds: vec![],
-                ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), bool_lit_ty())),
+                ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
             },
         )]),
         kind_predicates: vec![],
     }
 }
 
-pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn binary_opeartor_instance(
+    trait_id: TraitId,
+    method_name: &Name,
+    operand_ty: Arc<TypeNode>,
+    result_ty: Arc<TypeNode>,
+    generator: for<'c, 'm> fn(
+        &mut GenerationContext<'c, 'm>, // gc
+        BasicValueEnum<'c>,             // lhs
+        BasicValueEnum<'c>,             // rhs
+    ) -> PointerValue<'c>,
+) -> TraitInstance {
     const LHS_NAME: &str = "lhs";
     const RHS_NAME: &str = "rhs";
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let lhs = NameSpacedName::local(LHS_NAME);
         let rhs = NameSpacedName::local(RHS_NAME);
-        let lhs_val = gc
-            .get_var_field(&lhs, 1, int_type(gc.context))
-            .into_int_value();
+        let lhs_val = gc.get_var_field(&lhs, 1, int_type(gc.context));
         gc.release(gc.get_var(&lhs).ptr.get(gc));
-        let rhs_val = gc
-            .get_var_field(&rhs, 1, int_type(gc.context))
-            .into_int_value();
+        let rhs_val = gc.get_var_field(&rhs, 1, int_type(gc.context));
         gc.release(gc.get_var(&rhs).ptr.get(gc));
-        let value =
-            gc.builder()
-                .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
-        let value = gc.builder().build_int_cast(
-            value,
-            ObjectFieldType::Bool
-                .to_basic_type(gc.context)
-                .into_int_type(),
-            "eq",
-        );
-        let ptr_to_obj = ObjectType::bool_obj_type()
-            .create_obj(gc, Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)));
-        gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
-        ptr_to_obj
+        generator(gc, lhs_val, rhs_val)
     });
     TraitInstance {
         qual_pred: QualPredicate {
             context: vec![],
             kind_preds: vec![],
             predicate: Predicate {
-                trait_id: eq_trait_id(),
-                ty,
+                trait_id,
+                ty: operand_ty,
             },
         },
         methods: HashMap::from([(
-            EQ_TRAIT_EQ_NAME.to_string(),
+            method_name.to_string(),
             expr_abs(
                 var_local(LHS_NAME, None),
                 expr_abs(
@@ -1131,8 +1125,8 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
                             NameSpacedName::local(LHS_NAME),
                             NameSpacedName::local(RHS_NAME),
                         ],
-                        EQ_TRAIT_EQ_NAME.to_string(),
-                        bool_lit_ty(),
+                        method_name.to_string(),
+                        result_ty,
                         None,
                     ),
                     None,
@@ -1153,76 +1147,80 @@ pub fn add_trait_id() -> TraitId {
 }
 
 pub fn add_trait() -> TraitInfo {
-    const TYVAR_NAME: &str = "a";
-    let kind = kind_star();
-    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
-    let tv_type = type_tyvar(TYVAR_NAME, &kind);
-    TraitInfo {
-        id: add_trait_id(),
-        type_var: tv_tyvar,
-        methods: HashMap::from([(
-            ADD_TRAIT_ADD_NAME.to_string(),
-            QualType {
-                preds: vec![],
-                kind_preds: vec![],
-                ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), tv_type.clone())),
-            },
-        )]),
-        kind_predicates: vec![],
-    }
+    binary_operator_trait(add_trait_id(), ADD_TRAIT_ADD_NAME.to_string(), None)
 }
 
 pub fn add_trait_instance_int() -> TraitInstance {
-    const LHS_NAME: &str = "lhs";
-    const RHS_NAME: &str = "rhs";
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let lhs = NameSpacedName::local(LHS_NAME);
-        let rhs = NameSpacedName::local(RHS_NAME);
-        let lhs_val = gc
-            .get_var_field(&lhs, 1, int_type(gc.context))
-            .into_int_value();
-        gc.release(gc.get_var(&lhs).ptr.get(gc));
-        let rhs_val = gc
-            .get_var_field(&rhs, 1, int_type(gc.context))
-            .into_int_value();
-        gc.release(gc.get_var(&rhs).ptr.get(gc));
-        let value = gc
-            .builder()
-            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
+    fn generate_add_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_int_add(
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            ADD_TRAIT_ADD_NAME,
+        );
         let ptr_to_int_obj = ObjectType::int_obj_type()
             .create_obj(gc, Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)));
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
-    });
-    TraitInstance {
-        qual_pred: QualPredicate {
-            context: vec![],
-            kind_preds: vec![],
-            predicate: Predicate {
-                trait_id: add_trait_id(),
-                ty: int_lit_ty(),
-            },
-        },
-        methods: HashMap::from([(
-            ADD_TRAIT_ADD_NAME.to_string(),
-            expr_abs(
-                var_local(LHS_NAME, None),
-                expr_abs(
-                    var_local(RHS_NAME, None),
-                    expr_lit(
-                        generator,
-                        vec![
-                            NameSpacedName::local(LHS_NAME),
-                            NameSpacedName::local(RHS_NAME),
-                        ],
-                        ADD_TRAIT_ADD_NAME.to_string(),
-                        int_lit_ty(),
-                        None,
-                    ),
-                    None,
-                ),
-                None,
-            ),
-        )]),
     }
+    binary_opeartor_instance(
+        add_trait_id(),
+        &ADD_TRAIT_ADD_NAME.to_string(),
+        int_lit_ty(),
+        int_lit_ty(),
+        generate_add_int,
+    )
+}
+
+pub const EQ_TRAIT_NAME: &str = "Eq";
+pub const EQ_TRAIT_EQ_NAME: &str = "eq";
+
+pub fn eq_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
+    }
+}
+
+pub fn eq_trait() -> TraitInfo {
+    binary_operator_trait(
+        eq_trait_id(),
+        EQ_TRAIT_EQ_NAME.to_string(),
+        Some(bool_lit_ty()),
+    )
+}
+
+pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
+    fn generate_eq_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_int_compare(
+            IntPredicate::EQ,
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            EQ_TRAIT_EQ_NAME,
+        );
+        let value = gc.builder().build_int_cast(
+            value,
+            ObjectFieldType::Bool
+                .to_basic_type(gc.context)
+                .into_int_type(),
+            "eq",
+        );
+        let ptr_to_obj = ObjectType::bool_obj_type()
+            .create_obj(gc, Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)));
+        gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
+        ptr_to_obj
+    }
+    binary_opeartor_instance(
+        eq_trait_id(),
+        &EQ_TRAIT_EQ_NAME.to_string(),
+        ty,
+        bool_lit_ty(),
+        generate_eq_int,
+    )
 }
