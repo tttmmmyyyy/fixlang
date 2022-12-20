@@ -1137,44 +1137,6 @@ pub fn binary_opeartor_instance(
     }
 }
 
-pub const ADD_TRAIT_NAME: &str = "Add";
-pub const ADD_TRAIT_ADD_NAME: &str = "add";
-
-pub fn add_trait_id() -> TraitId {
-    TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], ADD_TRAIT_NAME),
-    }
-}
-
-pub fn add_trait() -> TraitInfo {
-    binary_operator_trait(add_trait_id(), ADD_TRAIT_ADD_NAME.to_string(), None)
-}
-
-pub fn add_trait_instance_int() -> TraitInstance {
-    fn generate_add_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_int_add(
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            ADD_TRAIT_ADD_NAME,
-        );
-        let ptr_to_int_obj = ObjectType::int_obj_type()
-            .create_obj(gc, Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)));
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        ptr_to_int_obj
-    }
-    binary_opeartor_instance(
-        add_trait_id(),
-        &ADD_TRAIT_ADD_NAME.to_string(),
-        int_lit_ty(),
-        int_lit_ty(),
-        generate_add_int,
-    )
-}
-
 pub const EQ_TRAIT_NAME: &str = "Eq";
 pub const EQ_TRAIT_EQ_NAME: &str = "eq";
 
@@ -1222,5 +1184,87 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
         ty,
         bool_lit_ty(),
         generate_eq_int,
+    )
+}
+
+pub const ADD_TRAIT_NAME: &str = "Add";
+pub const ADD_TRAIT_ADD_NAME: &str = "add";
+
+pub fn add_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], ADD_TRAIT_NAME),
+    }
+}
+
+pub fn add_trait() -> TraitInfo {
+    binary_operator_trait(add_trait_id(), ADD_TRAIT_ADD_NAME.to_string(), None)
+}
+
+pub fn add_trait_instance_int() -> TraitInstance {
+    fn generate_add_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_int_add(
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            ADD_TRAIT_ADD_NAME,
+        );
+        let ptr_to_int_obj = ObjectType::int_obj_type()
+            .create_obj(gc, Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)));
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
+        ptr_to_int_obj
+    }
+    binary_opeartor_instance(
+        add_trait_id(),
+        &ADD_TRAIT_ADD_NAME.to_string(),
+        int_lit_ty(),
+        int_lit_ty(),
+        generate_add_int,
+    )
+}
+
+pub const SUBTRACT_TRAIT_NAME: &str = "Subtract";
+pub const SUBTRACT_TRAIT_SUBTRACT_NAME: &str = "subtract";
+
+pub fn subtract_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], SUBTRACT_TRAIT_NAME),
+    }
+}
+
+pub fn subtract_trait() -> TraitInfo {
+    binary_operator_trait(
+        subtract_trait_id(),
+        SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
+        None,
+    )
+}
+
+pub fn subtract_trait_instance_int() -> TraitInstance {
+    fn generate_subtract_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_int_sub(
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            SUBTRACT_TRAIT_SUBTRACT_NAME,
+        );
+        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(
+            gc,
+            Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
+        );
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
+        ptr_to_int_obj
+    }
+    binary_opeartor_instance(
+        subtract_trait_id(),
+        &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
+        int_lit_ty(),
+        int_lit_ty(),
+        generate_subtract_int,
     )
 }
