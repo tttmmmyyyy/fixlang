@@ -130,6 +130,23 @@ pub fn test9() {
 
 #[test]
 #[serial]
+pub fn test9_5() {
+    let source = r"
+        module Main;
+        
+        main : Int;
+        main = (
+            let x = 3;
+            let y = 5;
+            x - y
+        );
+    ";
+    let answer = -2;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test10() {
     let source = r"
         module Main;
