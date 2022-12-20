@@ -122,7 +122,7 @@ pub fn test9() {
         module Main;
         
         main : Int;
-        main = add 3 5;
+        main = 3 + 5;
     ";
     let answer = 8;
     test_run_source(source, answer, OptimizationLevel::Default);
@@ -135,7 +135,7 @@ pub fn test10() {
         module Main;
 
         main : Int;
-        main = let x = 5 in add 2 x;
+        main = let x = 5 in 2 + x;
     ";
     let answer = 7;
     test_run_source(source, answer, OptimizationLevel::Default);
@@ -150,7 +150,7 @@ pub fn test11() {
         main : Int;
         main = let x = 5 in 
                let y = -3 in
-               add x y;
+               x + y;
         ";
     let answer = 2;
     test_run_source(source, answer, OptimizationLevel::Default);
@@ -167,8 +167,8 @@ pub fn test12() {
             let x = 5 in 
             let y = -3 in
             let z = 12 in
-            let xy = add x y in
-            add xy z
+            let xy = x + y in
+            xy + z
         );
         ";
     let answer = 14;
@@ -198,7 +198,7 @@ pub fn test13_5() {
         main : Int;
         main = (
             let f = add 5 in
-            add (f -3) (f 12)
+            f -3 + f 12
         );
         ";
     let answer = 5 - 3 + 5 + 12;
@@ -229,7 +229,7 @@ pub fn test15() {
         module Main;
         main : Int;
         main = (
-            let f = \x -> add 3 x in
+            let f = \x -> 3 + x in
             f 5
         );
         ";
@@ -260,7 +260,7 @@ pub fn test16() {
         module Main;
         main : Int;
         main = (
-            let f = \x -> add x 3 in
+            let f = \x -> x + 3 in
             f 5
         );
         ";
@@ -344,7 +344,7 @@ pub fn test21() {
 
             main : Int;
             main = (
-                let g = fix \f -> \x -> if x == 0 then 0 else add x (f (add x -1));
+                let g = fix \f -> \x -> if x == 0 then 0 else x + f (x + -1);
                 g {}
             );
         ",
@@ -367,8 +367,8 @@ pub fn test22() {
                             if x == 0 then 
                                 a 
                             else
-                                let a2 = add a x;
-                                let x2 = add x -1;
+                                let a2 = a + x;
+                                let x2 = x + -1;
                                 f a2 x2
                 in g 0 {}
             );
@@ -392,7 +392,7 @@ pub fn test22_5() {
                         else if n == 1 then
                             1
                         else
-                            add (f (add n -1)) (f (add n -2))
+                            f (n+-1) + f (n+-2)
             in fib 10
         );
     ";
@@ -483,8 +483,8 @@ pub fn test28() {
                 else
                     let x = arr.get (add n (-1));
                     let y = arr.get (add n (-2));
-                    let arr = arr.set! n (add x y);
-                    f arr (add n 1);
+                    let arr = arr.set! n (x+y);
+                    f arr (n+1);
             let fib = loop arr 2;
             fib.get 30
         );
@@ -517,7 +517,7 @@ pub fn test30() {
         module Main;
         main : Int;
         main = (
-            let f = \x -> add x 3;
+            let f = \x -> x + 3;
             let g = \x -> x == 8;
             let ans = g $ f $ 5;
             if ans then 1 else 0
@@ -535,7 +535,7 @@ pub fn test31() {
         module Main;
         main : Int;
         main = (
-            let f = \x -> add x 3;
+            let f = \x -> x + 3;
             let g = \x -> x == 8;
             let ans = 5 .f. g;
             if ans then 1 else 0
@@ -553,7 +553,7 @@ pub fn test32() {
         module Main;
         main : Int;
         main = (
-            let f = \x -> add x 10;
+            let f = \x -> x + 10;
             5.add $ 3.f
         );
         ";
@@ -572,7 +572,7 @@ pub fn test33() {
         main : Int;
         main = (
             let obj = IntBool.new 18 false;
-            let obj = IntBool.mod_x (\x -> add x 42) obj;
+            let obj = IntBool.mod_x (\x -> x + 42) obj;
             IntBool.get_x obj
         );
         ";
@@ -593,7 +593,7 @@ pub fn test34() {
         main : Int;
         main = (
             let obj = IntBool.new 18 false;
-            let obj = obj . mod_x (\x -> add x 42);
+            let obj = obj . mod_x (\x -> x + 42);
             obj . get_x
         );
         ";
@@ -635,7 +635,7 @@ pub fn test36() {
         main : Int;
         main = (
             let a = A.new (B.new 16);
-            let a = a.(mod_x $ mod_x $ \x -> add x 15);
+            let a = a.(mod_x $ mod_x $ \x -> x + 15);
             a . get_x . get_x
         );
         ";
@@ -656,7 +656,7 @@ pub fn test37() {
         main : Int;
         main = (
             let a = A.new (B.new 16);
-            let b = a . (mod_x! $ mod_x! $ \x -> add x 15);
+            let b = a . (mod_x! $ mod_x! $ \x -> x + 15);
             b . get_x . get_x
         );
         ";
@@ -677,7 +677,7 @@ pub fn test38() {
         main : Int;
         main = (    
             let a = A.new (B.new 16);
-            let f = \a -> (a : A) . (mod_x! $ mod_x! $ \x -> add x 15);
+            let f = \a -> (a : A) . (mod_x! $ mod_x! $ \x -> x + 15);
             let a = a.f;
             a.get_x.get_x
         );
@@ -699,7 +699,7 @@ pub fn test39() {
         main : Int;
         main = (
             let a = A.new (B.new 16);
-            let f = \a -> a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ \x -> add x 15);
+            let f = \a -> a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ \x -> x + 15);
             let a = a.f;
             a.get_x.get_x
         );
@@ -721,7 +721,7 @@ pub fn test40() {
         main : Int;
         main = (
             let a = A.new (B.new 16);
-            let f: A -> A = \a -> a.mod_x! $ mod_x! $ \x -> add x 15;
+            let f: A -> A = \a -> a.mod_x! $ mod_x! $ \x -> x + 15;
             let a = a .f;
             a .get_x .get_x
         );
@@ -757,7 +757,7 @@ pub fn test42() {
             module Main;
             
             loop : Int -> Int;
-            loop = \x -> if x == 0 then 0 else add x $ loop $ add x -1;
+            loop = \x -> if x == 0 then 0 else x + loop $ add x -1;
     
             main : Int;
             main = loop {};
@@ -778,7 +778,7 @@ pub fn test43() {
             module Main;
             
             my_loop : Int -> Int -> Int;
-            my_loop = \x -> \acc -> if x == 0 then acc else my_loop (add x -1) (add acc x);
+            my_loop = \x -> \acc -> if x == 0 then acc else my_loop (x + -1) (acc + x);
     
             main : Int;
             main = my_loop {} 0;
@@ -825,8 +825,8 @@ pub fn test44() {
             let arr1 = arr1.set! 1 5;
             let z = add_head_and_next arr1;
 
-            let y = add (toInt 5) (toInt false);
-            add (add x y) z
+            let y = toInt 5 + toInt false;
+            x + y + z
         );
     ";
     let answer = 11;
@@ -881,7 +881,7 @@ pub fn test46() {
 
         main : Int;
         main = (
-            add (let x = 3 in let y = 2 in add x Main.y) x
+            (let x = 3 in let y = 2 in add x Main.y) + x
         );
     ";
     let answer = 15;
