@@ -24,9 +24,9 @@ pub fn test1() {
     let source = r"
         module Main;
         main: Int;
-        main = let x = 5 in x;
+        main = let x = 5 in -x;
     ";
-    let answer = 5;
+    let answer = -5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 

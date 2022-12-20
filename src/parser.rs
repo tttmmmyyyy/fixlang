@@ -478,7 +478,7 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_plus);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), src);
+    let mut expr = parse_expr_neg(pairs.next().unwrap(), src);
     let mut next_operation = (ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME);
     for pair in pairs {
         if pair.as_rule() == Rule::operator_plus {
@@ -490,7 +490,7 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
                 unreachable!();
             }
         } else {
-            let rhs = parse_expr_ltr_app(pair, src);
+            let rhs = parse_expr_neg(pair, src);
             expr = expr_app(
                 expr_app(
                     expr_var(
@@ -506,6 +506,36 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         }
     }
     expr
+}
+
+// Unary opeartor -
+fn parse_expr_neg(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    if pairs.peek().unwrap().as_rule() == Rule::expr_int_lit {
+        parse_expr_int_lit(pairs.next().unwrap(), src)
+    } else {
+        let mut negate = false;
+        if pairs.peek().unwrap().as_rule() == Rule::operator_minus {
+            negate = true;
+            pairs.next();
+        }
+        let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), src);
+        if negate {
+            expr = expr_app(
+                expr_var(
+                    NameSpacedName::from_strs(
+                        &[STD_NAME, NEGATE_TRAIT_NAME],
+                        NEGATE_TRAIT_NEGATE_NAME,
+                    ),
+                    Some(span.clone()),
+                ),
+                expr,
+                Some(span.clone()),
+            );
+        }
+        expr
+    }
 }
 
 // Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)

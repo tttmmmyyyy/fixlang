@@ -1054,6 +1054,69 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
+    const TYVAR_NAME: &str = "a";
+    let kind = kind_star();
+    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
+    let tv_type = type_tyvar(TYVAR_NAME, &kind);
+    TraitInfo {
+        id: trait_id,
+        type_var: tv_tyvar,
+        methods: HashMap::from([(
+            method_name,
+            QualType {
+                preds: vec![],
+                kind_preds: vec![],
+                ty: type_fun(tv_type.clone(), tv_type.clone()),
+            },
+        )]),
+        kind_predicates: vec![],
+    }
+}
+
+pub fn unary_opeartor_instance(
+    trait_id: TraitId,
+    method_name: &Name,
+    operand_ty: Arc<TypeNode>,
+    result_ty: Arc<TypeNode>,
+    generator: for<'c, 'm> fn(
+        &mut GenerationContext<'c, 'm>, // gc
+        BasicValueEnum<'c>,             // rhs
+    ) -> PointerValue<'c>,
+) -> TraitInstance {
+    const RHS_NAME: &str = "rhs";
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let rhs = NameSpacedName::local(RHS_NAME);
+        let rhs_val = gc.get_var_field(&rhs, 1, int_type(gc.context));
+        gc.release(gc.get_var(&rhs).ptr.get(gc));
+        generator(gc, rhs_val)
+    });
+    TraitInstance {
+        qual_pred: QualPredicate {
+            context: vec![],
+            kind_preds: vec![],
+            predicate: Predicate {
+                trait_id,
+                ty: operand_ty,
+            },
+        },
+        methods: HashMap::from([(
+            method_name.to_string(),
+            expr_abs(
+                var_local(RHS_NAME, None),
+                expr_lit(
+                    generator,
+                    vec![NameSpacedName::local(RHS_NAME)],
+                    method_name.to_string(),
+                    result_ty,
+                    None,
+                ),
+                None,
+            ),
+        )]),
+    }
+}
+
 pub fn binary_operator_trait(
     trait_id: TraitId,
     method_name: Name,
@@ -1225,8 +1288,8 @@ pub fn add_trait_instance_int() -> TraitInstance {
     )
 }
 
-pub const SUBTRACT_TRAIT_NAME: &str = "Subtract";
-pub const SUBTRACT_TRAIT_SUBTRACT_NAME: &str = "subtract";
+pub const SUBTRACT_TRAIT_NAME: &str = "Sub";
+pub const SUBTRACT_TRAIT_SUBTRACT_NAME: &str = "sub";
 
 pub fn subtract_trait_id() -> TraitId {
     TraitId {
@@ -1266,5 +1329,40 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
         int_lit_ty(),
         int_lit_ty(),
         generate_subtract_int,
+    )
+}
+
+pub const NEGATE_TRAIT_NAME: &str = "Neg";
+pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
+
+pub fn negate_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], NEGATE_TRAIT_NAME),
+    }
+}
+
+pub fn negate_trait() -> TraitInfo {
+    unary_operator_trait(negate_trait_id(), NEGATE_TRAIT_NEGATE_NAME.to_string())
+}
+
+pub fn negate_trait_instance_int() -> TraitInstance {
+    fn generate_negate_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc
+            .builder()
+            .build_int_neg(rhs.into_int_value(), NEGATE_TRAIT_NEGATE_NAME);
+        let ptr_to_int_obj = ObjectType::int_obj_type()
+            .create_obj(gc, Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)));
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
+        ptr_to_int_obj
+    }
+    unary_opeartor_instance(
+        negate_trait_id(),
+        &NEGATE_TRAIT_NEGATE_NAME.to_string(),
+        int_lit_ty(),
+        int_lit_ty(),
+        generate_negate_int,
     )
 }
