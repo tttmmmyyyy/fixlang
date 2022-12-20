@@ -12,9 +12,9 @@ pub fn test0() {
         module Main;
 
         main: Int;
-        main = 5;
+        main = 5 + 3 * 2;
     ";
-    let answer = 5;
+    let answer = 11;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 

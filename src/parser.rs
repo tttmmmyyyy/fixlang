@@ -478,7 +478,7 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_plus);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_neg(pairs.next().unwrap(), src);
+    let mut expr = parse_expr_mul(pairs.next().unwrap(), src);
     let mut next_operation = (ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME);
     for pair in pairs {
         if pair.as_rule() == Rule::operator_plus {
@@ -486,6 +486,42 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
                 next_operation = (ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME);
             } else if pair.as_str() == "-" {
                 next_operation = (SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME);
+            } else {
+                unreachable!();
+            }
+        } else {
+            let rhs = parse_expr_mul(pair, src);
+            expr = expr_app(
+                expr_app(
+                    expr_var(
+                        NameSpacedName::from_strs(&[STD_NAME, next_operation.0], next_operation.1),
+                        Some(span.clone()),
+                    ),
+                    expr,
+                    Some(span.clone()),
+                ),
+                rhs,
+                Some(span.clone()),
+            )
+        }
+    }
+    expr
+}
+
+// Operator +/- (left associative)
+fn parse_expr_mul(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_mul);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let mut expr = parse_expr_neg(pairs.next().unwrap(), src);
+    let mut next_operation = (MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME);
+    for pair in pairs {
+        if pair.as_rule() == Rule::operator_mul {
+            if pair.as_str() == "*" {
+                next_operation = (MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME);
+            } else if pair.as_str() == "/" {
+                unimplemented!()
+                // next_operation = (, );
             } else {
                 unreachable!();
             }

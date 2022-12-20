@@ -1332,6 +1332,50 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
     )
 }
 
+pub const MULTIPLY_TRAIT_NAME: &str = "Mul";
+pub const MULTIPLY_TRAIT_MULTIPLY_NAME: &str = "mul";
+
+pub fn multiply_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], MULTIPLY_TRAIT_NAME),
+    }
+}
+
+pub fn multiply_trait() -> TraitInfo {
+    binary_operator_trait(
+        multiply_trait_id(),
+        MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
+        None,
+    )
+}
+
+pub fn multiply_trait_instance_int() -> TraitInstance {
+    fn generate_multiply_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_int_mul(
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            MULTIPLY_TRAIT_MULTIPLY_NAME,
+        );
+        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(
+            gc,
+            Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
+        );
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
+        ptr_to_int_obj
+    }
+    binary_opeartor_instance(
+        multiply_trait_id(),
+        &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
+        int_lit_ty(),
+        int_lit_ty(),
+        generate_multiply_int,
+    )
+}
+
 pub const NEGATE_TRAIT_NAME: &str = "Neg";
 pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
 
