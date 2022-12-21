@@ -508,7 +508,7 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     expr
 }
 
-// Operator +/- (left associative)
+// Operator *,/,% (left associative)
 fn parse_expr_mul(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_mul);
     let span = Span::from_pair(&src, &pair);
@@ -520,10 +520,11 @@ fn parse_expr_mul(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
             if pair.as_str() == "*" {
                 next_operation = (MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME);
             } else if pair.as_str() == "/" {
-                unimplemented!()
-                // next_operation = (, );
+                next_operation = (DIVIDE_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME);
+            } else if pair.as_str() == "%" {
+                next_operation = (REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME);
             } else {
-                unreachable!();
+                unreachable!()
             }
         } else {
             let rhs = parse_expr_neg(pair, src);

@@ -1376,6 +1376,92 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
     )
 }
 
+pub const DIVIDE_TRAIT_NAME: &str = "Div";
+pub const DIVIDE_TRAIT_DIVIDE_NAME: &str = "div";
+
+pub fn divide_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], DIVIDE_TRAIT_NAME),
+    }
+}
+
+pub fn divide_trait() -> TraitInfo {
+    binary_operator_trait(
+        divide_trait_id(),
+        DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
+        None,
+    )
+}
+
+pub fn divide_trait_instance_int() -> TraitInstance {
+    fn generate_divide_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_int_signed_div(
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            DIVIDE_TRAIT_DIVIDE_NAME,
+        );
+        let ptr_to_int_obj = ObjectType::int_obj_type()
+            .create_obj(gc, Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)));
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
+        ptr_to_int_obj
+    }
+    binary_opeartor_instance(
+        divide_trait_id(),
+        &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
+        int_lit_ty(),
+        int_lit_ty(),
+        generate_divide_int,
+    )
+}
+
+pub const REMAINDER_TRAIT_NAME: &str = "Rem";
+pub const REMAINDER_TRAIT_REMAINDER_NAME: &str = "rem";
+
+pub fn remainder_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], REMAINDER_TRAIT_NAME),
+    }
+}
+
+pub fn reminder_trait() -> TraitInfo {
+    binary_operator_trait(
+        remainder_trait_id(),
+        REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
+        None,
+    )
+}
+
+pub fn reminder_trait_instance_int() -> TraitInstance {
+    fn generate_remainder_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_int_signed_rem(
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            REMAINDER_TRAIT_REMAINDER_NAME,
+        );
+        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(
+            gc,
+            Some(&format!("{} lhs rhs", REMAINDER_TRAIT_REMAINDER_NAME)),
+        );
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
+        ptr_to_int_obj
+    }
+    binary_opeartor_instance(
+        remainder_trait_id(),
+        &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
+        int_lit_ty(),
+        int_lit_ty(),
+        generate_remainder_int,
+    )
+}
+
 pub const NEGATE_TRAIT_NAME: &str = "Neg";
 pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
 

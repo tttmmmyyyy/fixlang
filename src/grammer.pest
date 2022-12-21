@@ -62,8 +62,8 @@ expr_ltr_app = { expr_rtl_app ~ (sep* ~ combinator_dot ~ sep* ~ expr_rtl_app)* }
 operator_minus = { "-" }
 expr_neg = { expr_ltr_app | operator_minus? ~ expr_ltr_app }
 
-// operator* (left-associative)
-operator_mul = { "*" }
+// operator*,/,% (left-associative)
+operator_mul = { "*" | "/" | "%" }
 expr_mul = { expr_neg ~ (sep* ~ operator_mul ~ sep* ~ expr_neg)? }
 
 // operator+/- (left-associative)
