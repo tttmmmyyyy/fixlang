@@ -581,6 +581,8 @@ impl FixModule {
         self.trait_env.add_instance(multiply_trait_instance_int());
         self.trait_env.add_trait(divide_trait());
         self.trait_env.add_instance(divide_trait_instance_int());
+        self.trait_env.add_trait(remainder_trait());
+        self.trait_env.add_instance(remainder_trait_instance_int());
         add_global(self, NameSpacedName::from_strs(&[STD_NAME], "fix"), fix());
         self.type_decls.push(loop_result_defn());
         add_global(

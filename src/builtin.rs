@@ -1427,7 +1427,7 @@ pub fn remainder_trait_id() -> TraitId {
     }
 }
 
-pub fn reminder_trait() -> TraitInfo {
+pub fn remainder_trait() -> TraitInfo {
     binary_operator_trait(
         remainder_trait_id(),
         REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
@@ -1435,7 +1435,7 @@ pub fn reminder_trait() -> TraitInfo {
     )
 }
 
-pub fn reminder_trait_instance_int() -> TraitInstance {
+pub fn remainder_trait_instance_int() -> TraitInstance {
     fn generate_remainder_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: BasicValueEnum<'c>,
