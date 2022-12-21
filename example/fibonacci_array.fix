@@ -1,13 +1,20 @@
-let arr = newArray 31 0;
-let arr = writeArray! arr 0 0;
-let arr = writeArray! arr 1 1;
-let loop = fix \f -> \arr -> \n -> 
-    if eq n 31 then 
-        arr 
-    else
-        let x = readArray arr (add n (-1));
-        let y = readArray arr (add n (-2));
-        let arr = writeArray! arr n (add x y);
-        f arr (add n 1);
-let fib = loop arr 2;
-readArray fib 30
+module Main;
+
+main : Int;
+main = (
+    let arr = Array.new 31 0;
+    let arr = arr.set! 0 0;
+    let arr = arr.set! 1 1;
+    let calc_fib_array = (
+        fix \loop -> \arr -> \n -> 
+            if n == 31 then 
+                arr 
+            else
+                let x = arr.get (n-1);
+                let y = arr.get (n-2);
+                let arr = arr.set n (x+y);
+                loop arr (n+1)
+    );
+    let fib_array = calc_fib_array arr 2;
+    fib_array.get 30
+);
