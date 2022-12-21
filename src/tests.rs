@@ -442,10 +442,10 @@ pub fn test24() {
         main : Int;
         main = (
             let arr = Array.new 100 42;
-            32
+            arr.len
         );
         ";
-    let answer = 32;
+    let answer = 100;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 

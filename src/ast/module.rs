@@ -610,6 +610,11 @@ impl FixModule {
             NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "set!"),
             write_array_unique(),
         );
+        add_global(
+            self,
+            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
+            length_array(),
+        );
         for decl in &self.type_decls.clone() {
             match &decl.value {
                 TypeDeclValue::Struct(str) => {

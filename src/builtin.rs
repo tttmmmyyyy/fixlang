@@ -353,14 +353,60 @@ pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
     (expr, scm)
 }
 
-// writeArray built-in function.
+// set built-in function.
 pub fn write_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     write_array_common(false)
 }
 
-// writeArray! built-in function.
+// set! built-in function.
 pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
     write_array_common(true)
+}
+
+// `len` built-in function for Array.
+pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const ARR_NAME: &str = "arr";
+
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let arr_name = NameSpacedName::local(ARR_NAME);
+        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        let array_obj_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
+        let array_obj = gc.get_var(&arr_name).ptr.get(gc);
+        let array_obj = gc.cast_pointer(array_obj, array_obj_ty);
+        let size_buf_ptr = gc
+            .builder()
+            .build_struct_gep(array_obj, 1, "size_buf_ptr")
+            .unwrap();
+        gc.release(array_obj);
+        let array_str = ObjectFieldType::Array
+            .to_basic_type(gc.context)
+            .into_struct_type();
+        let size = gc
+            .load_obj_field(size_buf_ptr, array_str, 0)
+            .into_int_value();
+        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(gc, Some("len arr"));
+        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, size);
+        ptr_to_int_obj
+    });
+
+    let expr = expr_abs(
+        var_local(ARR_NAME, None),
+        expr_lit(
+            generator,
+            vec![NameSpacedName::local(ARR_NAME)],
+            "len arr".to_string(),
+            int_lit_ty(),
+            None,
+        ),
+        None,
+    );
+    let array_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
+    let scm = Scheme::generalize(
+        HashMap::from([("a".to_string(), kind_star())]),
+        vec![],
+        type_fun(array_ty, int_lit_ty()),
+    );
+    (expr, scm)
 }
 
 // `new` built-in function for a given struct.
