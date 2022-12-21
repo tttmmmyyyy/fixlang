@@ -223,7 +223,7 @@ pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Implementation of writeArray / writeArray! built-in function.
+// Implementation of Array.write/Array.write! built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
 fn write_array_lit(
     a: &str,
@@ -325,8 +325,7 @@ fn write_array_lit(
     )
 }
 
-// writeArray built-in function.
-// writeArray = for<a> \arr: Array<a> -> \idx: Int -> \value: a -> (...write_array_lit(a, arr, idx)...): Array<a>
+// Array.set built-in function.
 pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         var_local("idx", None),
