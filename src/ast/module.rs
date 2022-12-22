@@ -516,7 +516,7 @@ impl FixModule {
         // trait name appears in expression only in the namespace of a variable and it will be resolved by typechecker.
         let type_env = self.type_env();
         self.trait_env
-            .set_namespace_of_tycons(&type_env, &self.name);
+            .set_namespace_of_tycons_and_traits(&type_env, &self.name);
         let trait_env = &self.trait_env;
         for (_, sym) in &mut self.global_symbols {
             sym.set_namespace_of_tycons_and_traits(&type_env, trait_env, &self.name);
@@ -554,7 +554,8 @@ impl FixModule {
     }
 
     pub fn validate_trait_env(&mut self) {
-        self.trait_env.validate(&self.type_env, &self.name);
+        self.trait_env
+            .validate_and_set_namespace_of_instance_keys(&self.type_env, &self.name);
     }
 
     // Add bult-in functions to a given ast.

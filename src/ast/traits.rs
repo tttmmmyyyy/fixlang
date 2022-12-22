@@ -307,7 +307,11 @@ pub struct TraitEnv {
 }
 
 impl TraitEnv {
-    pub fn validate(&mut self, type_env: &TypeEnv, module_name: &str) {
+    pub fn validate_and_set_namespace_of_instance_keys(
+        &mut self,
+        type_env: &TypeEnv,
+        module_name: &str,
+    ) {
         let mut new_instances: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
         for (trait_id, insts) in &self.instances {
             // Check existaice of trait.
@@ -316,7 +320,12 @@ impl TraitEnv {
                     .infer_namespace(&trait_id.name, &module_name.to_string())
                     .clone(),
             };
-            new_instances.insert(new_trait_id, insts.clone());
+            match new_instances.get_mut(&new_trait_id) {
+                Some(v) => v.append(&mut insts.clone()),
+                None => {
+                    new_instances.insert(new_trait_id, insts.clone());
+                }
+            }
         }
         self.instances = new_instances;
 
@@ -358,12 +367,13 @@ impl TraitEnv {
         }
     }
 
-    pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
+    pub fn set_namespace_of_tycons_and_traits(&mut self, type_env: &TypeEnv, module_name: &Name) {
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
         let mut instances_resolved: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
         for (mut trait_id, mut insts) in insntaces {
             // Resolve key's namespace.
             trait_id.set_namespace_of_traits(self, module_name);
+            // Resolve value's namespace.
             for inst in &mut insts {
                 inst.set_namespace_of_tycons(type_env, module_name);
             }
