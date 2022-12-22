@@ -470,6 +470,7 @@ fn parse_binary_operator_sequence(
     expr
 }
 
+// Operator ==, <, >, <=, >= (left-associative)
 fn parse_expr_eq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_eq);
     parse_binary_operator_sequence(
