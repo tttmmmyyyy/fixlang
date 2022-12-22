@@ -1126,6 +1126,7 @@ pub fn unary_opeartor_instance(
     trait_id: TraitId,
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
+    get_operand_struct_ty: for<'c, 'm> fn(&mut GenerationContext<'c, 'm>) -> StructType<'c>,
     result_ty: Arc<TypeNode>,
     generator: for<'c, 'm> fn(
         &mut GenerationContext<'c, 'm>, // gc
@@ -1135,7 +1136,8 @@ pub fn unary_opeartor_instance(
     const RHS_NAME: &str = "rhs";
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         let rhs = NameSpacedName::local(RHS_NAME);
-        let rhs_val = gc.get_var_field(&rhs, 1, int_type(gc.context));
+        let operand_ty = get_operand_struct_ty(gc);
+        let rhs_val = gc.get_var_field(&rhs, 1, operand_ty);
         gc.release(gc.get_var(&rhs).ptr.get(gc));
         generator(gc, rhs_val)
     });
@@ -1291,14 +1293,11 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
         gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
         ptr_to_obj
     }
-    fn get_operand_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
-        bool_type(gc.context)
-    }
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
-        get_operand_struct_ty,
+        get_bool_struct_ty,
         bool_lit_ty(),
         generate_eq_int,
     )
@@ -1333,14 +1332,11 @@ pub fn add_trait_instance_int() -> TraitInstance {
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     }
-    fn get_operand_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
-        int_type(gc.context)
-    }
     binary_opeartor_instance(
         add_trait_id(),
         &ADD_TRAIT_ADD_NAME.to_string(),
         int_lit_ty(),
-        get_operand_struct_ty,
+        get_int_struct_ty,
         int_lit_ty(),
         generate_add_int,
     )
@@ -1381,14 +1377,11 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     }
-    fn get_operand_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
-        int_type(gc.context)
-    }
     binary_opeartor_instance(
         subtract_trait_id(),
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         int_lit_ty(),
-        get_operand_struct_ty,
+        get_int_struct_ty,
         int_lit_ty(),
         generate_subtract_int,
     )
@@ -1429,14 +1422,11 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     }
-    fn get_operand_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
-        int_type(gc.context)
-    }
     binary_opeartor_instance(
         multiply_trait_id(),
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         int_lit_ty(),
-        get_operand_struct_ty,
+        get_int_struct_ty,
         int_lit_ty(),
         generate_multiply_int,
     )
@@ -1475,14 +1465,11 @@ pub fn divide_trait_instance_int() -> TraitInstance {
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     }
-    fn get_operand_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
-        int_type(gc.context)
-    }
     binary_opeartor_instance(
         divide_trait_id(),
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         int_lit_ty(),
-        get_operand_struct_ty,
+        get_int_struct_ty,
         int_lit_ty(),
         generate_divide_int,
     )
@@ -1523,14 +1510,11 @@ pub fn remainder_trait_instance_int() -> TraitInstance {
         gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
         ptr_to_int_obj
     }
-    fn get_operand_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
-        int_type(gc.context)
-    }
     binary_opeartor_instance(
         remainder_trait_id(),
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
         int_lit_ty(),
-        get_operand_struct_ty,
+        get_int_struct_ty,
         int_lit_ty(),
         generate_remainder_int,
     )
@@ -1566,7 +1550,16 @@ pub fn negate_trait_instance_int() -> TraitInstance {
         negate_trait_id(),
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         int_lit_ty(),
+        get_int_struct_ty,
         int_lit_ty(),
         generate_negate_int,
     )
+}
+
+fn get_bool_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
+    bool_type(gc.context)
+}
+
+fn get_int_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
+    int_type(gc.context)
 }
