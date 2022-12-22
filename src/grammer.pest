@@ -99,7 +99,7 @@ predicate = { type_expr ~ sep* ~ ":" ~ sep* ~ trait_name }
 
 predicate_kind = { type_var ~ sep* ~ ":" ~ sep* ~ kind }
 
-predicates = { "[" ~ (sep* ~ (predicate | predicate_kind))* ~ sep* ~ "]" }
+predicates = { "[" ~ sep* ~ (predicate | predicate_kind) ~ (sep* ~ "," ~ sep* ~ (predicate | predicate_kind))* ~ sep* ~ "]" }
 
 predicate_qualified = { predicates? ~ sep* ~ predicate }
 
