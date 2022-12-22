@@ -28,16 +28,6 @@ impl<'c> ObjPointer<'c> {
                 .into_pointer_value(),
         }
     }
-
-    #[allow(dead_code)]
-    pub fn local(ptr: PointerValue<'c>) -> ObjPointer<'c> {
-        ObjPointer::Local(ptr)
-    }
-
-    #[allow(dead_code)]
-    pub fn global(fun: FunctionValue<'c>) -> ObjPointer<'c> {
-        ObjPointer::Global(fun)
-    }
 }
 
 #[derive(Clone)]
