@@ -1327,7 +1327,7 @@ pub fn cmp_trait_instance_int() -> TraitInstance {
         &CMP_TRAIT_LT_NAME.to_string(),
         int_lit_ty(),
         get_int_struct_ty,
-        int_lit_ty(),
+        bool_lit_ty(),
         generate_cmp_int,
     )
 }
