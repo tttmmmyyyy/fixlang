@@ -501,9 +501,6 @@ impl TypeCheckContext {
                 return true;
             }
             None => {
-                for p in &self.predicates {
-                    println!("{}: {}", p.ty.to_string(), p.trait_id.to_string());
-                }
                 return false;
             }
         }

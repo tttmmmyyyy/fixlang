@@ -359,11 +359,24 @@ impl TraitEnv {
     }
 
     pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
-        for (_, insts) in &mut self.instances {
-            for inst in insts {
+        let insntaces = std::mem::replace(&mut self.instances, Default::default());
+        let mut instances_resolved: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
+        for (mut trait_id, mut insts) in insntaces {
+            // Resolve key's namespace.
+            trait_id.set_namespace_of_traits(self, module_name);
+            for inst in &mut insts {
                 inst.set_namespace_of_tycons(type_env, module_name);
             }
+            match instances_resolved.get_mut(&trait_id) {
+                Some(v) => {
+                    v.append(&mut insts);
+                }
+                None => {
+                    instances_resolved.insert(trait_id, insts);
+                }
+            }
         }
+        self.instances = instances_resolved;
     }
 
     // TODO: fix duplication with TypeEnv::infer_namespace
@@ -420,7 +433,7 @@ impl TraitEnv {
     }
 
     // Add a instance.
-    pub fn add_instance(&mut self, mut inst: TraitInstance) {
+    pub fn add_instance(&mut self, inst: TraitInstance) {
         let trait_id = inst.trait_id();
         if !self.instances.contains_key(&trait_id) {
             self.instances.insert(trait_id.clone(), vec![]);
@@ -429,7 +442,7 @@ impl TraitEnv {
     }
 
     // Reduce predicate using trait instances.
-    // Returns None when p cannot be satisfied.
+    // Returns None when p cannot be reduced more.
     pub fn reduce_to_instance_contexts_one(
         &self,
         p: &Predicate,

@@ -951,6 +951,27 @@ pub fn test48() {
 
 #[test]
 #[serial]
+pub fn test49() {
+    // Parametrised union.
+    let source = r"
+        module Main;
+
+        type Either a b = union (left: a, right: b);
+
+        main : Int;
+        main = (
+            let int_left = Either.left 5;
+            if int_left.is_left 
+                then int_left.as_left 
+                else if int_left.as_right then 1 else 0
+        );
+    ";
+    let answer = 5;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test50() {
     // test loop.
     let n = 100;
@@ -976,22 +997,54 @@ pub fn test50() {
 
 #[test]
 #[serial]
-pub fn test49() {
-    // Parametrised union.
+pub fn test51() {
+    // test loop.
     let source = r"
-        module Main;
+    module Main;
 
-        type Either a b = union (left: a, right: b);
-
-        main : Int;
-        main = (
-            let int_left = Either.left 5;
-            if int_left.is_left 
-                then int_left.as_left 
-                else if int_left.as_right then 1 else 0
+    and : Bool -> Bool -> Bool;
+    and = \lhs -> \rhs -> (
+        if lhs 
+            then if rhs then true else false
+            else if rhs then false else true
+    );
+    
+    /*
+    type Pair a b = struct (fst: a, snd: b);
+    
+    impl [a: Eq, b: Eq] Pair a b : Std.Eq {
+        eq = \lhs -> \rhs -> (
+            (lhs.get_fst == rhs.get_fst).and (lhs.get_snd == rhs.get_snd)
         );
-    ";
-    let answer = 5;
+    }
+    */
+    
+    type IntVec = struct (x: Int, y: Int);
+    
+    impl IntVec : Eq {
+        eq = \lhs -> \rhs -> (
+            (lhs.get_x == rhs.get_x).and (lhs.get_y == rhs.get_y)
+        );
+    }
+
+    search : [a: Eq] a -> Array a -> Int;
+    search = \elem -> \arr -> loop 0 \idx -> (
+        if idx == arr.len then break -1
+        else if eq elem (arr.get idx) then break idx
+        else continue (idx + 1)
+    );
+    
+    main : Int;
+    main = (
+        let arr = Array.new 5 0;
+        let arr = arr.set 1 1;
+        let arr = arr.set 2 2;
+        let arr = arr.set 3 3;
+        let arr = arr.set 4 4;
+        arr.search 2
+    );            
+        ";
+    let answer = 2;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 

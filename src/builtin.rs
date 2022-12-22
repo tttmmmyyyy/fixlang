@@ -7,10 +7,10 @@ use super::*;
 
 pub const STD_NAME: &str = "Std";
 
+// Primitive types.
 pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
-pub const LOOP_RESULT_NAME: &str = "LoopResult";
 
 pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
     let mut ret = HashMap::new();
@@ -28,6 +28,9 @@ pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
     );
     ret
 }
+
+// Following types are coustructed using primitive types.
+pub const LOOP_RESULT_NAME: &str = "LoopResult";
 
 // Get Int type.
 pub fn int_lit_ty() -> Arc<TypeNode> {
