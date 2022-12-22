@@ -91,15 +91,6 @@ impl TypeNode {
         }
     }
 
-    // Set kinds to type variables.
-    pub fn set_kinds_vec(self: &Arc<TypeNode>, kinds: &Vec<KindPredicate>) -> Arc<TypeNode> {
-        let mut kinds_map: HashMap<Name, Arc<Kind>> = Default::default();
-        for kp in kinds {
-            kinds_map.insert(kp.name.clone(), kp.kind.clone());
-        }
-        self.set_kinds(&kinds_map)
-    }
-
     // Is this type head normal form? i.e., begins with type variable.
     pub fn is_hnf(&self) -> bool {
         match &self.ty {
@@ -172,7 +163,7 @@ impl TypeNode {
 
     pub fn resolve_namespace(self: &Arc<TypeNode>, ctx: &NameResolutionContext) -> Arc<TypeNode> {
         match &self.ty {
-            Type::TyVar(tv) => self.clone(),
+            Type::TyVar(_tv) => self.clone(),
             Type::TyCon(tc) => {
                 let mut tc = tc.as_ref().clone();
                 tc.name = ctx.resolve(&tc.name, NameResolutionType::Type);
@@ -408,11 +399,6 @@ impl TypeNode {
         };
         free_vars
     }
-
-    // Get set of free type variables.
-    pub fn free_vars_set(self: &Arc<Self>) -> HashSet<Name> {
-        self.free_vars().iter().map(|(k, _)| k.clone()).collect()
-    }
 }
 
 // Type scheme.
@@ -463,22 +449,7 @@ impl Scheme {
         Arc::new(Scheme { vars, preds, ty })
     }
 
-    // Create new instance.
-    // fn new_arc_from_str(
-    //     vars: &[(&str, Arc<Kind>)],
-    //     preds: Vec<Predicate>,
-    //     ty: Arc<TypeNode>,
-    // ) -> Arc<Scheme> {
-    //     Self::new_arc(
-    //         HashMap::from_iter(
-    //             vars.iter()
-    //                 .map(|(name, kind)| (name.to_string(), kind.clone())),
-    //         ),
-    //         preds,
-    //         ty,
-    //     )
-    // }
-
+    #[allow(dead_code)]
     pub fn substitute(&self, s: &Substitution) -> Arc<Scheme> {
         // Generalized variables cannot be replaced.
         for (v, _) in &self.vars {
@@ -519,6 +490,7 @@ impl Scheme {
     }
 
     // Get free type variables.
+    #[allow(dead_code)]
     pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
         let mut ret = self.ty.free_vars();
         for var in &self.vars {

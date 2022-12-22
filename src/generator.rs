@@ -29,10 +29,12 @@ impl<'c> ObjPointer<'c> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn local(ptr: PointerValue<'c>) -> ObjPointer<'c> {
         ObjPointer::Local(ptr)
     }
 
+    #[allow(dead_code)]
     pub fn global(fun: FunctionValue<'c>) -> ObjPointer<'c> {
         ObjPointer::Global(fun)
     }

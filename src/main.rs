@@ -9,7 +9,6 @@ extern crate serial_test;
 mod ast;
 mod builtin;
 mod generator;
-mod kindcheck;
 mod misc;
 mod parser;
 mod runner;

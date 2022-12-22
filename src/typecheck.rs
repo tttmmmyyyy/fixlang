@@ -44,9 +44,6 @@ where
     fn pop(self: &mut Self, name: &str) {
         self.var.get_mut(name).unwrap().local.pop();
     }
-    fn get(self: &Self, name: &str) -> Option<&ScopeValue<T>> {
-        self.var.get(name)
-    }
     fn get_mut(self: &mut Self, name: &str) -> Option<&mut ScopeValue<T>> {
         self.var.get_mut(name)
     }
@@ -372,11 +369,6 @@ impl TypeCheckContext {
         self.substitution.substitute_predicate(p)
     }
 
-    // Apply substitution to scheme.
-    pub fn substitute_scheme(&self, scm: &Arc<Scheme>) -> Arc<Scheme> {
-        scm.substitute(&self.substitution)
-    }
-
     // Instantiate a scheme.
     // Returns predicates if append_predicates = false or append them to self if append_predicates = true.
     pub fn instantiate_scheme(
@@ -399,77 +391,65 @@ impl TypeCheckContext {
         (preds, sub.substitute_type(&scheme.ty))
     }
 
-    // Make a scheme from a type by generalizing type variable that does not appear in fixed_vars.
-    fn generalize_to_scheme(
-        &mut self,
-        ty: &Arc<TypeNode>,
-        fixed_vars: &HashSet<Name>,
-    ) -> Arc<Scheme> {
-        // Get generalized type and predicates.
-        let ty = self.substitute_type(ty);
-        let mut preds = std::mem::replace(&mut self.predicates, vec![]);
+    // // Make a scheme from a type by generalizing type variable that does not appear in fixed_vars.
+    // fn generalize_to_scheme(
+    //     &mut self,
+    //     ty: &Arc<TypeNode>,
+    //     fixed_vars: &HashSet<Name>,
+    // ) -> Arc<Scheme> {
+    //     // Get generalized type and predicates.
+    //     let ty = self.substitute_type(ty);
+    //     let mut preds = std::mem::replace(&mut self.predicates, vec![]);
 
-        // Reduce predicates.
-        for p in &mut preds {
-            self.substitute_predicate(p);
-        }
-        let preds = match self.trait_env.reduce(&preds, &self.type_env) {
-            Some(ps) => ps,
-            None => self.error_exit_on_predicates(),
-        };
+    //     // Reduce predicates.
+    //     for p in &mut preds {
+    //         self.substitute_predicate(p);
+    //     }
+    //     let preds = match self.trait_env.reduce(&preds, &self.type_env) {
+    //         Some(ps) => ps,
+    //         None => self.error_exit_on_predicates(),
+    //     };
 
-        // Collect variables that appear in scope.
-        // let mut vars_in_scope: HashSet<String> = Default::default();
-        // for (_var, scp) in &self.scope.var {
-        //     for scm in &scp.local {
-        //         for (var_in_scope, _) in self.substitute_scheme(&scm).free_vars() {
-        //             vars_in_scope.insert(var_in_scope);
-        //         }
-        //     }
-        // }
+    //     // Collect variables that appear in scope.
+    //     // let mut vars_in_scope: HashSet<String> = Default::default();
+    //     // for (_var, scp) in &self.scope.var {
+    //     //     for scm in &scp.local {
+    //     //         for (var_in_scope, _) in self.substitute_scheme(&scm).free_vars() {
+    //     //             vars_in_scope.insert(var_in_scope);
+    //     //         }
+    //     //     }
+    //     // }
 
-        // Calculate genealized variables.
-        let mut gen_vars = ty.free_vars();
-        for v in fixed_vars {
-            gen_vars.remove(v);
-        }
+    //     // Calculate genealized variables.
+    //     let mut gen_vars = ty.free_vars();
+    //     for v in fixed_vars {
+    //         gen_vars.remove(v);
+    //     }
 
-        // Split predicates to generalized and deferred.
-        let mut gen_preds: Vec<Predicate> = Default::default(); // Generalized predicates.
-        let mut def_preds: Vec<Predicate> = Default::default(); // Deferred predicates.
-        for p in preds {
-            if p.ty.free_vars().iter().all(|(v, _)| fixed_vars.contains(v)) {
-                // All free variables of p appears in fixed_vars.
-                def_preds.push(p);
-            } else if p
-                .ty
-                .free_vars()
-                .iter()
-                .any(|(v, _)| !fixed_vars.contains(v) && gen_vars.contains_key(v))
-            {
-                // A free variable of p appears neither in fixed_vars and generalized variables.
-                error_exit(&format!("ambiguous type variable in `{}`", p.to_string()))
-            } else {
-                // A free variable of p appears in generalized variables.
-                gen_preds.push(p);
-            }
-        }
+    //     // Split predicates to generalized and deferred.
+    //     let mut gen_preds: Vec<Predicate> = Default::default(); // Generalized predicates.
+    //     let mut def_preds: Vec<Predicate> = Default::default(); // Deferred predicates.
+    //     for p in preds {
+    //         if p.ty.free_vars().iter().all(|(v, _)| fixed_vars.contains(v)) {
+    //             // All free variables of p appears in fixed_vars.
+    //             def_preds.push(p);
+    //         } else if p
+    //             .ty
+    //             .free_vars()
+    //             .iter()
+    //             .any(|(v, _)| !fixed_vars.contains(v) && gen_vars.contains_key(v))
+    //         {
+    //             // A free variable of p appears neither in fixed_vars and generalized variables.
+    //             error_exit(&format!("ambiguous type variable in `{}`", p.to_string()))
+    //         } else {
+    //             // A free variable of p appears in generalized variables.
+    //             gen_preds.push(p);
+    //         }
+    //     }
 
-        self.predicates = def_preds;
-        Scheme::generalize(gen_vars, gen_preds, ty)
-    }
-
-    // Show an error message that predicates are unsatisfiable.
-    pub fn error_exit_on_predicates(&self) -> ! {
-        error_exit(&format!(
-            "predicates are unsatisfiable: {}",
-            self.predicates
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))
-    }
+    //     self.predicates = def_preds;
+    //     Scheme::generalize(gen_vars, gen_preds, ty)
+    // }
 
     // Update substitution to unify two types.
     // When substitution fails, it has no side effect to self.

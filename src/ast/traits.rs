@@ -540,14 +540,4 @@ impl TraitEnv {
         }
         res
     }
-
-    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
-        for (_, trait_info) in &self.traits {
-            for (name, _) in &trait_info.methods {
-                trait_info
-                    .method_scheme(&name)
-                    .check_kinds(type_env, trait_kind_map);
-            }
-        }
-    }
 }

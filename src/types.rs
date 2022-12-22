@@ -395,7 +395,7 @@ impl ObjectType {
         Self::shared_obj_type(fields)
     }
 
-    pub fn union_type(field_count: usize) -> Self {
+    pub fn union_type() -> Self {
         let fields = vec![
             ObjectFieldType::Int, /* tag */
             ObjectFieldType::SubObject,

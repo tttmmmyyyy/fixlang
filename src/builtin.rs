@@ -1,7 +1,3 @@
-use inkwell::values::BasicMetadataValueEnum;
-
-use crate::ast::typedecl;
-
 // Implement built-in functions, types, etc.
 use super::*;
 
@@ -705,13 +701,7 @@ pub fn union_new(
     }
     let expr = expr_abs(
         var_local(field_name, None),
-        union_new_lit(
-            union_name,
-            union,
-            field_name,
-            field_idx,
-            union.fields().len(),
-        ),
+        union_new_lit(union_name, union, field_name, field_idx),
         None,
     );
     let union_ty = union.ty();
@@ -727,7 +717,6 @@ pub fn union_new_lit(
     union_defn: &TypeDecl,
     field_name: &Name,
     field_idx: usize,
-    field_count: usize,
 ) -> Arc<ExprNode> {
     let free_vars = vec![NameSpacedName::local(field_name)];
     let name = format!("{}.new_{}", union_name.to_string(), field_name);
@@ -741,7 +730,7 @@ pub fn union_new_lit(
             .get(gc);
 
         // Create struct object.
-        let union_ty = ObjectType::union_type(field_count);
+        let union_ty = ObjectType::union_type();
         let union_ptr = union_ty.create_obj(gc, Some(&name_cloned));
         let struct_ty = union_ty.to_struct_type(gc.context);
 
@@ -788,7 +777,6 @@ pub fn union_as(
             &union_arg_name,
             field_name,
             field_idx,
-            union.fields().len(),
             union.fields()[field_idx].ty.clone(),
         ),
         None,
@@ -806,7 +794,6 @@ pub fn union_as_lit(
     union_arg_name: &Name,
     field_name: &Name,
     field_idx: usize,
-    field_count: usize,
     field_ty: Arc<TypeNode>,
 ) -> Arc<ExprNode> {
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
@@ -823,7 +810,7 @@ pub fn union_as_lit(
         let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
 
         // Get tag value.
-        let union_ty = ObjectType::union_type(field_count);
+        let union_ty = ObjectType::union_type();
         let struct_ty = union_ty.to_struct_type(gc.context);
         let tag_value = gc.load_obj_field(union_ptr, struct_ty, 1).into_int_value();
 
@@ -881,13 +868,7 @@ pub fn union_is(
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
         var_local(&union_arg_name, None),
-        union_is_lit(
-            union_name,
-            &union_arg_name,
-            field_name,
-            field_idx,
-            union.fields().len(),
-        ),
+        union_is_lit(union_name, &union_arg_name, field_name, field_idx),
         None,
     );
     let union_ty = union.ty();
@@ -902,7 +883,6 @@ pub fn union_is_lit(
     union_arg_name: &Name,
     field_name: &Name,
     field_idx: usize,
-    field_count: usize,
 ) -> Arc<ExprNode> {
     let name = format!("{}.is_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
@@ -919,7 +899,7 @@ pub fn union_is_lit(
         let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
 
         // Get tag value.
-        let union_ty = ObjectType::union_type(field_count);
+        let union_ty = ObjectType::union_type();
         let struct_ty = union_ty.to_struct_type(gc.context);
         let tag_value = gc.load_obj_field(union_ptr, struct_ty, 1).into_int_value();
 
@@ -960,7 +940,6 @@ pub fn union_is_lit(
 }
 
 const LOOP_RESULT_CONTINUE_IDX: usize = 0;
-const LOOP_RESULT_FIELD_COUNT: usize = 2;
 pub fn loop_result_defn() -> TypeDecl {
     TypeDecl {
         name: NameSpacedName::from_strs(&[STD_NAME], LOOP_RESULT_NAME),
@@ -1022,8 +1001,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         let loop_res = gc.apply_lambda(loop_body, loop_state);
 
         // Branch due to loop_res.
-        let loop_result_ty =
-            ObjectType::union_type(LOOP_RESULT_FIELD_COUNT).to_struct_type(gc.context);
+        let loop_result_ty = ObjectType::union_type().to_struct_type(gc.context);
         let tag_value = gc
             .load_obj_field(loop_res, loop_result_ty, 1)
             .into_int_value();
