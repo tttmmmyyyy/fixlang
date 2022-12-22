@@ -1006,13 +1006,13 @@ pub fn test51() {
     and = \lhs -> \rhs -> (
         if lhs 
             then if rhs then true else false
-            else if rhs then false else true
+            else false
     );
     
     /*
     type Pair a b = struct (fst: a, snd: b);
     
-    impl [a: Eq, b: Eq] Pair a b : Std.Eq {
+    impl [a: Eq, b: Eq] Pair a b : Eq {
         eq = \lhs -> \rhs -> (
             (lhs.get_fst == rhs.get_fst).and (lhs.get_snd == rhs.get_snd)
         );
@@ -1036,12 +1036,12 @@ pub fn test51() {
     
     main : Int;
     main = (
-        let arr = Array.new 5 0;
-        let arr = arr.set 1 1;
-        let arr = arr.set 2 2;
-        let arr = arr.set 3 3;
-        let arr = arr.set 4 4;
-        arr.search 2
+        let arr = Array.new 5 $ IntVec.new 0 0;
+        let arr = arr.set 1 $ IntVec.new 1 1;
+        let arr = arr.set 2 $ IntVec.new 2 2;
+        let arr = arr.set 3 $ IntVec.new 3 3;
+        let arr = arr.set 4 $ IntVec.new 4 4;
+        arr.search $ IntVec.new 2 2
     );            
         ";
     let answer = 2;
