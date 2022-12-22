@@ -415,7 +415,7 @@ fn parse_expr_type_annotation(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNo
     assert_eq!(pair.as_rule(), Rule::expr_type_annotation);
     let span = Span::from_pair(src, &pair);
     let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_eq(pairs.next().unwrap(), src);
+    let mut expr = parse_expr_and(pairs.next().unwrap(), src);
     match pairs.next() {
         None => {}
         Some(ty) => {
@@ -436,101 +436,92 @@ fn parse_combinator_sequence(
         .collect()
 }
 
-fn parse_expr_eq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_eq);
+// Binary operator
+fn parse_binary_operator_sequence(
+    pair: Pair<Rule>,
+    src: &Arc<String>,
+    ops: HashMap<&str, (&str /* trait_name */, &str /* method_name */)>,
+    operator_rule: Rule,
+    inner_parser: fn(Pair<Rule>, &Arc<String>) -> Arc<ExprNode>,
+) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
-    let lhs = parse_expr_plus(pairs.next().unwrap(), src);
-    match pairs.next() {
-        Some(pair) => {
-            let rhs = parse_expr_plus(pair, src);
-            expr_app(
+    let mut expr = inner_parser(pairs.next().unwrap(), src);
+    let mut next_operation = ("N/A", "N/A");
+    for pair in pairs {
+        if pair.as_rule() == operator_rule {
+            next_operation = ops[pair.as_str()];
+        } else {
+            let rhs = inner_parser(pair, src);
+            expr = expr_app(
                 expr_app(
                     expr_var(
-                        NameSpacedName::from_strs(&[STD_NAME, EQ_TRAIT_NAME], EQ_TRAIT_EQ_NAME),
+                        NameSpacedName::from_strs(&[STD_NAME, next_operation.0], next_operation.1),
                         Some(span.clone()),
                     ),
-                    lhs,
+                    expr,
                     Some(span.clone()),
                 ),
                 rhs,
-                Some(span),
+                Some(span.clone()),
             )
         }
-        None => lhs,
     }
+    expr
+}
+
+fn parse_expr_eq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_eq);
+    parse_binary_operator_sequence(
+        pair,
+        src,
+        HashMap::from([("==", (EQ_TRAIT_NAME, EQ_TRAIT_EQ_NAME))]),
+        Rule::operator_eq,
+        parse_expr_plus,
+    )
+}
+
+// Operator &&, || (left-associative)
+fn parse_expr_and(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_and);
+    parse_binary_operator_sequence(
+        pair,
+        src,
+        HashMap::from([("&&", (AND_TRAIT_NAME, AND_TRAIT_AND_NAME))]),
+        Rule::operator_and,
+        parse_expr_eq,
+    )
 }
 
 // Operator +/- (left associative)
 fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_plus);
-    let span = Span::from_pair(&src, &pair);
-    let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_mul(pairs.next().unwrap(), src);
-    let mut next_operation = (ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME);
-    for pair in pairs {
-        if pair.as_rule() == Rule::operator_plus {
-            if pair.as_str() == "+" {
-                next_operation = (ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME);
-            } else if pair.as_str() == "-" {
-                next_operation = (SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME);
-            } else {
-                unreachable!();
-            }
-        } else {
-            let rhs = parse_expr_mul(pair, src);
-            expr = expr_app(
-                expr_app(
-                    expr_var(
-                        NameSpacedName::from_strs(&[STD_NAME, next_operation.0], next_operation.1),
-                        Some(span.clone()),
-                    ),
-                    expr,
-                    Some(span.clone()),
-                ),
-                rhs,
-                Some(span.clone()),
-            )
-        }
-    }
-    expr
+    parse_binary_operator_sequence(
+        pair,
+        src,
+        HashMap::from([
+            ("+", (ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME)),
+            ("-", (SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME)),
+        ]),
+        Rule::operator_plus,
+        parse_expr_mul,
+    )
 }
 
 // Operator *,/,% (left associative)
 fn parse_expr_mul(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_mul);
-    let span = Span::from_pair(&src, &pair);
-    let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_neg(pairs.next().unwrap(), src);
-    let mut next_operation = (MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME);
-    for pair in pairs {
-        if pair.as_rule() == Rule::operator_mul {
-            if pair.as_str() == "*" {
-                next_operation = (MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME);
-            } else if pair.as_str() == "/" {
-                next_operation = (DIVIDE_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME);
-            } else if pair.as_str() == "%" {
-                next_operation = (REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME);
-            } else {
-                unreachable!()
-            }
-        } else {
-            let rhs = parse_expr_neg(pair, src);
-            expr = expr_app(
-                expr_app(
-                    expr_var(
-                        NameSpacedName::from_strs(&[STD_NAME, next_operation.0], next_operation.1),
-                        Some(span.clone()),
-                    ),
-                    expr,
-                    Some(span.clone()),
-                ),
-                rhs,
-                Some(span.clone()),
-            )
-        }
-    }
-    expr
+    parse_binary_operator_sequence(
+        pair,
+        src,
+        HashMap::from([
+            ("*", (MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME)),
+            ("/", (DIVIDE_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME)),
+            ("%", (REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME)),
+        ]),
+        Rule::operator_mul,
+        parse_expr_neg,
+    )
 }
 
 // Unary opeartor -

@@ -71,10 +71,14 @@ operator_plus = { "+" | "-" }
 expr_plus = { expr_mul ~ (sep* ~ operator_plus ~ sep* ~ expr_mul)* }
 
 // operator==
-combinator_eq = _{ "==" }
-expr_eq = { expr_plus ~ (sep* ~ combinator_eq ~ sep* ~ expr_plus)? }
+operator_eq = { "==" }
+expr_eq = { expr_plus ~ (sep* ~ operator_eq ~ sep* ~ expr_plus)? }
 
-expr_type_annotation = { expr_eq ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
+// operator &&, || (left-associative)
+operator_and = { "&&" | "||" }
+expr_and = { expr_eq ~ (sep* ~ operator_and ~ sep* ~ expr_eq)* }
+
+expr_type_annotation = { expr_and ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 expr = { expr_type_annotation }
 

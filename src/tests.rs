@@ -1002,9 +1002,6 @@ pub fn test51() {
     let source = r"
     module Main;
 
-    and : Bool -> Bool -> Bool;
-    and = \lhs -> \rhs -> if lhs then rhs else false;
-
     /*
     Eq trait is defined in standard library as follows: 
 
@@ -1019,7 +1016,7 @@ pub fn test51() {
     
     impl [a: Eq, b: Eq] Pair a b : Eq {
         eq = \lhs -> \rhs -> (
-            (lhs.get_fst == rhs.get_fst).and (lhs.get_snd == rhs.get_snd)
+            lhs.get_fst == rhs.get_fst && lhs.get_snd == rhs.get_snd
         );
     }
 

@@ -1505,6 +1505,45 @@ pub fn remainder_trait_instance_int() -> TraitInstance {
     )
 }
 
+pub const AND_TRAIT_NAME: &str = "And";
+pub const AND_TRAIT_AND_NAME: &str = "and";
+
+pub fn and_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], AND_TRAIT_NAME),
+    }
+}
+
+pub fn and_trait() -> TraitInfo {
+    binary_operator_trait(and_trait_id(), AND_TRAIT_AND_NAME.to_string(), None)
+}
+
+pub fn and_trait_instance_bool() -> TraitInstance {
+    fn generate_and_bool<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_and(
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            AND_TRAIT_AND_NAME,
+        );
+        let ptr_to_bool_obj = ObjectType::bool_obj_type()
+            .create_obj(gc, Some(&format!("{} lhs rhs", AND_TRAIT_AND_NAME)));
+        gc.store_obj_field(ptr_to_bool_obj, bool_type(gc.context), 1, value);
+        ptr_to_bool_obj
+    }
+    binary_opeartor_instance(
+        and_trait_id(),
+        &AND_TRAIT_AND_NAME.to_string(),
+        bool_lit_ty(),
+        get_bool_struct_ty,
+        bool_lit_ty(),
+        generate_and_bool,
+    )
+}
+
 pub const NEGATE_TRAIT_NAME: &str = "Neg";
 pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
 
