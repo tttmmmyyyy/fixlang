@@ -998,7 +998,7 @@ pub fn test50() {
 #[test]
 #[serial]
 pub fn test51() {
-    // test loop.
+    // test trait bounds.
     let source = r"
     module Main;
 
@@ -1009,21 +1009,11 @@ pub fn test51() {
             else false
     );
     
-    /*
     type Pair a b = struct (fst: a, snd: b);
     
     impl [a: Eq, b: Eq] Pair a b : Eq {
         eq = \lhs -> \rhs -> (
             (lhs.get_fst == rhs.get_fst).and (lhs.get_snd == rhs.get_snd)
-        );
-    }
-    */
-    
-    type IntVec = struct (x: Int, y: Int);
-    
-    impl IntVec : Eq {
-        eq = \lhs -> \rhs -> (
-            (lhs.get_x == rhs.get_x).and (lhs.get_y == rhs.get_y)
         );
     }
 
@@ -1036,12 +1026,12 @@ pub fn test51() {
     
     main : Int;
     main = (
-        let arr = Array.new 5 $ IntVec.new 0 0;
-        let arr = arr.set 1 $ IntVec.new 1 1;
-        let arr = arr.set 2 $ IntVec.new 2 2;
-        let arr = arr.set 3 $ IntVec.new 3 3;
-        let arr = arr.set 4 $ IntVec.new 4 4;
-        arr.search $ IntVec.new 2 2
+        let arr = Array.new 5 $ Pair.new 0 false;
+        let arr = arr.set 0 $ Pair.new 0 false;
+        let arr = arr.set 1 $ Pair.new 0 true;
+        let arr = arr.set 2 $ Pair.new 1 false;
+        let arr = arr.set 3 $ Pair.new 1 true;
+        arr.search $ Pair.new 1 false
     );            
         ";
     let answer = 2;
