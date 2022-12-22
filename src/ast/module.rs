@@ -586,8 +586,7 @@ impl FixModule {
     }
 
     pub fn validate_trait_env(&mut self) {
-        self.trait_env
-            .validate_and_set_namespace_of_instance_keys(&self.type_env, &self.name);
+        self.trait_env.validate(&self.type_env);
     }
 
     // Add built-in types and traits

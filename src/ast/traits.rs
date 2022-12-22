@@ -96,13 +96,6 @@ impl TraitInfo {
             self.type_var = self.type_var.set_kind(self.kind_predicates[0].kind.clone());
         }
     }
-
-    fn set_kinds_to_methods(&mut self, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
-        let mut scope = KindPredicate::vec_to_map(self.kind_predicates.clone());
-        for (_, method_ty) in &mut self.methods {
-            method_ty.set_kinds(&mut scope, trait_kind_map)
-        }
-    }
 }
 
 // Trait instance.
@@ -208,18 +201,6 @@ impl QualPredicate {
             }
         }
     }
-
-    pub fn set_kinds(
-        &mut self,
-        scope: &mut HashMap<Name, Arc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
-    ) {
-        Self::extend_kind_scope(scope, &self.context, &self.kind_preds, trait_kind_map);
-        for ctx in &mut self.context {
-            ctx.set_kinds(scope);
-        }
-        self.predicate.set_kinds(scope);
-    }
 }
 
 #[derive(Clone)]
@@ -241,18 +222,6 @@ impl QualType {
     // Calculate free type variables.
     pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
         self.ty.free_vars()
-    }
-
-    pub fn set_kinds(
-        &mut self,
-        scope: &mut HashMap<Name, Arc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
-    ) {
-        QualPredicate::extend_kind_scope(scope, &self.preds, &self.kind_preds, trait_kind_map);
-        for p in &mut self.preds {
-            p.set_kinds(scope);
-        }
-        self.ty = self.ty.set_kinds(scope);
     }
 }
 
@@ -297,16 +266,6 @@ pub struct KindPredicate {
     pub kind: Arc<Kind>,
 }
 
-impl KindPredicate {
-    pub fn vec_to_map(vec: Vec<KindPredicate>) -> HashMap<Name, Arc<Kind>> {
-        let mut map: HashMap<Name, Arc<Kind>> = Default::default();
-        for kp in vec {
-            map.insert(kp.name, kp.kind);
-        }
-        map
-    }
-}
-
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
@@ -315,28 +274,7 @@ pub struct TraitEnv {
 }
 
 impl TraitEnv {
-    pub fn validate_and_set_namespace_of_instance_keys(
-        &mut self,
-        type_env: &TypeEnv,
-        module_name: &str,
-    ) {
-        // let mut new_instances: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
-        // for (trait_id, insts) in &self.instances {
-        //     // Check existaice of trait.
-        //     let new_trait_id = TraitId {
-        //         name: self
-        //             .infer_namespace(&trait_id.name, &module_name.to_string())
-        //             .clone(),
-        //     };
-        //     match new_instances.get_mut(&new_trait_id) {
-        //         Some(v) => v.append(&mut insts.clone()),
-        //         None => {
-        //             new_instances.insert(new_trait_id, insts.clone());
-        //         }
-        //     }
-        // }
-        // self.instances = new_instances;
-
+    pub fn validate(&mut self, type_env: &TypeEnv) {
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
                 *inst.trait_id_mut() = trait_id.clone();
