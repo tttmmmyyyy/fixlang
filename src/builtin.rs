@@ -1293,11 +1293,18 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
         gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
         ptr_to_obj
     }
+    let get_struct_ty = if ty == int_lit_ty() {
+        get_int_struct_ty
+    } else if ty == bool_lit_ty() {
+        get_bool_struct_ty
+    } else {
+        unimplemented!();
+    };
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
-        get_bool_struct_ty,
+        get_struct_ty,
         bool_lit_ty(),
         generate_eq_int,
     )
