@@ -27,8 +27,8 @@ impl TraitId {
         self.name.clone()
     }
 
-    pub fn set_namespace_of_traits(&mut self, trait_env: &TraitEnv, module_name: &Name) {
-        self.name = trait_env.infer_namespace(&self.name, module_name);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.name = ctx.resolve(&self.name, NameResolutionType::Trait);
     }
 }
 
@@ -49,6 +49,13 @@ pub struct TraitInfo {
 }
 
 impl TraitInfo {
+    // Resolve namespace.
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        for (_name, qt) in &mut self.methods {
+            qt.resolve_namespace(ctx);
+        }
+    }
+
     // Get type-scheme of a method.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // this function returns "a -> String for a: Show" as type of "show" method.
@@ -108,9 +115,11 @@ pub struct TraitInstance {
 }
 
 impl TraitInstance {
-    pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
-        self.qual_pred
-            .set_namespace_of_tycons(type_env, module_name);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.qual_pred.resolve_namespace(ctx);
+        for (_name, expr) in &mut self.methods {
+            *expr = expr.resolve_namespace(ctx);
+        }
     }
 
     // Get trait id.
@@ -156,14 +165,11 @@ pub struct QualPredicate {
 }
 
 impl QualPredicate {
-    pub fn set_namespace_of_tycons(&mut self, type_env: &TypeEnv, module_name: &Name) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         for p in &mut self.context {
-            p.ty = p.ty.set_namespace_of_tycons(type_env, module_name);
+            p.resolve_namespace(ctx);
         }
-        self.predicate.ty = self
-            .predicate
-            .ty
-            .set_namespace_of_tycons(type_env, module_name);
+        self.predicate.resolve_namespace(ctx);
     }
 
     pub fn extend_kind_scope(
@@ -224,6 +230,14 @@ pub struct QualType {
 }
 
 impl QualType {
+    // Resolve namespace.
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        for pred in &mut self.preds {
+            pred.resolve_namespace(ctx);
+        }
+        self.ty = self.ty.resolve_namespace(ctx);
+    }
+
     // Calculate free type variables.
     pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
         self.ty.free_vars()
@@ -250,6 +264,11 @@ pub struct Predicate {
 }
 
 impl Predicate {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.trait_id.resolve_namespace(ctx);
+        self.ty = self.ty.resolve_namespace(ctx);
+    }
+
     pub fn to_string(&self) -> String {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
@@ -268,17 +287,6 @@ impl Predicate {
                 found.to_string()
             ))
         }
-    }
-
-    pub fn set_namespace_of_tycons_and_traits(
-        &mut self,
-        type_env: &TypeEnv,
-        trait_env: &TraitEnv,
-        module_name: &Name,
-    ) {
-        self.trait_id
-            .set_namespace_of_traits(trait_env, module_name);
-        self.ty = self.ty.set_namespace_of_tycons(type_env, module_name);
     }
 }
 
@@ -312,22 +320,22 @@ impl TraitEnv {
         type_env: &TypeEnv,
         module_name: &str,
     ) {
-        let mut new_instances: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
-        for (trait_id, insts) in &self.instances {
-            // Check existaice of trait.
-            let new_trait_id = TraitId {
-                name: self
-                    .infer_namespace(&trait_id.name, &module_name.to_string())
-                    .clone(),
-            };
-            match new_instances.get_mut(&new_trait_id) {
-                Some(v) => v.append(&mut insts.clone()),
-                None => {
-                    new_instances.insert(new_trait_id, insts.clone());
-                }
-            }
-        }
-        self.instances = new_instances;
+        // let mut new_instances: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
+        // for (trait_id, insts) in &self.instances {
+        //     // Check existaice of trait.
+        //     let new_trait_id = TraitId {
+        //         name: self
+        //             .infer_namespace(&trait_id.name, &module_name.to_string())
+        //             .clone(),
+        //     };
+        //     match new_instances.get_mut(&new_trait_id) {
+        //         Some(v) => v.append(&mut insts.clone()),
+        //         None => {
+        //             new_instances.insert(new_trait_id, insts.clone());
+        //         }
+        //     }
+        // }
+        // self.instances = new_instances;
 
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
@@ -367,15 +375,23 @@ impl TraitEnv {
         }
     }
 
-    pub fn set_namespace_of_tycons_and_traits(&mut self, type_env: &TypeEnv, module_name: &Name) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        // See into trait definition.
+        for (trait_id, trait_info) in &mut self.traits {
+            // Keys in self.traits should already be resolved.
+            assert!(trait_id.name == ctx.resolve(&trait_id.name, NameResolutionType::Trait));
+            trait_info.resolve_namespace(ctx);
+        }
+
+        // See into trait implementation.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
         let mut instances_resolved: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
         for (mut trait_id, mut insts) in insntaces {
             // Resolve key's namespace.
-            trait_id.set_namespace_of_traits(self, module_name);
+            trait_id.resolve_namespace(ctx);
             // Resolve value's namespace.
             for inst in &mut insts {
-                inst.set_namespace_of_tycons(type_env, module_name);
+                inst.resolve_namespace(ctx);
             }
             match instances_resolved.get_mut(&trait_id) {
                 Some(v) => {
@@ -387,37 +403,6 @@ impl TraitEnv {
             }
         }
         self.instances = instances_resolved;
-    }
-
-    // TODO: fix duplication with TypeEnv::infer_namespace
-    pub fn infer_namespace(&self, ns: &NameSpacedName, module_name: &Name) -> NameSpacedName {
-        let candidates = self
-            .traits
-            .iter()
-            .filter_map(|(id, _)| {
-                if ns.is_suffix(&id.name) {
-                    Some(id.name.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        if candidates.len() == 0 {
-            error_exit(&format!("unknown type: {}", ns.to_string()))
-        } else if candidates.len() == 1 {
-            candidates[0].clone()
-        } else {
-            // candidates.len() >= 2
-            let candidates = candidates
-                .iter()
-                .filter(|name| name.namespace.len() >= 1 && name.namespace.module() == *module_name)
-                .collect::<Vec<_>>();
-            if candidates.len() == 1 {
-                candidates[0].clone()
-            } else {
-                error_exit("Trait name `{}` is ambiguous.");
-            }
-        }
     }
 
     // Set traits.

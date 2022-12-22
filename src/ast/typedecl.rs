@@ -9,6 +9,11 @@ pub struct TypeDecl {
 }
 
 impl TypeDecl {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        assert!(self.name == ctx.resolve(&self.name, NameResolutionType::Type));
+        self.value.resolve_namespace(ctx);
+    }
+
     pub fn tycon(&self) -> TyCon {
         TyCon::new(self.name.clone())
     }
@@ -62,14 +67,39 @@ pub enum TypeDeclValue {
     Union(Union),
 }
 
+impl TypeDeclValue {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        match self {
+            TypeDeclValue::Struct(s) => s.resolve_namespace(ctx),
+            TypeDeclValue::Union(u) => u.resolve_namespace(ctx),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Struct {
     pub fields: Vec<Field>,
 }
 
+impl Struct {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        for f in &mut self.fields {
+            f.resolve_namespace(ctx);
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Union {
     pub fields: Vec<Field>,
+}
+
+impl Union {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        for f in &mut self.fields {
+            f.resolve_namespace(ctx);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -79,6 +109,10 @@ pub struct Field {
 }
 
 impl Field {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.ty = self.ty.resolve_namespace(ctx);
+    }
+
     // Check if fields are duplicated. If duplication found, it returns the duplicated field.
     pub fn check_duplication(fields: &Vec<Field>) -> Option<Name> {
         let mut names: HashSet<Name> = Default::default();

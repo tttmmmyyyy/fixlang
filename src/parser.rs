@@ -148,7 +148,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     }
 
     fix_mod.set_type_decls(type_decls);
-    fix_mod.set_traits(trait_infos, trait_impls);
+    fix_mod.add_traits(trait_infos, trait_impls);
 
     let mut global_symbols: HashMap<NameSpacedName, GlobalSymbol> = Default::default();
     for (name, (ty, expr)) in global_symbols_defns {

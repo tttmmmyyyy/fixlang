@@ -248,38 +248,35 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_namespace_of_tycons(
-        self: &Arc<ExprNode>,
-        type_env: &TypeEnv,
-        module_name: &Name,
-    ) -> Arc<ExprNode> {
+    pub fn resolve_namespace(self: &Arc<ExprNode>, ctx: &NameResolutionContext) -> Arc<ExprNode> {
         match &*self.expr {
-            Expr::Var(_) => self.clone(),
+            Expr::Var(_) => {
+                // Resolution of names of variables will be done in type checking phase.
+                self.clone()
+            }
             Expr::Lit(lit) => {
                 let mut lit = lit.as_ref().clone();
-                lit.ty = lit.ty.set_namespace_of_tycons(type_env, module_name);
+                lit.ty = lit.ty.resolve_namespace(ctx);
                 self.clone().set_lit_lit(Arc::new(lit))
             }
             Expr::App(fun, arg) => self
                 .clone()
-                .set_app_func(fun.set_namespace_of_tycons(type_env, module_name))
-                .set_app_arg(arg.set_namespace_of_tycons(type_env, module_name)),
-            Expr::Lam(_, body) => self
-                .clone()
-                .set_lam_body(body.set_namespace_of_tycons(type_env, module_name)),
+                .set_app_func(fun.resolve_namespace(ctx))
+                .set_app_arg(arg.resolve_namespace(ctx)),
+            Expr::Lam(_, body) => self.clone().set_lam_body(body.resolve_namespace(ctx)),
             Expr::Let(_, bound, value) => self
                 .clone()
-                .set_let_bound(bound.set_namespace_of_tycons(type_env, module_name))
-                .set_let_value(value.set_namespace_of_tycons(type_env, module_name)),
+                .set_let_bound(bound.resolve_namespace(ctx))
+                .set_let_value(value.resolve_namespace(ctx)),
             Expr::If(cond, then_expr, else_expr) => self
                 .clone()
-                .set_if_cond(cond.set_namespace_of_tycons(type_env, module_name))
-                .set_if_then(then_expr.set_namespace_of_tycons(type_env, module_name))
-                .set_if_else(else_expr.set_namespace_of_tycons(type_env, module_name)),
+                .set_if_cond(cond.resolve_namespace(ctx))
+                .set_if_then(then_expr.resolve_namespace(ctx))
+                .set_if_else(else_expr.resolve_namespace(ctx)),
             Expr::TyAnno(expr, ty) => self
                 .clone()
-                .set_tyanno_expr(expr.set_namespace_of_tycons(type_env, module_name))
-                .set_tyanno_ty(ty.set_namespace_of_tycons(type_env, module_name)),
+                .set_tyanno_expr(expr.resolve_namespace(ctx))
+                .set_tyanno_ty(ty.resolve_namespace(ctx)),
         }
     }
 }

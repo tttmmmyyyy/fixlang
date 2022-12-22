@@ -170,24 +170,20 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    pub fn set_namespace_of_tycons(
-        self: &Arc<TypeNode>,
-        type_env: &TypeEnv,
-        module_name: &Name,
-    ) -> Arc<TypeNode> {
+    pub fn resolve_namespace(self: &Arc<TypeNode>, ctx: &NameResolutionContext) -> Arc<TypeNode> {
         match &self.ty {
             Type::TyVar(tv) => self.clone(),
             Type::TyCon(tc) => {
                 let mut tc = tc.as_ref().clone();
-                tc.name = type_env.infer_namespace(&tc.name, module_name);
+                tc.name = ctx.resolve(&tc.name, NameResolutionType::Type);
                 self.set_tycon_tc(Arc::new(tc))
             }
             Type::TyApp(fun, arg) => self
-                .set_tyapp_fun(fun.set_namespace_of_tycons(type_env, module_name))
-                .set_tyapp_arg(arg.set_namespace_of_tycons(type_env, module_name)),
+                .set_tyapp_fun(fun.resolve_namespace(ctx))
+                .set_tyapp_arg(arg.resolve_namespace(ctx)),
             Type::FunTy(src, dst) => self
-                .set_funty_src(src.set_namespace_of_tycons(type_env, module_name))
-                .set_funty_dst(dst.set_namespace_of_tycons(type_env, module_name)),
+                .set_funty_src(src.resolve_namespace(ctx))
+                .set_funty_dst(dst.resolve_namespace(ctx)),
         }
     }
 }
@@ -531,17 +527,12 @@ impl Scheme {
         ret
     }
 
-    pub fn set_namespace_of_tycons_and_traits(
-        &self,
-        type_env: &TypeEnv,
-        trait_env: &TraitEnv,
-        module_name: &Name,
-    ) -> Arc<Scheme> {
+    pub fn resolve_namespace(&self, ctx: &NameResolutionContext) -> Arc<Scheme> {
         let mut res = self.clone();
         for p in &mut res.preds {
-            p.set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
+            p.resolve_namespace(ctx);
         }
-        res.ty = res.ty.set_namespace_of_tycons(type_env, module_name);
+        res.ty = res.ty.resolve_namespace(ctx);
         Arc::new(res)
     }
 }

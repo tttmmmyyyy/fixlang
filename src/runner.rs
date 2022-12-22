@@ -21,23 +21,26 @@ fn execute_main_module<'c>(
 }
 
 fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
+    // Add built-in traits and types.
+    fix_mod.add_builtin_traits_types();
+
+    // Calculate list of type constructors.
+    fix_mod.calculate_type_env();
+
+    // Resolve namespaces to traits and types (not to variables).
+    fix_mod.resolve_namespace();
+
     // Validate user-defined types.
     fix_mod.validate_user_defined_types();
 
     // Add global symbols
     fix_mod.add_builtin_symbols();
 
-    // Calculate list of type constructors.
-    fix_mod.calculate_type_env();
-
     // Validate trait env.
     fix_mod.validate_trait_env();
 
     // Create symbols.
     fix_mod.create_trait_method_symbols();
-
-    // Set Namespaces to tycons and traits that appear in the module.
-    fix_mod.set_namespace_of_tycons_and_traits();
 
     // Set and check kinds that appear in the module.
     fix_mod.set_kinds();

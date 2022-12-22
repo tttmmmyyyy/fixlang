@@ -41,36 +41,6 @@ impl TypeEnv {
     pub fn kind(&self, tycon: &TyCon) -> Arc<Kind> {
         self.tycons.get(tycon).unwrap().clone()
     }
-
-    pub fn infer_namespace(&self, ns: &NameSpacedName, module_name: &Name) -> NameSpacedName {
-        let candidates = self
-            .tycons
-            .iter()
-            .filter_map(|(id, _)| {
-                if ns.is_suffix(&id.name) {
-                    Some(id.name.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        if candidates.len() == 0 {
-            error_exit(&format!("unknown type: {}", ns.to_string()))
-        } else if candidates.len() == 1 {
-            candidates[0].clone()
-        } else {
-            // candidates.len() >= 2
-            let candidates = candidates
-                .iter()
-                .filter(|name| name.namespace.len() >= 1 && name.namespace.module() == *module_name)
-                .collect::<Vec<_>>();
-            if candidates.len() == 1 {
-                candidates[0].clone()
-            } else {
-                error_exit("Type name `{}` is ambiguous.");
-            }
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -93,17 +63,9 @@ pub struct GlobalSymbol {
 }
 
 impl GlobalSymbol {
-    pub fn set_namespace_of_tycons_and_traits(
-        &mut self,
-        type_env: &TypeEnv,
-        trait_env: &TraitEnv,
-        module_name: &Name,
-    ) {
-        self.ty = self
-            .ty
-            .set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
-        self.expr
-            .set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.ty = self.ty.resolve_namespace(ctx);
+        self.expr.resolve_namespace(ctx);
     }
 
     pub fn set_kinds(&mut self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
@@ -129,19 +91,14 @@ pub enum SymbolExpr {
 }
 
 impl SymbolExpr {
-    pub fn set_namespace_of_tycons_and_traits(
-        &mut self,
-        type_env: &TypeEnv,
-        trait_env: &TraitEnv,
-        module_name: &Name,
-    ) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         match self {
             SymbolExpr::Simple(e) => {
-                *self = SymbolExpr::Simple(e.set_namespace_of_tycons(type_env, module_name));
+                *self = SymbolExpr::Simple(e.resolve_namespace(ctx));
             }
             SymbolExpr::Method(mis) => {
                 for mi in mis {
-                    mi.set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
+                    mi.resolve_namespace(ctx);
                 }
             }
         }
@@ -160,16 +117,63 @@ pub struct MethodImpl {
 }
 
 impl MethodImpl {
-    pub fn set_namespace_of_tycons_and_traits(
-        &mut self,
-        type_env: &TypeEnv,
-        trait_env: &TraitEnv,
-        module_name: &Name,
-    ) {
-        self.ty = self
-            .ty
-            .set_namespace_of_tycons_and_traits(type_env, trait_env, module_name);
-        self.expr = self.expr.set_namespace_of_tycons(type_env, module_name);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.ty = self.ty.resolve_namespace(ctx);
+        self.expr = self.expr.resolve_namespace(ctx);
+    }
+}
+
+pub struct NameResolutionContext {
+    pub types: HashSet<NameSpacedName>,
+    pub traits: HashSet<NameSpacedName>,
+    pub module_name: Name,
+}
+
+#[derive(PartialEq)]
+pub enum NameResolutionType {
+    Type,
+    Trait,
+}
+
+impl NameResolutionContext {
+    pub fn resolve(
+        &self,
+        ns: &NameSpacedName,
+        type_or_trait: NameResolutionType,
+    ) -> NameSpacedName {
+        let candidates = if type_or_trait == NameResolutionType::Type {
+            &self.types
+        } else {
+            &self.traits
+        };
+        let candidates = candidates
+            .iter()
+            .filter_map(|id| {
+                if ns.is_suffix(id) {
+                    Some(id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if candidates.len() == 0 {
+            error_exit(&format!("unknown name: {}", ns.to_string()))
+        } else if candidates.len() == 1 {
+            candidates[0].clone()
+        } else {
+            // candidates.len() >= 2
+            let candidates = candidates
+                .iter()
+                .filter(|name| {
+                    name.namespace.len() >= 1 && name.namespace.module() == self.module_name
+                })
+                .collect::<Vec<_>>();
+            if candidates.len() == 1 {
+                candidates[0].clone()
+            } else {
+                error_exit("Trait name `{}` is ambiguous.");
+            }
+        }
     }
 }
 
@@ -188,7 +192,7 @@ impl FixModule {
     }
 
     // Set traits.
-    pub fn set_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
+    pub fn add_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
         self.trait_env.set(trait_infos, trait_impls);
     }
 
@@ -216,6 +220,33 @@ impl FixModule {
     // Get list of type constructors including user-defined types.
     pub fn type_env(&self) -> TypeEnv {
         self.type_env.clone()
+    }
+
+    // Get of list of tycons that can be used for namespace resolution.
+    pub fn tycon_names(&self) -> HashSet<NameSpacedName> {
+        let mut res: HashSet<NameSpacedName> = Default::default();
+        for (k, _v) in self.type_env().tycons.iter() {
+            res.insert(k.name.clone());
+        }
+        res
+    }
+
+    // Get of list of traits that can be used for namespace resolution.
+    pub fn trait_names(&self) -> HashSet<NameSpacedName> {
+        let mut res: HashSet<NameSpacedName> = Default::default();
+        for (k, _v) in &self.trait_env.traits {
+            res.insert(k.name.clone());
+        }
+        res
+    }
+
+    // Get context for name resolution.
+    pub fn get_nameresolution_context(&self) -> NameResolutionContext {
+        NameResolutionContext {
+            types: self.tycon_names(),
+            traits: self.trait_names(),
+            module_name: self.name.clone(),
+        }
     }
 
     // Get this module's namespace.
@@ -511,15 +542,16 @@ impl FixModule {
         }
     }
 
-    pub fn set_namespace_of_tycons_and_traits(&mut self) {
-        // Currently we don't need to pass trait_env to expressions, since
-        // trait name appears in expression only in the namespace of a variable and it will be resolved by typechecker.
-        let type_env = self.type_env();
-        self.trait_env
-            .set_namespace_of_tycons_and_traits(&type_env, &self.name);
-        let trait_env = &self.trait_env;
+    // Resolve namespaces of types and traits that appear in this module.
+    // NOTE: names in types/traits defined in this module have to be full-names already when calling this function.
+    pub fn resolve_namespace(&mut self) {
+        let ctx = self.get_nameresolution_context();
+        self.trait_env.resolve_namespace(&ctx);
+        for decl in &mut self.type_decls {
+            decl.resolve_namespace(&ctx);
+        }
         for (_, sym) in &mut self.global_symbols {
-            sym.set_namespace_of_tycons_and_traits(&type_env, trait_env, &self.name);
+            sym.resolve_namespace(&ctx);
         }
     }
 
@@ -558,6 +590,18 @@ impl FixModule {
             .validate_and_set_namespace_of_instance_keys(&self.type_env, &self.name);
     }
 
+    // Add built-in types and traits
+    pub fn add_builtin_traits_types(&mut self) {
+        self.trait_env.add_trait(eq_trait());
+        self.trait_env.add_trait(add_trait());
+        self.trait_env.add_trait(subtract_trait());
+        self.trait_env.add_trait(negate_trait());
+        self.trait_env.add_trait(multiply_trait());
+        self.trait_env.add_trait(divide_trait());
+        self.trait_env.add_trait(remainder_trait());
+        self.type_decls.push(loop_result_defn());
+    }
+
     // Add bult-in functions to a given ast.
     pub fn add_builtin_symbols(self: &mut FixModule) {
         fn add_global(
@@ -567,25 +611,17 @@ impl FixModule {
         ) {
             program.add_global_object(name, (expr, scm));
         }
-        self.trait_env.add_trait(eq_trait());
         self.trait_env
             .add_instance(eq_trait_instance_primitive(int_lit_ty()));
         self.trait_env
             .add_instance(eq_trait_instance_primitive(bool_lit_ty()));
-        self.trait_env.add_trait(add_trait());
         self.trait_env.add_instance(add_trait_instance_int());
-        self.trait_env.add_trait(subtract_trait());
         self.trait_env.add_instance(subtract_trait_instance_int());
-        self.trait_env.add_trait(negate_trait());
         self.trait_env.add_instance(negate_trait_instance_int());
-        self.trait_env.add_trait(multiply_trait());
         self.trait_env.add_instance(multiply_trait_instance_int());
-        self.trait_env.add_trait(divide_trait());
         self.trait_env.add_instance(divide_trait_instance_int());
-        self.trait_env.add_trait(remainder_trait());
         self.trait_env.add_instance(remainder_trait_instance_int());
         add_global(self, NameSpacedName::from_strs(&[STD_NAME], "fix"), fix());
-        self.type_decls.push(loop_result_defn());
         add_global(
             self,
             NameSpacedName::from_strs(&[STD_NAME, LOOP_RESULT_NAME], "loop"),
