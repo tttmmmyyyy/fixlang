@@ -1,0 +1,34 @@
+module Main;
+
+type SieveState = struct (i: Int, arr: Array Bool);
+
+// Calculate a Bool array whose element is true iff idx is prime.
+is_prime : Int -> Array Bool;
+is_prime = \n -> (
+    let arr = Array.new n true;
+    let arr = arr.set! 0 false;
+    let arr = arr.set! 1 false;
+    loop (SieveState.new 2 arr) \state -> (
+        let i = state.get_i;
+        let arr = state.get_arr;
+        if i == n then (
+            break arr
+        ) else if arr.get i then (
+            let q = i + i;
+            let arr = loop (SieveState.new q arr) \state -> (
+                let q = state.get_i;
+                let arr = state.get_arr;
+                if n-1 < q then 
+                    break arr
+                else 
+                    continue $ SieveState.new (q + i) (arr.set! q false)
+            );
+            continue $ SieveState.new (i + 1) arr
+        ) else (
+            continue $ SieveState.new (i + 1) arr
+        )
+    )
+);
+
+main : Int;
+main = if (is_prime 100).get 97 then 1 else 0;

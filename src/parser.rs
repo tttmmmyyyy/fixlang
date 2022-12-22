@@ -476,7 +476,10 @@ fn parse_expr_eq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     parse_binary_operator_sequence(
         pair,
         src,
-        HashMap::from([("==", (EQ_TRAIT_NAME, EQ_TRAIT_EQ_NAME))]),
+        HashMap::from([
+            ("==", (EQ_TRAIT_NAME, EQ_TRAIT_EQ_NAME)),
+            ("<", (CMP_TRAIT_NAME, CMP_TRAIT_LT_NAME)),
+        ]),
         Rule::operator_eq,
         parse_expr_plus,
     )

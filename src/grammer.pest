@@ -70,8 +70,8 @@ expr_mul = { expr_neg ~ (sep* ~ operator_mul ~ sep* ~ expr_neg)* }
 operator_plus = { "+" | "-" }
 expr_plus = { expr_mul ~ (sep* ~ operator_plus ~ sep* ~ expr_mul)* }
 
-// operator==
-operator_eq = { "==" }
+// operator==, <, >, <=, >=
+operator_eq = { "==" | "<" }
 expr_eq = { expr_plus ~ (sep* ~ operator_eq ~ sep* ~ expr_plus)? }
 
 // operator &&, || (left-associative)

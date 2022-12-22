@@ -1288,6 +1288,50 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
     )
 }
 
+pub const CMP_TRAIT_NAME: &str = "Cmp";
+pub const CMP_TRAIT_LT_NAME: &str = "less_than";
+
+pub fn cmp_trait_id() -> TraitId {
+    TraitId {
+        name: NameSpacedName::from_strs(&[STD_NAME], CMP_TRAIT_NAME),
+    }
+}
+
+pub fn cmp_trait() -> TraitInfo {
+    binary_operator_trait(
+        cmp_trait_id(),
+        CMP_TRAIT_LT_NAME.to_string(),
+        Some(bool_lit_ty()),
+    )
+}
+
+pub fn cmp_trait_instance_int() -> TraitInstance {
+    fn generate_cmp_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: BasicValueEnum<'c>,
+        rhs: BasicValueEnum<'c>,
+    ) -> PointerValue<'c> {
+        let value = gc.builder().build_int_compare(
+            IntPredicate::SLT,
+            lhs.into_int_value(),
+            rhs.into_int_value(),
+            CMP_TRAIT_LT_NAME,
+        );
+        let ptr_to_bool_obj = ObjectType::bool_obj_type()
+            .create_obj(gc, Some(&format!("{} lhs rhs", CMP_TRAIT_LT_NAME)));
+        gc.store_obj_field(ptr_to_bool_obj, bool_type(gc.context), 1, value);
+        ptr_to_bool_obj
+    }
+    binary_opeartor_instance(
+        cmp_trait_id(),
+        &CMP_TRAIT_LT_NAME.to_string(),
+        int_lit_ty(),
+        get_int_struct_ty,
+        int_lit_ty(),
+        generate_cmp_int,
+    )
+}
+
 pub const ADD_TRAIT_NAME: &str = "Add";
 pub const ADD_TRAIT_ADD_NAME: &str = "add";
 
