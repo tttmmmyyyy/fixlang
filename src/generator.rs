@@ -127,6 +127,45 @@ impl<'c> Drop for PopScopeGuard<'c> {
 }
 
 impl<'c, 'm> GenerationContext<'c, 'm> {
+    // Build malloc.
+    pub fn malloc(&self, ty: StructType<'c>) -> PointerValue<'c> {
+        if USE_LEAKY_ALLOCATOR {
+            let ptr_to_heap = self
+                .module
+                .get_global(LEAKY_HEAP_NAME)
+                .unwrap()
+                .as_basic_value_enum()
+                .into_pointer_value();
+            let heap = self
+                .builder()
+                .build_load(ptr_to_heap, "heap")
+                .into_pointer_value();
+            let heap_ty = heap.get_type();
+            {
+                let heap =
+                    self.builder()
+                        .build_ptr_to_int(heap, self.context.i64_type(), "heap_int");
+                let offset = ty.size_of().unwrap();
+                let new_heap = self.builder().build_int_add(heap, offset, "hew_heap_int");
+                let new_heap = self
+                    .builder()
+                    .build_int_to_ptr(new_heap, heap_ty, "new_heap");
+                self.builder().build_store(ptr_to_heap, new_heap);
+            }
+            self.cast_pointer(heap, ptr_type(ty))
+        } else {
+            self.builder().build_malloc(ty, "malloc").unwrap()
+        }
+    }
+
+    // Build free.
+    pub fn free(&self, ptr: PointerValue<'c>) {
+        if USE_LEAKY_ALLOCATOR {
+        } else {
+            self.builder().build_free(ptr);
+        }
+    }
+
     // Create new gc.
     pub fn new(ctx: &'c Context, module: &'m Module<'c>) -> Self {
         let ret = Self {

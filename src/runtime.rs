@@ -165,7 +165,7 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
     // If refcnt is zero, then call dtor and free object.
     gc.builder().position_at_end(then_bb);
     gc.call_dtor(ptr_to_obj);
-    gc.builder().build_free(ptr_to_obj);
+    gc.free(ptr_to_obj);
     gc.builder().build_unconditional_branch(cont_bb);
 
     // End function.

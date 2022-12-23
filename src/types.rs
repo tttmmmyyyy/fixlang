@@ -154,7 +154,7 @@ impl ObjectFieldType {
             _size: IntValue<'c>,
             ptr_to_buffer: PointerValue<'c>,
         ) {
-            gc.builder().build_free(ptr_to_buffer);
+            gc.free(ptr_to_buffer);
         }
 
         // Generate loop.
@@ -461,10 +461,7 @@ impl ObjectType {
         let context = gc.context;
         let struct_type = self.to_struct_type(context);
         // NOTE: Only once allocation is needed since we don't implement weak_ptr
-        let ptr_to_obj = gc
-            .builder()
-            .build_malloc(struct_type, "ptr_to_obj")
-            .unwrap();
+        let ptr_to_obj = gc.malloc(struct_type);
 
         let mut object_id = obj_id_type(gc.context).const_int(0, false);
 

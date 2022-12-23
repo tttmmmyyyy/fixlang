@@ -96,6 +96,17 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     let module = context.create_module(&fix_mod.name);
     let mut gc = GenerationContext::new(&context, &module);
 
+    // If use leaky allocator, prepare heap counter.
+    if USE_LEAKY_ALLOCATOR {
+        let leaky_heap_type = gc.context.i8_type().array_type(LEAKY_ALLOCATOR_HEAP_SIZE);
+        let ptr_to_leaky_heap_type = leaky_heap_type.ptr_type(AddressSpace::Generic);
+        let ptr_to_heap = gc
+            .module
+            .add_global(ptr_to_leaky_heap_type, None, LEAKY_HEAP_NAME);
+        let null = ptr_to_leaky_heap_type.const_null().as_basic_value_enum();
+        ptr_to_heap.set_initializer(&null);
+    }
+
     // Build runtime functions.
     build_runtime(&mut gc);
 
@@ -110,6 +121,23 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     let main_function = module.add_function("main", main_fn_type, None);
     let entry_bb = context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
+
+    // If use leaky allocator, allocate heap.
+    if USE_LEAKY_ALLOCATOR {
+        let ptr_to_heap = gc
+            .module
+            .get_global(LEAKY_HEAP_NAME)
+            .unwrap()
+            .as_basic_value_enum()
+            .into_pointer_value();
+        // let leaky_heap_type = ptr_to_heap.get_type().get_element_type().into_array_type();
+        let leaky_heap_type = gc.context.i8_type().array_type(LEAKY_ALLOCATOR_HEAP_SIZE);
+        let leaky_heap = gc
+            .builder()
+            .build_malloc(leaky_heap_type, "leaky_heap")
+            .unwrap();
+        gc.builder().build_store(ptr_to_heap, leaky_heap);
+    }
 
     // Evaluate program and extract int value from result.
     let program_result = gc.eval_expr(main_expr);
