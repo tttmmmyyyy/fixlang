@@ -39,7 +39,7 @@ pub struct Variable<'c> {
 
 #[derive(Default)]
 pub struct Scope<'c> {
-    data: HashMap<NameSpacedName, Vec<Variable<'c>>>, // Change NameSpacedName to Name.
+    data: HashMap<NameSpacedName, Vec<Variable<'c>>>,
 }
 
 impl<'c> Scope<'c> {
