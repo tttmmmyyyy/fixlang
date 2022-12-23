@@ -11,24 +11,34 @@ is_prime = \n -> (
     loop (SieveState.new 2 arr) \state -> (
         let i = state.get_i;
         let arr = state.get_arr;
-        if i == n then (
-            break arr
-        ) else if arr.get i then (
-            let q = i + i;
-            let arr = loop (SieveState.new q arr) \state -> (
+        if n < i*i then break arr else 
+        let next_arr = if arr.get i then (
+            loop (SieveState.new (i+i) arr) \state -> (
                 let q = state.get_i;
                 let arr = state.get_arr;
                 if n-1 < q then 
                     break arr
                 else 
                     continue $ SieveState.new (q + i) (arr.set! q false)
-            );
-            continue $ SieveState.new (i + 1) arr
-        ) else (
-            continue $ SieveState.new (i + 1) arr
-        )
+            )
+        ) else arr;
+        continue $ SieveState.new (i + 1) next_arr
+    )
+);
+
+type CountState = struct (idx: Int, sum: Int);
+
+count : [a: Eq] a -> Array a -> Int;
+count = \elem -> \arr -> (
+    loop (CountState.new 0 0) \state -> (
+        let i = state.get_idx;
+        let sum = state.get_sum;
+        if arr.len == i then break sum 
+        else 
+            let sum = sum + (if arr.get i == elem then 1 else 0);
+            continue $ CountState.new (i+1) sum
     )
 );
 
 main : Int;
-main = if (is_prime 100).get 97 then 1 else 0;
+main = (is_prime 100).count true; // 25
