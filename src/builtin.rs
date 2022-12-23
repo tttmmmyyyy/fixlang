@@ -1317,6 +1317,13 @@ pub fn cmp_trait_instance_int() -> TraitInstance {
             rhs.into_int_value(),
             CMP_TRAIT_LT_NAME,
         );
+        let value = gc.builder().build_int_cast(
+            value,
+            ObjectFieldType::Bool
+                .to_basic_type(gc.context)
+                .into_int_type(),
+            CMP_TRAIT_LT_NAME,
+        );
         let ptr_to_bool_obj = ObjectType::bool_obj_type()
             .create_obj(gc, Some(&format!("{} lhs rhs", CMP_TRAIT_LT_NAME)));
         gc.store_obj_field(ptr_to_bool_obj, bool_type(gc.context), 1, value);
