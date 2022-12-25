@@ -1,0 +1,24 @@
+module Main;
+
+main : Int;
+main = (
+    let arr = Array.new 31 0;
+    // arr.set! asserts that the given array is uniquely referenced and 
+    // rewrites the given array insted of cloning because the old array value will be no longer accessed!
+    let arr = arr.set! 0 0;
+    let arr = arr.set! 1 1;
+    let calc_fib_array = (
+        // To make recursive function locally, use the idiom:
+        // fix \loop -> \(argments) -> (body of recursive_function that calls `loop`).
+        fix \loop -> \arr -> \n -> 
+            if n == 31 
+            then arr 
+            else
+                let x = arr.get (n-1);
+                let y = arr.get (n-2);
+                let arr = arr.set! n (x+y);
+                loop arr (n+1)
+    );
+    let fib_array = calc_fib_array arr 2;
+    fib_array.get 30 // 832040
+);

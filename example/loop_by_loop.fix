@@ -8,6 +8,10 @@ is_prime = \n -> (
     let arr = Array.new n true;
     let arr = arr.set! 0 false;
     let arr = arr.set! 1 false;
+    // For usual loop, use `loop`, `continue` and `break`.
+    // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body.
+    // continue : s -> LoopResult s r -- Take the next state and continues the loop.
+    // break : r -> LoopResult s r -- Break the loop and `loop` returns the value given to `break`.
     loop (SieveState.new 2 arr) \state -> (
         let i = state.get_i;
         let arr = state.get_arr;
@@ -28,6 +32,7 @@ is_prime = \n -> (
 
 type CountState = struct (idx: Int, sum: Int);
 
+// Count the appearance of a value in an array.
 count : [a: Eq] a -> Array a -> Int;
 count = \elem -> \arr -> (
     loop (CountState.new 0 0) \state -> (
