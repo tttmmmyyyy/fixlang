@@ -10,7 +10,7 @@ Fix is a functional language focused on ease of learning and use.
 ## Install
 
 - Install llvm12.0.1 by using [llvmemv](https://crates.io/crates/llvmenv).
-    - On macOS, llvmenv installs llvm to "~/Library/Application Support/llvmenv/12.0.1", but llvm-sys currently doesn't understand path with a whitespace correctly, so you need to copy/move "12.0.1" directory to another path.
+    - In macOS, llvmenv installs llvm to "~/Library/Application Support/llvmenv/12.0.1", but llvm-sys currently doesn't understand path with a whitespace correctly, so you need to copy/move "12.0.1" directory to another path.
 - Set LLVM_SYS_120_PREFIX variable to the directory to which llvm installed.
 - Clone this repository and run example by "cargo run -- run ./example/array_and_fix.fix".
 
