@@ -16,7 +16,7 @@ Fix is a functional language focused on ease of learning and use.
 
 ## Explanation / basic example
 
-Currently no detailed tutorial / documentation is written, but you can know the syntax by reading files in the "examples" directory (or codes in tests.rs). The following is a basic example ("exapmles/array_and_fix.fix"), about which I will explain.
+Currently no detailed tutorial / documentation is written, but you can know the syntax by reading files in the "examples" directory (or codes in tests.rs). The following is a basic example ("exapmles/array_and_fix.fix") about which I will explain.
 
 ```
 module Main;
