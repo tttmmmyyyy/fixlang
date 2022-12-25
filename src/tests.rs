@@ -890,23 +890,28 @@ pub fn test45() {
 
         impl Array : Functor {
             map = \f -> \arr -> (
-                let e = arr.get 0;
-                let e = f e;
-                Array.new 1 e
+                Array.from_map (arr.len) \idx -> f (arr.get idx)
             );
         }
 
-        map2 : [f: Functor] (a -> b) -> f a -> f b;
-        map2 = map;
+        sum : Array Int -> Int;
+        sum = \arr -> (
+            let loop = fix \loop -> \idx -> \sum -> (
+                if idx == arr.len 
+                then sum
+                else loop (idx + 1) (sum + arr.get idx)
+            );
+            loop 0 0
+        );
 
         main : Int;
         main = (
-            let arr = Array.new 1 false;
-            let arr = arr . map (\e -> if e then 0 else -1);
-            arr.get 0
+            let arr = Array.from_map 10 \x -> x;
+            let arr = arr.map \x -> x * x;
+            arr.sum
         );
     ";
-    let answer = -1;
+    let answer = 285;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 

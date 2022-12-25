@@ -249,7 +249,14 @@ impl Substitution {
             _ => {}
         };
         if ty2.free_vars().contains_key(&tyvar1.name) {
-            panic!("unify_tyvar is making circular substitution.")
+            // For example, this error occurs when
+            // the user is making `f c` in the implementation of
+            // `map: [f: Functor] (a -> b) -> f a -> f b; map = \f -> \c -> (...)`;
+            error_exit(&format!(
+                "cannot identify type `{}` and `{}`.",
+                tyvar1.name,
+                ty2.to_string()
+            ));
         }
         if tyvar1.kind != ty2.kind(type_env) {
             error_exit("Kinds do not match.");
