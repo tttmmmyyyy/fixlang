@@ -1,5 +1,3 @@
-use core::panic;
-
 use super::*;
 
 #[derive(Clone)]

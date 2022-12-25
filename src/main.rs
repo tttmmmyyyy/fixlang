@@ -50,7 +50,7 @@ use std::vec::Vec;
 use typecheck::*;
 use types::*;
 
-const SANITIZE_MEMORY: bool = true;
+const SANITIZE_MEMORY: bool = false;
 const USE_LEAKY_ALLOCATOR: bool = false;
 const LEAKY_ALLOCATOR_HEAP_SIZE: u32 = 512 * 1024 * 1024;
 const LEAKY_HEAP_NAME: &str = "LEAKY_HEAP";
