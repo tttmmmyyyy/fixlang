@@ -45,7 +45,7 @@ The operator `$` is same as the operator well-known in Haskell: `f $ x = f x` an
 
 The operator `.` in the code above is NOT the composition operator, but the right-to-left application operator: `x.f = f x`. The precedence between three ways of application is whitespace (usual application) > `$` > `.` . This allows you to write `obj.method arg` for a function `method: Arg -> Obj -> Result` as if you are writing OOP languages.
 
-`set!: Int -> a -> Array a -> Array a` in the code above is a method of Array, which updates the value of the given array if it is uniquely referenced (i.e. the reference counter is one) or stops the program otherwise. This allows you avoid cloing array and keeping purity (no side effect). If you are ok for cloing array when it is shared between multiple references, use `set` method instead.
+`set!: Int -> a -> Array a -> Array a` in the code above is a method of Array which updates the value of the given array if it is uniquely referenced (i.e. the reference counter is one) or stops the program otherwise. This allows you avoid cloning array and keeping purity (no side effect). If you are ok for cloning array when it is shared between multiple references, use `set` method instead.
 
 In the `let` of Fix, you cannot make recursive binding. In the `let arr = arr.set! 0 0;` line in the code, `arr` in the right of equality refers to the name defined in the previous line. If you want to define recursive function locally, use `fix: ((a -> b) -> a -> b) -> a -> b` function. An idiom for making local recursive function by `fix` is: `let func = fix \loop -> \arg_of_func -> (body of func which calls loop);`. You can define global recursive function in an usual way.
 
