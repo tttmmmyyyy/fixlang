@@ -16,7 +16,7 @@ Fix is a functional language focused on ease of learning and use.
 
 ## Explanation / basic example
 
-Currently no detailed tutorial / documentation is written, but you can know the syntax by reading files in the "examples" directory (or codes in tests.rs). The following is a basic example ("exapmles/array_and_fix.fix") about which I will explain.
+Currently no detailed tutorial / documentation is written, but you can know the syntax by reading files in the "examples" directory (or codes in tests.rs). The following is a basic example ("exapmles/array_and_fix.fix") about which I explain below.
 
 ```
 module Main;
@@ -41,9 +41,9 @@ main = (
 );
 ```
 
-The operator `$` is same as the operator well-known in Haskell: `f $ x = f x` and `f $ g $ x = f (g x)` where simply writing `f g x` is interpreted as `(f g) x`.
+The operator `$` is the same as the operator well-known in Haskell: `f $ x = f x` and `f $ g $ x = f (g x)` where simply writing `f g x` is interpreted as `(f g) x`.
 
-The operator `.` in the code above is NOT the composition operator, but the right-to-left application operator: `x.f = f x`. The precedence between three ways of application is whitespace (usual application) > `$` > `.` . This allows you to write `obj.method arg` for a function `method: Arg -> Obj -> Result` as if you are writing OOP languages.
+The operator `.` in the code above is NOT the composition operator, but the right-to-left application operator: `x.f = f x`. The precedence between three ways of application is whitespace (usual application) > `$` > `.` . This allows you to write `obj.method arg` to call a function `method: Arg -> Obj -> Result` on `obj` as if you are writing OOP languages.
 
 `set!: Int -> a -> Array a -> Array a` in the code above is a method of Array which updates the value of the given array if it is uniquely referenced (i.e. the reference counter is one) or stops the program otherwise. This allows you avoid cloning array and keeping purity (no side effect). If you are ok for cloning array when it is shared between multiple references, use `set` method instead.
 
