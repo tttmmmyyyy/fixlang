@@ -161,15 +161,13 @@ impl ObjectFieldType {
         Self::loop_over_array(gc, ptr_to_array, loop_body, after_loop);
     }
 
-    // Initialize an array.
+    // Initialize an array
     pub fn initialize_array<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         array_ptr: PointerValue<'c>,
         size: IntValue<'c>,
-        value: PointerValue<'c>,
-    ) {
+    ) -> PointerValue<'c> {
         assert_eq!(size.get_type(), gc.context.i64_type());
-        assert_eq!(value.get_type(), ptr_to_object_type(gc.context));
 
         let array_struct = ObjectFieldType::Array
             .to_basic_type(gc.context)
@@ -184,6 +182,20 @@ impl ObjectFieldType {
             .build_array_malloc(ptr_to_object_type(gc.context), size, "buffer_ptr")
             .unwrap();
         gc.store_obj_field(array_ptr, array_struct, 1, buffer_ptr);
+
+        array_ptr
+    }
+
+    // Initialize an array by value.
+    pub fn initialize_array_by_value<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        array_ptr: PointerValue<'c>,
+        size: IntValue<'c>,
+        value: PointerValue<'c>,
+    ) {
+        assert_eq!(value.get_type(), ptr_to_object_type(gc.context));
+
+        let array_ptr = Self::initialize_array(gc, array_ptr, size);
 
         // Initialize elements
         {
@@ -205,6 +217,53 @@ impl ObjectFieldType {
                               _size: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {
                 gc.release(value);
+            };
+
+            // Generate loop.
+            // NOTE: if you see error at here, try `cargo clean`.
+            Self::loop_over_array(gc, array_ptr, loop_body, after_loop);
+        }
+    }
+
+    // Initialize an array by map.
+    pub fn initialize_array_by_map<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        array_ptr: PointerValue<'c>,
+        size: IntValue<'c>,
+        map: PointerValue<'c>,
+    ) {
+        // Initialize array.
+        let array_ptr = Self::initialize_array(gc, array_ptr, size);
+
+        // Initialize elements
+        {
+            // In loop body, retain value and store it at idx.
+            let loop_body = |gc: &mut GenerationContext<'c, 'm>,
+                             idx: IntValue<'c>,
+                             _size: IntValue<'c>,
+                             ptr_to_buffer: PointerValue<'c>| {
+                // Create idx object.
+                let idx_ptr = ObjectType::int_obj_type().create_obj(gc, Some("idx_ptr"));
+                gc.store_obj_field(idx_ptr, int_type(gc.context), 1, idx);
+                let idx_ptr = gc.cast_pointer(idx_ptr, ptr_to_object_type(gc.context));
+
+                // Apply map to idx object to get initial value at this idx.
+                gc.retain(map);
+                let value = gc.apply_lambda(map, idx_ptr);
+
+                // Store value.
+                let ptr_to_obj_ptr = unsafe {
+                    gc.builder()
+                        .build_gep(ptr_to_buffer, &[idx.into()], "ptr_to_elem_of_array")
+                };
+                gc.builder().build_store(ptr_to_obj_ptr, value);
+            };
+
+            // After loop, release map.
+            let after_loop = |gc: &mut GenerationContext<'c, 'm>,
+                              _size: IntValue<'c>,
+                              _ptr_to_buffer: PointerValue<'c>| {
+                gc.release(map);
             };
 
             // Generate loop.

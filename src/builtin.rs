@@ -132,7 +132,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
             .builder()
             .build_struct_gep(array, 1, "array_field")
             .unwrap();
-        ObjectFieldType::initialize_array(gc, array_field, size, value);
+        ObjectFieldType::initialize_array_by_value(gc, array_field, size, value);
         array
     });
     expr_lit(
@@ -163,6 +163,56 @@ pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             int_lit_ty(),
             type_fun(
                 type_tyvar_star("a"),
+                type_tyapp(array_lit_ty(), type_tyvar_star("a")),
+            ),
+        ),
+    );
+    (expr, scm)
+}
+
+// "Array.from_map" built-in function.
+pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let arr_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
+    const SIZE_NAME: &str = "size";
+    const MAP_NAME: &str = "map";
+    let name = "Array.from_map size map".to_string();
+    let name_cloned = name.clone();
+    let size_name = NameSpacedName::local(SIZE_NAME);
+    let map_name = NameSpacedName::local(MAP_NAME);
+    let size_name_cloned = size_name.clone();
+    let map_name_cloned = map_name.clone();
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let size = gc
+            .get_var_field(&size_name_cloned, 1, int_type(gc.context))
+            .into_int_value();
+        gc.release(gc.get_var(&size_name_cloned).ptr.get(gc));
+        let map = gc.get_var(&map_name_cloned).ptr.get(gc);
+        let array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
+        let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
+        let array = gc.cast_pointer(array, array_ptr_ty);
+        let array_field = gc
+            .builder()
+            .build_struct_gep(array, 1, "array_field")
+            .unwrap();
+        ObjectFieldType::initialize_array_by_map(gc, array_field, size, map);
+        array
+    });
+    let expr = expr_abs(
+        var_local(SIZE_NAME, None),
+        expr_abs(
+            var_local(MAP_NAME, None),
+            expr_lit(generator, vec![size_name, map_name], name, arr_ty, None),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        HashMap::from([("a".to_string(), kind_star())]),
+        vec![],
+        type_fun(
+            int_lit_ty(),
+            type_fun(
+                type_fun(int_lit_ty(), type_tyvar_star("a")),
                 type_tyapp(array_lit_ty(), type_tyvar_star("a")),
             ),
         ),

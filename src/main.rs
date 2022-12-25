@@ -66,7 +66,7 @@ fn main() {
     match app.get_matches().subcommand() {
         Some(("run", m)) => {
             let path = m.value_of("source-file").unwrap();
-            let res = run_file(Path::new(path), OptimizationLevel::Default);
+            let res = run_file(Path::new(path), OptimizationLevel::Aggressive);
             println!("{}", res);
         }
         _ => eprintln!("Unknown command!"),

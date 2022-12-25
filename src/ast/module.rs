@@ -637,6 +637,11 @@ impl FixModule {
         );
         add_global(
             self,
+            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "from_map"),
+            from_map_array(),
+        );
+        add_global(
+            self,
             NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),
             read_array(),
         );

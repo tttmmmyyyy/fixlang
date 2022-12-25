@@ -852,6 +852,33 @@ pub fn test44() {
 
 #[test]
 #[serial]
+pub fn test44_5() {
+    // Test Array.from_map.
+    let source = r"
+        module Main;
+
+        sum : Array Int -> Int;
+        sum = \arr -> (
+            let loop = fix \loop -> \idx -> \sum -> (
+                if idx == arr.len 
+                then sum
+                else loop (idx + 1) (sum + arr.get idx)
+            );
+            loop 0 0
+        );
+
+        main : Int;
+        main = (
+            let arr = Array.from_map 10 \x -> x * x;
+            sum arr
+        );
+    ";
+    let answer = 285;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test45() {
     // Test HKT.
     let source = r"
