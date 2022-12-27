@@ -39,10 +39,11 @@ expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ s
 
 expr_lam = { "\\" ~ sep* ~ var ~ sep*  ~ arrow_of_lam ~ sep* ~ expr }
 
-expr_braced = { "(" ~ sep* ~ expr ~ sep* ~ ")" }
+// For n = 0 or n >= 2 this is interpreted as tuple, and for n = 1 this is treated as braced type.
+expr_tuple = { "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }
 
 // nlr = non left recursive
-expr_nlr = { expr_lit | expr_var | expr_let | expr_if | expr_lam | expr_braced }
+expr_nlr = { expr_lit | expr_var | expr_let | expr_if | expr_lam | expr_tuple }
 
 // application sequence, e.g., `f x y`. (left-associative)
 expr_app = { expr_nlr ~ (sep+ ~ expr_nlr)* }
@@ -85,9 +86,10 @@ expr = { expr_type_annotation }
 // === Types ===
 type_expr = { type_fun }
 
-type_braced = { "(" ~ sep* ~ type_expr ~ sep* ~ ")" }
+// For n = 0 or n >= 2 this is interpreted as tuple, and for n = 1 this is treated as braced type.
+type_tuple = { "(" ~ sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)* ~ sep* ~ ")" }
 
-type_nlr = { type_tycon | type_var | type_braced }
+type_nlr = { type_tycon | type_var | type_tuple }
 
 type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)* }
 

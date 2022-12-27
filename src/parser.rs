@@ -607,7 +607,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         Rule::expr_let => parse_expr_let(pair, src),
         Rule::expr_if => parse_expr_if(pair, src),
         Rule::expr_lam => parse_expr_lam(pair, src),
-        Rule::expr_braced => parse_bracket_expr(pair, src),
+        Rule::expr_tuple => parse_expr_tuple(pair, src),
         _ => unreachable!(),
     }
 }
@@ -700,10 +700,26 @@ fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     )
 }
 
-fn parse_bracket_expr(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    let span = Span::from_pair(&src, &expr);
-    let inner = expr.into_inner().next().unwrap();
-    parse_expr(inner, src).set_source(Some(span))
+fn parse_expr_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_tuple);
+    let span = Span::from_pair(&src, &pair);
+    let exprs = pair
+        .into_inner()
+        .map(|p| parse_expr(p, src).set_source(Some(span.clone())))
+        .collect::<Vec<_>>();
+    if exprs.len() == 1 {
+        exprs[0].clone()
+    } else {
+        let tuple_name = tuple_name(exprs.len() as u32);
+        let mut res = expr_var(
+            NameSpacedName::from_strs(&[STD_NAME, &tuple_name], "new"),
+            Some(span.clone()),
+        );
+        for expr in exprs {
+            res = expr_app(res, expr, Some(span.clone()));
+        }
+        res
+    }
 }
 
 fn parse_expr_int_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
@@ -759,7 +775,7 @@ fn parse_type_nlr(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     match pair.as_rule() {
         Rule::type_tycon => parse_type_tycon(pair),
         Rule::type_var => parse_type_var(pair),
-        Rule::type_braced => parse_type_braced(pair),
+        Rule::type_tuple => parse_type_tuple(pair),
         _ => unreachable!(),
     }
 }
@@ -774,11 +790,21 @@ fn parse_type_tycon(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     type_tycon(&tycon(NameSpacedName::from_strs(&[], type_expr.as_str())))
 }
 
-fn parse_type_braced(type_expr: Pair<Rule>) -> Arc<TypeNode> {
-    assert_eq!(type_expr.as_rule(), Rule::type_braced);
-    let mut pairs = type_expr.into_inner();
-    let pair = pairs.next().unwrap();
-    parse_type(pair)
+fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_tuple);
+    let types = pair.into_inner().map(|p| parse_type(p)).collect::<Vec<_>>();
+    if types.len() == 1 {
+        types[0].clone()
+    } else {
+        let mut res = type_tycon(&tycon(NameSpacedName::from_strs(
+            &[STD_NAME],
+            &tuple_name(types.len() as u32),
+        )));
+        for ty in types {
+            res = type_tyapp(res, ty);
+        }
+        res
+    }
 }
 
 fn rule_to_string(r: &Rule) -> String {

@@ -602,7 +602,9 @@ impl FixModule {
         self.trait_env.add_trait(cmp_trait());
         self.type_decls.push(loop_result_defn());
         for i in 0..=TUPLE_SIZE_MAX {
-            self.type_decls.push(tuple_defn(i));
+            if i != 1 {
+                self.type_decls.push(tuple_defn(i));
+            }
         }
     }
 
