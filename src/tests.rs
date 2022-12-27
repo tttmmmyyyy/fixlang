@@ -1010,15 +1010,13 @@ pub fn test50() {
     let source = format!(
         r"
             module Main;
-
-            type Pair a b = struct (fst: a, snd: b);
     
             main : Int;
             main = (
-                loop (Pair.new 0 0) \state -> 
-                    let i = state.get_fst;
-                    let sum = state.get_snd;
-                    if i == {} then break sum else continue $ Pair.new (add i 1) (add i sum)
+                loop (0, 0) \state -> 
+                    let i = state.get_0;
+                    let sum = state.get_1;
+                    if i == {} then break sum else continue $ (i+1, sum+i)
             );
         ",
         n
@@ -1044,11 +1042,9 @@ pub fn test51() {
     Expression `x == y` is equivalent to `Eq.eq x y`.
     */
     
-    type Pair a b = struct (fst: a, snd: b);
-    
-    impl [a: Eq, b: Eq] Pair a b : Eq {
+    impl [a: Eq, b: Eq] (a, b) : Eq {
         eq = \lhs -> \rhs -> (
-            lhs.get_fst == rhs.get_fst && lhs.get_snd == rhs.get_snd
+            lhs.get_0 == rhs.get_0 && lhs.get_1 == rhs.get_1
         );
     }
 
@@ -1061,12 +1057,12 @@ pub fn test51() {
     
     main : Int;
     main = (
-        let arr = Array.new 4 $ Pair.new 0 false;
-        let arr = arr.set 0 $ Pair.new 0 false;
-        let arr = arr.set 1 $ Pair.new 0 true;
-        let arr = arr.set 2 $ Pair.new 1 false;
-        let arr = arr.set 3 $ Pair.new 1 true;
-        arr.search $ Pair.new 1 false // evaluates to 2
+        let arr = Array.new 4 $ (0, false);
+        let arr = arr.set 0 $ (0, false);
+        let arr = arr.set 1 $ (0, true);
+        let arr = arr.set 2 $ (1, false);
+        let arr = arr.set 3 $ (1, true);
+        arr.search $ (1, false) // evaluates to 2
     );
         ";
     let answer = 2;
