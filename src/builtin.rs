@@ -27,6 +27,12 @@ pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
 
 // Following types are coustructed using primitive types.
 pub const LOOP_RESULT_NAME: &str = "LoopResult";
+pub const TUPLE_NAME: &str = "Tuple";
+
+// Make name of tuples.
+pub fn tuple_name(size: u32) -> Name {
+    format!("{}{}", TUPLE_NAME, size)
+}
 
 // Get Int type.
 pub fn int_lit_ty() -> Arc<TypeNode> {
@@ -1128,6 +1134,24 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
     );
     (expr, scm)
+}
+
+pub fn tuple_defn(size: u32) -> TypeDecl {
+    let tyvars = (0..size)
+        .map(|i| "t".to_string() + &i.to_string())
+        .collect::<Vec<_>>();
+    TypeDecl {
+        name: NameSpacedName::from_strs(&[STD_NAME], &tuple_name(size)),
+        tyvars: tyvars.clone(),
+        value: TypeDeclValue::Struct(Struct {
+            fields: (0..size)
+                .map(|i| Field {
+                    name: i.to_string(),
+                    ty: type_tyvar_star(&tyvars[i as usize]),
+                })
+                .collect(),
+        }),
+    }
 }
 
 pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {

@@ -54,6 +54,7 @@ const SANITIZE_MEMORY: bool = false;
 const USE_LEAKY_ALLOCATOR: bool = false;
 const LEAKY_ALLOCATOR_HEAP_SIZE: u32 = 512 * 1024 * 1024;
 const LEAKY_HEAP_NAME: &str = "LEAKY_HEAP";
+const TUPLE_SIZE_MAX: u32 = 3; // This affects on compilation time heavily. We should make tuple generation on-demand.
 
 fn main() {
     let source_file = Arg::new("source-file").required(true);
