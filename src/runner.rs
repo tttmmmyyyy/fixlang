@@ -1,3 +1,7 @@
+use std::path::PathBuf;
+
+use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
+
 use super::*;
 
 fn execute_main_module<'c>(
@@ -20,7 +24,7 @@ fn execute_main_module<'c>(
     }
 }
 
-fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
+fn build_module<'c>(context: &'c Context, mut fix_mod: FixModule) -> Module<'c> {
     // Add built-in traits and types.
     fix_mod.add_builtin_traits_types();
 
@@ -92,7 +96,6 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     }
 
     // Create GenerationContext.
-    let context = Context::create();
     let module = context.create_module(&fix_mod.name);
     let mut gc = GenerationContext::new(&context, &module, TypeCheckContext::default());
 
@@ -156,7 +159,7 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     }
 
     // Print LLVM bitcode to file
-    module.print_to_file("main.ll").unwrap();
+    // module.print_to_file("main.ll").unwrap();
 
     // Verify LLVM module.
     let verify = module.verify();
@@ -165,16 +168,17 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
         panic!("LLVM verify failed!");
     }
 
-    // Run the module.
-    execute_main_module(&context, &module, opt_level)
+    module
 }
 
 pub fn run_source(source: &str, opt_level: OptimizationLevel) -> i64 {
-    let module = parse_source(source);
-    run_module(module, opt_level)
+    let fix_mod = parse_source(source);
+    let ctx = Context::create();
+    let module = build_module(&ctx, fix_mod);
+    execute_main_module(&module.get_context(), &module, opt_level)
 }
 
-pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
+pub fn read_file(path: &Path) -> String {
     let display = path.display();
 
     let mut file = match File::open(&path) {
@@ -188,5 +192,48 @@ pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
         Ok(_) => (),
     }
 
-    run_source(s.as_str(), opt_level)
+    s
+}
+
+pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
+    run_source(read_file(path).as_str(), opt_level)
+}
+
+fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
+    let _native = Target::initialize_native(&InitializationConfig::default())
+        .map_err(|e| error_exit(&format!("failed to initialize native: {}", e)))
+        .unwrap();
+    let triple = TargetMachine::get_default_triple();
+    let target = Target::from_triple(&triple)
+        .map_err(|e| {
+            error_exit(&format!("failed to create target: {}", e));
+        })
+        .unwrap();
+    let cpu_name = TargetMachine::get_host_cpu_name();
+    let target_machine = target.create_target_machine(
+        &triple,
+        cpu_name.to_str().unwrap(),
+        TargetMachine::get_host_cpu_features().to_str().unwrap(),
+        opt_level,
+        RelocMode::Default,
+        CodeModel::Default,
+    );
+    match target_machine {
+        Some(tm) => tm,
+        None => error_exit("failed to creeate target machine"),
+    }
+}
+
+pub fn build_file(path: &Path, opt_level: OptimizationLevel) {
+    let mut out_path = PathBuf::from(path);
+    out_path.set_extension("o");
+
+    let fix_mod = parse_source(&read_file(path));
+    let ctx = Context::create();
+    let module = &build_module(&ctx, fix_mod);
+
+    let tm = get_target_machine(opt_level);
+    tm.write_to_file(module, inkwell::targets::FileType::Object, &out_path)
+        .map_err(|e| error_exit(&format!("failed to write to file: {}", e)))
+        .unwrap();
 }

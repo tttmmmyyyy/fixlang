@@ -58,17 +58,23 @@ const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We s
 
 fn main() {
     let source_file = Arg::new("source-file").required(true);
-    let run_subcom = App::new("run").arg(source_file);
+    let run_subc = App::new("run").arg(source_file.clone());
+    let build_subc = App::new("build").arg(source_file.clone());
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
-        .subcommand(run_subcom);
+        .subcommand(run_subc)
+        .subcommand(build_subc);
 
     match app.get_matches().subcommand() {
         Some(("run", m)) => {
             let path = m.value_of("source-file").unwrap();
             let res = run_file(Path::new(path), OptimizationLevel::Aggressive);
             println!("{}", res);
+        }
+        Some(("build", m)) => {
+            let path = m.value_of("source-file").unwrap();
+            build_file(Path::new(path), OptimizationLevel::Aggressive);
         }
         _ => eprintln!("Unknown command!"),
     }
