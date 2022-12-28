@@ -328,7 +328,7 @@ impl Substitution {
 
 // Context under type-checking.
 // Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct TypeCheckContext {
     // The identifier of type variables.
     tyvar_id: u32,

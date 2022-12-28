@@ -94,7 +94,7 @@ fn run_module(mut fix_mod: FixModule, opt_level: OptimizationLevel) -> i64 {
     // Create GenerationContext.
     let context = Context::create();
     let module = context.create_module(&fix_mod.name);
-    let mut gc = GenerationContext::new(&context, &module);
+    let mut gc = GenerationContext::new(&context, &module, TypeCheckContext::default());
 
     // If use leaky allocator, prepare heap counter.
     if USE_LEAKY_ALLOCATOR {

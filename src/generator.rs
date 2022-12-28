@@ -104,6 +104,7 @@ pub struct GenerationContext<'c, 'm> {
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
     global: HashMap<NameSpacedName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
+    typechecker: TypeCheckContext,
 }
 
 pub struct PopBuilderGuard<'c> {
@@ -167,7 +168,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Create new gc.
-    pub fn new(ctx: &'c Context, module: &'m Module<'c>) -> Self {
+    pub fn new(ctx: &'c Context, module: &'m Module<'c>, tc: TypeCheckContext) -> Self {
         let ret = Self {
             context: ctx,
             module,
@@ -175,6 +176,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             scope: Rc::new(RefCell::new(vec![Default::default()])),
             global: Default::default(),
             runtimes: Default::default(),
+            typechecker: tc,
         };
         ret
     }
