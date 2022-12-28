@@ -24,7 +24,11 @@ fn execute_main_module<'c>(
     }
 }
 
-fn build_module<'c>(context: &'c Context, mut fix_mod: FixModule) -> Module<'c> {
+fn build_module<'c>(
+    context: &'c Context,
+    mut fix_mod: FixModule,
+    result_as_main_return: bool,
+) -> Module<'c> {
     // Add built-in traits and types.
     fix_mod.add_builtin_traits_types();
 
@@ -151,9 +155,20 @@ fn build_module<'c>(context: &'c Context, mut fix_mod: FixModule) -> Module<'c> 
         gc.call_runtime(RuntimeFunctions::CheckLeak, &[]);
     }
 
-    // Build return
+    // Print result if print_result and build return
     if let BasicValueEnum::IntValue(result) = result {
-        gc.builder().build_return(Some(&result));
+        if result_as_main_return {
+            gc.builder().build_return(Some(&result));
+        } else {
+            let string_ptr = gc.builder().build_global_string_ptr("%d\n", "rust_str");
+            gc.call_runtime(
+                RuntimeFunctions::Printf,
+                &[string_ptr.as_pointer_value().into(), result.into()],
+            );
+            gc.builder().build_return(Some(
+                &gc.context.i64_type().const_zero().as_basic_value_enum(),
+            ));
+        }
     } else {
         panic!("Given program doesn't return int value!");
     }
@@ -171,10 +186,10 @@ fn build_module<'c>(context: &'c Context, mut fix_mod: FixModule) -> Module<'c> 
     module
 }
 
-pub fn run_source(source: &str, opt_level: OptimizationLevel) -> i64 {
+pub fn run_source(source: &str, opt_level: OptimizationLevel, result_as_main_return: bool) -> i64 {
     let fix_mod = parse_source(source);
     let ctx = Context::create();
-    let module = build_module(&ctx, fix_mod);
+    let module = build_module(&ctx, fix_mod, result_as_main_return);
     execute_main_module(&module.get_context(), &module, opt_level)
 }
 
@@ -195,8 +210,8 @@ pub fn read_file(path: &Path) -> String {
     s
 }
 
-pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i64 {
-    run_source(read_file(path).as_str(), opt_level)
+pub fn run_file(path: &Path, opt_level: OptimizationLevel, result_as_main_return: bool) -> i64 {
+    run_source(read_file(path).as_str(), opt_level, result_as_main_return)
 }
 
 fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
@@ -224,13 +239,13 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
     }
 }
 
-pub fn build_file(path: &Path, opt_level: OptimizationLevel) {
+pub fn build_file(path: &Path, opt_level: OptimizationLevel, result_as_main_return: bool) {
     let mut out_path = PathBuf::from(path);
     out_path.set_extension("o");
 
     let fix_mod = parse_source(&read_file(path));
     let ctx = Context::create();
-    let module = &build_module(&ctx, fix_mod);
+    let module = &build_module(&ctx, fix_mod, result_as_main_return);
 
     let tm = get_target_machine(opt_level);
     tm.write_to_file(module, inkwell::targets::FileType::Object, &out_path)
