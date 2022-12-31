@@ -10,13 +10,13 @@ mod ast;
 mod builtin;
 mod generator;
 mod misc;
+mod object;
 mod parser;
 mod runner;
 mod runtime;
 #[cfg(test)]
 mod tests;
 mod typecheck;
-mod types;
 
 use ast::expr::*;
 use ast::module::*;
@@ -36,6 +36,7 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 use misc::*;
+use object::*;
 use parser::*;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
@@ -48,7 +49,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::vec::Vec;
 use typecheck::*;
-use types::*;
 
 const SANITIZE_MEMORY: bool = false;
 const USE_LEAKY_ALLOCATOR: bool = false;

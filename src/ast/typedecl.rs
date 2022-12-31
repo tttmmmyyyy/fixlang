@@ -15,7 +15,11 @@ impl TypeDecl {
     }
 
     pub fn tycon(&self) -> TyCon {
-        TyCon::new(self.name.clone())
+        let (variant, is_unbox) = match self.value {
+            TypeDeclValue::Struct(s) => (TyConVariant::Struct, s.is_unbox),
+            TypeDeclValue::Union(u) => (TyConVariant::Union, u.is_unbox),
+        };
+        TyCon::new(self.name.clone(), variant, is_unbox)
     }
 
     pub fn kind(&self) -> Arc<Kind> {
@@ -79,6 +83,7 @@ impl TypeDeclValue {
 #[derive(Clone)]
 pub struct Struct {
     pub fields: Vec<Field>,
+    pub is_unbox: bool,
 }
 
 impl Struct {
@@ -92,6 +97,7 @@ impl Struct {
 #[derive(Clone)]
 pub struct Union {
     pub fields: Vec<Field>,
+    pub is_unbox: bool,
 }
 
 impl Union {

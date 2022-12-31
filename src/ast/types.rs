@@ -1,4 +1,5 @@
 use core::panic;
+use std::fmt::format;
 
 use super::*;
 
@@ -41,14 +42,28 @@ impl Kind {
     }
 }
 
+#[derive(Eq, PartialEq, Clone, Hash)]
+pub enum TyConVariant {
+    Primitive,
+    Array,
+    Struct,
+    Union,
+}
+
 #[derive(Clone, PartialEq, Hash, Eq)]
 pub struct TyCon {
     pub name: NameSpacedName,
+    pub variant: TyConVariant,
+    pub is_unbox: bool,
 }
 
 impl TyCon {
-    pub fn new(nsn: NameSpacedName) -> TyCon {
-        TyCon { name: nsn }
+    pub fn new(nsn: NameSpacedName, variant: TyConVariant, is_unbox: bool) -> TyCon {
+        TyCon {
+            name: nsn,
+            variant,
+            is_unbox,
+        }
     }
 
     pub fn to_string(&self) -> String {
@@ -152,6 +167,22 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    pub fn get_funty_src(&self) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::FunTy(src, _dst) => src.clone(),
+            _ => panic!(),
+        }
+    }
+
+    pub fn get_funty_dst(&self) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::FunTy(_src, dst) => dst.clone(),
+            _ => panic!(),
+        }
+    }
+
     pub fn set_tycon_tc(&self, tc: Arc<TyCon>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -177,18 +208,47 @@ impl TypeNode {
                 .set_funty_dst(dst.resolve_namespace(ctx)),
         }
     }
-}
 
-impl Clone for TypeNode {
-    fn clone(&self) -> Self {
-        TypeNode {
-            ty: self.ty.clone(),
-            info: self.info.clone(),
+    // For a type `tc a b c ...`, calculate [a, b, c, ...]
+    pub fn collect_type_arguemnts(&self) -> Vec<Arc<TypeNode>> {
+        let mut ret: Vec<Arc<TypeNode>> = vec![];
+        match self.ty {
+            Type::TyApp(fun, arg) => {
+                ret.append(&mut fun.collect_type_arguemnts());
+                ret.push(arg);
+            }
+            _ => unreachable!(),
+        }
+        ret
+    }
+
+    // Get top-level type constructor.
+    // Returns None if this is function type.
+    pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
+        match self.ty {
+            Type::TyVar(_) => panic!(),
+            Type::TyCon(tc) => Some(tc.clone()),
+            Type::TyApp(fun, _) => fun.toplevel_tycon(),
+            Type::FunTy(_, _) => None,
         }
     }
-}
 
-impl TypeNode {
+    pub fn is_function(&self) -> bool {
+        match self.ty {
+            Type::FunTy(_, _) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_unbox(&self) -> bool {
+        // If we want to add unboxed function, we need to add a new `function pointer` type.
+        !self.is_function() && self.toplevel_tycon().unwrap().is_unbox
+    }
+
+    pub fn is_box(&self) -> bool {
+        !self.is_unbox()
+    }
+
     // Create new type node with default info.
     fn new(ty: Type) -> Self {
         Self {
@@ -247,6 +307,35 @@ impl TypeNode {
             }
         }
     }
+
+    pub fn get_object_type(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> ObjectType {
+        get_object_type(self, capture)
+    }
+
+    pub fn get_struct_type<'c>(
+        self: &Arc<TypeNode>,
+        ctx: &'c Context,
+        capture: &Vec<Arc<TypeNode>>,
+    ) -> StructType<'c> {
+        self.get_object_type(capture).to_struct_type(ctx)
+    }
+
+    pub fn get_embedded_type<'c>(
+        self: &Arc<TypeNode>,
+        ctx: &'c Context,
+        capture: &Vec<Arc<TypeNode>>,
+    ) -> BasicTypeEnum<'c> {
+        self.get_object_type(capture).to_embedded_type(ctx)
+    }
+}
+
+impl Clone for TypeNode {
+    fn clone(&self) -> Self {
+        TypeNode {
+            ty: self.ty.clone(),
+            info: self.info.clone(),
+        }
+    }
 }
 
 // Variant of type
@@ -279,6 +368,22 @@ impl TypeNode {
     pub fn to_string_normalize(&self) -> String {
         let mut id: u32 = 0;
         self.to_string_inner(&mut Some(&mut id))
+    }
+
+    // Get hash value.
+    pub fn hash(&self) -> String {
+        let type_string = self.to_string_normalize();
+        format!("{:x}", md5::compute(type_string))
+    }
+
+    // Get dtor name.
+    pub fn dtor_name(&self, capture: &Vec<Arc<TypeNode>>) -> String {
+        let mut str = "".to_string();
+        str += &self.to_string_normalize();
+        for ty in capture {
+            str += &ty.to_string_normalize();
+        }
+        "dtor_".to_string() + &format!("{:x}", md5::compute(str))
     }
 
     // Stringify.

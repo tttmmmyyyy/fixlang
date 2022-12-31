@@ -93,7 +93,7 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
         let f = gc.get_var(&f_str).ptr.get(gc);
         let f_fixf = gc.apply_lambda(f, fixf);
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
-        f_fixf_x
+        f_fixf_x.ptr
     });
     expr_lit(generator, free_vars, name, type_tyvar_star(b), None)
 }
@@ -228,6 +228,7 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Implementation of readArray built-in function.
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
+    let elem_ty = type_tyvar_star(a);
     let array_str = NameSpacedName::local(array);
     let idx_str = NameSpacedName::local(idx);
     let name = format!("Array.get {} {}", idx, array);
@@ -235,21 +236,21 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
-        let array = gc.get_var(&array_str).ptr.get(gc);
-        let array = gc.cast_pointer(array, array_ptr_ty);
+        let mut array = gc.get_var(&array_str).ptr.get(gc);
+        array.ptr = gc.cast_pointer(array.ptr, array_ptr_ty);
         let array_field = gc
             .builder()
-            .build_struct_gep(array, 1, "array_field")
+            .build_struct_gep(array.ptr, 1, "array_field")
             .unwrap();
         let idx = gc
             .get_var_field(&idx_str, 1, int_type(gc.context))
             .into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let elem = ObjectFieldType::read_array(gc, array_field, idx);
+        let elem = ObjectFieldType::read_array(gc, array_field, idx, elem_ty);
         gc.release(array);
-        elem
+        elem.ptr
     });
-    expr_lit(generator, free_vars, name, type_tyvar_star(a), None)
+    expr_lit(generator, free_vars, name, elem_ty, None)
 }
 
 // "readArray" built-in function.
@@ -287,6 +288,7 @@ fn write_array_lit(
     value: &str,
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
+    let elem_ty = type_tyvar_star(a);
     let array_str = NameSpacedName::local(array);
     let idx_str = NameSpacedName::local(idx);
     let value_str = NameSpacedName::local(value);
@@ -304,7 +306,7 @@ fn write_array_lit(
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
 
         // Get argments
-        let array = gc.get_var(&array_str).ptr.get(gc);
+        let mut array = gc.get_var(&array_str).ptr.get(gc);
         let idx = gc
             .get_var_field(&idx_str, 1, int_type(gc.context))
             .into_int_value();
@@ -313,12 +315,12 @@ fn write_array_lit(
 
         // Get array field.
         let array_str_ty = ObjectType::array_type().to_struct_type(gc.context);
-        let array = gc.cast_pointer(array, ptr_type(array_str_ty));
-        let array_field = gc.builder().build_struct_gep(array, 1, "").unwrap();
+        array.ptr = gc.cast_pointer(array.ptr, ptr_type(array_str_ty));
+        let array_field = gc.builder().build_struct_gep(array.ptr, 1, "").unwrap();
 
         // Get refcnt.
         let refcnt = gc
-            .load_obj_field(array, control_block_type(gc.context), 0)
+            .load_obj_field(array.ptr, control_block_type(gc.context), 0)
             .into_int_value();
 
         // Add shared / cont bbs.
@@ -344,7 +346,7 @@ fn write_array_lit(
         let cloned_array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
         let cloned_array = gc.cast_pointer(cloned_array, ptr_type(array_str_ty));
         let cloned_array_field = gc.builder().build_struct_gep(cloned_array, 1, "").unwrap();
-        ObjectFieldType::clone_array(gc, array_field, cloned_array_field);
+        ObjectFieldType::clone_array(gc, array_field, cloned_array_field, elem_ty);
         gc.release(array); // Given array should be released here.
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
@@ -353,9 +355,9 @@ fn write_array_lit(
         gc.builder().position_at_end(cont_bb);
 
         // Build phi value of array and array_field.
-        let array_phi = gc.builder().build_phi(array.get_type(), "array_phi");
-        assert_eq!(array.get_type(), cloned_array.get_type());
-        array_phi.add_incoming(&[(&array, current_bb), (&cloned_array, succ_of_shared_bb)]);
+        let array_phi = gc.builder().build_phi(array.ptr.get_type(), "array_phi");
+        assert_eq!(array.ptr.get_type(), cloned_array.get_type());
+        array_phi.add_incoming(&[(&array.ptr, current_bb), (&cloned_array, succ_of_shared_bb)]);
         let array = array_phi.as_basic_value().into_pointer_value();
         let array_field_phi = gc
             .builder()
@@ -368,14 +370,14 @@ fn write_array_lit(
         let array_field = array_field_phi.as_basic_value().into_pointer_value();
 
         // Perform write and return.
-        ObjectFieldType::write_array(gc, array_field, idx, value);
+        ObjectFieldType::write_array(gc, array_field, idx, value.ptr, elem_ty);
         array
     });
     expr_lit(
         generator,
         free_vars,
         name,
-        type_tyapp(array_lit_ty(), type_tyvar_star(a)),
+        type_tyapp(array_lit_ty(), elem_ty),
         None,
     )
 }
@@ -425,11 +427,11 @@ pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         let arr_name = NameSpacedName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
-        let array_obj = gc.get_var(&arr_name).ptr.get(gc);
-        let array_obj = gc.cast_pointer(array_obj, array_obj_ty);
+        let mut array_obj = gc.get_var(&arr_name).ptr.get(gc);
+        array_obj.ptr = gc.cast_pointer(array_obj.ptr, array_obj_ty);
         let size_buf_ptr = gc
             .builder()
-            .build_struct_gep(array_obj, 1, "size_buf_ptr")
+            .build_struct_gep(array_obj.ptr, 1, "size_buf_ptr")
             .unwrap();
         gc.release(array_obj);
         let array_str = ObjectFieldType::Array
@@ -479,7 +481,7 @@ pub fn struct_new_lit(
         // Get field values.
         let field_ptrs: Vec<PointerValue> = field_names
             .iter()
-            .map(|name| gc.get_var(&NameSpacedName::local(name)).ptr.get(gc))
+            .map(|name| gc.get_var(&NameSpacedName::local(name)).ptr.get(gc).ptr)
             .collect();
 
         // Create struct object.
@@ -537,11 +539,15 @@ pub fn struct_get_lit(
 
         // Extract field.
         let str_ty = ObjectType::struct_type(field_count).to_struct_type(gc.context);
-        let field_ptr = gc.load_obj_field(str_ptr, str_ty, field_idx as u32 + 1);
+        let field_ptr = gc.load_obj_field(str_ptr.ptr, str_ty, field_idx as u32 + 1);
         let field_ptr = field_ptr.into_pointer_value();
+        let field_obj = Object {
+            ptr: field_ptr,
+            ty: field_ty,
+        };
 
         // Retain field and release struct.
-        gc.retain(field_ptr);
+        gc.retain(field_obj);
         gc.release(str_ptr);
 
         field_ptr
@@ -600,6 +606,7 @@ pub fn struct_mod_lit(
     struct_name: &NameSpacedName,
     struct_defn: &TypeDecl,
     field_name: &str,
+    field_ty: Arc<TypeNode>,
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
     let name = format!(
@@ -621,12 +628,12 @@ pub fn struct_mod_lit(
 
         // Get arguments
         let modfier = gc.get_var(&f_name).ptr.get(gc);
-        let str = gc.get_var(&x_name).ptr.get(gc);
-        let str = gc.cast_pointer(str, ptr_type(str_ty));
+        let mut str = gc.get_var(&x_name).ptr.get(gc);
+        str.ptr = gc.cast_pointer(str.ptr, ptr_type(str_ty));
 
         // If str is not unique, then first clone it.
         let refcnt = gc
-            .load_obj_field(str, control_block_type(gc.context), 0)
+            .load_obj_field(str.ptr, control_block_type(gc.context), 0)
             .into_int_value();
 
         // Add shared / cont bbs.
@@ -654,10 +661,14 @@ pub fn struct_mod_lit(
         for i in 0..field_count {
             let field_idx = 1 as u32 + i as u32;
             let field = gc
-                .load_obj_field(str, str_ty, field_idx)
+                .load_obj_field(str.ptr, str_ty, field_idx)
                 .into_pointer_value();
+            let field = Object {
+                ptr: field,
+                ty: field_ty,
+            };
             gc.retain(field);
-            gc.store_obj_field(cloned_str, str_ty, field_idx, field);
+            gc.store_obj_field(cloned_str, str_ty, field_idx, field.ptr);
         }
         gc.release(str); // Given struct should be released here.
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
@@ -667,17 +678,21 @@ pub fn struct_mod_lit(
         gc.builder().position_at_end(cont_bb);
 
         // Build phi value
-        let str_phi = gc.builder().build_phi(str.get_type(), "str_phi");
-        assert_eq!(str.get_type(), cloned_str.get_type());
-        str_phi.add_incoming(&[(&str, current_bb), (&cloned_str, succ_of_shared_bb)]);
+        let str_phi = gc.builder().build_phi(str.ptr.get_type(), "str_phi");
+        assert_eq!(str.ptr.get_type(), cloned_str.get_type());
+        str_phi.add_incoming(&[(&str.ptr, current_bb), (&cloned_str, succ_of_shared_bb)]);
         let str = str_phi.as_basic_value().into_pointer_value();
 
         // Modify field
         let field = gc
             .load_obj_field(str, str_ty, 1 + field_idx as u32)
             .into_pointer_value();
+        let field = Object {
+            ptr: field,
+            ty: field_ty,
+        };
         let field = gc.apply_lambda(modfier, field);
-        gc.store_obj_field(str, str_ty, 1 + field_idx as u32, field);
+        gc.store_obj_field(str, str_ty, 1 + field_idx as u32, field.ptr);
 
         str
     });
@@ -708,6 +723,7 @@ pub fn struct_mod(
 
     let field_count = definition.fields().len();
     let str_ty = definition.ty();
+    let field_ty = field.ty;
     let expr = expr_abs(
         var_local("f", None),
         expr_abs(
@@ -720,6 +736,7 @@ pub fn struct_mod(
                 struct_name,
                 definition,
                 field_name,
+                field_ty,
                 is_unique_version,
             ),
             None,
@@ -780,7 +797,7 @@ pub fn union_new_lit(
     let field_name_cloned = field_name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Get field values.
-        let field_ptr: PointerValue = gc
+        let field_ptr = gc
             .get_var(&NameSpacedName::local(&field_name_cloned))
             .ptr
             .get(gc);
@@ -797,7 +814,7 @@ pub fn union_new_lit(
         gc.store_obj_field(union_ptr, struct_ty, 1, tag_value.as_basic_value_enum());
 
         // Set value.
-        gc.store_obj_field(union_ptr, struct_ty, 2, field_ptr.as_basic_value_enum());
+        gc.store_obj_field(union_ptr, struct_ty, 2, field_ptr.ptr.as_basic_value_enum());
 
         union_ptr
     });
@@ -857,7 +874,7 @@ pub fn union_as_lit(
     let union_arg_name = union_arg_name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Get union object.
-        let union_ptr: PointerValue = gc
+        let union_ptr = gc
             .get_var(&NameSpacedName::local(&union_arg_name))
             .ptr
             .get(gc);
@@ -868,7 +885,9 @@ pub fn union_as_lit(
         // Get tag value.
         let union_ty = ObjectType::union_type();
         let struct_ty = union_ty.to_struct_type(gc.context);
-        let tag_value = gc.load_obj_field(union_ptr, struct_ty, 1).into_int_value();
+        let tag_value = gc
+            .load_obj_field(union_ptr.ptr, struct_ty, 1)
+            .into_int_value();
 
         // If tag unmatch, panic.
         let is_tag_unmatch = gc.builder().build_int_compare(
@@ -890,12 +909,16 @@ pub fn union_as_lit(
         // When match, return the value.
         gc.builder().position_at_end(match_bb);
         let field_value = gc
-            .load_obj_field(union_ptr, struct_ty, 2)
+            .load_obj_field(union_ptr.ptr, struct_ty, 2)
             .into_pointer_value();
+        let field_value = Object {
+            ptr: field_value,
+            ty: field_ty,
+        };
         gc.retain(field_value);
         gc.release(union_ptr);
 
-        field_value
+        field_value.ptr
     });
     expr_lit(generator, free_vars, name, field_ty, None)
 }
@@ -946,7 +969,7 @@ pub fn union_is_lit(
     let union_arg_name = union_arg_name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
         // Get union object.
-        let union_ptr: PointerValue = gc
+        let union_ptr = gc
             .get_var(&NameSpacedName::local(&union_arg_name))
             .ptr
             .get(gc);
@@ -957,7 +980,9 @@ pub fn union_is_lit(
         // Get tag value.
         let union_ty = ObjectType::union_type();
         let struct_ty = union_ty.to_struct_type(gc.context);
-        let tag_value = gc.load_obj_field(union_ptr, struct_ty, 1).into_int_value();
+        let tag_value = gc
+            .load_obj_field(union_ptr.ptr, struct_ty, 1)
+            .into_int_value();
 
         // Create returned value.
         let ret_ptr = ObjectType::bool_obj_type().create_obj(gc, Some(&name_cloned));
@@ -1011,6 +1036,7 @@ pub fn loop_result_defn() -> TypeDecl {
                     ty: type_tyvar("b", &kind_star()),
                 },
             ],
+            is_unbox: true,
         }),
     }
 }
@@ -1022,98 +1048,6 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     const B_NAME: &str = "b";
     const INITIAL_STATE_NAME: &str = "initial_state";
     const LOOP_BODY_NAME: &str = "loop_body";
-
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
-        let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
-
-        // Get argments.
-        let init_state = gc.get_var(&initial_state_name).ptr.get(gc);
-        let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
-
-        // Allocate a variable to store loop state on stack.
-        let state_ptr = gc
-            .builder()
-            .build_alloca(ptr_to_object_type(gc.context), "loop_state");
-
-        // Initialize state.
-        gc.builder().build_store(state_ptr, init_state);
-
-        // Create loop body bb and implement it.
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let loop_bb = gc.context.append_basic_block(current_func, "loop_bb");
-        gc.builder().build_unconditional_branch(loop_bb);
-
-        // Implement loop body.
-        gc.builder().position_at_end(loop_bb);
-        let loop_state = gc
-            .builder()
-            .build_load(state_ptr, "loop_state")
-            .into_pointer_value();
-
-        // Run loop_body on init_state.
-        gc.retain(loop_body);
-        let loop_res = gc.apply_lambda(loop_body, loop_state);
-
-        // Branch due to loop_res.
-        let loop_result_ty = ObjectType::union_type().to_struct_type(gc.context);
-        let tag_value = gc
-            .load_obj_field(loop_res, loop_result_ty, 1)
-            .into_int_value();
-        let cont_tag_value = gc
-            .context
-            .i64_type()
-            .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
-        let is_continue = gc.builder().build_int_compare(
-            IntPredicate::EQ,
-            tag_value,
-            cont_tag_value,
-            "is_continue",
-        );
-        let continue_bb = gc.context.append_basic_block(current_func, "continue_bb");
-        let break_bb = gc.context.append_basic_block(current_func, "break_bb");
-        gc.builder()
-            .build_conditional_branch(is_continue, continue_bb, break_bb);
-
-        // Implement continue.
-        gc.builder().position_at_end(continue_bb);
-        let next_state = gc
-            .load_obj_field(loop_res, loop_result_ty, 2)
-            .into_pointer_value();
-        gc.retain(next_state);
-        gc.release(loop_res);
-        gc.builder().build_store(state_ptr, next_state);
-        gc.builder().build_unconditional_branch(loop_bb);
-
-        // Implement break.
-        gc.builder().position_at_end(break_bb);
-        gc.release(loop_body);
-        let result = gc
-            .load_obj_field(loop_res, loop_result_ty, 2)
-            .into_pointer_value();
-        gc.retain(result);
-        gc.release(loop_res);
-        result
-    });
-
-    let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
-    let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
-    let expr = expr_abs(
-        var_var(initial_state_name.clone(), None),
-        expr_abs(
-            var_var(loop_body_name.clone(), None),
-            expr_lit(
-                generator,
-                vec![initial_state_name, loop_body_name],
-                format!("loop {} {}", INITIAL_STATE_NAME, LOOP_BODY_NAME),
-                type_tyvar_star(B_NAME),
-                None,
-            ),
-            None,
-        ),
-        None,
-    );
     let tyvar_s = type_tyvar(S_NAME, &kind_star());
     let tyvar_b = type_tyvar(B_NAME, &kind_star());
     let scm = Scheme::generalize(
@@ -1133,6 +1067,110 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
             ),
         ),
     );
+
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+        let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
+        let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
+
+        // Get argments.
+        let init_state = gc.get_var(&initial_state_name).ptr.get(gc);
+        let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
+
+        // Allocate a variable to store loop state on stack.
+        let state_ptr = gc
+            .builder()
+            .build_alloca(ptr_to_object_type(gc.context), "loop_state");
+
+        // Initialize state.
+        gc.builder().build_store(state_ptr, init_state.ptr);
+
+        // Create loop body bb and implement it.
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let loop_bb = gc.context.append_basic_block(current_func, "loop_bb");
+        gc.builder().build_unconditional_branch(loop_bb);
+
+        // Implement loop body.
+        gc.builder().position_at_end(loop_bb);
+        let loop_state = gc
+            .builder()
+            .build_load(state_ptr, "loop_state")
+            .into_pointer_value();
+        let loop_state = Object {
+            ptr: loop_state,
+            ty: tyvar_s,
+        };
+
+        // Run loop_body on init_state.
+        gc.retain(loop_body);
+        let loop_res = gc.apply_lambda(loop_body, loop_state);
+
+        // Branch due to loop_res.
+        let loop_result_ty = ObjectType::union_type().to_struct_type(gc.context);
+        let tag_value = gc
+            .load_obj_field(loop_res.ptr, loop_result_ty, 1)
+            .into_int_value();
+        let cont_tag_value = gc
+            .context
+            .i64_type()
+            .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
+        let is_continue = gc.builder().build_int_compare(
+            IntPredicate::EQ,
+            tag_value,
+            cont_tag_value,
+            "is_continue",
+        );
+        let continue_bb = gc.context.append_basic_block(current_func, "continue_bb");
+        let break_bb = gc.context.append_basic_block(current_func, "break_bb");
+        gc.builder()
+            .build_conditional_branch(is_continue, continue_bb, break_bb);
+
+        // Implement continue.
+        gc.builder().position_at_end(continue_bb);
+        let next_state = gc
+            .load_obj_field(loop_res.ptr, loop_result_ty, 2)
+            .into_pointer_value();
+        let next_state = Object {
+            ptr: next_state,
+            ty: tyvar_s,
+        };
+        gc.retain(next_state);
+        gc.release(loop_res);
+        gc.builder().build_store(state_ptr, next_state.ptr);
+        gc.builder().build_unconditional_branch(loop_bb);
+
+        // Implement break.
+        gc.builder().position_at_end(break_bb);
+        gc.release(loop_body);
+        let result = gc
+            .load_obj_field(loop_res.ptr, loop_result_ty, 2)
+            .into_pointer_value();
+        let result = Object {
+            ptr: result,
+            ty: tyvar_b,
+        };
+        gc.retain(result);
+        gc.release(loop_res);
+        result.ptr
+    });
+
+    let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
+    let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
+    let expr = expr_abs(
+        var_var(initial_state_name.clone(), None),
+        expr_abs(
+            var_var(loop_body_name.clone(), None),
+            expr_lit(
+                generator,
+                vec![initial_state_name, loop_body_name],
+                format!("loop {} {}", INITIAL_STATE_NAME, LOOP_BODY_NAME),
+                type_tyvar_star(B_NAME),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
     (expr, scm)
 }
 
@@ -1150,6 +1188,7 @@ pub fn tuple_defn(size: u32) -> TypeDecl {
                     ty: type_tyvar_star(&tyvars[i as usize]),
                 })
                 .collect(),
+            is_unbox: true,
         }),
     }
 }

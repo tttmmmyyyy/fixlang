@@ -1,12 +1,16 @@
 use std::path::PathBuf;
 
-use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
+use either::Either;
+use inkwell::{
+    execution_engine::ExecutionEngine,
+    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetData, TargetMachine},
+};
 
 use super::*;
 
 fn execute_main_module<'c>(
-    _context: &'c Context,
     module: &Module<'c>,
+    ee: &ExecutionEngine<'c>,
     opt_level: OptimizationLevel,
 ) -> i64 {
     if SANITIZE_MEMORY {
@@ -15,9 +19,8 @@ fn execute_main_module<'c>(
             false
         );
     }
-    let execution_engine = module.create_jit_execution_engine(opt_level).unwrap();
     unsafe {
-        let func = execution_engine
+        let func = ee
             .get_function::<unsafe extern "C" fn() -> i64>("main")
             .unwrap();
         func.call()
@@ -26,9 +29,11 @@ fn execute_main_module<'c>(
 
 fn build_module<'c>(
     context: &'c Context,
+    module: &Module<'c>,
+    target: Either<TargetMachine, ExecutionEngine<'c>>,
     mut fix_mod: FixModule,
     result_as_main_return: bool,
-) -> Module<'c> {
+) -> Either<TargetMachine, ExecutionEngine<'c>> {
     // Add built-in traits and types.
     fix_mod.add_builtin_traits_types();
 
@@ -100,8 +105,7 @@ fn build_module<'c>(
     }
 
     // Create GenerationContext.
-    let module = context.create_module(&fix_mod.name);
-    let mut gc = GenerationContext::new(&context, &module, TypeCheckContext::default());
+    let mut gc = GenerationContext::new(&context, &module, target, TypeCheckContext::default());
 
     // If use leaky allocator, prepare heap counter.
     if USE_LEAKY_ALLOCATOR {
@@ -148,7 +152,7 @@ fn build_module<'c>(
 
     // Evaluate program and extract int value from result.
     let program_result = gc.eval_expr(main_expr);
-    let result = gc.load_obj_field(program_result, int_type(&context), 1);
+    let result = gc.load_obj_field(program_result.ptr, int_type(&context), 1);
 
     // Perform leak check
     if SANITIZE_MEMORY {
@@ -183,14 +187,23 @@ fn build_module<'c>(
         panic!("LLVM verify failed!");
     }
 
-    module
+    gc.target
 }
 
 pub fn run_source(source: &str, opt_level: OptimizationLevel, result_as_main_return: bool) -> i64 {
     let fix_mod = parse_source(source);
     let ctx = Context::create();
-    let module = build_module(&ctx, fix_mod, result_as_main_return);
-    execute_main_module(&module.get_context(), &module, opt_level)
+    let module = ctx.create_module(&fix_mod.name);
+    let ee = module.create_jit_execution_engine(opt_level).unwrap();
+    let ee = build_module(
+        &ctx,
+        &module,
+        Either::Right(ee),
+        fix_mod,
+        result_as_main_return,
+    )
+    .unwrap_right();
+    execute_main_module(&module, &ee, opt_level)
 }
 
 pub fn read_file(path: &Path) -> String {
@@ -242,13 +255,19 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
 pub fn build_file(path: &Path, opt_level: OptimizationLevel, result_as_main_return: bool) {
     let mut out_path = PathBuf::from(path);
     out_path.set_extension("o");
-
+    let tm = get_target_machine(opt_level);
     let fix_mod = parse_source(&read_file(path));
     let ctx = Context::create();
-    let module = &build_module(&ctx, fix_mod, result_as_main_return);
-
-    let tm = get_target_machine(opt_level);
-    tm.write_to_file(module, inkwell::targets::FileType::Object, &out_path)
+    let module = ctx.create_module(&fix_mod.name);
+    let tm = build_module(
+        &ctx,
+        &module,
+        Either::Left(tm),
+        fix_mod,
+        result_as_main_return,
+    )
+    .unwrap_left();
+    tm.write_to_file(&module, inkwell::targets::FileType::Object, &out_path)
         .map_err(|e| error_exit(&format!("failed to write to file: {}", e)))
         .unwrap();
 }

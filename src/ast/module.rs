@@ -48,6 +48,7 @@ pub struct InstantiatedSymbol {
     template_name: NameSpacedName,
     ty: Arc<TypeNode>,
     expr: Option<Arc<ExprNode>>,
+    typechecker: Option<TypeCheckContext>,
 }
 
 pub struct GlobalSymbol {
@@ -305,7 +306,7 @@ impl FixModule {
                         .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
 
                 // Register the accessor function to gc.
-                gc.add_global_object(name.clone(), acc_fn);
+                gc.add_global_object(name.clone(), acc_fn, sym.ty);
 
                 // Return global variable and accessor.
                 (global_var, acc_fn, sym.clone())
@@ -329,10 +330,10 @@ impl FixModule {
             // If ptr is null, then create object and initialize the pointer.
             gc.builder().position_at_end(init_bb);
             let obj = gc.eval_expr(sym.expr.unwrap().clone());
-            gc.builder().build_store(global_var, obj);
+            gc.builder().build_store(global_var, obj.ptr);
             if SANITIZE_MEMORY {
                 // Mark this object as global.
-                let obj_id = gc.get_obj_id(obj);
+                let obj_id = gc.get_obj_id(obj.ptr);
                 gc.call_runtime(RuntimeFunctions::MarkGlobal, &[obj_id.into()]);
             }
             gc.builder().build_unconditional_branch(end_bb);
@@ -397,7 +398,7 @@ impl FixModule {
             .unwrap()
             .clone();
         let inst_name =
-            self.require_instantiated_symbol(&typecheck_log, &main_func_name, &int_lit_ty());
+            self.require_instantiated_symbol(typecheck_log, &main_func_name, &int_lit_ty());
         self.instantiate_symbols();
         expr_var(inst_name, None)
     }
@@ -410,7 +411,7 @@ impl FixModule {
                     expr.clone()
                 } else {
                     let ty = tc.substitute_type(&expr.inferred_ty.as_ref().unwrap());
-                    let instance = self.require_instantiated_symbol(tc, &v.name, &ty);
+                    let instance = self.require_instantiated_symbol(tc.clone(), &v.name, &ty);
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
                 }
@@ -446,14 +447,14 @@ impl FixModule {
     // Require instantiate generic symbol such that it has a specified type.
     fn require_instantiated_symbol(
         &mut self,
-        tc: &TypeCheckContext,
+        tc: TypeCheckContext,
         name: &NameSpacedName,
         ty: &Arc<TypeNode>,
     ) -> NameSpacedName {
         if !ty.free_vars().is_empty() {
             error_exit(&format!("cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", name.to_string(), ty.to_string()));
         }
-        let inst_name = self.determine_instantiated_symbol_name(tc, name, ty);
+        let inst_name = self.determine_instantiated_symbol_name(&tc, name, ty);
         if !self.instantiated_global_symbols.contains_key(&inst_name)
             && !self.deferred_instantiation.contains_key(&inst_name)
         {
@@ -463,6 +464,7 @@ impl FixModule {
                     template_name: name.clone(),
                     ty: ty.clone(),
                     expr: None,
+                    typechecker: Some(tc),
                 },
             );
         }
@@ -477,6 +479,8 @@ impl FixModule {
         name: &NameSpacedName,
         ty: &Arc<TypeNode>,
     ) -> NameSpacedName {
+        /*
+
         assert!(ty.free_vars().is_empty());
         let mut tc = tc.clone();
         let gs = self.global_symbols.get(name).unwrap();
@@ -501,8 +505,15 @@ impl FixModule {
 
         // Return the name.
         let inst_ty = sub.substitute_type(&generic_ty);
-        let type_string = inst_ty.to_string_normalize();
-        let hash = format!("{:x}", md5::compute(type_string));
+        let hash = inst_ty.hash();
+        let mut name = name.clone();
+        name.name += "@";
+        name.name += &hash;
+        name
+        */
+
+        assert!(ty.free_vars().is_empty());
+        let hash = ty.hash();
         let mut name = name.clone();
         name.name += "@";
         name.name += &hash;

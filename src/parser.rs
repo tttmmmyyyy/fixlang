@@ -381,7 +381,10 @@ fn parse_struct_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
     for pair in pairs {
         fields.push(parse_type_field(pair, src));
     }
-    TypeDeclValue::Struct(Struct { fields })
+    TypeDeclValue::Struct(Struct {
+        fields,
+        is_unbox: false,
+    })
 }
 
 fn parse_union_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
@@ -391,7 +394,10 @@ fn parse_union_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
     for pair in pairs {
         fields.push(parse_type_field(pair, src));
     }
-    TypeDeclValue::Union(Union { fields })
+    TypeDeclValue::Union(Union {
+        fields,
+        is_unbox: true,
+    })
 }
 
 fn parse_type_field(pair: Pair<Rule>, _src: &Arc<String>) -> Field {

@@ -9,9 +9,8 @@ pub enum RuntimeFunctions {
     ReportRelease,
     MarkGlobal,
     CheckLeak,
-    RetainObj,
-    ReleaseObj,
-    Dtor(ObjectType),
+    RetainBoxedObject,
+    ReleaseBoxedObject,
 }
 
 fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -81,7 +80,9 @@ fn build_check_leak_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> Func
     gc.module.add_function("check_leak", fn_ty, None)
 }
 
-fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_retain_boxed_function<'c, 'm, 'b>(
+    gc: &mut GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
     let void_type = context.void_type();
@@ -114,14 +115,23 @@ fn build_retain_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Func
     let refcnt = gc.builder().build_int_add(refcnt, one, "refcnt");
     gc.builder().build_store(ptr_to_refcnt, refcnt);
     gc.builder().build_return(None);
-    // gc.pop_builder();
     retain_func
     // TODO: Add fence instruction for incrementing refcnt
 }
 
-fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_release_boxed_function<'c, 'm, 'b>(
+    gc: &mut GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
     let void_type = gc.context.void_type();
-    let func_type = void_type.fn_type(&[ptr_to_object_type(gc.context).into()], false);
+    let func_type = void_type.fn_type(
+        &[
+            ptr_to_object_type(gc.context).into(),
+            ObjectFieldType::DtorFunction
+                .to_basic_type(gc.context)
+                .into(),
+        ],
+        false,
+    );
     let release_func = gc.module.add_function("release_obj", func_type, None);
     let bb = gc.context.append_basic_block(release_func, "entry");
 
@@ -162,9 +172,33 @@ fn build_release_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fun
     gc.builder()
         .build_conditional_branch(is_refcnt_zero, then_bb, cont_bb);
 
-    // If refcnt is zero, then call dtor and free object.
+    // If refcnt is zero, then try to call dtor and free object.
     gc.builder().position_at_end(then_bb);
-    gc.call_dtor(ptr_to_obj);
+    let ptr_to_dtor = release_func.get_nth_param(1).unwrap().into_pointer_value();
+
+    // If dtor is null, then skip calling dtor.
+    let free_bb = gc.context.append_basic_block(release_func, "free");
+    let call_dtor_bb = gc.context.append_basic_block(release_func, "call_dtor");
+    let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
+    let is_dtor_null = gc.builder().build_int_compare(
+        IntPredicate::EQ,
+        gc.builder()
+            .build_ptr_to_int(ptr_to_dtor, ptr_int_ty, "ptr_to_dtor"),
+        ptr_int_ty.const_zero(),
+        "is_dtor_null",
+    );
+    gc.builder()
+        .build_conditional_branch(is_dtor_null, free_bb, call_dtor_bb);
+
+    // Call dtor and jump to free_bb
+    gc.builder().position_at_end(call_dtor_bb);
+    let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
+    gc.builder()
+        .build_call(dtor_func, &[ptr_to_obj.into()], "call_dtor");
+    gc.builder().build_unconditional_branch(free_bb);
+
+    // free.
+    gc.builder().position_at_end(free_bb);
     gc.free(ptr_to_obj);
     gc.builder().build_unconditional_branch(cont_bb);
 
@@ -201,9 +235,10 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
         gc.runtimes
             .insert(RuntimeFunctions::CheckLeak, build_check_leak_function(gc));
     }
-    let retain_func = build_retain_function(gc);
-    gc.runtimes.insert(RuntimeFunctions::RetainObj, retain_func);
-    let release_func = build_release_function(gc);
+    let retain_func = build_retain_boxed_function(gc);
     gc.runtimes
-        .insert(RuntimeFunctions::ReleaseObj, release_func);
+        .insert(RuntimeFunctions::RetainBoxedObject, retain_func);
+    let release_func = build_release_boxed_function(gc);
+    gc.runtimes
+        .insert(RuntimeFunctions::ReleaseBoxedObject, release_func);
 }

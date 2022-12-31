@@ -46,4 +46,4 @@ count = \elem -> \arr -> (
 );
 
 main : Int;
-main = (is_prime 100).count true; // 25
+main = (is_prime 10000000).count true; // 25
