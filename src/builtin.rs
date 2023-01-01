@@ -329,7 +329,7 @@ fn write_array_lit(
 
         // Get refcnt.
         let refcnt = gc
-            .load_obj_field(array.ptr, control_block_type(gc.context), 0)
+            .load_obj_field(array.ptr(gc), control_block_type(gc.context), 0)
             .into_int_value();
 
         // Add shared / cont bbs.
@@ -364,11 +364,12 @@ fn write_array_lit(
         gc.builder().position_at_end(cont_bb);
 
         // Build phi value of array and array_field.
-        let array_phi = gc.builder().build_phi(array.ptr.get_type(), "array_phi");
-        assert_eq!(array.ptr.get_type(), cloned_array.ptr.get_type());
+        let array_phi = gc
+            .builder()
+            .build_phi(array.ptr(gc).get_type(), "array_phi");
         array_phi.add_incoming(&[
-            (&array.ptr, current_bb),
-            (&cloned_array.ptr, succ_of_shared_bb),
+            (&array.ptr(gc), current_bb),
+            (&cloned_array.ptr(gc), succ_of_shared_bb),
         ]);
         let array = Object::new(array_phi.as_basic_value().into_pointer_value(), ty.clone());
         let array_field_phi = gc
@@ -496,7 +497,7 @@ pub fn struct_new_lit(
             if is_unbox {
                 obj.store_field_nocap(gc, i as u32 + offset, field.load_nocap(gc));
             } else {
-                obj.store_field_nocap(gc, i as u32 + offset, field.ptr);
+                obj.store_field_nocap(gc, i as u32 + offset, field.ptr(gc));
             }
         }
 
@@ -623,7 +624,7 @@ pub fn struct_mod_lit(
 
             // Get refcnt.
             let refcnt = gc
-                .load_obj_field(str.ptr, control_block_type(gc.context), 0)
+                .load_obj_field(str.ptr(gc), control_block_type(gc.context), 0)
                 .into_int_value();
 
             // Add shared / cont bbs.
@@ -653,7 +654,7 @@ pub fn struct_mod_lit(
                 let field = str.load_field_nocap(gc, field_idx).into_pointer_value();
                 let field = Object::new(field, field_ty);
                 gc.retain(field.clone());
-                cloned_str.store_field_nocap(gc, field_idx, field.ptr);
+                cloned_str.store_field_nocap(gc, field_idx, field.ptr(gc));
             }
             gc.release(str.clone());
             let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
@@ -663,9 +664,11 @@ pub fn struct_mod_lit(
             gc.builder().position_at_end(cont_bb);
 
             // Build phi value
-            let str_phi = gc.builder().build_phi(str.ptr.get_type(), "str_phi");
-            assert_eq!(str.ptr.get_type(), cloned_str.ptr.get_type());
-            str_phi.add_incoming(&[(&str.ptr, current_bb), (&cloned_str.ptr, succ_of_shared_bb)]);
+            let str_phi = gc.builder().build_phi(str.ptr(gc).get_type(), "str_phi");
+            str_phi.add_incoming(&[
+                (&str.ptr(gc), current_bb),
+                (&cloned_str.ptr(gc), succ_of_shared_bb),
+            ]);
 
             str = Object::new(str_phi.as_basic_value().into_pointer_value(), ty.clone());
         }
@@ -677,7 +680,7 @@ pub fn struct_mod_lit(
         let field_ty = ty.fields_types(gc.type_env())[field_idx].clone();
         let field = Object::new(field_val, field_ty);
         let field = gc.apply_lambda(modfier, field);
-        str.store_field_nocap(gc, field_offset + field_idx as u32, field.ptr);
+        str.store_field_nocap(gc, field_offset + field_idx as u32, field.ptr(gc));
 
         str
     });
@@ -1060,7 +1063,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 
         // Initialize state.
         let state_val = if state_ty.is_box(gc.type_env()) {
-            init_state.ptr.as_basic_value_enum()
+            init_state.ptr(gc).as_basic_value_enum()
         } else {
             init_state.load_nocap(gc).as_basic_value_enum()
         };

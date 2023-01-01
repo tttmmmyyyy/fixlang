@@ -310,7 +310,7 @@ impl FixModule {
                 let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
 
                 // Add accessor function.
-                let acc_fn_type = global_var.get_type().fn_type(&[], false);
+                let acc_fn_type = ptr_to_object_type(gc.context).fn_type(&[], false);
                 let acc_fn =
                     gc.module
                         .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
@@ -348,7 +348,7 @@ impl FixModule {
             gc.builder().position_at_end(init_bb);
             let obj = gc.eval_expr(sym.expr.unwrap().clone());
             let obj_val = if obj.is_box(gc.type_env()) {
-                obj.ptr.as_basic_value_enum()
+                obj.ptr(gc).as_basic_value_enum()
             } else {
                 obj.load_nocap(gc).as_basic_value_enum()
             };
@@ -357,7 +357,7 @@ impl FixModule {
                 .build_store(init_flag, gc.context.i8_type().const_int(1, false));
             if SANITIZE_MEMORY && obj.is_box(gc.type_env()) {
                 // Mark this object as global.
-                let obj_id = gc.get_obj_id(obj.ptr);
+                let obj_id = gc.get_obj_id(obj.ptr(gc));
                 gc.call_runtime(RuntimeFunctions::MarkGlobal, &[obj_id.into()]);
             }
             gc.builder().build_unconditional_branch(end_bb);
@@ -371,6 +371,7 @@ impl FixModule {
             } else {
                 global_var
             };
+            let ret = gc.cast_pointer(ret, ptr_to_object_type(gc.context));
             gc.builder().build_return(Some(&ret));
         }
     }

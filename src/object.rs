@@ -224,8 +224,6 @@ impl ObjectFieldType {
         size: IntValue<'c>,
         value: Object<'c>,
     ) {
-        assert_eq!(value.ptr.get_type(), ptr_to_object_type(gc.context));
-
         Self::initialize_array_size_buf(gc, size_buf, elem_ty.clone(), size);
 
         // Initialize elements
@@ -242,7 +240,7 @@ impl ObjectFieldType {
                         .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
                 };
                 if value.is_box(gc.type_env()) {
-                    gc.builder().build_store(ptr_to_obj_ptr, value.ptr);
+                    gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
                 } else {
                     gc.builder()
                         .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
@@ -291,7 +289,7 @@ impl ObjectFieldType {
                         .build_gep(ptr_to_buffer, &[idx_val.into()], "ptr_to_elem_of_array")
                 };
                 if value.is_box(gc.type_env()) {
-                    gc.builder().build_store(ptr_to_obj_ptr, value.ptr);
+                    gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
                 } else {
                     gc.builder()
                         .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
@@ -395,7 +393,7 @@ impl ObjectFieldType {
 
         // Insert the given value to the place.
         let value = if value.is_box(gc.type_env()) {
-            value.ptr.as_basic_value_enum()
+            value.ptr(gc).as_basic_value_enum()
         } else {
             value.load_nocap(gc).as_basic_value_enum()
         };
@@ -577,7 +575,7 @@ impl ObjectFieldType {
         val: Object<'c>,
     ) {
         let val = if val.is_box(gc.type_env()) {
-            val.ptr.as_basic_value_enum()
+            val.ptr(gc).as_basic_value_enum()
         } else {
             val.load_nocap(gc).as_basic_value_enum()
         };
@@ -633,7 +631,7 @@ impl ObjectType {
         if self.is_unbox {
             str_ty.into()
         } else {
-            ptr_type(str_ty).into()
+            ptr_to_object_type(gc.context).into()
         }
     }
 
@@ -987,10 +985,7 @@ pub fn create_dtor<'c, 'm>(
                             gc.load_obj_field(ptr_to_obj, struct_type, i as u32)
                                 .into_pointer_value()
                         };
-                        gc.release(Object {
-                            ptr: ptr_to_subobj,
-                            ty: ty.clone(),
-                        });
+                        gc.release(Object::new(ptr_to_subobj, ty.clone()));
                     }
                     ObjectFieldType::ControlBlock => {}
                     ObjectFieldType::I64 => {}
