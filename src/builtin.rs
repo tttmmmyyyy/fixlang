@@ -315,6 +315,7 @@ fn write_array_lit(
         let elem_ty = ty.fields_types(gc.type_env())[0].clone();
         // Get argments
         let array = gc.get_var(&array_str).ptr.get(gc);
+        let original_array_ptr = array.ptr(gc);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
@@ -353,6 +354,7 @@ fn write_array_lit(
         ObjectFieldType::clone_array_size_buf(gc, array_field, cloned_array_field, elem_ty);
         gc.release(array.clone()); // Given array should be released here.
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
+        let cloned_array_ptr = cloned_array.ptr(gc);
         gc.builder().build_unconditional_branch(cont_bb);
 
         // Implement cont_bb
@@ -361,10 +363,10 @@ fn write_array_lit(
         // Build phi value of array and array_field.
         let array_phi = gc
             .builder()
-            .build_phi(array.ptr(gc).get_type(), "array_phi");
+            .build_phi(original_array_ptr.get_type(), "array_phi");
         array_phi.add_incoming(&[
-            (&array.ptr(gc), current_bb),
-            (&cloned_array.ptr(gc), succ_of_shared_bb),
+            (&original_array_ptr, current_bb),
+            (&cloned_array_ptr, succ_of_shared_bb),
         ]);
         let array = Object::new(array_phi.as_basic_value().into_pointer_value(), ty.clone());
         let array_field_phi = gc
