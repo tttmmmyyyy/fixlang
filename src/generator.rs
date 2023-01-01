@@ -9,7 +9,7 @@ use inkwell::{
     execution_engine::ExecutionEngine,
     intrinsics::Intrinsic,
     targets::{TargetData, TargetMachine},
-    types::AnyType,
+    types::{AnyType, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
 
@@ -871,9 +871,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().build_unconditional_branch(cont_bb);
 
         self.builder().position_at_end(cont_bb);
-        let phi = self
-            .builder()
-            .build_phi(ptr_to_object_type(self.context), "phi");
+        let phi_ty = if then_val.is_box(self.type_env()) {
+            ptr_to_object_type(self.context)
+        } else {
+            ptr_type(then_val.struct_ty(self))
+        };
+        let phi = self.builder().build_phi(phi_ty, "phi");
         phi.add_incoming(&[
             (&then_val.ptr(self), then_bb),
             (&else_val.ptr(self), else_bb),
