@@ -397,7 +397,13 @@ impl FixModule {
         }
         let inst_name = self.require_instantiated_symbol(&main_func_name, &int_lit_ty());
         self.instantiate_symbols();
-        expr_var(inst_name, None)
+        self.instantiated_global_symbols
+            .get(&inst_name)
+            .unwrap()
+            .expr
+            .as_ref()
+            .unwrap()
+            .clone()
     }
 
     // Instantiate expression.

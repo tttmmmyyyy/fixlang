@@ -649,6 +649,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 .unwrap()
                 .substitute_type(&expr.inferred_ty.clone().unwrap()),
         );
+        assert!(expr.inferred_ty.as_ref().unwrap().free_vars().is_empty());
         let mut ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone()),
             Expr::Lit(lit) => self.eval_lit(lit.clone(), expr.inferred_ty.clone().unwrap().clone()),
