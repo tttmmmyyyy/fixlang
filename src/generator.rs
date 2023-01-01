@@ -142,10 +142,7 @@ impl<'c> VarValue<'c> {
                     .left()
                     .unwrap()
                     .into_pointer_value();
-                Object {
-                    ptr,
-                    ty: ty.clone(),
-                }
+                Object::new(ptr, ty.clone())
             }
         }
     }

@@ -851,7 +851,7 @@ pub fn allocate_obj<'c, 'm>(
 
     // If sanitize memory, create object id.
     let mut object_id = obj_id_type(gc.context).const_int(0, false);
-    if SANITIZE_MEMORY {
+    if SANITIZE_MEMORY && !object_type.is_unbox {
         let string_ptr = name.unwrap_or("N/A");
         let string_ptr = gc
             .builder()
