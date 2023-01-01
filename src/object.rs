@@ -35,7 +35,6 @@ impl ObjectFieldType {
                         gc.context.i64_type().into(), // size
                         get_object_type(ty, &vec![], gc.type_env())
                             .to_embedded_type(gc)
-                            .array_type(0)
                             .ptr_type(AddressSpace::Generic)
                             .into(), // buffer
                     ],
