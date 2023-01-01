@@ -687,8 +687,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate lambda abstraction.
     fn eval_lam(&mut self, arg: Arc<Var>, val: Arc<ExprNode>, lam_ty: Arc<TypeNode>) -> Object<'c> {
-        let lam_ty = self.typechecker.as_ref().unwrap().substitute_type(&lam_ty);
-
         let context = self.context;
         let module = self.module;
 

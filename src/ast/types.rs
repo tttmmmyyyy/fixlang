@@ -87,6 +87,12 @@ impl PartialEq for TypeNode {
 
 impl Eq for TypeNode {}
 
+impl std::fmt::Debug for TypeNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string_normalize())
+    }
+}
+
 impl TypeNode {
     // Set kinds to type variables.
     pub fn set_kinds(self: &Arc<TypeNode>, kinds: &HashMap<Name, Arc<Kind>>) -> Arc<TypeNode> {

@@ -48,7 +48,7 @@ pub struct InstantiatedSymbol {
     template_name: NameSpacedName,
     ty: Arc<TypeNode>,
     expr: Option<Arc<ExprNode>>,
-    typechecker: Option<TypeCheckContext>,
+    typechecker: Option<TypeCheckContext>, // type checker available for resolving types in expr.
 }
 
 pub struct GlobalSymbol {
@@ -372,6 +372,7 @@ impl FixModule {
             }
         };
         sym.expr = Some(self.instantiate_expr(&tc, &template_expr));
+        sym.typechecker = Some(tc);
     }
 
     // Instantiate all symbols.
@@ -399,8 +400,7 @@ impl FixModule {
             .as_ref()
             .unwrap()
             .clone();
-        let inst_name =
-            self.require_instantiated_symbol(typecheck_log, &main_func_name, &int_lit_ty());
+        let inst_name = self.require_instantiated_symbol(&main_func_name, &int_lit_ty());
         self.instantiate_symbols();
         expr_var(inst_name, None)
     }
@@ -413,7 +413,7 @@ impl FixModule {
                     expr.clone()
                 } else {
                     let ty = tc.substitute_type(&expr.inferred_ty.as_ref().unwrap());
-                    let instance = self.require_instantiated_symbol(tc.clone(), &v.name, &ty);
+                    let instance = self.require_instantiated_symbol(&v.name, &ty);
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
                 }
@@ -449,7 +449,6 @@ impl FixModule {
     // Require instantiate generic symbol such that it has a specified type.
     fn require_instantiated_symbol(
         &mut self,
-        tc: TypeCheckContext,
         name: &NameSpacedName,
         ty: &Arc<TypeNode>,
     ) -> NameSpacedName {
@@ -466,7 +465,7 @@ impl FixModule {
                     template_name: name.clone(),
                     ty: ty.clone(),
                     expr: None,
-                    typechecker: Some(tc),
+                    typechecker: None,
                 },
             );
         }
