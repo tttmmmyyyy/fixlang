@@ -883,7 +883,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ]);
         Object::new(
             phi.as_basic_value().into_pointer_value(),
-            then_expr.inferred_ty.clone().unwrap(),
+            then_val.ty.clone(),
         )
     }
 }
