@@ -10,30 +10,31 @@ pub enum ObjectFieldType {
     I64,
     Bool,
     SubObject(Arc<TypeNode>),
-    UnionBuf,             // pointer to buffer.
-    UnionTag,             // TODO: I should merge UnionTag and UnionBuf as like Array.
-    Array(Arc<TypeNode>), // [size, POINTER to buffer].
+    UnionBuf,                    // pointer to buffer.
+    UnionTag,                    // TODO: I should merge UnionTag and UnionBuf as like Array.
+    ArraySizeBuf(Arc<TypeNode>), // [size, POINTER to buffer].
 }
 
 impl ObjectFieldType {
-    pub fn to_basic_type<'ctx>(&self, context: &'ctx Context) -> BasicTypeEnum<'ctx> {
+    pub fn to_basic_type<'c, 'm>(&self, gc: &GenerationContext<'c, 'm>) -> BasicTypeEnum<'c> {
         match self {
-            ObjectFieldType::ControlBlock => control_block_type(context).into(),
-            ObjectFieldType::DtorFunction => ptr_to_dtor_type(context).into(),
-            ObjectFieldType::LambdaFunction(ty) => lambda_function_type(ty, context)
+            ObjectFieldType::ControlBlock => control_block_type(gc.context).into(),
+            ObjectFieldType::DtorFunction => ptr_to_dtor_type(gc.context).into(),
+            ObjectFieldType::LambdaFunction(ty) => lambda_function_type(ty, gc)
                 .ptr_type(AddressSpace::Generic)
                 .into(),
             ObjectFieldType::SubObject(ty) => {
-                get_object_type(ty, &vec![]).to_embedded_type(context)
+                get_object_type(ty, &vec![], gc.type_env()).to_embedded_type(gc)
             }
-            ObjectFieldType::I64 => context.i64_type().into(),
-            ObjectFieldType::Bool => context.i8_type().into(),
-            ObjectFieldType::Array(ty) => context
+            ObjectFieldType::I64 => gc.context.i64_type().into(),
+            ObjectFieldType::Bool => gc.context.i8_type().into(),
+            ObjectFieldType::ArraySizeBuf(ty) => gc
+                .context
                 .struct_type(
                     &[
-                        context.i64_type().into(), // size
-                        get_object_type(ty, &vec![])
-                            .to_embedded_type(context)
+                        gc.context.i64_type().into(), // size
+                        get_object_type(ty, &vec![], gc.type_env())
+                            .to_embedded_type(gc)
                             .array_type(0)
                             .ptr_type(AddressSpace::Generic)
                             .into(), // buffer
@@ -41,19 +42,19 @@ impl ObjectFieldType {
                     false,
                 )
                 .into(),
-            ObjectFieldType::UnionTag => context.i64_type().into(),
-            ObjectFieldType::UnionBuf => ptr_to_object_type(context).into(),
+            ObjectFieldType::UnionTag => gc.context.i64_type().into(),
+            ObjectFieldType::UnionBuf => ptr_to_object_type(gc.context).into(),
         }
     }
 
     // Get fields (size and buffer) from array.
-    pub fn get_size_and_buffer_of_array<'c, 'm>(
+    pub fn decompose_array_size_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         array: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
     ) -> (IntValue<'c>, PointerValue<'c>) {
-        let array_struct = ObjectFieldType::Array(elem_ty)
-            .to_basic_type(gc.context)
+        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty)
+            .to_basic_type(gc)
             .into_struct_type();
         let size = gc.load_obj_field(array, array_struct, 0).into_int_value();
         let buffer = gc
@@ -62,10 +63,21 @@ impl ObjectFieldType {
         (size, buffer)
     }
 
-    // Take array and generate code iterating its elements.
-    fn loop_over_array<'c, 'm>(
+    // Get size of array.
+    pub fn size_from_array_size_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        ptr_to_array: PointerValue<'c>,
+        array: PointerValue<'c>,
+    ) -> IntValue<'c> {
+        let array_struct = ObjectFieldType::ArraySizeBuf(int_lit_ty() /* any will do */)
+            .to_basic_type(gc)
+            .into_struct_type();
+        gc.load_obj_field(array, array_struct, 0).into_int_value()
+    }
+
+    // Take array and generate code iterating its elements.
+    fn loop_over_array_size_buf<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         loop_body: impl Fn(
             &mut GenerationContext<'c, 'm>,
@@ -80,7 +92,7 @@ impl ObjectFieldType {
         ),
     ) {
         // Get fields (size, ptr_to_buffer).
-        let (size, ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, ptr_to_array, elem_ty);
+        let (size, buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
 
         // Append blocks: loop_check, loop_body and after_loop.
         let current_bb = gc.builder().get_insert_block().unwrap();
@@ -118,12 +130,7 @@ impl ObjectFieldType {
         gc.builder().position_at_end(loop_body_bb);
 
         // Generate code of loop body.
-        loop_body(
-            gc,
-            Object::new(counter_ptr, int_lit_ty()),
-            size,
-            ptr_to_buffer,
-        );
+        loop_body(gc, Object::new(counter_ptr, int_lit_ty()), size, buffer);
 
         // Increment counter.
         let incremented_counter_val = gc.builder().build_int_add(
@@ -139,13 +146,13 @@ impl ObjectFieldType {
 
         // Generate code after loop.
         gc.builder().position_at_end(after_loop_bb);
-        after_loop(gc, size, ptr_to_buffer);
+        after_loop(gc, size, buffer);
     }
 
-    // Take pointer to array = [size, ptr_to_buffer], call release of ptr_to_bufer[i] for all i and free ptr_to_buffer.
-    pub fn destruct_array<'c, 'm>(
+    // Take pointer to array_size_buf = [size, ptr_to_buffer], call release of ptr_to_bufer[i] for all i and free ptr_to_buffer.
+    pub fn destruct_array_size_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        ptr_to_array: PointerValue<'c>,
+        size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
     ) {
         // In loop body, release object of idx = counter_val.
@@ -153,12 +160,12 @@ impl ObjectFieldType {
                          idx: Object<'c>,
                          _size: IntValue<'c>,
                          ptr_to_buffer: PointerValue<'c>| {
-            let idx = idx.load_field_unbox(gc, 0).into_int_value();
+            let idx = idx.load_field_nocap(gc, 0).into_int_value();
             let ptr = unsafe {
                 gc.builder()
                     .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
             };
-            let obj = if elem_ty.is_box() {
+            let obj = if elem_ty.is_box(gc.type_env()) {
                 gc.builder()
                     .build_load(ptr, "elem_of_array")
                     .into_pointer_value()
@@ -177,47 +184,45 @@ impl ObjectFieldType {
         }
 
         // Generate loop.
-        Self::loop_over_array(gc, ptr_to_array, elem_ty, loop_body, after_loop);
+        Self::loop_over_array_size_buf(gc, size_buf, elem_ty, loop_body, after_loop);
     }
 
     // Initialize an array
-    pub fn initialize_array<'c, 'm>(
+    pub fn initialize_array_size_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        array_ptr: PointerValue<'c>,
+        size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         size: IntValue<'c>,
-    ) -> PointerValue<'c> {
+    ) {
         assert_eq!(size.get_type(), gc.context.i64_type());
 
-        let array_struct = ObjectFieldType::Array(elem_ty)
-            .to_basic_type(gc.context)
+        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty)
+            .to_basic_type(gc)
             .into_struct_type();
 
         // Set size.
-        gc.store_obj_field(array_ptr, array_struct, 0, size);
+        gc.store_obj_field(size_buf, array_struct, 0, size);
 
         // Allocate buffer and set it to array.
-        let elem_type = get_object_type(&elem_ty, &vec![]).to_embedded_type(gc.context);
+        let elem_type = get_object_type(&elem_ty, &vec![], gc.type_env()).to_embedded_type(gc);
         let buffer_ptr = gc
             .builder()
             .build_array_malloc(elem_type, size, "buffer_ptr")
             .unwrap();
-        gc.store_obj_field(array_ptr, array_struct, 1, buffer_ptr);
-
-        array_ptr
+        gc.store_obj_field(size_buf, array_struct, 1, buffer_ptr);
     }
 
     // Initialize an array by value.
-    pub fn initialize_array_by_value<'c, 'm>(
+    pub fn initialize_array_size_buf_by_value<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        array_ptr: PointerValue<'c>,
+        size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         size: IntValue<'c>,
         value: Object<'c>,
     ) {
         assert_eq!(value.ptr.get_type(), ptr_to_object_type(gc.context));
 
-        let array_ptr = Self::initialize_array(gc, array_ptr, elem_ty, size);
+        Self::initialize_array_size_buf(gc, size_buf, elem_ty, size);
 
         // Initialize elements
         {
@@ -226,17 +231,17 @@ impl ObjectFieldType {
                              idx: Object<'c>,
                              _size: IntValue<'c>,
                              ptr_to_buffer: PointerValue<'c>| {
-                let idx = idx.load_field_unbox(gc, 0).into_int_value();
+                let idx = idx.load_field_nocap(gc, 0).into_int_value();
                 gc.retain(value.clone());
                 let ptr_to_obj_ptr = unsafe {
                     gc.builder()
                         .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
                 };
-                if value.is_box() {
+                if value.is_box(gc.type_env()) {
                     gc.builder().build_store(ptr_to_obj_ptr, value.ptr);
                 } else {
                     gc.builder()
-                        .build_store(ptr_to_obj_ptr, value.load_unbox(gc));
+                        .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
                 }
             };
 
@@ -249,20 +254,20 @@ impl ObjectFieldType {
 
             // Generate loop.
             // NOTE: if you see error at here, try `cargo clean`.
-            Self::loop_over_array(gc, array_ptr, elem_ty, loop_body, after_loop);
+            Self::loop_over_array_size_buf(gc, size_buf, elem_ty, loop_body, after_loop);
         }
     }
 
     // Initialize an array by map.
-    pub fn initialize_array_by_map<'c, 'm>(
+    pub fn initialize_array_size_buf_by_map<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        array_ptr: PointerValue<'c>,
+        size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         size: IntValue<'c>,
         map: Object<'c>,
     ) {
         // Initialize array.
-        let array_ptr = Self::initialize_array(gc, array_ptr, elem_ty, size);
+        Self::initialize_array_size_buf(gc, size_buf, elem_ty, size);
 
         // Initialize elements
         {
@@ -276,16 +281,16 @@ impl ObjectFieldType {
                 let value = gc.apply_lambda(map.clone(), idx);
 
                 // Store value.
-                let idx_val = idx.load_field_unbox(gc, 0).into_int_value();
+                let idx_val = idx.load_field_nocap(gc, 0).into_int_value();
                 let ptr_to_obj_ptr = unsafe {
                     gc.builder()
                         .build_gep(ptr_to_buffer, &[idx_val.into()], "ptr_to_elem_of_array")
                 };
-                if value.is_box() {
+                if value.is_box(gc.type_env()) {
                     gc.builder().build_store(ptr_to_obj_ptr, value.ptr);
                 } else {
                     gc.builder()
-                        .build_store(ptr_to_obj_ptr, value.load_unbox(gc));
+                        .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
                 }
             };
 
@@ -298,18 +303,18 @@ impl ObjectFieldType {
 
             // Generate loop.
             // NOTE: if you see error at here, try `cargo clean`.
-            Self::loop_over_array(gc, array_ptr, elem_ty, loop_body, after_loop);
+            Self::loop_over_array_size_buf(gc, size_buf, elem_ty, loop_body, after_loop);
         }
     }
 
     // Panic if idx is out_of_range for the array.
-    pub fn panic_if_out_of_array<'c, 'm>(
+    pub fn panic_if_out_of_range<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        array: PointerValue<'c>,
+        size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
     ) {
-        let (size, _ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, array, elem_ty);
+        let (size, _ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
         let curr_bb = gc.builder().get_insert_block().unwrap();
         let curr_func = curr_bb.get_parent().unwrap();
         let is_out_of_range =
@@ -326,17 +331,17 @@ impl ObjectFieldType {
 
     // Read an element of array.
     // Returned object is already retained.
-    pub fn read_array<'c, 'm>(
+    pub fn read_array_size_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        array: PointerValue<'c>,
+        size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
     ) -> Object<'c> {
         // Panic if out_of_range.
-        Self::panic_if_out_of_array(gc, array, elem_ty, idx);
+        Self::panic_if_out_of_range(gc, size_buf, elem_ty, idx);
 
         // Get fields (size, ptr_to_buffer).
-        let (_size, ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, array, elem_ty);
+        let (_size, ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
 
         // Get element.
         let ptr_to_elem = unsafe {
@@ -355,18 +360,19 @@ impl ObjectFieldType {
     }
 
     // Write an element into array.
-    pub fn write_array<'c, 'm>(
+    pub fn write_array_size_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        array: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
+        size_buf: PointerValue<'c>,
         idx: IntValue<'c>,
-        value: PointerValue<'c>,
+        value: Object<'c>,
     ) {
+        let elem_ty = value.ty;
+
         // Panic if out_of_range.
-        Self::panic_if_out_of_array(gc, array, elem_ty, idx);
+        Self::panic_if_out_of_range(gc, size_buf, elem_ty, idx);
 
         // Get fields (size, ptr_to_buffer).
-        let (_size, ptr_to_buffer) = Self::get_size_and_buffer_of_array(gc, array, elem_ty);
+        let (_size, ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
 
         // Get ptr to the place at idx.
         let place = unsafe {
@@ -375,7 +381,7 @@ impl ObjectFieldType {
         };
 
         // Release element that is already at the place.
-        let elem = if elem_ty.is_box() {
+        let elem = if elem_ty.is_box(gc.type_env()) {
             gc.builder().build_load(place, "elem").into_pointer_value()
         } else {
             place
@@ -384,35 +390,33 @@ impl ObjectFieldType {
         gc.release(elem_obj);
 
         // Insert the given value to the place.
-        let value = if elem_ty.is_box() {
-            value.as_basic_value_enum()
+        let value = if value.is_box(gc.type_env()) {
+            value.ptr.as_basic_value_enum()
         } else {
-            Object::new(place, elem_ty)
-                .load_unbox(gc)
-                .as_basic_value_enum()
+            value.load_nocap(gc).as_basic_value_enum()
         };
         gc.builder().build_store(place, value);
     }
 
     // Clone an array
-    pub fn clone_array<'c, 'm>(
+    pub fn clone_array_size_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         src: PointerValue<'c>,
         dst: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
     ) {
-        let array_struct = ObjectFieldType::Array(elem_ty)
-            .to_basic_type(gc.context)
+        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty)
+            .to_basic_type(gc)
             .into_struct_type();
 
         // Get fields (size, ptr_to_buffer) of src.
-        let (src_size, src_buffer) = Self::get_size_and_buffer_of_array(gc, src, elem_ty);
+        let (src_size, src_buffer) = Self::decompose_array_size_buf(gc, src, elem_ty);
 
         // Copy size.
         gc.store_obj_field(dst, array_struct, 0, src_size);
 
         // Allocate buffer and set it to dst.
-        let elem_str_type = get_object_type(&elem_ty, &vec![]).to_struct_type(gc.context);
+        let elem_str_type = get_object_type(&elem_ty, &vec![], gc.type_env()).to_struct_type(gc);
         let dst_buffer = gc
             .builder()
             .build_array_malloc(elem_str_type, src_size, "dst_buffer")
@@ -426,7 +430,7 @@ impl ObjectFieldType {
                              idx: Object<'c>,
                              _size: IntValue<'c>,
                              _ptr_to_buffer: PointerValue<'c>| {
-                let idx = idx.load_field_unbox(gc, 0).into_int_value();
+                let idx = idx.load_field_nocap(gc, 0).into_int_value();
                 let ptr_to_src_elem = unsafe {
                     gc.builder()
                         .build_gep(src_buffer, &[idx.into()], "ptr_to_src_elem")
@@ -437,7 +441,7 @@ impl ObjectFieldType {
                 };
                 let src_elem = gc.builder().build_load(ptr_to_src_elem, "src_elem");
                 gc.builder().build_store(ptr_to_dst_elem, src_elem);
-                let src_elem = if elem_ty.is_box() {
+                let src_elem = if elem_ty.is_box(gc.type_env()) {
                     src_elem.into_pointer_value()
                 } else {
                     ptr_to_dst_elem
@@ -451,7 +455,7 @@ impl ObjectFieldType {
                               _size: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {};
 
-            Self::loop_over_array(gc, src, elem_ty, loop_body, after_loop);
+            Self::loop_over_array_size_buf(gc, src, elem_ty, loop_body, after_loop);
         }
     }
 
@@ -491,7 +495,7 @@ impl ObjectFieldType {
 
             // Implement the case tag is match.
             gc.builder().position_at_end(match_bb);
-            let value_ptr = if field_ty.is_box() {
+            let value_ptr = if field_ty.is_box(gc.type_env()) {
                 gc.builder()
                     .build_load(buf, "load_buf")
                     .into_pointer_value()
@@ -546,9 +550,12 @@ impl ObjectFieldType {
         let size = field_types
             .iter()
             .map(|ty| {
-                let struct_ty =
-                    get_object_type(ty, &vec![] /* captured list desn't effect sizeof */)
-                        .to_struct_type(gc.context);
+                let struct_ty = get_object_type(
+                    ty,
+                    &vec![], /* captured list desn't effect sizeof */
+                    gc.type_env(),
+                )
+                .to_struct_type(gc);
                 gc.sizeof(&struct_ty)
             })
             .max()
@@ -557,6 +564,45 @@ impl ObjectFieldType {
         gc.builder()
             .build_array_malloc(gc.context.i8_type(), size, "alloc_union_buf")
             .unwrap()
+    }
+
+    pub fn set_value_to_union_buf<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        buf: PointerValue<'c>,
+        val: Object<'c>,
+    ) {
+        let val = if val.is_box(gc.type_env()) {
+            val.ptr.as_basic_value_enum()
+        } else {
+            val.load_nocap(gc).as_basic_value_enum()
+        };
+        let buf = gc.cast_pointer(buf, val.get_type().ptr_type(AddressSpace::Generic));
+        gc.builder().build_store(buf, val);
+    }
+
+    pub fn get_value_from_union_buf<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        buf: PointerValue<'c>,
+        elem_ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        let val = ObjectFieldType::get_basic_value_from_union_buf(gc, buf, elem_ty);
+        let val = Object::from_basic_value_enum(val, elem_ty.clone(), gc);
+        gc.retain(val);
+        val
+    }
+
+    pub fn get_basic_value_from_union_buf<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        buf: PointerValue<'c>,
+        elem_ty: &Arc<TypeNode>,
+    ) -> BasicValueEnum<'c> {
+        let buf = gc.cast_pointer(
+            buf,
+            elem_ty
+                .get_embedded_type(gc, &vec![])
+                .ptr_type(AddressSpace::Generic),
+        );
+        gc.builder().build_load(buf, "value_at_union_buf")
     }
 }
 
@@ -567,18 +613,18 @@ pub struct ObjectType {
 }
 
 impl ObjectType {
-    pub fn to_struct_type<'ctx>(&self, context: &'ctx Context) -> StructType<'ctx> {
-        let mut fields: Vec<BasicTypeEnum<'ctx>> = vec![];
+    pub fn to_struct_type<'c, 'm>(&self, gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
+        let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
         for field_type in &self.field_types {
-            fields.push(field_type.to_basic_type(context));
+            fields.push(field_type.to_basic_type(gc));
         }
-        context.struct_type(&fields, false)
+        gc.context.struct_type(&fields, false)
     }
 
     // Get type used when this object is embedded.
     // i.e., for unboxed type, a pointer; for unboxed type, a struct.
-    pub fn to_embedded_type<'c>(&self, context: &'c Context) -> BasicTypeEnum<'c> {
-        let str_ty = self.to_struct_type(context);
+    pub fn to_embedded_type<'c, 'm>(&self, gc: &GenerationContext<'c, 'm>) -> BasicTypeEnum<'c> {
+        let str_ty = self.to_struct_type(gc);
         if self.is_unbox {
             str_ty.into()
         } else {
@@ -662,14 +708,17 @@ pub fn ptr_to_control_block_type<'ctx>(context: &'ctx Context) -> PointerType<'c
     control_block_type(context).ptr_type(AddressSpace::Generic)
 }
 
-pub fn lambda_function_type<'ctx>(
+pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
-    context: &'ctx Context,
-) -> FunctionType<'ctx> {
+    gc: &GenerationContext<'c, 'm>,
+) -> FunctionType<'c> {
     // A function that takes argument and context (=lambda object itself).
-    let arg_ty = ty.get_funty_src().get_embedded_type(context, &vec![]);
-    let ret_ty = ty.get_funty_dst().get_embedded_type(context, &vec![]);
-    ret_ty.fn_type(&[arg_ty.into(), ptr_to_object_type(context).into()], false)
+    let arg_ty = ty.get_funty_src().get_embedded_type(gc, &vec![]);
+    let ret_ty = ty.get_funty_dst().get_embedded_type(gc, &vec![]);
+    ret_ty.fn_type(
+        &[arg_ty.into(), ptr_to_object_type(gc.context).into()],
+        false,
+    )
 }
 
 // fn ptr_to_lambda_function_type<'ctx>(
@@ -694,8 +743,20 @@ pub fn lambda_function_type<'ctx>(
 pub const DTOR_IDX: u32 = 1/* ControlBlock */;
 pub const LAMBDA_FUNCTION_IDX: u32 = DTOR_IDX + 1;
 pub const CAPTURED_OBJECT_IDX: u32 = LAMBDA_FUNCTION_IDX + 1;
+pub const ARRAY_IDX: u32 = 1;
+pub fn struct_field_idx(is_unbox: bool) -> u32 {
+    if is_unbox {
+        0
+    } else {
+        1
+    }
+}
 
-pub fn get_object_type(ty: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> ObjectType {
+pub fn get_object_type(
+    ty: &Arc<TypeNode>,
+    capture: &Vec<Arc<TypeNode>>,
+    type_env: &TypeEnv,
+) -> ObjectType {
     assert!(ty.free_vars().is_empty());
     let mut ret = ObjectType {
         field_types: vec![],
@@ -715,10 +776,11 @@ pub fn get_object_type(ty: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> Obje
     } else {
         assert!(capture.is_empty());
         let tc = ty.toplevel_tycon().unwrap();
-        match tc.variant {
+        let ti = type_env.tycons.get(&tc).unwrap();
+        match ti.variant {
             TyConVariant::Primitive => {
-                assert!(tc.is_unbox);
-                ret.is_unbox = tc.is_unbox;
+                assert!(ti.is_unbox);
+                ret.is_unbox = ti.is_unbox;
                 if ty == &int_lit_ty() {
                     ret.field_types.push(ObjectFieldType::I64);
                 } else if ty == &bool_lit_ty() {
@@ -728,25 +790,27 @@ pub fn get_object_type(ty: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> Obje
                 }
             }
             TyConVariant::Array => {
-                let is_unbox = ty.toplevel_tycon().unwrap().is_unbox;
+                let is_unbox = ti.is_unbox;
                 assert!(!is_unbox);
                 ret.is_unbox = is_unbox;
                 ret.field_types.push(ObjectFieldType::ControlBlock);
+                assert_eq!(ret.field_types.len(), ARRAY_IDX as usize);
                 ret.field_types
-                    .push(ObjectFieldType::Array(ty.collect_type_arguemnts()[0]))
+                    .push(ObjectFieldType::ArraySizeBuf(ty.fields_types(type_env)[0]))
             }
             TyConVariant::Struct => {
-                let is_unbox = ty.toplevel_tycon().unwrap().is_unbox;
+                let is_unbox = ti.is_unbox;
                 ret.is_unbox = is_unbox;
                 if !is_unbox {
                     ret.field_types.push(ObjectFieldType::ControlBlock);
                 }
-                for field_ty in ty.collect_type_arguemnts() {
+                assert_eq!(ret.field_types.len(), struct_field_idx(is_unbox) as usize);
+                for field_ty in ty.fields_types(type_env) {
                     ret.field_types.push(ObjectFieldType::SubObject(field_ty));
                 }
             }
             TyConVariant::Union => {
-                let is_unbox = ty.toplevel_tycon().unwrap().is_unbox;
+                let is_unbox = ti.is_unbox;
                 ret.is_unbox = is_unbox;
                 if !is_unbox {
                     ret.field_types.push(ObjectFieldType::ControlBlock);
@@ -768,8 +832,8 @@ pub fn allocate_obj<'c, 'm>(
 ) -> Object<'c> {
     assert!(ty.free_vars().is_empty());
     let context = gc.context;
-    let object_type = ty.get_object_type(capture);
-    let struct_type = object_type.to_struct_type(context);
+    let object_type = ty.get_object_type(capture, gc.type_env());
+    let struct_type = object_type.to_struct_type(gc);
 
     // Allocate object
     let ptr_to_obj = if object_type.is_unbox {
@@ -832,7 +896,7 @@ pub fn allocate_obj<'c, 'm>(
                 assert_eq!(i, LAMBDA_FUNCTION_IDX as usize);
             }
             ObjectFieldType::Bool => {}
-            ObjectFieldType::Array(_) => {}
+            ObjectFieldType::ArraySizeBuf(_) => {}
             ObjectFieldType::DtorFunction => {
                 assert_eq!(i, DTOR_IDX as usize);
                 let ptr_to_dtor_field = gc
@@ -843,7 +907,7 @@ pub fn allocate_obj<'c, 'm>(
                 gc.builder().build_store(ptr_to_dtor_field, dtor);
             }
             ObjectFieldType::UnionBuf => {
-                let field_types = ty.collect_type_arguemnts();
+                let field_types = ty.fields_types(gc.type_env());
                 let ptr = ObjectFieldType::allocate_union_buf(gc, &field_types);
                 let ptr_to_unionbuf_field = gc
                     .builder()
@@ -889,8 +953,8 @@ pub fn create_dtor<'c, 'm>(
         }
         None => {
             // Define dtor function.
-            let object_type = get_object_type(ty, capture);
-            let struct_type = object_type.to_struct_type(gc.context);
+            let object_type = get_object_type(ty, capture, gc.type_env());
+            let struct_type = object_type.to_struct_type(gc);
             let func_type = dtor_type(gc.context);
             let func = gc.module.add_function(&dtor_name, func_type, None);
             let bb = gc.context.append_basic_block(func, "entry");
@@ -903,7 +967,7 @@ pub fn create_dtor<'c, 'm>(
             for (i, ft) in object_type.field_types.iter().enumerate() {
                 match ft {
                     ObjectFieldType::SubObject(ty) => {
-                        let is_unbox = ty.is_unbox();
+                        let is_unbox = ty.is_unbox(gc.type_env());
                         let ptr_to_subobj = if is_unbox {
                             let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
                             gc.builder()
@@ -926,11 +990,11 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Bool => {}
-                    ObjectFieldType::Array(ty) => {
+                    ObjectFieldType::ArraySizeBuf(ty) => {
                         let ptr = gc
                             .load_obj_field(ptr_to_obj, struct_type, i as u32)
                             .into_pointer_value();
-                        ObjectFieldType::destruct_array(gc, ptr, ty.clone());
+                        ObjectFieldType::destruct_array_size_buf(gc, ptr, ty.clone());
                         gc.builder().build_free(ptr);
                     }
                     ObjectFieldType::UnionTag => {
@@ -947,7 +1011,7 @@ pub fn create_dtor<'c, 'm>(
                             gc,
                             buf,
                             union_tag.unwrap(),
-                            &ty.collect_type_arguemnts(),
+                            &ty.fields_types(gc.type_env()),
                         );
                         gc.builder().build_free(buf);
                     }

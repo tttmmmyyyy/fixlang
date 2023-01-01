@@ -1,5 +1,4 @@
 use core::panic;
-use std::fmt::format;
 
 use super::*;
 
@@ -53,22 +52,25 @@ pub enum TyConVariant {
 #[derive(Clone, PartialEq, Hash, Eq)]
 pub struct TyCon {
     pub name: NameSpacedName,
-    pub variant: TyConVariant,
-    pub is_unbox: bool,
 }
 
 impl TyCon {
-    pub fn new(nsn: NameSpacedName, variant: TyConVariant, is_unbox: bool) -> TyCon {
-        TyCon {
-            name: nsn,
-            variant,
-            is_unbox,
-        }
+    pub fn new(nsn: NameSpacedName) -> TyCon {
+        TyCon { name: nsn }
     }
 
     pub fn to_string(&self) -> String {
         self.name.to_string()
     }
+}
+
+#[derive(Clone)]
+pub struct TyConInfo {
+    pub kind: Arc<Kind>,
+    pub variant: TyConVariant,
+    pub is_unbox: bool,
+    pub tyvars: Vec<Name>,
+    pub field_types: Vec<Arc<TypeNode>>, // For array, element type.
 }
 
 // Node of type ast tree with user defined additional information
@@ -209,12 +211,27 @@ impl TypeNode {
         }
     }
 
-    // For a type `tc a b c ...`, calculate [a, b, c, ...]
-    pub fn collect_type_arguemnts(&self) -> Vec<Arc<TypeNode>> {
+    // For structs and unions, return types of fields.
+    // For Array, return element type.
+    pub fn fields_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
+        let args = self.collect_type_argments();
+        let ti = self.toplevel_tycon_info(type_env);
+        assert_eq!(args.len(), ti.tyvars.len());
+        let mut s = Substitution::default();
+        for (i, tv) in ti.tyvars.iter().enumerate() {
+            s.add_substitution(&Substitution::single(tv, args[i]));
+        }
+        ti.field_types
+            .iter()
+            .map(|ty| s.substitute_type(ty))
+            .collect()
+    }
+
+    fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match self.ty {
             Type::TyApp(fun, arg) => {
-                ret.append(&mut fun.collect_type_arguemnts());
+                ret.append(&mut fun.collect_type_argments());
                 ret.push(arg);
             }
             _ => unreachable!(),
@@ -240,13 +257,21 @@ impl TypeNode {
         }
     }
 
-    pub fn is_unbox(&self) -> bool {
-        // If we want to add unboxed function, we need to add a new `function pointer` type.
-        !self.is_function() && self.toplevel_tycon().unwrap().is_unbox
+    pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
+        assert!(!self.is_function());
+        type_env
+            .tycons
+            .get(&self.toplevel_tycon().unwrap())
+            .unwrap()
+            .clone()
     }
 
-    pub fn is_box(&self) -> bool {
-        !self.is_unbox()
+    pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
+        !self.is_function() && self.toplevel_tycon_info(type_env).is_unbox
+    }
+
+    pub fn is_box(&self, type_env: &TypeEnv) -> bool {
+        !self.is_unbox(type_env)
     }
 
     // Create new type node with default info.
@@ -308,24 +333,30 @@ impl TypeNode {
         }
     }
 
-    pub fn get_object_type(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> ObjectType {
-        get_object_type(self, capture)
+    pub fn get_object_type(
+        self: &Arc<TypeNode>,
+        capture: &Vec<Arc<TypeNode>>,
+        type_env: &TypeEnv,
+    ) -> ObjectType {
+        get_object_type(self, capture, type_env)
     }
 
-    pub fn get_struct_type<'c>(
+    pub fn get_struct_type<'c, 'm>(
         self: &Arc<TypeNode>,
-        ctx: &'c Context,
+        gc: &GenerationContext<'c, 'm>,
         capture: &Vec<Arc<TypeNode>>,
     ) -> StructType<'c> {
-        self.get_object_type(capture).to_struct_type(ctx)
+        self.get_object_type(capture, gc.type_env())
+            .to_struct_type(gc)
     }
 
-    pub fn get_embedded_type<'c>(
+    pub fn get_embedded_type<'c, 'm>(
         self: &Arc<TypeNode>,
-        ctx: &'c Context,
+        gc: &GenerationContext<'c, 'm>,
         capture: &Vec<Arc<TypeNode>>,
     ) -> BasicTypeEnum<'c> {
-        self.get_object_type(capture).to_embedded_type(ctx)
+        self.get_object_type(capture, gc.type_env())
+            .to_embedded_type(gc)
     }
 }
 

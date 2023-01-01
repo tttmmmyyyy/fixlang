@@ -15,19 +15,33 @@ impl TypeDecl {
     }
 
     pub fn tycon(&self) -> TyCon {
-        let (variant, is_unbox) = match self.value {
-            TypeDeclValue::Struct(s) => (TyConVariant::Struct, s.is_unbox),
-            TypeDeclValue::Union(u) => (TyConVariant::Union, u.is_unbox),
-        };
-        TyCon::new(self.name.clone(), variant, is_unbox)
+        TyCon::new(self.name.clone())
     }
 
-    pub fn kind(&self) -> Arc<Kind> {
+    pub fn tycon_info(&self) -> TyConInfo {
         let mut kind = kind_star();
         for _ in &self.tyvars {
             kind = kind_arrow(kind_star(), kind);
         }
-        kind
+        let (variant, is_unbox, field_types) = match self.value {
+            TypeDeclValue::Struct(s) => (
+                TyConVariant::Struct,
+                s.is_unbox,
+                s.fields.iter().map(|f| f.ty.clone()).collect::<Vec<_>>(),
+            ),
+            TypeDeclValue::Union(u) => (
+                TyConVariant::Union,
+                u.is_unbox,
+                u.fields.iter().map(|f| f.ty.clone()).collect::<Vec<_>>(),
+            ),
+        };
+        TyConInfo {
+            kind,
+            variant,
+            is_unbox,
+            tyvars: self.tyvars.clone(),
+            field_types,
+        }
     }
 
     pub fn ty(&self) -> Arc<TypeNode> {

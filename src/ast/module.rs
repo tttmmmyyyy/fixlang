@@ -20,7 +20,7 @@ pub struct FixModule {
 #[derive(Clone)]
 pub struct TypeEnv {
     // List of type constructors including user-defined types.
-    pub tycons: Arc<HashMap<TyCon, Arc<Kind>>>,
+    pub tycons: Arc<HashMap<TyCon, TyConInfo>>,
 }
 
 impl Default for TypeEnv {
@@ -32,14 +32,14 @@ impl Default for TypeEnv {
 }
 
 impl TypeEnv {
-    pub fn new(tycons: HashMap<TyCon, Arc<Kind>>) -> TypeEnv {
+    pub fn new(tycons: HashMap<TyCon, TyConInfo>) -> TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
         }
     }
 
     pub fn kind(&self, tycon: &TyCon) -> Arc<Kind> {
-        self.tycons.get(tycon).unwrap().clone()
+        self.tycons.get(tycon).unwrap().kind
     }
 }
 
@@ -204,7 +204,7 @@ impl FixModule {
 
     // Calculate list of type constructors including user-defined types.
     pub fn calculate_type_env(&mut self) {
-        let mut tycons: HashMap<TyCon, Arc<Kind>> = bulitin_type_to_kind_map();
+        let mut tycons = bulitin_tycons();
         for type_decl in &self.type_decls {
             let tycon = type_decl.tycon();
             if tycons.contains_key(&tycon) {
@@ -213,7 +213,7 @@ impl FixModule {
                     &None,
                 );
             }
-            tycons.insert(tycon, type_decl.kind());
+            tycons.insert(tycon, type_decl.tycon_info());
         }
         self.type_env = TypeEnv::new(tycons);
     }

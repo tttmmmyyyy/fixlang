@@ -8,19 +8,37 @@ pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 
-pub fn bulitin_type_to_kind_map() -> HashMap<TyCon, Arc<Kind>> {
+pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
     ret.insert(
         TyCon::new(NameSpacedName::from_strs(&[STD_NAME], INT_NAME)),
-        kind_star(),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            field_types: vec![],
+        },
     );
     ret.insert(
         TyCon::new(NameSpacedName::from_strs(&[STD_NAME], BOOL_NAME)),
-        kind_star(),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            field_types: vec![],
+        },
     );
     ret.insert(
         TyCon::new(NameSpacedName::from_strs(&[STD_NAME], ARRAY_NAME)),
-        kind_arrow(kind_star(), kind_star()),
+        TyConInfo {
+            kind: kind_arrow(kind_star(), kind_star()),
+            variant: TyConVariant::Array,
+            is_unbox: false,
+            tyvars: vec!["a".to_string()],
+            field_types: vec![type_tyvar_star("a")],
+        },
     );
     ret
 }
@@ -58,22 +76,21 @@ pub fn loop_result_ty() -> Arc<TypeNode> {
 }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let ptr_to_int_obj =
-            ObjectType::int_obj_type().create_obj(gc, Some(val.to_string().as_str()));
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+        let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&format!("int_lit_{}", val)));
         let value = gc.context.i64_type().const_int(val as u64, false);
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        ptr_to_int_obj
+        obj.store_field_nocap(gc, 0, value);
+        obj
     });
     expr_lit(generator, vec![], val.to_string(), int_lit_ty(), source)
 }
 
 pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let ptr_to_obj = ObjectType::bool_obj_type().create_obj(gc, Some(val.to_string().as_str()));
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+        let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&format!("bool_lit_{}", val)));
         let value = gc.context.i8_type().const_int(val as u64, false);
-        gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
-        ptr_to_obj
+        obj.store_field_nocap(gc, 0, value);
+        obj
     });
     expr_lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
 }
@@ -87,13 +104,13 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
         f_str.clone(),
         x_str.clone(),
     ];
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
         let fixf = gc.get_var(&NameSpacedName::local(SELF_NAME)).ptr.get(gc);
         let x = gc.get_var(&x_str).ptr.get(gc);
         let f = gc.get_var(&f_str).ptr.get(gc);
         let f_fixf = gc.apply_lambda(f, fixf);
         let f_fixf_x = gc.apply_lambda(f_fixf, x);
-        f_fixf_x.ptr
+        f_fixf_x
     });
     expr_lit(generator, free_vars, name, type_tyvar_star(b), None)
 }
@@ -124,21 +141,20 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let name = format!("newArray {} {}", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         // Array = [ControlBlock, ArrayField] where ArrayField = [Size, PtrToBuffer].
-        let size = gc
-            .get_var_field(&size_str, 1, int_type(gc.context))
-            .into_int_value();
+        let size = gc.get_var_field(&size_str, 0).into_int_value();
         gc.release(gc.get_var(&size_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
-        let array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
-        let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
-        let array = gc.cast_pointer(array, array_ptr_ty);
-        let array_field = gc
-            .builder()
-            .build_struct_gep(array, 1, "array_field")
-            .unwrap();
-        ObjectFieldType::initialize_array_by_value(gc, array_field, size, value);
+        let array = allocate_obj(ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
+        let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
+        ObjectFieldType::initialize_array_size_buf_by_value(
+            gc,
+            array_field,
+            ty.fields_types(gc.type_env())[0],
+            size,
+            value,
+        );
         array
     });
     expr_lit(
@@ -187,20 +203,19 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let map_name = NameSpacedName::local(MAP_NAME);
     let size_name_cloned = size_name.clone();
     let map_name_cloned = map_name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let size = gc
-            .get_var_field(&size_name_cloned, 1, int_type(gc.context))
-            .into_int_value();
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+        let size = gc.get_var_field(&size_name_cloned, 0).into_int_value();
         gc.release(gc.get_var(&size_name_cloned).ptr.get(gc));
         let map = gc.get_var(&map_name_cloned).ptr.get(gc);
-        let array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
-        let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
-        let array = gc.cast_pointer(array, array_ptr_ty);
-        let array_field = gc
-            .builder()
-            .build_struct_gep(array, 1, "array_field")
-            .unwrap();
-        ObjectFieldType::initialize_array_by_map(gc, array_field, size, map);
+        let array = allocate_obj(ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
+        let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
+        ObjectFieldType::initialize_array_size_buf_by_map(
+            gc,
+            array_field,
+            ty.fields_types(gc.type_env())[0],
+            size,
+            map,
+        );
         array
     });
     let expr = expr_abs(
@@ -233,22 +248,20 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let idx_str = NameSpacedName::local(idx);
     let name = format!("Array.get {} {}", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
-        let array_ptr_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
         let mut array = gc.get_var(&array_str).ptr.get(gc);
-        array.ptr = gc.cast_pointer(array.ptr, array_ptr_ty);
-        let array_field = gc
-            .builder()
-            .build_struct_gep(array.ptr, 1, "array_field")
-            .unwrap();
-        let idx = gc
-            .get_var_field(&idx_str, 1, int_type(gc.context))
-            .into_int_value();
+        let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
+        let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let elem = ObjectFieldType::read_array(gc, array_field, idx, elem_ty);
+        let elem = ObjectFieldType::read_array_size_buf(
+            gc,
+            array_field,
+            ty.fields_types(gc.type_env())[0],
+            idx,
+        );
         gc.release(array);
-        elem.ptr
+        elem
     });
     expr_lit(generator, free_vars, name, elem_ty, None)
 }
@@ -302,21 +315,16 @@ fn write_array_lit(
     let name = format!("{} {} {} {}", func_name, array, idx, value);
     let name_cloned = name.clone();
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
-
         // Get argments
         let mut array = gc.get_var(&array_str).ptr.get(gc);
-        let idx = gc
-            .get_var_field(&idx_str, 1, int_type(gc.context))
-            .into_int_value();
+        let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
 
         // Get array field.
-        let array_str_ty = ObjectType::array_type().to_struct_type(gc.context);
-        array.ptr = gc.cast_pointer(array.ptr, ptr_type(array_str_ty));
-        let array_field = gc.builder().build_struct_gep(array.ptr, 1, "").unwrap();
+        let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
 
         // Get refcnt.
         let refcnt = gc
@@ -343,10 +351,10 @@ fn write_array_lit(
             // In case of unique version, panic in this case.
             gc.panic(format!("The argument of {} is shared!\n", func_name.as_str()).as_str());
         }
-        let cloned_array = ObjectType::array_type().create_obj(gc, Some(name_cloned.as_str()));
-        let cloned_array = gc.cast_pointer(cloned_array, ptr_type(array_str_ty));
-        let cloned_array_field = gc.builder().build_struct_gep(cloned_array, 1, "").unwrap();
-        ObjectFieldType::clone_array(gc, array_field, cloned_array_field, elem_ty);
+        let cloned_array = allocate_obj(ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
+        let cloned_array_field = cloned_array.ptr_to_field_nocap(gc, ARRAY_IDX);
+
+        ObjectFieldType::clone_array_size_buf(gc, array_field, cloned_array_field, elem_ty);
         gc.release(array); // Given array should be released here.
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
@@ -356,9 +364,12 @@ fn write_array_lit(
 
         // Build phi value of array and array_field.
         let array_phi = gc.builder().build_phi(array.ptr.get_type(), "array_phi");
-        assert_eq!(array.ptr.get_type(), cloned_array.get_type());
-        array_phi.add_incoming(&[(&array.ptr, current_bb), (&cloned_array, succ_of_shared_bb)]);
-        let array = array_phi.as_basic_value().into_pointer_value();
+        assert_eq!(array.ptr.get_type(), cloned_array.ptr.get_type());
+        array_phi.add_incoming(&[
+            (&array.ptr, current_bb),
+            (&cloned_array.ptr, succ_of_shared_bb),
+        ]);
+        let array = Object::new(array_phi.as_basic_value().into_pointer_value(), ty.clone());
         let array_field_phi = gc
             .builder()
             .build_phi(array_field.get_type(), "array_field_phi");
@@ -370,7 +381,7 @@ fn write_array_lit(
         let array_field = array_field_phi.as_basic_value().into_pointer_value();
 
         // Perform write and return.
-        ObjectFieldType::write_array(gc, array_field, idx, value.ptr, elem_ty);
+        ObjectFieldType::write_array_size_buf(gc, array_field, idx, value);
         array
     });
     expr_lit(
@@ -423,26 +434,16 @@ pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         let arr_name = NameSpacedName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
-        let array_obj_ty = ptr_type(ObjectType::array_type().to_struct_type(gc.context));
-        let mut array_obj = gc.get_var(&arr_name).ptr.get(gc);
-        array_obj.ptr = gc.cast_pointer(array_obj.ptr, array_obj_ty);
-        let size_buf_ptr = gc
-            .builder()
-            .build_struct_gep(array_obj.ptr, 1, "size_buf_ptr")
-            .unwrap();
+        let array_obj = gc.get_var(&arr_name).ptr.get(gc);
+        let size_buf_ptr = array_obj.ptr_to_field_nocap(gc, ARRAY_IDX);
+        let size = ObjectFieldType::size_from_array_size_buf(gc, size_buf_ptr);
         gc.release(array_obj);
-        let array_str = ObjectFieldType::Array
-            .to_basic_type(gc.context)
-            .into_struct_type();
-        let size = gc
-            .load_obj_field(size_buf_ptr, array_str, 0)
-            .into_int_value();
-        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(gc, Some("len arr"));
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, size);
-        ptr_to_int_obj
+        let int_obj = allocate_obj(int_lit_ty(), &vec![], gc, Some("length_of_arr"));
+        int_obj.store_field_nocap(gc, 0, size);
+        int_obj
     });
 
     let expr = expr_abs(
@@ -477,29 +478,28 @@ pub fn struct_new_lit(
         .collect();
     let name = format!("{}.new {}", struct_name.to_string(), field_names.join(" "));
     let name_cloned = name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         // Get field values.
-        let field_ptrs: Vec<PointerValue> = field_names
+        let fields = field_names
             .iter()
-            .map(|name| gc.get_var(&NameSpacedName::local(name)).ptr.get(gc).ptr)
-            .collect();
+            .map(|name| gc.get_var(&NameSpacedName::local(name)).ptr.get(gc))
+            .collect::<Vec<_>>();
 
         // Create struct object.
-        let obj_ty = ObjectType::struct_type(field_names.len());
-        let str_ptr = obj_ty.create_obj(gc, Some(&name_cloned));
+        let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned));
 
         // Set fields.
-        let struct_ty = obj_ty.to_struct_type(gc.context);
-        for (i, field_ptr) in field_ptrs.iter().enumerate() {
-            gc.store_obj_field(
-                str_ptr,
-                struct_ty,
-                i as u32 + 1,
-                field_ptr.as_basic_value_enum(),
-            );
+        let is_unbox = obj.is_unbox(gc.type_env());
+        let offset = struct_field_idx(is_unbox);
+        for (i, field) in fields.iter().enumerate() {
+            if is_unbox {
+                obj.store_field_nocap(gc, i as u32 + offset, field.load_nocap(gc));
+            } else {
+                obj.store_field_nocap(gc, i as u32 + offset, field.ptr);
+            }
         }
 
-        str_ptr
+        obj
     });
     expr_lit(generator, free_vars, name, struct_defn.ty(), None)
 }
@@ -533,24 +533,22 @@ pub fn struct_get_lit(
     field_name: &str,
 ) -> Arc<ExprNode> {
     let var_name_clone = NameSpacedName::local(var_name);
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         // Get struct object.
-        let str_ptr = gc.get_var(&var_name_clone).ptr.get(gc);
+        let str = gc.get_var(&var_name_clone).ptr.get(gc);
 
         // Extract field.
-        let str_ty = ObjectType::struct_type(field_count).to_struct_type(gc.context);
-        let field_ptr = gc.load_obj_field(str_ptr.ptr, str_ty, field_idx as u32 + 1);
-        let field_ptr = field_ptr.into_pointer_value();
-        let field_obj = Object {
-            ptr: field_ptr,
-            ty: field_ty,
-        };
+        let is_unbox = str.is_unbox(gc.type_env());
+        let offset = struct_field_idx(is_unbox);
+        let field_val = str.load_field_nocap(gc, field_idx as u32 + offset);
+        let field_ty = ty.fields_types(gc.type_env())[field_idx];
+        let field = Object::from_basic_value_enum(field_val, field_ty, gc);
 
         // Retain field and release struct.
-        gc.retain(field_obj);
-        gc.release(str_ptr);
+        gc.retain(field);
+        gc.release(str);
 
-        field_ptr
+        field
     });
     let free_vars = vec![NameSpacedName::local(var_name)];
     let name = format!("{}.get_{}", struct_name.to_string(), field_name);
@@ -597,7 +595,7 @@ pub fn struct_get(
     (expr, scm)
 }
 
-// `get` built-in function for a given struct.
+// `mod` built-in function for a given struct.
 pub fn struct_mod_lit(
     f_name: &str,
     x_name: &str,
@@ -606,7 +604,6 @@ pub fn struct_mod_lit(
     struct_name: &NameSpacedName,
     struct_defn: &TypeDecl,
     field_name: &str,
-    field_ty: Arc<TypeNode>,
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
     let name = format!(
@@ -621,78 +618,74 @@ pub fn struct_mod_lit(
     let x_name = NameSpacedName::local(x_name);
     let free_vars = vec![f_name.clone(), x_name.clone()];
     let name_cloned = name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        // Make types
-        let obj_ty = ObjectType::struct_type(field_count);
-        let str_ty = obj_ty.to_struct_type(gc.context);
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+        let is_unbox = ty.is_unbox(gc.type_env());
+        let field_offset: u32 = if is_unbox { 0 } else { 1 };
 
         // Get arguments
         let modfier = gc.get_var(&f_name).ptr.get(gc);
         let mut str = gc.get_var(&x_name).ptr.get(gc);
-        str.ptr = gc.cast_pointer(str.ptr, ptr_type(str_ty));
 
-        // If str is not unique, then first clone it.
-        let refcnt = gc
-            .load_obj_field(str.ptr, control_block_type(gc.context), 0)
-            .into_int_value();
+        if !is_unbox {
+            // In unboxed case, str should be replaced to cloned object if it is shared.
 
-        // Add shared / cont bbs.
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
-        let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
+            // Get refcnt.
+            let refcnt = gc
+                .load_obj_field(str.ptr, control_block_type(gc.context), 0)
+                .into_int_value();
 
-        // Jump to shared_bb if refcnt > 1.
-        let one = refcnt_type(gc.context).const_int(1, false);
-        let is_unique = gc
-            .builder()
-            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
-        gc.builder()
-            .build_conditional_branch(is_unique, cont_bb, shared_bb);
+            // Add shared / cont bbs.
+            let current_bb = gc.builder().get_insert_block().unwrap();
+            let current_func = current_bb.get_parent().unwrap();
+            let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
+            let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
-        // In shared_bb, create new struct and clone fields.
-        gc.builder().position_at_end(shared_bb);
-        if is_unique_version {
-            // In case of unique version, panic in this case.
-            gc.panic(&format!("The argument of mod! is shared!\n"));
+            // Jump to shared_bb if refcnt > 1.
+            let one = refcnt_type(gc.context).const_int(1, false);
+            let is_unique =
+                gc.builder()
+                    .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+            gc.builder()
+                .build_conditional_branch(is_unique, cont_bb, shared_bb);
+
+            // In shared_bb, create new struct and clone fields.
+            gc.builder().position_at_end(shared_bb);
+            if is_unique_version {
+                // In case of unique version, panic in this case.
+                gc.panic(&format!("The argument of mod! is shared!\n"));
+            }
+            let cloned_str = allocate_obj(str.ty, &vec![], gc, Some(name_cloned.as_str()));
+            for i in 0..field_count {
+                let field_ty = ty.fields_types(gc.type_env())[i];
+                let field_idx = field_offset + i as u32;
+                let field = str.load_field_nocap(gc, field_idx).into_pointer_value();
+                let field = Object::new(field, field_ty);
+                gc.retain(field);
+                cloned_str.store_field_nocap(gc, field_idx, field.ptr);
+            }
+            gc.release(str);
+            let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
+            gc.builder().build_unconditional_branch(cont_bb);
+
+            // Implement cont_bb
+            gc.builder().position_at_end(cont_bb);
+
+            // Build phi value
+            let str_phi = gc.builder().build_phi(str.ptr.get_type(), "str_phi");
+            assert_eq!(str.ptr.get_type(), cloned_str.ptr.get_type());
+            str_phi.add_incoming(&[(&str.ptr, current_bb), (&cloned_str.ptr, succ_of_shared_bb)]);
+
+            str = Object::new(str_phi.as_basic_value().into_pointer_value(), ty.clone());
         }
-        let cloned_str = obj_ty.create_obj(gc, Some(name_cloned.as_str()));
-        let cloned_str = gc.cast_pointer(cloned_str, ptr_type(str_ty));
-        for i in 0..field_count {
-            let field_idx = 1 as u32 + i as u32;
-            let field = gc
-                .load_obj_field(str.ptr, str_ty, field_idx)
-                .into_pointer_value();
-            let field = Object {
-                ptr: field,
-                ty: field_ty,
-            };
-            gc.retain(field);
-            gc.store_obj_field(cloned_str, str_ty, field_idx, field.ptr);
-        }
-        gc.release(str); // Given struct should be released here.
-        let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-        gc.builder().build_unconditional_branch(cont_bb);
-
-        // Implement cont_bb
-        gc.builder().position_at_end(cont_bb);
-
-        // Build phi value
-        let str_phi = gc.builder().build_phi(str.ptr.get_type(), "str_phi");
-        assert_eq!(str.ptr.get_type(), cloned_str.get_type());
-        str_phi.add_incoming(&[(&str.ptr, current_bb), (&cloned_str, succ_of_shared_bb)]);
-        let str = str_phi.as_basic_value().into_pointer_value();
 
         // Modify field
-        let field = gc
-            .load_obj_field(str, str_ty, 1 + field_idx as u32)
+        let field_val = str
+            .load_field_nocap(gc, field_offset + field_idx as u32)
             .into_pointer_value();
-        let field = Object {
-            ptr: field,
-            ty: field_ty,
-        };
+        let field_ty = ty.fields_types(gc.type_env())[field_idx];
+        let field = Object::new(field_val, field_ty);
         let field = gc.apply_lambda(modfier, field);
-        gc.store_obj_field(str, str_ty, 1 + field_idx as u32, field.ptr);
+        str.store_field_nocap(gc, field_offset + field_idx as u32, field.ptr);
 
         str
     });
@@ -736,7 +729,6 @@ pub fn struct_mod(
                 struct_name,
                 definition,
                 field_name,
-                field_ty,
                 is_unique_version,
             ),
             None,
@@ -795,28 +787,28 @@ pub fn union_new_lit(
     let name = format!("{}.new_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
     let field_name_cloned = field_name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+        let is_unbox = ty.is_unbox(gc.type_env());
+        let offset: u32 = if is_unbox { 0 } else { 1 };
+
         // Get field values.
-        let field_ptr = gc
+        let field = gc
             .get_var(&NameSpacedName::local(&field_name_cloned))
             .ptr
             .get(gc);
 
         // Create struct object.
-        let union_ty = ObjectType::union_type();
-        let union_ptr = union_ty.create_obj(gc, Some(&name_cloned));
-        let struct_ty = union_ty.to_struct_type(gc.context);
+        let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned));
 
-        // Create tag value.
+        // Set tag value.
         let tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
-
-        // Set tag.
-        gc.store_obj_field(union_ptr, struct_ty, 1, tag_value.as_basic_value_enum());
+        obj.store_field_nocap(gc, 0 + offset, tag_value);
 
         // Set value.
-        gc.store_obj_field(union_ptr, struct_ty, 2, field_ptr.ptr.as_basic_value_enum());
+        let buf = obj.ptr_to_field_nocap(gc, offset + 1);
+        ObjectFieldType::set_value_to_union_buf(gc, buf, field);
 
-        union_ptr
+        obj
     });
     expr_lit(generator, free_vars, name, union_defn.ty(), None)
 }
@@ -872,9 +864,13 @@ pub fn union_as_lit(
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
     let free_vars = vec![NameSpacedName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+        let is_unbox = ty.is_unbox(gc.type_env());
+        let offset = if is_unbox { 0 } else { 1 };
+        let elem_ty = ty.fields_types(gc.type_env())[field_idx];
+
         // Get union object.
-        let union_ptr = gc
+        let obj = gc
             .get_var(&NameSpacedName::local(&union_arg_name))
             .ptr
             .get(gc);
@@ -883,11 +879,7 @@ pub fn union_as_lit(
         let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
 
         // Get tag value.
-        let union_ty = ObjectType::union_type();
-        let struct_ty = union_ty.to_struct_type(gc.context);
-        let tag_value = gc
-            .load_obj_field(union_ptr.ptr, struct_ty, 1)
-            .into_int_value();
+        let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
 
         // If tag unmatch, panic.
         let is_tag_unmatch = gc.builder().build_int_compare(
@@ -908,17 +900,11 @@ pub fn union_as_lit(
 
         // When match, return the value.
         gc.builder().position_at_end(match_bb);
-        let field_value = gc
-            .load_obj_field(union_ptr.ptr, struct_ty, 2)
-            .into_pointer_value();
-        let field_value = Object {
-            ptr: field_value,
-            ty: field_ty,
-        };
-        gc.retain(field_value);
-        gc.release(union_ptr);
+        let buf = obj.load_field_nocap(gc, 1 + offset).into_pointer_value();
+        let value = ObjectFieldType::get_value_from_union_buf(gc, buf, &elem_ty);
 
-        field_value.ptr
+        gc.release(obj);
+        value
     });
     expr_lit(generator, free_vars, name, field_ty, None)
 }
@@ -967,9 +953,12 @@ pub fn union_is_lit(
     let name_cloned = name.clone();
     let free_vars = vec![NameSpacedName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+        let is_unbox = ty.is_unbox(gc.type_env());
+        let offset = if is_unbox { 0 } else { 1 };
+
         // Get union object.
-        let union_ptr = gc
+        let obj = gc
             .get_var(&NameSpacedName::local(&union_arg_name))
             .ptr
             .get(gc);
@@ -978,14 +967,10 @@ pub fn union_is_lit(
         let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
 
         // Get tag value.
-        let union_ty = ObjectType::union_type();
-        let struct_ty = union_ty.to_struct_type(gc.context);
-        let tag_value = gc
-            .load_obj_field(union_ptr.ptr, struct_ty, 1)
-            .into_int_value();
+        let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
 
         // Create returned value.
-        let ret_ptr = ObjectType::bool_obj_type().create_obj(gc, Some(&name_cloned));
+        let ret_ptr = allocate_obj(bool_lit_ty(), &vec![], gc, Some(&name_cloned));
 
         // Branch and store result to ret_ptr.
         let is_tag_match = gc.builder().build_int_compare(
@@ -1004,17 +989,17 @@ pub fn union_is_lit(
 
         gc.builder().position_at_end(match_bb);
         let value = gc.context.i8_type().const_int(1 as u64, false);
-        gc.store_obj_field(ret_ptr, bool_type(gc.context), 1, value);
+        ret_ptr.store_field_nocap(gc, 0, value);
         gc.builder().build_unconditional_branch(cont_bb);
 
         gc.builder().position_at_end(unmatch_bb);
         let value = gc.context.i8_type().const_int(0 as u64, false);
-        gc.store_obj_field(ret_ptr, bool_type(gc.context), 1, value);
+        ret_ptr.store_field_nocap(gc, 0, value);
         gc.builder().build_unconditional_branch(cont_bb);
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
-        gc.release(union_ptr);
+        gc.release(obj);
         ret_ptr
     });
     expr_lit(generator, free_vars, name, bool_lit_ty(), None)
@@ -1068,7 +1053,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
     );
 
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
         let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
 
@@ -1077,12 +1062,18 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
 
         // Allocate a variable to store loop state on stack.
+        let state_ty = init_state.ty;
         let state_ptr = gc
             .builder()
-            .build_alloca(ptr_to_object_type(gc.context), "loop_state");
+            .build_alloca(state_ty.get_embedded_type(gc, &vec![]), "loop_state");
 
         // Initialize state.
-        gc.builder().build_store(state_ptr, init_state.ptr);
+        let state_val = if state_ty.is_box(gc.type_env()) {
+            init_state.ptr.as_basic_value_enum()
+        } else {
+            init_state.load_nocap(gc).as_basic_value_enum()
+        };
+        gc.builder().build_store(state_ptr, state_val);
 
         // Create loop body bb and implement it.
         let current_bb = gc.builder().get_insert_block().unwrap();
@@ -1092,24 +1083,25 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 
         // Implement loop body.
         gc.builder().position_at_end(loop_bb);
-        let loop_state = gc
-            .builder()
-            .build_load(state_ptr, "loop_state")
-            .into_pointer_value();
-        let loop_state = Object {
-            ptr: loop_state,
-            ty: tyvar_s,
-        };
+        let loop_state = Object::new(
+            if state_ty.is_box(gc.type_env()) {
+                gc.builder()
+                    .build_load(state_ptr, "loop_state")
+                    .into_pointer_value()
+            } else {
+                state_ptr
+            },
+            state_ty,
+        );
 
         // Run loop_body on init_state.
         gc.retain(loop_body);
         let loop_res = gc.apply_lambda(loop_body, loop_state);
+        todo!("avoid alloca here.");
 
         // Branch due to loop_res.
-        let loop_result_ty = ObjectType::union_type().to_struct_type(gc.context);
-        let tag_value = gc
-            .load_obj_field(loop_res.ptr, loop_result_ty, 1)
-            .into_int_value();
+        assert!(loop_res.ty.is_unbox(gc.type_env()));
+        let tag_value = loop_res.load_field_nocap(gc, 0).into_int_value();
         let cont_tag_value = gc
             .context
             .i64_type()
@@ -1127,31 +1119,30 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 
         // Implement continue.
         gc.builder().position_at_end(continue_bb);
-        let next_state = gc
-            .load_obj_field(loop_res.ptr, loop_result_ty, 2)
-            .into_pointer_value();
-        let next_state = Object {
-            ptr: next_state,
-            ty: tyvar_s,
-        };
+        let union_buf = loop_res.load_field_nocap(gc, 1).into_pointer_value();
+        let next_state_val =
+            ObjectFieldType::get_basic_value_from_union_buf(gc, union_buf, &state_ty);
+        let next_state = Object::new(
+            if state_ty.is_box(gc.type_env()) {
+                next_state_val.into_pointer_value()
+            } else {
+                gc.builder().build_store(state_ptr, next_state_val);
+                state_ptr
+            },
+            state_ty,
+        );
         gc.retain(next_state);
         gc.release(loop_res);
-        gc.builder().build_store(state_ptr, next_state.ptr);
         gc.builder().build_unconditional_branch(loop_bb);
 
         // Implement break.
         gc.builder().position_at_end(break_bb);
         gc.release(loop_body);
-        let result = gc
-            .load_obj_field(loop_res.ptr, loop_result_ty, 2)
-            .into_pointer_value();
-        let result = Object {
-            ptr: result,
-            ty: tyvar_b,
-        };
+        let union_buf = loop_res.load_field_nocap(gc, 1).into_pointer_value();
+        let result = ObjectFieldType::get_value_from_union_buf(gc, union_buf, ty);
         gc.retain(result);
         gc.release(loop_res);
-        result.ptr
+        result
     });
 
     let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
@@ -1221,14 +1212,15 @@ pub fn unary_opeartor_instance(
     result_ty: Arc<TypeNode>,
     generator: for<'c, 'm> fn(
         &mut GenerationContext<'c, 'm>, // gc
-        BasicValueEnum<'c>,             // rhs
-    ) -> PointerValue<'c>,
+        Object<'c>,                     // rhs
+    ) -> Object<'c>,
 ) -> TraitInstance {
     const RHS_NAME: &str = "rhs";
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
-        let rhs = NameSpacedName::local(RHS_NAME);
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+        let rhs_name = NameSpacedName::local(RHS_NAME);
+        let rhs = gc.get_var(&rhs_name).ptr.get(gc);
         let operand_ty = get_operand_struct_ty(gc);
-        let rhs_val = gc.get_var_field(&rhs, 1, operand_ty);
+
         gc.release(gc.get_var(&rhs).ptr.get(gc));
         generator(gc, rhs_val)
     });

@@ -325,8 +325,9 @@ impl Expr {
     }
 }
 
-pub type LiteralGenerator =
-    dyn Send + Sync + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm>) -> PointerValue<'c>;
+pub type LiteralGenerator = dyn Send
+    + Sync
+    + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm>, &Arc<TypeNode>) -> Object<'c>;
 
 #[derive(Clone)]
 pub struct Literal {

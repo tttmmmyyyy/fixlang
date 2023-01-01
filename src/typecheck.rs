@@ -341,7 +341,7 @@ pub struct TypeCheckContext {
     // Trait environment.
     trait_env: TraitEnv,
     // List of type constructors.
-    type_env: TypeEnv,
+    pub type_env: TypeEnv,
 }
 
 impl TypeCheckContext {
