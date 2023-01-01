@@ -331,7 +331,8 @@ impl FixModule {
 
             // If ptr is null, then create object and initialize the pointer.
             gc.builder().position_at_end(init_bb);
-            let obj = gc.eval_expr(sym.expr.unwrap().clone());
+            let mut obj = gc.eval_expr(sym.expr.unwrap().clone());
+            obj.ptr = gc.cast_pointer(obj.ptr, ptr_to_object_type(gc.context));
             gc.builder().build_store(global_var, obj.ptr);
             if SANITIZE_MEMORY {
                 // Mark this object as global.
