@@ -420,7 +420,7 @@ pub fn test22_5() {
 #[test]
 #[serial]
 pub fn test23() {
-    // Test newArray of size 0.
+    // Test Array.new of size 0.
     let source = r"
         module Main;
         main : Int;
@@ -436,7 +436,7 @@ pub fn test23() {
 #[test]
 #[serial]
 pub fn test24() {
-    // Test newArray of size > 0.
+    // Test Array.new of size > 0.
     let source = r"
         module Main;
         main : Int;
@@ -452,7 +452,7 @@ pub fn test24() {
 #[test]
 #[serial]
 pub fn test25() {
-    // Test readArray.
+    // Test Array.read.
     let source = r"
         module Main;
         main : Int;
@@ -469,7 +469,7 @@ pub fn test25() {
 #[test]
 #[serial]
 pub fn test26() {
-    // Test writeArray.
+    // Test Array.set (unique case).
     let source = r"
         module Main;
         main : Int;
@@ -480,6 +480,23 @@ pub fn test26() {
         );
         ";
     let answer = 21;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test27() {
+    // Test Array.set (shared case).
+    let source = r"
+        module Main;
+        main : Int;
+        main = (
+            let arr0 = Array.new 100 42;
+            let arr1 = arr0.set 50 21;
+            arr0.get 50 + arr1.get 50
+        );
+        ";
+    let answer = 63;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
