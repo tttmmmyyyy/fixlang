@@ -155,6 +155,8 @@ impl ObjectFieldType {
         size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
     ) {
+        let elem_ty_clone = elem_ty.clone();
+
         // In loop body, release object of idx = counter_val.
         let loop_body = |gc: &mut GenerationContext<'c, 'm>,
                          idx: Object<'c>,
@@ -184,7 +186,7 @@ impl ObjectFieldType {
         }
 
         // Generate loop.
-        Self::loop_over_array_size_buf(gc, size_buf, elem_ty, loop_body, after_loop);
+        Self::loop_over_array_size_buf(gc, size_buf, elem_ty_clone, loop_body, after_loop);
     }
 
     // Initialize an array
@@ -196,7 +198,7 @@ impl ObjectFieldType {
     ) {
         assert_eq!(size.get_type(), gc.context.i64_type());
 
-        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty)
+        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty.clone())
             .to_basic_type(gc)
             .into_struct_type();
 
@@ -222,7 +224,7 @@ impl ObjectFieldType {
     ) {
         assert_eq!(value.ptr.get_type(), ptr_to_object_type(gc.context));
 
-        Self::initialize_array_size_buf(gc, size_buf, elem_ty, size);
+        Self::initialize_array_size_buf(gc, size_buf, elem_ty.clone(), size);
 
         // Initialize elements
         {
@@ -267,7 +269,7 @@ impl ObjectFieldType {
         map: Object<'c>,
     ) {
         // Initialize array.
-        Self::initialize_array_size_buf(gc, size_buf, elem_ty, size);
+        Self::initialize_array_size_buf(gc, size_buf, elem_ty.clone(), size);
 
         // Initialize elements
         {
@@ -278,7 +280,7 @@ impl ObjectFieldType {
                              ptr_to_buffer: PointerValue<'c>| {
                 // Apply map to idx object to get initial value at this idx.
                 gc.retain(map.clone());
-                let value = gc.apply_lambda(map.clone(), idx);
+                let value = gc.apply_lambda(map.clone(), idx.clone());
 
                 // Store value.
                 let idx_val = idx.load_field_nocap(gc, 0).into_int_value();
@@ -338,10 +340,10 @@ impl ObjectFieldType {
         idx: IntValue<'c>,
     ) -> Object<'c> {
         // Panic if out_of_range.
-        Self::panic_if_out_of_range(gc, size_buf, elem_ty, idx);
+        Self::panic_if_out_of_range(gc, size_buf, elem_ty.clone(), idx);
 
         // Get fields (size, ptr_to_buffer).
-        let (_size, ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
+        let (_size, ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty.clone());
 
         // Get element.
         let ptr_to_elem = unsafe {
@@ -355,7 +357,7 @@ impl ObjectFieldType {
         );
 
         // Retain element and return it.
-        gc.retain(elem_obj);
+        gc.retain(elem_obj.clone());
         elem_obj
     }
 
@@ -366,13 +368,13 @@ impl ObjectFieldType {
         idx: IntValue<'c>,
         value: Object<'c>,
     ) {
-        let elem_ty = value.ty;
+        let elem_ty = value.ty.clone();
 
         // Panic if out_of_range.
-        Self::panic_if_out_of_range(gc, size_buf, elem_ty, idx);
+        Self::panic_if_out_of_range(gc, size_buf, elem_ty.clone(), idx);
 
         // Get fields (size, ptr_to_buffer).
-        let (_size, ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
+        let (_size, ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty.clone());
 
         // Get ptr to the place at idx.
         let place = unsafe {
@@ -405,12 +407,12 @@ impl ObjectFieldType {
         dst: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
     ) {
-        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty)
+        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty.clone())
             .to_basic_type(gc)
             .into_struct_type();
 
         // Get fields (size, ptr_to_buffer) of src.
-        let (src_size, src_buffer) = Self::decompose_array_size_buf(gc, src, elem_ty);
+        let (src_size, src_buffer) = Self::decompose_array_size_buf(gc, src, elem_ty.clone());
 
         // Copy size.
         gc.store_obj_field(dst, array_struct, 0, src_size);
@@ -423,6 +425,7 @@ impl ObjectFieldType {
             .unwrap();
         gc.store_obj_field(dst, array_struct, 1, dst_buffer);
 
+        let elem_ty_clone = elem_ty.clone();
         // Clone each elements.
         {
             // In loop body, retain value and store it at idx.
@@ -455,7 +458,7 @@ impl ObjectFieldType {
                               _size: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {};
 
-            Self::loop_over_array_size_buf(gc, src, elem_ty, loop_body, after_loop);
+            Self::loop_over_array_size_buf(gc, src, elem_ty_clone, loop_body, after_loop);
         }
     }
 
@@ -587,7 +590,7 @@ impl ObjectFieldType {
     ) -> Object<'c> {
         let val = ObjectFieldType::get_basic_value_from_union_buf(gc, buf, elem_ty);
         let val = Object::from_basic_value_enum(val, elem_ty.clone(), gc);
-        gc.retain(val);
+        gc.retain(val.clone());
         val
     }
 
@@ -795,8 +798,9 @@ pub fn get_object_type(
                 ret.is_unbox = is_unbox;
                 ret.field_types.push(ObjectFieldType::ControlBlock);
                 assert_eq!(ret.field_types.len(), ARRAY_IDX as usize);
-                ret.field_types
-                    .push(ObjectFieldType::ArraySizeBuf(ty.fields_types(type_env)[0]))
+                ret.field_types.push(ObjectFieldType::ArraySizeBuf(
+                    ty.fields_types(type_env)[0].clone(),
+                ))
             }
             TyConVariant::Struct => {
                 let is_unbox = ti.is_unbox;

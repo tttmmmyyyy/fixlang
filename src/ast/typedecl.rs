@@ -23,7 +23,7 @@ impl TypeDecl {
         for _ in &self.tyvars {
             kind = kind_arrow(kind_star(), kind);
         }
-        let (variant, is_unbox, field_types) = match self.value {
+        let (variant, is_unbox, field_types) = match &self.value {
             TypeDeclValue::Struct(s) => (
                 TyConVariant::Struct,
                 s.is_unbox,

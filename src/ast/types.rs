@@ -170,7 +170,6 @@ impl TypeNode {
     }
 
     pub fn get_funty_src(&self) -> Arc<TypeNode> {
-        let mut ret = self.clone();
         match &self.ty {
             Type::FunTy(src, _dst) => src.clone(),
             _ => panic!(),
@@ -178,7 +177,6 @@ impl TypeNode {
     }
 
     pub fn get_funty_dst(&self) -> Arc<TypeNode> {
-        let mut ret = self.clone();
         match &self.ty {
             Type::FunTy(_src, dst) => dst.clone(),
             _ => panic!(),
@@ -219,7 +217,7 @@ impl TypeNode {
         assert_eq!(args.len(), ti.tyvars.len());
         let mut s = Substitution::default();
         for (i, tv) in ti.tyvars.iter().enumerate() {
-            s.add_substitution(&Substitution::single(tv, args[i]));
+            s.add_substitution(&Substitution::single(tv, args[i].clone()));
         }
         ti.field_types
             .iter()
@@ -229,10 +227,10 @@ impl TypeNode {
 
     fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
-        match self.ty {
+        match &self.ty {
             Type::TyApp(fun, arg) => {
                 ret.append(&mut fun.collect_type_argments());
-                ret.push(arg);
+                ret.push(arg.clone());
             }
             _ => unreachable!(),
         }
@@ -242,7 +240,7 @@ impl TypeNode {
     // Get top-level type constructor.
     // Returns None if this is function type.
     pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
-        match self.ty {
+        match &self.ty {
             Type::TyVar(_) => panic!(),
             Type::TyCon(tc) => Some(tc.clone()),
             Type::TyApp(fun, _) => fun.toplevel_tycon(),

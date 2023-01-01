@@ -105,7 +105,7 @@ fn build_module<'c>(
     }
 
     // Create GenerationContext.
-    let mut gc = GenerationContext::new(&context, &module, target, TypeCheckContext::default());
+    let mut gc = GenerationContext::new(&context, &module, target);
 
     // If use leaky allocator, prepare heap counter.
     if USE_LEAKY_ALLOCATOR {

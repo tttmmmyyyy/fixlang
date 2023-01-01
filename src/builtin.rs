@@ -151,7 +151,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
         ObjectFieldType::initialize_array_size_buf_by_value(
             gc,
             array_field,
-            ty.fields_types(gc.type_env())[0],
+            ty.fields_types(gc.type_env())[0].clone(),
             size,
             value,
         );
@@ -212,7 +212,7 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         ObjectFieldType::initialize_array_size_buf_by_map(
             gc,
             array_field,
-            ty.fields_types(gc.type_env())[0],
+            ty.fields_types(gc.type_env())[0].clone(),
             size,
             map,
         );
@@ -250,14 +250,14 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let free_vars = vec![array_str.clone(), idx_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
-        let mut array = gc.get_var(&array_str).ptr.get(gc);
+        let array = gc.get_var(&array_str).ptr.get(gc);
         let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
         let elem = ObjectFieldType::read_array_size_buf(
             gc,
             array_field,
-            ty.fields_types(gc.type_env())[0],
+            ty.fields_types(gc.type_env())[0].clone(),
             idx,
         );
         gc.release(array);
@@ -317,8 +317,9 @@ fn write_array_lit(
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        let elem_ty = ty.fields_types(gc.type_env())[0].clone();
         // Get argments
-        let mut array = gc.get_var(&array_str).ptr.get(gc);
+        let array = gc.get_var(&array_str).ptr.get(gc);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
@@ -355,7 +356,7 @@ fn write_array_lit(
         let cloned_array_field = cloned_array.ptr_to_field_nocap(gc, ARRAY_IDX);
 
         ObjectFieldType::clone_array_size_buf(gc, array_field, cloned_array_field, elem_ty);
-        gc.release(array); // Given array should be released here.
+        gc.release(array.clone()); // Given array should be released here.
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
 
@@ -434,7 +435,7 @@ pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
         let arr_name = NameSpacedName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
@@ -526,7 +527,6 @@ pub fn struct_new(
 // `get` built-in function for a given struct.
 pub fn struct_get_lit(
     var_name: &str,
-    field_count: usize, // number of fields in this struct
     field_idx: usize,
     field_ty: Arc<TypeNode>,
     struct_name: &NameSpacedName,
@@ -541,11 +541,11 @@ pub fn struct_get_lit(
         let is_unbox = str.is_unbox(gc.type_env());
         let offset = struct_field_idx(is_unbox);
         let field_val = str.load_field_nocap(gc, field_idx as u32 + offset);
-        let field_ty = ty.fields_types(gc.type_env())[field_idx];
+        let field_ty = ty.fields_types(gc.type_env())[field_idx].clone();
         let field = Object::from_basic_value_enum(field_val, field_ty, gc);
 
         // Retain field and release struct.
-        gc.retain(field);
+        gc.retain(field.clone());
         gc.release(str);
 
         field
@@ -576,18 +576,10 @@ pub fn struct_get(
     }
     let (field_idx, field) = field.unwrap();
 
-    let field_count = definition.fields().len();
     let str_ty = definition.ty();
     let expr = expr_abs(
         var_local("f", None),
-        struct_get_lit(
-            "f",
-            field_count,
-            field_idx,
-            field.ty.clone(),
-            struct_name,
-            field_name,
-        ),
+        struct_get_lit("f", field_idx, field.ty.clone(), struct_name, field_name),
         None,
     );
     let ty = type_fun(str_ty, field.ty.clone());
@@ -654,16 +646,16 @@ pub fn struct_mod_lit(
                 // In case of unique version, panic in this case.
                 gc.panic(&format!("The argument of mod! is shared!\n"));
             }
-            let cloned_str = allocate_obj(str.ty, &vec![], gc, Some(name_cloned.as_str()));
+            let cloned_str = allocate_obj(str.ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
             for i in 0..field_count {
-                let field_ty = ty.fields_types(gc.type_env())[i];
+                let field_ty = ty.fields_types(gc.type_env())[i].clone();
                 let field_idx = field_offset + i as u32;
                 let field = str.load_field_nocap(gc, field_idx).into_pointer_value();
                 let field = Object::new(field, field_ty);
-                gc.retain(field);
+                gc.retain(field.clone());
                 cloned_str.store_field_nocap(gc, field_idx, field.ptr);
             }
-            gc.release(str);
+            gc.release(str.clone());
             let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
             gc.builder().build_unconditional_branch(cont_bb);
 
@@ -682,7 +674,7 @@ pub fn struct_mod_lit(
         let field_val = str
             .load_field_nocap(gc, field_offset + field_idx as u32)
             .into_pointer_value();
-        let field_ty = ty.fields_types(gc.type_env())[field_idx];
+        let field_ty = ty.fields_types(gc.type_env())[field_idx].clone();
         let field = Object::new(field_val, field_ty);
         let field = gc.apply_lambda(modfier, field);
         str.store_field_nocap(gc, field_offset + field_idx as u32, field.ptr);
@@ -716,7 +708,6 @@ pub fn struct_mod(
 
     let field_count = definition.fields().len();
     let str_ty = definition.ty();
-    let field_ty = field.ty;
     let expr = expr_abs(
         var_local("f", None),
         expr_abs(
@@ -867,7 +858,7 @@ pub fn union_as_lit(
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         let is_unbox = ty.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
-        let elem_ty = ty.fields_types(gc.type_env())[field_idx];
+        let elem_ty = ty.fields_types(gc.type_env())[field_idx].clone();
 
         // Get union object.
         let obj = gc
@@ -1062,7 +1053,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
 
         // Allocate a variable to store loop state on stack.
-        let state_ty = init_state.ty;
+        let state_ty = init_state.ty.clone();
         let state_ptr = gc
             .builder()
             .build_alloca(state_ty.get_embedded_type(gc, &vec![]), "loop_state");
@@ -1095,9 +1086,9 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         );
 
         // Run loop_body on init_state.
-        gc.retain(loop_body);
+        gc.retain(loop_body.clone());
         let loop_res = gc.apply_lambda(loop_body, loop_state);
-        todo!("avoid alloca here.");
+        todo!("use stacksave and stackrestore here.");
 
         // Branch due to loop_res.
         assert!(loop_res.ty.is_unbox(gc.type_env()));
@@ -1208,7 +1199,6 @@ pub fn unary_opeartor_instance(
     trait_id: TraitId,
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
-    get_operand_struct_ty: for<'c, 'm> fn(&mut GenerationContext<'c, 'm>) -> StructType<'c>,
     result_ty: Arc<TypeNode>,
     generator: for<'c, 'm> fn(
         &mut GenerationContext<'c, 'm>, // gc
@@ -1219,10 +1209,7 @@ pub fn unary_opeartor_instance(
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         let rhs_name = NameSpacedName::local(RHS_NAME);
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
-        let operand_ty = get_operand_struct_ty(gc);
-
-        gc.release(gc.get_var(&rhs).ptr.get(gc));
-        generator(gc, rhs_val)
+        generator(gc, rhs)
     });
     TraitInstance {
         qual_pred: QualPredicate {
@@ -1282,24 +1269,20 @@ pub fn binary_opeartor_instance(
     trait_id: TraitId,
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
-    get_operand_struct_ty: for<'c, 'm> fn(&mut GenerationContext<'c, 'm>) -> StructType<'c>,
     result_ty: Arc<TypeNode>,
     generator: for<'c, 'm> fn(
         &mut GenerationContext<'c, 'm>, // gc
-        BasicValueEnum<'c>,             // lhs
-        BasicValueEnum<'c>,             // rhs
-    ) -> PointerValue<'c>,
+        Object<'c>,                     // lhs
+        Object<'c>,                     // rhs
+    ) -> Object<'c>,
 ) -> TraitInstance {
     const LHS_NAME: &str = "lhs";
     const RHS_NAME: &str = "rhs";
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         let lhs = NameSpacedName::local(LHS_NAME);
         let rhs = NameSpacedName::local(RHS_NAME);
-        let operand_ty = get_operand_struct_ty(gc);
-        let lhs_val = gc.get_var_field(&lhs, 1, operand_ty);
-        gc.release(gc.get_var(&lhs).ptr.get(gc));
-        let rhs_val = gc.get_var_field(&rhs, 1, operand_ty);
-        gc.release(gc.get_var(&rhs).ptr.get(gc));
+        let lhs_val = gc.get_var(&lhs).ptr.get(gc);
+        let rhs_val = gc.get_var(&rhs).ptr.get(gc);
         generator(gc, lhs_val, rhs_val)
     });
     TraitInstance {
@@ -1355,39 +1338,34 @@ pub fn eq_trait() -> TraitInfo {
 pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
     fn generate_eq_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_int_compare(
-            IntPredicate::EQ,
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            EQ_TRAIT_EQ_NAME,
-        );
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value =
+            gc.builder()
+                .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
         let value = gc.builder().build_int_cast(
             value,
-            ObjectFieldType::Bool
-                .to_basic_type(gc.context)
-                .into_int_type(),
+            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
             "eq",
         );
-        let ptr_to_obj = ObjectType::bool_obj_type()
-            .create_obj(gc, Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)));
-        gc.store_obj_field(ptr_to_obj, bool_type(gc.context), 1, value);
-        ptr_to_obj
+        let obj = allocate_obj(
+            bool_lit_ty(),
+            &vec![],
+            gc,
+            Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
+        );
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
-    let get_struct_ty = if ty == int_lit_ty() {
-        get_int_struct_ty
-    } else if ty == bool_lit_ty() {
-        get_bool_struct_ty
-    } else {
-        unimplemented!();
-    };
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
-        get_struct_ty,
         bool_lit_ty(),
         generate_eq_int,
     )
@@ -1413,32 +1391,34 @@ pub fn cmp_trait() -> TraitInfo {
 pub fn cmp_trait_instance_int() -> TraitInstance {
     fn generate_cmp_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_int_compare(
-            IntPredicate::SLT,
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            CMP_TRAIT_LT_NAME,
-        );
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value =
+            gc.builder()
+                .build_int_compare(IntPredicate::SLT, lhs_val, rhs_val, CMP_TRAIT_LT_NAME);
         let value = gc.builder().build_int_cast(
             value,
-            ObjectFieldType::Bool
-                .to_basic_type(gc.context)
-                .into_int_type(),
+            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
             CMP_TRAIT_LT_NAME,
         );
-        let ptr_to_bool_obj = ObjectType::bool_obj_type()
-            .create_obj(gc, Some(&format!("{} lhs rhs", CMP_TRAIT_LT_NAME)));
-        gc.store_obj_field(ptr_to_bool_obj, bool_type(gc.context), 1, value);
-        ptr_to_bool_obj
+        let obj = allocate_obj(
+            bool_lit_ty(),
+            &vec![],
+            gc,
+            Some(&format!("{} lhs rhs", CMP_TRAIT_LT_NAME)),
+        );
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
     binary_opeartor_instance(
         cmp_trait_id(),
         &CMP_TRAIT_LT_NAME.to_string(),
         int_lit_ty(),
-        get_int_struct_ty,
         bool_lit_ty(),
         generate_cmp_int,
     )
@@ -1460,24 +1440,29 @@ pub fn add_trait() -> TraitInfo {
 pub fn add_trait_instance_int() -> TraitInstance {
     fn generate_add_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_int_add(
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            ADD_TRAIT_ADD_NAME,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
+        let obj = allocate_obj(
+            int_lit_ty(),
+            &vec![],
+            gc,
+            Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
         );
-        let ptr_to_int_obj = ObjectType::int_obj_type()
-            .create_obj(gc, Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)));
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        ptr_to_int_obj
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
     binary_opeartor_instance(
         add_trait_id(),
         &ADD_TRAIT_ADD_NAME.to_string(),
         int_lit_ty(),
-        get_int_struct_ty,
         int_lit_ty(),
         generate_add_int,
     )
@@ -1503,26 +1488,29 @@ pub fn subtract_trait() -> TraitInfo {
 pub fn subtract_trait_instance_int() -> TraitInstance {
     fn generate_subtract_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_int_sub(
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            SUBTRACT_TRAIT_SUBTRACT_NAME,
-        );
-        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
+        let obj = allocate_obj(
+            int_lit_ty(),
+            &vec![],
             gc,
             Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
         );
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        ptr_to_int_obj
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
     binary_opeartor_instance(
         subtract_trait_id(),
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         int_lit_ty(),
-        get_int_struct_ty,
         int_lit_ty(),
         generate_subtract_int,
     )
@@ -1548,26 +1536,29 @@ pub fn multiply_trait() -> TraitInfo {
 pub fn multiply_trait_instance_int() -> TraitInstance {
     fn generate_multiply_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_int_mul(
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            MULTIPLY_TRAIT_MULTIPLY_NAME,
-        );
-        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
+        let obj = allocate_obj(
+            int_lit_ty(),
+            &vec![],
             gc,
             Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
         );
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        ptr_to_int_obj
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
     binary_opeartor_instance(
         multiply_trait_id(),
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         int_lit_ty(),
-        get_int_struct_ty,
         int_lit_ty(),
         generate_multiply_int,
     )
@@ -1593,24 +1584,29 @@ pub fn divide_trait() -> TraitInfo {
 pub fn divide_trait_instance_int() -> TraitInstance {
     fn generate_divide_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_int_signed_div(
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            DIVIDE_TRAIT_DIVIDE_NAME,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
+        let obj = allocate_obj(
+            int_lit_ty(),
+            &vec![],
+            gc,
+            Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
         );
-        let ptr_to_int_obj = ObjectType::int_obj_type()
-            .create_obj(gc, Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)));
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        ptr_to_int_obj
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
     binary_opeartor_instance(
         divide_trait_id(),
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         int_lit_ty(),
-        get_int_struct_ty,
         int_lit_ty(),
         generate_divide_int,
     )
@@ -1636,26 +1632,29 @@ pub fn remainder_trait() -> TraitInfo {
 pub fn remainder_trait_instance_int() -> TraitInstance {
     fn generate_remainder_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_int_signed_rem(
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            REMAINDER_TRAIT_REMAINDER_NAME,
-        );
-        let ptr_to_int_obj = ObjectType::int_obj_type().create_obj(
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value =
+            gc.builder()
+                .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME);
+        let obj = allocate_obj(
+            int_lit_ty(),
+            &vec![],
             gc,
             Some(&format!("{} lhs rhs", REMAINDER_TRAIT_REMAINDER_NAME)),
         );
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        ptr_to_int_obj
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
     binary_opeartor_instance(
         remainder_trait_id(),
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
         int_lit_ty(),
-        get_int_struct_ty,
         int_lit_ty(),
         generate_remainder_int,
     )
@@ -1677,24 +1676,28 @@ pub fn and_trait() -> TraitInfo {
 pub fn and_trait_instance_bool() -> TraitInstance {
     fn generate_and_bool<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: BasicValueEnum<'c>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
-        let value = gc.builder().build_and(
-            lhs.into_int_value(),
-            rhs.into_int_value(),
-            AND_TRAIT_AND_NAME,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc.builder().build_and(lhs_val, rhs_val, AND_TRAIT_AND_NAME);
+
+        let obj = allocate_obj(
+            bool_lit_ty(),
+            &vec![],
+            gc,
+            Some(&format!("{} lhs rhs", AND_TRAIT_AND_NAME)),
         );
-        let ptr_to_bool_obj = ObjectType::bool_obj_type()
-            .create_obj(gc, Some(&format!("{} lhs rhs", AND_TRAIT_AND_NAME)));
-        gc.store_obj_field(ptr_to_bool_obj, bool_type(gc.context), 1, value);
-        ptr_to_bool_obj
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
     binary_opeartor_instance(
         and_trait_id(),
         &AND_TRAIT_AND_NAME.to_string(),
         bool_lit_ty(),
-        get_bool_struct_ty,
         bool_lit_ty(),
         generate_and_bool,
     )
@@ -1716,30 +1719,27 @@ pub fn negate_trait() -> TraitInfo {
 pub fn negate_trait_instance_int() -> TraitInstance {
     fn generate_negate_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        rhs: BasicValueEnum<'c>,
-    ) -> PointerValue<'c> {
+        rhs: Object<'c>,
+    ) -> Object<'c> {
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
         let value = gc
             .builder()
-            .build_int_neg(rhs.into_int_value(), NEGATE_TRAIT_NEGATE_NAME);
-        let ptr_to_int_obj = ObjectType::int_obj_type()
-            .create_obj(gc, Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)));
-        gc.store_obj_field(ptr_to_int_obj, int_type(gc.context), 1, value);
-        ptr_to_int_obj
+            .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
+        let obj = allocate_obj(
+            int_lit_ty(),
+            &vec![],
+            gc,
+            Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
+        );
+        obj.store_field_nocap(gc, 0, value);
+        obj
     }
     unary_opeartor_instance(
         negate_trait_id(),
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         int_lit_ty(),
-        get_int_struct_ty,
         int_lit_ty(),
         generate_negate_int,
     )
-}
-
-fn get_bool_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
-    bool_type(gc.context)
-}
-
-fn get_int_struct_ty<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
-    int_type(gc.context)
 }

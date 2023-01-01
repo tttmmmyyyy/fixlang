@@ -39,7 +39,7 @@ impl TypeEnv {
     }
 
     pub fn kind(&self, tycon: &TyCon) -> Arc<Kind> {
-        self.tycons.get(tycon).unwrap().kind
+        self.tycons.get(tycon).unwrap().kind.clone()
     }
 }
 
@@ -306,7 +306,7 @@ impl FixModule {
                         .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
 
                 // Register the accessor function to gc.
-                gc.add_global_object(name.clone(), acc_fn, sym.ty);
+                gc.add_global_object(name.clone(), acc_fn, sym.ty.clone());
 
                 // Return global variable and accessor.
                 (global_var, acc_fn, sym.clone())
@@ -454,7 +454,7 @@ impl FixModule {
         if !ty.free_vars().is_empty() {
             error_exit(&format!("cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", name.to_string(), ty.to_string()));
         }
-        let inst_name = self.determine_instantiated_symbol_name(&tc, name, ty);
+        let inst_name = self.determine_instantiated_symbol_name(name, ty);
         if !self.instantiated_global_symbols.contains_key(&inst_name)
             && !self.deferred_instantiation.contains_key(&inst_name)
         {
@@ -475,7 +475,6 @@ impl FixModule {
     // tc: a typechecker (substituion) under which ty should be interpret.
     fn determine_instantiated_symbol_name(
         &self,
-        tc: &TypeCheckContext,
         name: &NameSpacedName,
         ty: &Arc<TypeNode>,
     ) -> NameSpacedName {
