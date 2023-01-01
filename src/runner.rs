@@ -174,7 +174,7 @@ fn build_module<'c>(
     }
 
     // Print LLVM bitcode to file
-    // module.print_to_file("main.ll").unwrap();
+    module.print_to_file("main.ll").unwrap();
 
     // Verify LLVM module.
     let verify = module.verify();
