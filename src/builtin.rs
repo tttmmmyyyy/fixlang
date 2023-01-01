@@ -1074,6 +1074,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 
         // Implement loop body.
         gc.builder().position_at_end(loop_bb);
+        let stack_pos = gc.save_stack();
         let loop_state = Object::new(
             if state_ty.is_box(gc.type_env()) {
                 gc.builder()
@@ -1123,6 +1124,8 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         );
         gc.retain(next_state);
         gc.release(loop_res.clone());
+
+        gc.restore_stack(stack_pos);
         gc.builder().build_unconditional_branch(loop_bb);
 
         // Implement break.

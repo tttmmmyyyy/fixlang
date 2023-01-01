@@ -7,6 +7,7 @@ use std::{cell::RefCell, rc::Rc};
 use either::Either;
 use inkwell::{
     execution_engine::ExecutionEngine,
+    intrinsics::Intrinsic,
     targets::{TargetData, TargetMachine},
     types::AnyType,
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
@@ -243,6 +244,35 @@ impl<'c> Drop for PopScopeGuard<'c> {
 }
 
 impl<'c, 'm> GenerationContext<'c, 'm> {
+    // Store stack pointer.
+    pub fn save_stack(&mut self) -> PointerValue<'c> {
+        let intrinsic = Intrinsic::find("llvm.stacksave").unwrap();
+        let func = intrinsic.get_declaration(&self.module, &[]).unwrap();
+        self.builder()
+            .build_call(func, &[], "save_stack")
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_pointer_value()
+    }
+
+    // Restore stack pointer.
+    pub fn restore_stack(&mut self, pos: PointerValue<'c>) {
+        let intrinsic = Intrinsic::find("llvm.stackrestore").unwrap();
+        let func = intrinsic
+            .get_declaration(
+                &self.module,
+                &[self
+                    .context
+                    .i8_type()
+                    .ptr_type(AddressSpace::Generic)
+                    .into()],
+            )
+            .unwrap();
+        self.builder()
+            .build_call(func, &[pos.into()], "restore_stack");
+    }
+
     pub fn type_env(&self) -> &TypeEnv {
         &self.typechecker.as_ref().unwrap().type_env
     }
