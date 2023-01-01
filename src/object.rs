@@ -179,12 +179,13 @@ impl ObjectFieldType {
             gc.release(Object::new(obj, elem_ty.clone()));
         };
 
-        // After loop, do nothing.
+        // After loop, free buffer.
         fn after_loop<'c, 'm>(
-            _gc: &mut GenerationContext<'c, 'm>,
+            gc: &mut GenerationContext<'c, 'm>,
             _size: IntValue<'c>,
-            _ptr_to_buffer: PointerValue<'c>,
+            ptr_to_buffer: PointerValue<'c>,
         ) {
+            gc.builder().build_free(ptr_to_buffer);
         }
 
         // Generate loop.
@@ -992,11 +993,16 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Bool => {}
                     ObjectFieldType::ArraySizeBuf(ty) => {
-                        let ptr = gc
-                            .load_obj_field(ptr_to_obj, struct_type, i as u32)
-                            .into_pointer_value();
-                        ObjectFieldType::destruct_array_size_buf(gc, ptr, ty.clone());
-                        gc.builder().build_free(ptr);
+                        let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
+                        let size_buf = gc
+                            .builder()
+                            .build_struct_gep(
+                                ptr_to_struct,
+                                i as u32,
+                                &format!("ptr_to_{}nd_field", i),
+                            )
+                            .unwrap();
+                        ObjectFieldType::destruct_array_size_buf(gc, size_buf, ty.clone());
                     }
                     ObjectFieldType::UnionTag => {
                         union_tag = Some(
