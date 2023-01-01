@@ -395,15 +395,10 @@ impl FixModule {
         if !self.global_symbols.contains_key(&main_func_name) {
             error_exit("main function not found.");
         }
-        let inst_name = self.require_instantiated_symbol(&main_func_name, &int_lit_ty());
+        let main_ty = int_lit_ty();
+        let inst_name = self.require_instantiated_symbol(&main_func_name, &main_ty);
         self.instantiate_symbols();
-        self.instantiated_global_symbols
-            .get(&inst_name)
-            .unwrap()
-            .expr
-            .as_ref()
-            .unwrap()
-            .clone()
+        expr_var(inst_name, None).set_inferred_type(main_ty)
     }
 
     // Instantiate expression.
