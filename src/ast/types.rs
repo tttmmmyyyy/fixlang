@@ -238,6 +238,7 @@ impl TypeNode {
                 ret.append(&mut fun.collect_type_argments());
                 ret.push(arg.clone());
             }
+            Type::TyCon(_) => {}
             _ => unreachable!(),
         }
         ret
