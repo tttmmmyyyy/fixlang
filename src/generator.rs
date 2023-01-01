@@ -47,12 +47,12 @@ impl<'c> Object<'c> {
         gc: &GenerationContext<'c, 'm>,
     ) -> Object<'c> {
         let ptr = if ty.is_box(gc.type_env()) {
+            val.into_pointer_value()
+        } else {
             let str = ty.get_struct_type(gc, &vec![]);
             let ptr = gc.builder().build_alloca(str, "alloca_for_unboxed_obj");
             gc.builder().build_store(ptr, val);
             ptr
-        } else {
-            val.into_pointer_value()
         };
         Object::new(ptr, ty)
     }
