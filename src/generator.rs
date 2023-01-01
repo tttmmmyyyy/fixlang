@@ -123,14 +123,6 @@ impl<'c> Object<'c> {
         assert!(self.is_unbox(gc.type_env()));
         create_dtor(&self.ty, &vec![], gc)
     }
-
-    pub fn get_struct_type<'m>(
-        &self,
-        gc: &mut GenerationContext<'c, 'm>,
-        capture: &Vec<Arc<TypeNode>>,
-    ) -> StructType<'c> {
-        self.ty.get_struct_type(gc, capture)
-    }
 }
 
 // Additional implementation of Object with another set of life parameters.

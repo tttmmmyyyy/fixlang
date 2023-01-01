@@ -3,16 +3,12 @@ use std::path::PathBuf;
 use either::Either;
 use inkwell::{
     execution_engine::ExecutionEngine,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetData, TargetMachine},
+    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
 
 use super::*;
 
-fn execute_main_module<'c>(
-    module: &Module<'c>,
-    ee: &ExecutionEngine<'c>,
-    opt_level: OptimizationLevel,
-) -> i64 {
+fn execute_main_module<'c>(ee: &ExecutionEngine<'c>) -> i64 {
     if SANITIZE_MEMORY {
         assert_eq!(
             load_library_permanently("sanitizer/libfixsanitizer.so"),
@@ -203,7 +199,7 @@ pub fn run_source(source: &str, opt_level: OptimizationLevel, result_as_main_ret
         result_as_main_return,
     )
     .unwrap_right();
-    execute_main_module(&module, &ee, opt_level)
+    execute_main_module(&ee)
 }
 
 pub fn read_file(path: &Path) -> String {

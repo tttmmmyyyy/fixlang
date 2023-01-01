@@ -1082,13 +1082,12 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
             } else {
                 state_ptr
             },
-            state_ty,
+            state_ty.clone(),
         );
 
         // Run loop_body on init_state.
         gc.retain(loop_body.clone());
-        let loop_res = gc.apply_lambda(loop_body, loop_state);
-        todo!("use stacksave and stackrestore here.");
+        let loop_res = gc.apply_lambda(loop_body.clone(), loop_state);
 
         // Branch due to loop_res.
         assert!(loop_res.ty.is_unbox(gc.type_env()));
@@ -1123,7 +1122,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
             state_ty,
         );
         gc.retain(next_state);
-        gc.release(loop_res);
+        gc.release(loop_res.clone());
         gc.builder().build_unconditional_branch(loop_bb);
 
         // Implement break.
@@ -1131,7 +1130,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         gc.release(loop_body);
         let union_buf = loop_res.load_field_nocap(gc, 1).into_pointer_value();
         let result = ObjectFieldType::get_value_from_union_buf(gc, union_buf, ty);
-        gc.retain(result);
+        gc.retain(result.clone());
         gc.release(loop_res);
         result
     });
@@ -1206,7 +1205,7 @@ pub fn unary_opeartor_instance(
     ) -> Object<'c>,
 ) -> TraitInstance {
     const RHS_NAME: &str = "rhs";
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
         let rhs_name = NameSpacedName::local(RHS_NAME);
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
         generator(gc, rhs)
@@ -1278,7 +1277,7 @@ pub fn binary_opeartor_instance(
 ) -> TraitInstance {
     const LHS_NAME: &str = "lhs";
     const RHS_NAME: &str = "rhs";
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
         let lhs = NameSpacedName::local(LHS_NAME);
         let rhs = NameSpacedName::local(RHS_NAME);
         let lhs_val = gc.get_var(&lhs).ptr.get(gc);

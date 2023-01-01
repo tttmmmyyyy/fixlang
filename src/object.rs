@@ -819,7 +819,7 @@ pub fn get_object_type(
                 if !is_unbox {
                     ret.field_types.push(ObjectFieldType::ControlBlock);
                 }
-                ret.field_types.push(ObjectFieldType::I64); // tag
+                ret.field_types.push(ObjectFieldType::UnionTag);
                 ret.field_types.push(ObjectFieldType::UnionBuf);
             }
         }

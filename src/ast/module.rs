@@ -315,6 +315,8 @@ impl FixModule {
 
         // Implement global accessor function.
         for (global_var, acc_fn, sym) in global_objs {
+            gc.typechecker = sym.typechecker;
+
             let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
             gc.builder().position_at_end(entry_bb);
             let ptr_to_obj = gc
