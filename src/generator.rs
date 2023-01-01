@@ -264,16 +264,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Restore stack pointer.
     pub fn restore_stack(&mut self, pos: PointerValue<'c>) {
         let intrinsic = Intrinsic::find("llvm.stackrestore").unwrap();
-        let func = intrinsic
-            .get_declaration(
-                &self.module,
-                &[self
-                    .context
-                    .i8_type()
-                    .ptr_type(AddressSpace::Generic)
-                    .into()],
-            )
-            .unwrap();
+        assert!(!intrinsic.is_overloaded());
+        let func = intrinsic.get_declaration(&self.module, &[]).unwrap();
         self.builder()
             .build_call(func, &[pos.into()], "restore_stack");
     }
