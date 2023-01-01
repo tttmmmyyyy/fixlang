@@ -328,6 +328,7 @@ impl ObjectFieldType {
             .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb);
         gc.builder().position_at_end(out_of_range_bb);
         gc.panic("Index out of range!");
+        gc.builder().build_unconditional_branch(in_range_bb);
         gc.builder().position_at_end(in_range_bb);
     }
 

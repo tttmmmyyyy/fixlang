@@ -254,12 +254,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
         let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let elem = ObjectFieldType::read_array_size_buf(
-            gc,
-            array_field,
-            ty.fields_types(gc.type_env())[0].clone(),
-            idx,
-        );
+        let elem = ObjectFieldType::read_array_size_buf(gc, array_field, ty.clone(), idx);
         gc.release(array);
         elem
     });
