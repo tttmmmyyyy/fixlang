@@ -264,7 +264,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Restore stack pointer.
     pub fn restore_stack(&mut self, pos: PointerValue<'c>) {
         let intrinsic = Intrinsic::find("llvm.stackrestore").unwrap();
-        assert!(!intrinsic.is_overloaded());
+        assert!(!intrinsic.is_overloaded()); // So we don't need to specify type parameters in the next line.
         let func = intrinsic.get_declaration(&self.module, &[]).unwrap();
         self.builder()
             .build_call(func, &[pos.into()], "restore_stack");
