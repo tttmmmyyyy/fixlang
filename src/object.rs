@@ -426,7 +426,7 @@ impl ObjectFieldType {
         gc.store_obj_field(dst, array_struct, 0, src_size);
 
         // Allocate buffer and set it to dst.
-        let elem_str_type = get_object_type(&elem_ty, &vec![], gc.type_env()).to_struct_type(gc);
+        let elem_str_type = elem_ty.get_embedded_type(gc, &vec![]);
         let dst_buffer = gc
             .builder()
             .build_array_malloc(elem_str_type, src_size, "dst_buffer")
