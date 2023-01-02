@@ -1012,7 +1012,7 @@ pub fn create_dtor<'c, 'm>(
                         .build_struct_gep(
                             ptr_to_struct,
                             field_idx,
-                            &format!("ptr_to_{}nd_field", field_idx),
+                            &format!("ptr_to_{}th_field", field_idx),
                         )
                         .unwrap()
                 };

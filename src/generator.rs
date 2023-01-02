@@ -641,7 +641,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                                 .into_pointer_value()
                         } else {
                             self.builder()
-                                .build_struct_gep(ptr, i as u32, &format!("ptr_to_{}nd_field", i))
+                                .build_struct_gep(ptr, i as u32, &format!("ptr_to_{}th_field", i))
                                 .unwrap()
                         };
                         self.retain(Object::new(ptr, ty.clone()));
@@ -998,15 +998,26 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         pair_ty: Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
+        assert!(pair_ty.is_unbox(self.type_env()));
         let pair = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(pair_ty, &vec![], self, Some("allocate_MakePair"))
+            allocate_obj(pair_ty.clone(), &vec![], self, Some("allocate_MakePair"))
         };
-        let lhs_rvo = ObjectFieldType::get_struct_field(self, &pair, 0);
-        self.eval_expr(lhs, Some(lhs_rvo));
-        let rhs_rvo = ObjectFieldType::get_struct_field(self, &pair, 1);
-        self.eval_expr(rhs, Some(rhs_rvo));
+        let field_exprs = vec![lhs, rhs];
+        let field_types = pair_ty.fields_types(self.type_env());
+        for i in 0..2 {
+            let field_expr = field_exprs[i].clone();
+            let field_ty = field_types[i].clone();
+            if field_ty.is_unbox(self.type_env()) {
+                let rvo = ObjectFieldType::get_struct_field(self, &pair, i as u32);
+                self.eval_expr(field_expr, Some(rvo));
+            } else {
+                let field_obj = self.eval_expr(field_expr, None);
+                let field_val = field_obj.value(self);
+                pair.store_field_nocap(self, i as u32, field_val);
+            }
+        }
         pair
     }
 }
