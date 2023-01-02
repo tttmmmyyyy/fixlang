@@ -324,9 +324,11 @@ fn write_array_lit(
         let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
 
         // Get refcnt.
-        let refcnt = gc
-            .load_obj_field(array.ptr(gc), control_block_type(gc.context), 0)
-            .into_int_value();
+        let refcnt = {
+            let array_ptr = array.ptr(gc);
+            gc.load_obj_field(array_ptr, control_block_type(gc.context), 0)
+                .into_int_value()
+        };
 
         // Add shared / cont bbs.
         let current_bb = gc.builder().get_insert_block().unwrap();
@@ -610,9 +612,11 @@ pub fn struct_mod_lit(
             // In unboxed case, str should be replaced to cloned object if it is shared.
 
             // Get refcnt.
-            let refcnt = gc
-                .load_obj_field(str.ptr(gc), control_block_type(gc.context), 0)
-                .into_int_value();
+            let refcnt = {
+                let str_ptr = str.ptr(gc);
+                gc.load_obj_field(str_ptr, control_block_type(gc.context), 0)
+                    .into_int_value()
+            };
 
             // Add shared / cont bbs.
             let current_bb = gc.builder().get_insert_block().unwrap();

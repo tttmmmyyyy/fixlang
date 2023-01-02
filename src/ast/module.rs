@@ -344,7 +344,8 @@ impl FixModule {
                 .build_store(init_flag, gc.context.i8_type().const_int(1, false));
             if SANITIZE_MEMORY && obj.is_box(gc.type_env()) {
                 // Mark this object as global.
-                let obj_id = gc.get_obj_id(obj.ptr(gc));
+                let ptr = obj.ptr(gc);
+                let obj_id = gc.get_obj_id(ptr);
                 gc.call_runtime(RuntimeFunctions::MarkGlobal, &[obj_id.into()]);
             }
             gc.builder().build_unconditional_branch(end_bb);

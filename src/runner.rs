@@ -148,7 +148,7 @@ fn build_module<'c>(
 
     // Evaluate program and extract int value from result.
     let result = gc.eval_expr(main_expr);
-    let result = result.load_field_nocap(&gc, 0);
+    let result = result.load_field_nocap(&mut gc, 0);
 
     // Perform leak check
     if SANITIZE_MEMORY {

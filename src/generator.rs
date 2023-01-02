@@ -44,7 +44,7 @@ impl<'c> Object<'c> {
     pub fn create_from_value<'m>(
         val: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
-        gc: &GenerationContext<'c, 'm>,
+        gc: &mut GenerationContext<'c, 'm>,
     ) -> Object<'c> {
         let ptr = if ty.is_box(gc.type_env()) {
             val.into_pointer_value()
@@ -57,7 +57,7 @@ impl<'c> Object<'c> {
         Object::new(ptr, ty)
     }
 
-    pub fn value<'m>(&self, gc: &GenerationContext<'c, 'm>) -> BasicValueEnum<'c> {
+    pub fn value<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> BasicValueEnum<'c> {
         if self.ty.is_box(gc.type_env()) {
             self.ptr(gc).as_basic_value_enum()
         } else {
@@ -73,19 +73,20 @@ impl<'c> Object<'c> {
         self.ty.is_box(type_env)
     }
 
-    pub fn ptr<'m>(&self, gc: &GenerationContext<'c, 'm>) -> PointerValue<'c> {
+    pub fn ptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
         if self.is_box(gc.type_env()) {
             gc.cast_pointer(self.ptr, ptr_to_object_type(gc.context))
         } else {
-            gc.cast_pointer(self.ptr, ptr_type(self.struct_ty(gc)))
+            let str_ty = self.struct_ty(gc);
+            gc.cast_pointer(self.ptr, ptr_type(str_ty))
         }
     }
 
-    pub fn struct_ty<'m>(&self, gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
+    pub fn struct_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
         get_object_type(&self.ty, &vec![], gc.type_env()).to_struct_type(gc)
     }
 
-    pub fn load_nocap<'m>(&self, gc: &GenerationContext<'c, 'm>) -> StructValue<'c> {
+    pub fn load_nocap<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder()
@@ -95,7 +96,7 @@ impl<'c> Object<'c> {
 
     pub fn ptr_to_field_nocap<'m>(
         &self,
-        gc: &GenerationContext<'c, 'm>,
+        gc: &mut GenerationContext<'c, 'm>,
         field_idx: u32,
     ) -> PointerValue<'c> {
         let struct_ty = self.struct_ty(gc);
@@ -107,15 +108,19 @@ impl<'c> Object<'c> {
 
     pub fn load_field_nocap<'m>(
         &self,
-        gc: &GenerationContext<'c, 'm>,
+        gc: &mut GenerationContext<'c, 'm>,
         field_idx: u32,
     ) -> BasicValueEnum<'c> {
         let struct_ty = self.struct_ty(gc);
         gc.load_obj_field(self.ptr, struct_ty, field_idx)
     }
 
-    pub fn store_field_nocap<'m, V>(&self, gc: &GenerationContext<'c, 'm>, field_idx: u32, val: V)
-    where
+    pub fn store_field_nocap<'m, V>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        field_idx: u32,
+        val: V,
+    ) where
         V: BasicValue<'c>,
     {
         let struct_ty = self.struct_ty(gc);
@@ -428,7 +433,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get field of object in the scope.
-    pub fn get_var_field(self: &Self, var: &NameSpacedName, field_idx: u32) -> BasicValueEnum<'c> {
+    pub fn get_var_field(
+        self: &mut Self,
+        var: &NameSpacedName,
+        field_idx: u32,
+    ) -> BasicValueEnum<'c> {
         let obj = self.get_var(var).ptr.get(self);
         obj.load_field_nocap(self, field_idx)
     }
@@ -514,13 +523,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Take a closure object and return function pointer.
-    fn get_lambda_func_ptr(&self, obj: Object<'c>) -> PointerValue<'c> {
+    fn get_lambda_func_ptr(&mut self, obj: Object<'c>) -> PointerValue<'c> {
         obj.load_field_nocap(self, LAMBDA_FUNCTION_IDX)
             .into_pointer_value()
     }
 
     // Apply a object to a lambda.
-    pub fn apply_lambda(&self, lambda: Object<'c>, arg: Object<'c>) -> Object<'c> {
+    pub fn apply_lambda(&mut self, lambda: Object<'c>, arg: Object<'c>) -> Object<'c> {
         // If argument is unboxed, load it.
         let arg = arg.value(self);
 
@@ -542,11 +551,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Retain object.
     pub fn retain(&mut self, obj: Object<'c>) {
         if obj.is_box(self.type_env()) {
-            self.call_runtime(RuntimeFunctions::RetainBoxedObject, &[obj.ptr(self).into()]);
+            let obj_ptr = obj.ptr(self);
+            self.call_runtime(RuntimeFunctions::RetainBoxedObject, &[obj_ptr.into()]);
         } else {
             let obj_type = get_object_type(&obj.ty, &vec![], self.type_env());
             let struct_type = obj_type.to_struct_type(self);
-            let ptr = self.cast_pointer(obj.ptr(self), ptr_type(struct_type));
+            let ptr = obj.ptr(self);
+            let ptr = self.cast_pointer(ptr, ptr_type(struct_type));
             let mut union_tag: Option<IntValue<'c>> = None;
             for (i, ft) in obj_type.field_types.iter().enumerate() {
                 match ft {
@@ -566,10 +577,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                         };
                         self.retain(Object::new(ptr, ty.clone()));
                     }
-                    ObjectFieldType::UnionBuf => {
-                        let buf = self
-                            .load_obj_field(ptr, struct_type, i as u32)
-                            .into_pointer_value();
+                    ObjectFieldType::UnionBuf(_) => {
+                        let buf = obj.ptr_to_field_nocap(self, i as u32);
                         ObjectFieldType::retain_union_buf(
                             self,
                             buf,
@@ -592,7 +601,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Release object.
     pub fn release(&mut self, obj: Object<'c>) {
         if obj.is_box(self.type_env()) {
-            let ptr = self.cast_pointer(obj.ptr(self), ptr_to_object_type(self.context));
+            let ptr = obj.ptr(self);
+            let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
             let dtor = obj.get_dtor_ptr_boxed(self);
             self.call_runtime(
                 RuntimeFunctions::ReleaseBoxedObject,
@@ -602,7 +612,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             match obj.get_dtor_unboxed(self) {
                 Some(dtor) => {
                     // Argument of dtor function is i8*, even when the object is unboxed.
-                    let ptr = self.cast_pointer(obj.ptr(self), ptr_to_object_type(self.context));
+                    let ptr = obj.ptr(self);
+                    let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
                     self.builder()
                         .build_call(dtor, &[ptr.into()], "dtor_of_unboxed");
                 }
@@ -768,20 +779,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Allocate and set up closure
         let name = expr_abs(arg, val, None).expr.to_string();
         let obj = allocate_obj(lam_ty, &captured_types, self, Some(name.as_str()));
+        let obj_ptr = obj.ptr(self);
         self.store_obj_field(
-            obj.ptr(self),
+            obj_ptr,
             closure_ty,
             LAMBDA_FUNCTION_IDX,
             lam_fn.as_global_value().as_pointer_value(),
         );
         for (i, (cap_name, _cap_ty)) in captured_vars.iter().enumerate() {
             let cap_obj = self.get_var_retained_if_used_later(cap_name);
-            self.store_obj_field(
-                obj.ptr(self),
-                closure_ty,
-                i as u32 + CAPTURED_OBJECT_IDX,
-                cap_obj.value(self),
-            );
+            let cap_val = cap_obj.value(self);
+            let obj_ptr = obj.ptr(self);
+            self.store_obj_field(obj_ptr, closure_ty, i as u32 + CAPTURED_OBJECT_IDX, cap_val);
         }
 
         // Return closure object

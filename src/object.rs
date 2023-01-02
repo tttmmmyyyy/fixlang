@@ -10,13 +10,13 @@ pub enum ObjectFieldType {
     I64,
     Bool,
     SubObject(Arc<TypeNode>),
-    UnionBuf,                    // pointer to buffer.
-    UnionTag,                    // TODO: I should merge UnionTag and UnionBuf as like Array.
-    ArraySizeBuf(Arc<TypeNode>), // [size, POINTER to buffer].
+    UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
+    UnionTag,                     // TODO: I should merge UnionTag and UnionBuf as like Array.
+    ArraySizeBuf(Arc<TypeNode>),  // [size, POINTER to buffer].
 }
 
 impl ObjectFieldType {
-    pub fn to_basic_type<'c, 'm>(&self, gc: &GenerationContext<'c, 'm>) -> BasicTypeEnum<'c> {
+    pub fn to_basic_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc.context).into(),
             ObjectFieldType::DtorFunction => ptr_to_dtor_type(gc.context).into(),
@@ -42,7 +42,22 @@ impl ObjectFieldType {
                 )
                 .into(),
             ObjectFieldType::UnionTag => gc.context.i64_type().into(),
-            ObjectFieldType::UnionBuf => ptr_to_object_type(gc.context).into(),
+            ObjectFieldType::UnionBuf(field_tys) => {
+                let mut size = 0;
+                for field_ty in field_tys {
+                    let struct_ty = get_object_type(
+                        field_ty,
+                        &vec![], /* captured list desn't effect sizeof */
+                        gc.type_env(),
+                    )
+                    .to_struct_type(gc);
+                    size = size.max(gc.sizeof(&struct_ty));
+                }
+                gc.context
+                    .i8_type()
+                    .array_type(size as u32)
+                    .as_basic_type_enum()
+            }
         }
     }
 
@@ -590,12 +605,10 @@ impl ObjectFieldType {
         buf: PointerValue<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> BasicValueEnum<'c> {
-        let buf = gc.cast_pointer(
-            buf,
-            elem_ty
-                .get_embedded_type(gc, &vec![])
-                .ptr_type(AddressSpace::from(0)),
-        );
+        let elem_ptr_ty = elem_ty
+            .get_embedded_type(gc, &vec![])
+            .ptr_type(AddressSpace::from(0));
+        let buf = gc.cast_pointer(buf, elem_ptr_ty);
         gc.builder().build_load(buf, "value_at_union_buf")
     }
 
@@ -624,7 +637,8 @@ impl ObjectFieldType {
         field: &Object<'c>,
     ) -> () {
         let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
-        str.store_field_nocap(gc, field_offset + field_idx as u32, field.value(gc));
+        let field_val = field.value(gc);
+        str.store_field_nocap(gc, field_offset + field_idx as u32, field_val);
     }
 }
 
@@ -635,7 +649,7 @@ pub struct ObjectType {
 }
 
 impl ObjectType {
-    pub fn to_struct_type<'c, 'm>(&self, gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
+    pub fn to_struct_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
         for field_type in &self.field_types {
             fields.push(field_type.to_basic_type(gc));
@@ -645,7 +659,10 @@ impl ObjectType {
 
     // Get type used when this object is embedded.
     // i.e., for unboxed type, a pointer; for unboxed type, a struct.
-    pub fn to_embedded_type<'c, 'm>(&self, gc: &GenerationContext<'c, 'm>) -> BasicTypeEnum<'c> {
+    pub fn to_embedded_type<'c, 'm>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+    ) -> BasicTypeEnum<'c> {
         let str_ty = self.to_struct_type(gc);
         if self.is_unbox {
             str_ty.into()
@@ -732,7 +749,7 @@ pub fn ptr_to_control_block_type<'ctx>(context: &'ctx Context) -> PointerType<'c
 
 pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
-    gc: &GenerationContext<'c, 'm>,
+    gc: &mut GenerationContext<'c, 'm>,
 ) -> FunctionType<'c> {
     // A function that takes argument and context (=lambda object itself).
     let arg_ty = ty.get_funty_src().get_embedded_type(gc, &vec![]);
@@ -839,7 +856,8 @@ pub fn get_object_type(
                     ret.field_types.push(ObjectFieldType::ControlBlock);
                 }
                 ret.field_types.push(ObjectFieldType::UnionTag);
-                ret.field_types.push(ObjectFieldType::UnionBuf);
+                ret.field_types
+                    .push(ObjectFieldType::UnionBuf(ty.fields_types(type_env)));
             }
         }
     }
@@ -929,15 +947,7 @@ pub fn allocate_obj<'c, 'm>(
                 let dtor = get_dtor_ptr(&ty, capture, gc);
                 gc.builder().build_store(ptr_to_dtor_field, dtor);
             }
-            ObjectFieldType::UnionBuf => {
-                let field_types = ty.fields_types(gc.type_env());
-                let ptr = ObjectFieldType::allocate_union_buf(gc, &field_types);
-                let ptr_to_unionbuf_field = gc
-                    .builder()
-                    .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_unionbuf_field")
-                    .unwrap();
-                gc.builder().build_store(ptr_to_unionbuf_field, ptr);
-            }
+            ObjectFieldType::UnionBuf(_) => {}
             ObjectFieldType::UnionTag => {}
         }
     }
@@ -986,20 +996,26 @@ pub fn create_dtor<'c, 'm>(
 
             gc.builder().position_at_end(bb);
             let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
+
+            // In this function, we need to access captured fields, so fundamentally we cannot use Object's methods to access fields.
+            let ptr_to_field =
+                |field_idx: u32, gc: &mut GenerationContext<'c, 'm>| -> PointerValue<'c> {
+                    let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
+                    gc.builder()
+                        .build_struct_gep(
+                            ptr_to_struct,
+                            field_idx,
+                            &format!("ptr_to_{}nd_field", field_idx),
+                        )
+                        .unwrap()
+                };
+
             let mut union_tag: Option<IntValue<'c>> = None;
             for (i, ft) in object_type.field_types.iter().enumerate() {
                 match ft {
                     ObjectFieldType::SubObject(ty) => {
-                        let is_unbox = ty.is_unbox(gc.type_env());
-                        let ptr_to_subobj = if is_unbox {
-                            let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
-                            gc.builder()
-                                .build_struct_gep(
-                                    ptr_to_struct,
-                                    i as u32,
-                                    &format!("ptr_to_{}nd_field", i),
-                                )
-                                .unwrap()
+                        let ptr_to_subobj = if ty.is_unbox(gc.type_env()) {
+                            ptr_to_field(i as u32, gc)
                         } else {
                             gc.load_obj_field(ptr_to_obj, struct_type, i as u32)
                                 .into_pointer_value()
@@ -1011,15 +1027,7 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Bool => {}
                     ObjectFieldType::ArraySizeBuf(ty) => {
-                        let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
-                        let size_buf = gc
-                            .builder()
-                            .build_struct_gep(
-                                ptr_to_struct,
-                                i as u32,
-                                &format!("ptr_to_{}nd_field", i),
-                            )
-                            .unwrap();
+                        let size_buf = ptr_to_field(i as u32, gc);
                         ObjectFieldType::destruct_array_size_buf(gc, size_buf, ty.clone());
                     }
                     ObjectFieldType::UnionTag => {
@@ -1028,17 +1036,15 @@ pub fn create_dtor<'c, 'm>(
                                 .into_int_value(),
                         );
                     }
-                    ObjectFieldType::UnionBuf => {
-                        let buf = gc
-                            .load_obj_field(ptr_to_obj, struct_type, i as u32)
-                            .into_pointer_value();
+                    ObjectFieldType::UnionBuf(_) => {
+                        let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
+                        let buf = ptr_to_field(i as u32, gc);
                         ObjectFieldType::release_union_buf(
                             gc,
                             buf,
                             union_tag.unwrap(),
                             &ty.fields_types(gc.type_env()),
                         );
-                        gc.builder().build_free(buf);
                     }
                     ObjectFieldType::DtorFunction => {}
                 }

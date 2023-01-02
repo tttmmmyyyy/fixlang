@@ -356,7 +356,7 @@ impl TypeNode {
 
     pub fn get_struct_type<'c, 'm>(
         self: &Arc<TypeNode>,
-        gc: &GenerationContext<'c, 'm>,
+        gc: &mut GenerationContext<'c, 'm>,
         capture: &Vec<Arc<TypeNode>>,
     ) -> StructType<'c> {
         self.get_object_type(capture, gc.type_env())
@@ -365,7 +365,7 @@ impl TypeNode {
 
     pub fn get_embedded_type<'c, 'm>(
         self: &Arc<TypeNode>,
-        gc: &GenerationContext<'c, 'm>,
+        gc: &mut GenerationContext<'c, 'm>,
         capture: &Vec<Arc<TypeNode>>,
     ) -> BasicTypeEnum<'c> {
         self.get_object_type(capture, gc.type_env())
