@@ -1016,6 +1016,26 @@ pub fn test47() {
 
 #[test]
 #[serial]
+pub fn test47_5() {
+    // Test union of boxed object
+    let source = r"
+        module Main;
+
+        type Union = union (val: Int, func: Int -> Int);
+
+        main : Int;
+        main = (
+            let val = Union.val 3;
+            let func = Union.func \x -> x + 5;
+            (func.as_func) (val.as_val)
+        );
+    ";
+    let answer = 5 + 3;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test48() {
     // Parametrised struct.
     let source = r"
