@@ -950,6 +950,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         }
         let then_val = self.eval_expr(then_expr.clone(), rvo.clone());
+        let then_val_ptr = then_val.ptr(self);
         let then_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
 
@@ -961,6 +962,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         }
         let else_val = self.eval_expr(else_expr, rvo);
+        let else_val_ptr = else_val.ptr(self);
         let else_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
 
@@ -971,10 +973,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             ptr_type(then_val.struct_ty(self))
         };
         let phi = self.builder().build_phi(phi_ty, "phi");
-        phi.add_incoming(&[
-            (&then_val.ptr(self), then_bb),
-            (&else_val.ptr(self), else_bb),
-        ]);
+        phi.add_incoming(&[(&then_val_ptr, then_bb), (&else_val_ptr, else_bb)]);
         Object::new(
             phi.as_basic_value().into_pointer_value(),
             then_val.ty.clone(),
