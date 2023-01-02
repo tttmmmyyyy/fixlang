@@ -607,7 +607,6 @@ pub fn struct_mod_lit(
     let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         let is_unbox = ty.is_unbox(gc.type_env());
-        let field_offset = struct_field_idx(is_unbox);
 
         // Get arguments
         let modfier = gc.get_var(&f_name).ptr.get(gc);
