@@ -531,16 +531,13 @@ pub fn struct_get_lit(
     field_name: &str,
 ) -> Arc<ExprNode> {
     let var_name_clone = NameSpacedName::local(var_name);
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
         // Get struct object.
         let str = gc.get_var(&var_name_clone).ptr.get(gc);
 
         // Extract field.
-        let is_unbox = str.is_unbox(gc.type_env());
-        let offset = struct_field_idx(is_unbox);
-        let field_val = str.load_field_nocap(gc, field_idx as u32 + offset);
-        let field_ty = ty.fields_types(gc.type_env())[field_idx].clone();
-        let field = Object::from_basic_value_enum(field_val, field_ty, gc);
+        let field = ObjectFieldType::get_struct_field(gc, &str, field_idx as u32);
+        let field = Object::create_from_value(field.value(gc), field.ty, gc);
 
         // Retain field and release struct.
         gc.retain(field.clone());
@@ -610,7 +607,7 @@ pub fn struct_mod_lit(
     let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         let is_unbox = ty.is_unbox(gc.type_env());
-        let field_offset: u32 = if is_unbox { 0 } else { 1 };
+        let field_offset = struct_field_idx(is_unbox);
 
         // Get arguments
         let modfier = gc.get_var(&f_name).ptr.get(gc);
@@ -646,12 +643,11 @@ pub fn struct_mod_lit(
             }
             let cloned_str = allocate_obj(str.ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
             for i in 0..field_count {
-                let field_ty = ty.fields_types(gc.type_env())[i].clone();
-                let field_idx = field_offset + i as u32;
-                let field = str.load_field_nocap(gc, field_idx).into_pointer_value();
-                let field = Object::new(field, field_ty);
+                // Retain field.
+                let field = ObjectFieldType::get_struct_field(gc, &str, i as u32);
                 gc.retain(field.clone());
-                cloned_str.store_field_nocap(gc, field_idx, field.ptr(gc));
+                // Clone field.
+                ObjectFieldType::set_struct_field(gc, &cloned_str, i as u32, &field);
             }
             gc.release(str.clone());
             let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
@@ -671,13 +667,9 @@ pub fn struct_mod_lit(
         }
 
         // Modify field
-        let field_val = str
-            .load_field_nocap(gc, field_offset + field_idx as u32)
-            .into_pointer_value();
-        let field_ty = ty.fields_types(gc.type_env())[field_idx].clone();
-        let field = Object::new(field_val, field_ty);
+        let field = ObjectFieldType::get_struct_field(gc, &str, field_idx as u32);
         let field = gc.apply_lambda(modfier, field);
-        str.store_field_nocap(gc, field_offset + field_idx as u32, field.ptr(gc));
+        ObjectFieldType::set_struct_field(gc, &str, field_idx as u32, &field);
 
         str
     });
@@ -1059,11 +1051,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
             .build_alloca(state_ty.get_embedded_type(gc, &vec![]), "loop_state");
 
         // Initialize state.
-        let state_val = if state_ty.is_box(gc.type_env()) {
-            init_state.ptr(gc).as_basic_value_enum()
-        } else {
-            init_state.load_nocap(gc).as_basic_value_enum()
-        };
+        let state_val = init_state.value(gc);
         gc.builder().build_store(state_ptr, state_val);
 
         // Create loop body bb and implement it.

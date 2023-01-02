@@ -351,11 +351,8 @@ impl ObjectFieldType {
             gc.builder()
                 .build_gep(ptr_to_buffer, &[idx.into()], "ptr_to_elem_of_array")
         };
-        let elem_obj = Object::from_basic_value_enum(
-            gc.builder().build_load(ptr_to_elem, "elem"),
-            elem_ty,
-            gc,
-        );
+        let elem_obj =
+            Object::create_from_value(gc.builder().build_load(ptr_to_elem, "elem"), elem_ty, gc);
 
         // Retain element and return it.
         gc.retain(elem_obj.clone());
@@ -393,12 +390,7 @@ impl ObjectFieldType {
         gc.release(elem_obj);
 
         // Insert the given value to the place.
-        let value = if value.is_box(gc.type_env()) {
-            value.ptr(gc).as_basic_value_enum()
-        } else {
-            value.load_nocap(gc).as_basic_value_enum()
-        };
-        gc.builder().build_store(place, value);
+        gc.builder().build_store(place, value.value(gc));
     }
 
     // Clone an array
@@ -575,11 +567,7 @@ impl ObjectFieldType {
         buf: PointerValue<'c>,
         val: Object<'c>,
     ) {
-        let val = if val.is_box(gc.type_env()) {
-            val.ptr(gc).as_basic_value_enum()
-        } else {
-            val.load_nocap(gc).as_basic_value_enum()
-        };
+        let val = val.value(gc);
         let buf = gc.cast_pointer(buf, val.get_type().ptr_type(AddressSpace::Generic));
         gc.builder().build_store(buf, val);
     }
@@ -590,7 +578,7 @@ impl ObjectFieldType {
         elem_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let val = ObjectFieldType::get_basic_value_from_union_buf(gc, buf, elem_ty);
-        let val = Object::from_basic_value_enum(val, elem_ty.clone(), gc);
+        let val = Object::create_from_value(val, elem_ty.clone(), gc);
         gc.retain(val.clone());
         val
     }
@@ -607,6 +595,34 @@ impl ObjectFieldType {
                 .ptr_type(AddressSpace::Generic),
         );
         gc.builder().build_load(buf, "value_at_union_buf")
+    }
+
+    // Get field of struct as Object (unretained, uncloned).
+    pub fn get_struct_field<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        str: &Object<'c>,
+        field_idx: u32,
+    ) -> Object<'c> {
+        let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
+        let field_ty = str.ty.fields_types(gc.type_env())[field_idx as usize].clone();
+        let field_ptr = if field_ty.is_box(gc.type_env()) {
+            str.load_field_nocap(gc, field_idx + field_offset)
+                .into_pointer_value()
+        } else {
+            str.ptr_to_field_nocap(gc, field_idx + field_offset)
+        };
+        Object::new(field_ptr, field_ty)
+    }
+
+    // Set an Object to field of struct. The old value isn't released in this function.
+    pub fn set_struct_field<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        str: &Object<'c>,
+        field_idx: u32,
+        field: &Object<'c>,
+    ) -> () {
+        let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
+        str.store_field_nocap(gc, field_offset + field_idx as u32, field.value(gc));
     }
 }
 

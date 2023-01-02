@@ -41,7 +41,7 @@ impl<'c> Object<'c> {
 
     // If boxed type, then create Object from pointer.
     // If unboxed type, then store the value to stack and create Object.
-    pub fn from_basic_value_enum<'m>(
+    pub fn create_from_value<'m>(
         val: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
         gc: &GenerationContext<'c, 'm>,
@@ -55,6 +55,14 @@ impl<'c> Object<'c> {
             ptr
         };
         Object::new(ptr, ty)
+    }
+
+    pub fn value<'m>(&self, gc: &GenerationContext<'c, 'm>) -> BasicValueEnum<'c> {
+        if self.ty.is_box(gc.type_env()) {
+            self.ptr(gc).as_basic_value_enum()
+        } else {
+            self.load_nocap(gc).as_basic_value_enum()
+        }
     }
 
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
@@ -445,11 +453,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if var.used_later > 0 {
             self.retain(obj.clone());
             if obj.is_unbox(self.type_env()) {
-                obj = Object::from_basic_value_enum(
-                    obj.load_nocap(self).as_basic_value_enum(),
-                    obj.ty,
-                    self,
-                );
+                obj = Object::create_from_value(obj.value(self), obj.ty, self);
             }
         }
         obj
@@ -518,11 +522,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Apply a object to a lambda.
     pub fn apply_lambda(&self, lambda: Object<'c>, arg: Object<'c>) -> Object<'c> {
         // If argument is unboxed, load it.
-        let arg = if arg.ty.is_unbox(self.type_env()) {
-            arg.load_nocap(self).as_basic_value_enum()
-        } else {
-            arg.ptr(self).as_basic_value_enum()
-        };
+        let arg = arg.value(self);
 
         // Call function.
         let ptr_to_func = self.get_lambda_func_ptr(lambda.clone());
@@ -536,7 +536,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ret = ret.try_as_basic_value().unwrap_left();
 
         let dst_ty = lambda.ty.get_funty_dst();
-        Object::from_basic_value_enum(ret, dst_ty, self)
+        Object::create_from_value(ret, dst_ty, self)
     }
 
     // Retain object.
@@ -734,7 +734,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Push argment on scope.
             let arg_val = lam_fn.get_first_param().unwrap();
             let arg_ty = lam_ty.get_funty_src();
-            let arg_obj = Object::from_basic_value_enum(arg_val, arg_ty, self);
+            let arg_obj = Object::create_from_value(arg_val, arg_ty, self);
             self.scope_push(&arg.name, &arg_obj);
 
             // Push SELF on scope.
@@ -746,7 +746,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             for (i, (cap_name, cap_ty)) in captured_vars.iter().enumerate() {
                 let cap_val =
                     self.load_obj_field(closure_ptr, closure_ty, i as u32 + CAPTURED_OBJECT_IDX);
-                let cap_obj = Object::from_basic_value_enum(cap_val, cap_ty.clone(), self);
+                let cap_obj = Object::create_from_value(cap_val, cap_ty.clone(), self);
                 self.retain(cap_obj.clone());
                 self.scope_push(cap_name, &cap_obj);
             }
@@ -763,12 +763,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let val = self.eval_expr(val.clone());
 
             // Return result
-            let retval = if val.is_box(self.type_env()) {
-                val.ptr(self).as_basic_value_enum()
-            } else {
-                val.load_nocap(self).as_basic_value_enum()
-            };
-            self.builder().build_return(Some(&retval));
+            self.builder().build_return(Some(&val.value(self)));
         }
         // Allocate and set up closure
         let name = expr_abs(arg, val, None).expr.to_string();
@@ -781,16 +776,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
         for (i, (cap_name, _cap_ty)) in captured_vars.iter().enumerate() {
             let cap_obj = self.get_var_retained_if_used_later(cap_name);
-            let cap_val = if cap_obj.is_box(self.type_env()) {
-                cap_obj.ptr(self).as_basic_value_enum()
-            } else {
-                cap_obj.load_nocap(self).as_basic_value_enum()
-            };
             self.store_obj_field(
                 obj.ptr(self),
                 closure_ty,
                 i as u32 + CAPTURED_OBJECT_IDX,
-                cap_val,
+                cap_obj.value(self),
             );
         }
 

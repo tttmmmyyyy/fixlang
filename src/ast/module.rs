@@ -338,11 +338,7 @@ impl FixModule {
             // If flag is zero, then create object and store it to the global variable.
             gc.builder().position_at_end(init_bb);
             let obj = gc.eval_expr(sym.expr.unwrap().clone());
-            let obj_val = if obj.is_box(gc.type_env()) {
-                obj.ptr(gc).as_basic_value_enum()
-            } else {
-                obj.load_nocap(gc).as_basic_value_enum()
-            };
+            let obj_val = obj.value(gc);
             gc.builder().build_store(global_var, obj_val);
             gc.builder()
                 .build_store(init_flag, gc.context.i8_type().const_int(1, false));
