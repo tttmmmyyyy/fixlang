@@ -563,18 +563,18 @@ impl ObjectFieldType {
         gc.builder().build_store(buf, val);
     }
 
-    pub fn get_value_from_union_buf<'c, 'm>(
+    pub fn get_object_from_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        let val = ObjectFieldType::get_basic_value_from_union_buf(gc, buf, elem_ty);
+        let val = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
         let val = Object::create_from_value(val, elem_ty.clone(), gc);
         gc.retain(val.clone());
         val
     }
 
-    pub fn get_basic_value_from_union_buf<'c, 'm>(
+    pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         elem_ty: &Arc<TypeNode>,

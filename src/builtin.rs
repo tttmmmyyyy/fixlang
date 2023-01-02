@@ -788,7 +788,7 @@ pub fn union_new_lit(
         obj.store_field_nocap(gc, 0 + offset, tag_value);
 
         // Set value.
-        let buf = obj.load_field_nocap(gc, offset + 1).into_pointer_value();
+        let buf = obj.ptr_to_field_nocap(gc, offset + 1);
         ObjectFieldType::set_value_to_union_buf(gc, buf, field);
 
         obj
@@ -883,8 +883,8 @@ pub fn union_as_lit(
 
         // When match, return the value.
         gc.builder().position_at_end(match_bb);
-        let buf = obj.load_field_nocap(gc, 1 + offset).into_pointer_value();
-        let value = ObjectFieldType::get_value_from_union_buf(gc, buf, &elem_ty);
+        let buf = obj.ptr_to_field_nocap(gc, 1 + offset);
+        let value = ObjectFieldType::get_object_from_union_buf(gc, buf, &elem_ty);
 
         gc.release(obj);
         value
@@ -1098,9 +1098,9 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 
         // Implement continue.
         gc.builder().position_at_end(continue_bb);
-        let union_buf = loop_res.load_field_nocap(gc, 1).into_pointer_value();
-        let next_state_val =
-            ObjectFieldType::get_basic_value_from_union_buf(gc, union_buf, &state_ty);
+        assert!(loop_res.is_unbox(gc.type_env()));
+        let union_buf = loop_res.ptr_to_field_nocap(gc, 1);
+        let next_state_val = ObjectFieldType::get_value_from_union_buf(gc, union_buf, &state_ty);
         let next_state = Object::new(
             if state_ty.is_box(gc.type_env()) {
                 next_state_val.into_pointer_value()
@@ -1119,8 +1119,9 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         // Implement break.
         gc.builder().position_at_end(break_bb);
         gc.release(loop_body);
-        let union_buf = loop_res.load_field_nocap(gc, 1).into_pointer_value();
-        let result = ObjectFieldType::get_value_from_union_buf(gc, union_buf, ty);
+        assert!(loop_res.is_unbox(gc.type_env()));
+        let union_buf = loop_res.ptr_to_field_nocap(gc, 1);
+        let result = ObjectFieldType::get_object_from_union_buf(gc, union_buf, ty);
         gc.retain(result.clone());
         gc.release(loop_res);
         result
