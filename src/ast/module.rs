@@ -1,4 +1,4 @@
-use inkwell::{module::Linkage, types::BasicType};
+use inkwell::module::Linkage;
 
 use super::*;
 

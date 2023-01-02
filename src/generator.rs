@@ -9,7 +9,7 @@ use inkwell::{
     execution_engine::ExecutionEngine,
     intrinsics::Intrinsic,
     targets::{TargetData, TargetMachine},
-    types::{AnyType, BasicType},
+    types::AnyType,
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
 
