@@ -8,7 +8,7 @@ use super::*;
 pub fn exclude(name: &NameSpacedName) -> bool {
     let fix_name = NameSpacedName::from_strs(&[STD_NAME], FIX_NAME);
     if *name == fix_name
-        || (fix_name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
+        || (name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
     {
         // fix@uncurry will be corrupted since it uses SELF.
         // If uncurried, the type of SELF is changed but of course the implementation will not change.
