@@ -374,19 +374,20 @@ pub fn test21() {
 #[test]
 #[serial]
 pub fn test22() {
+    // Test recursion function defined by fix with two variable that is tail-call.
     let n = 100000;
     let source = format!(
         r"
             module Main;
             main : Int;
             main = (
-                let g = fix \f -> \a -> \x -> 
+                let g = fix \loop -> \a -> \x -> 
                             if x == 0 then 
                                 a 
                             else
                                 let a2 = a + x;
                                 let x2 = x + -1;
-                                f a2 x2
+                                loop a2 x2
                 in g 0 {}
             );
         ",
@@ -399,6 +400,7 @@ pub fn test22() {
 #[test]
 #[serial]
 pub fn test22_5() {
+    // Test recursion function defined by fix that is not tail-call.
     let source = r"
         module Main;
         main : Int;
