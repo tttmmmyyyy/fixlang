@@ -56,7 +56,7 @@ fn make_pair_name() -> NameSpacedName {
     NameSpacedName::from_strs(&[STD_NAME], &make_tuple_name(2))
 }
 
-fn make_pair_ty(ty0: &Arc<TypeNode>, ty1: &Arc<TypeNode>) -> Arc<TypeNode> {
+pub fn make_pair_ty(ty0: &Arc<TypeNode>, ty1: &Arc<TypeNode>) -> Arc<TypeNode> {
     type_tyapp(
         type_tyapp(type_tycon(&tycon(make_pair_name())), ty0.clone()),
         ty1.clone(),
@@ -192,6 +192,9 @@ fn uncurry_global_function_call_subexprs(
         Expr::TyAnno(e, _) => {
             expr.set_tyanno_expr(uncurry_global_function_call_subexprs(e, fix_mod))
         }
+        Expr::MakePair(lhs, rhs) => expr
+            .set_make_pair_lhs(uncurry_global_function_call_subexprs(lhs, fix_mod))
+            .set_make_pair_rhs(uncurry_global_function_call_subexprs(rhs, fix_mod)),
     };
     calculate_free_vars(expr)
 }

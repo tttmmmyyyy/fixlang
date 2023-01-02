@@ -746,6 +746,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), rvo)
             }
             Expr::TyAnno(e, _) => self.eval_expr(e.clone(), rvo),
+            Expr::MakePair(lhs, rhs) => {
+                let pair_ty = expr.inferred_ty.clone().unwrap();
+                self.eval_make_pair(lhs.clone(), rhs.clone(), pair_ty, rvo)
+            }
         };
         ret.ty = expr.inferred_ty.clone().unwrap();
         ret
@@ -984,6 +988,26 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // if perform rvo then return rvo
             rvo.unwrap()
         }
+    }
+
+    // Evaluate make pair
+    fn eval_make_pair(
+        &mut self,
+        lhs: Arc<ExprNode>,
+        rhs: Arc<ExprNode>,
+        pair_ty: Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let pair = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(pair_ty, &vec![], self, Some("allocate_MakePair"))
+        };
+        let lhs_rvo = ObjectFieldType::get_struct_field(self, &pair, 0);
+        self.eval_expr(lhs, Some(lhs_rvo));
+        let rhs_rvo = ObjectFieldType::get_struct_field(self, &pair, 1);
+        self.eval_expr(rhs, Some(rhs_rvo));
+        pair
     }
 }
 
