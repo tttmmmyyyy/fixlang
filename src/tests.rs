@@ -1146,6 +1146,32 @@ pub fn test51() {
 
 #[test]
 #[serial]
+pub fn test52() {
+    // Test loop with boxed state / break.
+    let source = r"
+    module Main;
+
+    type SieveState = struct (i: Int, arr: Array Bool);
+    
+    // Calculate a Bool array whose element is true iff idx is prime.
+    identity_by_loop: a -> a;
+    identity_by_loop = \x -> (
+        loop x \state -> (
+            break $ state
+        )
+    );
+    
+    main : Int;
+    main = (
+        (identity_by_loop $ Array.new 10 5).get 0
+    );
+    ";
+    let answer = 5;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 

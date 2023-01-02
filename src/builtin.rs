@@ -1063,16 +1063,24 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         // Implement loop body.
         gc.builder().position_at_end(loop_bb);
         let stack_pos = gc.save_stack();
-        let loop_state = Object::new(
-            if state_ty.is_box(gc.type_env()) {
-                gc.builder()
-                    .build_load(state_ptr, "loop_state")
-                    .into_pointer_value()
-            } else {
-                state_ptr
-            },
-            state_ty.clone(),
-        );
+
+        fn get_loop_state<'c, 'm>(
+            gc: &mut GenerationContext<'c, 'm>,
+            state_ptr: PointerValue<'c>,
+            state_ty: &Arc<TypeNode>,
+        ) -> Object<'c> {
+            Object::new(
+                if state_ty.is_box(gc.type_env()) {
+                    gc.builder()
+                        .build_load(state_ptr, "loop_state")
+                        .into_pointer_value()
+                } else {
+                    state_ptr
+                },
+                state_ty.clone(),
+            )
+        }
+        let loop_state = get_loop_state(gc, state_ptr, &state_ty);
 
         // Run loop_body on init_state.
         gc.retain(loop_body.clone());
@@ -1101,16 +1109,9 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         assert!(loop_res.is_unbox(gc.type_env()));
         let union_buf = loop_res.ptr_to_field_nocap(gc, 1);
         let next_state_val = ObjectFieldType::get_value_from_union_buf(gc, union_buf, &state_ty);
-        let next_state = Object::new(
-            if state_ty.is_box(gc.type_env()) {
-                next_state_val.into_pointer_value()
-            } else {
-                gc.builder().build_store(state_ptr, next_state_val);
-                state_ptr
-            },
-            state_ty,
-        );
-        gc.retain(next_state);
+        gc.builder().build_store(state_ptr, next_state_val);
+        let loop_state = get_loop_state(gc, state_ptr, &state_ty);
+        gc.retain(loop_state);
         gc.release(loop_res.clone());
 
         gc.restore_stack(stack_pos);
