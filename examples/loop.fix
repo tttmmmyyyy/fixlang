@@ -1,7 +1,5 @@
 module Main;
 
-type SieveState = struct (i: Int, arr: Array Bool);
-
 // Calculate a Bool array whose element is true iff idx is prime.
 is_prime : Int -> Array Bool;
 is_prime = \n -> (
@@ -12,38 +10,36 @@ is_prime = \n -> (
     // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body.
     // continue : s -> LoopResult s r -- Take the next state and continues the loop.
     // break : r -> LoopResult s r -- Break the loop and `loop` returns the value given to `break`.
-    loop (SieveState.new 2 arr) \state -> (
-        let i = state.get_i;
-        let arr = state.get_arr;
+    loop (2, arr) \state -> (
+        let i = state.get_0;
+        let arr = state.get_1;
         if n < i*i then break arr else 
         let next_arr = if arr.get i then (
-            loop (SieveState.new (i+i) arr) \state -> (
-                let q = state.get_i;
-                let arr = state.get_arr;
+            loop (i+i, arr) \state -> (
+                let q = state.get_0;
+                let arr = state.get_1;
                 if n-1 < q then 
                     break arr
                 else 
-                    continue $ SieveState.new (q + i) (arr.set! q false)
+                    continue $ (q + i, arr.set! q false)
             )
         ) else arr;
-        continue $ SieveState.new (i + 1) next_arr
+        continue $ (i + 1, next_arr)
     )
 );
-
-type CountState = struct (idx: Int, sum: Int);
 
 // Count the appearance of a value in an array.
 count : [a: Eq] a -> Array a -> Int;
 count = \elem -> \arr -> (
-    loop (CountState.new 0 0) \state -> (
-        let i = state.get_idx;
-        let sum = state.get_sum;
+    loop (0, 0) \state -> (
+        let i = state.get_0;
+        let sum = state.get_1;
         if arr.len == i then break sum 
         else 
             let sum = sum + (if arr.get i == elem then 1 else 0);
-            continue $ CountState.new (i+1) sum
+            continue $ (i+1, sum)
     )
 );
 
 main : Int;
-main = (is_prime 10000000).count true; // 25
+main = (is_prime 10000000).count true; // 664579
