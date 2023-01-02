@@ -1008,9 +1008,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             allocate_obj(pair_ty.clone(), &vec![], self, Some("allocate_MakePair"))
         };
-        let field_exprs = vec![lhs, rhs];
+        let field_exprs = vec![lhs.clone(), rhs.clone()];
         let field_types = pair_ty.fields_types(self.type_env());
+        let vars_used_in_right = rhs.free_vars().clone();
         for i in 0..2 {
+            if i == 0 {
+                self.scope_lock_as_used_later(&vars_used_in_right);
+            }
             let field_expr = field_exprs[i].clone();
             let field_ty = field_types[i].clone();
             if field_ty.is_unbox(self.type_env()) {
@@ -1020,6 +1024,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let field_obj = self.eval_expr(field_expr, None);
                 let field_val = field_obj.value(self);
                 pair.store_field_nocap(self, i as u32, field_val);
+            }
+            if i == 0 {
+                self.scope_unlock_as_used_later(&vars_used_in_right);
             }
         }
         pair
