@@ -848,15 +848,15 @@ pub fn union_as_lit(
     let free_vars = vec![NameSpacedName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
-        let is_unbox = ty.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { 1 };
-        let elem_ty = ty.clone();
-
         // Get union object.
         let obj = gc
             .get_var(&NameSpacedName::local(&union_arg_name))
             .ptr
             .get(gc);
+
+        let is_unbox = obj.ty.is_unbox(gc.type_env());
+        let offset = if is_unbox { 0 } else { 1 };
+        let elem_ty = ty.clone();
 
         // Create specified tag value.
         let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
