@@ -1122,7 +1122,6 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         assert!(loop_res.is_unbox(gc.type_env()));
         let union_buf = loop_res.ptr_to_field_nocap(gc, 1);
         let result = ObjectFieldType::get_object_from_union_buf(gc, union_buf, ty);
-        gc.retain(result.clone());
         gc.release(loop_res);
         result
     });
