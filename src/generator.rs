@@ -961,23 +961,29 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.release(self.get_var(var_name).ptr.get(self));
             }
         }
-        let else_val = self.eval_expr(else_expr, rvo);
+        let else_val = self.eval_expr(else_expr, rvo.clone());
         let else_val_ptr = else_val.ptr(self);
         let else_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
 
         self.builder().position_at_end(cont_bb);
-        let phi_ty = if then_val.is_box(self.type_env()) {
-            ptr_to_object_type(self.context)
+        if rvo.is_none() {
+            // If don't perform rvo, then return phi value.
+            let phi_ty = if then_val.is_box(self.type_env()) {
+                ptr_to_object_type(self.context)
+            } else {
+                ptr_type(then_val.struct_ty(self))
+            };
+            let phi = self.builder().build_phi(phi_ty, "phi");
+            phi.add_incoming(&[(&then_val_ptr, then_bb), (&else_val_ptr, else_bb)]);
+            Object::new(
+                phi.as_basic_value().into_pointer_value(),
+                then_val.ty.clone(),
+            )
         } else {
-            ptr_type(then_val.struct_ty(self))
-        };
-        let phi = self.builder().build_phi(phi_ty, "phi");
-        phi.add_incoming(&[(&then_val_ptr, then_bb), (&else_val_ptr, else_bb)]);
-        Object::new(
-            phi.as_basic_value().into_pointer_value(),
-            then_val.ty.clone(),
-        )
+            // if perform rvo then return rvo
+            rvo.unwrap()
+        }
     }
 }
 
