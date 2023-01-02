@@ -502,6 +502,23 @@ pub fn test27() {
 
 #[test]
 #[serial]
+pub fn test27_5() {
+    // Test Array of boxed object.
+    let source = r"
+        module Main;
+        main : Int;
+        main = (
+            let arr = Array.from_map 100 $ \i -> add i;
+            let arr = arr.set 99 \x -> x - 100;
+            (arr.get 99) $ (arr.get 50) 1
+        );
+        ";
+    let answer = 1 + 50 - 100;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r"
