@@ -94,7 +94,7 @@ fn uncurry_lambda(
                         expr_app(
                             getters[0].clone(),
                             expr_var(pair_arg_name.clone(), None)
-                                .set_inferred_type(getter_types[0].clone()),
+                                .set_inferred_type(pair_ty.clone()),
                             None,
                         )
                         .set_inferred_type(arg0_ty),
@@ -103,7 +103,7 @@ fn uncurry_lambda(
                             expr_app(
                                 getters[1].clone(),
                                 expr_var(pair_arg_name.clone(), None)
-                                    .set_inferred_type(getter_types[1].clone()),
+                                    .set_inferred_type(pair_ty.clone()),
                                 None,
                             )
                             .set_inferred_type(arg1_ty.clone()),
