@@ -6,6 +6,7 @@ use super::*;
 // Avoiding name confliction with "Module" of inkwell.
 
 const MAIN_FUNCTION_NAME: &str = "main";
+pub const INSTANCIATED_NAME_SEPARATOR: &str = "@";
 
 pub struct FixModule {
     pub name: Name,
@@ -545,7 +546,7 @@ impl FixModule {
         assert!(ty.free_vars().is_empty());
         let hash = ty.hash();
         let mut name = name.clone();
-        name.name += "@";
+        name.name += INSTANCIATED_NAME_SEPARATOR;
         name.name += &hash;
         name
     }
@@ -682,7 +683,11 @@ impl FixModule {
         self.trait_env.add_instance(remainder_trait_instance_int());
         self.trait_env.add_instance(and_trait_instance_bool());
         self.trait_env.add_instance(cmp_trait_instance_int());
-        add_global(self, NameSpacedName::from_strs(&[STD_NAME], "fix"), fix());
+        add_global(
+            self,
+            NameSpacedName::from_strs(&[STD_NAME], FIX_NAME),
+            fix(),
+        );
         add_global(
             self,
             NameSpacedName::from_strs(&[STD_NAME, LOOP_RESULT_NAME], "loop"),
@@ -783,5 +788,6 @@ impl FixModule {
     }
 }
 
+pub const FIX_NAME: &str = "fix";
 pub const STRUCT_GETTER_NAME: &str = "get";
 pub const STRUCT_NEW_NAME: &str = "new";

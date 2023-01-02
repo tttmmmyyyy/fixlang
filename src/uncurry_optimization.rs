@@ -4,6 +4,19 @@ use super::*;
 // Before optimization, `func x y` creates lambda object `func x` on heap, capturing `x`.
 // After optimization, if construction of (x, y) is implemented as a special code that avoids heap allocation, then `func@uncurry (x, y)` requires no heap allocation.
 
+// Global functions that cannot be uncurried.
+pub fn exclude(name: &NameSpacedName) -> bool {
+    let fix_name = NameSpacedName::from_strs(&[STD_NAME], FIX_NAME);
+    if *name == fix_name
+        || (fix_name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
+    {
+        // fix@uncurry will be corrupted since it uses SELF.
+        // If uncurried, the type of SELF is changed but of course the implementation will not change.
+        return true;
+    }
+    return false;
+}
+
 pub fn uncurry_optimization(fix_mod: &mut FixModule) {
     // First, define uncurried versions of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
@@ -13,7 +26,12 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
             .insert(sym_name.clone(), sym.clone());
 
         // Add uncurried function as long as possible.
-        let mut expr = uncurry_lambda(sym.expr.as_ref().unwrap(), &sym.ty, fix_mod);
+        let mut expr = uncurry_lambda(
+            &sym.template_name,
+            sym.expr.as_ref().unwrap(),
+            &sym.ty,
+            fix_mod,
+        );
         let mut name = sym_name.clone();
         while expr.is_some() {
             let new_expr = expr.take().unwrap();
@@ -22,13 +40,17 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
             fix_mod.instantiated_global_symbols.insert(
                 name.clone(),
                 InstantiatedSymbol {
-                    template_name: NameSpacedName::local("N/A; created by uncurry_optimization"),
+                    template_name: NameSpacedName::local(&format!(
+                        "{} created by uncurry_optimization from {}",
+                        &name.to_string(),
+                        sym.template_name.to_string()
+                    )),
                     ty: new_ty.clone(),
                     expr: Some(new_expr.clone()),
                     typechecker: sym.typechecker.clone(),
                 },
             );
-            expr = uncurry_lambda(&new_expr, &new_ty, fix_mod);
+            expr = uncurry_lambda(&sym.template_name, &new_expr, &new_ty, fix_mod);
         }
     }
 
@@ -62,10 +84,14 @@ pub fn make_pair_ty(ty0: &Arc<TypeNode>, ty1: &Arc<TypeNode>) -> Arc<TypeNode> {
 // NOTE: applying this repeatedly, `\x -> \y -> \z -> w` is converted to `\((x, y), z) -> w`, not to `\(x, (y, z)) -> w`.
 // if uncurry cannot be done, return None.
 fn uncurry_lambda(
+    template_name: &NameSpacedName,
     expr: &Arc<ExprNode>,
     lam_ty: &Arc<TypeNode>,
     fix_mod: &mut FixModule,
 ) -> Option<Arc<ExprNode>> {
+    if exclude(template_name) {
+        return None;
+    }
     match &*expr.expr {
         Expr::Lam(arg0, body0) => {
             let arg0_ty = lam_ty.get_funty_src();
@@ -137,6 +163,9 @@ fn uncurry_global_function_call(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                 Expr::Var(v) => {
                     if v.name.is_local() {
                         // If fun0 is not global, do not apply uncurry.
+                        return expr.clone();
+                    }
+                    if exclude(&v.name) {
                         return expr.clone();
                     }
                     let result_ty = expr.inferred_ty.clone().unwrap();
