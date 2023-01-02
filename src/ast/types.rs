@@ -73,6 +73,14 @@ pub struct TyConInfo {
     pub field_types: Vec<Arc<TypeNode>>, // For array, element type.
 }
 
+impl TyConInfo {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        for ty in &mut self.field_types {
+            *ty = ty.resolve_namespace(ctx);
+        }
+    }
+}
+
 // Node of type ast tree with user defined additional information
 pub struct TypeNode {
     pub ty: Type,

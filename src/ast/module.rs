@@ -241,15 +241,6 @@ impl FixModule {
         res
     }
 
-    // Get context for name resolution.
-    pub fn get_nameresolution_context(&self) -> NameResolutionContext {
-        NameResolutionContext {
-            types: self.tycon_names(),
-            traits: self.trait_names(),
-            module_name: self.name.clone(),
-        }
-    }
-
     // Get this module's namespace.
     pub fn get_namespace(&self) -> NameSpace {
         NameSpace::new(vec![self.name.clone()])
@@ -578,7 +569,19 @@ impl FixModule {
     // Resolve namespaces of types and traits that appear in this module.
     // NOTE: names in types/traits defined in this module have to be full-names already when calling this function.
     pub fn resolve_namespace(&mut self) {
-        let ctx = self.get_nameresolution_context();
+        let ctx = NameResolutionContext {
+            types: self.tycon_names(),
+            traits: self.trait_names(),
+            module_name: self.name.clone(),
+        };
+        {
+            let mut tycons = (*self.type_env.tycons).clone();
+            for (_, ti) in &mut tycons {
+                ti.resolve_namespace(&ctx);
+            }
+            self.type_env.tycons = Arc::new(tycons);
+        }
+
         self.trait_env.resolve_namespace(&ctx);
         for decl in &mut self.type_decls {
             decl.resolve_namespace(&ctx);
