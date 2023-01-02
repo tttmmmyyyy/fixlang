@@ -327,7 +327,11 @@ impl Expr {
 
 pub type LiteralGenerator = dyn Send
     + Sync
-    + for<'c, 'm, 'b> Fn(&mut GenerationContext<'c, 'm>, &Arc<TypeNode>) -> Object<'c>;
+    + for<'c, 'm, 'b> Fn(
+        &mut GenerationContext<'c, 'm>,
+        &Arc<TypeNode>,     // type of this literal
+        Option<Object<'c>>, // rvo
+    ) -> Object<'c>;
 
 #[derive(Clone)]
 pub struct Literal {

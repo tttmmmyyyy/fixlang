@@ -147,7 +147,7 @@ fn build_module<'c>(
     }
 
     // Evaluate program and extract int value from result.
-    let result = gc.eval_expr(main_expr);
+    let result = gc.eval_expr(main_expr, None);
     let result = result.load_field_nocap(&mut gc, 0);
 
     // Perform leak check

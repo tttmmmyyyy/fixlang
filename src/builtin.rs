@@ -76,8 +76,12 @@ pub fn loop_result_ty() -> Arc<TypeNode> {
 }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
-        let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&format!("int_lit_{}", val)));
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
+        let obj = if rvo.is_none() {
+            allocate_obj(ty.clone(), &vec![], gc, Some(&format!("int_lit_{}", val)))
+        } else {
+            rvo.unwrap()
+        };
         let value = gc.context.i64_type().const_int(val as u64, false);
         obj.store_field_nocap(gc, 0, value);
         obj
@@ -86,8 +90,12 @@ pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
 }
 
 pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
-        let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&format!("bool_lit_{}", val)));
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
+        let obj = if rvo.is_none() {
+            allocate_obj(ty.clone(), &vec![], gc, Some(&format!("bool_lit_{}", val)))
+        } else {
+            rvo.unwrap()
+        };
         let value = gc.context.i8_type().const_int(val as u64, false);
         obj.store_field_nocap(gc, 0, value);
         obj
@@ -104,12 +112,12 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
         f_str.clone(),
         x_str.clone(),
     ];
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
         let fixf = gc.get_var(&NameSpacedName::local(SELF_NAME)).ptr.get(gc);
         let x = gc.get_var(&x_str).ptr.get(gc);
         let f = gc.get_var(&f_str).ptr.get(gc);
-        let f_fixf = gc.apply_lambda(f, fixf);
-        let f_fixf_x = gc.apply_lambda(f_fixf, x);
+        let f_fixf = gc.apply_lambda(f, fixf, None);
+        let f_fixf_x = gc.apply_lambda(f_fixf, x, rvo);
         f_fixf_x
     });
     expr_lit(generator, free_vars, name, type_tyvar_star(b), None)
@@ -141,11 +149,12 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let name = format!("newArray {} {}", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         // Array = [ControlBlock, ArrayField] where ArrayField = [Size, PtrToBuffer].
         let size = gc.get_var_field(&size_str, 0).into_int_value();
         gc.release(gc.get_var(&size_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
+        assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
         let array = allocate_obj(ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
         let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
         ObjectFieldType::initialize_array_size_buf_by_value(
@@ -203,10 +212,11 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let map_name = NameSpacedName::local(MAP_NAME);
     let size_name_cloned = size_name.clone();
     let map_name_cloned = map_name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         let size = gc.get_var_field(&size_name_cloned, 0).into_int_value();
         gc.release(gc.get_var(&size_name_cloned).ptr.get(gc));
         let map = gc.get_var(&map_name_cloned).ptr.get(gc);
+        assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
         let array = allocate_obj(ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
         let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
         ObjectFieldType::initialize_array_size_buf_by_map(
@@ -248,13 +258,13 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let idx_str = NameSpacedName::local(idx);
     let name = format!("Array.get {} {}", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array = gc.get_var(&array_str).ptr.get(gc);
         let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let elem = ObjectFieldType::read_array_size_buf(gc, array_field, ty.clone(), idx);
+        let elem = ObjectFieldType::read_array_size_buf(gc, array_field, ty.clone(), idx, rvo);
         gc.release(array);
         elem
     });
@@ -287,7 +297,7 @@ pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Implementation of Array.write/Array.write! built-in function.
+// Implementation of Array.set/Array.set! built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
 fn write_array_lit(
     a: &str,
@@ -310,7 +320,8 @@ fn write_array_lit(
     let name = format!("{} {} {} {}", func_name, array, idx, value);
     let name_cloned = name.clone();
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
+        assert!(rvo.is_none());
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let elem_ty = ty.fields_types(gc.type_env())[0].clone();
         // Get argments
@@ -435,14 +446,18 @@ pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
         let arr_name = NameSpacedName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
         let size_buf_ptr = array_obj.ptr_to_field_nocap(gc, ARRAY_IDX);
         let size = ObjectFieldType::size_from_array_size_buf(gc, size_buf_ptr);
         gc.release(array_obj);
-        let int_obj = allocate_obj(int_lit_ty(), &vec![], gc, Some("length_of_arr"));
+        let int_obj = if rvo.is_none() {
+            allocate_obj(int_lit_ty(), &vec![], gc, Some("length_of_arr"))
+        } else {
+            rvo.unwrap()
+        };
         int_obj.store_field_nocap(gc, 0, size);
         int_obj
     });
@@ -479,7 +494,7 @@ pub fn struct_new_lit(
         .collect();
     let name = format!("{}.new {}", struct_name.to_string(), field_names.join(" "));
     let name_cloned = name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         // Get field values.
         let fields = field_names
             .iter()
@@ -487,7 +502,11 @@ pub fn struct_new_lit(
             .collect::<Vec<_>>();
 
         // Create struct object.
-        let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned));
+        let obj = if rvo.is_none() {
+            allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned))
+        } else {
+            rvo.unwrap()
+        };
 
         // Set fields.
         for (i, field) in fields.iter().enumerate() {
@@ -527,13 +546,20 @@ pub fn struct_get_lit(
     field_name: &str,
 ) -> Arc<ExprNode> {
     let var_name_clone = NameSpacedName::local(var_name);
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
         // Get struct object.
         let str = gc.get_var(&var_name_clone).ptr.get(gc);
 
         // Extract field.
         let field = ObjectFieldType::get_struct_field(gc, &str, field_idx as u32);
-        let field = Object::create_from_value(field.value(gc), field.ty, gc);
+        let field_val = field.value(gc);
+        let field = if rvo.is_none() {
+            Object::create_from_value(field_val, field.ty, gc)
+        } else {
+            let rvo = rvo.unwrap();
+            rvo.store_unbox(gc, field_val);
+            rvo
+        };
 
         // Retain field and release struct.
         gc.retain(field.clone());
@@ -601,7 +627,7 @@ pub fn struct_mod_lit(
     let x_name = NameSpacedName::local(x_name);
     let free_vars = vec![f_name.clone(), x_name.clone()];
     let name_cloned = name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         let is_unbox = ty.is_unbox(gc.type_env());
 
         // Get arguments
@@ -609,7 +635,9 @@ pub fn struct_mod_lit(
         let mut str = gc.get_var(&x_name).ptr.get(gc);
 
         if !is_unbox {
-            // In unboxed case, str should be replaced to cloned object if it is shared.
+            // In boxed case, str should be replaced to cloned object if it is shared.
+            // In unboxed case, str is always treated as unique object.
+            assert!(rvo.is_none());
 
             // Get refcnt.
             let refcnt = {
@@ -668,8 +696,17 @@ pub fn struct_mod_lit(
 
         // Modify field
         let field = ObjectFieldType::get_struct_field(gc, &str, field_idx as u32);
-        let field = gc.apply_lambda(modfier, field);
+        let field = gc.apply_lambda(modfier, field, None);
         ObjectFieldType::set_struct_field(gc, &str, field_idx as u32, &field);
+
+        if rvo.is_some() {
+            assert!(is_unbox);
+            // Move str to rvo.
+            let rvo = rvo.unwrap();
+            let str_val = str.load_nocap(gc);
+            rvo.store_unbox(gc, str_val);
+            str = rvo;
+        }
 
         str
     });
@@ -770,7 +807,7 @@ pub fn union_new_lit(
     let name = format!("{}.new_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
     let field_name_cloned = field_name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         let is_unbox = ty.is_unbox(gc.type_env());
         let offset: u32 = if is_unbox { 0 } else { 1 };
 
@@ -780,8 +817,12 @@ pub fn union_new_lit(
             .ptr
             .get(gc);
 
-        // Create struct object.
-        let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned));
+        // Create union object.
+        let obj = if rvo.is_none() {
+            allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned))
+        } else {
+            rvo.unwrap()
+        };
 
         // Set tag value.
         let tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
@@ -836,7 +877,7 @@ pub fn union_as(
     (expr, scm)
 }
 
-// `from_{field}` built-in function for a given union.
+// `as_{field}` built-in function for a given union.
 pub fn union_as_lit(
     union_name: &NameSpacedName,
     union_arg_name: &Name,
@@ -847,7 +888,7 @@ pub fn union_as_lit(
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
     let free_vars = vec![NameSpacedName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         // Get union object.
         let obj = gc
             .get_var(&NameSpacedName::local(&union_arg_name))
@@ -884,7 +925,7 @@ pub fn union_as_lit(
         // When match, return the value.
         gc.builder().position_at_end(match_bb);
         let buf = obj.ptr_to_field_nocap(gc, 1 + offset);
-        let value = ObjectFieldType::get_object_from_union_buf(gc, buf, &elem_ty);
+        let value = ObjectFieldType::get_object_from_union_buf(gc, buf, &elem_ty, rvo);
 
         gc.release(obj);
         value
@@ -936,7 +977,7 @@ pub fn union_is_lit(
     let name_cloned = name.clone();
     let free_vars = vec![NameSpacedName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         let is_unbox = ty.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
 
@@ -953,7 +994,11 @@ pub fn union_is_lit(
         let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
 
         // Create returned value.
-        let ret_ptr = allocate_obj(bool_lit_ty(), &vec![], gc, Some(&name_cloned));
+        let ret = if rvo.is_none() {
+            allocate_obj(bool_lit_ty(), &vec![], gc, Some(&name_cloned))
+        } else {
+            rvo.unwrap()
+        };
 
         // Branch and store result to ret_ptr.
         let is_tag_match = gc.builder().build_int_compare(
@@ -972,18 +1017,18 @@ pub fn union_is_lit(
 
         gc.builder().position_at_end(match_bb);
         let value = gc.context.i8_type().const_int(1 as u64, false);
-        ret_ptr.store_field_nocap(gc, 0, value);
+        ret.store_field_nocap(gc, 0, value);
         gc.builder().build_unconditional_branch(cont_bb);
 
         gc.builder().position_at_end(unmatch_bb);
         let value = gc.context.i8_type().const_int(0 as u64, false);
-        ret_ptr.store_field_nocap(gc, 0, value);
+        ret.store_field_nocap(gc, 0, value);
         gc.builder().build_unconditional_branch(cont_bb);
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
         gc.release(obj);
-        ret_ptr
+        ret
     });
     expr_lit(generator, free_vars, name, bool_lit_ty(), None)
 }
@@ -1036,7 +1081,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
     );
 
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
         let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
 
@@ -1084,7 +1129,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 
         // Run loop_body on init_state.
         gc.retain(loop_body.clone());
-        let loop_res = gc.apply_lambda(loop_body.clone(), loop_state);
+        let loop_res = gc.apply_lambda(loop_body.clone(), loop_state, None);
 
         // Branch due to loop_res.
         assert!(loop_res.ty.is_unbox(gc.type_env()));
@@ -1122,7 +1167,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         gc.release(loop_body);
         assert!(loop_res.is_unbox(gc.type_env()));
         let union_buf = loop_res.ptr_to_field_nocap(gc, 1);
-        let result = ObjectFieldType::get_object_from_union_buf(gc, union_buf, ty);
+        let result = ObjectFieldType::get_object_from_union_buf(gc, union_buf, ty, rvo);
         gc.release(loop_res);
         result
     });
@@ -1194,13 +1239,14 @@ pub fn unary_opeartor_instance(
     generator: for<'c, 'm> fn(
         &mut GenerationContext<'c, 'm>, // gc
         Object<'c>,                     // rhs
+        Option<Object<'c>>,             // rvo
     ) -> Object<'c>,
 ) -> TraitInstance {
     const RHS_NAME: &str = "rhs";
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
         let rhs_name = NameSpacedName::local(RHS_NAME);
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
-        generator(gc, rhs)
+        generator(gc, rhs, rvo)
     });
     TraitInstance {
         qual_pred: QualPredicate {
@@ -1265,16 +1311,17 @@ pub fn binary_opeartor_instance(
         &mut GenerationContext<'c, 'm>, // gc
         Object<'c>,                     // lhs
         Object<'c>,                     // rhs
+        Option<Object<'c>>,             // rvo
     ) -> Object<'c>,
 ) -> TraitInstance {
     const LHS_NAME: &str = "lhs";
     const RHS_NAME: &str = "rhs";
-    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty| {
+    let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
         let lhs = NameSpacedName::local(LHS_NAME);
         let rhs = NameSpacedName::local(RHS_NAME);
         let lhs_val = gc.get_var(&lhs).ptr.get(gc);
         let rhs_val = gc.get_var(&rhs).ptr.get(gc);
-        generator(gc, lhs_val, rhs_val)
+        generator(gc, lhs_val, rhs_val, rvo)
     });
     TraitInstance {
         qual_pred: QualPredicate {
@@ -1331,6 +1378,7 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
@@ -1344,12 +1392,16 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
             ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
             "eq",
         );
-        let obj = allocate_obj(
-            bool_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                bool_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }
@@ -1384,6 +1436,7 @@ pub fn cmp_trait_instance_int() -> TraitInstance {
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
@@ -1397,12 +1450,16 @@ pub fn cmp_trait_instance_int() -> TraitInstance {
             ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
             CMP_TRAIT_LT_NAME,
         );
-        let obj = allocate_obj(
-            bool_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} lhs rhs", CMP_TRAIT_LT_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                bool_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", CMP_TRAIT_LT_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }
@@ -1433,6 +1490,7 @@ pub fn add_trait_instance_int() -> TraitInstance {
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
@@ -1441,12 +1499,16 @@ pub fn add_trait_instance_int() -> TraitInstance {
         let value = gc
             .builder()
             .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
-        let obj = allocate_obj(
-            int_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                int_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }
@@ -1481,6 +1543,7 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
@@ -1489,12 +1552,16 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
         let value = gc
             .builder()
             .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
-        let obj = allocate_obj(
-            int_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                int_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }
@@ -1529,6 +1596,7 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
@@ -1537,12 +1605,16 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
         let value = gc
             .builder()
             .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
-        let obj = allocate_obj(
-            int_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                int_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }
@@ -1577,6 +1649,7 @@ pub fn divide_trait_instance_int() -> TraitInstance {
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
@@ -1585,12 +1658,16 @@ pub fn divide_trait_instance_int() -> TraitInstance {
         let value = gc
             .builder()
             .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
-        let obj = allocate_obj(
-            int_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                int_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }
@@ -1625,6 +1702,7 @@ pub fn remainder_trait_instance_int() -> TraitInstance {
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
@@ -1633,12 +1711,16 @@ pub fn remainder_trait_instance_int() -> TraitInstance {
         let value =
             gc.builder()
                 .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME);
-        let obj = allocate_obj(
-            int_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} lhs rhs", REMAINDER_TRAIT_REMAINDER_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                int_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", REMAINDER_TRAIT_REMAINDER_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }
@@ -1669,6 +1751,7 @@ pub fn and_trait_instance_bool() -> TraitInstance {
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
@@ -1676,12 +1759,16 @@ pub fn and_trait_instance_bool() -> TraitInstance {
         gc.release(rhs);
         let value = gc.builder().build_and(lhs_val, rhs_val, AND_TRAIT_AND_NAME);
 
-        let obj = allocate_obj(
-            bool_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} lhs rhs", AND_TRAIT_AND_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                bool_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", AND_TRAIT_AND_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }
@@ -1711,18 +1798,23 @@ pub fn negate_trait_instance_int() -> TraitInstance {
     fn generate_negate_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc
             .builder()
             .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
-        let obj = allocate_obj(
-            int_lit_ty(),
-            &vec![],
-            gc,
-            Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
-        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                int_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
         obj.store_field_nocap(gc, 0, value);
         obj
     }

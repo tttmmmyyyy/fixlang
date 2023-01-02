@@ -94,6 +94,15 @@ impl<'c> Object<'c> {
             .into_struct_value()
     }
 
+    pub fn store_unbox<'m, V>(&self, gc: &mut GenerationContext<'c, 'm>, value: V)
+    where
+        V: BasicValue<'c>,
+    {
+        assert!(self.is_unbox(gc.type_env()));
+        let ptr = self.ptr(gc);
+        gc.builder().build_store(ptr, value);
+    }
+
     pub fn ptr_to_field_nocap<'m>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -456,16 +465,45 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
-    pub fn get_var_retained_if_used_later(&mut self, var_name: &NameSpacedName) -> Object<'c> {
+    pub fn get_var_retained_if_used_later(
+        &mut self,
+        var_name: &NameSpacedName,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         let var = self.get_var(var_name);
-        let mut obj = var.ptr.get(self);
+        let obj = var.ptr.get(self);
         if var.used_later > 0 {
+            // If used later, clone object.
             self.retain(obj.clone());
             if obj.is_unbox(self.type_env()) {
-                obj = Object::create_from_value(obj.value(self), obj.ty, self);
+                // if unboxed, in addition to retain, we also need to store the value to another memory region other than obj,
+                // since all unboxed values are treated as like unique object (i.e., the object of refcnt = 1)
+                // in the sense that it will be modified by functions such as `Struct.set`.
+                if rvo.is_some() {
+                    let rvo = rvo.unwrap();
+                    let obj_val = obj.value(self);
+                    rvo.store_unbox(self, obj_val);
+                    rvo
+                } else {
+                    Object::create_from_value(obj.value(self), obj.ty, self)
+                }
+            } else {
+                assert!(rvo.is_none());
+                obj
+            }
+        } else {
+            // If this variable is not used later,
+            if rvo.is_some() {
+                // and if rvo is required, then "move" the ownership of the value to the rvo memory region.
+                assert!(obj.is_unbox(self.type_env()));
+                let rvo = rvo.unwrap();
+                let obj_val = obj.value(self);
+                rvo.store_unbox(self, obj_val);
+                rvo
+            } else {
+                obj
             }
         }
-        obj
     }
 
     pub fn cast_pointer(&self, from: PointerValue<'c>, to: PointerType<'c>) -> PointerValue<'c> {
@@ -529,23 +567,54 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Apply a object to a lambda.
-    pub fn apply_lambda(&mut self, lambda: Object<'c>, arg: Object<'c>) -> Object<'c> {
+    pub fn apply_lambda(
+        &mut self,
+        lambda: Object<'c>,
+        arg: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // If argument is unboxed, load it.
         let arg = arg.value(self);
 
-        // Call function.
+        // Get function.
         let ptr_to_func = self.get_lambda_func_ptr(lambda.clone());
         let lambda_func = CallableValue::try_from(ptr_to_func).unwrap();
-        let ret = self.builder().build_call(
-            lambda_func,
-            &[arg.into(), lambda.ptr(self).into()],
-            "call_lambda",
-        );
-        ret.set_tail_call(true);
-        let ret = ret.try_as_basic_value().unwrap_left();
 
-        let dst_ty = lambda.ty.get_funty_dst();
-        Object::create_from_value(ret, dst_ty, self)
+        // Perform return value optimization iff return type is unboxed.
+        let ret_ty = lambda.ty.get_funty_dst();
+        // Call function.
+        if ret_ty.is_unbox(self.type_env()) {
+            let rvo = if rvo.is_none() {
+                // Allocate memory region for rvo here.
+                allocate_obj(
+                    ret_ty.clone(),
+                    &vec![],
+                    self,
+                    Some(&format!("alloca_rvo_{}", ret_ty.to_string())),
+                )
+            } else {
+                rvo.unwrap()
+            };
+            let rvo_ptr = rvo.ptr(self);
+            let rvo_ptr = self.cast_pointer(rvo_ptr, ptr_to_object_type(self.context));
+            let ret = self.builder().build_call(
+                lambda_func,
+                &[arg.into(), lambda.ptr(self).into(), rvo_ptr.into()],
+                "call_lambda",
+            );
+            ret.set_tail_call(true);
+            rvo
+        } else {
+            assert!(rvo.is_none());
+            let ret = self.builder().build_call(
+                lambda_func,
+                &[arg.into(), lambda.ptr(self).into()],
+                "call_lambda",
+            );
+            ret.set_tail_call(true);
+            let ret = ret.try_as_basic_value().unwrap_left();
+            Object::create_from_value(ret, ret_ty, self)
+        }
     }
 
     // Retain object.
@@ -653,7 +722,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate expression.
-    pub fn eval_expr(&mut self, expr: Arc<ExprNode>) -> Object<'c> {
+    pub fn eval_expr(&mut self, expr: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
         let expr = expr.set_inferred_type(
             self.typechecker
                 .as_ref()
@@ -662,39 +731,53 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
         assert!(expr.inferred_ty.as_ref().unwrap().free_vars().is_empty());
         let mut ret = match &*expr.expr {
-            Expr::Var(var) => self.eval_var(var.clone()),
-            Expr::Lit(lit) => self.eval_lit(lit.clone(), expr.inferred_ty.clone().unwrap().clone()),
-            Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone()),
+            Expr::Var(var) => self.eval_var(var.clone(), rvo),
+            Expr::Lit(lit) => {
+                self.eval_lit(lit.clone(), expr.inferred_ty.clone().unwrap().clone(), rvo)
+            }
+            Expr::App(lambda, arg) => self.eval_app(lambda.clone(), arg.clone(), rvo),
             Expr::Lam(arg, val) => {
                 self.eval_lam(arg.clone(), val.clone(), expr.inferred_ty.clone().unwrap())
             }
-            Expr::Let(var, bound, expr) => self.eval_let(var.clone(), bound.clone(), expr.clone()),
-            Expr::If(cond_expr, then_expr, else_expr) => {
-                self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone())
+            Expr::Let(var, bound, expr) => {
+                self.eval_let(var.clone(), bound.clone(), expr.clone(), rvo)
             }
-            Expr::TyAnno(e, _) => self.eval_expr(e.clone()),
+            Expr::If(cond_expr, then_expr, else_expr) => {
+                self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), rvo)
+            }
+            Expr::TyAnno(e, _) => self.eval_expr(e.clone(), rvo),
         };
         ret.ty = expr.inferred_ty.clone().unwrap();
         ret
     }
 
     // Evaluate variable.
-    fn eval_var(&mut self, var: Arc<Var>) -> Object<'c> {
-        self.get_var_retained_if_used_later(&var.name)
+    fn eval_var(&mut self, var: Arc<Var>, rvo: Option<Object<'c>>) -> Object<'c> {
+        self.get_var_retained_if_used_later(&var.name, rvo)
     }
 
     // Evaluate application
-    fn eval_app(&mut self, lambda: Arc<ExprNode>, arg: Arc<ExprNode>) -> Object<'c> {
+    fn eval_app(
+        &mut self,
+        lambda: Arc<ExprNode>,
+        arg: Arc<ExprNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         self.scope_lock_as_used_later(arg.free_vars());
-        let lambda_code = self.eval_expr(lambda);
+        let lambda_code = self.eval_expr(lambda, None);
         self.scope_unlock_as_used_later(arg.free_vars());
-        let arg_code = self.eval_expr(arg);
-        self.apply_lambda(lambda_code, arg_code)
+        let arg_code = self.eval_expr(arg, None);
+        self.apply_lambda(lambda_code, arg_code, rvo)
     }
 
     // Evaluate literal
-    fn eval_lit(&mut self, lit: Arc<Literal>, ty: Arc<TypeNode>) -> Object<'c> {
-        (lit.generator)(self, &ty)
+    fn eval_lit(
+        &mut self,
+        lit: Arc<Literal>,
+        ty: Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        (lit.generator)(self, &ty, rvo)
     }
 
     // Evaluate lambda abstraction.
@@ -748,6 +831,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let arg_obj = Object::create_from_value(arg_val, arg_ty, self);
             self.scope_push(&arg.name, &arg_obj);
 
+            // Get rvo field if return value is unboxed.
+            let ret_ty = lam_ty.get_funty_dst();
+            let rvo = if ret_ty.is_unbox(self.type_env()) {
+                let ptr = lam_fn.get_nth_param(2).unwrap().into_pointer_value();
+                Some(Object::new(ptr, ret_ty))
+            } else {
+                None
+            };
+
             // Push SELF on scope.
             let closure_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
             let closure_obj = Object::new(closure_ptr, lam_ty.clone());
@@ -771,10 +863,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
 
             // Calculate body.
-            let val = self.eval_expr(val.clone());
+            let val = self.eval_expr(val.clone(), rvo.clone());
 
-            // Return result
-            self.builder().build_return(Some(&val.value(self)));
+            // Return lambda function.
+            if rvo.is_some() {
+                self.builder().build_return(None);
+            } else {
+                self.builder().build_return(Some(&val.value(self)));
+            }
         }
         // Allocate and set up closure
         let name = expr_abs(arg, val, None).expr.to_string();
@@ -787,7 +883,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             lam_fn.as_global_value().as_pointer_value(),
         );
         for (i, (cap_name, _cap_ty)) in captured_vars.iter().enumerate() {
-            let cap_obj = self.get_var_retained_if_used_later(cap_name);
+            let cap_obj = self.get_var_retained_if_used_later(cap_name, None);
             let cap_val = cap_obj.value(self);
             let obj_ptr = obj.ptr(self);
             self.store_obj_field(obj_ptr, closure_ty, i as u32 + CAPTURED_OBJECT_IDX, cap_val);
@@ -798,18 +894,24 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate let
-    fn eval_let(&mut self, var: Arc<Var>, bound: Arc<ExprNode>, val: Arc<ExprNode>) -> Object<'c> {
+    fn eval_let(
+        &mut self,
+        var: Arc<Var>,
+        bound: Arc<ExprNode>,
+        val: Arc<ExprNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         let var_name = &var.name;
         let mut used_in_val_except_var = val.free_vars().clone();
         used_in_val_except_var.remove(var_name);
         self.scope_lock_as_used_later(&used_in_val_except_var);
-        let bound_code = self.eval_expr(bound.clone());
+        let bound_code = self.eval_expr(bound.clone(), None);
         self.scope_unlock_as_used_later(&used_in_val_except_var);
         self.scope_push(&var_name, &bound_code);
         if !val.free_vars().contains(var_name) {
             self.release(bound_code);
         }
-        let val_code = self.eval_expr(val.clone());
+        let val_code = self.eval_expr(val.clone(), rvo);
         self.scope_pop(&var_name);
         val_code
     }
@@ -820,11 +922,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         cond_expr: Arc<ExprNode>,
         then_expr: Arc<ExprNode>,
         else_expr: Arc<ExprNode>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let mut used_then_or_else = then_expr.free_vars().clone();
         used_then_or_else.extend(else_expr.free_vars().clone());
         self.scope_lock_as_used_later(&used_then_or_else);
-        let ptr_to_cond_obj = self.eval_expr(cond_expr);
+        let ptr_to_cond_obj = self.eval_expr(cond_expr, None);
         self.scope_unlock_as_used_later(&used_then_or_else);
         let cond_val = ptr_to_cond_obj.load_field_nocap(self, 0).into_int_value();
         self.release(ptr_to_cond_obj);
@@ -846,7 +949,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.release(self.get_var(var_name).ptr.get(self));
             }
         }
-        let then_val = self.eval_expr(then_expr.clone());
+        let then_val = self.eval_expr(then_expr.clone(), rvo.clone());
         let then_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
 
@@ -857,7 +960,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.release(self.get_var(var_name).ptr.get(self));
             }
         }
-        let else_val = self.eval_expr(else_expr);
+        let else_val = self.eval_expr(else_expr, rvo);
         let else_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
 

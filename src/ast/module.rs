@@ -337,7 +337,7 @@ impl FixModule {
 
             // If flag is zero, then create object and store it to the global variable.
             gc.builder().position_at_end(init_bb);
-            let obj = gc.eval_expr(sym.expr.unwrap().clone());
+            let obj = gc.eval_expr(sym.expr.unwrap().clone(), None); // TODO: we can use rvo here.
             let obj_val = obj.value(gc);
             gc.builder().build_store(global_var, obj_val);
             gc.builder()

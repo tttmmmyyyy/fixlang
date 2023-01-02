@@ -295,7 +295,7 @@ impl ObjectFieldType {
                              ptr_to_buffer: PointerValue<'c>| {
                 // Apply map to idx object to get initial value at this idx.
                 gc.retain(map.clone());
-                let value = gc.apply_lambda(map.clone(), idx.clone());
+                let value = gc.apply_lambda(map.clone(), idx.clone(), None);
 
                 // Store value.
                 let idx_val = idx.load_field_nocap(gc, 0).into_int_value();
@@ -354,6 +354,7 @@ impl ObjectFieldType {
         size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Panic if out_of_range.
         Self::panic_if_out_of_range(gc, size_buf, elem_ty.clone(), idx);
@@ -366,8 +367,17 @@ impl ObjectFieldType {
             gc.builder()
                 .build_gep(ptr_to_buffer, &[idx.into()], "ptr_to_elem_of_array")
         };
-        let elem_obj =
-            Object::create_from_value(gc.builder().build_load(ptr_to_elem, "elem"), elem_ty, gc);
+
+        // Get value
+        let elem_val = gc.builder().build_load(ptr_to_elem, "elem");
+
+        let elem_obj = if rvo.is_some() {
+            let rvo = rvo.unwrap();
+            rvo.store_unbox(gc, elem_val);
+            rvo
+        } else {
+            Object::create_from_value(elem_val, elem_ty, gc)
+        };
 
         // Retain element and return it.
         gc.retain(elem_obj.clone());
@@ -571,11 +581,18 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         elem_ty: &Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let val = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
-        let val = Object::create_from_value(val, elem_ty.clone(), gc);
-        gc.retain(val.clone());
-        val
+        let obj = if rvo.is_none() {
+            Object::create_from_value(val, elem_ty.clone(), gc)
+        } else {
+            let rvo = rvo.unwrap();
+            rvo.store_unbox(gc, val);
+            rvo
+        };
+        gc.retain(obj.clone());
+        obj
     }
 
     pub fn get_value_from_union_buf<'c, 'm>(
@@ -730,12 +747,24 @@ pub fn lambda_function_type<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
 ) -> FunctionType<'c> {
     // A function that takes argument and context (=lambda object itself).
+    // In addition, if ret_ty is unboxed, then add parameter for pointer of return value and return void.
     let arg_ty = ty.get_funty_src().get_embedded_type(gc, &vec![]);
     let ret_ty = ty.get_funty_dst().get_embedded_type(gc, &vec![]);
-    ret_ty.fn_type(
-        &[arg_ty.into(), ptr_to_object_type(gc.context).into()],
-        false,
-    )
+    if ty.get_funty_dst().is_box(gc.type_env()) {
+        ret_ty.fn_type(
+            &[arg_ty.into(), ptr_to_object_type(gc.context).into()],
+            false,
+        )
+    } else {
+        gc.context.void_type().fn_type(
+            &[
+                arg_ty.into(),
+                ptr_to_object_type(gc.context).into(),
+                ptr_to_object_type(gc.context).into(),
+            ],
+            false,
+        )
+    }
 }
 
 // fn ptr_to_lambda_function_type<'ctx>(
