@@ -374,7 +374,7 @@ pub fn test21() {
 #[test]
 #[serial]
 pub fn test22() {
-    // Test recursion function defined by fix with two variable that is tail-call.
+    // Test recursion function defined by fix with two variables that is tail-call.
     let n = 100000;
     let source = format!(
         r"
@@ -846,7 +846,7 @@ pub fn test42() {
 #[serial]
 pub fn test43() {
     // Recursion function using global variable (tail call).
-    let n = 10000;
+    let n = 1000000;
     let source = format!(
         r"
             module Main;
