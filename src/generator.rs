@@ -574,6 +574,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         assert_eq!(arg.ty, lambda.ty.get_funty_src());
+        if rvo.is_some() {
+            assert_eq!(rvo.clone().unwrap().ty, lambda.ty.get_funty_dst());
+        }
         // If argument is unboxed, load it.
         let arg = arg.value(self);
 
