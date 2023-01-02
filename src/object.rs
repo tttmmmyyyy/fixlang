@@ -507,8 +507,12 @@ impl ObjectFieldType {
             // Implement the case tag is match.
             gc.builder().position_at_end(match_bb);
             let value_ptr = if field_ty.is_box(gc.type_env()) {
+                let buf = gc.cast_pointer(
+                    buf,
+                    ptr_to_object_type(gc.context).ptr_type(AddressSpace::from(0)),
+                );
                 gc.builder()
-                    .build_load(buf, "load_buf")
+                    .build_load(buf, "load_boxed_buf")
                     .into_pointer_value()
             } else {
                 buf
