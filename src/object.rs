@@ -553,32 +553,6 @@ impl ObjectFieldType {
         ObjectFieldType::retain_release_union_buf(gc, buf, tag, field_types, false);
     }
 
-    pub fn allocate_union_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        field_types: &Vec<Arc<TypeNode>>,
-    ) -> PointerValue<'c> {
-        if field_types.is_empty() {
-            return ptr_to_object_type(gc.context).const_null();
-        }
-        let size = field_types
-            .iter()
-            .map(|ty| {
-                let struct_ty = get_object_type(
-                    ty,
-                    &vec![], /* captured list desn't effect sizeof */
-                    gc.type_env(),
-                )
-                .to_struct_type(gc);
-                gc.sizeof(&struct_ty)
-            })
-            .max()
-            .unwrap();
-        let size = gc.context.i64_type().const_int(size, false);
-        gc.builder()
-            .build_array_malloc(gc.context.i8_type(), size, "alloc_union_buf")
-            .unwrap()
-    }
-
     pub fn set_value_to_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
@@ -1037,7 +1011,6 @@ pub fn create_dtor<'c, 'm>(
                         );
                     }
                     ObjectFieldType::UnionBuf(_) => {
-                        let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
                         let buf = ptr_to_field(i as u32, gc);
                         ObjectFieldType::release_union_buf(
                             gc,
