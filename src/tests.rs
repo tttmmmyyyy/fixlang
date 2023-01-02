@@ -598,7 +598,7 @@ pub fn test32() {
 #[test]
 #[serial]
 pub fn test33() {
-    // Test struct declaration and new.
+    // Test struct declaration and new, mod.
     let source = r"
         module Main;
         type IntBool = struct (x: Int, y: Bool);
@@ -695,6 +695,27 @@ pub fn test37() {
         );
         ";
     let answer = 31;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test37_5() {
+    // Test shared modField.
+    let source = r"
+        module Main;
+
+        type A = struct (x: B);
+        type B = struct (x: Int);
+
+        main : Int;
+        main = (
+            let a = A.new (B.new 16);
+            let b = a.(mod_x $ mod_x $ \x -> x + 15);
+            a.get_x.get_x + b.get_x.get_x
+        );
+        ";
+    let answer = (16 + 15) + 16;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
