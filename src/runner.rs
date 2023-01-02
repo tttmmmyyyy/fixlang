@@ -100,6 +100,9 @@ fn build_module<'c>(
         }
     }
 
+    // Instanciate main function and all called functions.
+    let main_expr = fix_mod.instantiate_main_function();
+
     // Create GenerationContext.
     let mut gc = GenerationContext::new(&context, &module, target);
 
@@ -116,9 +119,6 @@ fn build_module<'c>(
 
     // Build runtime functions.
     build_runtime(&mut gc);
-
-    // Instanciate main function and all called functions.
-    let main_expr = fix_mod.instantiate_main_function();
 
     // Generate codes.
     fix_mod.generate_code(&mut gc);
