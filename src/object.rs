@@ -514,8 +514,10 @@ impl ObjectFieldType {
         // Implement last unmatch bb.
         let last_unmatch_bb = last_unmatch_bb.unwrap();
         gc.builder().position_at_end(last_unmatch_bb);
-        gc.builder().build_unreachable();
+        gc.panic("all tags unmatch!"); // unreachable didn't work as I expected.
         gc.builder().build_unconditional_branch(end_bb);
+
+        gc.builder().position_at_end(end_bb);
     }
 
     pub fn retain_union_buf<'c, 'm>(

@@ -846,7 +846,7 @@ pub fn union_as_lit(
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty| {
         let is_unbox = ty.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
-        let elem_ty = ty.fields_types(gc.type_env())[field_idx].clone();
+        let elem_ty = ty.clone();
 
         // Get union object.
         let obj = gc
