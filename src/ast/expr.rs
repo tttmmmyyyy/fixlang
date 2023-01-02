@@ -558,6 +558,10 @@ pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) ->
     Arc::new(Expr::TyAnno(expr, ty)).into_expr_info(src)
 }
 
+pub fn expr_make_pair(lhs: Arc<ExprNode>, rhs: Arc<ExprNode>) -> Arc<ExprNode> {
+    Arc::new(Expr::MakePair(lhs, rhs)).into_expr_info(None)
+}
+
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
 pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
