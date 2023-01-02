@@ -1169,6 +1169,26 @@ pub fn test52() {
     let answer = 5;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
+#[test]
+#[serial]
+pub fn test53() {
+    // Test mutation of unboxed struct (e.g., tuple).
+    let source = r"
+    module Main;
+    
+    main : Int;
+    main = (
+        let pair = (13, Array.new 1 17);
+        let pair = pair.mod_0! \x -> x + 3;
+        let pair = pair.mod_1! \arr -> arr.mod! 0 (\e -> e + 5);
+        let x = pair.get_0;
+        let y = pair.get_1.get 0;
+        x + y
+    );
+    ";
+    let answer = 13 + 17 + 3 + 5;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
 
 #[test]
 #[serial]
