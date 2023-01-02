@@ -488,14 +488,8 @@ pub fn struct_new_lit(
         let obj = allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned));
 
         // Set fields.
-        let is_unbox = obj.is_unbox(gc.type_env());
-        let offset = struct_field_idx(is_unbox);
         for (i, field) in fields.iter().enumerate() {
-            if is_unbox {
-                obj.store_field_nocap(gc, i as u32 + offset, field.load_nocap(gc));
-            } else {
-                obj.store_field_nocap(gc, i as u32 + offset, field.ptr(gc));
-            }
+            ObjectFieldType::set_struct_field(gc, &obj, i as u32, field);
         }
 
         obj
