@@ -626,6 +626,8 @@ pub fn struct_mod_lit(
             let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
+            let original_str_ptr = str.ptr(gc);
+
             // Jump to shared_bb if refcnt > 1.
             let one = refcnt_type(gc.context).const_int(1, false);
             let is_unique =
@@ -649,6 +651,7 @@ pub fn struct_mod_lit(
                 ObjectFieldType::set_struct_field(gc, &cloned_str, i as u32, &field);
             }
             gc.release(str.clone());
+            let cloned_str_ptr = cloned_str.ptr(gc);
             let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
             gc.builder().build_unconditional_branch(cont_bb);
 
@@ -658,8 +661,8 @@ pub fn struct_mod_lit(
             // Build phi value
             let str_phi = gc.builder().build_phi(str.ptr(gc).get_type(), "str_phi");
             str_phi.add_incoming(&[
-                (&str.ptr(gc), current_bb),
-                (&cloned_str.ptr(gc), succ_of_shared_bb),
+                (&original_str_ptr, current_bb),
+                (&cloned_str_ptr, succ_of_shared_bb),
             ]);
 
             str = Object::new(str_phi.as_basic_value().into_pointer_value(), ty.clone());
