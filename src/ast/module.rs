@@ -307,15 +307,15 @@ impl FixModule {
                         .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
 
                 // Register the accessor function to gc.
-                gc.add_global_object(name.clone(), acc_fn, obj_ty);
+                gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
 
                 // Return global variable and accessor.
-                (global_var, init_flag, acc_fn, sym.clone())
+                (global_var, init_flag, acc_fn, sym.clone(), obj_ty)
             })
             .collect::<Vec<_>>();
 
         // Implement global accessor function.
-        for (global_var, init_flag, acc_fn, sym) in global_objs {
+        for (global_var, init_flag, acc_fn, sym, obj_ty) in global_objs {
             gc.typechecker = sym.typechecker;
 
             let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
@@ -337,11 +337,25 @@ impl FixModule {
 
             // If flag is zero, then create object and store it to the global variable.
             gc.builder().position_at_end(init_bb);
-            let obj = gc.eval_expr(sym.expr.unwrap().clone(), None); // TODO: we can use rvo here.
-            let obj_val = obj.value(gc);
-            gc.builder().build_store(global_var, obj_val);
+            // Prepare memory space for rvo.
+            let rvo = if obj_ty.is_unbox(gc.type_env()) {
+                Some(Object::new(global_var, obj_ty))
+            } else {
+                None
+            };
+            // Execute expression.
+            let obj = gc.eval_expr(sym.expr.unwrap().clone(), rvo.clone());
+
+            // If we didn't rvo, then store the result to gloval_ptr.
+            if rvo.is_none() {
+                let obj_val = obj.value(gc);
+                gc.builder().build_store(global_var, obj_val);
+            }
+
+            // Set the initialized flag 1.
             gc.builder()
                 .build_store(init_flag, gc.context.i8_type().const_int(1, false));
+
             if SANITIZE_MEMORY && obj.is_box(gc.type_env()) {
                 // Mark this object as global.
                 let ptr = obj.ptr(gc);
