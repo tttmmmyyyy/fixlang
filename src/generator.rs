@@ -871,7 +871,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
-    ty.ptr_type(AddressSpace::Generic)
+    ty.ptr_type(AddressSpace::from(0))
 }
 
 pub static SELF_NAME: &str = "%SELF%";

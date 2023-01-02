@@ -24,7 +24,7 @@ fn build_printf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> Function
 
     let i32_type = context.i32_type();
     let i8_type = context.i8_type();
-    let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::Generic);
+    let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::from(0));
 
     let fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
     let func = module.add_function("printf", fn_type, None);
@@ -36,7 +36,7 @@ fn build_report_malloc_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Funct
     let fn_ty = gc.context.i64_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
-            gc.context.i8_type().ptr_type(AddressSpace::Generic).into(),
+            gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
         ],
         false,
     );

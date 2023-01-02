@@ -106,7 +106,7 @@ fn build_module<'c>(
     // If use leaky allocator, prepare heap counter.
     if USE_LEAKY_ALLOCATOR {
         let leaky_heap_type = gc.context.i8_type().array_type(LEAKY_ALLOCATOR_HEAP_SIZE);
-        let ptr_to_leaky_heap_type = leaky_heap_type.ptr_type(AddressSpace::Generic);
+        let ptr_to_leaky_heap_type = leaky_heap_type.ptr_type(AddressSpace::from(0));
         let ptr_to_heap = gc
             .module
             .add_global(ptr_to_leaky_heap_type, None, LEAKY_HEAP_NAME);

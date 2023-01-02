@@ -21,7 +21,7 @@ impl ObjectFieldType {
             ObjectFieldType::ControlBlock => control_block_type(gc.context).into(),
             ObjectFieldType::DtorFunction => ptr_to_dtor_type(gc.context).into(),
             ObjectFieldType::LambdaFunction(ty) => lambda_function_type(ty, gc)
-                .ptr_type(AddressSpace::Generic)
+                .ptr_type(AddressSpace::from(0))
                 .into(),
             ObjectFieldType::SubObject(ty) => {
                 get_object_type(ty, &vec![], gc.type_env()).to_embedded_type(gc)
@@ -35,7 +35,7 @@ impl ObjectFieldType {
                         gc.context.i64_type().into(), // size
                         get_object_type(ty, &vec![], gc.type_env())
                             .to_embedded_type(gc)
-                            .ptr_type(AddressSpace::Generic)
+                            .ptr_type(AddressSpace::from(0))
                             .into(), // buffer
                     ],
                     false,
@@ -570,7 +570,7 @@ impl ObjectFieldType {
         val: Object<'c>,
     ) {
         let val = val.value(gc);
-        let buf = gc.cast_pointer(buf, val.get_type().ptr_type(AddressSpace::Generic));
+        let buf = gc.cast_pointer(buf, val.get_type().ptr_type(AddressSpace::from(0)));
         gc.builder().build_store(buf, val);
     }
 
@@ -594,7 +594,7 @@ impl ObjectFieldType {
             buf,
             elem_ty
                 .get_embedded_type(gc, &vec![])
-                .ptr_type(AddressSpace::Generic),
+                .ptr_type(AddressSpace::from(0)),
         );
         gc.builder().build_load(buf, "value_at_union_buf")
     }
@@ -697,7 +697,7 @@ pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
 }
 
 fn _ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    refcnt_type(context).ptr_type(AddressSpace::Generic)
+    refcnt_type(context).ptr_type(AddressSpace::from(0))
 }
 
 pub fn obj_id_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
@@ -705,7 +705,7 @@ pub fn obj_id_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
 }
 
 pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    context.i8_type().ptr_type(AddressSpace::Generic)
+    context.i8_type().ptr_type(AddressSpace::from(0))
 }
 
 fn dtor_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
@@ -715,7 +715,7 @@ fn dtor_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
 }
 
 fn ptr_to_dtor_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    dtor_type(context).ptr_type(AddressSpace::Generic)
+    dtor_type(context).ptr_type(AddressSpace::from(0))
 }
 
 pub fn control_block_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
@@ -727,7 +727,7 @@ pub fn control_block_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
 }
 
 pub fn ptr_to_control_block_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    control_block_type(context).ptr_type(AddressSpace::Generic)
+    control_block_type(context).ptr_type(AddressSpace::from(0))
 }
 
 pub fn lambda_function_type<'c, 'm>(
@@ -747,7 +747,7 @@ pub fn lambda_function_type<'c, 'm>(
 //     ty: &Arc<TypeNode>,
 //     context: &'ctx Context,
 // ) -> PointerType<'ctx> {
-//     lambda_function_type(ty, context).ptr_type(AddressSpace::Generic)
+//     lambda_function_type(ty, context).ptr_type(AddressSpace::from(0))
 // }
 
 // pub fn lambda_type<'c>(context: &'c Context) -> StructType<'c> {
@@ -876,7 +876,7 @@ pub fn allocate_obj<'c, 'm>(
         let string_ptr = string_ptr.as_pointer_value();
         let string_ptr = gc.builder().build_pointer_cast(
             string_ptr,
-            gc.context.i8_type().ptr_type(AddressSpace::Generic),
+            gc.context.i8_type().ptr_type(AddressSpace::from(0)),
             "name_of_obj_i8ptr",
         );
         let ptr = gc.cast_pointer(ptr_to_obj, ptr_to_object_type(gc.context));
