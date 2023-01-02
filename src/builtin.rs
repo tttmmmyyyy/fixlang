@@ -784,7 +784,7 @@ pub fn union_new_lit(
         obj.store_field_nocap(gc, 0 + offset, tag_value);
 
         // Set value.
-        let buf = obj.ptr_to_field_nocap(gc, offset + 1);
+        let buf = obj.load_field_nocap(gc, offset + 1).into_pointer_value();
         ObjectFieldType::set_value_to_union_buf(gc, buf, field);
 
         obj
