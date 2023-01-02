@@ -17,6 +17,7 @@ mod runtime;
 #[cfg(test)]
 mod tests;
 mod typecheck;
+mod uncurry_optimization;
 
 use ast::expr::*;
 use ast::module::*;
@@ -49,6 +50,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::vec::Vec;
 use typecheck::*;
+use uncurry_optimization::*;
 
 const SANITIZE_MEMORY: bool = true;
 const USE_LEAKY_ALLOCATOR: bool = false;

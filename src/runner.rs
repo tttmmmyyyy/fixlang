@@ -102,6 +102,7 @@ fn build_module<'c>(
 
     // Instanciate main function and all called functions.
     let main_expr = fix_mod.instantiate_main_function();
+    uncurry_optimization(&mut fix_mod);
 
     // Create GenerationContext.
     let mut gc = GenerationContext::new(&context, &module, target);

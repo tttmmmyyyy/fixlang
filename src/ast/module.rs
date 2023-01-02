@@ -45,10 +45,10 @@ impl TypeEnv {
 
 #[derive(Clone)]
 pub struct InstantiatedSymbol {
-    template_name: NameSpacedName,
-    ty: Arc<TypeNode>,
-    expr: Option<Arc<ExprNode>>,
-    typechecker: Option<TypeCheckContext>, // type checker available for resolving types in expr.
+    pub template_name: NameSpacedName,
+    pub ty: Arc<TypeNode>,
+    pub expr: Option<Arc<ExprNode>>,
+    pub typechecker: Option<TypeCheckContext>, // type checker available for resolving types in expr.
 }
 
 pub struct GlobalSymbol {
@@ -471,7 +471,7 @@ impl FixModule {
     }
 
     // Require instantiate generic symbol such that it has a specified type.
-    fn require_instantiated_symbol(
+    pub fn require_instantiated_symbol(
         &mut self,
         name: &NameSpacedName,
         ty: &Arc<TypeNode>,
@@ -489,7 +489,8 @@ impl FixModule {
                     template_name: name.clone(),
                     ty: ty.clone(),
                     expr: None,
-                    typechecker: None,
+                    typechecker: None, // This field will be set after instantiation.
+                                       // In instantiation, typechecker carried by GlobalSymbol is used and set to this field in the end.
                 },
             );
         }
@@ -718,7 +719,7 @@ impl FixModule {
                     let struct_name = decl.name.clone();
                     add_global(
                         self,
-                        NameSpacedName::new(&decl.name.to_namespace(), "new"),
+                        NameSpacedName::new(&decl.name.to_namespace(), STRUCT_NEW_NAME),
                         struct_new(&struct_name, decl),
                     );
                     for field in &str.fields {
@@ -726,7 +727,7 @@ impl FixModule {
                             self,
                             NameSpacedName::new(
                                 &decl.name.to_namespace(),
-                                &format!("get_{}", &field.name),
+                                &format!("{}_{}", STRUCT_GETTER_NAME, &field.name),
                             ),
                             struct_get(&struct_name, decl, &field.name),
                         );
@@ -776,3 +777,6 @@ impl FixModule {
         }
     }
 }
+
+pub const STRUCT_GETTER_NAME: &str = "get";
+pub const STRUCT_NEW_NAME: &str = "new";

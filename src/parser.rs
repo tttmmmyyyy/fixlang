@@ -716,7 +716,7 @@ fn parse_expr_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     if exprs.len() == 1 {
         exprs[0].clone()
     } else {
-        let tuple_name = tuple_name(exprs.len() as u32);
+        let tuple_name = make_tuple_name(exprs.len() as u32);
         let mut res = expr_var(
             NameSpacedName::from_strs(&[STD_NAME, &tuple_name], "new"),
             Some(span.clone()),
@@ -804,7 +804,7 @@ fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
     } else {
         let mut res = type_tycon(&tycon(NameSpacedName::from_strs(
             &[STD_NAME],
-            &tuple_name(types.len() as u32),
+            &make_tuple_name(types.len() as u32),
         )));
         for ty in types {
             res = type_tyapp(res, ty);

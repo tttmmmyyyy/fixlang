@@ -442,6 +442,10 @@ impl NameSpacedName {
         names.push(self.name.clone());
         NameSpace { names }
     }
+
+    pub fn name_as_mut(&mut self) -> &mut Name {
+        &mut self.name
+    }
 }
 
 impl Var {

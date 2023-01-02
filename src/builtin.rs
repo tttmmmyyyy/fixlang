@@ -48,7 +48,7 @@ pub const LOOP_RESULT_NAME: &str = "LoopResult";
 pub const TUPLE_NAME: &str = "Tuple";
 
 // Make name of tuples.
-pub fn tuple_name(size: u32) -> Name {
+pub fn make_tuple_name(size: u32) -> Name {
     format!("{}{}", TUPLE_NAME, size)
 }
 
@@ -1197,7 +1197,7 @@ pub fn tuple_defn(size: u32) -> TypeDecl {
         .map(|i| "t".to_string() + &i.to_string())
         .collect::<Vec<_>>();
     TypeDecl {
-        name: NameSpacedName::from_strs(&[STD_NAME], &tuple_name(size)),
+        name: NameSpacedName::from_strs(&[STD_NAME], &make_tuple_name(size)),
         tyvars: tyvars.clone(),
         value: TypeDeclValue::Struct(Struct {
             fields: (0..size)
