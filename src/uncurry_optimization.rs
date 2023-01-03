@@ -57,8 +57,12 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
     }
 
     // Then replace expressions in the global symbols.
+    let mut symbol_names: HashSet<NameSpacedName> = Default::default();
+    for (name, _sym) in &fix_mod.instantiated_global_symbols {
+        symbol_names.insert(name.clone());
+    }
     for (_name, sym) in &mut fix_mod.instantiated_global_symbols {
-        let expr = uncurry_global_function_call_subexprs(sym.expr.as_ref().unwrap());
+        let expr = uncurry_global_function_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
         let expr = calculate_free_vars(expr);
         sym.expr = Some(expr);
     }
@@ -160,7 +164,10 @@ fn uncurry_lambda(
 }
 
 // Convert expression like `func x y` to `func@uncurry (x, y)` if possible.
-fn uncurry_global_function_call(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+fn uncurry_global_function_call(
+    expr: &Arc<ExprNode>,
+    symbols: &HashSet<NameSpacedName>,
+) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::App(fun1, arg1) => match &*fun1.expr {
             Expr::App(fun0, arg0) => match &*fun0.expr {
@@ -169,15 +176,16 @@ fn uncurry_global_function_call(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                         // If fun0 is not global, do not apply uncurry.
                         return expr.clone();
                     }
-                    if exclude(&v.name) {
+                    let mut f_uncurry = v.as_ref().clone();
+                    convert_to_uncurried_name(&mut f_uncurry.name.name);
+                    if !symbols.contains(&f_uncurry.name) {
+                        // If uncurried function is not defined, do not apply uncurry.
                         return expr.clone();
                     }
                     let result_ty = expr.inferred_ty.clone().unwrap();
                     let arg0_ty = arg0.inferred_ty.clone().unwrap();
                     let arg1_ty = arg1.inferred_ty.clone().unwrap();
                     let pair_ty = make_pair_ty(&arg0_ty, &arg1_ty);
-                    let mut f_uncurry = v.as_ref().clone();
-                    convert_to_uncurried_name(&mut f_uncurry.name.name);
                     let f_uncurry = expr_var(f_uncurry.name, None)
                         .set_inferred_type(type_fun(pair_ty.clone(), result_ty.clone()));
                     expr_app(
@@ -197,28 +205,33 @@ fn uncurry_global_function_call(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
 
 // Apply uncurry_global_function_call to all sub-expressions.
 // NOTE: we need to convert sub-expression `func x y z` to `func@uncurry@uncurry ((x, y), z)`, not to `func@uncurry@uncurry (x, (y, z))`.
-fn uncurry_global_function_call_subexprs(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+fn uncurry_global_function_call_subexprs(
+    expr: &Arc<ExprNode>,
+    symbols: &HashSet<NameSpacedName>,
+) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::Lit(_) => expr.clone(),
         Expr::App(fun, arg) => {
             let expr = expr
-                .set_app_func(uncurry_global_function_call_subexprs(fun))
-                .set_app_arg(uncurry_global_function_call_subexprs(arg));
-            uncurry_global_function_call(&expr)
+                .set_app_func(uncurry_global_function_call_subexprs(fun, symbols))
+                .set_app_arg(uncurry_global_function_call_subexprs(arg, symbols));
+            uncurry_global_function_call(&expr, symbols)
         }
-        Expr::Lam(_, val) => expr.set_lam_body(uncurry_global_function_call_subexprs(val)),
+        Expr::Lam(_, val) => expr.set_lam_body(uncurry_global_function_call_subexprs(val, symbols)),
         Expr::Let(_, bound, val) => expr
-            .set_let_bound(uncurry_global_function_call_subexprs(bound))
-            .set_let_value(uncurry_global_function_call_subexprs(val)),
+            .set_let_bound(uncurry_global_function_call_subexprs(bound, symbols))
+            .set_let_value(uncurry_global_function_call_subexprs(val, symbols)),
         Expr::If(c, t, e) => expr
-            .set_if_cond(uncurry_global_function_call_subexprs(c))
-            .set_if_then(uncurry_global_function_call_subexprs(t))
-            .set_if_else(uncurry_global_function_call_subexprs(e)),
-        Expr::TyAnno(e, _) => expr.set_tyanno_expr(uncurry_global_function_call_subexprs(e)),
+            .set_if_cond(uncurry_global_function_call_subexprs(c, symbols))
+            .set_if_then(uncurry_global_function_call_subexprs(t, symbols))
+            .set_if_else(uncurry_global_function_call_subexprs(e, symbols)),
+        Expr::TyAnno(e, _) => {
+            expr.set_tyanno_expr(uncurry_global_function_call_subexprs(e, symbols))
+        }
         Expr::MakePair(lhs, rhs) => expr
-            .set_make_pair_lhs(uncurry_global_function_call_subexprs(lhs))
-            .set_make_pair_rhs(uncurry_global_function_call_subexprs(rhs)),
+            .set_make_pair_lhs(uncurry_global_function_call_subexprs(lhs, symbols))
+            .set_make_pair_rhs(uncurry_global_function_call_subexprs(rhs, symbols)),
     }
 }
 
