@@ -1,4 +1,4 @@
-use inkwell::{basic_block::BasicBlock, types::BasicType};
+use inkwell::{basic_block::BasicBlock, module::Linkage, types::BasicType};
 
 use super::*;
 
@@ -996,7 +996,9 @@ pub fn create_dtor<'c, 'm>(
             let object_type = get_object_type(ty, capture, gc.type_env());
             let struct_type = object_type.to_struct_type(gc);
             let func_type = dtor_type(gc.context);
-            let func = gc.module.add_function(&dtor_name, func_type, None);
+            let func = gc
+                .module
+                .add_function(&dtor_name, func_type, Some(Linkage::Internal));
             let bb = gc.context.append_basic_block(func, "entry");
 
             let _builder_guard = gc.push_builder();

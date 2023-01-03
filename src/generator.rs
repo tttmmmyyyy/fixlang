@@ -8,6 +8,7 @@ use either::Either;
 use inkwell::{
     execution_engine::ExecutionEngine,
     intrinsics::Intrinsic,
+    module::Linkage,
     targets::{TargetData, TargetMachine},
     types::AnyType,
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
@@ -819,7 +820,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let lam_fn = module.add_function(
             &format!("lambda_{}", lam_ty.to_string_normalize()),
             lam_fn_ty,
-            None,
+            Some(Linkage::Internal),
         );
 
         // Implement lambda function

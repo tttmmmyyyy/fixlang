@@ -305,7 +305,7 @@ impl FixModule {
                 let acc_fn_type = ptr_to_object_type(gc.context).fn_type(&[], false);
                 let acc_fn =
                     gc.module
-                        .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
+                        .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
 
                 // Register the accessor function to gc.
                 gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
