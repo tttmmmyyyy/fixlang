@@ -223,38 +223,41 @@ fn uncurry_global_function_call_subexprs(expr: &Arc<ExprNode>) -> Arc<ExprNode> 
 // NOTE: if name `b` is contained in x, then first we need to replace `b` to another name.
 fn move_abs_front_let(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
-        Expr::Let(let_var, let_bound, let_val) => match &*let_val.expr {
-            Expr::Lam(lam_var, lam_val) => {
-                let ty = expr.inferred_ty.clone().unwrap();
+        Expr::Let(let_var, let_bound, let_val) => {
+            let let_val = move_abs_front_let(let_val);
+            match &*let_val.expr {
+                Expr::Lam(lam_var, lam_val) => {
+                    let ty = expr.inferred_ty.clone().unwrap();
 
-                // Replace lam_var and it's appearance in lam_val to avoid confliction with free variables in let_bound.
-                let let_bound = calculate_free_vars(let_bound.clone());
-                let let_bound_free_vars = let_bound.free_vars();
-                let original_name = lam_var.name.clone();
-                let mut lam_var_name = original_name.clone();
-                let mut counter = 0;
-                while let_bound_free_vars.contains(&lam_var_name) {
-                    *lam_var_name.name_as_mut() = format!("{}@{}", original_name.name, counter);
-                    counter += 1;
+                    // Replace lam_var and it's appearance in lam_val to avoid confliction with free variables in let_bound.
+                    let let_bound = calculate_free_vars(let_bound.clone());
+                    let let_bound_free_vars = let_bound.free_vars();
+                    let original_name = lam_var.name.clone();
+                    let mut lam_var_name = original_name.clone();
+                    let mut counter = 0;
+                    while let_bound_free_vars.contains(&lam_var_name) {
+                        *lam_var_name.name_as_mut() = format!("{}@{}", original_name.name, counter);
+                        counter += 1;
+                    }
+                    let (lam_var, lam_val) = if lam_var_name == lam_var.name {
+                        // Replace is not needed.
+                        (lam_var.clone(), lam_val.clone())
+                    } else {
+                        // Replace is needed.
+                        let lam_var = lam_var.set_name(lam_var_name.clone());
+                        let lam_val = replace_free_var(lam_val, &original_name, &lam_var_name);
+                        (lam_var, lam_val)
+                    };
+
+                    // Construct the expression.
+                    let expr = expr_let(let_var.clone(), let_bound.clone(), lam_val.clone(), None)
+                        .set_inferred_type(lam_val.inferred_ty.clone().unwrap());
+                    let expr = expr_abs(lam_var, expr, None).set_inferred_type(ty);
+                    expr
                 }
-                let (lam_var, lam_val) = if lam_var_name == lam_var.name {
-                    // Replace is not needed.
-                    (lam_var.clone(), lam_val.clone())
-                } else {
-                    // Replace is needed.
-                    let lam_var = lam_var.set_name(lam_var_name.clone());
-                    let lam_val = replace_free_var(lam_val, &original_name, &lam_var_name);
-                    (lam_var, lam_val)
-                };
-
-                // Construct the expression.
-                let expr = expr_let(let_var.clone(), let_bound.clone(), lam_val.clone(), None)
-                    .set_inferred_type(lam_val.inferred_ty.clone().unwrap());
-                let expr = expr_abs(lam_var, expr, None).set_inferred_type(ty);
-                expr
+                _ => expr.clone(),
             }
-            _ => expr.clone(),
-        },
+        }
         _ => expr.clone(),
     }
 }
