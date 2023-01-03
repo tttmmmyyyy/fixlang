@@ -18,6 +18,7 @@ pub fn exclude(name: &NameSpacedName) -> bool {
 }
 
 pub fn uncurry_optimization(fix_mod: &mut FixModule) {
+    let mut next_var_id: u32 = 0;
     // First, define uncurried versions of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
     for (sym_name, sym) in syms {
@@ -33,6 +34,7 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
             sym.expr.as_ref().unwrap(),
             fix_mod,
             typechcker,
+            &mut next_var_id,
         );
         let mut name = sym_name.clone();
         while expr.is_some() {
@@ -52,7 +54,13 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
                     typechecker: sym.typechecker.clone(),
                 },
             );
-            expr = uncurry_lambda(&sym.template_name, &new_expr, fix_mod, typechcker);
+            expr = uncurry_lambda(
+                &sym.template_name,
+                &new_expr,
+                fix_mod,
+                typechcker,
+                &mut next_var_id,
+            );
         }
     }
 
@@ -94,6 +102,7 @@ fn uncurry_lambda(
     expr: &Arc<ExprNode>,
     fix_mod: &mut FixModule,
     typechcker: &TypeCheckContext, // for resolving types of expr
+    next_var_id: &mut u32,
 ) -> Option<Arc<ExprNode>> {
     if exclude(template_name) {
         return None;
@@ -121,7 +130,9 @@ fn uncurry_lambda(
                             expr_var(name, None).set_inferred_type(getter_types[i].clone())
                         })
                         .collect::<Vec<_>>();
-                    let pair_arg_name = NameSpacedName::local("%uncurried_pair");
+                    let pair_arg_name =
+                        NameSpacedName::local(&format!("%uncurried_pair{}", *next_var_id));
+                    *next_var_id += 1;
                     let uncurried_body = expr_let(
                         arg0.clone(),
                         expr_app(
