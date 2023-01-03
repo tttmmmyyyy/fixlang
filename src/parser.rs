@@ -716,15 +716,7 @@ fn parse_expr_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     if exprs.len() == 1 {
         exprs[0].clone()
     } else {
-        let tuple_name = make_tuple_name(exprs.len() as u32);
-        let mut res = expr_var(
-            NameSpacedName::from_strs(&[STD_NAME, &tuple_name], "new"),
-            Some(span.clone()),
-        );
-        for expr in exprs {
-            res = expr_app(res, expr, Some(span.clone()));
-        }
-        res
+        expr_make_tuple(exprs)
     }
 }
 
