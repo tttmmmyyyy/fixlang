@@ -624,7 +624,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Retain object.
     pub fn retain(&mut self, obj: Object<'c>) {
-        if LEAK_MODE {
+        if NO_RETAIN_RELEASE {
             return;
         }
         if obj.is_box(self.type_env()) {
@@ -677,7 +677,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Release object.
     pub fn release(&mut self, obj: Object<'c>) {
-        if LEAK_MODE {
+        if NO_RETAIN_RELEASE {
             return;
         }
         if obj.is_box(self.type_env()) {
