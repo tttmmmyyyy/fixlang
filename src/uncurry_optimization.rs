@@ -29,18 +29,22 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
             .insert(sym_name.clone(), sym.clone());
 
         // Add uncurried function as long as possible.
-        let mut expr = uncurry_lambda(
-            &sym.template_name,
-            sym.expr.as_ref().unwrap(),
-            fix_mod,
-            typechcker,
-            &mut next_var_id,
-        );
-        let mut name = sym_name.clone();
-        while expr.is_some() {
-            let new_expr = calculate_free_vars(expr.take().unwrap());
-            convert_to_uncurried_name(name.name_as_mut());
-            let new_ty = new_expr.inferred_ty.clone().unwrap();
+        for arg_cnt in 2..(TUPLE_SIZE_MAX + 1) {
+            let mut expr = uncurry_lambda(
+                &sym.template_name,
+                sym.expr.as_ref().unwrap(),
+                fix_mod,
+                typechcker,
+                &mut next_var_id,
+                arg_cnt as usize,
+            );
+            if expr.is_none() {
+                break;
+            }
+            let expr = calculate_free_vars(expr.take().unwrap());
+            let ty = expr.inferred_ty.clone().unwrap();
+            let mut name = sym_name.clone();
+            convert_to_uncurried_name(name.name_as_mut(), arg_cnt as usize);
             fix_mod.instantiated_global_symbols.insert(
                 name.clone(),
                 InstantiatedSymbol {
@@ -49,17 +53,10 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
                         &name.to_string(),
                         sym.template_name.to_string()
                     )),
-                    ty: new_ty.clone(),
-                    expr: Some(new_expr.clone()),
+                    ty,
+                    expr: Some(expr.clone()),
                     typechecker: sym.typechecker.clone(),
                 },
-            );
-            expr = uncurry_lambda(
-                &sym.template_name,
-                &new_expr,
-                fix_mod,
-                typechcker,
-                &mut next_var_id,
             );
         }
     }
@@ -79,19 +76,21 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
     fix_mod.instantiate_symbols();
 }
 
-fn convert_to_uncurried_name(name: &mut Name) {
-    *name += "@uncurry";
+fn convert_to_uncurried_name(name: &mut Name, count: usize) {
+    *name += &format!("@uncurry{}", count);
 }
 
-fn make_pair_name() -> NameSpacedName {
-    NameSpacedName::from_strs(&[STD_NAME], &make_tuple_name(2))
+fn make_pair_name(size: usize) -> NameSpacedName {
+    NameSpacedName::from_strs(&[STD_NAME], &make_tuple_name(size as u32))
 }
 
-pub fn make_pair_ty(ty0: &Arc<TypeNode>, ty1: &Arc<TypeNode>) -> Arc<TypeNode> {
-    type_tyapp(
-        type_tyapp(type_tycon(&tycon(make_pair_name())), ty0.clone()),
-        ty1.clone(),
-    )
+pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+    assert!(tys.len() <= TUPLE_SIZE_MAX as usize);
+    let mut ty = type_tycon(&tycon(make_pair_name(tys.len())));
+    for field_ty in tys {
+        ty = type_tyapp(ty, field_ty);
+    }
+    ty
 }
 
 // Convert expression `\x -> \y -> z` to `\(x, y) -> z`.
@@ -103,75 +102,127 @@ fn uncurry_lambda(
     fix_mod: &mut FixModule,
     typechcker: &TypeCheckContext, // for resolving types of expr
     next_var_id: &mut u32,
+    vars_count: usize,
 ) -> Option<Arc<ExprNode>> {
     if exclude(template_name) {
         return None;
     }
-    let lam_ty = typechcker.substitute_type(expr.inferred_ty.as_ref().unwrap());
-    match &*expr.expr {
-        Expr::Lam(arg0, body0) => {
-            let arg0_ty = lam_ty.get_funty_src();
-            let body0_ty = lam_ty.get_funty_dst();
-            match &*body0.expr {
-                Expr::Lam(arg1, body) => {
-                    let arg1_ty = body0_ty.get_funty_src();
-                    let arg_types = vec![arg0_ty.clone(), arg1_ty.clone()];
-                    let pair_ty = make_pair_ty(&arg0_ty, &arg1_ty);
-                    let getter_types = (0..2)
-                        .map(|i| type_fun(pair_ty.clone(), arg_types[i].clone()))
-                        .collect::<Vec<_>>();
-                    let getters = (0..2)
-                        .map(|i| {
-                            let name = NameSpacedName::new(
-                                &make_pair_name().to_namespace(),
-                                &format!("{}_{}", STRUCT_GETTER_NAME, i),
-                            );
-                            let name = fix_mod.require_instantiated_symbol(&name, &getter_types[i]);
-                            expr_var(name, None).set_inferred_type(getter_types[i].clone())
-                        })
-                        .collect::<Vec<_>>();
-                    let pair_arg_name =
-                        NameSpacedName::local(&format!("%uncurried_pair{}", *next_var_id));
-                    *next_var_id += 1;
-                    let uncurried_body = expr_let(
-                        arg0.clone(),
-                        expr_app(
-                            getters[0].clone(),
-                            expr_var(pair_arg_name.clone(), None)
-                                .set_inferred_type(pair_ty.clone()),
-                            None,
-                        )
-                        .set_inferred_type(arg0_ty),
-                        expr_let(
-                            arg1.clone(),
-                            expr_app(
-                                getters[1].clone(),
-                                expr_var(pair_arg_name.clone(), None)
-                                    .set_inferred_type(pair_ty.clone()),
-                                None,
-                            )
-                            .set_inferred_type(arg1_ty.clone()),
-                            body.clone(),
-                            None,
-                        )
-                        .set_inferred_type(body.inferred_ty.clone().unwrap()),
-                        None,
-                    )
-                    .set_inferred_type(body.inferred_ty.clone().unwrap());
-                    let uncurried_body = move_abs_front_let(&uncurried_body); // Prepare for following uncurry.
-                    let uncurried_lam =
-                        expr_abs(var_var(pair_arg_name, None), uncurried_body, None)
-                            .set_inferred_type(type_fun(
-                                pair_ty,
-                                body.inferred_ty.clone().unwrap(),
-                            ));
-                    Some(calculate_free_vars(uncurried_lam))
-                }
-                _ => None,
-            }
-        }
-        _ => None,
+    // Extract abstructions from expr.
+    let expr = move_abs_front_let_all(expr);
+    let (args, body) = collect_abs(&expr, vars_count);
+    if args.len() != vars_count {
+        return None;
     }
+
+    // Collect types of argments.
+    let expr_type = typechcker.substitute_type(expr.inferred_ty.as_ref().unwrap());
+    let (arg_types, body_ty) = collect_app_src(&expr_type, vars_count);
+    let tuple_ty = make_tuple_ty(arg_types.clone());
+    assert_eq!(
+        typechcker.substitute_type(body.inferred_ty.as_ref().unwrap()),
+        body_ty
+    );
+
+    // Collect getter of fields of the tuple.
+    let getter_types = (0..vars_count)
+        .map(|i| type_fun(tuple_ty.clone(), arg_types[i].clone()))
+        .collect::<Vec<_>>();
+    let getters = (0..vars_count)
+        .map(|i| {
+            let name = NameSpacedName::new(
+                &make_pair_name(vars_count).to_namespace(),
+                &format!("{}_{}", STRUCT_GETTER_NAME, i),
+            );
+            let name = fix_mod.require_instantiated_symbol(&name, &getter_types[i]);
+            expr_var(name, None).set_inferred_type(getter_types[i].clone())
+        })
+        .collect::<Vec<_>>();
+
+    // Make argument (tuple) name.
+    let tuple_arg_name = NameSpacedName::local(&format!("%uncurried_tuple{}", *next_var_id));
+    *next_var_id += 1;
+
+    // Construct body of resulting lambda.
+    let mut lam_body = body.clone();
+    for i in (0..vars_count).rev() {
+        lam_body = expr_let(
+            args[i].clone(),
+            expr_app(
+                getters[i].clone(),
+                expr_var(tuple_arg_name.clone(), None).set_inferred_type(tuple_ty.clone()),
+                None,
+            )
+            .set_inferred_type(arg_types[i].clone()),
+            lam_body,
+            None,
+        )
+        .set_inferred_type(body_ty.clone())
+    }
+
+    // Construct uncurried lambda.
+    let uncurried_lam = expr_abs(var_var(tuple_arg_name, None), lam_body, None)
+        .set_inferred_type(type_fun(tuple_ty, body_ty));
+    Some(uncurried_lam)
+}
+
+// Convert \x -> \y -> z to ([x, y], z).
+fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
+    fn collect_abs_inner(
+        expr: &Arc<ExprNode>,
+        vars_limit: usize,
+    ) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
+        match &*expr.expr {
+            Expr::Lam(var, val) => {
+                let (mut vars, val) = collect_abs_inner(val, vars_limit);
+                if vars.len() >= vars_limit {
+                    return (vars, val);
+                }
+                vars.push(var.clone());
+                (vars, val)
+            }
+            _ => (vec![], expr.clone()),
+        }
+    }
+
+    let (mut vars, val) = collect_abs_inner(expr, vars_limit);
+    vars.reverse();
+    (vars, val)
+}
+
+// Convert x y z to (x, [y, z]).
+fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
+    match &*expr.expr {
+        Expr::App(fun, arg) => {
+            let (fun, mut args) = collect_app(fun);
+            args.push(arg.clone());
+            (fun, args)
+        }
+        _ => (expr.clone(), vec![]),
+    }
+}
+
+// Convert A -> B -> C to ([A, B], C)
+fn collect_app_src(ty: &Arc<TypeNode>, vars_limit: usize) -> (Vec<Arc<TypeNode>>, Arc<TypeNode>) {
+    fn collect_app_src_inner(
+        ty: &Arc<TypeNode>,
+        vars_limit: usize,
+    ) -> (Vec<Arc<TypeNode>>, Arc<TypeNode>) {
+        match &ty.ty {
+            Type::FunTy(var, val) => {
+                let (mut vars, val) = collect_app_src_inner(&val, vars_limit);
+                if vars.len() >= vars_limit {
+                    return (vars, val);
+                }
+                vars.push(var.clone());
+                (vars, val)
+            }
+            _ => (vec![], ty.clone()),
+        }
+    }
+
+    let (mut vars, val) = collect_app_src_inner(ty, vars_limit);
+    vars.reverse();
+    (vars, val)
 }
 
 // Convert expression like `func x y` to `func@uncurry (x, y)` if possible.
@@ -179,37 +230,34 @@ fn uncurry_global_function_call(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<NameSpacedName>,
 ) -> Arc<ExprNode> {
-    match &*expr.expr {
-        Expr::App(fun1, arg1) => match &*fun1.expr {
-            Expr::App(fun0, arg0) => match &*fun0.expr {
-                Expr::Var(v) => {
-                    if v.name.is_local() {
-                        // If fun0 is not global, do not apply uncurry.
-                        return expr.clone();
-                    }
-                    let mut f_uncurry = v.as_ref().clone();
-                    convert_to_uncurried_name(&mut f_uncurry.name.name);
-                    if !symbols.contains(&f_uncurry.name) {
-                        // If uncurried function is not defined, do not apply uncurry.
-                        return expr.clone();
-                    }
-                    let result_ty = expr.inferred_ty.clone().unwrap();
-                    let arg0_ty = arg0.inferred_ty.clone().unwrap();
-                    let arg1_ty = arg1.inferred_ty.clone().unwrap();
-                    let pair_ty = make_pair_ty(&arg0_ty, &arg1_ty);
-                    let f_uncurry = expr_var(f_uncurry.name, None)
-                        .set_inferred_type(type_fun(pair_ty.clone(), result_ty.clone()));
-                    expr_app(
-                        f_uncurry,
-                        expr_make_pair(arg0.clone(), arg1.clone()).set_inferred_type(pair_ty),
-                        None,
-                    )
-                    .set_inferred_type(result_ty)
-                }
-                _ => expr.clone(),
-            },
-            _ => expr.clone(),
-        },
+    let (fun, args) = collect_app(expr);
+    match &*fun.expr {
+        Expr::Var(v) => {
+            if v.name.is_local() {
+                // If fun is not global, do not apply uncurry.
+                return expr.clone();
+            }
+            let mut f_uncurry = v.as_ref().clone();
+            convert_to_uncurried_name(&mut f_uncurry.name.name, args.len());
+            if !symbols.contains(&f_uncurry.name) {
+                // If uncurried function is not defined, do not apply uncurry.
+                return expr.clone();
+            }
+            let result_ty = expr.inferred_ty.clone().unwrap();
+            let arg_tys = args
+                .iter()
+                .map(|arg| arg.inferred_ty.clone().unwrap())
+                .collect::<Vec<_>>();
+            let tuple_ty = make_tuple_ty(arg_tys);
+            let f_uncurry = expr_var(f_uncurry.name, None)
+                .set_inferred_type(type_fun(tuple_ty.clone(), result_ty.clone()));
+            expr_app(
+                f_uncurry,
+                expr_make_tuple(args).set_inferred_type(tuple_ty),
+                None,
+            )
+            .set_inferred_type(result_ty)
+        }
         _ => expr.clone(),
     }
 }
@@ -220,15 +268,13 @@ fn uncurry_global_function_call_subexprs(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<NameSpacedName>,
 ) -> Arc<ExprNode> {
+    let expr = uncurry_global_function_call(expr, symbols);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::Lit(_) => expr.clone(),
-        Expr::App(fun, arg) => {
-            let expr = expr
-                .set_app_func(uncurry_global_function_call_subexprs(fun, symbols))
-                .set_app_arg(uncurry_global_function_call_subexprs(arg, symbols));
-            uncurry_global_function_call(&expr, symbols)
-        }
+        Expr::App(fun, arg) => expr
+            .set_app_func(uncurry_global_function_call_subexprs(fun, symbols))
+            .set_app_arg(uncurry_global_function_call_subexprs(arg, symbols)),
         Expr::Lam(_, val) => expr.set_lam_body(uncurry_global_function_call_subexprs(val, symbols)),
         Expr::Let(_, bound, val) => expr
             .set_let_bound(uncurry_global_function_call_subexprs(bound, symbols))
@@ -240,18 +286,24 @@ fn uncurry_global_function_call_subexprs(
         Expr::TyAnno(e, _) => {
             expr.set_tyanno_expr(uncurry_global_function_call_subexprs(e, symbols))
         }
-        Expr::MakePair(lhs, rhs) => expr
-            .set_make_pair_lhs(uncurry_global_function_call_subexprs(lhs, symbols))
-            .set_make_pair_rhs(uncurry_global_function_call_subexprs(rhs, symbols)),
+        Expr::MakeTuple(fields) => {
+            let fields = fields.clone();
+            let mut expr = expr;
+            for (idx, field) in fields.iter().enumerate() {
+                let field = uncurry_global_function_call_subexprs(field, symbols);
+                expr = expr.set_make_tuple_field(field, idx);
+            }
+            expr
+        }
     }
 }
 
 // Convert `let a = x in \b -> y` to `\b -> let a = x in y` if possible.
 // NOTE: if name `b` is contained in x, then first we need to replace `b` to another name.
-fn move_abs_front_let(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Let(let_var, let_bound, let_val) => {
-            let let_val = move_abs_front_let(let_val);
+            let let_val = move_abs_front_let_one(let_val);
             match &*let_val.expr {
                 Expr::Lam(lam_var, lam_val) => {
                     let ty = expr.inferred_ty.clone().unwrap();
@@ -284,6 +336,22 @@ fn move_abs_front_let(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                 }
                 _ => expr.clone(),
             }
+        }
+        _ => expr.clone(),
+    }
+}
+
+// apply move_abs_front_let_one repeatedly at the head.
+fn move_abs_front_let_all(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+    match &*expr.expr {
+        Expr::Lam(_, val) => {
+            let val = move_abs_front_let_all(val);
+            expr.set_lam_body(val)
+        }
+        Expr::Let(_, _, val) => {
+            let val = move_abs_front_let_all(val);
+            let expr = &expr.set_let_value(val);
+            move_abs_front_let_one(&expr)
         }
         _ => expr.clone(),
     }
@@ -337,10 +405,13 @@ fn replace_free_var(
             let e = replace_free_var(e, from, to);
             expr.set_tyanno_expr(e)
         }
-        Expr::MakePair(l, r) => {
-            let l = replace_free_var(l, from, to);
-            let r = replace_free_var(r, from, to);
-            expr.set_make_pair_lhs(l).set_make_pair_rhs(r)
+        Expr::MakeTuple(fields) => {
+            let mut expr = expr.clone();
+            for (idx, field) in fields.iter().enumerate() {
+                let field = replace_free_var(field, from, to);
+                expr = expr.set_make_tuple_field(field, idx);
+            }
+            expr
         }
     }
 }

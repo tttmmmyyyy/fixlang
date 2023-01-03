@@ -60,7 +60,7 @@ const LEAKY_HEAP_NAME: &str = "LEAKY_HEAP";
 
 const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We should make tuple generation on-demand.
 
-const UNCURRY_OPTIMIZATION: bool = false;
+const UNCURRY_OPTIMIZATION: bool = true;
 const TUPLE_UNBOX: bool = true;
 
 fn main() {

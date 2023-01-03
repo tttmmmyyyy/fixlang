@@ -248,24 +248,13 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_make_pair_lhs(&self, lhs: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_make_tuple_field(&self, field: Arc<ExprNode>, idx: usize) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
-            Expr::MakePair(_, rhs) => {
-                ret.expr = Arc::new(Expr::MakePair(lhs, rhs.clone()));
-            }
-            _ => {
-                panic!()
-            }
-        }
-        Arc::new(ret)
-    }
-
-    pub fn set_make_pair_rhs(&self, rhs: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone();
-        match &*self.expr {
-            Expr::MakePair(lhs, _) => {
-                ret.expr = Arc::new(Expr::MakePair(lhs.clone(), rhs));
+            Expr::MakeTuple(fields) => {
+                let mut fields = fields.clone();
+                fields[idx] = field;
+                ret.expr = Arc::new(Expr::MakeTuple(fields));
             }
             _ => {
                 panic!()
@@ -303,10 +292,14 @@ impl ExprNode {
                 .clone()
                 .set_tyanno_expr(expr.resolve_namespace(ctx))
                 .set_tyanno_ty(ty.resolve_namespace(ctx)),
-            Expr::MakePair(lhs, rhs) => self
-                .clone()
-                .set_make_pair_lhs(lhs.resolve_namespace(ctx))
-                .set_make_pair_rhs(rhs.resolve_namespace(ctx)),
+            Expr::MakeTuple(fields) => {
+                let mut expr = self.clone();
+                for (i, field) in fields.iter().enumerate() {
+                    let field = field.resolve_namespace(ctx);
+                    expr = expr.set_make_tuple_field(field, i);
+                }
+                expr
+            }
         }
     }
 }
@@ -320,10 +313,10 @@ pub enum Expr {
     Let(Arc<Var>, Arc<ExprNode>, Arc<ExprNode>),
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>), // TODO: Implement case
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
-    MakePair(Arc<ExprNode>, Arc<ExprNode>), // This node is generated in optimization:
-                                            // expresison `(x, y)` is first interpreted as a naive function call `Tuple2.new x y`,
-                                            // and it is converted to `MakePair x y` in uncurry optimization.
-                                            // `MakePair x y` is compiled to a faster code than function call.
+    MakeTuple(Vec<Arc<ExprNode>>), // This node is generated in optimization:
+                                   // expresison `(x, y)` is first interpreted as a naive function call `Tuple2.new x y`,
+                                   // and it is converted to `MakePair x y` in uncurry optimization.
+                                   // `MakePair x y` is compiled to a faster code than function call.
 }
 
 impl Expr {
@@ -355,8 +348,15 @@ impl Expr {
                 e.expr.to_string()
             ),
             Expr::TyAnno(e, t) => format!("({} : {})", e.expr.to_string(), t.to_string()),
-            Expr::MakePair(lhs, rhs) => {
-                format!("({}, {})", lhs.expr.to_string(), rhs.expr.to_string())
+            Expr::MakeTuple(fields) => {
+                format!(
+                    "({})",
+                    fields
+                        .iter()
+                        .map(|f| f.expr.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             }
         }
     }
@@ -558,8 +558,8 @@ pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) ->
     Arc::new(Expr::TyAnno(expr, ty)).into_expr_info(src)
 }
 
-pub fn expr_make_pair(lhs: Arc<ExprNode>, rhs: Arc<ExprNode>) -> Arc<ExprNode> {
-    Arc::new(Expr::MakePair(lhs, rhs)).into_expr_info(None)
+pub fn expr_make_tuple(fields: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
+    Arc::new(Expr::MakeTuple(fields)).into_expr_info(None)
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
@@ -619,14 +619,15 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let free_vars = e.free_vars.clone().unwrap();
             ei.set_tyanno_expr(e).set_free_vars(free_vars)
         }
-        Expr::MakePair(lhs, rhs) => {
-            let lhs = calculate_free_vars(lhs.clone());
-            let rhs = calculate_free_vars(rhs.clone());
-            let mut free_vars = lhs.free_vars.clone().unwrap();
-            free_vars.extend(rhs.free_vars.clone().unwrap());
-            ei.set_make_pair_lhs(lhs)
-                .set_make_pair_rhs(rhs)
-                .set_free_vars(free_vars)
+        Expr::MakeTuple(fields) => {
+            let mut free_vars: HashSet<NameSpacedName> = Default::default();
+            let mut ei = ei.clone();
+            for (i, field) in fields.iter().enumerate() {
+                let field = calculate_free_vars(field.clone());
+                free_vars.extend(field.free_vars.clone().unwrap());
+                ei = ei.set_make_tuple_field(field, i);
+            }
+            ei.set_free_vars(free_vars)
         }
     }
 }

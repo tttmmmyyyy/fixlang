@@ -632,23 +632,29 @@ impl TypeCheckContext {
                 let e = self.unify_type_of_expr(e, ty.clone());
                 ei.set_tyanno_expr(e)
             }
-            Expr::MakePair(lhs, rhs) => {
-                let lhs_ty = type_tyvar_star(&self.new_tyvar());
-                let rhs_ty = type_tyvar_star(&self.new_tyvar());
-                let pair_ty = make_pair_ty(&lhs_ty, &rhs_ty);
-                if !self.unify(&pair_ty, &ty) {
+            Expr::MakeTuple(fields) => {
+                let fields = fields.clone();
+                let mut field_tys: Vec<Arc<TypeNode>> = vec![];
+                for _ in 0..fields.len() {
+                    field_tys.push(type_tyvar_star(&self.new_tyvar()));
+                }
+                let tuple_ty = make_tuple_ty(field_tys.clone());
+                if !self.unify(&tuple_ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "type mismatch. Expected `{}`, Found `{}`",
                             &self.substitute_type(&ty).to_string(),
-                            &self.substitute_type(&pair_ty).to_string(),
+                            &self.substitute_type(&tuple_ty).to_string(),
                         ),
                         &ei.source,
                     );
                 }
-                let lhs = self.unify_type_of_expr(&lhs, lhs_ty);
-                let rhs = self.unify_type_of_expr(&rhs, rhs_ty);
-                ei.set_make_pair_lhs(lhs).set_make_pair_rhs(rhs)
+                let mut ei = ei;
+                for (i, field) in fields.iter().enumerate() {
+                    let field = self.unify_type_of_expr(field, field_tys[i].clone());
+                    ei = ei.set_make_tuple_field(field, i);
+                }
+                ei
             }
         }
     }

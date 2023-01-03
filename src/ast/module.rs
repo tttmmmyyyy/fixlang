@@ -467,10 +467,13 @@ impl FixModule {
                 let e = self.instantiate_expr(tc, e);
                 expr.set_tyanno_expr(e)
             }
-            Expr::MakePair(lhs, rhs) => {
-                let lhs = self.instantiate_expr(tc, lhs);
-                let rhs = self.instantiate_expr(tc, rhs);
-                expr.set_make_pair_lhs(lhs).set_make_pair_rhs(rhs)
+            Expr::MakeTuple(fields) => {
+                let mut expr = expr.clone();
+                for (i, field) in fields.iter().enumerate() {
+                    let field = self.instantiate_expr(tc, field);
+                    expr = expr.set_make_tuple_field(field, i);
+                }
+                expr
             }
         };
         calculate_free_vars(ret)
