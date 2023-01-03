@@ -54,7 +54,7 @@ use uncurry_optimization::*;
 
 const SANITIZE_MEMORY: bool = true;
 
-const NO_RETAIN_RELEASE: bool = true; // In this mode, not only memory leak occurrs, reference transparency breaks.
+const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
 const USE_LEAKY_ALLOCATOR: bool = false;
 const LEAKY_ALLOCATOR_HEAP_SIZE: u32 = 512 * 1024 * 1024;
 const LEAKY_HEAP_NAME: &str = "LEAKY_HEAP";
