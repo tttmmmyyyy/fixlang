@@ -21,6 +21,8 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
     // First, define uncurried versions of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
     for (sym_name, sym) in syms {
+        let typechcker = sym.typechecker.as_ref().unwrap();
+
         fix_mod
             .instantiated_global_symbols
             .insert(sym_name.clone(), sym.clone());
@@ -29,8 +31,8 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
         let mut expr = uncurry_lambda(
             &sym.template_name,
             sym.expr.as_ref().unwrap(),
-            &sym.ty,
             fix_mod,
+            typechcker,
         );
         let mut name = sym_name.clone();
         while expr.is_some() {
@@ -50,7 +52,7 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
                     typechecker: sym.typechecker.clone(),
                 },
             );
-            expr = uncurry_lambda(&sym.template_name, &new_expr, &new_ty, fix_mod);
+            expr = uncurry_lambda(&sym.template_name, &new_expr, fix_mod, typechcker);
         }
     }
 
@@ -86,12 +88,13 @@ pub fn make_pair_ty(ty0: &Arc<TypeNode>, ty1: &Arc<TypeNode>) -> Arc<TypeNode> {
 fn uncurry_lambda(
     template_name: &NameSpacedName,
     expr: &Arc<ExprNode>,
-    lam_ty: &Arc<TypeNode>,
     fix_mod: &mut FixModule,
+    typechcker: &TypeCheckContext, // for resolving types of expr
 ) -> Option<Arc<ExprNode>> {
     if exclude(template_name) {
         return None;
     }
+    let lam_ty = typechcker.substitute_type(expr.inferred_ty.as_ref().unwrap());
     match &*expr.expr {
         Expr::Lam(arg0, body0) => {
             let arg0_ty = lam_ty.get_funty_src();
