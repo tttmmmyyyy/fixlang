@@ -317,7 +317,7 @@ fn write_array_lit(
             "set"
         }
     });
-    let name = format!("{} {} {} {}", func_name, array, idx, value);
+    let name = format!("{} {} {} {}", func_name, idx, value, array);
     let name_cloned = name.clone();
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {

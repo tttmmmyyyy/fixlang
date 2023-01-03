@@ -169,23 +169,23 @@ fn uncurry_lambda(
 fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
     fn collect_abs_inner(
         expr: &Arc<ExprNode>,
+        vars: &mut Vec<Arc<Var>>,
         vars_limit: usize,
-    ) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
+    ) -> Arc<ExprNode> {
         match &*expr.expr {
             Expr::Lam(var, val) => {
-                let (mut vars, val) = collect_abs_inner(val, vars_limit);
-                if vars.len() >= vars_limit {
-                    return (vars, val);
-                }
                 vars.push(var.clone());
-                (vars, val)
+                if vars.len() >= vars_limit {
+                    return val.clone();
+                }
+                return collect_abs_inner(val, vars, vars_limit);
             }
-            _ => (vec![], expr.clone()),
+            _ => expr.clone(),
         }
     }
 
-    let (mut vars, val) = collect_abs_inner(expr, vars_limit);
-    vars.reverse();
+    let mut vars: Vec<Arc<Var>> = vec![];
+    let val = collect_abs_inner(expr, &mut vars, vars_limit);
     (vars, val)
 }
 
@@ -205,23 +205,23 @@ fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
 fn collect_app_src(ty: &Arc<TypeNode>, vars_limit: usize) -> (Vec<Arc<TypeNode>>, Arc<TypeNode>) {
     fn collect_app_src_inner(
         ty: &Arc<TypeNode>,
+        vars: &mut Vec<Arc<TypeNode>>,
         vars_limit: usize,
-    ) -> (Vec<Arc<TypeNode>>, Arc<TypeNode>) {
+    ) -> Arc<TypeNode> {
         match &ty.ty {
             Type::FunTy(var, val) => {
-                let (mut vars, val) = collect_app_src_inner(&val, vars_limit);
-                if vars.len() >= vars_limit {
-                    return (vars, val);
-                }
                 vars.push(var.clone());
-                (vars, val)
+                if vars.len() >= vars_limit {
+                    return val.clone();
+                }
+                return collect_app_src_inner(&val, vars, vars_limit);
             }
-            _ => (vec![], ty.clone()),
+            _ => ty.clone(),
         }
     }
 
-    let (mut vars, val) = collect_app_src_inner(ty, vars_limit);
-    vars.reverse();
+    let mut vars: Vec<Arc<TypeNode>> = vec![];
+    let val = collect_app_src_inner(ty, &mut vars, vars_limit);
     (vars, val)
 }
 
