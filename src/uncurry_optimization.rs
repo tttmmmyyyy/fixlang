@@ -92,7 +92,6 @@ fn uncurry_lambda(
     if exclude(template_name) {
         return None;
     }
-    let expr = move_abs_front_let(expr);
     match &*expr.expr {
         Expr::Lam(arg0, body0) => {
             let arg0_ty = lam_ty.get_funty_src();
@@ -141,6 +140,7 @@ fn uncurry_lambda(
                         None,
                     )
                     .set_inferred_type(body.inferred_ty.clone().unwrap());
+                    let uncurried_body = move_abs_front_let(&uncurried_body); // Prepare for following uncurry.
                     let uncurried_lam =
                         expr_abs(var_var(pair_arg_name, None), uncurried_body, None)
                             .set_inferred_type(type_fun(
