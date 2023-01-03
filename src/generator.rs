@@ -1003,8 +1003,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         pair_ty: Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        assert!(pair_ty.is_unbox(self.type_env()));
         let pair = if rvo.is_some() {
+            assert!(pair_ty.is_unbox(self.type_env()));
             rvo.unwrap()
         } else {
             allocate_obj(pair_ty.clone(), &vec![], self, Some("allocate_MakePair"))
@@ -1024,7 +1024,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             } else {
                 let field_obj = self.eval_expr(field_expr, None);
                 let field_val = field_obj.value(self);
-                pair.store_field_nocap(self, i as u32, field_val);
+                let offset = if pair_ty.is_box(self.type_env()) {
+                    1
+                } else {
+                    0
+                };
+                pair.store_field_nocap(self, i as u32 + offset, field_val);
             }
             if i == 0 {
                 self.scope_unlock_as_used_later(&vars_used_in_right);

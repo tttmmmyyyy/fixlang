@@ -1206,7 +1206,7 @@ pub fn tuple_defn(size: u32) -> TypeDecl {
                     ty: type_tyvar_star(&tyvars[i as usize]),
                 })
                 .collect(),
-            is_unbox: true,
+            is_unbox: TUPLE_UNBOX,
         }),
     }
 }
