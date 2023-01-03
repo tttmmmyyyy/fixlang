@@ -56,9 +56,9 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
 
     // Then replace expressions in the global symbols.
     for (_name, sym) in &mut fix_mod.instantiated_global_symbols {
-        sym.expr = Some(uncurry_global_function_call_subexprs(
-            sym.expr.as_ref().unwrap(),
-        ));
+        let expr = uncurry_global_function_call_subexprs(sym.expr.as_ref().unwrap());
+        let expr = calculate_free_vars(expr);
+        sym.expr = Some(expr);
     }
 
     // In the above process, there is possibility that constructor / getter of pairs is required to be instanciated.
