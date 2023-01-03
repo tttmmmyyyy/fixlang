@@ -34,7 +34,7 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
         );
         let mut name = sym_name.clone();
         while expr.is_some() {
-            let new_expr = expr.take().unwrap();
+            let new_expr = calculate_free_vars(expr.take().unwrap());
             convert_to_uncurried_name(name.name_as_mut());
             let new_ty = new_expr.inferred_ty.clone().unwrap();
             fix_mod.instantiated_global_symbols.insert(
@@ -92,6 +92,7 @@ fn uncurry_lambda(
     if exclude(template_name) {
         return None;
     }
+    let expr = move_abs_front_let(expr);
     match &*expr.expr {
         Expr::Lam(arg0, body0) => {
             let arg0_ty = lam_ty.get_funty_src();
@@ -157,7 +158,7 @@ fn uncurry_lambda(
 
 // Convert expression like `func x y` to `func@uncurry (x, y)` if possible.
 fn uncurry_global_function_call(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    let expr = match &*expr.expr {
+    match &*expr.expr {
         Expr::App(fun1, arg1) => match &*fun1.expr {
             Expr::App(fun0, arg0) => match &*fun0.expr {
                 Expr::Var(v) => {
@@ -188,14 +189,13 @@ fn uncurry_global_function_call(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
             _ => expr.clone(),
         },
         _ => expr.clone(),
-    };
-    calculate_free_vars(expr)
+    }
 }
 
 // Apply uncurry_global_function_call to all sub-expressions.
 // NOTE: we need to convert sub-expression `func x y z` to `func@uncurry@uncurry ((x, y), z)`, not to `func@uncurry@uncurry (x, (y, z))`.
 fn uncurry_global_function_call_subexprs(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    let expr = match &*expr.expr {
+    match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::Lit(_) => expr.clone(),
         Expr::App(fun, arg) => {
@@ -216,6 +216,144 @@ fn uncurry_global_function_call_subexprs(expr: &Arc<ExprNode>) -> Arc<ExprNode> 
         Expr::MakePair(lhs, rhs) => expr
             .set_make_pair_lhs(uncurry_global_function_call_subexprs(lhs))
             .set_make_pair_rhs(uncurry_global_function_call_subexprs(rhs)),
-    };
-    calculate_free_vars(expr)
+    }
 }
+
+// Convert `let a = x in \b -> y` to `\b -> let a = x in y` if possible.
+// NOTE: if name `b` is contained in x, then first we need to replace `b` to another name.
+fn move_abs_front_let(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+    match &*expr.expr {
+        Expr::Let(let_var, let_bound, let_val) => match &*let_val.expr {
+            Expr::Lam(lam_var, lam_val) => {
+                let ty = expr.inferred_ty.clone().unwrap();
+
+                // Replace lam_var and it's appearance in lam_val to avoid confliction with free variables in let_bound.
+                let let_bound = calculate_free_vars(let_bound.clone());
+                let let_bound_free_vars = let_bound.free_vars();
+                let original_name = lam_var.name.clone();
+                let mut lam_var_name = original_name.clone();
+                let mut counter = 0;
+                while let_bound_free_vars.contains(&lam_var_name) {
+                    *lam_var_name.name_as_mut() = format!("{}@{}", original_name.name, counter);
+                    counter += 1;
+                }
+                let (lam_var, lam_val) = if lam_var_name == lam_var.name {
+                    // Replace is not needed.
+                    (lam_var.clone(), lam_val.clone())
+                } else {
+                    // Replace is needed.
+                    let lam_var = lam_var.set_name(lam_var_name.clone());
+                    let lam_val = replace_free_var(lam_val, &original_name, &lam_var_name);
+                    (lam_var, lam_val)
+                };
+
+                // Construct the expression.
+                let expr = expr_let(let_var.clone(), let_bound.clone(), lam_val.clone(), None)
+                    .set_inferred_type(lam_val.inferred_ty.clone().unwrap());
+                let expr = expr_abs(lam_var, expr, None).set_inferred_type(ty);
+                expr
+            }
+            _ => expr.clone(),
+        },
+        _ => expr.clone(),
+    }
+}
+
+fn replace_free_var(
+    expr: &Arc<ExprNode>,
+    from: &NameSpacedName,
+    to: &NameSpacedName,
+) -> Arc<ExprNode> {
+    match &*expr.expr {
+        Expr::Var(v) => {
+            if v.name == *from {
+                expr.clone().set_var_var(v.set_name(to.clone()))
+            } else {
+                expr.clone()
+            }
+        }
+        Expr::Lit(_) => expr.clone(),
+        Expr::App(func, arg) => {
+            let func = replace_free_var(func, from, to);
+            let arg = replace_free_var(arg, from, to);
+            expr.set_app_func(func).set_app_arg(arg)
+        }
+        Expr::Lam(v, val) => {
+            let val = if v.name == *from {
+                // then, the from-name is shadowed in val, so we should not replace val.
+                val.clone()
+            } else {
+                replace_free_var(val, from, to)
+            };
+            expr.set_lam_body(val)
+        }
+        Expr::Let(v, bound, val) => {
+            let bound = replace_free_var(bound, from, to);
+            let val = if v.name == *from {
+                // then, the from-name is shadowed in val, so we should not replace val.
+                val.clone()
+            } else {
+                replace_free_var(val, from, to)
+            };
+            expr.set_let_bound(bound).set_let_value(val)
+        }
+        Expr::If(c, t, e) => {
+            let c = replace_free_var(c, from, to);
+            let t = replace_free_var(t, from, to);
+            let e = replace_free_var(e, from, to);
+            expr.set_if_cond(c).set_if_then(t).set_if_else(e)
+        }
+        Expr::TyAnno(e, _) => {
+            let e = replace_free_var(e, from, to);
+            expr.set_tyanno_expr(e)
+        }
+        Expr::MakePair(l, r) => {
+            let l = replace_free_var(l, from, to);
+            let r = replace_free_var(r, from, to);
+            expr.set_make_pair_lhs(l).set_make_pair_rhs(r)
+        }
+    }
+}
+
+// fn replace_travarsally(
+//     expr: Arc<ExprNode>,
+//     replace: &impl Fn(Arc<ExprNode>) -> Arc<ExprNode>,
+// ) -> Arc<ExprNode> {
+//     match &*expr.expr {
+//         Expr::Var(_) => replace(expr.clone()),
+//         Expr::Lit(_) => replace(expr.clone()),
+//         Expr::App(fun, arg) => {
+//             let expr = expr
+//                 .set_app_func(replace_travarsally(fun.clone(), replace))
+//                 .set_app_arg(replace_travarsally(arg.clone(), replace));
+//             replace(expr)
+//         }
+//         Expr::Lam(_, val) => {
+//             let expr = expr.set_lam_body(replace_travarsally(val.clone(), replace));
+//             replace(expr)
+//         }
+//         Expr::Let(_, bound, val) => {
+//             let expr = expr
+//                 .set_let_bound(replace_travarsally(bound.clone(), replace))
+//                 .set_let_value(replace_travarsally(val.clone(), replace));
+//             replace(expr)
+//         }
+//         Expr::If(c, t, e) => {
+//             let expr = expr
+//                 .set_if_cond(replace_travarsally(c.clone(), replace))
+//                 .set_if_then(replace_travarsally(t.clone(), replace))
+//                 .set_if_else(replace_travarsally(e.clone(), replace));
+//             replace(expr)
+//         }
+//         Expr::TyAnno(e, _) => {
+//             let expr = expr.set_tyanno_expr(replace_travarsally(e.clone(), replace));
+//             replace(expr)
+//         }
+//         Expr::MakePair(lhs, rhs) => {
+//             let expr = expr
+//                 .set_make_pair_lhs(replace_travarsally(lhs.clone(), replace))
+//                 .set_make_pair_rhs(replace_travarsally(rhs.clone(), replace));
+//             replace(expr)
+//         }
+//     }
+// }
