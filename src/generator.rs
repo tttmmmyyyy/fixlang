@@ -624,6 +624,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Retain object.
     pub fn retain(&mut self, obj: Object<'c>) {
+        if LEAK_MODE {
+            return;
+        }
         if obj.is_box(self.type_env()) {
             let obj_ptr = obj.ptr(self);
             self.call_runtime(RuntimeFunctions::RetainBoxedObject, &[obj_ptr.into()]);
@@ -674,6 +677,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Release object.
     pub fn release(&mut self, obj: Object<'c>) {
+        if LEAK_MODE {
+            return;
+        }
         if obj.is_box(self.type_env()) {
             let ptr = obj.ptr(self);
             let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
