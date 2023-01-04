@@ -3,19 +3,19 @@ use super::*;
 // Identifier to spacify trait.
 #[derive(Hash, Eq, PartialEq, Clone)]
 pub struct TraitId {
-    pub name: NameSpacedName,
+    pub name: FullName,
 }
 
 impl TraitId {
     pub fn new(ns: &[&str], name: &Name) -> TraitId {
         TraitId {
-            name: NameSpacedName::from_strs(ns, &name),
+            name: FullName::from_strs(ns, &name),
         }
     }
 
     pub fn new_by_name(name: &Name) -> TraitId {
         TraitId {
-            name: NameSpacedName::from_strs(&[], name),
+            name: FullName::from_strs(&[], name),
         }
     }
 
@@ -23,7 +23,7 @@ impl TraitId {
         self.namespaced_name().to_string()
     }
 
-    pub fn namespaced_name(&self) -> NameSpacedName {
+    pub fn namespaced_name(&self) -> FullName {
         self.name.clone()
     }
 

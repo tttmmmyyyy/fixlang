@@ -11,9 +11,9 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "@";
 pub struct FixModule {
     pub name: Name,
     pub type_decls: Vec<TypeDecl>,
-    pub global_symbols: HashMap<NameSpacedName, GlobalSymbol>,
-    pub instantiated_global_symbols: HashMap<NameSpacedName, InstantiatedSymbol>,
-    pub deferred_instantiation: HashMap<NameSpacedName, InstantiatedSymbol>,
+    pub global_symbols: HashMap<FullName, GlobalSymbol>,
+    pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
+    pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
     pub trait_env: TraitEnv,
     pub type_env: TypeEnv,
 }
@@ -46,7 +46,7 @@ impl TypeEnv {
 
 #[derive(Clone)]
 pub struct InstantiatedSymbol {
-    pub template_name: NameSpacedName,
+    pub template_name: FullName,
     pub ty: Arc<TypeNode>,
     pub expr: Option<Arc<ExprNode>>,
     pub typechecker: Option<TypeCheckContext>, // type checker available for resolving types in expr.
@@ -126,8 +126,8 @@ impl MethodImpl {
 }
 
 pub struct NameResolutionContext {
-    pub types: HashSet<NameSpacedName>,
-    pub traits: HashSet<NameSpacedName>,
+    pub types: HashSet<FullName>,
+    pub traits: HashSet<FullName>,
     pub module_name: Name,
 }
 
@@ -138,11 +138,7 @@ pub enum NameResolutionType {
 }
 
 impl NameResolutionContext {
-    pub fn resolve(
-        &self,
-        ns: &NameSpacedName,
-        type_or_trait: NameResolutionType,
-    ) -> NameSpacedName {
+    pub fn resolve(&self, ns: &FullName, type_or_trait: NameResolutionType) -> FullName {
         let candidates = if type_or_trait == NameResolutionType::Type {
             &self.types
         } else {
@@ -225,8 +221,8 @@ impl FixModule {
     }
 
     // Get of list of tycons that can be used for namespace resolution.
-    pub fn tycon_names(&self) -> HashSet<NameSpacedName> {
-        let mut res: HashSet<NameSpacedName> = Default::default();
+    pub fn tycon_names(&self) -> HashSet<FullName> {
+        let mut res: HashSet<FullName> = Default::default();
         for (k, _v) in self.type_env().tycons.iter() {
             res.insert(k.name.clone());
         }
@@ -234,8 +230,8 @@ impl FixModule {
     }
 
     // Get of list of traits that can be used for namespace resolution.
-    pub fn trait_names(&self) -> HashSet<NameSpacedName> {
-        let mut res: HashSet<NameSpacedName> = Default::default();
+    pub fn trait_names(&self) -> HashSet<FullName> {
+        let mut res: HashSet<FullName> = Default::default();
         for (k, _v) in &self.trait_env.traits {
             res.insert(k.name.clone());
         }
@@ -248,19 +244,15 @@ impl FixModule {
     }
 
     // Get this module's namespace with a name.
-    pub fn get_namespaced_name(&self, name: &Name) -> NameSpacedName {
-        NameSpacedName {
+    pub fn get_namespaced_name(&self, name: &Name) -> FullName {
+        FullName {
             namespace: self.get_namespace(),
             name: name.clone(),
         }
     }
 
     // Add a global symbol.
-    pub fn add_global_object(
-        &mut self,
-        name: NameSpacedName,
-        (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
-    ) {
+    pub fn add_global_object(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
         if self.global_symbols.contains_key(&name) {
             error_exit(&format!("duplicated global object: `{}`", name.to_string()));
         }
@@ -487,11 +479,7 @@ impl FixModule {
     }
 
     // Require instantiate generic symbol such that it has a specified type.
-    pub fn require_instantiated_symbol(
-        &mut self,
-        name: &NameSpacedName,
-        ty: &Arc<TypeNode>,
-    ) -> NameSpacedName {
+    pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
         if !ty.free_vars().is_empty() {
             error_exit(&format!("cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", name.to_string(), ty.to_string()));
         }
@@ -515,11 +503,7 @@ impl FixModule {
 
     // Determine the name of instantiated generic symbol so that it has a specified type.
     // tc: a typechecker (substituion) under which ty should be interpret.
-    fn determine_instantiated_symbol_name(
-        &self,
-        name: &NameSpacedName,
-        ty: &Arc<TypeNode>,
-    ) -> NameSpacedName {
+    fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
         /*
 
         assert!(ty.free_vars().is_empty());
@@ -572,7 +556,7 @@ impl FixModule {
                     let expr = trait_impl.method_expr(method_name);
                     method_impls.push(MethodImpl { ty, expr });
                 }
-                let method_name = NameSpacedName::new(&trait_id.name.to_namespace(), &method_name);
+                let method_name = FullName::new(&trait_id.name.to_namespace(), &method_name);
                 self.global_symbols.insert(
                     method_name,
                     GlobalSymbol {
@@ -676,7 +660,7 @@ impl FixModule {
     pub fn add_builtin_symbols(self: &mut FixModule) {
         fn add_global(
             program: &mut FixModule,
-            name: NameSpacedName,
+            name: FullName,
             (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
         ) {
             program.add_global_object(name, (expr, scm));
@@ -693,44 +677,40 @@ impl FixModule {
         self.trait_env.add_instance(remainder_trait_instance_int());
         self.trait_env.add_instance(and_trait_instance_bool());
         self.trait_env.add_instance(cmp_trait_instance_int());
+        add_global(self, FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
         add_global(
             self,
-            NameSpacedName::from_strs(&[STD_NAME], FIX_NAME),
-            fix(),
-        );
-        add_global(
-            self,
-            NameSpacedName::from_strs(&[STD_NAME, LOOP_RESULT_NAME], "loop"),
+            FullName::from_strs(&[STD_NAME, LOOP_RESULT_NAME], "loop"),
             state_loop(),
         );
         add_global(
             self,
-            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "new"),
+            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "new"),
             new_array(),
         );
         add_global(
             self,
-            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "from_map"),
+            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "from_map"),
             from_map_array(),
         );
         add_global(
             self,
-            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),
+            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),
             read_array(),
         );
         add_global(
             self,
-            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
+            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
             write_array(),
         );
         add_global(
             self,
-            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "set!"),
+            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set!"),
             write_array_unique(),
         );
         add_global(
             self,
-            NameSpacedName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
+            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
             length_array(),
         );
         for decl in &self.type_decls.clone() {
@@ -739,13 +719,13 @@ impl FixModule {
                     let struct_name = decl.name.clone();
                     add_global(
                         self,
-                        NameSpacedName::new(&decl.name.to_namespace(), STRUCT_NEW_NAME),
+                        FullName::new(&decl.name.to_namespace(), STRUCT_NEW_NAME),
                         struct_new(&struct_name, decl),
                     );
                     for field in &str.fields {
                         add_global(
                             self,
-                            NameSpacedName::new(
+                            FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("{}_{}", STRUCT_GETTER_NAME, &field.name),
                             ),
@@ -754,7 +734,7 @@ impl FixModule {
                         for is_unique in [false, true] {
                             add_global(
                                 self,
-                                NameSpacedName::new(
+                                FullName::new(
                                     &decl.name.to_namespace(),
                                     &format!(
                                         "mod_{}{}",
@@ -772,23 +752,17 @@ impl FixModule {
                     for field in &union.fields {
                         add_global(
                             self,
-                            NameSpacedName::new(&decl.name.to_namespace(), &field.name),
+                            FullName::new(&decl.name.to_namespace(), &field.name),
                             union_new(&union_name, &field.name, decl),
                         );
                         add_global(
                             self,
-                            NameSpacedName::new(
-                                &decl.name.to_namespace(),
-                                &format!("as_{}", field.name),
-                            ),
+                            FullName::new(&decl.name.to_namespace(), &format!("as_{}", field.name)),
                             union_as(&union_name, &field.name, decl),
                         );
                         add_global(
                             self,
-                            NameSpacedName::new(
-                                &decl.name.to_namespace(),
-                                &format!("is_{}", field.name),
-                            ),
+                            FullName::new(&decl.name.to_namespace(), &format!("is_{}", field.name)),
                             union_is(&union_name, &field.name, decl),
                         );
                     }

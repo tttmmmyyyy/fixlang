@@ -51,11 +51,11 @@ pub enum TyConVariant {
 
 #[derive(Clone, PartialEq, Hash, Eq)]
 pub struct TyCon {
-    pub name: NameSpacedName,
+    pub name: FullName,
 }
 
 impl TyCon {
-    pub fn new(nsn: NameSpacedName) -> TyCon {
+    pub fn new(nsn: FullName) -> TyCon {
         TyCon { name: nsn }
     }
 
@@ -520,7 +520,7 @@ pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }
 
-pub fn tycon(name: NameSpacedName) -> Arc<TyCon> {
+pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
 }
 

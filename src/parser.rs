@@ -150,7 +150,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     fix_mod.set_type_decls(type_decls);
     fix_mod.add_traits(trait_infos, trait_impls);
 
-    let mut global_symbols: HashMap<NameSpacedName, GlobalSymbol> = Default::default();
+    let mut global_symbols: HashMap<FullName, GlobalSymbol> = Default::default();
     for (name, (ty, expr)) in global_symbols_defns {
         if ty.is_none() {
             error_exit(&format!("symbol `{}` has no type declaration", name));
@@ -368,7 +368,7 @@ fn parse_type_decl(pair: Pair<Rule>, module_name: &str, src: &Arc<String>) -> Ty
         unreachable!();
     };
     TypeDecl {
-        name: NameSpacedName::from_strs(&[module_name], name),
+        name: FullName::from_strs(&[module_name], name),
         value: type_value,
         tyvars,
     }
@@ -462,7 +462,7 @@ fn parse_binary_operator_sequence(
             expr = expr_app(
                 expr_app(
                     expr_var(
-                        NameSpacedName::from_strs(&[STD_NAME, next_operation.0], next_operation.1),
+                        FullName::from_strs(&[STD_NAME, next_operation.0], next_operation.1),
                         Some(span.clone()),
                     ),
                     expr,
@@ -550,10 +550,7 @@ fn parse_expr_neg(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         if negate {
             expr = expr_app(
                 expr_var(
-                    NameSpacedName::from_strs(
-                        &[STD_NAME, NEGATE_TRAIT_NAME],
-                        NEGATE_TRAIT_NEGATE_NAME,
-                    ),
+                    FullName::from_strs(&[STD_NAME, NEGATE_TRAIT_NAME], NEGATE_TRAIT_NEGATE_NAME),
                     Some(span.clone()),
                 ),
                 expr,
@@ -624,7 +621,7 @@ fn parse_expr_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let mut pairs = pair.into_inner();
     let names = parse_namespace(pairs.next().unwrap(), src);
     let var = pairs.next().unwrap().as_str().to_string();
-    let name = NameSpacedName {
+    let name = FullName {
         namespace: NameSpace::new(names),
         name: var,
     };
@@ -785,7 +782,7 @@ fn parse_type_var(pair: Pair<Rule>) -> Arc<TypeNode> {
 
 fn parse_type_tycon(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_tycon);
-    type_tycon(&tycon(NameSpacedName::from_strs(&[], type_expr.as_str())))
+    type_tycon(&tycon(FullName::from_strs(&[], type_expr.as_str())))
 }
 
 fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
@@ -794,7 +791,7 @@ fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
     if types.len() == 1 {
         types[0].clone()
     } else {
-        let mut res = type_tycon(&tycon(NameSpacedName::from_strs(
+        let mut res = type_tycon(&tycon(FullName::from_strs(
             &[STD_NAME],
             &make_tuple_name(types.len() as u32),
         )));

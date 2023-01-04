@@ -67,7 +67,7 @@ where
     // If `namespace` is unspecified and no local variable `name` is found, then all global variables are returned.
     // If `namespace` is specified and non-empty, then returns all global variables whose namespaces have `namespace` as suffix.
     // If `namespace` is specified and empty, then returns local variable `name`.
-    fn overloaded_candidates(&self, name: &NameSpacedName) -> Vec<(NameSpace, T)> {
+    fn overloaded_candidates(&self, name: &FullName) -> Vec<(NameSpace, T)> {
         if !self.var.contains_key(&name.name) {
             return vec![];
         }
@@ -529,7 +529,7 @@ impl TypeCheckContext {
                     let candidates_str = candidates
                         .iter()
                         .map(|(_, ns)| {
-                            let nsn = NameSpacedName::new(ns, &var.name.name);
+                            let nsn = FullName::new(ns, &var.name.name);
                             "`".to_string() + &nsn.to_string() + "`"
                         })
                         .collect::<Vec<_>>()

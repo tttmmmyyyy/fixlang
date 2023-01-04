@@ -5,8 +5,8 @@ use super::*;
 // After optimization, if construction of (x, y) is implemented as a special code that avoids heap allocation, then `func@uncurry (x, y)` requires no heap allocation.
 
 // Global functions that cannot be uncurried.
-pub fn exclude(name: &NameSpacedName) -> bool {
-    let fix_name = NameSpacedName::from_strs(&[STD_NAME], FIX_NAME);
+pub fn exclude(name: &FullName) -> bool {
+    let fix_name = FullName::from_strs(&[STD_NAME], FIX_NAME);
     if *name == fix_name
         || (name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
     {
@@ -48,7 +48,7 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
             fix_mod.instantiated_global_symbols.insert(
                 name.clone(),
                 InstantiatedSymbol {
-                    template_name: NameSpacedName::local(&format!(
+                    template_name: FullName::local(&format!(
                         "{} created by uncurry_optimization from {}",
                         &name.to_string(),
                         sym.template_name.to_string()
@@ -62,7 +62,7 @@ pub fn uncurry_optimization(fix_mod: &mut FixModule) {
     }
 
     // Then replace expressions in the global symbols.
-    let mut symbol_names: HashSet<NameSpacedName> = Default::default();
+    let mut symbol_names: HashSet<FullName> = Default::default();
     for (name, _sym) in &fix_mod.instantiated_global_symbols {
         symbol_names.insert(name.clone());
     }
@@ -80,8 +80,8 @@ fn convert_to_uncurried_name(name: &mut Name, count: usize) {
     *name += &format!("@uncurry{}", count);
 }
 
-fn make_pair_name(size: usize) -> NameSpacedName {
-    NameSpacedName::from_strs(&[STD_NAME], &make_tuple_name(size as u32))
+fn make_pair_name(size: usize) -> FullName {
+    FullName::from_strs(&[STD_NAME], &make_tuple_name(size as u32))
 }
 
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
@@ -97,7 +97,7 @@ pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
 // NOTE: applying this repeatedly, `\x -> \y -> \z -> w` is converted to `\((x, y), z) -> w`, not to `\(x, (y, z)) -> w`.
 // if uncurry cannot be done, return None.
 fn uncurry_lambda(
-    template_name: &NameSpacedName,
+    template_name: &FullName,
     expr: &Arc<ExprNode>,
     fix_mod: &mut FixModule,
     typechcker: &TypeCheckContext, // for resolving types of expr
@@ -129,7 +129,7 @@ fn uncurry_lambda(
         .collect::<Vec<_>>();
     let getters = (0..vars_count)
         .map(|i| {
-            let name = NameSpacedName::new(
+            let name = FullName::new(
                 &make_pair_name(vars_count).to_namespace(),
                 &format!("{}_{}", STRUCT_GETTER_NAME, i),
             );
@@ -139,7 +139,7 @@ fn uncurry_lambda(
         .collect::<Vec<_>>();
 
     // Make argument (tuple) name.
-    let tuple_arg_name = NameSpacedName::local(&format!("%uncurried_tuple{}", *next_var_id));
+    let tuple_arg_name = FullName::local(&format!("%uncurried_tuple{}", *next_var_id));
     *next_var_id += 1;
 
     // Construct body of resulting lambda.
@@ -228,7 +228,7 @@ fn collect_app_src(ty: &Arc<TypeNode>, vars_limit: usize) -> (Vec<Arc<TypeNode>>
 // Convert expression like `func x y` to `func@uncurry (x, y)` if possible.
 fn uncurry_global_function_call(
     expr: &Arc<ExprNode>,
-    symbols: &HashSet<NameSpacedName>,
+    symbols: &HashSet<FullName>,
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
     match &*fun.expr {
@@ -266,7 +266,7 @@ fn uncurry_global_function_call(
 // NOTE: we need to convert sub-expression `func x y z` to `func@uncurry@uncurry ((x, y), z)`, not to `func@uncurry@uncurry (x, (y, z))`.
 fn uncurry_global_function_call_subexprs(
     expr: &Arc<ExprNode>,
-    symbols: &HashSet<NameSpacedName>,
+    symbols: &HashSet<FullName>,
 ) -> Arc<ExprNode> {
     let expr = uncurry_global_function_call(expr, symbols);
     match &*expr.expr {
@@ -357,11 +357,7 @@ fn move_abs_front_let_all(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     }
 }
 
-fn replace_free_var(
-    expr: &Arc<ExprNode>,
-    from: &NameSpacedName,
-    to: &NameSpacedName,
-) -> Arc<ExprNode> {
+fn replace_free_var(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Var(v) => {
             if v.name == *from {

@@ -181,11 +181,11 @@ impl<'c> VarValue<'c> {
 
 #[derive(Default)]
 pub struct Scope<'c> {
-    data: HashMap<NameSpacedName, Vec<Variable<'c>>>,
+    data: HashMap<FullName, Vec<Variable<'c>>>,
 }
 
 impl<'c> Scope<'c> {
-    fn push_local(self: &mut Self, var: &NameSpacedName, obj: &Object<'c>) {
+    fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
         if !self.data.contains_key(var) {
             self.data.insert(var.clone(), Default::default());
@@ -196,7 +196,7 @@ impl<'c> Scope<'c> {
         });
     }
 
-    fn pop_local(&mut self, var: &NameSpacedName) {
+    fn pop_local(&mut self, var: &FullName) {
         // TODO: add assertion that var is local (or change var to Name).
         self.data.get_mut(var).unwrap().pop();
         if self.data.get(var).unwrap().is_empty() {
@@ -204,11 +204,11 @@ impl<'c> Scope<'c> {
         }
     }
 
-    pub fn get(self: &Self, var: &NameSpacedName) -> Variable<'c> {
+    pub fn get(self: &Self, var: &FullName) -> Variable<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
 
-    fn modify_used_later(self: &mut Self, vars: &HashSet<NameSpacedName>, by: i32) {
+    fn modify_used_later(self: &mut Self, vars: &HashSet<FullName>, by: i32) {
         for var in vars {
             if !var.is_local() {
                 continue;
@@ -223,10 +223,10 @@ impl<'c> Scope<'c> {
             *used_later = add_i32_to_u32(*used_later, by);
         }
     }
-    fn increment_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
+    fn increment_used_later(self: &mut Self, names: &HashSet<FullName>) {
         self.modify_used_later(names, 1);
     }
-    fn decrement_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
+    fn decrement_used_later(self: &mut Self, names: &HashSet<FullName>) {
         self.modify_used_later(names, -1);
     }
 }
@@ -244,7 +244,7 @@ pub struct GenerationContext<'c, 'm> {
     pub module: &'m Module<'c>,
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
-    global: HashMap<NameSpacedName, Variable<'c>>,
+    global: HashMap<FullName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typechecker: Option<TypeCheckContext>,
     pub target: Either<TargetMachine, ExecutionEngine<'c>>,
@@ -390,7 +390,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Add a global object.
     pub fn add_global_object(
         &mut self,
-        name: NameSpacedName,
+        name: FullName,
         accessor: FunctionValue<'c>,
         ty: Arc<TypeNode>,
     ) {
@@ -422,7 +422,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get the value of a variable.
-    pub fn get_var(&self, var: &NameSpacedName) -> Variable<'c> {
+    pub fn get_var(&self, var: &FullName) -> Variable<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
         } else {
@@ -431,7 +431,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Lock variables in scope to avoid being moved out.
-    fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
+    fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<FullName>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -440,7 +440,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Unlock variables in scope.
-    fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<NameSpacedName>) {
+    fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<FullName>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -449,17 +449,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get field of object in the scope.
-    pub fn get_var_field(
-        self: &mut Self,
-        var: &NameSpacedName,
-        field_idx: u32,
-    ) -> BasicValueEnum<'c> {
+    pub fn get_var_field(self: &mut Self, var: &FullName, field_idx: u32) -> BasicValueEnum<'c> {
         let obj = self.get_var(var).ptr.get(self);
         obj.load_field_nocap(self, field_idx)
     }
 
     // Push scope.
-    fn scope_push(self: &mut Self, var: &NameSpacedName, obj: &Object<'c>) {
+    fn scope_push(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -468,13 +464,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Pop scope.
-    fn scope_pop(self: &mut Self, var: &NameSpacedName) {
+    fn scope_pop(self: &mut Self, var: &FullName) {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
     pub fn get_var_retained_if_used_later(
         &mut self,
-        var_name: &NameSpacedName,
+        var_name: &FullName,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let var = self.get_var(var_name);
@@ -809,7 +805,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Calculate captured variables.
         let mut captured_names = val.free_vars().clone();
         captured_names.remove(&arg.name);
-        captured_names.remove(&NameSpacedName::local(SELF_NAME));
+        captured_names.remove(&FullName::local(SELF_NAME));
         // We need not and should not capture global variable
         // If we capture global variable, then global recursive function such as
         // "main = \x -> if x == 0 then 0 else x + main (x-1)" results in infinite recursion at it's initialization.
@@ -864,7 +860,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Push SELF on scope.
             let closure_ptr = lam_fn.get_nth_param(1).unwrap().into_pointer_value();
             let closure_obj = Object::new(closure_ptr, lam_ty.clone());
-            self.scope_push(&NameSpacedName::local(SELF_NAME), &closure_obj);
+            self.scope_push(&FullName::local(SELF_NAME), &closure_obj);
 
             // Push captured variables on scope.
             for (i, (cap_name, cap_ty)) in captured_vars.iter().enumerate() {
@@ -876,7 +872,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
 
             // Release SELF and arg if unused
-            if !val.free_vars().contains(&NameSpacedName::local(SELF_NAME)) {
+            if !val.free_vars().contains(&FullName::local(SELF_NAME)) {
                 self.release(closure_obj);
             }
             if !val.free_vars().contains(&arg.name) {

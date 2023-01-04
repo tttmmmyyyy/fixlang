@@ -11,7 +11,7 @@ pub const ARRAY_NAME: &str = "Array";
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
     ret.insert(
-        TyCon::new(NameSpacedName::from_strs(&[STD_NAME], INT_NAME)),
+        TyCon::new(FullName::from_strs(&[STD_NAME], INT_NAME)),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::Primitive,
@@ -21,7 +21,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(NameSpacedName::from_strs(&[STD_NAME], BOOL_NAME)),
+        TyCon::new(FullName::from_strs(&[STD_NAME], BOOL_NAME)),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::Primitive,
@@ -31,7 +31,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(NameSpacedName::from_strs(&[STD_NAME], ARRAY_NAME)),
+        TyCon::new(FullName::from_strs(&[STD_NAME], ARRAY_NAME)),
         TyConInfo {
             kind: kind_arrow(kind_star(), kind_star()),
             variant: TyConVariant::Array,
@@ -54,25 +54,22 @@ pub fn make_tuple_name(size: u32) -> Name {
 
 // Get Int type.
 pub fn int_lit_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(NameSpacedName::from_strs(&[STD_NAME], INT_NAME)))
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], INT_NAME)))
 }
 
 // Get Bool type.
 pub fn bool_lit_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(NameSpacedName::from_strs(&[STD_NAME], BOOL_NAME)))
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOOL_NAME)))
 }
 
 // Get Array type.
 pub fn array_lit_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(NameSpacedName::from_strs(&[STD_NAME], ARRAY_NAME)))
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
 // Get LoopResult type.
 pub fn loop_result_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(NameSpacedName::from_strs(
-        &[STD_NAME],
-        LOOP_RESULT_NAME,
-    )))
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
 }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
@@ -104,16 +101,12 @@ pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
 }
 
 fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
-    let f_str = NameSpacedName::local(f);
-    let x_str = NameSpacedName::local(x);
+    let f_str = FullName::local(f);
+    let x_str = FullName::local(x);
     let name = format!("fix {} {}", f_str.to_string(), x_str.to_string());
-    let free_vars = vec![
-        NameSpacedName::local(SELF_NAME),
-        f_str.clone(),
-        x_str.clone(),
-    ];
+    let free_vars = vec![FullName::local(SELF_NAME), f_str.clone(), x_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
-        let fixf = gc.get_var(&NameSpacedName::local(SELF_NAME)).ptr.get(gc);
+        let fixf = gc.get_var(&FullName::local(SELF_NAME)).ptr.get(gc);
         let x = gc.get_var(&x_str).ptr.get(gc);
         let f = gc.get_var(&f_str).ptr.get(gc);
         let f_fixf = gc.apply_lambda(f, fixf, None);
@@ -144,8 +137,8 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Implementation of newArray built-in function.
 fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
-    let size_str = NameSpacedName::local(size);
-    let value_str = NameSpacedName::local(value);
+    let size_str = FullName::local(size);
+    let value_str = FullName::local(value);
     let name = format!("newArray {} {}", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
@@ -208,8 +201,8 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const MAP_NAME: &str = "map";
     let name = "Array.from_map size map".to_string();
     let name_cloned = name.clone();
-    let size_name = NameSpacedName::local(SIZE_NAME);
-    let map_name = NameSpacedName::local(MAP_NAME);
+    let size_name = FullName::local(SIZE_NAME);
+    let map_name = FullName::local(MAP_NAME);
     let size_name_cloned = size_name.clone();
     let map_name_cloned = map_name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
@@ -254,8 +247,8 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // Implementation of readArray built-in function.
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
-    let array_str = NameSpacedName::local(array);
-    let idx_str = NameSpacedName::local(idx);
+    let array_str = FullName::local(array);
+    let idx_str = FullName::local(idx);
     let name = format!("Array.get {} {}", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
@@ -307,9 +300,9 @@ fn write_array_lit(
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
-    let array_str = NameSpacedName::local(array);
-    let idx_str = NameSpacedName::local(idx);
-    let value_str = NameSpacedName::local(value);
+    let array_str = FullName::local(array);
+    let idx_str = FullName::local(idx);
+    let value_str = FullName::local(value);
     let func_name = String::from({
         if is_unique_version {
             "set!"
@@ -447,7 +440,7 @@ pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
-        let arr_name = NameSpacedName::local(ARR_NAME);
+        let arr_name = FullName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
         let size_buf_ptr = array_obj.ptr_to_field_nocap(gc, ARRAY_IDX);
@@ -466,7 +459,7 @@ pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         var_local(ARR_NAME, None),
         expr_lit(
             generator,
-            vec![NameSpacedName::local(ARR_NAME)],
+            vec![FullName::local(ARR_NAME)],
             "len arr".to_string(),
             int_lit_ty(),
             None,
@@ -484,13 +477,13 @@ pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // `new` built-in function for a given struct.
 pub fn struct_new_lit(
-    struct_name: &NameSpacedName,
+    struct_name: &FullName,
     struct_defn: &TypeDecl,
     field_names: Vec<String>,
 ) -> Arc<ExprNode> {
     let free_vars = field_names
         .iter()
-        .map(|name| NameSpacedName::local(name))
+        .map(|name| FullName::local(name))
         .collect();
     let name = format!("{}.new {}", struct_name.to_string(), field_names.join(" "));
     let name_cloned = name.clone();
@@ -498,7 +491,7 @@ pub fn struct_new_lit(
         // Get field values.
         let fields = field_names
             .iter()
-            .map(|name| gc.get_var(&NameSpacedName::local(name)).ptr.get(gc))
+            .map(|name| gc.get_var(&FullName::local(name)).ptr.get(gc))
             .collect::<Vec<_>>();
 
         // Create struct object.
@@ -519,10 +512,7 @@ pub fn struct_new_lit(
 }
 
 // `new` built-in function for a given struct.
-pub fn struct_new(
-    struct_name: &NameSpacedName,
-    definition: &TypeDecl,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn struct_new(struct_name: &FullName, definition: &TypeDecl) -> (Arc<ExprNode>, Arc<Scheme>) {
     let mut expr = struct_new_lit(
         struct_name,
         definition,
@@ -542,10 +532,10 @@ pub fn struct_get_lit(
     var_name: &str,
     field_idx: usize,
     field_ty: Arc<TypeNode>,
-    struct_name: &NameSpacedName,
+    struct_name: &FullName,
     field_name: &str,
 ) -> Arc<ExprNode> {
-    let var_name_clone = NameSpacedName::local(var_name);
+    let var_name_clone = FullName::local(var_name);
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
         // Get struct object.
         let str = gc.get_var(&var_name_clone).ptr.get(gc);
@@ -567,14 +557,14 @@ pub fn struct_get_lit(
 
         field
     });
-    let free_vars = vec![NameSpacedName::local(var_name)];
+    let free_vars = vec![FullName::local(var_name)];
     let name = format!("{}.get_{}", struct_name.to_string(), field_name);
     expr_lit(generator, free_vars, name, field_ty, None)
 }
 
 // `get` built-in function for a given struct.
 pub fn struct_get(
-    struct_name: &NameSpacedName,
+    struct_name: &FullName,
     definition: &TypeDecl,
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -610,7 +600,7 @@ pub fn struct_mod_lit(
     x_name: &str,
     field_count: usize, // number of fields in this struct
     field_idx: usize,
-    struct_name: &NameSpacedName,
+    struct_name: &FullName,
     struct_defn: &TypeDecl,
     field_name: &str,
     is_unique_version: bool,
@@ -623,8 +613,8 @@ pub fn struct_mod_lit(
         f_name,
         x_name
     );
-    let f_name = NameSpacedName::local(f_name);
-    let x_name = NameSpacedName::local(x_name);
+    let f_name = FullName::local(f_name);
+    let x_name = FullName::local(x_name);
     let free_vars = vec![f_name.clone(), x_name.clone()];
     let name_cloned = name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
@@ -715,7 +705,7 @@ pub fn struct_mod_lit(
 
 // `mod` built-in function for a given struct.
 pub fn struct_mod(
-    struct_name: &NameSpacedName,
+    struct_name: &FullName,
     definition: &TypeDecl,
     field_name: &str,
     is_unique_version: bool,
@@ -765,7 +755,7 @@ pub fn struct_mod(
 
 // `new_{field}` built-in function for a given union.
 pub fn union_new(
-    union_name: &NameSpacedName,
+    union_name: &FullName,
     field_name: &Name,
     union: &TypeDecl,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -798,12 +788,12 @@ pub fn union_new(
 
 // `new_{field}` built-in function for a given union.
 pub fn union_new_lit(
-    union_name: &NameSpacedName,
+    union_name: &FullName,
     union_defn: &TypeDecl,
     field_name: &Name,
     field_idx: usize,
 ) -> Arc<ExprNode> {
-    let free_vars = vec![NameSpacedName::local(field_name)];
+    let free_vars = vec![FullName::local(field_name)];
     let name = format!("{}.new_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
     let field_name_cloned = field_name.clone();
@@ -812,10 +802,7 @@ pub fn union_new_lit(
         let offset: u32 = if is_unbox { 0 } else { 1 };
 
         // Get field values.
-        let field = gc
-            .get_var(&NameSpacedName::local(&field_name_cloned))
-            .ptr
-            .get(gc);
+        let field = gc.get_var(&FullName::local(&field_name_cloned)).ptr.get(gc);
 
         // Create union object.
         let obj = if rvo.is_none() {
@@ -839,7 +826,7 @@ pub fn union_new_lit(
 
 // `as_{field}` built-in function for a given union.
 pub fn union_as(
-    union_name: &NameSpacedName,
+    union_name: &FullName,
     field_name: &Name,
     union: &TypeDecl,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -879,21 +866,18 @@ pub fn union_as(
 
 // `as_{field}` built-in function for a given union.
 pub fn union_as_lit(
-    union_name: &NameSpacedName,
+    union_name: &FullName,
     union_arg_name: &Name,
     field_name: &Name,
     field_idx: usize,
     field_ty: Arc<TypeNode>,
 ) -> Arc<ExprNode> {
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
-    let free_vars = vec![NameSpacedName::local(union_arg_name)];
+    let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         // Get union object.
-        let obj = gc
-            .get_var(&NameSpacedName::local(&union_arg_name))
-            .ptr
-            .get(gc);
+        let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
 
         let is_unbox = obj.ty.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
@@ -935,7 +919,7 @@ pub fn union_as_lit(
 
 // `is_{field}` built-in function for a given union.
 pub fn union_is(
-    union_name: &NameSpacedName,
+    union_name: &FullName,
     field_name: &Name,
     union: &TypeDecl,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -968,24 +952,21 @@ pub fn union_is(
 
 // `is_{field}` built-in function for a given union.
 pub fn union_is_lit(
-    union_name: &NameSpacedName,
+    union_name: &FullName,
     union_arg_name: &Name,
     field_name: &Name,
     field_idx: usize,
 ) -> Arc<ExprNode> {
     let name = format!("{}.is_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
-    let free_vars = vec![NameSpacedName::local(union_arg_name)];
+    let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         let is_unbox = ty.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
 
         // Get union object.
-        let obj = gc
-            .get_var(&NameSpacedName::local(&union_arg_name))
-            .ptr
-            .get(gc);
+        let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
 
         // Create specified tag value.
         let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
@@ -1036,7 +1017,7 @@ pub fn union_is_lit(
 const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 pub fn loop_result_defn() -> TypeDecl {
     TypeDecl {
-        name: NameSpacedName::from_strs(&[STD_NAME], LOOP_RESULT_NAME),
+        name: FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME),
         tyvars: vec!["s".to_string(), "b".to_string()],
         value: TypeDeclValue::Union(Union {
             fields: vec![
@@ -1082,8 +1063,8 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
 
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
-        let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
-        let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
+        let initial_state_name = FullName::local(INITIAL_STATE_NAME);
+        let loop_body_name = FullName::local(LOOP_BODY_NAME);
 
         // Get argments.
         let init_state = gc.get_var(&initial_state_name).ptr.get(gc);
@@ -1172,8 +1153,8 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         result
     });
 
-    let initial_state_name = NameSpacedName::local(INITIAL_STATE_NAME);
-    let loop_body_name = NameSpacedName::local(LOOP_BODY_NAME);
+    let initial_state_name = FullName::local(INITIAL_STATE_NAME);
+    let loop_body_name = FullName::local(LOOP_BODY_NAME);
     let expr = expr_abs(
         var_var(initial_state_name.clone(), None),
         expr_abs(
@@ -1197,7 +1178,7 @@ pub fn tuple_defn(size: u32) -> TypeDecl {
         .map(|i| "t".to_string() + &i.to_string())
         .collect::<Vec<_>>();
     TypeDecl {
-        name: NameSpacedName::from_strs(&[STD_NAME], &make_tuple_name(size)),
+        name: FullName::from_strs(&[STD_NAME], &make_tuple_name(size)),
         tyvars: tyvars.clone(),
         value: TypeDeclValue::Struct(Struct {
             fields: (0..size)
@@ -1244,7 +1225,7 @@ pub fn unary_opeartor_instance(
 ) -> TraitInstance {
     const RHS_NAME: &str = "rhs";
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
-        let rhs_name = NameSpacedName::local(RHS_NAME);
+        let rhs_name = FullName::local(RHS_NAME);
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
         generator(gc, rhs, rvo)
     });
@@ -1263,7 +1244,7 @@ pub fn unary_opeartor_instance(
                 var_local(RHS_NAME, None),
                 expr_lit(
                     generator,
-                    vec![NameSpacedName::local(RHS_NAME)],
+                    vec![FullName::local(RHS_NAME)],
                     method_name.to_string(),
                     result_ty,
                     None,
@@ -1317,8 +1298,8 @@ pub fn binary_opeartor_instance(
     const LHS_NAME: &str = "lhs";
     const RHS_NAME: &str = "rhs";
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, _ty, rvo| {
-        let lhs = NameSpacedName::local(LHS_NAME);
-        let rhs = NameSpacedName::local(RHS_NAME);
+        let lhs = FullName::local(LHS_NAME);
+        let rhs = FullName::local(RHS_NAME);
         let lhs_val = gc.get_var(&lhs).ptr.get(gc);
         let rhs_val = gc.get_var(&rhs).ptr.get(gc);
         generator(gc, lhs_val, rhs_val, rvo)
@@ -1340,10 +1321,7 @@ pub fn binary_opeartor_instance(
                     var_local(RHS_NAME, None),
                     expr_lit(
                         generator,
-                        vec![
-                            NameSpacedName::local(LHS_NAME),
-                            NameSpacedName::local(RHS_NAME),
-                        ],
+                        vec![FullName::local(LHS_NAME), FullName::local(RHS_NAME)],
                         method_name.to_string(),
                         result_ty,
                         None,
@@ -1361,7 +1339,7 @@ pub const EQ_TRAIT_EQ_NAME: &str = "eq";
 
 pub fn eq_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
     }
 }
 
@@ -1419,7 +1397,7 @@ pub const CMP_TRAIT_LT_NAME: &str = "less_than";
 
 pub fn cmp_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], CMP_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], CMP_TRAIT_NAME),
     }
 }
 
@@ -1477,7 +1455,7 @@ pub const ADD_TRAIT_ADD_NAME: &str = "add";
 
 pub fn add_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], ADD_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], ADD_TRAIT_NAME),
     }
 }
 
@@ -1526,7 +1504,7 @@ pub const SUBTRACT_TRAIT_SUBTRACT_NAME: &str = "sub";
 
 pub fn subtract_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], SUBTRACT_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], SUBTRACT_TRAIT_NAME),
     }
 }
 
@@ -1579,7 +1557,7 @@ pub const MULTIPLY_TRAIT_MULTIPLY_NAME: &str = "mul";
 
 pub fn multiply_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], MULTIPLY_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], MULTIPLY_TRAIT_NAME),
     }
 }
 
@@ -1632,7 +1610,7 @@ pub const DIVIDE_TRAIT_DIVIDE_NAME: &str = "div";
 
 pub fn divide_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], DIVIDE_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], DIVIDE_TRAIT_NAME),
     }
 }
 
@@ -1685,7 +1663,7 @@ pub const REMAINDER_TRAIT_REMAINDER_NAME: &str = "rem";
 
 pub fn remainder_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], REMAINDER_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], REMAINDER_TRAIT_NAME),
     }
 }
 
@@ -1738,7 +1716,7 @@ pub const AND_TRAIT_AND_NAME: &str = "and";
 
 pub fn and_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], AND_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], AND_TRAIT_NAME),
     }
 }
 
@@ -1786,7 +1764,7 @@ pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
 
 pub fn negate_trait_id() -> TraitId {
     TraitId {
-        name: NameSpacedName::from_strs(&[STD_NAME], NEGATE_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], NEGATE_TRAIT_NAME),
     }
 }
 

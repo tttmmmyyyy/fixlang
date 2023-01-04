@@ -12,7 +12,7 @@ pub enum AppSourceCodeOrderType {
 #[derive(Clone)]
 pub struct ExprNode {
     pub expr: Arc<Expr>,
-    pub free_vars: Option<HashSet<NameSpacedName>>,
+    pub free_vars: Option<HashSet<FullName>>,
     pub source: Option<Span>,
     pub app_order: AppSourceCodeOrderType,
     pub inferred_ty: Option<Arc<TypeNode>>,
@@ -20,14 +20,14 @@ pub struct ExprNode {
 
 impl ExprNode {
     // Set free vars
-    fn set_free_vars(&self, free_vars: HashSet<NameSpacedName>) -> Arc<Self> {
+    fn set_free_vars(&self, free_vars: HashSet<FullName>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.free_vars = Some(free_vars);
         Arc::new(ret)
     }
 
     // Get free vars
-    pub fn free_vars(self: &Self) -> &HashSet<NameSpacedName> {
+    pub fn free_vars(self: &Self) -> &HashSet<FullName> {
         self.free_vars.as_ref().unwrap()
     }
 
@@ -375,7 +375,7 @@ pub type LiteralGenerator = dyn Send
 #[derive(Clone)]
 pub struct Literal {
     pub generator: Arc<LiteralGenerator>,
-    pub free_vars: Vec<NameSpacedName>, // e.g. "+" literal has two free variables.
+    pub free_vars: Vec<FullName>, // e.g. "+" literal has two free variables.
     name: String,
     pub ty: Arc<TypeNode>,
 }
@@ -433,17 +433,17 @@ impl NameSpace {
 
 #[derive(Clone)]
 pub struct Var {
-    pub name: NameSpacedName,
+    pub name: FullName,
     pub source: Option<Span>,
 }
 
 #[derive(Eq, Hash, PartialEq, Clone)]
-pub struct NameSpacedName {
+pub struct FullName {
     pub namespace: NameSpace,
     pub name: String,
 }
 
-impl NameSpacedName {
+impl FullName {
     pub fn new(ns: &NameSpace, name: &str) -> Self {
         Self {
             namespace: ns.clone(),
@@ -472,7 +472,7 @@ impl NameSpacedName {
         }
     }
 
-    pub fn is_suffix(&self, other: &NameSpacedName) -> bool {
+    pub fn is_suffix(&self, other: &FullName) -> bool {
         self.name == other.name && self.namespace.is_suffix(&other.namespace)
     }
 
@@ -494,24 +494,24 @@ impl Var {
         Arc::new(ret)
     }
 
-    pub fn set_name(&self, nsn: NameSpacedName) -> Arc<Self> {
+    pub fn set_name(&self, nsn: FullName) -> Arc<Self> {
         let mut ret = self.clone();
         ret.name = nsn;
         Arc::new(ret)
     }
 }
 
-pub fn var_var(name: NameSpacedName, src: Option<Span>) -> Arc<Var> {
+pub fn var_var(name: FullName, src: Option<Span>) -> Arc<Var> {
     Arc::new(Var { name, source: src })
 }
 
 pub fn var_local(var_name: &str, src: Option<Span>) -> Arc<Var> {
-    var_var(NameSpacedName::local(var_name), src)
+    var_var(FullName::local(var_name), src)
 }
 
 pub fn expr_lit(
     generator: Arc<LiteralGenerator>,
-    free_vars: Vec<NameSpacedName>,
+    free_vars: Vec<FullName>,
     name: String,
     ty: Arc<TypeNode>,
     src: Option<Span>,
@@ -543,7 +543,7 @@ pub fn expr_app(lam: Arc<ExprNode>, arg: Arc<ExprNode>, src: Option<Span>) -> Ar
 }
 
 // Make variable expression.
-pub fn expr_var(name: NameSpacedName, src: Option<Span>) -> Arc<ExprNode> {
+pub fn expr_var(name: FullName, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Var(var_var(name, src.clone()))).into_expr_info(src)
 }
 
@@ -588,7 +588,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let body = calculate_free_vars(body.clone());
             let mut free_vars = body.free_vars.clone().unwrap();
             free_vars.remove(&arg.name);
-            free_vars.remove(&NameSpacedName::local(SELF_NAME));
+            free_vars.remove(&FullName::local(SELF_NAME));
             ei.set_lam_body(body).set_free_vars(free_vars)
         }
         Expr::Let(var, bound, val) => {
@@ -622,7 +622,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             ei.set_tyanno_expr(e).set_free_vars(free_vars)
         }
         Expr::MakeTuple(fields) => {
-            let mut free_vars: HashSet<NameSpacedName> = Default::default();
+            let mut free_vars: HashSet<FullName> = Default::default();
             let mut ei = ei.clone();
             for (i, field) in fields.iter().enumerate() {
                 let field = calculate_free_vars(field.clone());

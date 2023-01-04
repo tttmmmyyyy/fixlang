@@ -3,7 +3,7 @@ use super::*;
 // Declaration of user-defind types.
 #[derive(Clone)]
 pub struct TypeDecl {
-    pub name: NameSpacedName,
+    pub name: FullName,
     pub value: TypeDeclValue,
     pub tyvars: Vec<Name>,
 }
