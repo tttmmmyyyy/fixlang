@@ -313,10 +313,12 @@ pub enum Expr {
     Let(Arc<Var>, Arc<ExprNode>, Arc<ExprNode>),
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>), // TODO: Implement case
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
-    MakeTuple(Vec<Arc<ExprNode>>), // This node is generated in optimization:
-                                   // expresison `(x, y)` is first interpreted as a naive function call `Tuple2.new x y`,
-                                   // and it is converted to `MakePair x y` in uncurry optimization.
-                                   // `MakePair x y` is compiled to a faster code than function call.
+
+    // The following nodes are generated in optimization
+
+    // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakePair x y`.
+    // `MakePair x y` is compiled to a faster code than function call.
+    MakeTuple(Vec<Arc<ExprNode>>),
 }
 
 impl Expr {
