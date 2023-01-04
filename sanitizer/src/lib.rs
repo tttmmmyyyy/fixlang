@@ -11,7 +11,6 @@ static OBJECT_TABLE: Lazy<Mutex<HashMap<i64, ObjectInfo>>> =
     Lazy::new(|| Mutex::new(Default::default()));
 
 struct ObjectInfo {
-    id: i64,
     addr: usize,
     refcnt: i64,
     code: String,
@@ -39,7 +38,6 @@ pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
     }
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     let info = ObjectInfo {
-        id: obj_id,
         addr: address as usize,
         refcnt: 1,
         code: String::from(name_c_str),
@@ -83,11 +81,18 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
         obj_id
     );
     let info = object_table.get_mut(&obj_id).unwrap();
-    assert_eq!(
-        info.refcnt, refcnt,
-        "The refcnt of object id={} in report_retain mismatch! reported={}, sanitizer={}",
-        obj_id, refcnt, info.refcnt
-    );
+    if !info.is_global {
+        assert_eq!(
+            info.refcnt, refcnt,
+            "The refcnt of object id={} in report_retain mismatch! reported={}, sanitizer={}",
+            obj_id, refcnt, info.refcnt
+        );
+    } else if refcnt != info.refcnt {
+        if VERBOSE {
+            println!("[Sanitizer] The refcnt of object id={} in report_retain mismatch but it is global. reported={}, sanitizer={}",
+            obj_id, refcnt, info.refcnt)
+        }
+    }
     info.refcnt += 1;
     if VERBOSE {
         println!(
@@ -116,13 +121,19 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
         obj_id
     );
     let info = object_info.get_mut(&obj_id).unwrap();
-    assert_eq!(
-        info.refcnt, refcnt,
-        "The refcnt of object id={} in report_release mismatch! reported={}, sanitizer={}",
-        obj_id, refcnt, info.refcnt
-    );
-    info.refcnt -= 1;
-
+    if !info.is_global {
+        assert_eq!(
+            info.refcnt, refcnt,
+            "The refcnt of object id={} in report_release mismatch! reported={}, sanitizer={}",
+            obj_id, refcnt, info.refcnt
+        );
+        info.refcnt -= 1;
+    } else if refcnt != info.refcnt {
+        if VERBOSE {
+            println!("[Sanitizer] The refcnt of object id={} in report_retain mismatch but it is global. reported={}, sanitizer={}",
+            obj_id, refcnt, info.refcnt)
+        }
+    }
     if VERBOSE {
         println!(
             "Object id={} is released. refcnt=({} -> {}), addr={:#X}, code = {}",

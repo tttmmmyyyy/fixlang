@@ -397,11 +397,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if self.global.contains_key(&name) {
             error_exit(&format!("duplicate symbol: {}", name.to_string()));
         } else {
+            let used_later = if NOT_RETAIN_GLOBAL {
+                // Global objects are pre-retained, so we do not need to retain. Always move out it.
+                0
+            } else {
+                u32::MAX / 2
+            };
             self.global.insert(
                 name.clone(),
                 Variable {
                     ptr: VarValue::Global(accessor, ty),
-                    used_later: if NOT_RETAIN_GLOBAL { 0 } else { u32::MAX / 2 },
+                    used_later,
                 },
             );
         }

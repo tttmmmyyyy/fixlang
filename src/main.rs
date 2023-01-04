@@ -52,7 +52,7 @@ use std::vec::Vec;
 use typecheck::*;
 use uncurry_optimization::*;
 
-const SANITIZE_MEMORY: bool = false;
+const SANITIZE_MEMORY: bool = true;
 
 const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
 const USE_LEAKY_ALLOCATOR: bool = false;
