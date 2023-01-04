@@ -512,7 +512,7 @@ pub fn test27_5() {
         main = (
             let arr = Array.from_map 100 $ \i -> add i;
             let arr = arr.set 99 \x -> x - 100;
-            (arr.get 99) $ (arr.get 50) 1
+            arr.get 99 $ arr.get 50 $ 1
         );
         ";
     let answer = 1 + 50 - 100;

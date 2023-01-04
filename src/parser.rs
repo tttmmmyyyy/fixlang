@@ -2,6 +2,8 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
+use std::mem::swap;
+
 use pest::error::Error;
 
 use super::*;
@@ -546,7 +548,7 @@ fn parse_expr_neg(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
             negate = true;
             pairs.next();
         }
-        let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), src);
+        let mut expr = parse_expr_operator_app(pairs.next().unwrap(), src);
         if negate {
             expr = expr_app(
                 expr_var(
@@ -561,31 +563,121 @@ fn parse_expr_neg(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     }
 }
 
-// Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
-fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
-    let exprs = parse_combinator_sequence(pair, src, parse_expr_app);
-    let mut exprs_iter = exprs.iter().rev();
-    let mut ret = exprs_iter.next().unwrap().clone();
-    for expr in exprs_iter {
-        let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(expr.clone(), ret, span);
-    }
-    ret
-}
+// // Parse application by opeartor $ or .
+// fn parse_expr_operator_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+//     assert_eq!(pair.as_rule(), Rule::expr_operator_app);
+//     const DOL: &str = "$";
+//     const DOT: &str = ".";
 
-// Parse left to right application sequence, e.g., `x & f & g`. (left-associative)
-fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_ltr_app);
-    let exprs = parse_combinator_sequence(pair, src, parse_expr_rtl_app);
-    let mut exprs_iter = exprs.iter();
-    let mut ret = exprs_iter.next().unwrap().clone();
-    for expr in exprs_iter {
-        let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(expr.clone(), ret, span)
-            .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
+//     fn join_by_expr(mut exprs: Vec<Arc<ExprNode>>, op: String) -> Arc<ExprNode> {
+//         if op == DOT {
+//             exprs.reverse();
+//         }
+//         // println!(
+//         //     "{}",
+//         //     exprs
+//         //         .iter()
+//         //         .map(|e| e.expr.to_string())
+//         //         .collect::<Vec<_>>()
+//         //         .join(", ")
+//         // );
+//         while exprs.len() >= 2 {
+//             let fun = exprs.pop().unwrap();
+//             let arg = exprs.pop().unwrap();
+//             let span = unite_span(&fun.source, &arg.source);
+//             let expr = expr_app(fun, arg, span);
+//             let app_order = if op == DOL {
+//                 AppSourceCodeOrderType::FunctionIsFormer
+//             } else {
+//                 AppSourceCodeOrderType::ArgumentIsFormer
+//             };
+//             expr.set_app_order(app_order);
+//             exprs.push(expr);
+//         }
+//         exprs.pop().unwrap()
+//     }
+
+//     let mut mode: Option<String> = None;
+//     let mut exprs: Vec<Arc<ExprNode>> = vec![];
+
+//     for pair in pair.into_inner().rev() {
+//         if pair.as_rule() == Rule::expr_app {
+//             exprs.push(parse_expr_app(pair, src));
+//         } else {
+//             let op = pair.as_str().to_string();
+//             if mode == None {
+//                 mode = Some(op);
+//             } else if mode != Some(op.clone()) {
+//                 exprs.reverse();
+//                 exprs = vec![join_by_expr(exprs, mode.clone().unwrap())];
+//                 mode = Some(op);
+//             }
+//         }
+//     }
+//     if mode == None {
+//         exprs.pop().unwrap()
+//     } else {
+//         join_by_expr(exprs, mode.clone().unwrap())
+//     }
+// }
+
+// Parse application by opeartor $ or .
+fn parse_expr_operator_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_operator_app);
+
+    let mut pairs = pair.into_inner();
+    let head = parse_expr_app(pairs.next().unwrap(), src);
+    let mut op_exprs: Vec<(String, Arc<ExprNode>)> = vec![];
+    let mut op: String = Default::default();
+
+    for pair in pairs {
+        if pair.as_rule() == Rule::combinator_dollar_or_dot {
+            op = pair.as_str().to_string();
+        } else {
+            op_exprs.push((op.clone(), parse_expr_app(pair, src)));
+        }
     }
-    ret
+
+    const DOL: &str = "$";
+    const DOT: &str = ".";
+
+    fn join(
+        head: Arc<ExprNode>,
+        op_exprs: &mut dyn Iterator<Item = (String, Arc<ExprNode>)>,
+    ) -> Arc<ExprNode> {
+        let mut dot_sequence = vec![head];
+        loop {
+            match op_exprs.next() {
+                None => break,
+                Some(op_expr) => {
+                    if op_expr.0 == DOL.to_string() {
+                        let arg = join(op_expr.1, op_exprs);
+                        let fun = dot_sequence.pop().unwrap();
+                        let span = unite_span(&fun.source, &arg.source);
+                        let expr = expr_app(fun, arg, span);
+                        dot_sequence.push(expr);
+                    } else {
+                        dot_sequence.push(op_expr.1);
+                    }
+                }
+            }
+        }
+        dot_sequence.reverse();
+        while dot_sequence.len() >= 2 {
+            let arg = dot_sequence.pop().unwrap();
+            let fun = dot_sequence.pop().unwrap();
+            let span = unite_span(&fun.source, &arg.source);
+            let expr = expr_app(fun, arg, span);
+            expr.set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
+            dot_sequence.push(expr);
+        }
+        dot_sequence.pop().unwrap()
+    }
+
+    let mut op_exprs = op_exprs.into_iter();
+    let res = join(head, &mut op_exprs);
+    println!("{}", res.expr.to_string());
+    res
 }
 
 // Parse application sequence, e.g., `f x y`. (left-associative)
