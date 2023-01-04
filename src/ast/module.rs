@@ -347,6 +347,13 @@ impl FixModule {
             // Execute expression.
             let obj = gc.eval_expr(sym.expr.unwrap().clone(), rvo.clone());
 
+            if NOT_RETAIN_GLOBAL && obj.is_box(gc.type_env()) {
+                let obj_ptr = obj.ptr(gc);
+                let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+                let infty = refcnt_type(gc.context).const_int(i32::MAX as u64, false);
+                gc.builder().build_store(ptr_to_refcnt, infty);
+            }
+
             // If we didn't rvo, then store the result to gloval_ptr.
             if rvo.is_none() {
                 let obj_val = obj.value(gc);

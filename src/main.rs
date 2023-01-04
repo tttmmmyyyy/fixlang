@@ -52,7 +52,7 @@ use std::vec::Vec;
 use typecheck::*;
 use uncurry_optimization::*;
 
-const SANITIZE_MEMORY: bool = true;
+const SANITIZE_MEMORY: bool = false;
 
 const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
 const USE_LEAKY_ALLOCATOR: bool = false;
@@ -61,8 +61,9 @@ const LEAKY_HEAP_NAME: &str = "LEAKY_HEAP";
 
 const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We should make tuple generation on-demand.
 
-const UNCURRY_OPTIMIZATION: bool = false;
+const UNCURRY_OPTIMIZATION: bool = true;
 const TUPLE_UNBOX: bool = true;
+const NOT_RETAIN_GLOBAL: bool = true;
 
 fn main() {
     let source_file = Arg::new("source-file").required(true);

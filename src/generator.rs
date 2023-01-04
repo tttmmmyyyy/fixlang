@@ -401,7 +401,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 name.clone(),
                 Variable {
                     ptr: VarValue::Global(accessor, ty),
-                    used_later: u32::MAX / 2,
+                    used_later: if NOT_RETAIN_GLOBAL { 0 } else { u32::MAX / 2 },
                 },
             );
         }
