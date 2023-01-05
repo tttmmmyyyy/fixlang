@@ -1119,7 +1119,7 @@ pub fn test51() {
     search = \elem -> \arr -> loop 0 \idx -> (
         if idx == arr.len then break -1
         else if arr.get idx == elem then break idx
-        else continue (idx + 1)
+        else continue $ idx + 1
     );
     
     main : Int;
@@ -1146,19 +1146,46 @@ pub fn test52() {
     type SieveState = struct (i: Int, arr: Array Bool);
     
     // Calculate a Bool array whose element is true iff idx is prime.
-    identity_by_loop: a -> a;
-    identity_by_loop = \x -> (
-        loop x \state -> (
-            break $ state
+    is_prime : Int -> Array Bool;
+    is_prime = \n -> (
+        let arr = Array.new n true;
+        let arr = arr.set! 0 false;
+        let arr = arr.set! 1 false;
+        loop (SieveState.new 2 arr) \state -> (
+            let i = state.get_i;
+            let arr = state.get_arr;
+            if n < i*i then break arr else 
+            let next_arr = if arr.get i then (
+                loop (SieveState.new (i+i) arr) \state -> (
+                    let q = state.get_i;
+                    let arr = state.get_arr;
+                    if n-1 < q then 
+                        break arr
+                    else 
+                        continue $ SieveState.new (q + i) $ arr.set! q false
+                )
+            ) else arr;
+            continue $ SieveState.new (i + 1) next_arr
+        )
+    );
+
+    // Count the appearance of a value in an array.
+    count : [a: Eq] a -> Array a -> Int;
+    count = \elem -> \arr -> (
+        loop (0, 0) \state -> (
+            let i = state.get_0;
+            let sum = state.get_1;
+            if arr.len == i then break sum 
+            else 
+                let sum = sum + (if arr.get i == elem then 1 else 0);
+                continue $ (i+1, sum)
         )
     );
     
     main : Int;
-    main = (
-        (identity_by_loop $ Array.new 10 5).get 0
-    );
+    main = (is_prime 100).count true;
     ";
-    let answer = 5;
+    let answer = 25;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 #[test]
