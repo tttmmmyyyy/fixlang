@@ -2,6 +2,8 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
+use std::mem::swap;
+
 use pest::error::Error;
 
 use super::*;
@@ -442,30 +444,54 @@ fn parse_combinator_sequence(
         .collect()
 }
 
+#[derive(Default, Clone)]
+struct OperatorInfo {
+    trait_name: Name,
+    method_name: Name,
+    reverse: bool,
+}
+
+impl OperatorInfo {
+    fn new(trait_name: &str, method_name: &str, reverse: bool) -> OperatorInfo {
+        OperatorInfo {
+            trait_name: trait_name.to_string(),
+            method_name: method_name.to_string(),
+            reverse,
+        }
+    }
+}
+
 // Binary operator
 fn parse_binary_operator_sequence(
     pair: Pair<Rule>,
     src: &Arc<String>,
-    ops: HashMap<&str, (&str /* trait_name */, &str /* method_name */)>,
+    ops: HashMap<&str, OperatorInfo>,
     operator_rule: Rule,
     inner_parser: fn(Pair<Rule>, &Arc<String>) -> Arc<ExprNode>,
 ) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let mut expr = inner_parser(pairs.next().unwrap(), src);
-    let mut next_operation = ("N/A", "N/A");
+    let mut next_operation = OperatorInfo::default();
     for pair in pairs {
         if pair.as_rule() == operator_rule {
-            next_operation = ops[pair.as_str()];
+            next_operation = ops[pair.as_str()].clone();
         } else {
-            let rhs = inner_parser(pair, src);
+            let mut lhs = expr;
+            let mut rhs = inner_parser(pair, src);
+            if next_operation.reverse {
+                swap(&mut lhs, &mut rhs);
+            }
             expr = expr_app(
                 expr_app(
                     expr_var(
-                        FullName::from_strs(&[STD_NAME, next_operation.0], next_operation.1),
+                        FullName::from_strs(
+                            &[STD_NAME, &next_operation.trait_name],
+                            &next_operation.method_name,
+                        ),
                         Some(span.clone()),
                     ),
-                    expr,
+                    lhs,
                     Some(span.clone()),
                 ),
                 rhs,
@@ -477,16 +503,26 @@ fn parse_binary_operator_sequence(
 }
 
 // Operator ==, <, >, <=, >= (left-associative)
-fn parse_expr_eq(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_eq);
+fn parse_expr_cmp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_cmp);
     parse_binary_operator_sequence(
         pair,
         src,
         HashMap::from([
-            ("==", (EQ_TRAIT_NAME, EQ_TRAIT_EQ_NAME)),
-            ("<", (CMP_TRAIT_NAME, CMP_TRAIT_LT_NAME)),
+            (
+                "==",
+                OperatorInfo::new(EQ_TRAIT_NAME, EQ_TRAIT_EQ_NAME, false),
+            ),
+            (
+                "<",
+                OperatorInfo::new(CMP_TRAIT_NAME, CMP_TRAIT_LT_NAME, false),
+            ),
+            (
+                ">",
+                OperatorInfo::new(CMP_TRAIT_NAME, CMP_TRAIT_LT_NAME, true),
+            ),
         ]),
-        Rule::operator_eq,
+        Rule::operator_cmp,
         parse_expr_plus,
     )
 }
@@ -497,9 +533,12 @@ fn parse_expr_and(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     parse_binary_operator_sequence(
         pair,
         src,
-        HashMap::from([("&&", (AND_TRAIT_NAME, AND_TRAIT_AND_NAME))]),
+        HashMap::from([(
+            "&&",
+            OperatorInfo::new(AND_TRAIT_NAME, AND_TRAIT_AND_NAME, false),
+        )]),
         Rule::operator_and,
-        parse_expr_eq,
+        parse_expr_cmp,
     )
 }
 
@@ -510,8 +549,14 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         pair,
         src,
         HashMap::from([
-            ("+", (ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME)),
-            ("-", (SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME)),
+            (
+                "+",
+                OperatorInfo::new(ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME, false),
+            ),
+            (
+                "-",
+                OperatorInfo::new(SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME, false),
+            ),
         ]),
         Rule::operator_plus,
         parse_expr_mul,
@@ -525,9 +570,18 @@ fn parse_expr_mul(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         pair,
         src,
         HashMap::from([
-            ("*", (MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME)),
-            ("/", (DIVIDE_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME)),
-            ("%", (REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME)),
+            (
+                "*",
+                OperatorInfo::new(MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME, false),
+            ),
+            (
+                "/",
+                OperatorInfo::new(DIVIDE_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, false),
+            ),
+            (
+                "%",
+                OperatorInfo::new(REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME, false),
+            ),
         ]),
         Rule::operator_mul,
         parse_expr_neg,

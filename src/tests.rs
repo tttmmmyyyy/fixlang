@@ -1154,7 +1154,7 @@ pub fn test52() {
         loop (SieveState.new 2 arr) \state -> (
             let i = state.get_i;
             let arr = state.get_arr;
-            if n < i*i then break arr else 
+            if i*i > n then break arr else 
             let next_arr = if arr.get i then (
                 loop (SieveState.new (i+i) arr) \state -> (
                     let q = state.get_i;

@@ -72,12 +72,12 @@ operator_plus = { "+" | "-" }
 expr_plus = { expr_mul ~ (sep* ~ operator_plus ~ sep* ~ expr_mul)* }
 
 // operator==, <, >, <=, >=
-operator_eq = { "==" | "<" }
-expr_eq = { expr_plus ~ (sep* ~ operator_eq ~ sep* ~ expr_plus)? }
+operator_cmp = { "==" | "<" | ">" }
+expr_cmp = { expr_plus ~ (sep* ~ operator_cmp ~ sep* ~ expr_plus)? }
 
 // operator &&, || (left-associative)
 operator_and = { "&&" | "||" }
-expr_and = { expr_eq ~ (sep* ~ operator_and ~ sep* ~ expr_eq)* }
+expr_and = { expr_cmp ~ (sep* ~ operator_and ~ sep* ~ expr_cmp)* }
 
 expr_type_annotation = { expr_and ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
