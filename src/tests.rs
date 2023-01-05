@@ -512,7 +512,7 @@ pub fn test27_5() {
         main = (
             let arr = Array.from_map 100 $ \i -> add i;
             let arr = arr.set 99 \x -> x - 100;
-            (arr.get 99) $ (arr.get 50) 1
+            arr.get 99 $ arr.get 50 $ 1
         );
         ";
     let answer = 1 + 50 - 100;
@@ -795,7 +795,7 @@ pub fn test40() {
         main : Int;
         main = (
             let a = A.new (B.new 16);
-            let f: A -> A = \a -> a.mod_x! $ mod_x! $ \x -> x + 15;
+            let f: A -> A = \a -> a.(mod_x! $ mod_x! $ \x -> x + 15);
             let a = a .f;
             a .get_x .get_x
         );
@@ -1029,7 +1029,7 @@ pub fn test47_5() {
         main = (
             let val = Union.val 3;
             let func = Union.func \x -> x + 5;
-            (func.as_func) (val.as_val)
+            func.as_func $ val.as_val
         );
     ";
     let answer = 5 + 3;
@@ -1048,7 +1048,7 @@ pub fn test48() {
         main : Int;
         main = (
             let int_vec = Vec.new $ Array.new 2 5;
-            let int_vec = int_vec.mod_data! $ \arr -> arr.set 0 3;
+            let int_vec = int_vec.mod_data! \arr -> arr.set 0 3;
             let head = int_vec.get_data.get 0;
             let next = int_vec.get_data.get 1;
             add head next
@@ -1108,16 +1108,6 @@ pub fn test51() {
     // test trait bounds.
     let source = r"
     module Main;
-
-    /*
-    Eq trait is defined in standard library as follows: 
-
-    trait a: Eq {
-        eq: a -> a -> Bool
-    }
-
-    Expression `x == y` is equivalent to `Eq.eq x y`.
-    */
     
     impl [a: Eq, b: Eq] (a, b) : Eq {
         eq = \lhs -> \rhs -> (
@@ -1134,12 +1124,12 @@ pub fn test51() {
     
     main : Int;
     main = (
-        let arr = Array.new 4 $ (0, false);
-        let arr = arr.set 0 $ (0, false);
-        let arr = arr.set 1 $ (0, true);
-        let arr = arr.set 2 $ (1, false);
-        let arr = arr.set 3 $ (1, true);
-        arr.search $ (1, false) // evaluates to 2
+        let arr = Array.new 4 (0, false);
+        let arr = arr.set 0 (0, false);
+        let arr = arr.set 1 (0, true);
+        let arr = arr.set 2 (1, false);
+        let arr = arr.set 3 (1, true);
+        arr.search (1, false) // evaluates to 2
     );
         ";
     let answer = 2;
