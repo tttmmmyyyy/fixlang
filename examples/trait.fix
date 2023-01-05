@@ -44,5 +44,5 @@ main : Int;
 main = (
     let arr = Array.from_map 6 \x -> x; // arr = [0,1,2,...,9].
     let arr = arr.map \x -> Pair.new (x % 2) (x % 3); // arr = [(0, 0), (1, 1), (0, 2), ...].
-    arr.search $ Pair.new 1 2 // 5, the first number x such that x % 2 == 1 and x % 3 == 2.
+    arr.search (Pair.new 1 2) // 5, the first number x such that x % 2 == 1 and x % 3 == 2.
 );
