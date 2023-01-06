@@ -16,8 +16,7 @@ serial_test = "0.4.0"
 clap = "3.2.0"
 md5 = "0.7.0"
 
-# TODO: use rustc-llvm-proxy: 
-# rustc-llvm-proxy = "0.2"
-# [dependencies.llvm-sys]
-# version = "120"
-# features = ["no-llvm-linking", "disable-alltargets-init"]
+[[bin]]
+name = "fix"
+path = "src/main.rs"
+
