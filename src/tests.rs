@@ -831,7 +831,7 @@ pub fn test42() {
             module Main;
             
             loop : Int -> Int;
-            loop = \x -> if x == 0 then 0 else x + loop $ add x -1;
+            loop = \x -> if x == 0 then 0 else add x $ loop $ add x -1;
     
             main : Int;
             main = loop {};

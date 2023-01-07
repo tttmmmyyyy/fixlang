@@ -423,7 +423,7 @@ fn parse_expr_type_annotation(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNo
     assert_eq!(pair.as_rule(), Rule::expr_type_annotation);
     let span = Span::from_pair(src, &pair);
     let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_and(pairs.next().unwrap(), src);
+    let mut expr = parse_expr_rtl_app(pairs.next().unwrap(), src);
     match pairs.next() {
         None => {}
         Some(ty) => {
@@ -600,7 +600,7 @@ fn parse_expr_neg(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
             negate = true;
             pairs.next();
         }
-        let mut expr = parse_expr_rtl_app(pairs.next().unwrap(), src);
+        let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), src);
         if negate {
             expr = expr_app(
                 expr_var(
@@ -618,7 +618,7 @@ fn parse_expr_neg(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 // Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
 fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
-    let exprs = parse_combinator_sequence(pair, src, parse_expr_ltr_app);
+    let exprs = parse_combinator_sequence(pair, src, parse_expr_and);
     let mut exprs_iter = exprs.iter().rev();
     let mut ret = exprs_iter.next().unwrap().clone();
     for expr in exprs_iter {
