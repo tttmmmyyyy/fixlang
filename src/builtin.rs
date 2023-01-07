@@ -1392,19 +1392,19 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
     )
 }
 
-pub const CMP_TRAIT_NAME: &str = "Cmp";
-pub const CMP_TRAIT_LT_NAME: &str = "less_than";
+pub const LESS_THAN_TRAIT_NAME: &str = "LessThan";
+pub const LESS_THAN_TRAIT_LT_NAME: &str = "less_than";
 
 pub fn cmp_trait_id() -> TraitId {
     TraitId {
-        name: FullName::from_strs(&[STD_NAME], CMP_TRAIT_NAME),
+        name: FullName::from_strs(&[STD_NAME], LESS_THAN_TRAIT_NAME),
     }
 }
 
 pub fn cmp_trait() -> TraitInfo {
     binary_operator_trait(
         cmp_trait_id(),
-        CMP_TRAIT_LT_NAME.to_string(),
+        LESS_THAN_TRAIT_LT_NAME.to_string(),
         Some(bool_lit_ty()),
     )
 }
@@ -1420,20 +1420,23 @@ pub fn cmp_trait_instance_int() -> TraitInstance {
         gc.release(lhs);
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
-        let value =
-            gc.builder()
-                .build_int_compare(IntPredicate::SLT, lhs_val, rhs_val, CMP_TRAIT_LT_NAME);
+        let value = gc.builder().build_int_compare(
+            IntPredicate::SLT,
+            lhs_val,
+            rhs_val,
+            LESS_THAN_TRAIT_LT_NAME,
+        );
         let value = gc.builder().build_int_cast(
             value,
             ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
-            CMP_TRAIT_LT_NAME,
+            LESS_THAN_TRAIT_LT_NAME,
         );
         let obj = if rvo.is_none() {
             allocate_obj(
                 bool_lit_ty(),
                 &vec![],
                 gc,
-                Some(&format!("{} lhs rhs", CMP_TRAIT_LT_NAME)),
+                Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
             )
         } else {
             rvo.unwrap()
@@ -1443,7 +1446,7 @@ pub fn cmp_trait_instance_int() -> TraitInstance {
     }
     binary_opeartor_instance(
         cmp_trait_id(),
-        &CMP_TRAIT_LT_NAME.to_string(),
+        &LESS_THAN_TRAIT_LT_NAME.to_string(),
         int_lit_ty(),
         bool_lit_ty(),
         generate_cmp_int,

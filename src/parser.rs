@@ -515,11 +515,11 @@ fn parse_expr_cmp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
             ),
             (
                 "<",
-                OperatorInfo::new(CMP_TRAIT_NAME, CMP_TRAIT_LT_NAME, false),
+                OperatorInfo::new(LESS_THAN_TRAIT_NAME, LESS_THAN_TRAIT_LT_NAME, false),
             ),
             (
                 ">",
-                OperatorInfo::new(CMP_TRAIT_NAME, CMP_TRAIT_LT_NAME, true),
+                OperatorInfo::new(LESS_THAN_TRAIT_NAME, LESS_THAN_TRAIT_LT_NAME, true),
             ),
         ]),
         Rule::operator_cmp,
