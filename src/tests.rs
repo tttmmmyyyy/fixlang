@@ -23,6 +23,7 @@ pub fn test0() {
 pub fn test1() {
     let source = r"
         module Main;
+        
         main: Int;
         main = let x = 5 in -x;
     ";
@@ -416,6 +417,30 @@ pub fn test22_5() {
         );
     ";
     let answer = 55;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test22_7() {
+    // Test global recursion function
+    let source = r"
+        module Main;
+
+        fib : Int -> Int;
+        fib = \n -> (
+            if n == 0 then
+                0
+            else if n == 1 then
+                1
+            else
+                fib (n-1) + fib (n-2)
+        );
+        
+        main : Int;
+        main = fib 30; // 832040
+    ";
+    let answer = 832040;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
