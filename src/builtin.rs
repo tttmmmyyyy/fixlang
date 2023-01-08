@@ -135,11 +135,11 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Implementation of newArray built-in function.
+// Implementation of Array.new built-in function.
 fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let size_str = FullName::local(size);
     let value_str = FullName::local(value);
-    let name = format!("newArray {} {}", size, value);
+    let name = format!("Array.new {} {}", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
