@@ -1453,6 +1453,67 @@ pub fn less_than_trait_instance_int() -> TraitInstance {
     )
 }
 
+pub const LESS_THAN_OR_EQUAL_TO_TRAIT_NAME: &str = "LessThanOrEqualTo";
+pub const LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME: &str = "less_than_or_equal_to";
+
+pub fn less_than_or_equal_to_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], LESS_THAN_OR_EQUAL_TO_TRAIT_NAME),
+    }
+}
+
+pub fn less_than_or_equal_to_trait() -> TraitInfo {
+    binary_operator_trait(
+        less_than_or_equal_to_trait_id(),
+        LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
+        Some(bool_lit_ty()),
+    )
+}
+
+pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
+    fn generate_less_than_or_equal_to_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc.builder().build_int_compare(
+            IntPredicate::SLE,
+            lhs_val,
+            rhs_val,
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let value = gc.builder().build_int_cast(
+            value,
+            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                bool_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        less_than_or_equal_to_trait_id(),
+        &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
+        int_lit_ty(),
+        bool_lit_ty(),
+        generate_less_than_or_equal_to_int,
+    )
+}
+
 pub const ADD_TRAIT_NAME: &str = "Add";
 pub const ADD_TRAIT_ADD_NAME: &str = "add";
 

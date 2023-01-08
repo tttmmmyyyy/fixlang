@@ -68,7 +68,8 @@ operator_plus = { "+" | "-" }
 expr_plus = { expr_mul ~ (sep* ~ operator_plus ~ sep* ~ expr_mul)* }
 
 // operator==, <, >, <=, >=
-operator_cmp = { "==" | "<" | ">" }
+// NOTE: "<=" and ">=" has to put in from of "<" and ">".
+operator_cmp = { "==" | "<=" | ">=" | "<" | ">" }
 expr_cmp = { expr_plus ~ (sep* ~ operator_cmp ~ sep* ~ expr_plus)? }
 
 // operator &&, || (left-associative)

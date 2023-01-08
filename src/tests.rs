@@ -1213,6 +1213,7 @@ pub fn test52() {
     let answer = 25;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
+
 #[test]
 #[serial]
 pub fn test53() {
@@ -1252,6 +1253,27 @@ pub fn test54() {
     );
     ";
     let answer = 13 + 3 + 5;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test55() {
+    // Test <= operator
+    let source = r"
+    module Main;
+    
+    main : Int;
+    main = (
+        if 0 <= -1 && -1 >= 0 then
+            0
+        else if 0 <= 0 && 0 <= 1 && 0 >= 0 && 1 >= 0 then
+            1
+        else 
+            2
+    );
+    ";
+    let answer = 1;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
 
