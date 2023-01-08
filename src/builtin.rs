@@ -1395,22 +1395,22 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
 pub const LESS_THAN_TRAIT_NAME: &str = "LessThan";
 pub const LESS_THAN_TRAIT_LT_NAME: &str = "less_than";
 
-pub fn cmp_trait_id() -> TraitId {
+pub fn less_than_trait_id() -> TraitId {
     TraitId {
         name: FullName::from_strs(&[STD_NAME], LESS_THAN_TRAIT_NAME),
     }
 }
 
-pub fn cmp_trait() -> TraitInfo {
+pub fn less_than_trait() -> TraitInfo {
     binary_operator_trait(
-        cmp_trait_id(),
+        less_than_trait_id(),
         LESS_THAN_TRAIT_LT_NAME.to_string(),
         Some(bool_lit_ty()),
     )
 }
 
-pub fn cmp_trait_instance_int() -> TraitInstance {
-    fn generate_cmp_int<'c, 'm>(
+pub fn less_than_trait_instance_int() -> TraitInstance {
+    fn generate_less_than_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
@@ -1445,11 +1445,11 @@ pub fn cmp_trait_instance_int() -> TraitInstance {
         obj
     }
     binary_opeartor_instance(
-        cmp_trait_id(),
+        less_than_trait_id(),
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         int_lit_ty(),
         bool_lit_ty(),
-        generate_cmp_int,
+        generate_less_than_int,
     )
 }
 
