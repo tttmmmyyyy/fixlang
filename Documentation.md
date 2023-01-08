@@ -125,10 +125,11 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ## Types
 
-## Traits
-
 ## Functions
 
 ## Operators
+
+|Precedence|Operator|Trait|Method|Notes|
+||||||
 
 # Features of "fix" command

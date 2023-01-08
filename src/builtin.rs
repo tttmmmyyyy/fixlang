@@ -1453,8 +1453,8 @@ pub fn less_than_trait_instance_int() -> TraitInstance {
     )
 }
 
-pub const LESS_THAN_OR_EQUAL_TO_TRAIT_NAME: &str = "LessThanOrEqualTo";
-pub const LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME: &str = "less_than_or_equal_to";
+pub const LESS_THAN_OR_EQUAL_TO_TRAIT_NAME: &str = "LessThanOrEq";
+pub const LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME: &str = "less_than_or_eq";
 
 pub fn less_than_or_equal_to_trait_id() -> TraitId {
     TraitId {
