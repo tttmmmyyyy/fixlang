@@ -54,7 +54,7 @@ Fix's `let`-binding doesn't allow to make recursive definition. To define a recu
 
 ## If
 
-The syntax of `if` is `if {condition} then {expression_0} else {expression_1}`. The type of `{condition}` has to be `Bool`, and The types of `{expression_0}` and `{expression_1}` must coincide. Boolean value literals are `True` and `False`.
+The syntax of `if` is `if {condition} then {expression_0} else {expression_1}`. The type of `{condition}` has to be `Bool`, and The types of `{expression_0}` and `{expression_1}` must coincide. Boolean value literals are `true` and `false`.
 
 ```
 if False then 1 else 0 // evaluates to 0
@@ -125,8 +125,29 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ## Types
 
-## Traits
-
 ## Functions
 
 ## Operators
+
+The following is the table of operators sorted by it's precedence (operator of higher precedence appears earlier).
+
+| Operator       | Associativity | Trant / method                     | Explanation                                                 | 
+| -------------- | ------------- | ---------------------------------- | ----------------------------------------------------------- | 
+| (whitespace)   | left          | -                                  | function application                                        | 
+| .              | left          | -                                  | right-to-left function application: x.f = f x               | 
+| - (minus sign) | -             | Std.Neg / neg                      | negative of number                                          | 
+| *              | left          | Std.Mul / mul                      | multiplication of numbers                                   | 
+| /              | left          | Std.Div / div                      | division of numbers                                         | 
+| %              | left          | Std.Rem / rem                      | reminder of division                                        | 
+| +              | left          | Std.Add / add                      | addition of numbers                                         | 
+| - (minus sign) | left          | Std.Sub / sub                      | subtraction of numbers                                      | 
+| ==             | left          | Std.Eq / eq                        | equality comparison                                         | 
+| <=             | left          | Std.LessThanOrEq / less_than_or_eq | less-than-or-equal-to comparison                            | 
+| >=             | left          | Std.LessThanOrEq / less_than_or_eq | `x >= y` is interpret as `y <= x`                           | 
+| <              | left          | Std.LessThan / less_than           | less-than comparison                                        | 
+| >              | left          | Std.LessThan / less_than           | `x > y` is interpret as `y < x`                             | 
+| &&             | left          | Std.And / and                      | logical AND                                                 | 
+| &#124;&#124;   | left          | Std.Or / or                        | logical OR                                                  | 
+| $              | right         | -                                  | right associative function application: f $ g $ x = f (g x) | 
+
+# Features of "fix" command

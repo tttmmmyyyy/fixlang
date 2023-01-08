@@ -1395,22 +1395,22 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
 pub const LESS_THAN_TRAIT_NAME: &str = "LessThan";
 pub const LESS_THAN_TRAIT_LT_NAME: &str = "less_than";
 
-pub fn cmp_trait_id() -> TraitId {
+pub fn less_than_trait_id() -> TraitId {
     TraitId {
         name: FullName::from_strs(&[STD_NAME], LESS_THAN_TRAIT_NAME),
     }
 }
 
-pub fn cmp_trait() -> TraitInfo {
+pub fn less_than_trait() -> TraitInfo {
     binary_operator_trait(
-        cmp_trait_id(),
+        less_than_trait_id(),
         LESS_THAN_TRAIT_LT_NAME.to_string(),
         Some(bool_lit_ty()),
     )
 }
 
-pub fn cmp_trait_instance_int() -> TraitInstance {
-    fn generate_cmp_int<'c, 'm>(
+pub fn less_than_trait_instance_int() -> TraitInstance {
+    fn generate_less_than_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
@@ -1445,11 +1445,72 @@ pub fn cmp_trait_instance_int() -> TraitInstance {
         obj
     }
     binary_opeartor_instance(
-        cmp_trait_id(),
+        less_than_trait_id(),
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         int_lit_ty(),
         bool_lit_ty(),
-        generate_cmp_int,
+        generate_less_than_int,
+    )
+}
+
+pub const LESS_THAN_OR_EQUAL_TO_TRAIT_NAME: &str = "LessThanOrEq";
+pub const LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME: &str = "less_than_or_eq";
+
+pub fn less_than_or_equal_to_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], LESS_THAN_OR_EQUAL_TO_TRAIT_NAME),
+    }
+}
+
+pub fn less_than_or_equal_to_trait() -> TraitInfo {
+    binary_operator_trait(
+        less_than_or_equal_to_trait_id(),
+        LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
+        Some(bool_lit_ty()),
+    )
+}
+
+pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
+    fn generate_less_than_or_equal_to_int<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc.builder().build_int_compare(
+            IntPredicate::SLE,
+            lhs_val,
+            rhs_val,
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let value = gc.builder().build_int_cast(
+            value,
+            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                bool_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        less_than_or_equal_to_trait_id(),
+        &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
+        int_lit_ty(),
+        bool_lit_ty(),
+        generate_less_than_or_equal_to_int,
     )
 }
 
@@ -1759,6 +1820,54 @@ pub fn and_trait_instance_bool() -> TraitInstance {
         bool_lit_ty(),
         bool_lit_ty(),
         generate_and_bool,
+    )
+}
+
+pub const OR_TRAIT_NAME: &str = "Or";
+pub const OR_TRAIT_OR_NAME: &str = "or";
+
+pub fn or_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], OR_TRAIT_NAME),
+    }
+}
+
+pub fn or_trait() -> TraitInfo {
+    binary_operator_trait(or_trait_id(), OR_TRAIT_OR_NAME.to_string(), None)
+}
+
+pub fn or_trait_instance_bool() -> TraitInstance {
+    fn generate_or_bool<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc.builder().build_or(lhs_val, rhs_val, OR_TRAIT_OR_NAME);
+
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                bool_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", OR_TRAIT_OR_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        or_trait_id(),
+        &OR_TRAIT_OR_NAME.to_string(),
+        bool_lit_ty(),
+        bool_lit_ty(),
+        generate_or_bool,
     )
 }
 

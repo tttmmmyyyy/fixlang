@@ -68,16 +68,21 @@ operator_plus = { "+" | "-" }
 expr_plus = { expr_mul ~ (sep* ~ operator_plus ~ sep* ~ expr_mul)* }
 
 // operator==, <, >, <=, >=
-operator_cmp = { "==" | "<" | ">" }
+// NOTE: "<=" and ">=" has to put in from of "<" and ">".
+operator_cmp = { "==" | "<=" | ">=" | "<" | ">" }
 expr_cmp = { expr_plus ~ (sep* ~ operator_cmp ~ sep* ~ expr_plus)? }
 
-// operator &&, || (left-associative)
-operator_and = { "&&" | "||" }
+// operator && (left-associative)
+operator_and = { "&&" }
 expr_and = { expr_cmp ~ (sep* ~ operator_and ~ sep* ~ expr_cmp)* }
+
+// operator && (left-associative)
+operator_or = { "||" }
+expr_or = { expr_and ~ (sep* ~ operator_or ~ sep* ~ expr_and)* }
 
 // right to left application sequence, e.g., `g $ f $ x`. (right-associative)
 combinator_dollar = _{ "$" }
-expr_rtl_app = { expr_and ~ (sep* ~ combinator_dollar ~ sep* ~ expr_and)* }
+expr_rtl_app = { expr_or ~ (sep* ~ combinator_dollar ~ sep* ~ expr_or)* }
 
 expr_type_annotation = { expr_rtl_app ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
