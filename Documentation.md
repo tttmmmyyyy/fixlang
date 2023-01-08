@@ -54,7 +54,11 @@ Fix's `let`-binding doen't allow to make recursive definition. To define a recur
 
 ## If
 
-The syntax of `if` is `if {condition} then {expression_0} else {expression_1}`. The type `{condition}` has to be `Bool`, and The types of `{expression_0}` and `{expression_1}` must coincide.
+The syntax of `if` is `if {condition} then {expression_0} else {expression_1}`. The type of `{condition}` has to be `Bool`, and The types of `{expression_0}` and `{expression_1}` must coincide. Boolean value literals are `True` and `False`.
+
+```
+if False then 1 else 0 // evaluates to 0
+```
 
 ## Function application
 
