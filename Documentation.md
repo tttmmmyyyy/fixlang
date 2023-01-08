@@ -50,7 +50,7 @@ The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {
 
 If the name of the lhs of `let`-binding is already in the scope, `let` evaluates `{expression_0}` in the old scope (i.e., with the old value of the name) and evaluates `{expression_1}` in the new scope (i.e., with the new value of the name).
 
-Fix's `let`-binding doen't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
+Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
 
 ## If
 
@@ -80,7 +80,7 @@ add_x 4 + add_x 5 // (4 + 3) + (5 + 3) = 15
 
 ## Recursion
 
-Recursion in definition of global value is allowed.
+You can make recursive global function as usual.
 
 ```
 module Main;
@@ -99,7 +99,7 @@ main : Int;
 main = fib 30; // 832040
 ```
 
-On the other hand, Fix's `let`-binding doen't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
+On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
 
 ## Type annotation
 
