@@ -129,7 +129,25 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ## Operators
 
-|Precedence|Operator|Trait|Method|Notes|
-||||||
+The following is the table of operators sorted by it's precedence (operator of higher precedence appears earlier).
+
+| Operator       | Associativity | Trant / method                     | Explanation                                                 | 
+| -------------- | ------------- | ---------------------------------- | ----------------------------------------------------------- | 
+| (whitespace)   | left          | -                                  | function application                                        | 
+| .              | left          | -                                  | right-to-left function application: x.f = f x               | 
+| - (minus sign) | -             | Std.Neg / neg                      | negative of number                                          | 
+| *              | left          | Std.Mul / mul                      | multiplication of numbers                                   | 
+| /              | left          | Std.Div / div                      | division of numbers                                         | 
+| %              | left          | Std.Rem / rem                      | reminder of division                                        | 
+| +              | left          | Std.Add / add                      | addition of numbers                                         | 
+| - (minus sign) | left          | Std.Sub / sub                      | subtraction of numbers                                      | 
+| ==             | left          | Std.Eq / eq                        | equality comparison                                         | 
+| <=             | left          | Std.LessThanOrEq / less_than_or_eq | less-than-or-equal-to comparison                            | 
+| >=             | left          | Std.LessThanOrEq / less_than_or_eq | `x >= y` is interpret as `y <= x`                           | 
+| <              | left          | Std.LessThan / less_than           | less-than comparison                                        | 
+| >              | left          | Std.LessThan / less_than           | `x > y` is interpret as `y < x`                             | 
+| &&             | left          | Std.And / and                      | logical AND                                                 | 
+| &#124;&#124;   | left          | Std.Or / or                        | logical OR                                                  | 
+| $              | right         | -                                  | right associative function application: f $ g $ x = f (g x) | 
 
 # Features of "fix" command
