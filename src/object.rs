@@ -41,7 +41,7 @@ impl ObjectFieldType {
                     false,
                 )
                 .into(),
-            ObjectFieldType::UnionTag => gc.context.i64_type().into(),
+            ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut size = 0;
                 for field_ty in field_tys {
@@ -89,22 +89,25 @@ impl ObjectFieldType {
     }
 
     // Take array and generate code iterating its elements.
-    fn loop_over_array_size_buf<'c, 'm>(
+    fn loop_over_array_size_buf<'c, 'm, F, G>(
         gc: &mut GenerationContext<'c, 'm>,
         size_buf: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
-        loop_body: impl Fn(
+        loop_body: F,
+        after_loop: G,
+    ) where
+        for<'c2, 'm2> F: Fn(
             &mut GenerationContext<'c, 'm>,
             Object<'c>,       /* idx */
             IntValue<'c>,     /* size */
             PointerValue<'c>, /* buffer */
         ),
-        after_loop: impl Fn(
+        for<'c2, 'm2> G: Fn(
             &mut GenerationContext<'c, 'm>,
             IntValue<'c>,     /* size */
             PointerValue<'c>, /* buffer */
         ),
-    ) {
+    {
         // Get fields (size, ptr_to_buffer).
         let (size, buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
 
@@ -504,7 +507,10 @@ impl ObjectFieldType {
             let unmatch_bb = gc
                 .context
                 .append_basic_block(curr_func, &format!("unmatch_tag{}", i));
-            let expect_tag_val = gc.context.i64_type().const_int(i as u64, false);
+            let expect_tag_val = ObjectFieldType::UnionTag
+                .to_basic_type(gc)
+                .into_int_type()
+                .const_int(i as u64, false);
             let is_match = gc.builder().build_int_compare(
                 IntPredicate::EQ,
                 tag,

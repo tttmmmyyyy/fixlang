@@ -812,7 +812,10 @@ pub fn union_new_lit(
         };
 
         // Set tag value.
-        let tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+        let tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(field_idx as u64, false);
         obj.store_field_nocap(gc, 0 + offset, tag_value);
 
         // Set value.
@@ -884,7 +887,10 @@ pub fn union_as_lit(
         let elem_ty = ty.clone();
 
         // Create specified tag value.
-        let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+        let specified_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(field_idx as u64, false);
 
         // Get tag value.
         let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
@@ -969,7 +975,10 @@ pub fn union_is_lit(
         let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
 
         // Create specified tag value.
-        let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+        let specified_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(field_idx as u64, false);
 
         // Get tag value.
         let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
@@ -1115,9 +1124,9 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         // Branch due to loop_res.
         assert!(loop_res.ty.is_unbox(gc.type_env()));
         let tag_value = loop_res.load_field_nocap(gc, 0).into_int_value();
-        let cont_tag_value = gc
-            .context
-            .i64_type()
+        let cont_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
             .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
         let is_continue = gc.builder().build_int_compare(
             IntPredicate::EQ,

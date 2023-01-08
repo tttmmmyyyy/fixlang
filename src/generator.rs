@@ -311,6 +311,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     pub fn sizeof(&mut self, ty: &dyn AnyType<'c>) -> u64 {
+        // TODO: this is not good: instead use getTypeAllocSize, but no way to call it from inkwell, currently.
         self.target_data().get_store_size(ty)
     }
 
