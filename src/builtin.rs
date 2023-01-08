@@ -1823,6 +1823,54 @@ pub fn and_trait_instance_bool() -> TraitInstance {
     )
 }
 
+pub const OR_TRAIT_NAME: &str = "Or";
+pub const OR_TRAIT_OR_NAME: &str = "or";
+
+pub fn or_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], OR_TRAIT_NAME),
+    }
+}
+
+pub fn or_trait() -> TraitInfo {
+    binary_operator_trait(or_trait_id(), OR_TRAIT_OR_NAME.to_string(), None)
+}
+
+pub fn or_trait_instance_bool() -> TraitInstance {
+    fn generate_or_bool<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc.builder().build_or(lhs_val, rhs_val, OR_TRAIT_OR_NAME);
+
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                bool_lit_ty(),
+                &vec![],
+                gc,
+                Some(&format!("{} lhs rhs", OR_TRAIT_OR_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        or_trait_id(),
+        &OR_TRAIT_OR_NAME.to_string(),
+        bool_lit_ty(),
+        bool_lit_ty(),
+        generate_or_bool,
+    )
+}
+
 pub const NEGATE_TRAIT_NAME: &str = "Neg";
 pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
 

@@ -543,7 +543,7 @@ fn parse_expr_cmp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     )
 }
 
-// Operator &&, || (left-associative)
+// Operator && (left-associative)
 fn parse_expr_and(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_and);
     parse_binary_operator_sequence(
@@ -555,6 +555,21 @@ fn parse_expr_and(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         )]),
         Rule::operator_and,
         parse_expr_cmp,
+    )
+}
+
+// Operator || (left-associative)
+fn parse_expr_or(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_or);
+    parse_binary_operator_sequence(
+        pair,
+        src,
+        HashMap::from([(
+            "||",
+            OperatorInfo::new(OR_TRAIT_NAME, OR_TRAIT_OR_NAME, false),
+        )]),
+        Rule::operator_or,
+        parse_expr_and,
     )
 }
 
@@ -634,7 +649,7 @@ fn parse_expr_neg(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 // Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
 fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
-    let exprs = parse_combinator_sequence(pair, src, parse_expr_and);
+    let exprs = parse_combinator_sequence(pair, src, parse_expr_or);
     let mut exprs_iter = exprs.iter().rev();
     let mut ret = exprs_iter.next().unwrap().clone();
     for expr in exprs_iter {
