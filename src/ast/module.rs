@@ -643,6 +643,7 @@ impl FixModule {
         self.trait_env.add_trait(add_trait());
         self.trait_env.add_trait(subtract_trait());
         self.trait_env.add_trait(negate_trait());
+        self.trait_env.add_trait(not_trait());
         self.trait_env.add_trait(multiply_trait());
         self.trait_env.add_trait(divide_trait());
         self.trait_env.add_trait(remainder_trait());
@@ -674,6 +675,7 @@ impl FixModule {
         self.trait_env.add_instance(add_trait_instance_int());
         self.trait_env.add_instance(subtract_trait_instance_int());
         self.trait_env.add_instance(negate_trait_instance_int());
+        self.trait_env.add_instance(not_trait_instance_bool());
         self.trait_env.add_instance(multiply_trait_instance_int());
         self.trait_env.add_instance(divide_trait_instance_int());
         self.trait_env.add_instance(remainder_trait_instance_int());

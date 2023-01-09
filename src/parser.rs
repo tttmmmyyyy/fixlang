@@ -445,15 +445,15 @@ fn parse_combinator_sequence(
 }
 
 #[derive(Default, Clone)]
-struct OperatorInfo {
+struct BinaryOpInfo {
     trait_name: Name,
     method_name: Name,
     reverse: bool,
 }
 
-impl OperatorInfo {
-    fn new(trait_name: &str, method_name: &str, reverse: bool) -> OperatorInfo {
-        OperatorInfo {
+impl BinaryOpInfo {
+    fn new(trait_name: &str, method_name: &str, reverse: bool) -> BinaryOpInfo {
+        BinaryOpInfo {
             trait_name: trait_name.to_string(),
             method_name: method_name.to_string(),
             reverse,
@@ -465,14 +465,14 @@ impl OperatorInfo {
 fn parse_binary_operator_sequence(
     pair: Pair<Rule>,
     src: &Arc<String>,
-    ops: HashMap<&str, OperatorInfo>,
+    ops: HashMap<&str, BinaryOpInfo>,
     operator_rule: Rule,
     inner_parser: fn(Pair<Rule>, &Arc<String>) -> Arc<ExprNode>,
 ) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let mut expr = inner_parser(pairs.next().unwrap(), src);
-    let mut next_operation = OperatorInfo::default();
+    let mut next_operation = BinaryOpInfo::default();
     for pair in pairs {
         if pair.as_rule() == operator_rule {
             next_operation = ops[pair.as_str()].clone();
@@ -511,19 +511,19 @@ fn parse_expr_cmp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         HashMap::from([
             (
                 "==",
-                OperatorInfo::new(EQ_TRAIT_NAME, EQ_TRAIT_EQ_NAME, false),
+                BinaryOpInfo::new(EQ_TRAIT_NAME, EQ_TRAIT_EQ_NAME, false),
             ),
             (
                 "<",
-                OperatorInfo::new(LESS_THAN_TRAIT_NAME, LESS_THAN_TRAIT_LT_NAME, false),
+                BinaryOpInfo::new(LESS_THAN_TRAIT_NAME, LESS_THAN_TRAIT_LT_NAME, false),
             ),
             (
                 ">",
-                OperatorInfo::new(LESS_THAN_TRAIT_NAME, LESS_THAN_TRAIT_LT_NAME, true),
+                BinaryOpInfo::new(LESS_THAN_TRAIT_NAME, LESS_THAN_TRAIT_LT_NAME, true),
             ),
             (
                 "<=",
-                OperatorInfo::new(
+                BinaryOpInfo::new(
                     LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
                     LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
                     false,
@@ -531,7 +531,7 @@ fn parse_expr_cmp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
             ),
             (
                 ">=",
-                OperatorInfo::new(
+                BinaryOpInfo::new(
                     LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
                     LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
                     true,
@@ -551,7 +551,7 @@ fn parse_expr_and(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         src,
         HashMap::from([(
             "&&",
-            OperatorInfo::new(AND_TRAIT_NAME, AND_TRAIT_AND_NAME, false),
+            BinaryOpInfo::new(AND_TRAIT_NAME, AND_TRAIT_AND_NAME, false),
         )]),
         Rule::operator_and,
         parse_expr_cmp,
@@ -566,7 +566,7 @@ fn parse_expr_or(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         src,
         HashMap::from([(
             "||",
-            OperatorInfo::new(OR_TRAIT_NAME, OR_TRAIT_OR_NAME, false),
+            BinaryOpInfo::new(OR_TRAIT_NAME, OR_TRAIT_OR_NAME, false),
         )]),
         Rule::operator_or,
         parse_expr_and,
@@ -582,11 +582,11 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         HashMap::from([
             (
                 "+",
-                OperatorInfo::new(ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME, false),
+                BinaryOpInfo::new(ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME, false),
             ),
             (
                 "-",
-                OperatorInfo::new(SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME, false),
+                BinaryOpInfo::new(SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME, false),
             ),
         ]),
         Rule::operator_plus,
@@ -603,46 +603,85 @@ fn parse_expr_mul(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         HashMap::from([
             (
                 "*",
-                OperatorInfo::new(MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME, false),
+                BinaryOpInfo::new(MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME, false),
             ),
             (
                 "/",
-                OperatorInfo::new(DIVIDE_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, false),
+                BinaryOpInfo::new(DIVIDE_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, false),
             ),
             (
                 "%",
-                OperatorInfo::new(REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME, false),
+                BinaryOpInfo::new(REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME, false),
             ),
         ]),
         Rule::operator_mul,
-        parse_expr_neg,
+        parse_expr_unary,
     )
 }
 
-// Unary opeartor -
-fn parse_expr_neg(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+#[derive(Default, Clone)]
+struct UnaryOpInfo {
+    trait_name: Name,
+    method_name: Name,
+    span: Option<Span>,
+}
+
+impl UnaryOpInfo {
+    fn new(trait_name: &str, method_name: &str, span: Span) -> UnaryOpInfo {
+        UnaryOpInfo {
+            trait_name: trait_name.to_string(),
+            method_name: method_name.to_string(),
+            span: Some(span),
+        }
+    }
+}
+
+// Unary opeartors
+fn parse_expr_unary(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     if pairs.peek().unwrap().as_rule() == Rule::expr_int_lit {
-        parse_expr_int_lit(pairs.next().unwrap(), src)
+        parse_expr_int_lit(pairs.next().unwrap(), src);
+        panic!("maybe this is dead code?")
     } else {
-        let mut negate = false;
-        if pairs.peek().unwrap().as_rule() == Rule::operator_minus {
-            negate = true;
-            pairs.next();
+        let mut ops: Vec<UnaryOpInfo> = vec![];
+        for pair in pairs {
+            match pair.as_rule() {
+                Rule::operator_unary => {
+                    let span = Span::from_pair(&src, &pair);
+                    if pair.as_str() == "-" {
+                        ops.push(UnaryOpInfo::new(
+                            NEGATE_TRAIT_NAME,
+                            NEGATE_TRAIT_NEGATE_NAME,
+                            span,
+                        ))
+                    } else if pair.as_str() == "!" {
+                        ops.push(UnaryOpInfo::new(NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, span))
+                    } else {
+                        panic!("unknown unary operator: `{}`", pair.as_str());
+                    }
+                }
+                _ => {
+                    let mut expr = parse_expr_ltr_app(pair, src);
+                    for op in ops.iter().rev() {
+                        expr = expr_app(
+                            expr_var(
+                                FullName::from_strs(&[STD_NAME, &op.trait_name], &op.method_name),
+                                op.span.clone(),
+                            ),
+                            expr.clone(),
+                            expr.source
+                                .as_ref()
+                                .map(|s0| op.span.as_ref().map(|s1| s0.unite(s1)))
+                                .flatten(),
+                        );
+                    }
+                    let expr = expr.set_source(Some(span));
+                    return expr;
+                }
+            }
         }
-        let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), src);
-        if negate {
-            expr = expr_app(
-                expr_var(
-                    FullName::from_strs(&[STD_NAME, NEGATE_TRAIT_NAME], NEGATE_TRAIT_NEGATE_NAME),
-                    Some(span.clone()),
-                ),
-                expr,
-                Some(span.clone()),
-            );
-        }
-        expr
+        unreachable!()
     }
 }
 
