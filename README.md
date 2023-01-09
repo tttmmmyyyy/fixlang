@@ -43,7 +43,7 @@ main = (
     arr.get 30 // 832040
 );
 ```
-Currently, what fix can do is only to calculate and print a single `Int` value! In a source file, you need to declare the module name for the source file as `Main` and define `main` symbol of type `Int`.
+Currently, what fix can do is only to calculate and print a single `Int` value! In a source file, you need to declare the module name for the source file as `Main` and define `main` object of type `Int`.
 
 `Array.new` in the first line of `main` is the constructor function for `Array`. It takes the length and the initial value and returns a new Array. The `Array` here is not a type, but a namespace: the name of the constructor function is `new`, and it is defined in the namespace `Std.Array`, where `Std` is a namspace for standard libraries / built-in functions. So the full-name of the constructor function is `Std.Array.new`, but you can omit some prefix of the full namespace when the compiler can infer it.
 
