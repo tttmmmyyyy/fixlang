@@ -12,7 +12,7 @@ pub enum ObjectFieldType {
     SubObject(Arc<TypeNode>),
     UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
     UnionTag,                     // TODO: I should merge UnionTag and UnionBuf as like Array.
-    ArraySizeBuf(Arc<TypeNode>),  // [size, POINTER to buffer].
+    ArraySize(Arc<TypeNode>),     // [size, POINTER to buffer].
 }
 
 impl ObjectFieldType {
@@ -28,20 +28,8 @@ impl ObjectFieldType {
             }
             ObjectFieldType::I64 => gc.context.i64_type().into(),
             ObjectFieldType::Bool => gc.context.i8_type().into(),
-            ObjectFieldType::ArraySizeBuf(ty) => gc
-                .context
-                .struct_type(
-                    &[
-                        gc.context.i64_type().into(), // size
-                        get_object_type(ty, &vec![], gc.type_env())
-                            .to_embedded_type(gc)
-                            .ptr_type(AddressSpace::from(0))
-                            .into(), // buffer
-                    ],
-                    false,
-                )
-                .into(),
-            ObjectFieldType::UnionTag => gc.context.i64_type().into(),
+            ObjectFieldType::ArraySize(_) => gc.context.i64_type().into(), // size; buffer will be added on alloca.
+            ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut size = 0;
                 for field_ty in field_tys {
@@ -61,53 +49,26 @@ impl ObjectFieldType {
         }
     }
 
-    // Get fields (size and buffer) from array.
-    pub fn decompose_array_size_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        array: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
-    ) -> (IntValue<'c>, PointerValue<'c>) {
-        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty)
-            .to_basic_type(gc)
-            .into_struct_type();
-        let size = gc.load_obj_field(array, array_struct, 0).into_int_value();
-        let buffer = gc
-            .load_obj_field(array, array_struct, 1)
-            .into_pointer_value();
-        (size, buffer)
-    }
-
-    // Get size of array.
-    pub fn size_from_array_size_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        array: PointerValue<'c>,
-    ) -> IntValue<'c> {
-        let array_struct = ObjectFieldType::ArraySizeBuf(int_lit_ty() /* any will do */)
-            .to_basic_type(gc)
-            .into_struct_type();
-        gc.load_obj_field(array, array_struct, 0).into_int_value()
-    }
-
     // Take array and generate code iterating its elements.
-    fn loop_over_array_size_buf<'c, 'm>(
+    fn loop_over_array_buf<'c, 'm, F, G>(
         gc: &mut GenerationContext<'c, 'm>,
-        size_buf: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
-        loop_body: impl Fn(
+        size: IntValue<'c>,
+        buffer: PointerValue<'c>,
+        loop_body: F,
+        after_loop: G,
+    ) where
+        for<'c2, 'm2> F: Fn(
             &mut GenerationContext<'c, 'm>,
             Object<'c>,       /* idx */
             IntValue<'c>,     /* size */
             PointerValue<'c>, /* buffer */
         ),
-        after_loop: impl Fn(
+        for<'c2, 'm2> G: Fn(
             &mut GenerationContext<'c, 'm>,
             IntValue<'c>,     /* size */
             PointerValue<'c>, /* buffer */
         ),
-    ) {
-        // Get fields (size, ptr_to_buffer).
-        let (size, buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
-
+    {
         // Append blocks: loop_check, loop_body and after_loop.
         let current_bb = gc.builder().get_insert_block().unwrap();
         let dtor_func = current_bb.get_parent().unwrap();
@@ -165,14 +126,13 @@ impl ObjectFieldType {
         after_loop(gc, size, buffer);
     }
 
-    // Take pointer to array_size_buf = [size, ptr_to_buffer], call release of ptr_to_bufer[i] for all i and free ptr_to_buffer.
-    pub fn destruct_array_size_buf<'c, 'm>(
+    // Release each element in array buffer.
+    pub fn release_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size_buf: PointerValue<'c>,
+        size: IntValue<'c>,
+        buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
     ) {
-        let elem_ty_clone = elem_ty.clone();
-
         // In loop body, release object of idx = counter_val.
         let loop_body = |gc: &mut GenerationContext<'c, 'm>,
                          idx: Object<'c>,
@@ -193,54 +153,25 @@ impl ObjectFieldType {
             gc.release(Object::new(obj, elem_ty.clone()));
         };
 
-        // After loop, free buffer.
+        // After loop, do nothing.
         fn after_loop<'c, 'm>(
-            gc: &mut GenerationContext<'c, 'm>,
+            _gc: &mut GenerationContext<'c, 'm>,
             _size: IntValue<'c>,
-            ptr_to_buffer: PointerValue<'c>,
+            _ptr_to_buffer: PointerValue<'c>,
         ) {
-            gc.builder().build_free(ptr_to_buffer);
         }
 
         // Generate loop.
-        Self::loop_over_array_size_buf(gc, size_buf, elem_ty_clone, loop_body, after_loop);
-    }
-
-    // Initialize an array
-    pub fn initialize_array_size_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        size_buf: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
-        size: IntValue<'c>,
-    ) {
-        assert_eq!(size.get_type(), gc.context.i64_type());
-
-        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty.clone())
-            .to_basic_type(gc)
-            .into_struct_type();
-
-        // Set size.
-        gc.store_obj_field(size_buf, array_struct, 0, size);
-
-        // Allocate buffer and set it to array.
-        let elem_type = get_object_type(&elem_ty, &vec![], gc.type_env()).to_embedded_type(gc);
-        let buffer_ptr = gc
-            .builder()
-            .build_array_malloc(elem_type, size, "buffer_ptr")
-            .unwrap();
-        gc.store_obj_field(size_buf, array_struct, 1, buffer_ptr);
+        Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
     }
 
     // Initialize an array by value.
-    pub fn initialize_array_size_buf_by_value<'c, 'm>(
+    pub fn initialize_array_buf_by_value<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size_buf: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
         size: IntValue<'c>,
+        buffer: PointerValue<'c>,
         value: Object<'c>,
     ) {
-        Self::initialize_array_size_buf(gc, size_buf, elem_ty.clone(), size);
-
         // Initialize elements
         {
             // In loop body, retain value and store it at idx.
@@ -271,21 +202,17 @@ impl ObjectFieldType {
 
             // Generate loop.
             // NOTE: if you see error at here, try `cargo clean`.
-            Self::loop_over_array_size_buf(gc, size_buf, elem_ty, loop_body, after_loop);
+            Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
         }
     }
 
     // Initialize an array by map.
-    pub fn initialize_array_size_buf_by_map<'c, 'm>(
+    pub fn initialize_array_buf_by_map<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size_buf: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
         size: IntValue<'c>,
+        buffer: PointerValue<'c>,
         map: Object<'c>,
     ) {
-        // Initialize array.
-        Self::initialize_array_size_buf(gc, size_buf, elem_ty.clone(), size);
-
         // Initialize elements
         {
             // In loop body, retain value and store it at idx.
@@ -320,18 +247,16 @@ impl ObjectFieldType {
 
             // Generate loop.
             // NOTE: if you see error at here, try `cargo clean`.
-            Self::loop_over_array_size_buf(gc, size_buf, elem_ty, loop_body, after_loop);
+            Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
         }
     }
 
     // Panic if idx is out_of_range for the array.
     pub fn panic_if_out_of_range<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size_buf: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
+        size: IntValue<'c>,
         idx: IntValue<'c>,
     ) {
-        let (size, _ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty);
         let curr_bb = gc.builder().get_insert_block().unwrap();
         let curr_func = curr_bb.get_parent().unwrap();
         let is_out_of_range =
@@ -349,23 +274,21 @@ impl ObjectFieldType {
 
     // Read an element of array.
     // Returned object is already retained.
-    pub fn read_array_size_buf<'c, 'm>(
+    pub fn read_from_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size_buf: PointerValue<'c>,
+        size: IntValue<'c>,
+        buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Panic if out_of_range.
-        Self::panic_if_out_of_range(gc, size_buf, elem_ty.clone(), idx);
-
-        // Get fields (size, ptr_to_buffer).
-        let (_size, ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty.clone());
+        Self::panic_if_out_of_range(gc, size, idx);
 
         // Get element.
         let ptr_to_elem = unsafe {
             gc.builder()
-                .build_gep(ptr_to_buffer, &[idx.into()], "ptr_to_elem_of_array")
+                .build_gep(buffer, &[idx.into()], "ptr_to_elem_of_array")
         };
 
         // Get value
@@ -385,24 +308,22 @@ impl ObjectFieldType {
     }
 
     // Write an element into array.
-    pub fn write_array_size_buf<'c, 'm>(
+    pub fn write_to_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size_buf: PointerValue<'c>,
+        size: IntValue<'c>,
+        buffer: PointerValue<'c>,
         idx: IntValue<'c>,
         value: Object<'c>,
     ) {
         let elem_ty = value.ty.clone();
 
         // Panic if out_of_range.
-        Self::panic_if_out_of_range(gc, size_buf, elem_ty.clone(), idx);
-
-        // Get fields (size, ptr_to_buffer).
-        let (_size, ptr_to_buffer) = Self::decompose_array_size_buf(gc, size_buf, elem_ty.clone());
+        Self::panic_if_out_of_range(gc, size, idx);
 
         // Get ptr to the place at idx.
         let place = unsafe {
             gc.builder()
-                .build_gep(ptr_to_buffer, &[idx.into()], "ptr_to_elem_of_array")
+                .build_gep(buffer, &[idx.into()], "ptr_to_elem_of_array")
         };
 
         // Release element that is already at the place.
@@ -419,31 +340,13 @@ impl ObjectFieldType {
     }
 
     // Clone an array
-    pub fn clone_array_size_buf<'c, 'm>(
+    pub fn clone_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        src: PointerValue<'c>,
-        dst: PointerValue<'c>,
+        size: IntValue<'c>,
+        src_buffer: PointerValue<'c>,
+        dst_buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
     ) {
-        let array_struct = ObjectFieldType::ArraySizeBuf(elem_ty.clone())
-            .to_basic_type(gc)
-            .into_struct_type();
-
-        // Get fields (size, ptr_to_buffer) of src.
-        let (src_size, src_buffer) = Self::decompose_array_size_buf(gc, src, elem_ty.clone());
-
-        // Copy size.
-        gc.store_obj_field(dst, array_struct, 0, src_size);
-
-        // Allocate buffer and set it to dst.
-        let elem_str_type = elem_ty.get_embedded_type(gc, &vec![]);
-        let dst_buffer = gc
-            .builder()
-            .build_array_malloc(elem_str_type, src_size, "dst_buffer")
-            .unwrap();
-        gc.store_obj_field(dst, array_struct, 1, dst_buffer);
-
-        let elem_ty_clone = elem_ty.clone();
         // Clone each elements.
         {
             // In loop body, retain value and store it at idx.
@@ -476,7 +379,7 @@ impl ObjectFieldType {
                               _size: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {};
 
-            Self::loop_over_array_size_buf(gc, src, elem_ty_clone, loop_body, after_loop);
+            Self::loop_over_array_buf(gc, size, src_buffer, loop_body, after_loop);
         }
     }
 
@@ -504,7 +407,10 @@ impl ObjectFieldType {
             let unmatch_bb = gc
                 .context
                 .append_basic_block(curr_func, &format!("unmatch_tag{}", i));
-            let expect_tag_val = gc.context.i64_type().const_int(i as u64, false);
+            let expect_tag_val = ObjectFieldType::UnionTag
+                .to_basic_type(gc)
+                .into_int_type()
+                .const_int(i as u64, false);
             let is_match = gc.builder().build_int_compare(
                 IntPredicate::EQ,
                 tag,
@@ -646,10 +552,78 @@ pub struct ObjectType {
 impl ObjectType {
     pub fn to_struct_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
-        for field_type in &self.field_types {
+        for (i, field_type) in self.field_types.iter().enumerate() {
             fields.push(field_type.to_basic_type(gc));
+            match field_type {
+                ObjectFieldType::ArraySize(ty) => {
+                    assert_eq!(i, self.field_types.len() - 1); // ArraySizeBuf must be the last field.
+                    assert!(!self.is_unbox); // Array has to be boxed.
+
+                    // Add space for one element.
+                    // This is for:
+                    // - to get the pointer to the first element by gep of this struct type.
+                    // - used in implementation of size_of method.
+                    fields.push(
+                        ty.get_object_type(&vec![], gc.type_env())
+                            .to_embedded_type(gc)
+                            .into(),
+                    );
+                }
+                _ => {}
+            }
         }
         gc.context.struct_type(&fields, false)
+    }
+
+    pub fn size_of<'c, 'm>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        array_size: Option<IntValue<'c>>,
+    ) -> IntValue<'c> {
+        if array_size.is_some() {
+            // Get pointer to the first element (which is properly aligned) and add it to sizeof(elem_ty) * size.
+
+            // Calculate sizeof(elem_ty) * size.
+            let elem_ty = match self.field_types.last().unwrap() {
+                ObjectFieldType::ArraySize(ty) => ty.clone(),
+                _ => panic!(),
+            };
+            let elem_sizeof = elem_ty
+                .get_object_type(&vec![], gc.type_env())
+                .to_struct_type(gc)
+                .size_of()
+                .unwrap();
+            let struct_ty = self.to_struct_type(gc);
+            let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
+            let size = array_size.unwrap();
+            let size = gc
+                .builder()
+                .build_int_cast(size, ptr_int_ty, "size_as_ptr_int_ty");
+            let elems_size = gc.builder().build_int_mul(elem_sizeof, size, "elems_size");
+
+            // Get pointer to the first element
+            let null = gc.cast_pointer(
+                gc.context
+                    .i8_type()
+                    .ptr_type(AddressSpace::from(0))
+                    .const_null(),
+                struct_ty.ptr_type(AddressSpace::from(0)),
+            );
+            let ptr_to_first_elem = gc
+                .builder()
+                .build_struct_gep(null, ARRAY_BUF_IDX, "gep_first_elem_size_of")
+                .unwrap();
+            let ptr_to_first_elem =
+                gc.builder()
+                    .build_ptr_to_int(ptr_to_first_elem, ptr_int_ty, "size_with_one_elem");
+
+            let size_with_elems =
+                gc.builder()
+                    .build_int_add(ptr_to_first_elem, elems_size, "size_with_elems");
+            return size_with_elems;
+        } else {
+            self.to_struct_type(gc).size_of().unwrap()
+        }
     }
 
     // Get type used when this object is embedded.
@@ -665,43 +639,6 @@ impl ObjectType {
             ptr_to_object_type(gc.context).into()
         }
     }
-
-    // fn shared_obj_type(mut field_types: Vec<ObjectFieldType>) -> Self {
-    //     let mut fields = vec![ObjectFieldType::ControlBlock];
-    //     fields.append(&mut field_types);
-    //     Self {
-    //         field_types: fields,
-    //     }
-    // }
-
-    // pub fn lam_obj_type() -> Self {
-    //     Self::shared_obj_type(vec![ObjectFieldType::LambdaFunction]) // Other fields for captured objects may exist but omitted here.
-    // }
-
-    // pub fn int_obj_type() -> Self {
-    //     Self::shared_obj_type(vec![ObjectFieldType::I64])
-    // }
-
-    // pub fn bool_obj_type() -> Self {
-    //     Self::shared_obj_type(vec![ObjectFieldType::Bool])
-    // }
-
-    // pub fn array_type() -> Self {
-    //     let fields = vec![ObjectFieldType::Array];
-    //     Self::shared_obj_type(fields)
-    // }
-
-    // pub fn struct_type(field_count: usize) -> Self {
-    //     let fields: Vec<ObjectFieldType> = iter::repeat(ObjectFieldType::Boxed)
-    //         .take(field_count)
-    //         .collect();
-    //     Self::shared_obj_type(fields)
-    // }
-
-    // pub fn union_type() -> Self {
-    //     let fields = vec![ObjectFieldType::Int /* tag */, ObjectFieldType::Boxed];
-    //     Self::shared_obj_type(fields)
-    // }
 }
 
 pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
@@ -767,29 +704,11 @@ pub fn lambda_function_type<'c, 'm>(
     }
 }
 
-// fn ptr_to_lambda_function_type<'ctx>(
-//     ty: &Arc<TypeNode>,
-//     context: &'ctx Context,
-// ) -> PointerType<'ctx> {
-//     lambda_function_type(ty, context).ptr_type(AddressSpace::from(0))
-// }
-
-// pub fn lambda_type<'c>(context: &'c Context) -> StructType<'c> {
-//     ObjectType::lam_obj_type().to_struct_type(context)
-// }
-
-// pub fn int_type<'c>(context: &'c Context) -> StructType<'c> {
-//     ObjectType::int_obj_type().to_struct_type(context)
-// }
-
-// pub fn bool_type<'c>(context: &'c Context) -> StructType<'c> {
-//     ObjectType::bool_obj_type().to_struct_type(context)
-// }
-
 pub const DTOR_IDX: u32 = 1/* ControlBlock */;
 pub const LAMBDA_FUNCTION_IDX: u32 = DTOR_IDX + 1;
 pub const CAPTURED_OBJECT_IDX: u32 = LAMBDA_FUNCTION_IDX + 1;
-pub const ARRAY_IDX: u32 = 1;
+pub const ARRAY_SIZE_IDX: u32 = 1;
+pub const ARRAY_BUF_IDX: u32 = ARRAY_SIZE_IDX + 1;
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
@@ -840,8 +759,8 @@ pub fn get_object_type(
                 assert!(!is_unbox);
                 ret.is_unbox = is_unbox;
                 ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), ARRAY_IDX as usize);
-                ret.field_types.push(ObjectFieldType::ArraySizeBuf(
+                assert_eq!(ret.field_types.len(), ARRAY_SIZE_IDX as usize);
+                ret.field_types.push(ObjectFieldType::ArraySize(
                     ty.fields_types(type_env)[0].clone(),
                 ))
             }
@@ -874,7 +793,8 @@ pub fn get_object_type(
 // Allocate an object.
 pub fn allocate_obj<'c, 'm>(
     ty: Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>, // used in lambda
+    capture: &Vec<Arc<TypeNode>>,     // used in lambda
+    array_size: Option<IntValue<'c>>, // used in array
     gc: &mut GenerationContext<'c, 'm>,
     name: Option<&str>,
 ) -> Object<'c> {
@@ -884,12 +804,23 @@ pub fn allocate_obj<'c, 'm>(
     let struct_type = object_type.to_struct_type(gc);
 
     // Allocate object
+    let sizeof = object_type.size_of(gc, array_size);
     let ptr_to_obj = if object_type.is_unbox {
-        gc.builder()
-            .build_alloca(struct_type, &format!("alloca_{}", ty.to_string_normalize()))
+        gc.builder().build_array_alloca(
+            gc.context.i8_type(),
+            sizeof,
+            &format!("alloca_{}", ty.to_string_normalize()),
+        )
     } else {
-        gc.malloc(struct_type)
+        gc.builder()
+            .build_array_malloc(
+                gc.context.i8_type(),
+                sizeof,
+                &format!("malloc_{}", ty.to_string_normalize()),
+            )
+            .unwrap()
     };
+    let ptr_to_obj = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
 
     // If sanitize memory, create object id.
     let mut object_id = obj_id_type(gc.context).const_int(0, false);
@@ -944,7 +875,16 @@ pub fn allocate_obj<'c, 'm>(
                 assert_eq!(i, LAMBDA_FUNCTION_IDX as usize);
             }
             ObjectFieldType::Bool => {}
-            ObjectFieldType::ArraySizeBuf(_) => {}
+            ObjectFieldType::ArraySize(_) => {
+                assert_eq!(i, ARRAY_SIZE_IDX as usize);
+                // Set array size.
+                let ptr_to_size_field = gc
+                    .builder()
+                    .build_struct_gep(ptr_to_obj, ARRAY_SIZE_IDX, "ptr_to_size_field")
+                    .unwrap();
+                gc.builder()
+                    .build_store(ptr_to_size_field, array_size.unwrap());
+            }
             ObjectFieldType::DtorFunction => {
                 assert_eq!(i, DTOR_IDX as usize);
                 let ptr_to_dtor_field = gc
@@ -1035,9 +975,13 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Bool => {}
-                    ObjectFieldType::ArraySizeBuf(ty) => {
-                        let size_buf = ptr_to_field(i as u32, gc);
-                        ObjectFieldType::destruct_array_size_buf(gc, size_buf, ty.clone());
+                    ObjectFieldType::ArraySize(ty) => {
+                        assert_eq!(i, ARRAY_SIZE_IDX as usize);
+                        let size = gc
+                            .load_obj_field(ptr_to_obj, struct_type, ARRAY_SIZE_IDX)
+                            .into_int_value();
+                        let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
+                        ObjectFieldType::release_array_buf(gc, size, buffer, ty.clone());
                     }
                     ObjectFieldType::UnionTag => {
                         union_tag = Some(

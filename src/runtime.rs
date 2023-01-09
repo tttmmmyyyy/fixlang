@@ -197,7 +197,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
 
     // free.
     gc.builder().position_at_end(free_bb);
-    gc.free(ptr_to_obj);
+    gc.builder().build_free(ptr_to_obj);
     gc.builder().build_unconditional_branch(cont_bb);
 
     // End function.

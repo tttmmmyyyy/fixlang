@@ -75,7 +75,13 @@ pub fn loop_result_ty() -> Arc<TypeNode> {
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
-            allocate_obj(ty.clone(), &vec![], gc, Some(&format!("int_lit_{}", val)))
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("int_lit_{}", val)),
+            )
         } else {
             rvo.unwrap()
         };
@@ -89,7 +95,13 @@ pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
 pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
-            allocate_obj(ty.clone(), &vec![], gc, Some(&format!("bool_lit_{}", val)))
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("bool_lit_{}", val)),
+            )
         } else {
             rvo.unwrap()
         };
@@ -135,28 +147,27 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Implementation of newArray built-in function.
+// Implementation of Array.new built-in function.
 fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let size_str = FullName::local(size);
     let value_str = FullName::local(value);
-    let name = format!("newArray {} {}", size, value);
+    let name = format!("Array.new {} {}", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
-        // Array = [ControlBlock, ArrayField] where ArrayField = [Size, PtrToBuffer].
         let size = gc.get_var_field(&size_str, 0).into_int_value();
         gc.release(gc.get_var(&size_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
-        let array = allocate_obj(ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
-        let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
-        ObjectFieldType::initialize_array_size_buf_by_value(
+        let array = allocate_obj(
+            ty.clone(),
+            &vec![],
+            Some(size),
             gc,
-            array_field,
-            ty.fields_types(gc.type_env())[0].clone(),
-            size,
-            value,
+            Some(name_cloned.as_str()),
         );
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        ObjectFieldType::initialize_array_buf_by_value(gc, size, buf, value);
         array
     });
     expr_lit(
@@ -210,15 +221,15 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         gc.release(gc.get_var(&size_name_cloned).ptr.get(gc));
         let map = gc.get_var(&map_name_cloned).ptr.get(gc);
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
-        let array = allocate_obj(ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
-        let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
-        ObjectFieldType::initialize_array_size_buf_by_map(
+        let array = allocate_obj(
+            ty.clone(),
+            &vec![],
+            Some(size),
             gc,
-            array_field,
-            ty.fields_types(gc.type_env())[0].clone(),
-            size,
-            map,
+            Some(name_cloned.as_str()),
         );
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        ObjectFieldType::initialize_array_buf_by_map(gc, size, buf, map);
         array
     });
     let expr = expr_abs(
@@ -254,10 +265,11 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array = gc.get_var(&array_str).ptr.get(gc);
-        let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
+        let size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let elem = ObjectFieldType::read_array_size_buf(gc, array_field, ty.clone(), idx, rvo);
+        let elem = ObjectFieldType::read_from_array_buf(gc, size, buf, ty.clone(), idx, rvo);
         gc.release(array);
         elem
     });
@@ -324,8 +336,9 @@ fn write_array_lit(
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
 
-        // Get array field.
-        let array_field = array.ptr_to_field_nocap(gc, ARRAY_IDX);
+        // Get array size and buffer.
+        let array_size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
+        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
 
         // Get refcnt.
         let refcnt = {
@@ -354,10 +367,16 @@ fn write_array_lit(
             // In case of unique version, panic in this case.
             gc.panic(format!("The argument of {} is shared!\n", func_name.as_str()).as_str());
         }
-        let cloned_array = allocate_obj(ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
-        let cloned_array_field = cloned_array.ptr_to_field_nocap(gc, ARRAY_IDX);
+        let cloned_array = allocate_obj(
+            ty.clone(),
+            &vec![],
+            Some(array_size),
+            gc,
+            Some(name_cloned.as_str()),
+        );
+        let cloned_array_buf = cloned_array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
 
-        ObjectFieldType::clone_array_size_buf(gc, array_field, cloned_array_field, elem_ty);
+        ObjectFieldType::clone_array_buf(gc, array_size, array_buf, cloned_array_buf, elem_ty);
         gc.release(array.clone()); // Given array should be released here.
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
         let cloned_array_ptr = cloned_array.ptr(gc);
@@ -375,18 +394,18 @@ fn write_array_lit(
             (&cloned_array_ptr, succ_of_shared_bb),
         ]);
         let array = Object::new(array_phi.as_basic_value().into_pointer_value(), ty.clone());
-        let array_field_phi = gc
+        let array_buf_phi = gc
             .builder()
-            .build_phi(array_field.get_type(), "array_field_phi");
-        assert_eq!(array_field.get_type(), cloned_array_field.get_type());
-        array_field_phi.add_incoming(&[
-            (&array_field, current_bb),
-            (&cloned_array_field, succ_of_shared_bb),
+            .build_phi(array_buf.get_type(), "array_field_phi");
+        assert_eq!(array_buf.get_type(), cloned_array_buf.get_type());
+        array_buf_phi.add_incoming(&[
+            (&array_buf, current_bb),
+            (&cloned_array_buf, succ_of_shared_bb),
         ]);
-        let array_field = array_field_phi.as_basic_value().into_pointer_value();
+        let array_buf = array_buf_phi.as_basic_value().into_pointer_value();
 
         // Perform write and return.
-        ObjectFieldType::write_array_size_buf(gc, array_field, idx, value);
+        ObjectFieldType::write_to_array_buf(gc, array_size, array_buf, idx, value);
         array
     });
     expr_lit(
@@ -443,11 +462,12 @@ pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         let arr_name = FullName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
-        let size_buf_ptr = array_obj.ptr_to_field_nocap(gc, ARRAY_IDX);
-        let size = ObjectFieldType::size_from_array_size_buf(gc, size_buf_ptr);
+        let size = array_obj
+            .load_field_nocap(gc, ARRAY_SIZE_IDX)
+            .into_int_value();
         gc.release(array_obj);
         let int_obj = if rvo.is_none() {
-            allocate_obj(int_lit_ty(), &vec![], gc, Some("length_of_arr"))
+            allocate_obj(int_lit_ty(), &vec![], None, gc, Some("length_of_arr"))
         } else {
             rvo.unwrap()
         };
@@ -496,7 +516,7 @@ pub fn struct_new_lit(
 
         // Create struct object.
         let obj = if rvo.is_none() {
-            allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned))
+            allocate_obj(ty.clone(), &vec![], None, gc, Some(&name_cloned))
         } else {
             rvo.unwrap()
         };
@@ -658,7 +678,13 @@ pub fn struct_mod_lit(
                 // In case of unique version, panic in this case.
                 gc.panic(&format!("The argument of mod! is shared!\n"));
             }
-            let cloned_str = allocate_obj(str.ty.clone(), &vec![], gc, Some(name_cloned.as_str()));
+            let cloned_str = allocate_obj(
+                str.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(name_cloned.as_str()),
+            );
             for i in 0..field_count {
                 // Retain field.
                 let field = ObjectFieldType::get_struct_field(gc, &str, i as u32);
@@ -806,13 +832,16 @@ pub fn union_new_lit(
 
         // Create union object.
         let obj = if rvo.is_none() {
-            allocate_obj(ty.clone(), &vec![], gc, Some(&name_cloned))
+            allocate_obj(ty.clone(), &vec![], None, gc, Some(&name_cloned))
         } else {
             rvo.unwrap()
         };
 
         // Set tag value.
-        let tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+        let tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(field_idx as u64, false);
         obj.store_field_nocap(gc, 0 + offset, tag_value);
 
         // Set value.
@@ -884,7 +913,10 @@ pub fn union_as_lit(
         let elem_ty = ty.clone();
 
         // Create specified tag value.
-        let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+        let specified_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(field_idx as u64, false);
 
         // Get tag value.
         let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
@@ -969,14 +1001,17 @@ pub fn union_is_lit(
         let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
 
         // Create specified tag value.
-        let specified_tag_value = gc.context.i64_type().const_int(field_idx as u64, false);
+        let specified_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(field_idx as u64, false);
 
         // Get tag value.
         let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
 
         // Create returned value.
         let ret = if rvo.is_none() {
-            allocate_obj(bool_lit_ty(), &vec![], gc, Some(&name_cloned))
+            allocate_obj(bool_lit_ty(), &vec![], None, gc, Some(&name_cloned))
         } else {
             rvo.unwrap()
         };
@@ -1115,9 +1150,9 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         // Branch due to loop_res.
         assert!(loop_res.ty.is_unbox(gc.type_env()));
         let tag_value = loop_res.load_field_nocap(gc, 0).into_int_value();
-        let cont_tag_value = gc
-            .context
-            .i64_type()
+        let cont_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
             .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
         let is_continue = gc.builder().build_int_compare(
             IntPredicate::EQ,
@@ -1374,6 +1409,7 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
             allocate_obj(
                 bool_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
             )
@@ -1435,6 +1471,7 @@ pub fn less_than_trait_instance_int() -> TraitInstance {
             allocate_obj(
                 bool_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
             )
@@ -1496,6 +1533,7 @@ pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
             allocate_obj(
                 bool_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
             )
@@ -1545,6 +1583,7 @@ pub fn add_trait_instance_int() -> TraitInstance {
             allocate_obj(
                 int_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
             )
@@ -1598,6 +1637,7 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
             allocate_obj(
                 int_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
             )
@@ -1651,6 +1691,7 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
             allocate_obj(
                 int_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
             )
@@ -1704,6 +1745,7 @@ pub fn divide_trait_instance_int() -> TraitInstance {
             allocate_obj(
                 int_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
             )
@@ -1757,6 +1799,7 @@ pub fn remainder_trait_instance_int() -> TraitInstance {
             allocate_obj(
                 int_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", REMAINDER_TRAIT_REMAINDER_NAME)),
             )
@@ -1805,6 +1848,7 @@ pub fn and_trait_instance_bool() -> TraitInstance {
             allocate_obj(
                 bool_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", AND_TRAIT_AND_NAME)),
             )
@@ -1853,6 +1897,7 @@ pub fn or_trait_instance_bool() -> TraitInstance {
             allocate_obj(
                 bool_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} lhs rhs", OR_TRAIT_OR_NAME)),
             )
@@ -1899,6 +1944,7 @@ pub fn negate_trait_instance_int() -> TraitInstance {
             allocate_obj(
                 int_lit_ty(),
                 &vec![],
+                None,
                 gc,
                 Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
             )

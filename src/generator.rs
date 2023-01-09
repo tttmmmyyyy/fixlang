@@ -311,45 +311,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     pub fn sizeof(&mut self, ty: &dyn AnyType<'c>) -> u64 {
+        // TODO: this is not good: instead use getTypeAllocSize, but no way to call it from inkwell, currently.
         self.target_data().get_store_size(ty)
-    }
-
-    // Build malloc.
-    pub fn malloc(&mut self, ty: StructType<'c>) -> PointerValue<'c> {
-        if USE_LEAKY_ALLOCATOR {
-            let ptr_to_heap = self
-                .module
-                .get_global(LEAKY_HEAP_NAME)
-                .unwrap()
-                .as_basic_value_enum()
-                .into_pointer_value();
-            let heap = self
-                .builder()
-                .build_load(ptr_to_heap, "heap")
-                .into_pointer_value();
-            let heap_ty = heap.get_type();
-            {
-                let ptr_int = self.context.ptr_sized_int_type(self.target_data(), None);
-                let heap = self.builder().build_ptr_to_int(heap, ptr_int, "heap_int");
-                let offset = ty.size_of().unwrap();
-                let new_heap = self.builder().build_int_add(heap, offset, "hew_heap_int");
-                let new_heap = self
-                    .builder()
-                    .build_int_to_ptr(new_heap, heap_ty, "new_heap");
-                self.builder().build_store(ptr_to_heap, new_heap);
-            }
-            self.cast_pointer(heap, ptr_type(ty))
-        } else {
-            self.builder().build_malloc(ty, "malloc").unwrap()
-        }
-    }
-
-    // Build free.
-    pub fn free(&self, ptr: PointerValue<'c>) {
-        if USE_LEAKY_ALLOCATOR {
-        } else {
-            self.builder().build_free(ptr);
-        }
     }
 
     // Create new gc.
@@ -596,6 +559,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 allocate_obj(
                     ret_ty.clone(),
                     &vec![],
+                    None,
                     self,
                     Some(&format!("alloca_rvo_{}", ret_ty.to_string())),
                 )
@@ -671,7 +635,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                                 .into_int_value(),
                         );
                     }
-                    ObjectFieldType::ArraySizeBuf(_) => unreachable!(),
+                    ObjectFieldType::ArraySize(_) => unreachable!(),
                 }
             }
         }
@@ -891,7 +855,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         // Allocate and set up closure
         let name = expr_abs(arg, val, None).expr.to_string();
-        let obj = allocate_obj(lam_ty, &captured_types, self, Some(name.as_str()));
+        let obj = allocate_obj(lam_ty, &captured_types, None, self, Some(name.as_str()));
         let obj_ptr = obj.ptr(self);
         self.store_obj_field(
             obj_ptr,
@@ -1014,7 +978,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             assert!(tuple_ty.is_unbox(self.type_env()));
             rvo.unwrap()
         } else {
-            allocate_obj(tuple_ty.clone(), &vec![], self, Some("allocate_MakePair"))
+            allocate_obj(
+                tuple_ty.clone(),
+                &vec![],
+                None,
+                self,
+                Some("allocate_MakePair"),
+            )
         };
         let field_types = tuple_ty.fields_types(self.type_env());
 
