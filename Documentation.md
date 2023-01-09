@@ -127,6 +127,45 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ## Functions
 
+### Std.fix : ((a -> b) -> a -> b) -> a -> b
+
+`fix` enables you to make a recursive function locally. The idiom is: `fix \loop -> \var -> (expression calls loop)`.
+
+```
+module Main;
+
+main : Int;
+main = (
+    let fact = fix \loop -> \n -> if n == 0 then 1 else n * loop (n-1);
+    fact 5 // evaluates to 5 * 4 * 3 * 2 * 1 = 120
+);
+```
+
+### Std.loop : s -> (s -> Std.LoopResult s r) -> r
+
+`loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
+
+```
+type LoopResult s r = union (s: continue, r: break);
+```
+
+`loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`. It first calls `body` on `s0`. If `body` returns `break r`, then the loop ends and returns `r` as the result. If `body` returns `continue s`, then the loop calls again `body` on `s`.
+
+```
+module Main;
+    
+main : Int;
+main = (
+    loop (0, 0) \state -> 
+        let i = state.get_0;
+        let sum = state.get_1;
+        if i == 100 then 
+            break sum 
+        else
+            continue (i+1, sum+i)
+); // evaluates to 0 + 1 + ... + 99 
+```
+
 ## Operators
 
 The following is the table of operators sorted by it's precedence (operator of higher precedence appears earlier).

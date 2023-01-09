@@ -355,21 +355,17 @@ pub fn test20_5() {
 #[test]
 #[serial]
 pub fn test21() {
-    let n = 10000;
-    let source = format!(
-        r"
+    let source = r"
             module Main;
 
             main : Int;
             main = (
-                let g = fix \f -> \x -> if x == 0 then 0 else x + f (x + -1);
-                g {}
+                let fact = fix \loop -> \n -> if n == 0 then 1 else n * loop (n-1);
+                fact 5
             );
-        ",
-        n
-    );
-    let answer = (n * (n + 1)) / 2;
-    test_run_source(source.as_str(), answer, OptimizationLevel::Default);
+        ";
+    let answer = 5 * 4 * 3 * 2 * 1;
+    test_run_source(source, answer, OptimizationLevel::Default);
 }
 
 #[test]

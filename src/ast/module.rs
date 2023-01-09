@@ -504,39 +504,6 @@ impl FixModule {
     // Determine the name of instantiated generic symbol so that it has a specified type.
     // tc: a typechecker (substituion) under which ty should be interpret.
     fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
-        /*
-
-        assert!(ty.free_vars().is_empty());
-        let mut tc = tc.clone();
-        let gs = self.global_symbols.get(name).unwrap();
-
-        // Calculate free variables that is instantiated. They are variables that appear in context predicates.
-        let (preds, generic_ty) = tc.instantiate_scheme(&gs.ty, false);
-        let mut inst_fvs: HashMap<Name, Arc<Kind>> = Default::default();
-        for pred in preds {
-            for (k, v) in pred.ty.free_vars() {
-                inst_fvs.insert(k, v);
-            }
-        }
-
-        // Calculate instantiation of free variables.
-        let mut sub = Substitution::default();
-        tc.unify(&generic_ty, &ty);
-        for (name, kind) in inst_fvs {
-            let tyvar = type_tyvar(&name, &kind);
-            let inst_ty = tc.substitute_type(&tyvar);
-            sub.add_substitution(&Substitution::single(&name, inst_ty))
-        }
-
-        // Return the name.
-        let inst_ty = sub.substitute_type(&generic_ty);
-        let hash = inst_ty.hash();
-        let mut name = name.clone();
-        name.name += "@";
-        name.name += &hash;
-        name
-        */
-
         assert!(ty.free_vars().is_empty());
         let hash = ty.hash();
         let mut name = name.clone();
@@ -685,11 +652,7 @@ impl FixModule {
         self.trait_env
             .add_instance(less_than_or_equal_to_trait_instance_int());
         add_global(self, FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
-        add_global(
-            self,
-            FullName::from_strs(&[STD_NAME, LOOP_RESULT_NAME], "loop"),
-            state_loop(),
-        );
+        add_global(self, FullName::from_strs(&[STD_NAME], "loop"), state_loop());
         add_global(
             self,
             FullName::from_strs(&[STD_NAME, ARRAY_NAME], "new"),
