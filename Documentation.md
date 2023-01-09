@@ -143,10 +143,11 @@ The following is the table of operators sorted by it's precedence (operator of h
 | +              | left          | Std.Add / add                      | addition of numbers                                         | 
 | - (minus sign) | left          | Std.Sub / sub                      | subtraction of numbers                                      | 
 | ==             | left          | Std.Eq / eq                        | equality comparison                                         | 
+| !=             | left          | -                                  | `x != y` is interpreted as `!(x == y)`                      | 
 | <=             | left          | Std.LessThanOrEq / less_than_or_eq | less-than-or-equal-to comparison                            | 
-| >=             | left          | Std.LessThanOrEq / less_than_or_eq | `x >= y` is interpreted as `y <= x`                         | 
+| >=             | left          | -                                  | `x >= y` is interpreted as `y <= x`                         | 
 | <              | left          | Std.LessThan / less_than           | less-than comparison                                        | 
-| >              | left          | Std.LessThan / less_than           | `x > y` is interpreted as `y < x`                           | 
+| >              | left          | -                                  | `x > y` is interpreted as `y < x`                           | 
 | &&             | left          | Std.And / and                      | logical AND                                                 | 
 | &#124;&#124;   | left          | Std.Or / or                        | logical OR                                                  | 
 | $              | right         | -                                  | right associative function application: f $ g $ x = f (g x) | 
