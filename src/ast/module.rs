@@ -652,11 +652,7 @@ impl FixModule {
         self.trait_env
             .add_instance(less_than_or_equal_to_trait_instance_int());
         add_global(self, FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
-        add_global(
-            self,
-            FullName::from_strs(&[STD_NAME, LOOP_RESULT_NAME], "loop"),
-            state_loop(),
-        );
+        add_global(self, FullName::from_strs(&[STD_NAME], "loop"), state_loop());
         add_global(
             self,
             FullName::from_strs(&[STD_NAME, ARRAY_NAME], "new"),
