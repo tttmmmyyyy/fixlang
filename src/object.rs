@@ -12,7 +12,7 @@ pub enum ObjectFieldType {
     SubObject(Arc<TypeNode>),
     UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
     UnionTag,                     // TODO: I should merge UnionTag and UnionBuf as like Array.
-    ArraySizeBuf(Arc<TypeNode>),  // [size, POINTER to buffer].
+    ArraySize(Arc<TypeNode>),     // [size, POINTER to buffer].
 }
 
 impl ObjectFieldType {
@@ -28,7 +28,7 @@ impl ObjectFieldType {
             }
             ObjectFieldType::I64 => gc.context.i64_type().into(),
             ObjectFieldType::Bool => gc.context.i8_type().into(),
-            ObjectFieldType::ArraySizeBuf(_) => gc.context.i64_type().into(), // size; buffer will be added on alloca.
+            ObjectFieldType::ArraySize(_) => gc.context.i64_type().into(), // size; buffer will be added on alloca.
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut size = 0;
@@ -555,7 +555,7 @@ impl ObjectType {
         for (i, field_type) in self.field_types.iter().enumerate() {
             fields.push(field_type.to_basic_type(gc));
             match field_type {
-                ObjectFieldType::ArraySizeBuf(ty) => {
+                ObjectFieldType::ArraySize(ty) => {
                     assert_eq!(i, self.field_types.len() - 1); // ArraySizeBuf must be the last field.
                     assert!(!self.is_unbox); // Array has to be boxed.
 
@@ -585,7 +585,7 @@ impl ObjectType {
 
             // Calculate sizeof(elem_ty) * size.
             let elem_ty = match self.field_types.last().unwrap() {
-                ObjectFieldType::ArraySizeBuf(ty) => ty.clone(),
+                ObjectFieldType::ArraySize(ty) => ty.clone(),
                 _ => panic!(),
             };
             let elem_sizeof = elem_ty
@@ -707,8 +707,8 @@ pub fn lambda_function_type<'c, 'm>(
 pub const DTOR_IDX: u32 = 1/* ControlBlock */;
 pub const LAMBDA_FUNCTION_IDX: u32 = DTOR_IDX + 1;
 pub const CAPTURED_OBJECT_IDX: u32 = LAMBDA_FUNCTION_IDX + 1;
-pub const ARRAY_IDX: u32 = 1;
-pub const ARRAY_BUF_IDX: u32 = ARRAY_IDX + 1;
+pub const ARRAY_SIZE_IDX: u32 = 1;
+pub const ARRAY_BUF_IDX: u32 = ARRAY_SIZE_IDX + 1;
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
@@ -759,8 +759,8 @@ pub fn get_object_type(
                 assert!(!is_unbox);
                 ret.is_unbox = is_unbox;
                 ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), ARRAY_IDX as usize);
-                ret.field_types.push(ObjectFieldType::ArraySizeBuf(
+                assert_eq!(ret.field_types.len(), ARRAY_SIZE_IDX as usize);
+                ret.field_types.push(ObjectFieldType::ArraySize(
                     ty.fields_types(type_env)[0].clone(),
                 ))
             }
@@ -875,12 +875,12 @@ pub fn allocate_obj<'c, 'm>(
                 assert_eq!(i, LAMBDA_FUNCTION_IDX as usize);
             }
             ObjectFieldType::Bool => {}
-            ObjectFieldType::ArraySizeBuf(_) => {
-                assert_eq!(i, ARRAY_IDX as usize);
+            ObjectFieldType::ArraySize(_) => {
+                assert_eq!(i, ARRAY_SIZE_IDX as usize);
                 // Set array size.
                 let ptr_to_size_field = gc
                     .builder()
-                    .build_struct_gep(ptr_to_obj, ARRAY_IDX, "ptr_to_size_field")
+                    .build_struct_gep(ptr_to_obj, ARRAY_SIZE_IDX, "ptr_to_size_field")
                     .unwrap();
                 gc.builder()
                     .build_store(ptr_to_size_field, array_size.unwrap());
@@ -975,10 +975,10 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Bool => {}
-                    ObjectFieldType::ArraySizeBuf(ty) => {
-                        assert_eq!(i, ARRAY_IDX as usize);
+                    ObjectFieldType::ArraySize(ty) => {
+                        assert_eq!(i, ARRAY_SIZE_IDX as usize);
                         let size = gc
-                            .load_obj_field(ptr_to_obj, struct_type, ARRAY_IDX)
+                            .load_obj_field(ptr_to_obj, struct_type, ARRAY_SIZE_IDX)
                             .into_int_value();
                         let buffer = gc
                             .load_obj_field(ptr_to_obj, struct_type, ARRAY_BUF_IDX)

@@ -265,7 +265,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let generator: Arc<LiteralGenerator> = Arc::new(move |gc, ty, rvo| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array = gc.get_var(&array_str).ptr.get(gc);
-        let size = array.load_field_nocap(gc, ARRAY_IDX).into_int_value();
+        let size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
@@ -337,7 +337,7 @@ fn write_array_lit(
         let value = gc.get_var(&value_str).ptr.get(gc);
 
         // Get array size and buffer.
-        let array_size = array.load_field_nocap(gc, ARRAY_IDX).into_int_value();
+        let array_size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
         let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
 
         // Get refcnt.
@@ -462,7 +462,9 @@ pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         let arr_name = FullName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
-        let size = array_obj.load_field_nocap(gc, ARRAY_IDX).into_int_value();
+        let size = array_obj
+            .load_field_nocap(gc, ARRAY_SIZE_IDX)
+            .into_int_value();
         gc.release(array_obj);
         let int_obj = if rvo.is_none() {
             allocate_obj(int_lit_ty(), &vec![], None, gc, Some("length_of_arr"))

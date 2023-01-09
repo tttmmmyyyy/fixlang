@@ -635,7 +635,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                                 .into_int_value(),
                         );
                     }
-                    ObjectFieldType::ArraySizeBuf(_) => unreachable!(),
+                    ObjectFieldType::ArraySize(_) => unreachable!(),
                 }
             }
         }
