@@ -136,6 +136,7 @@ The following is the table of operators sorted by it's precedence (operator of h
 | (whitespace)   | left          | -                                  | function application                                        | 
 | .              | left          | -                                  | right-to-left function application: x.f = f x               | 
 | - (minus sign) | -             | Std.Neg / neg                      | negative of number                                          | 
+| !              | -             | Std.Not / not                      | logical NOT                                                 | 
 | *              | left          | Std.Mul / mul                      | multiplication of numbers                                   | 
 | /              | left          | Std.Div / div                      | division of numbers                                         | 
 | %              | left          | Std.Rem / rem                      | reminder of division                                        | 
