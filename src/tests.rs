@@ -1276,6 +1276,7 @@ pub fn test55() {
     let answer = 1;
     test_run_source(source, answer, OptimizationLevel::Default);
 }
+
 #[test]
 #[serial]
 pub fn test56() {
@@ -1288,6 +1289,36 @@ pub fn test56() {
             && false || true == true 
             && true || false == true 
             && true || true == true 
+            then 1 else 0;
+    ";
+    let answer = 1;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test57() {
+    // Test ! operator
+    let source = r"
+    module Main;
+    
+    main : Int;
+    main = if !false == true && !true == false
+            then 1 else 0;
+    ";
+    let answer = 1;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test58() {
+    // Test != operator
+    let source = r"
+    module Main;
+    
+    main : Int;
+    main = if false != true && true != false && !(true != true) && !(false != false)
             then 1 else 0;
     ";
     let answer = 1;

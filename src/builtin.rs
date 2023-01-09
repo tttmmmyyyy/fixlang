@@ -1962,3 +1962,55 @@ pub fn negate_trait_instance_int() -> TraitInstance {
         generate_negate_int,
     )
 }
+
+pub const NOT_TRAIT_NAME: &str = "Not";
+pub const NOT_TRAIT_OP_NAME: &str = "not";
+
+pub fn not_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], NOT_TRAIT_NAME),
+    }
+}
+
+pub fn not_trait() -> TraitInfo {
+    unary_operator_trait(not_trait_id(), NOT_TRAIT_OP_NAME.to_string())
+}
+
+pub fn not_trait_instance_bool() -> TraitInstance {
+    fn generate_not_bool<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let bool_ty = ObjectFieldType::Bool.to_basic_type(gc).into_int_type();
+        let false_val = bool_ty.const_zero();
+        let value =
+            gc.builder()
+                .build_int_compare(IntPredicate::EQ, rhs_val, false_val, NOT_TRAIT_OP_NAME);
+        let value = gc
+            .builder()
+            .build_int_z_extend(value, bool_ty, NOT_TRAIT_OP_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                bool_lit_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} rhs", NOT_TRAIT_OP_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    unary_opeartor_instance(
+        not_trait_id(),
+        &NOT_TRAIT_OP_NAME.to_string(),
+        bool_lit_ty(),
+        bool_lit_ty(),
+        generate_not_bool,
+    )
+}
