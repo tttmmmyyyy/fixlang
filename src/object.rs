@@ -980,9 +980,7 @@ pub fn create_dtor<'c, 'm>(
                         let size = gc
                             .load_obj_field(ptr_to_obj, struct_type, ARRAY_SIZE_IDX)
                             .into_int_value();
-                        let buffer = gc
-                            .load_obj_field(ptr_to_obj, struct_type, ARRAY_BUF_IDX)
-                            .into_pointer_value();
+                        let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
                         ObjectFieldType::release_array_buf(gc, size, buffer, ty.clone());
                     }
                     ObjectFieldType::UnionTag => {
