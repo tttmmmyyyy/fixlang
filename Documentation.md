@@ -111,7 +111,51 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ### Struct definition
 
+You can define a new struct by `type {type_name} = struct ({field_name}: {field_type},...);`. The `{type_name}` must start with a uppercase alphabet. 
+
+Example:
+```
+module Main;
+
+type Product = struct (price: Int, sold: Bool);
+```
+
+For each struct, the following methods are defined in the namespace of {type_name} automatically: 
+- `new : {field_type}... -> {type_name}`
+    - For the `Product` example above, `Main.Product.new : Int -> Bool -> Product`.
+- `get_{field_name} : {type_name} -> {field_type}`
+    - For the `Product` example above, `Main.Product.get_price : Product -> Int` and `Main.Product.get_sold : Product -> Bool`.
+- `mod_{field_name} : ({field_type} -> {field_type}) -> {type_name} -> {type_name}`
+    - For the `Product` example above, `Main.Product.mod_price : (Int -> Int) -> Product -> Product` and `Main.Product.mod_sold : (Bool -> Bool) -> Product -> Product`. 
+    - This function receives a transformer function on a field and extends it to the transformer of a struct value.
+    - This function clones the given struct value if it is shared between multiple references.
+- `mod_{field_name}! : ({field_type} -> {field_type}) -> {type_name} -> {type_name}`
+    - For the `Product` example above, `Main.Product.mod_price! : (Int -> Int) -> Product -> Product` and `Main.Product.mod_sold! : (Bool -> Bool) -> Product -> Product`. 
+    - This function always update the given struct value. If the give struct value is shared between multiple references, this function panics (i.e., stops the execution of the program).
+
+Convenient `set_{field_name}` and `set_{field_name}!` functions (or more is general lens function) will be added in the future.
+
 ### Union definition
+
+You can define a new union by `type {type_name} = union ({field_name}: {field_type},...);`. The `{type_name}` must start with a uppercase alphabet. 
+
+Example:
+```
+module Main;
+
+type Weight = union (pound: Int, kilograms: Int);
+```
+
+For each struct, the following methods are defined in the namespace of {type_name} automatically: 
+- `{field_name} : {field_type} -> {type_name}`
+    - For the `Weight` example above, `Main.Weight.pound : Int -> Weight` and `Main.Weight.kilograms : Int -> Weight`.
+- `as_{field_name} : {type_name} -> {field_type}`
+    - For the `Weight` example above, `Main.Weight.as_pound : Weight -> Int` and `Main.Weight.as_kilograms : Weight -> Int`.
+    - If the given union value doesn't carry `{field_name}`, this function panics.
+- `is_{field_name} : {type_name} -> Bool`
+    - For the `Weight` example above, `Main.Weight.is_pound : Weight -> Bool` and `Main.Weight.is_kilograms : Weight -> Bool`.
+
+`map_{field_name}` will be added in the future.
 
 ### Type parameters
 
@@ -124,6 +168,8 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 # Built-in features
 
 ## Types
+
+### Std.Array
 
 ## Functions
 

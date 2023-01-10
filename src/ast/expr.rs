@@ -364,7 +364,7 @@ impl Expr {
     }
 }
 
-pub type LiteralGenerator = dyn Send
+pub type InlineLLVM = dyn Send
     + Sync
     + for<'c, 'm, 'b> Fn(
         &mut GenerationContext<'c, 'm>,
@@ -374,7 +374,7 @@ pub type LiteralGenerator = dyn Send
 
 #[derive(Clone)]
 pub struct Literal {
-    pub generator: Arc<LiteralGenerator>,
+    pub generator: Arc<InlineLLVM>,
     pub free_vars: Vec<FullName>, // e.g. "+" literal has two free variables.
     name: String,
     pub ty: Arc<TypeNode>,
@@ -510,7 +510,7 @@ pub fn var_local(var_name: &str, src: Option<Span>) -> Arc<Var> {
 }
 
 pub fn expr_lit(
-    generator: Arc<LiteralGenerator>,
+    generator: Arc<InlineLLVM>,
     free_vars: Vec<FullName>,
     name: String,
     ty: Arc<TypeNode>,
