@@ -155,8 +155,6 @@ For each struct, the following methods are defined in the namespace of {type_nam
 - `is_{field_name} : {type_name} -> Bool`
     - For the `Weight` example above, `Main.Weight.is_pound : Weight -> Bool` and `Main.Weight.is_kilograms : Weight -> Bool`.
 
-`map_{field_name}` will be added in the future.
-
 ### Type parameters
 
 ## Traits
