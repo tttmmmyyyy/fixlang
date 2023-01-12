@@ -556,7 +556,7 @@ impl ObjectType {
             fields.push(field_type.to_basic_type(gc));
             match field_type {
                 ObjectFieldType::ArraySize(ty) => {
-                    assert_eq!(i, self.field_types.len() - 1); // ArraySizeBuf must be the last field.
+                    assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
                     assert!(!self.is_unbox); // Array has to be boxed.
 
                     // Add space for one element.
