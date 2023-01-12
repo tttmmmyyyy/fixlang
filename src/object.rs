@@ -12,7 +12,7 @@ pub enum ObjectFieldType {
     SubObject(Arc<TypeNode>),
     UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
     UnionTag,                     // TODO: I should merge UnionTag and UnionBuf as like Array.
-    ArraySize(Arc<TypeNode>),     // [size, POINTER to buffer].
+    ArraySize(Arc<TypeNode>),     // [size, buffer].
 }
 
 impl ObjectFieldType {
