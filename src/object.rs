@@ -41,9 +41,11 @@ impl ObjectFieldType {
                     .to_struct_type(gc);
                     size = size.max(gc.sizeof(&struct_ty));
                 }
+                // Force align 8
+                let num_of_i64 = size / 8 + if size % 8 == 0 { 0 } else { 1 };
                 gc.context
-                    .i8_type()
-                    .array_type(size as u32)
+                    .i64_type()
+                    .array_type(num_of_i64 as u32)
                     .as_basic_type_enum()
             }
         }
