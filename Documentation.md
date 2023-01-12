@@ -131,7 +131,7 @@ For each struct, the following methods are defined in the namespace of {type_nam
     - This function clones the given struct value if it is shared between multiple references.
 - `mod_{field_name}! : ({field_type} -> {field_type}) -> {type_name} -> {type_name}`
     - For the `Product` example above, `Main.Product.mod_price! : (Int -> Int) -> Product -> Product` and `Main.Product.mod_sold! : (Bool -> Bool) -> Product -> Product`. 
-    - This function always update the given struct value. If the give struct value is shared between multiple references, this function panics (i.e., stops the execution of the program).
+    - This function always update the given struct value. If the given struct value is shared between multiple references, this function panics (i.e., stops the execution of the program).
 
 Convenient `set_{field_name}` and `set_{field_name}!` functions (or more is general lens function) will be added in the future.
 
@@ -155,8 +155,6 @@ For each struct, the following methods are defined in the namespace of {type_nam
 - `is_{field_name} : {type_name} -> Bool`
     - For the `Weight` example above, `Main.Weight.is_pound : Weight -> Bool` and `Main.Weight.is_kilograms : Weight -> Bool`.
 
-`map_{field_name}` will be added in the future.
-
 ### Type parameters
 
 ## Traits
@@ -170,6 +168,23 @@ For each struct, the following methods are defined in the namespace of {type_nam
 ## Types
 
 ### Std.Array
+
+`Std.Array` is the type of fixed-length array.
+
+- `Std.Array.new : Int -> a -> Std.Array a`
+    - Creates an array of the specified length and elements of the specified value.
+- `Std.Array.from_map : Int -> (Int -> a) -> Std.Array a`
+    - Creates an array of the specified length and elements specified by the function given as the second argument at each index.
+- `Std.Array.get : Int -> Std.Array a -> a`
+    - Returns an element of an array at the specified index.
+- `Std.Array.set : Int -> a -> Std.Array a -> Std.Array a`
+    - Updates a value of an element at the specified index of an array.
+    - This function clones the given array if it is shared between multiple references.
+- `Std.Array.set! : Int -> a -> Std.Array a -> Std.Array a`
+    - Updates a value of an element at the specified index of an array.
+    - This function always update the given array. If the given array is shared between multiple references, this function panics.
+- `Std.Array.len : Std.Array a -> Int`
+    - Returns the length of an array.
 
 ## Functions
 
