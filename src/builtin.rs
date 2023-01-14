@@ -993,7 +993,7 @@ pub fn union_is_lit(
     let name_cloned = name.clone();
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
         // Get union object.
         let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
 
