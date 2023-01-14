@@ -113,8 +113,8 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
             Rule::type_decl => {
                 type_decls.push(parse_type_decl(pair, &module_name, src));
             }
-            Rule::global_symbol_type_defn => {
-                let (name, ty) = parse_global_symbol_type_defn(pair, src);
+            Rule::global_name_type_sign => {
+                let (name, ty) = parse_global_name_type_sign(pair, src);
                 if !global_symbols_defns.contains_key(&name) {
                     global_symbols_defns.insert(name, (Some(ty), None));
                 } else {
@@ -243,8 +243,8 @@ fn parse_predicate_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualPredica
     qp
 }
 
-fn parse_global_symbol_type_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<Scheme>) {
-    assert_eq!(pair.as_rule(), Rule::global_symbol_type_defn);
+fn parse_global_name_type_sign(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<Scheme>) {
+    assert_eq!(pair.as_rule(), Rule::global_name_type_sign);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), src);
