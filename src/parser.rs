@@ -839,6 +839,7 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     match pair.as_rule() {
         Rule::expr_int_lit => parse_expr_int_lit(pair, src),
         Rule::expr_bool_lit => parse_expr_bool_lit(pair, src),
+        Rule::expr_string_lit => parse_expr_string_lit(pair, src),
         _ => unreachable!(),
     }
 }
@@ -913,16 +914,26 @@ fn parse_expr_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     }
 }
 
-fn parse_expr_int_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    let span = Span::from_pair(&src, &expr);
-    let val = expr.as_str().parse::<i64>().unwrap();
+fn parse_expr_int_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_int_lit);
+    let span = Span::from_pair(&src, &pair);
+    let val = pair.as_str().parse::<i64>().unwrap();
     int(val, Some(span))
 }
 
-fn parse_expr_bool_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
-    let val = expr.as_str().parse::<bool>().unwrap();
-    let span = Span::from_pair(&src, &expr);
+fn parse_expr_bool_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_bool_lit);
+    let val = pair.as_str().parse::<bool>().unwrap();
+    let span = Span::from_pair(&src, &pair);
     bool(val, Some(span))
+}
+
+fn parse_expr_string_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_string_lit);
+    let span = Span::from_pair(&src, &pair);
+    let string = pair.as_str().to_string();
+    // TODO: resolve escape sequences.
+    make_string_value(string, Some(span))
 }
 
 fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeNode> {

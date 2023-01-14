@@ -9,6 +9,7 @@ pub const BOOL_NAME: &str = "Bool";
 pub const BYTE_NAME: &str = "Byte";
 pub const ARRAY_NAME: &str = "Array";
 pub const IOSTATE_NAME: &str = "IOState";
+pub const STRING_NAME: &str = "String";
 
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
@@ -62,6 +63,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             field_types: vec![],
         },
     );
+    // String is defined by source code.
     ret
 }
 
@@ -97,6 +99,11 @@ pub fn array_lit_ty() -> Arc<TypeNode> {
 // Get IOState type.
 pub fn iostate_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
+}
+
+// Get String type.
+pub fn string_lit_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
 }
 
 // Get LoopResult type.
@@ -142,6 +149,69 @@ pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
         obj
     });
     expr_lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
+}
+
+pub fn make_string_value(string: String, source: Option<Span>) -> Arc<ExprNode> {
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        // Define string literal.
+        let string_ptr = gc
+            .builder()
+            .build_global_string_ptr(&string, "string_literal");
+
+        // Create `Array Byte` which contains null-terminated string.
+        let array_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+        let buf_len: u64 = string.as_bytes().len() as u64 + 1/* null termination */;
+        let buf_len_int = gc.context.i64_type().const_int(buf_len, false);
+        let array = allocate_obj(
+            array_ty,
+            &vec![],
+            Some(buf_len_int),
+            gc,
+            Some("string_constructed_from_literal"),
+        );
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        gc.builder()
+            .build_memcpy(
+                buf,
+                1,
+                string_ptr.as_pointer_value(),
+                1,
+                gc.context
+                    .ptr_sized_int_type(gc.target_data(), None)
+                    .const_int(buf_len, false),
+            )
+            .ok()
+            .unwrap();
+
+        // Allocate String.
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("string_literal")),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        // Since String and Vector are just aliases to Array, simply store `array` to the 0th field of `obj`.
+        let array_field = obj.ptr(gc);
+        let array_field = gc.cast_pointer(
+            array_field,
+            ptr_to_object_type(gc.context).ptr_type(AddressSpace::from(0)),
+        );
+        gc.builder().build_store(array_field, array.value(gc));
+
+        obj
+    });
+    expr_lit(
+        generator,
+        vec![],
+        "string_literal".to_string(),
+        string_lit_ty(),
+        source,
+    )
 }
 
 fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {

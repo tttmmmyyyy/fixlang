@@ -29,7 +29,15 @@ expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
 expr_bool_lit = { "true" | "false" }
 
-expr_lit = { expr_int_lit | expr_bool_lit }
+expr_string_lit = { "\"" ~ string_char* ~ "\"" }
+
+string_char = {
+    !("\"" | "\\") ~ ANY 
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit }
 
 expr_var = { (namespace ~ ".")? ~ var }
 
