@@ -231,6 +231,14 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 - `Std.Array.len : Std.Array a -> Int`
     - Returns the length of an array.
 
+### Std.Vector
+
+`Std.Vector` is the type of variable-length array.
+
+### Std.String
+
+`Std.String` is the type of string.
+
 ## Functions
 
 ### Std.fix : ((a -> b) -> a -> b) -> a -> b

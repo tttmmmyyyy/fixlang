@@ -1394,6 +1394,23 @@ pub fn test59() {
 
 #[test]
 #[serial]
+pub fn test60() {
+    // Test unit.
+    let source = r"
+    module Main;
+    
+    unit : ();
+    unit = ();
+
+    main : Int;
+    main = 0;
+    ";
+    let answer = 0;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 
