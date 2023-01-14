@@ -429,6 +429,12 @@ impl NameSpace {
     pub fn module(&self) -> Name {
         self.names[0].clone()
     }
+
+    pub fn append(&self, mut rhs: NameSpace) -> NameSpace {
+        let mut names = self.names.clone();
+        names.append(&mut rhs.names);
+        NameSpace::new(names)
+    }
 }
 
 #[derive(Clone)]
@@ -484,6 +490,11 @@ impl FullName {
 
     pub fn name_as_mut(&mut self) -> &mut Name {
         &mut self.name
+    }
+
+    #[allow(dead_code)]
+    pub fn module(&self) -> Name {
+        self.namespace.module()
     }
 }
 

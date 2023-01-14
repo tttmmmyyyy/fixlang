@@ -23,7 +23,7 @@ var_with_type = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 namespace_item = { name_head_large ~ var_char* }
 
-namespace = { (namespace_item ~ ".")* }
+namespace = { namespace_item ~ ("." ~ namespace_item)* }
 
 expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
@@ -31,7 +31,7 @@ expr_bool_lit = { "true" | "false" }
 
 expr_lit = { expr_int_lit | expr_bool_lit }
 
-expr_var = { namespace ~ var }
+expr_var = { (namespace ~ ".")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ var_with_type ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
@@ -123,14 +123,14 @@ kind_nlr = { kind_star | kind_braced }
 
 kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 
-// === Type declarations ===
+// === Type definitions ===
 type_name = { name_head_large ~ var_char* }
 
 type_field_name = { !keywords ~ name_head_small ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_decl = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn) ~ sep* ~ ";" }
+type_defn = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn) ~ sep* ~ ";" }
 
 comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* }
 
@@ -156,19 +156,21 @@ trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_
 
 trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
-// === Global symbols === 
-global_symbol_type_defn = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
+// === Global names === 
+global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
 
-global_symbol_defn = { var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
+global_name_defn = { var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
 // === Module ===
 module_name = { name_head_large ~ var_char* }
 
-module_decl = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" }
+module_defn = { "module" ~ sep+ ~ namespace ~ sep* ~ ";" }
 
-toplevel_defns = _{ type_decl | global_symbol_type_defn | global_symbol_defn | trait_defn | trait_impl }
+global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn }
 
-module = { module_decl ~ (sep* ~ toplevel_defns)* }
+global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep* ~ global_defns)* ~ sep* ~ "}" }
+
+module = { module_defn ~ (sep* ~ (global_defns | trait_impl))* }
 
 // === Comments ===
 block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }

@@ -2,13 +2,13 @@ use super::*;
 
 // Declaration of user-defind types.
 #[derive(Clone)]
-pub struct TypeDecl {
+pub struct TypeDefn {
     pub name: FullName,
     pub value: TypeDeclValue,
     pub tyvars: Vec<Name>,
 }
 
-impl TypeDecl {
+impl TypeDefn {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         assert!(self.name == ctx.resolve(&self.name, NameResolutionType::Type));
         self.value.resolve_namespace(ctx);

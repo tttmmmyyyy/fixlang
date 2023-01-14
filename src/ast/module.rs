@@ -10,8 +10,8 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "@";
 
 pub struct FixModule {
     pub name: Name,
-    pub type_decls: Vec<TypeDecl>,
-    pub global_symbols: HashMap<FullName, GlobalSymbol>,
+    pub type_defns: Vec<TypeDefn>,
+    pub global_values: HashMap<FullName, GlobalValue>,
     pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
     pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
     pub trait_env: TraitEnv,
@@ -52,7 +52,7 @@ pub struct InstantiatedSymbol {
     pub typechecker: Option<TypeCheckContext>, // type checker available for resolving types in expr.
 }
 
-pub struct GlobalSymbol {
+pub struct GlobalValue {
     // Type of this symbol.
     // For example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String for a: Show",
@@ -64,7 +64,7 @@ pub struct GlobalSymbol {
     // TODO: add expr_src: Span
 }
 
-impl GlobalSymbol {
+impl GlobalValue {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         self.ty = self.ty.resolve_namespace(ctx);
         self.expr.resolve_namespace(ctx);
@@ -180,8 +180,8 @@ impl FixModule {
     pub fn new(name: Name) -> FixModule {
         FixModule {
             name,
-            type_decls: Default::default(),
-            global_symbols: Default::default(),
+            type_defns: Default::default(),
+            global_values: Default::default(),
             instantiated_global_symbols: Default::default(),
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
@@ -189,20 +189,20 @@ impl FixModule {
         }
     }
 
-    // Set traits.
+    // Add traits.
     pub fn add_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
-        self.trait_env.set(trait_infos, trait_impls);
+        self.trait_env.add(trait_infos, trait_impls);
     }
 
     // Register declarations of user-defined types.
-    pub fn set_type_decls(&mut self, type_decls: Vec<TypeDecl>) {
-        self.type_decls = type_decls;
+    pub fn add_type_defns(&mut self, mut type_defns: Vec<TypeDefn>) {
+        self.type_defns.append(&mut type_defns);
     }
 
     // Calculate list of type constructors including user-defined types.
     pub fn calculate_type_env(&mut self) {
         let mut tycons = bulitin_tycons();
-        for type_decl in &self.type_decls {
+        for type_decl in &self.type_defns {
             let tycon = type_decl.tycon();
             if tycons.contains_key(&tycon) {
                 error_exit_with_src(
@@ -251,19 +251,94 @@ impl FixModule {
         }
     }
 
-    // Add a global symbol.
-    pub fn add_global_object(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
-        if self.global_symbols.contains_key(&name) {
-            error_exit(&format!("duplicated global object: `{}`", name.to_string()));
+    // Add a global value.
+    pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
+        if self.global_values.contains_key(&name) {
+            error_exit(&format!(
+                "duplicated definition for global value: `{}`",
+                name.to_string()
+            ));
         }
-        self.global_symbols.insert(
+        self.global_values.insert(
             name,
-            GlobalSymbol {
+            GlobalValue {
                 ty: scm,
                 expr: SymbolExpr::Simple(expr),
                 typecheck_log: None,
             },
         );
+    }
+
+    // Add global values
+    pub fn add_global_values(
+        &mut self,
+        exprs: Vec<(FullName, Arc<ExprNode>)>,
+        types: Vec<(FullName, Arc<Scheme>)>,
+    ) {
+        struct GlobalValue {
+            expr: Option<Arc<ExprNode>>,
+            ty: Option<Arc<Scheme>>,
+        }
+
+        let mut global_values: HashMap<FullName, GlobalValue> = Default::default();
+        for (name, expr) in exprs {
+            if !global_values.contains_key(&name) {
+                global_values.insert(
+                    name,
+                    GlobalValue {
+                        expr: Some(expr),
+                        ty: None,
+                    },
+                );
+            } else {
+                let gs = global_values.get_mut(&name).unwrap();
+                if gs.expr.is_some() {
+                    error_exit(&format!(
+                        "duplicated definition signature for global value: `{}`",
+                        name.to_string()
+                    ));
+                } else {
+                    gs.expr = Some(expr);
+                }
+            }
+        }
+        for (name, ty) in types {
+            if !global_values.contains_key(&name) {
+                global_values.insert(
+                    name,
+                    GlobalValue {
+                        ty: Some(ty),
+                        expr: None,
+                    },
+                );
+            } else {
+                let gs = global_values.get_mut(&name).unwrap();
+                if gs.ty.is_some() {
+                    error_exit(&format!(
+                        "duplicated type signature for `{}`",
+                        name.to_string()
+                    ));
+                } else {
+                    gs.ty = Some(ty);
+                }
+            }
+        }
+
+        for (name, gv) in global_values {
+            if gv.expr.is_none() {
+                error_exit(&format!(
+                    "global value `{}` lacks type signature",
+                    name.to_string()
+                ))
+            }
+            if gv.ty.is_none() {
+                error_exit(&format!(
+                    "global value `{}` lacks definition",
+                    name.to_string()
+                ))
+            }
+            self.add_global_value(name, (gv.expr.unwrap(), gv.ty.unwrap()))
+        }
     }
 
     // Generate codes of global symbols.
@@ -381,7 +456,7 @@ impl FixModule {
     // Instantiate symbol.
     fn instantiate_symbol(&mut self, mut tc: TypeCheckContext, sym: &mut InstantiatedSymbol) {
         assert!(sym.expr.is_none());
-        let global_sym = self.global_symbols.get(&sym.template_name).unwrap();
+        let global_sym = self.global_values.get(&sym.template_name).unwrap();
         let template_expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
                 tc.unify(&e.inferred_ty.as_ref().unwrap(), &sym.ty);
@@ -407,7 +482,7 @@ impl FixModule {
     pub fn instantiate_symbols(&mut self) {
         while !self.deferred_instantiation.is_empty() {
             let (name, sym) = self.deferred_instantiation.iter().next().unwrap();
-            let gs = &self.global_symbols[&sym.template_name];
+            let gs = &self.global_values[&sym.template_name];
             let tc = gs.typecheck_log.as_ref().unwrap().clone();
             let name = name.clone();
             let mut sym = sym.clone();
@@ -420,7 +495,7 @@ impl FixModule {
     // Instantiate main function.
     pub fn instantiate_main_function(&mut self) -> Arc<ExprNode> {
         let main_func_name = self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string());
-        if !self.global_symbols.contains_key(&main_func_name) {
+        if !self.global_values.contains_key(&main_func_name) {
             error_exit("main function not found.");
         }
         let main_ty = int_lit_ty();
@@ -524,9 +599,9 @@ impl FixModule {
                     method_impls.push(MethodImpl { ty, expr });
                 }
                 let method_name = FullName::new(&trait_id.name.to_namespace(), &method_name);
-                self.global_symbols.insert(
+                self.global_values.insert(
                     method_name,
-                    GlobalSymbol {
+                    GlobalValue {
                         ty: method_ty,
                         expr: SymbolExpr::Method(method_impls),
                         typecheck_log: None,
@@ -540,7 +615,7 @@ impl FixModule {
         self.trait_env.set_kinds();
         let type_env = &self.type_env();
         let trait_kind_map = self.trait_env.trait_kind_map();
-        for (_name, sym) in &mut self.global_symbols {
+        for (_name, sym) in &mut self.global_values {
             sym.set_kinds(type_env, &trait_kind_map);
         }
     }
@@ -562,17 +637,17 @@ impl FixModule {
         }
 
         self.trait_env.resolve_namespace(&ctx);
-        for decl in &mut self.type_decls {
+        for decl in &mut self.type_defns {
             decl.resolve_namespace(&ctx);
         }
-        for (_, sym) in &mut self.global_symbols {
+        for (_, sym) in &mut self.global_values {
             sym.resolve_namespace(&ctx);
         }
     }
 
     // Validate user-defined types
     pub fn validate_user_defined_types(&self) {
-        for type_defn in &self.type_decls {
+        for type_defn in &self.type_defns {
             type_defn.check_tyvars();
             let type_name = &type_defn.name;
             match &type_defn.value {
@@ -618,10 +693,10 @@ impl FixModule {
         self.trait_env.add_trait(or_trait());
         self.trait_env.add_trait(less_than_trait());
         self.trait_env.add_trait(less_than_or_equal_to_trait());
-        self.type_decls.push(loop_result_defn());
+        self.type_defns.push(loop_result_defn());
         for i in 0..=TUPLE_SIZE_MAX {
             if i != 1 {
-                self.type_decls.push(tuple_defn(i));
+                self.type_defns.push(tuple_defn(i));
             }
         }
     }
@@ -633,7 +708,7 @@ impl FixModule {
             name: FullName,
             (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
         ) {
-            program.add_global_object(name, (expr, scm));
+            program.add_global_value(name, (expr, scm));
         }
         self.trait_env
             .add_instance(eq_trait_instance_primitive(int_lit_ty()));
@@ -683,7 +758,7 @@ impl FixModule {
             FullName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
             length_array(),
         );
-        for decl in &self.type_decls.clone() {
+        for decl in &self.type_defns.clone() {
             match &decl.value {
                 TypeDeclValue::Struct(str) => {
                     let struct_name = decl.name.clone();

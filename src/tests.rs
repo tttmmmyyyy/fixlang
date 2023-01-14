@@ -1364,6 +1364,36 @@ pub fn test58() {
 
 #[test]
 #[serial]
+pub fn test59() {
+    // Test namespace definition
+    let source = r"
+    module Main;
+    
+    namespace A {
+        x : Int;
+        x = 3;
+
+        y : Int;
+        y = 1;
+    }
+
+    namespace B {
+        x : Int;
+        x = 5;
+
+        y : Bool;
+        y = true;
+    }
+
+    main : Int;
+    main = if y then A.x + B.x + A.y else 0;
+    ";
+    let answer = 9;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 

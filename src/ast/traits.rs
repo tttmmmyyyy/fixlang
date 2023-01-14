@@ -7,10 +7,8 @@ pub struct TraitId {
 }
 
 impl TraitId {
-    pub fn new(ns: &[&str], name: &Name) -> TraitId {
-        TraitId {
-            name: FullName::from_strs(ns, &name),
-        }
+    pub fn from_fullname(name: FullName) -> TraitId {
+        TraitId { name }
     }
 
     pub fn new_by_name(name: &Name) -> TraitId {
@@ -343,8 +341,8 @@ impl TraitEnv {
         self.instances = instances_resolved;
     }
 
-    // Set traits.
-    pub fn set(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
+    // Add traits.
+    pub fn add(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
         for trait_info in trait_infos {
             self.add_trait(trait_info);
         }
@@ -358,14 +356,14 @@ impl TraitEnv {
         // Check duplicate definition.
         if self.traits.contains_key(&info.id) {
             error_exit(&format!(
-                "duplicate definition of trait {}.",
+                "duplicate definition for trait {}.",
                 info.id.to_string()
             ));
         }
         self.traits.insert(info.id.clone(), info);
     }
 
-    // Add a instance.
+    // Add an instance.
     pub fn add_instance(&mut self, inst: TraitInstance) {
         let trait_id = inst.trait_id();
         if !self.instances.contains_key(&trait_id) {
