@@ -251,8 +251,8 @@ impl FixModule {
         }
     }
 
-    // Add a global symbol.
-    pub fn add_global_object(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
+    // Add a global value.
+    pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
         if self.global_symbols.contains_key(&name) {
             error_exit(&format!("duplicated global object: `{}`", name.to_string()));
         }
@@ -633,7 +633,7 @@ impl FixModule {
             name: FullName,
             (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
         ) {
-            program.add_global_object(name, (expr, scm));
+            program.add_global_value(name, (expr, scm));
         }
         self.trait_env
             .add_instance(eq_trait_instance_primitive(int_lit_ty()));
