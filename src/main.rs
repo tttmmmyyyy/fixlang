@@ -14,6 +14,7 @@ mod object;
 mod parser;
 mod runner;
 mod runtime;
+mod stdlib;
 #[cfg(test)]
 mod tests;
 mod typecheck;
@@ -49,6 +50,7 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use std::vec::Vec;
+use stdlib::*;
 use typecheck::*;
 use uncurry_optimization::*;
 

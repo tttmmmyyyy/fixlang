@@ -6,7 +6,10 @@ use super::*;
 // Avoiding name confliction with "Module" of inkwell.
 
 const MAIN_FUNCTION_NAME: &str = "main";
+const MAIN_MODULE_NAME: &str = "Main";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "@";
+pub const STRUCT_GETTER_NAME: &str = "get";
+pub const STRUCT_NEW_NAME: &str = "new";
 
 pub struct FixModule {
     pub name: Name,
@@ -229,19 +232,6 @@ impl FixModule {
             res.insert(k.name.clone());
         }
         res
-    }
-
-    // Get this module's namespace.
-    pub fn get_namespace(&self) -> NameSpace {
-        NameSpace::new(vec![self.name.clone()])
-    }
-
-    // Get this module's namespace with a name.
-    pub fn get_namespaced_name(&self, name: &Name) -> FullName {
-        FullName {
-            namespace: self.get_namespace(),
-            name: name.clone(),
-        }
     }
 
     // Add a global value.
@@ -487,9 +477,9 @@ impl FixModule {
 
     // Instantiate main function.
     pub fn instantiate_main_function(&mut self) -> Arc<ExprNode> {
-        let main_func_name = self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string());
+        let main_func_name = FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME);
         if !self.global_values.contains_key(&main_func_name) {
-            error_exit("main function not found.");
+            error_exit("Main.main not found.");
         }
         let main_ty = int_lit_ty();
         let inst_name = self.require_instantiated_symbol(&main_func_name, &main_ty);
@@ -638,7 +628,7 @@ impl FixModule {
     }
 
     // Validate user-defined types
-    pub fn validate_user_defined_types(&self) {
+    pub fn validate_type_defns(&self) {
         for type_defn in &self.type_defns {
             type_defn.check_tyvars();
             let type_name = &type_defn.name;
@@ -671,97 +661,17 @@ impl FixModule {
         self.trait_env.validate(&self.type_env);
     }
 
-    // Add built-in types and traits
-    pub fn add_builtin_traits_types(&mut self) {
-        self.trait_env.add_trait(eq_trait());
-        self.trait_env.add_trait(add_trait());
-        self.trait_env.add_trait(subtract_trait());
-        self.trait_env.add_trait(negate_trait());
-        self.trait_env.add_trait(not_trait());
-        self.trait_env.add_trait(multiply_trait());
-        self.trait_env.add_trait(divide_trait());
-        self.trait_env.add_trait(remainder_trait());
-        self.trait_env.add_trait(and_trait());
-        self.trait_env.add_trait(or_trait());
-        self.trait_env.add_trait(less_than_trait());
-        self.trait_env.add_trait(less_than_or_equal_to_trait());
-        self.type_defns.push(loop_result_defn());
-        for i in 0..=TUPLE_SIZE_MAX {
-            if i != 1 {
-                self.type_defns.push(tuple_defn(i));
-            }
-        }
-    }
-
-    // Add bult-in functions to a given ast.
-    pub fn add_builtin_symbols(self: &mut FixModule) {
-        fn add_global(
-            program: &mut FixModule,
-            name: FullName,
-            (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
-        ) {
-            program.add_global_value(name, (expr, scm));
-        }
-        self.trait_env
-            .add_instance(eq_trait_instance_primitive(int_lit_ty()));
-        self.trait_env
-            .add_instance(eq_trait_instance_primitive(bool_lit_ty()));
-        self.trait_env.add_instance(add_trait_instance_int());
-        self.trait_env.add_instance(subtract_trait_instance_int());
-        self.trait_env.add_instance(negate_trait_instance_int());
-        self.trait_env.add_instance(not_trait_instance_bool());
-        self.trait_env.add_instance(multiply_trait_instance_int());
-        self.trait_env.add_instance(divide_trait_instance_int());
-        self.trait_env.add_instance(remainder_trait_instance_int());
-        self.trait_env.add_instance(and_trait_instance_bool());
-        self.trait_env.add_instance(or_trait_instance_bool());
-        self.trait_env.add_instance(less_than_trait_instance_int());
-        self.trait_env
-            .add_instance(less_than_or_equal_to_trait_instance_int());
-        add_global(self, FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
-        add_global(self, FullName::from_strs(&[STD_NAME], "loop"), state_loop());
-        add_global(
-            self,
-            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "new"),
-            new_array(),
-        );
-        add_global(
-            self,
-            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "from_map"),
-            from_map_array(),
-        );
-        add_global(
-            self,
-            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),
-            read_array(),
-        );
-        add_global(
-            self,
-            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
-            write_array(),
-        );
-        add_global(
-            self,
-            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set!"),
-            write_array_unique(),
-        );
-        add_global(
-            self,
-            FullName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
-            length_array(),
-        );
+    pub fn add_methods(self: &mut FixModule) {
         for decl in &self.type_defns.clone() {
             match &decl.value {
                 TypeDeclValue::Struct(str) => {
                     let struct_name = decl.name.clone();
-                    add_global(
-                        self,
+                    self.add_global_value(
                         FullName::new(&decl.name.to_namespace(), STRUCT_NEW_NAME),
                         struct_new(&struct_name, decl),
                     );
                     for field in &str.fields {
-                        add_global(
-                            self,
+                        self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("{}_{}", STRUCT_GETTER_NAME, &field.name),
@@ -769,8 +679,7 @@ impl FixModule {
                             struct_get(&struct_name, decl, &field.name),
                         );
                         for is_unique in [false, true] {
-                            add_global(
-                                self,
+                            self.add_global_value(
                                 FullName::new(
                                     &decl.name.to_namespace(),
                                     &format!(
@@ -787,18 +696,15 @@ impl FixModule {
                 TypeDeclValue::Union(union) => {
                     let union_name = &decl.name;
                     for field in &union.fields {
-                        add_global(
-                            self,
+                        self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &field.name),
                             union_new(&union_name, &field.name, decl),
                         );
-                        add_global(
-                            self,
+                        self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &format!("as_{}", field.name)),
                             union_as(&union_name, &field.name, decl),
                         );
-                        add_global(
-                            self,
+                        self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &format!("is_{}", field.name)),
                             union_is(&union_name, &field.name, decl),
                         );
@@ -807,8 +713,21 @@ impl FixModule {
             }
         }
     }
-}
 
-pub const FIX_NAME: &str = "fix";
-pub const STRUCT_GETTER_NAME: &str = "get";
-pub const STRUCT_NEW_NAME: &str = "new";
+    // Import other module
+    pub fn import(&mut self, other: FixModule) {
+        // Import types
+        self.add_type_defns(other.type_defns);
+
+        // Import traits and instances
+        self.trait_env.import(other.trait_env);
+
+        // Import global values
+        for (name, gv) in other.global_values {
+            let ty = gv.ty;
+            if let SymbolExpr::Simple(expr) = gv.expr {
+                self.add_global_value(name, (expr, ty));
+            }
+        }
+    }
+}

@@ -30,9 +30,6 @@ fn build_module<'c>(
     mut fix_mod: FixModule,
     result_as_main_return: bool,
 ) -> Either<TargetMachine, ExecutionEngine<'c>> {
-    // Add built-in traits and types.
-    fix_mod.add_builtin_traits_types();
-
     // Calculate list of type constructors.
     fix_mod.calculate_type_env();
 
@@ -40,10 +37,10 @@ fn build_module<'c>(
     fix_mod.resolve_namespace();
 
     // Validate user-defined types.
-    fix_mod.validate_user_defined_types();
+    fix_mod.validate_type_defns();
 
-    // Add global symbols
-    fix_mod.add_builtin_symbols();
+    // Add struct / union methods
+    fix_mod.add_methods();
 
     // Validate trait env.
     fix_mod.validate_trait_env();
@@ -162,7 +159,9 @@ fn build_module<'c>(
 }
 
 pub fn run_source(source: &str, opt_level: OptimizationLevel, result_as_main_return: bool) -> i64 {
-    let fix_mod = parse_source(source);
+    let mut fix_mod = make_std_mod();
+    fix_mod.import(parse_source(source));
+
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
     let ee = module.create_jit_execution_engine(opt_level).unwrap();
@@ -227,7 +226,10 @@ pub fn build_file(path: &Path, opt_level: OptimizationLevel, result_as_main_retu
     let mut out_path = PathBuf::from(path);
     out_path.set_extension("o");
     let tm = get_target_machine(opt_level);
-    let fix_mod = parse_source(&read_file(path));
+
+    let mut fix_mod = make_std_mod();
+    fix_mod.import(parse_source(&read_file(path)));
+
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
     let tm = build_module(

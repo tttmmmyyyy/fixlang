@@ -400,23 +400,6 @@ impl TraitEnv {
         return None;
     }
 
-    // Reduce predicate using trait instances (as long as possible).
-    // Returns None when p cannot be satisfied.
-    // pub fn reduce_to_instance_contexts_alap(
-    //     &self,
-    //     p: &Predicate,
-    //     tycons: &HashMap<String, Arc<Kind>>,
-    // ) -> Option<Vec<Predicate>> {
-    //     self.reduce_to_instance_contexts_one(p, tycons)
-    //         .map(|qs| {
-    //             qs.iter()
-    //                 .map(|q| self.reduce_to_instance_contexts_alap(&q, tycons))
-    //                 .collect::<Option<Vec<_>>>()
-    //         })
-    //         .flatten()
-    //         .map(|vs| vs.concat())
-    // }
-
     // Entailment.
     pub fn entail(&self, ps: &Vec<Predicate>, p: &Predicate, type_env: &TypeEnv) -> bool {
         // If p in contained in ps, then ok.
@@ -493,27 +476,6 @@ impl TraitEnv {
     // Returns qs when satisfaction of ps are reduced to qs.
     // In particular, returns empty when ps are satisfied.
     // Returns None when p cannot be satisfied.
-    // pub fn reduce(
-    //     &self,
-    //     ps: &Vec<Predicate>,
-    //     tycons: &HashMap<String, Arc<Kind>>,
-    // ) -> Option<Vec<Predicate>> {
-    //     let ret = ps
-    //         .iter()
-    //         .map(|p| self.reduce_to_instance_contexts_alap(p, tycons))
-    //         .collect::<Option<Vec<_>>>()
-    //         .map(|vs| vs.concat())
-    //         .map(|ps| self.simplify_predicates(&ps, tycons));
-
-    //     // Every predicate has to be hnf.
-    //     assert!(ret.is_none() || ret.as_ref().unwrap().iter().all(|p| p.ty.is_hnf()));
-    //     ret
-    // }
-
-    // Context reduction.
-    // Returns qs when satisfaction of ps are reduced to qs.
-    // In particular, returns empty when ps are satisfied.
-    // Returns None when p cannot be satisfied.
     pub fn reduce(&self, ps: &Vec<Predicate>, type_env: &TypeEnv) -> Option<Vec<Predicate>> {
         let ret = self
             .reduce_to_hnfs(ps, type_env)
@@ -537,5 +499,16 @@ impl TraitEnv {
             res.insert(id.clone(), ti.type_var.kind.clone());
         }
         res
+    }
+
+    pub fn import(&mut self, other: TraitEnv) {
+        for (_, ti) in other.traits {
+            self.add_trait(ti);
+        }
+        for (_, insts) in other.instances {
+            for inst in insts {
+                self.add_instance(inst)
+            }
+        }
     }
 }
