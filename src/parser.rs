@@ -378,28 +378,41 @@ fn parse_type_decl(pair: Pair<Rule>, module_name: &str, src: &Arc<String>) -> Ty
 
 fn parse_struct_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
     assert_eq!(pair.as_rule(), Rule::struct_defn);
-    let pairs = pair.into_inner();
+    let mut pairs = pair.into_inner();
     let mut fields: Vec<Field> = Vec::new();
+    let mut is_unbox = false; // Default value
+    if pairs.peek().unwrap().as_rule() == Rule::box_or_unbox {
+        is_unbox = parse_box_unbox(pairs.next().unwrap(), src);
+    }
     for pair in pairs {
         fields.push(parse_type_field(pair, src));
     }
-    TypeDeclValue::Struct(Struct {
-        fields,
-        is_unbox: false,
-    })
+    TypeDeclValue::Struct(Struct { fields, is_unbox })
 }
 
 fn parse_union_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
     assert_eq!(pair.as_rule(), Rule::union_defn);
-    let pairs = pair.into_inner();
+    let mut pairs = pair.into_inner();
     let mut fields: Vec<Field> = Vec::new();
+    let mut is_unbox = true; // Default value
+    if pairs.peek().unwrap().as_rule() == Rule::box_or_unbox {
+        is_unbox = parse_box_unbox(pairs.next().unwrap(), src);
+    }
     for pair in pairs {
         fields.push(parse_type_field(pair, src));
     }
-    TypeDeclValue::Union(Union {
-        fields,
-        is_unbox: true,
-    })
+    TypeDeclValue::Union(Union { fields, is_unbox })
+}
+
+// Return true if unbox.
+fn parse_box_unbox(pair: Pair<Rule>, _src: &Arc<String>) -> bool {
+    assert_eq!(pair.as_rule(), Rule::box_or_unbox);
+    if pair.as_str() == "box" {
+        return false;
+    } else if pair.as_str() == "unbox" {
+        return true;
+    }
+    unreachable!();
 }
 
 fn parse_type_field(pair: Pair<Rule>, _src: &Arc<String>) -> Field {
