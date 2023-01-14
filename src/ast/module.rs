@@ -10,7 +10,7 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "@";
 
 pub struct FixModule {
     pub name: Name,
-    pub type_decls: Vec<TypeDecl>,
+    pub type_defns: Vec<TypeDefn>,
     pub global_symbols: HashMap<FullName, GlobalSymbol>,
     pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
     pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
@@ -180,7 +180,7 @@ impl FixModule {
     pub fn new(name: Name) -> FixModule {
         FixModule {
             name,
-            type_decls: Default::default(),
+            type_defns: Default::default(),
             global_symbols: Default::default(),
             instantiated_global_symbols: Default::default(),
             deferred_instantiation: Default::default(),
@@ -195,14 +195,14 @@ impl FixModule {
     }
 
     // Register declarations of user-defined types.
-    pub fn set_type_decls(&mut self, type_decls: Vec<TypeDecl>) {
-        self.type_decls = type_decls;
+    pub fn add_type_defns(&mut self, mut type_defns: Vec<TypeDefn>) {
+        self.type_defns.append(&mut type_defns);
     }
 
     // Calculate list of type constructors including user-defined types.
     pub fn calculate_type_env(&mut self) {
         let mut tycons = bulitin_tycons();
-        for type_decl in &self.type_decls {
+        for type_decl in &self.type_defns {
             let tycon = type_decl.tycon();
             if tycons.contains_key(&tycon) {
                 error_exit_with_src(
@@ -562,7 +562,7 @@ impl FixModule {
         }
 
         self.trait_env.resolve_namespace(&ctx);
-        for decl in &mut self.type_decls {
+        for decl in &mut self.type_defns {
             decl.resolve_namespace(&ctx);
         }
         for (_, sym) in &mut self.global_symbols {
@@ -572,7 +572,7 @@ impl FixModule {
 
     // Validate user-defined types
     pub fn validate_user_defined_types(&self) {
-        for type_defn in &self.type_decls {
+        for type_defn in &self.type_defns {
             type_defn.check_tyvars();
             let type_name = &type_defn.name;
             match &type_defn.value {
@@ -618,10 +618,10 @@ impl FixModule {
         self.trait_env.add_trait(or_trait());
         self.trait_env.add_trait(less_than_trait());
         self.trait_env.add_trait(less_than_or_equal_to_trait());
-        self.type_decls.push(loop_result_defn());
+        self.type_defns.push(loop_result_defn());
         for i in 0..=TUPLE_SIZE_MAX {
             if i != 1 {
-                self.type_decls.push(tuple_defn(i));
+                self.type_defns.push(tuple_defn(i));
             }
         }
     }
@@ -683,7 +683,7 @@ impl FixModule {
             FullName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
             length_array(),
         );
-        for decl in &self.type_decls.clone() {
+        for decl in &self.type_defns.clone() {
             match &decl.value {
                 TypeDeclValue::Struct(str) => {
                     let struct_name = decl.name.clone();

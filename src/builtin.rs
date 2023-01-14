@@ -498,7 +498,7 @@ pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // `new` built-in function for a given struct.
 pub fn struct_new_lit(
     struct_name: &FullName,
-    struct_defn: &TypeDecl,
+    struct_defn: &TypeDefn,
     field_names: Vec<String>,
 ) -> Arc<ExprNode> {
     let free_vars = field_names
@@ -532,7 +532,7 @@ pub fn struct_new_lit(
 }
 
 // `new` built-in function for a given struct.
-pub fn struct_new(struct_name: &FullName, definition: &TypeDecl) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn struct_new(struct_name: &FullName, definition: &TypeDefn) -> (Arc<ExprNode>, Arc<Scheme>) {
     let mut expr = struct_new_lit(
         struct_name,
         definition,
@@ -585,7 +585,7 @@ pub fn struct_get_lit(
 // `get` built-in function for a given struct.
 pub fn struct_get(
     struct_name: &FullName,
-    definition: &TypeDecl,
+    definition: &TypeDefn,
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
@@ -621,7 +621,7 @@ pub fn struct_mod_lit(
     field_count: usize, // number of fields in this struct
     field_idx: usize,
     struct_name: &FullName,
-    struct_defn: &TypeDecl,
+    struct_defn: &TypeDefn,
     field_name: &str,
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
@@ -732,7 +732,7 @@ pub fn struct_mod_lit(
 // `mod` built-in function for a given struct.
 pub fn struct_mod(
     struct_name: &FullName,
-    definition: &TypeDecl,
+    definition: &TypeDefn,
     field_name: &str,
     is_unique_version: bool,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -783,7 +783,7 @@ pub fn struct_mod(
 pub fn union_new(
     union_name: &FullName,
     field_name: &Name,
-    union: &TypeDecl,
+    union: &TypeDefn,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
@@ -815,7 +815,7 @@ pub fn union_new(
 // `new_{field}` built-in function for a given union.
 pub fn union_new_lit(
     union_name: &FullName,
-    union_defn: &TypeDecl,
+    union_defn: &TypeDefn,
     field_name: &Name,
     field_idx: usize,
 ) -> Arc<ExprNode> {
@@ -857,7 +857,7 @@ pub fn union_new_lit(
 pub fn union_as(
     union_name: &FullName,
     field_name: &Name,
-    union: &TypeDecl,
+    union: &TypeDefn,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
@@ -953,7 +953,7 @@ pub fn union_as_lit(
 pub fn union_is(
     union_name: &FullName,
     field_name: &Name,
-    union: &TypeDecl,
+    union: &TypeDefn,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
@@ -1050,8 +1050,8 @@ pub fn union_is_lit(
 }
 
 const LOOP_RESULT_CONTINUE_IDX: usize = 0;
-pub fn loop_result_defn() -> TypeDecl {
-    TypeDecl {
+pub fn loop_result_defn() -> TypeDefn {
+    TypeDefn {
         name: FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME),
         tyvars: vec!["s".to_string(), "b".to_string()],
         value: TypeDeclValue::Union(Union {
@@ -1208,11 +1208,11 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-pub fn tuple_defn(size: u32) -> TypeDecl {
+pub fn tuple_defn(size: u32) -> TypeDefn {
     let tyvars = (0..size)
         .map(|i| "t".to_string() + &i.to_string())
         .collect::<Vec<_>>();
-    TypeDecl {
+    TypeDefn {
         name: FullName::from_strs(&[STD_NAME], &make_tuple_name(size)),
         tyvars: tyvars.clone(),
         value: TypeDeclValue::Struct(Struct {
