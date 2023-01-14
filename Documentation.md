@@ -206,7 +206,7 @@ truth : Bool;
 truth = true;
 ```
 
-two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.TheNameSpace.truth : Bool`.
+two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth : Bool`.
 
 # Built-in features
 
