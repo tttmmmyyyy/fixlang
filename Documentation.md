@@ -50,7 +50,7 @@ The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {
 
 If the name of the lhs of `let`-binding is already in the scope, `let` evaluates `{expression_0}` in the old scope (i.e., with the old value of the name) and evaluates `{expression_1}` in the new scope (i.e., with the new value of the name).
 
-Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
+Fix's `let`-binding doesn't allow making recursive definition. To define a recursive function locally, use `fix` built-in function.
 
 ## If
 
