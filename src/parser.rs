@@ -100,48 +100,26 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut pairs = pair.into_inner();
     let module_name = parse_module_defn(pairs.next().unwrap(), src);
-    let mut fix_mod = FixModule::new(module_name.clone());
+    let namespace = NameSpace::new(vec![module_name.clone()]);
+    let mut fix_mod = FixModule::new(module_name);
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
-    let mut global_symbols_defns: HashMap<Name, (Option<Arc<Scheme>>, Option<Arc<ExprNode>>)> =
-        Default::default();
+    let mut global_name_type_signs: Vec<(FullName, Arc<Scheme>)> = vec![];
+    let mut global_value_defns: Vec<(FullName, Arc<ExprNode>)> = vec![];
     let mut trait_infos: Vec<TraitInfo> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
 
     for pair in pairs {
         match pair.as_rule() {
-            Rule::type_defn => {
-                type_defns.push(parse_type_defn(pair, &module_name, src));
-            }
-            Rule::global_name_type_sign => {
-                let (name, ty) = parse_global_name_type_sign(pair, src);
-                if !global_symbols_defns.contains_key(&name) {
-                    global_symbols_defns.insert(name, (Some(ty), None));
-                } else {
-                    let gs = global_symbols_defns.get_mut(&name).unwrap();
-                    if gs.0.is_some() {
-                        error_exit(&format!("duplicated type declaration for `{}`", name));
-                    } else {
-                        gs.0 = Some(ty);
-                    }
-                }
-            }
-            Rule::global_name_defn => {
-                let (name, expr) = parse_global_name_defn(pair, src);
-                if !global_symbols_defns.contains_key(&name) {
-                    global_symbols_defns.insert(name, (None, Some(expr)));
-                } else {
-                    let gs = global_symbols_defns.get_mut(&name).unwrap();
-                    if gs.1.is_some() {
-                        error_exit(&format!("duplicated definition for `{}`", name));
-                    } else {
-                        gs.1 = Some(expr);
-                    }
-                }
-            }
-            Rule::trait_defn => {
-                trait_infos.push(parse_trait_defn(pair, src, &module_name));
-            }
+            Rule::global_defns => parse_global_defns(
+                pair,
+                src,
+                &namespace,
+                &mut global_name_type_signs,
+                &mut global_value_defns,
+                &mut type_defns,
+                &mut trait_infos,
+            ),
             Rule::trait_impl => {
                 trait_impls.push(parse_trait_impl(pair, src));
             }
@@ -149,32 +127,80 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
         }
     }
 
+    fix_mod.add_global_values(global_value_defns, global_name_type_signs);
     fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls);
 
-    let mut global_symbols: HashMap<FullName, GlobalValue> = Default::default();
-    for (name, (ty, expr)) in global_symbols_defns {
-        if ty.is_none() {
-            error_exit(&format!("symbol `{}` has no type declaration", name));
-        }
-        if expr.is_none() {
-            error_exit(&format!("symbol `{}` has no definition", name));
-        }
-        global_symbols.insert(
-            fix_mod.get_namespaced_name(&name),
-            GlobalValue {
-                ty: ty.unwrap(),
-                expr: SymbolExpr::Simple(expr.unwrap()),
-                typecheck_log: None,
-            },
-        );
-    }
-
-    fix_mod.global_values = global_symbols;
     fix_mod
 }
 
-fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>, module_name: &str) -> TraitInfo {
+fn parse_global_defns(
+    pair: Pair<Rule>,
+    src: &Arc<String>,
+    namespace: &NameSpace,
+    global_name_type_signs: &mut Vec<(FullName, Arc<Scheme>)>,
+    global_value_defns: &mut Vec<(FullName, Arc<ExprNode>)>,
+    type_defns: &mut Vec<TypeDefn>,
+    trait_infos: &mut Vec<TraitInfo>,
+) {
+    assert_ne!(pair.as_rule(), Rule::global_defns);
+    let pairs = pair.into_inner();
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::global_defns_in_namespace => {
+                parse_global_defns_in_namespace(
+                    pair,
+                    src,
+                    namespace,
+                    global_name_type_signs,
+                    global_value_defns,
+                    type_defns,
+                    trait_infos,
+                );
+            }
+            Rule::type_defn => {
+                type_defns.push(parse_type_defn(pair, src, &namespace));
+            }
+            Rule::global_name_type_sign => {
+                global_name_type_signs.push(parse_global_name_type_sign(pair, src, &namespace));
+            }
+            Rule::global_name_defn => {
+                global_value_defns.push(parse_global_name_defn(pair, src, &namespace));
+            }
+            Rule::trait_defn => {
+                trait_infos.push(parse_trait_defn(pair, src, &namespace));
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+fn parse_global_defns_in_namespace(
+    pair: Pair<Rule>,
+    src: &Arc<String>,
+    namespace: &NameSpace,
+    global_name_type_signs: &mut Vec<(FullName, Arc<Scheme>)>,
+    global_value_defns: &mut Vec<(FullName, Arc<ExprNode>)>,
+    type_defns: &mut Vec<TypeDefn>,
+    trait_infos: &mut Vec<TraitInfo>,
+) {
+    assert_ne!(pair.as_rule(), Rule::global_defns_in_namespace);
+    let mut pairs = pair.into_inner();
+    let namespace = namespace.append(parse_namespace(pairs.next().unwrap(), src));
+    for pair in pairs {
+        parse_global_defns(
+            pair,
+            src,
+            &namespace,
+            global_name_type_signs,
+            global_value_defns,
+            type_defns,
+            trait_infos,
+        );
+    }
+}
+
+fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>, namespace: &NameSpace) -> TraitInfo {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let mut pairs = pair.into_inner();
     let kinds = if pairs.peek().unwrap().as_rule() == Rule::predicates {
@@ -193,7 +219,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>, module_name: &str) -> T
         .map(|pair| parse_trait_member_defn(pair, src))
         .collect();
     TraitInfo {
-        id: TraitId::new(&[module_name], &trait_name),
+        id: TraitId::from_fullname(FullName::new(namespace, &trait_name)),
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
         kind_predicates: kinds,
@@ -243,22 +269,33 @@ fn parse_predicate_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualPredica
     qp
 }
 
-fn parse_global_name_type_sign(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<Scheme>) {
+fn parse_global_name_type_sign(
+    pair: Pair<Rule>,
+    src: &Arc<String>,
+    namespace: &NameSpace,
+) -> (FullName, Arc<Scheme>) {
     assert_eq!(pair.as_rule(), Rule::global_name_type_sign);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), src);
     let preds = qual_type.preds.clone();
     let ty = qual_type.ty.clone();
-    (name, Scheme::generalize(ty.free_vars(), preds, ty))
+    (
+        FullName::new(namespace, &name),
+        Scheme::generalize(ty.free_vars(), preds, ty),
+    )
 }
 
-fn parse_global_name_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<ExprNode>) {
+fn parse_global_name_defn(
+    pair: Pair<Rule>,
+    src: &Arc<String>,
+    namespace: &NameSpace,
+) -> (FullName, Arc<ExprNode>) {
     assert_eq!(pair.as_rule(), Rule::global_name_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let expr = parse_expr(pairs.next().unwrap(), src);
-    (name, expr)
+    (FullName::new(namespace, &name), expr)
 }
 
 fn parse_type_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualType {
@@ -353,7 +390,7 @@ fn parse_module_defn(pair: Pair<Rule>, _src: &Arc<String>) -> String {
     pair.into_inner().next().unwrap().as_str().to_string()
 }
 
-fn parse_type_defn(pair: Pair<Rule>, module_name: &str, src: &Arc<String>) -> TypeDefn {
+fn parse_type_defn(pair: Pair<Rule>, src: &Arc<String>, namespace: &NameSpace) -> TypeDefn {
     assert_eq!(pair.as_rule(), Rule::type_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
@@ -370,7 +407,7 @@ fn parse_type_defn(pair: Pair<Rule>, module_name: &str, src: &Arc<String>) -> Ty
         unreachable!();
     };
     TypeDefn {
-        name: FullName::from_strs(&[module_name], name),
+        name: FullName::new(namespace, name),
         value: type_value,
         tyvars,
     }
@@ -774,23 +811,27 @@ fn parse_expr_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_var);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
-    let names = parse_namespace(pairs.next().unwrap(), src);
+    let namespace = if pairs.peek().unwrap().as_rule() == Rule::namespace {
+        parse_namespace(pairs.next().unwrap(), src)
+    } else {
+        NameSpace::local()
+    };
     let var = pairs.next().unwrap().as_str().to_string();
     let name = FullName {
-        namespace: NameSpace::new(names),
+        namespace,
         name: var,
     };
     expr_var(name, Some(span))
 }
 
-fn parse_namespace(pair: Pair<Rule>, _src: &Arc<String>) -> Vec<String> {
+fn parse_namespace(pair: Pair<Rule>, _src: &Arc<String>) -> NameSpace {
     assert_eq!(pair.as_rule(), Rule::namespace);
     let pairs = pair.into_inner();
     let mut ret: Vec<String> = Vec::new();
     for pair in pairs {
         ret.push(pair.as_str().to_string());
     }
-    ret
+    NameSpace::new(ret)
 }
 
 fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {

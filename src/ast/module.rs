@@ -269,6 +269,78 @@ impl FixModule {
         );
     }
 
+    // Add global values
+    pub fn add_global_values(
+        &mut self,
+        exprs: Vec<(FullName, Arc<ExprNode>)>,
+        types: Vec<(FullName, Arc<Scheme>)>,
+    ) {
+        struct GlobalValue {
+            expr: Option<Arc<ExprNode>>,
+            ty: Option<Arc<Scheme>>,
+        }
+
+        let mut global_values: HashMap<FullName, GlobalValue> = Default::default();
+        for (name, expr) in exprs {
+            if !global_values.contains_key(&name) {
+                global_values.insert(
+                    name,
+                    GlobalValue {
+                        expr: Some(expr),
+                        ty: None,
+                    },
+                );
+            } else {
+                let gs = global_values.get_mut(&name).unwrap();
+                if gs.expr.is_some() {
+                    error_exit(&format!(
+                        "duplicated definition signature for global value: `{}`",
+                        name.to_string()
+                    ));
+                } else {
+                    gs.expr = Some(expr);
+                }
+            }
+        }
+        for (name, ty) in types {
+            if !global_values.contains_key(&name) {
+                global_values.insert(
+                    name,
+                    GlobalValue {
+                        ty: Some(ty),
+                        expr: None,
+                    },
+                );
+            } else {
+                let gs = global_values.get_mut(&name).unwrap();
+                if gs.ty.is_some() {
+                    error_exit(&format!(
+                        "duplicated type signature for `{}`",
+                        name.to_string()
+                    ));
+                } else {
+                    gs.ty = Some(ty);
+                }
+            }
+        }
+
+        for (name, gv) in global_values {
+            if gv.expr.is_none() {
+                error_exit(&format!(
+                    "global value `{}` lacks type signature",
+                    name.to_string()
+                ))
+            }
+            if gv.ty.is_none() {
+                error_exit(&format!(
+                    "global value `{}` lacks definition",
+                    name.to_string()
+                ))
+            }
+            self.add_global_value(name, (gv.expr.unwrap(), gv.ty.unwrap()))
+        }
+    }
+
     // Generate codes of global symbols.
     pub fn generate_code(&self, gc: &mut GenerationContext) {
         // Create global symbols, global variable and accessor function.

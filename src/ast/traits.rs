@@ -7,10 +7,8 @@ pub struct TraitId {
 }
 
 impl TraitId {
-    pub fn new(ns: &[&str], name: &Name) -> TraitId {
-        TraitId {
-            name: FullName::from_strs(ns, &name),
-        }
+    pub fn from_fullname(name: FullName) -> TraitId {
+        TraitId { name }
     }
 
     pub fn new_by_name(name: &Name) -> TraitId {
