@@ -168,7 +168,7 @@ module_defn = { "module" ~ sep+ ~ namespace ~ sep* ~ ";" }
 
 global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn }
 
-global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ sep* ~ global_defns* ~ sep* ~ "}" }
+global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep* ~ global_defns)* ~ sep* ~ "}" }
 
 module = { module_defn ~ (sep* ~ (global_defns | trait_impl))* }
 

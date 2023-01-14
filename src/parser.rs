@@ -184,7 +184,7 @@ fn parse_global_defns_in_namespace(
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
 ) {
-    assert_ne!(pair.as_rule(), Rule::global_defns_in_namespace);
+    assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
     let mut pairs = pair.into_inner();
     let namespace = namespace.append(parse_namespace(pairs.next().unwrap(), src));
     for pair in pairs {
