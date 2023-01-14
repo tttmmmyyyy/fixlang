@@ -5,7 +5,9 @@ pub const FIX_NAME: &str = "fix";
 const STD_SOURCE: &str = r#"
 module Std;
 
-type Vector a = unbox struct ( data: Array a );
+type Vector a = unbox struct ( data : Array a );
+
+type String = unbox struct ( data : Vector Byte );
 "#;
 
 pub fn make_std_mod() -> FixModule {
