@@ -105,11 +105,22 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ## Types
 
+### Boxed and unboxed types
+
+Types in fix are divided into boxed types and unboxed types. 
+
+* Value of boxed types are allocated in heap memory. Local names and struct / union fields whose types are boxed are compiled as pointers to the values. 
+* Values of unboxed types are directly embedded into the stack memoroy, structs and unions. 
+
 ### Arrow types
+
+Arrow types are boxed (in principle).
 
 ### Tuples
 
-### Struct definition
+Tuple types are unboxed.
+
+### Structs
 
 You can define a new struct by `type {type_name} = struct ({field_name}: {field_type},...);`. The `{type_name}` must start with a uppercase alphabet. 
 
@@ -135,7 +146,9 @@ For each struct, the following methods are defined in the namespace of {type_nam
 
 Convenient `set_{field_name}` and `set_{field_name}!` functions (or more is general lens function) will be added in the future.
 
-### Union definition
+Struct types are boxed by default.
+
+### Unions
 
 You can define a new union by `type {type_name} = union ({field_name}: {field_type},...);`. The `{type_name}` must start with a uppercase alphabet. 
 
