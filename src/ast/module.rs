@@ -128,7 +128,6 @@ impl MethodImpl {
 pub struct NameResolutionContext {
     pub types: HashSet<FullName>,
     pub traits: HashSet<FullName>,
-    pub module_name: Name,
 }
 
 #[derive(PartialEq)]
@@ -620,7 +619,6 @@ impl FixModule {
         let ctx = NameResolutionContext {
             types: self.tycon_names(),
             traits: self.trait_names(),
-            module_name: self.name.clone(),
         };
         {
             let mut tycons = (*self.type_env.tycons).clone();
