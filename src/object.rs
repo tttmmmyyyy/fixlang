@@ -12,7 +12,7 @@ pub enum ObjectFieldType {
     SubObject(Arc<TypeNode>),
     UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
     UnionTag,                     // TODO: I should merge UnionTag and UnionBuf as like Array.
-    ArraySize(Arc<TypeNode>),     // [size, POINTER to buffer].
+    ArraySize(Arc<TypeNode>),     // Size of array.
 }
 
 impl ObjectFieldType {
@@ -41,9 +41,11 @@ impl ObjectFieldType {
                     .to_struct_type(gc);
                     size = size.max(gc.sizeof(&struct_ty));
                 }
+                // Force align 8
+                let num_of_i64 = size / 8 + if size % 8 == 0 { 0 } else { 1 };
                 gc.context
-                    .i8_type()
-                    .array_type(size as u32)
+                    .i64_type()
+                    .array_type(num_of_i64 as u32)
                     .as_basic_type_enum()
             }
         }
@@ -556,7 +558,7 @@ impl ObjectType {
             fields.push(field_type.to_basic_type(gc));
             match field_type {
                 ObjectFieldType::ArraySize(ty) => {
-                    assert_eq!(i, self.field_types.len() - 1); // ArraySizeBuf must be the last field.
+                    assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
                     assert!(!self.is_unbox); // Array has to be boxed.
 
                     // Add space for one element.
