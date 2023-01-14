@@ -126,8 +126,8 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
                     }
                 }
             }
-            Rule::global_symbol_defn => {
-                let (name, expr) = parse_global_symbol_defn(pair, src);
+            Rule::global_name_defn => {
+                let (name, expr) = parse_global_name_defn(pair, src);
                 if !global_symbols_defns.contains_key(&name) {
                     global_symbols_defns.insert(name, (None, Some(expr)));
                 } else {
@@ -253,8 +253,8 @@ fn parse_global_symbol_type_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, 
     (name, Scheme::generalize(ty.free_vars(), preds, ty))
 }
 
-fn parse_global_symbol_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<ExprNode>) {
-    assert_eq!(pair.as_rule(), Rule::global_symbol_defn);
+fn parse_global_name_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<ExprNode>) {
+    assert_eq!(pair.as_rule(), Rule::global_name_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let expr = parse_expr(pairs.next().unwrap(), src);
