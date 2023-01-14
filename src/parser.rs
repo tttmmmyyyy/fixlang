@@ -143,7 +143,7 @@ fn parse_global_defns(
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
 ) {
-    assert_ne!(pair.as_rule(), Rule::global_defns);
+    assert_eq!(pair.as_rule(), Rule::global_defns);
     let pairs = pair.into_inner();
     for pair in pairs {
         match pair.as_rule() {

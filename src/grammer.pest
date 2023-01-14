@@ -31,7 +31,7 @@ expr_bool_lit = { "true" | "false" }
 
 expr_lit = { expr_int_lit | expr_bool_lit }
 
-expr_var = { namespace? ~ var }
+expr_var = { (namespace ~ ".")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ var_with_type ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
@@ -166,7 +166,7 @@ module_name = { name_head_large ~ var_char* }
 
 module_defn = { "module" ~ sep+ ~ namespace ~ sep* ~ ";" }
 
-global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_impl }
+global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn }
 
 global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ sep* ~ global_defns* ~ sep* ~ "}" }
 
