@@ -164,11 +164,11 @@ global_name_defn = { var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 // === Module ===
 module_name = { name_head_large ~ var_char* }
 
-module_decl = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" }
+module_defn = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" }
 
 toplevel_defns = _{ type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_impl }
 
-module = { module_decl ~ (sep* ~ toplevel_defns)* }
+module = { module_defn ~ (sep* ~ toplevel_defns)* }
 
 // === Comments ===
 block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }

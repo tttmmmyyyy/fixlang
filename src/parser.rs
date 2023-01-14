@@ -99,7 +99,7 @@ fn parse_file(mut file: Pairs<Rule>, src: &Arc<String>) -> FixModule {
 fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut pairs = pair.into_inner();
-    let module_name = parse_module_decl(pairs.next().unwrap(), src);
+    let module_name = parse_module_defn(pairs.next().unwrap(), src);
     let mut fix_mod = FixModule::new(module_name.clone());
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
@@ -349,7 +349,7 @@ fn parse_kind_braced(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
     parse_kind(pair, src)
 }
 
-fn parse_module_decl(pair: Pair<Rule>, _src: &Arc<String>) -> String {
+fn parse_module_defn(pair: Pair<Rule>, _src: &Arc<String>) -> String {
     pair.into_inner().next().unwrap().as_str().to_string()
 }
 
