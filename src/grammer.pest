@@ -29,7 +29,9 @@ expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
 expr_bool_lit = { "true" | "false" }
 
-expr_string_lit = { "\"" ~ string_char* ~ "\"" }
+expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
+
+string_lit_inner = { string_char* }
 
 string_char = {
     !("\"" | "\\") ~ ANY 

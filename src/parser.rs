@@ -931,7 +931,7 @@ fn parse_expr_bool_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 fn parse_expr_string_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_string_lit);
     let span = Span::from_pair(&src, &pair);
-    let string = pair.as_str().to_string();
+    let string = pair.into_inner().next().unwrap().as_str().to_string();
     // TODO: resolve escape sequences.
     make_string_value(string, Some(span))
 }
