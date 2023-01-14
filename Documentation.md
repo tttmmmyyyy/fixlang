@@ -3,9 +3,9 @@ Documentation
 
 # Syntax
 
-## Module declaration
+## Module definition
 
-Each source file needs a module declaration at the first.
+Each source file needs a module definition at the first.
 
 ```
 module Main;
@@ -187,6 +187,26 @@ type Weight = box union (pound: Int, kilograms: Int);
 ### Trait bound
 
 ## Higher-kinded types
+
+## Namespaces
+
+Namespaces of global names (i.e., names of global values, types and traits) can be specified using the following syntax: `namespace {namespace} { ... }`.
+
+For example, in the following program,
+
+```
+module Main;
+
+namespace TheNameSpace {
+    truth : Int;
+    truth = 42;
+}
+
+truth : Bool;
+truth = true;
+```
+
+two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.TheNameSpace.truth : Bool`.
 
 # Built-in features
 
