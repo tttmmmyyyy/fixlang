@@ -2,9 +2,11 @@ use super::*;
 
 pub const FIX_NAME: &str = "fix";
 
-const STD_SOURCE: &str = r###"
+const STD_SOURCE: &str = r#"
 module Std;
-"###;
+
+type Vector a = unbox struct ( data: Array a );
+"#;
 
 pub fn make_std_mod() -> FixModule {
     let mut fix_module = parse_source(STD_SOURCE);

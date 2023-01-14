@@ -8,7 +8,7 @@ pub enum ObjectFieldType {
     DtorFunction,
     LambdaFunction(Arc<TypeNode>), // Specify type of lambda
     I64,
-    Bool,
+    I8,
     SubObject(Arc<TypeNode>),
     UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
     UnionTag,                     // TODO: I should merge UnionTag and UnionBuf as like Array.
@@ -27,7 +27,7 @@ impl ObjectFieldType {
                 get_object_type(ty, &vec![], gc.type_env()).to_embedded_type(gc)
             }
             ObjectFieldType::I64 => gc.context.i64_type().into(),
-            ObjectFieldType::Bool => gc.context.i8_type().into(),
+            ObjectFieldType::I8 => gc.context.i8_type().into(),
             ObjectFieldType::ArraySize(_) => gc.context.i64_type().into(), // size; buffer will be added on alloca.
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
@@ -751,7 +751,9 @@ pub fn get_object_type(
                 if ty == &int_lit_ty() {
                     ret.field_types.push(ObjectFieldType::I64);
                 } else if ty == &bool_lit_ty() {
-                    ret.field_types.push(ObjectFieldType::Bool);
+                    ret.field_types.push(ObjectFieldType::I8);
+                } else if ty == &byte_lit_ty() {
+                    ret.field_types.push(ObjectFieldType::I8);
                 } else {
                     unreachable!()
                 }
@@ -876,7 +878,7 @@ pub fn allocate_obj<'c, 'm>(
             ObjectFieldType::LambdaFunction(_) => {
                 assert_eq!(i, LAMBDA_FUNCTION_IDX as usize);
             }
-            ObjectFieldType::Bool => {}
+            ObjectFieldType::I8 => {}
             ObjectFieldType::ArraySize(_) => {
                 assert_eq!(i, ARRAY_SIZE_IDX as usize);
                 // Set array size.
@@ -976,7 +978,7 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::ControlBlock => {}
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::LambdaFunction(_) => {}
-                    ObjectFieldType::Bool => {}
+                    ObjectFieldType::I8 => {}
                     ObjectFieldType::ArraySize(ty) => {
                         assert_eq!(i, ARRAY_SIZE_IDX as usize);
                         let size = gc

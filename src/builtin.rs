@@ -6,6 +6,7 @@ pub const STD_NAME: &str = "Std";
 // Primitive types.
 pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
+pub const BYTE_NAME: &str = "Byte";
 pub const ARRAY_NAME: &str = "Array";
 
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
@@ -22,6 +23,16 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     );
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], BOOL_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            field_types: vec![],
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], BYTE_NAME)),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::Primitive,
@@ -60,6 +71,11 @@ pub fn int_lit_ty() -> Arc<TypeNode> {
 // Get Bool type.
 pub fn bool_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOOL_NAME)))
+}
+
+// Get Byte type.
+pub fn byte_lit_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BYTE_NAME)))
 }
 
 // Get Array type.
@@ -1402,7 +1418,7 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
                 .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
         let value = gc.builder().build_int_cast(
             value,
-            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             "eq",
         );
         let obj = if rvo.is_none() {
@@ -1464,7 +1480,7 @@ pub fn less_than_trait_instance_int() -> TraitInstance {
         );
         let value = gc.builder().build_int_cast(
             value,
-            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             LESS_THAN_TRAIT_LT_NAME,
         );
         let obj = if rvo.is_none() {
@@ -1526,7 +1542,7 @@ pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
         );
         let value = gc.builder().build_int_cast(
             value,
-            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
         let obj = if rvo.is_none() {
@@ -1984,7 +2000,7 @@ pub fn not_trait_instance_bool() -> TraitInstance {
     ) -> Object<'c> {
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
-        let bool_ty = ObjectFieldType::Bool.to_basic_type(gc).into_int_type();
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
         let false_val = bool_ty.const_zero();
         let value =
             gc.builder()

@@ -607,7 +607,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     ObjectFieldType::DtorFunction => unreachable!(),
                     ObjectFieldType::LambdaFunction(_) => unreachable!(),
                     ObjectFieldType::I64 => {}
-                    ObjectFieldType::Bool => {}
+                    ObjectFieldType::I8 => {}
                     ObjectFieldType::SubObject(ty) => {
                         let ptr = if ty.is_box(self.type_env()) {
                             self.load_obj_field(ptr, struct_type, i as u32)
