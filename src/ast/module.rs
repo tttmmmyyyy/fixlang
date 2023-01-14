@@ -160,16 +160,10 @@ impl NameResolutionContext {
             candidates[0].clone()
         } else {
             // candidates.len() >= 2
-            let candidates = candidates
-                .iter()
-                .filter(|name| {
-                    name.namespace.len() >= 1 && name.namespace.module() == self.module_name
-                })
-                .collect::<Vec<_>>();
-            if candidates.len() == 1 {
-                candidates[0].clone()
+            if type_or_trait == NameResolutionType::Type {
+                error_exit("Type name `{}` is ambiguous.")
             } else {
-                error_exit("Trait name `{}` is ambiguous.");
+                error_exit("Trait name `{}` is ambiguous.")
             }
         }
     }
