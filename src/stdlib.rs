@@ -8,6 +8,8 @@ module Std;
 type Vector a = unbox struct ( data : Array a );
 
 type String = unbox struct ( data : Vector Byte );
+
+type IO a = box struct ( data : IOState -> (a, IOState) );
 "#;
 
 pub fn make_std_mod() -> FixModule {

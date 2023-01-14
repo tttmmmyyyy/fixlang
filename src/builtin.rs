@@ -8,6 +8,7 @@ pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
 pub const BYTE_NAME: &str = "Byte";
 pub const ARRAY_NAME: &str = "Array";
+pub const IOSTATE_NAME: &str = "IOState";
 
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
@@ -51,6 +52,16 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             field_types: vec![type_tyvar_star("a")],
         },
     );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            field_types: vec![],
+        },
+    );
     ret
 }
 
@@ -81,6 +92,11 @@ pub fn byte_lit_ty() -> Arc<TypeNode> {
 // Get Array type.
 pub fn array_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
+}
+
+// Get IOState type.
+pub fn iostate_lit_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
 }
 
 // Get LoopResult type.
