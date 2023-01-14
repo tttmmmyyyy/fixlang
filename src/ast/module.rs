@@ -189,9 +189,9 @@ impl FixModule {
         }
     }
 
-    // Set traits.
+    // Add traits.
     pub fn add_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
-        self.trait_env.set(trait_infos, trait_impls);
+        self.trait_env.add(trait_infos, trait_impls);
     }
 
     // Register declarations of user-defined types.
