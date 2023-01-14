@@ -122,6 +122,10 @@ Arrow types are boxed, because it may contain many captured values.
 
 Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
 
+### Unit type
+
+Unit `()` is a type allows only one value, which is also written as `()`.
+
 ### Structs
 
 You can define a new struct by `type {type_name} = struct ({field_name}: {field_type},...);`. The `{type_name}` must start with a uppercase alphabet. 
