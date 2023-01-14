@@ -485,6 +485,11 @@ impl FullName {
     pub fn name_as_mut(&mut self) -> &mut Name {
         &mut self.name
     }
+
+    #[allow(dead_code)]
+    pub fn module(&self) -> Name {
+        self.namespace.module()
+    }
 }
 
 impl Var {

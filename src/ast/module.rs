@@ -254,7 +254,10 @@ impl FixModule {
     // Add a global value.
     pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
         if self.global_symbols.contains_key(&name) {
-            error_exit(&format!("duplicated global object: `{}`", name.to_string()));
+            error_exit(&format!(
+                "duplicated definition for global value: `{}`",
+                name.to_string()
+            ));
         }
         self.global_symbols.insert(
             name,
