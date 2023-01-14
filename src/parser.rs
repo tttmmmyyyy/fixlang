@@ -102,7 +102,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     let module_name = parse_module_decl(pairs.next().unwrap(), src);
     let mut fix_mod = FixModule::new(module_name.clone());
 
-    let mut type_decls: Vec<TypeDefn> = Vec::new();
+    let mut type_defns: Vec<TypeDefn> = Vec::new();
     let mut global_symbols_defns: HashMap<Name, (Option<Arc<Scheme>>, Option<Arc<ExprNode>>)> =
         Default::default();
     let mut trait_infos: Vec<TraitInfo> = vec![];
@@ -110,8 +110,8 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
 
     for pair in pairs {
         match pair.as_rule() {
-            Rule::type_decl => {
-                type_decls.push(parse_type_decl(pair, &module_name, src));
+            Rule::type_defn => {
+                type_defns.push(parse_type_defn(pair, &module_name, src));
             }
             Rule::global_name_type_sign => {
                 let (name, ty) = parse_global_name_type_sign(pair, src);
@@ -149,7 +149,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
         }
     }
 
-    fix_mod.add_type_defns(type_decls);
+    fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls);
 
     let mut global_symbols: HashMap<FullName, GlobalSymbol> = Default::default();
@@ -353,8 +353,8 @@ fn parse_module_decl(pair: Pair<Rule>, _src: &Arc<String>) -> String {
     pair.into_inner().next().unwrap().as_str().to_string()
 }
 
-fn parse_type_decl(pair: Pair<Rule>, module_name: &str, src: &Arc<String>) -> TypeDefn {
-    assert_eq!(pair.as_rule(), Rule::type_decl);
+fn parse_type_defn(pair: Pair<Rule>, module_name: &str, src: &Arc<String>) -> TypeDefn {
+    assert_eq!(pair.as_rule(), Rule::type_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
     let mut tyvars: Vec<Name> = vec![];

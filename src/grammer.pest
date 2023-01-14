@@ -123,14 +123,14 @@ kind_nlr = { kind_star | kind_braced }
 
 kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 
-// === Type declarations ===
+// === Type definitions ===
 type_name = { name_head_large ~ var_char* }
 
 type_field_name = { !keywords ~ name_head_small ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_decl = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn) ~ sep* ~ ";" }
+type_defn = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn) ~ sep* ~ ";" }
 
 comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* }
 
@@ -166,7 +166,7 @@ module_name = { name_head_large ~ var_char* }
 
 module_decl = { "module" ~ sep+ ~ module_name ~ sep* ~ ";" }
 
-toplevel_defns = _{ type_decl | global_name_type_sign | global_name_defn | trait_defn | trait_impl }
+toplevel_defns = _{ type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_impl }
 
 module = { module_decl ~ (sep* ~ toplevel_defns)* }
 
