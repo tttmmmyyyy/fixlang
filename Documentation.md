@@ -112,13 +112,15 @@ Types in fix are divided into boxed types and unboxed types.
 * Value of boxed types are allocated in heap memory. Local names and struct / union fields whose types are boxed are compiled as pointers to the values. 
 * Values of unboxed types are directly embedded into the stack memoroy, structs and unions. 
 
+In general, types that contain a lot of data (such as `Array`) are suited to be boxed because boxed types have lower copying costs. On the other hand, types containing small data (such as `Int`) can be unboxed to reduce the cost of increasing or decreasing the reference counter.
+
 ### Arrow types
 
-Arrow types are boxed (in principle).
+Arrow types are boxed, because it may contain many captured values.
 
 ### Tuples
 
-Tuple types are unboxed.
+Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
 
 ### Structs
 
@@ -146,7 +148,11 @@ For each struct, the following methods are defined in the namespace of {type_nam
 
 Convenient `set_{field_name}` and `set_{field_name}!` functions (or more is general lens function) will be added in the future.
 
-Struct types are boxed by default.
+Structs are boxed by default because they are assumed to have many fields. To define unboxed struct type, write `unbox` specifier before `struct`.
+
+```
+type Product = unbox struct (price: Int, sold: Bool);
+```
 
 ### Unions
 
@@ -167,6 +173,12 @@ For each struct, the following methods are defined in the namespace of {type_nam
     - If the given union value doesn't carry `{field_name}`, this function panics.
 - `is_{field_name} : {type_name} -> Bool`
     - For the `Weight` example above, `Main.Weight.is_pound : Weight -> Bool` and `Main.Weight.is_kilograms : Weight -> Bool`.
+
+Unions are unboxed by default because they only contains a single value at a time. To define boxed union type, write `box` specifier before `struct`.
+
+```
+type Weight = box union (pound: Int, kilograms: Int);
+```
 
 ### Type parameters
 
