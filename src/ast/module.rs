@@ -11,7 +11,7 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "@";
 pub struct FixModule {
     pub name: Name,
     pub type_defns: Vec<TypeDefn>,
-    pub global_symbols: HashMap<FullName, GlobalSymbol>,
+    pub global_values: HashMap<FullName, GlobalValue>,
     pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
     pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
     pub trait_env: TraitEnv,
@@ -52,7 +52,7 @@ pub struct InstantiatedSymbol {
     pub typechecker: Option<TypeCheckContext>, // type checker available for resolving types in expr.
 }
 
-pub struct GlobalSymbol {
+pub struct GlobalValue {
     // Type of this symbol.
     // For example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String for a: Show",
@@ -64,7 +64,7 @@ pub struct GlobalSymbol {
     // TODO: add expr_src: Span
 }
 
-impl GlobalSymbol {
+impl GlobalValue {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         self.ty = self.ty.resolve_namespace(ctx);
         self.expr.resolve_namespace(ctx);
@@ -181,7 +181,7 @@ impl FixModule {
         FixModule {
             name,
             type_defns: Default::default(),
-            global_symbols: Default::default(),
+            global_values: Default::default(),
             instantiated_global_symbols: Default::default(),
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
@@ -253,15 +253,15 @@ impl FixModule {
 
     // Add a global value.
     pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
-        if self.global_symbols.contains_key(&name) {
+        if self.global_values.contains_key(&name) {
             error_exit(&format!(
                 "duplicated definition for global value: `{}`",
                 name.to_string()
             ));
         }
-        self.global_symbols.insert(
+        self.global_values.insert(
             name,
-            GlobalSymbol {
+            GlobalValue {
                 ty: scm,
                 expr: SymbolExpr::Simple(expr),
                 typecheck_log: None,
@@ -384,7 +384,7 @@ impl FixModule {
     // Instantiate symbol.
     fn instantiate_symbol(&mut self, mut tc: TypeCheckContext, sym: &mut InstantiatedSymbol) {
         assert!(sym.expr.is_none());
-        let global_sym = self.global_symbols.get(&sym.template_name).unwrap();
+        let global_sym = self.global_values.get(&sym.template_name).unwrap();
         let template_expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
                 tc.unify(&e.inferred_ty.as_ref().unwrap(), &sym.ty);
@@ -410,7 +410,7 @@ impl FixModule {
     pub fn instantiate_symbols(&mut self) {
         while !self.deferred_instantiation.is_empty() {
             let (name, sym) = self.deferred_instantiation.iter().next().unwrap();
-            let gs = &self.global_symbols[&sym.template_name];
+            let gs = &self.global_values[&sym.template_name];
             let tc = gs.typecheck_log.as_ref().unwrap().clone();
             let name = name.clone();
             let mut sym = sym.clone();
@@ -423,7 +423,7 @@ impl FixModule {
     // Instantiate main function.
     pub fn instantiate_main_function(&mut self) -> Arc<ExprNode> {
         let main_func_name = self.get_namespaced_name(&MAIN_FUNCTION_NAME.to_string());
-        if !self.global_symbols.contains_key(&main_func_name) {
+        if !self.global_values.contains_key(&main_func_name) {
             error_exit("main function not found.");
         }
         let main_ty = int_lit_ty();
@@ -527,9 +527,9 @@ impl FixModule {
                     method_impls.push(MethodImpl { ty, expr });
                 }
                 let method_name = FullName::new(&trait_id.name.to_namespace(), &method_name);
-                self.global_symbols.insert(
+                self.global_values.insert(
                     method_name,
-                    GlobalSymbol {
+                    GlobalValue {
                         ty: method_ty,
                         expr: SymbolExpr::Method(method_impls),
                         typecheck_log: None,
@@ -543,7 +543,7 @@ impl FixModule {
         self.trait_env.set_kinds();
         let type_env = &self.type_env();
         let trait_kind_map = self.trait_env.trait_kind_map();
-        for (_name, sym) in &mut self.global_symbols {
+        for (_name, sym) in &mut self.global_values {
             sym.set_kinds(type_env, &trait_kind_map);
         }
     }
@@ -568,7 +568,7 @@ impl FixModule {
         for decl in &mut self.type_defns {
             decl.resolve_namespace(&ctx);
         }
-        for (_, sym) in &mut self.global_symbols {
+        for (_, sym) in &mut self.global_values {
             sym.resolve_namespace(&ctx);
         }
     }

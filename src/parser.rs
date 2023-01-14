@@ -152,7 +152,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls);
 
-    let mut global_symbols: HashMap<FullName, GlobalSymbol> = Default::default();
+    let mut global_symbols: HashMap<FullName, GlobalValue> = Default::default();
     for (name, (ty, expr)) in global_symbols_defns {
         if ty.is_none() {
             error_exit(&format!("symbol `{}` has no type declaration", name));
@@ -162,7 +162,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
         }
         global_symbols.insert(
             fix_mod.get_namespaced_name(&name),
-            GlobalSymbol {
+            GlobalValue {
                 ty: ty.unwrap(),
                 expr: SymbolExpr::Simple(expr.unwrap()),
                 typecheck_log: None,
@@ -170,7 +170,7 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
         );
     }
 
-    fix_mod.global_symbols = global_symbols;
+    fix_mod.global_values = global_symbols;
     fix_mod
 }
 

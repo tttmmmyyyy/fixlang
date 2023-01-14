@@ -58,14 +58,14 @@ fn build_module<'c>(
     let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone(), fix_mod.type_env());
 
     // Register type declarations of global symbols to typechecker.
-    for (name, defn) in &fix_mod.global_symbols {
+    for (name, defn) in &fix_mod.global_values {
         typechecker
             .scope
             .add_global(name.name.clone(), &name.namespace, &defn.ty);
     }
 
     // Check types.
-    for (_name, sym) in &mut fix_mod.global_symbols {
+    for (_name, sym) in &mut fix_mod.global_values {
         let mut tc = typechecker.clone();
         match &sym.expr {
             SymbolExpr::Simple(e) => {
@@ -84,7 +84,7 @@ fn build_module<'c>(
     }
 
     // Calculate free variables of expressions.
-    for (_name, sym) in &mut fix_mod.global_symbols {
+    for (_name, sym) in &mut fix_mod.global_values {
         match &sym.expr {
             SymbolExpr::Simple(e) => {
                 let e = calculate_free_vars(e.clone());
