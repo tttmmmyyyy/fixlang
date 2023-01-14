@@ -656,6 +656,25 @@ pub fn test33() {
 
 #[test]
 #[serial]
+pub fn test34_5() {
+    // Test unboxed struct declaration and new, mod.
+    let source = r"
+        module Main;
+        type IntBool = unbox struct (x: Int, y: Bool);
+
+        main : Int;
+        main = (
+            let obj = IntBool.new 18 false;
+            let obj = IntBool.mod_x (\x -> x + 42) obj;
+            IntBool.get_x obj
+        );
+        ";
+    let answer = 60;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test34() {
     // Test namespace inference.
     let source = r"
@@ -1023,6 +1042,28 @@ pub fn test47() {
         module Main;
 
         type IntOrBool = union (int : Int, bool: Bool);
+
+        main : Int;
+        main = (
+            let int_union = int 3;
+            let bool_union = bool true;
+            let int_val = if int_union.is_int then int_union.as_int else 0;
+            let bool_val = if bool_union.is_bool then bool_union.as_bool else false;
+            if bool_val then int_val else 0
+        );
+    ";
+    let answer = 3;
+    test_run_source(source, answer, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test47_2() {
+    // Basic use of boxed union.
+    let source = r"
+        module Main;
+
+        type IntOrBool = box union (int : Int, bool: Bool);
 
         main : Int;
         main = (
