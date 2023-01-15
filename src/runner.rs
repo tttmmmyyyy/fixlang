@@ -8,7 +8,7 @@ use inkwell::{
 
 use super::*;
 
-fn execute_main_module<'c>(ee: &ExecutionEngine<'c>) -> i64 {
+fn execute_main_module<'c>(ee: &ExecutionEngine<'c>) -> i32 {
     if SANITIZE_MEMORY {
         assert_eq!(
             load_library_permanently("sanitizer/libfixsanitizer.so"),
@@ -17,7 +17,7 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>) -> i64 {
     }
     unsafe {
         let func = ee
-            .get_function::<unsafe extern "C" fn() -> i64>("main")
+            .get_function::<unsafe extern "C" fn() -> i32>("main")
             .unwrap();
         func.call()
     }
@@ -113,13 +113,14 @@ fn build_module<'c>(
     fix_mod.generate_code(&mut gc);
 
     // Add main function.
-    let main_fn_type = context.void_type().fn_type(&[], false);
+    let main_fn_type = context.i32_type().fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
     let entry_bb = context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
 
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
+    let main_obj_ty = main_obj.ty.to_string();
     let main_runner = main_obj.load_field_nocap(&mut gc, 0).into_pointer_value(); // IOState -> ((), IOState)
     let main_runner = Object::new(main_runner, io_runner_ty(unit_ty()));
     let iostate = allocate_obj(
@@ -138,7 +139,8 @@ fn build_module<'c>(
     }
 
     // Return main function.
-    gc.builder().build_return(None);
+    gc.builder()
+        .build_return(Some(&gc.context.i32_type().const_int(0, false)));
 
     // Print LLVM bitcode to file
     module.print_to_file("main.ll").unwrap();
@@ -153,7 +155,7 @@ fn build_module<'c>(
     gc.target
 }
 
-pub fn run_source(source: &str, opt_level: OptimizationLevel, result_as_main_return: bool) -> i64 {
+pub fn run_source(source: &str, opt_level: OptimizationLevel, result_as_main_return: bool) -> i32 {
     let mut fix_mod = make_std_mod();
     fix_mod.import(parse_source(source));
 
@@ -188,7 +190,7 @@ pub fn read_file(path: &Path) -> String {
     s
 }
 
-pub fn run_file(path: &Path, opt_level: OptimizationLevel, result_as_main_return: bool) -> i64 {
+pub fn run_file(path: &Path, opt_level: OptimizationLevel, result_as_main_return: bool) -> i32 {
     run_source(read_file(path).as_str(), opt_level, result_as_main_return)
 }
 

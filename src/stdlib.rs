@@ -9,7 +9,7 @@ type Vector a = unbox struct ( data : Array a );
 
 type String = unbox struct ( data : Vector Byte );
 
-type IO a = box struct ( run : IOState -> (a, IOState) );
+type IO a = unbox struct ( run : IOState -> (a, IOState) );
 
 print : String -> IO ();
 print = \str -> IO.new $ print_internal str;

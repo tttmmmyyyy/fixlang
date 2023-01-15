@@ -8,6 +8,7 @@ pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
 pub const BYTE_NAME: &str = "Byte";
 pub const IOSTATE_NAME: &str = "IOState";
+pub const IO_NAME: &str = "IO";
 pub const ARRAY_NAME: &str = "Array";
 pub const VECTOR_NAME: &str = "Vector";
 pub const STRING_NAME: &str = "String";
@@ -54,6 +55,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             field_types: vec![],
         },
     );
+    // IO is defined in the source code of Std.
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], ARRAY_NAME)),
         TyConInfo {
@@ -64,7 +66,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             field_types: vec![type_tyvar_star("a")],
         },
     );
-    // String is defined by source code.
+    // String is defined in the source code of Std.
     ret
 }
 
@@ -105,6 +107,11 @@ pub fn vector_lit_ty() -> Arc<TypeNode> {
 // Get IOState type.
 pub fn iostate_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
+}
+
+// Get IO type.
+pub fn io_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME)))
 }
 
 // Get String type.
@@ -1365,6 +1372,7 @@ pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
         // Get ptr to string buffer.
         let array = extract_array_from_string(gc, &string);
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let buf = gc.cast_pointer(buf, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
 
         // Print string.
         gc.call_runtime(RuntimeFunctions::Printf, &[buf.into()]);

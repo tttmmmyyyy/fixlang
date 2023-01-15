@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn test_run_source(source: &str, answer: i64, opt_level: OptimizationLevel) {
+pub fn test_run_source(source: &str, answer: i32, opt_level: OptimizationLevel) {
     assert_eq!(run_source(source, opt_level, true), answer)
 }
 
