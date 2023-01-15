@@ -1415,12 +1415,9 @@ pub fn test61() {
     // Test Hello world.
     let source = r#"
     module Main;
-    
-    hw : String;
-    hw = "Hello World!";
 
-    main : Int;
-    main = let hw = hw in 0;
+    main : IO ();
+    main = print "Hello World!";
     "#;
     let answer = 0;
     test_run_source(source, answer, OptimizationLevel::Default);

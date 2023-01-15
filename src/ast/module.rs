@@ -479,9 +479,9 @@ impl FixModule {
     pub fn instantiate_main_function(&mut self) -> Arc<ExprNode> {
         let main_func_name = FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME);
         if !self.global_values.contains_key(&main_func_name) {
-            error_exit("Main.main not found.");
+            error_exit(&format!("{} not found.", main_func_name.to_string()));
         }
-        let main_ty = int_lit_ty();
+        let main_ty = type_tyapp(iostate_lit_ty(), unit_ty());
         let inst_name = self.require_instantiated_symbol(&main_func_name, &main_ty);
         self.instantiate_symbols();
         expr_var(inst_name, None).set_inferred_type(main_ty)

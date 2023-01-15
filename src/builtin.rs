@@ -122,6 +122,12 @@ pub fn unit_ty() -> Arc<TypeNode> {
     make_tuple_ty(vec![])
 }
 
+// Get type IOState -> (output_ty, IOState).
+pub fn io_runner_ty(output_ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    let result_ty = make_tuple_ty(vec![output_ty, iostate_lit_ty()]);
+    type_fun(iostate_lit_ty(), result_ty.clone())
+}
+
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
     let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
@@ -1389,14 +1395,10 @@ pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
         ret
     });
 
-    let result_ty = make_tuple_ty(vec![unit_ty(), iostate_lit_ty()]);
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
-        type_fun(
-            string_lit_ty(),
-            type_fun(iostate_lit_ty(), result_ty.clone()),
-        ),
+        type_fun(string_lit_ty(), io_runner_ty(unit_ty())),
     );
 
     let expr = expr_abs(
@@ -1407,7 +1409,7 @@ pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
                 generator,
                 vec![FullName::local(STRING_NAME), FullName::local(IOSTATE_NAME)],
                 format!("print_inner {} {}", STRING_NAME, IOSTATE_NAME),
-                result_ty,
+                make_tuple_ty(vec![unit_ty(), iostate_lit_ty()]),
                 None,
             ),
             None,

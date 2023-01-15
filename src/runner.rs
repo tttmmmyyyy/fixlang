@@ -113,37 +113,32 @@ fn build_module<'c>(
     fix_mod.generate_code(&mut gc);
 
     // Add main function.
-    let main_fn_type = context.i64_type().fn_type(&[], false);
+    let main_fn_type = context.void_type().fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
     let entry_bb = context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
 
-    // Evaluate program and extract int value from result.
-    let result = gc.eval_expr(main_expr, None);
-    let result = result.load_field_nocap(&mut gc, 0);
+    // Run main object.
+    let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
+    let main_runner = main_obj.load_field_nocap(&mut gc, 0).into_pointer_value(); // IOState -> ((), IOState)
+    let main_runner = Object::new(main_runner, io_runner_ty(unit_ty()));
+    let iostate = allocate_obj(
+        iostate_lit_ty(),
+        &vec![],
+        None,
+        &mut gc,
+        Some("iostate_for_main"),
+    );
+    let ret = gc.apply_lambda(main_runner, iostate, None);
+    gc.release(ret);
 
     // Perform leak check
     if SANITIZE_MEMORY {
         gc.call_runtime(RuntimeFunctions::CheckLeak, &[]);
     }
 
-    // Print result if print_result and build return
-    if let BasicValueEnum::IntValue(result) = result {
-        if result_as_main_return {
-            gc.builder().build_return(Some(&result));
-        } else {
-            let string_ptr = gc.builder().build_global_string_ptr("%d\n", "rust_str");
-            gc.call_runtime(
-                RuntimeFunctions::Printf,
-                &[string_ptr.as_pointer_value().into(), result.into()],
-            );
-            gc.builder().build_return(Some(
-                &gc.context.i64_type().const_zero().as_basic_value_enum(),
-            ));
-        }
-    } else {
-        panic!("Given program doesn't return int value!");
-    }
+    // Return main function.
+    gc.builder().build_return(None);
 
     // Print LLVM bitcode to file
     module.print_to_file("main.ll").unwrap();
