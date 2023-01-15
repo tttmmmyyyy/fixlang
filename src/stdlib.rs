@@ -9,6 +9,11 @@ type Vector a = unbox struct ( data : Array a );
 
 type String = unbox struct ( data : Vector Byte );
 
+namespace IO {
+    pure : a -> (IOState -> (a, IOState));
+    pure = \val -> \io -> (val, io);
+}
+
 namespace Debug {
     assert_eq : [a: Eq] String -> a -> a -> ();
     assert_eq = \msg -> \lhs -> \rhs -> (
