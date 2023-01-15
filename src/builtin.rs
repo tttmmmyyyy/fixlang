@@ -1355,8 +1355,8 @@ fn extract_vector_from_string<'c, 'm>(
     vector
 }
 
-// print_internal : String -> IOState -> ((), IOState).
-pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
+// print : String -> IOState -> ((), IOState).
+pub fn print_io_func() -> (Arc<ExprNode>, Arc<Scheme>) {
     const STRING_NAME: &str = "str";
     const IOSTATE_NAME: &str = "iostate";
 
@@ -1384,13 +1384,7 @@ pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             assert!(ty.is_unbox(gc.type_env()));
             rvo.unwrap()
         } else {
-            allocate_obj(
-                ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some("allocate_ret_print_internal"),
-            )
+            allocate_obj(ty.clone(), &vec![], None, gc, Some("allocate_ret_print"))
         };
         let unit_val = unit_ty()
             .get_object_type(&vec![], gc.type_env())
@@ -1416,7 +1410,7 @@ pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             expr_lit(
                 generator,
                 vec![FullName::local(STRING_NAME), FullName::local(IOSTATE_NAME)],
-                format!("print_inner {} {}", STRING_NAME, IOSTATE_NAME),
+                format!("print {} {}", STRING_NAME, IOSTATE_NAME),
                 make_tuple_ty(vec![unit_ty(), iostate_lit_ty()]),
                 None,
             ),

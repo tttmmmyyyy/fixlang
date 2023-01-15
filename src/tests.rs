@@ -1416,8 +1416,19 @@ pub fn test61() {
     let source = r#"
     module Main;
 
-    main : IO ();
-    main = print "Hello " .and_then \x -> print "World!";
+    main : IOState -> ((), IOState);
+    main = \io -> (
+        loop (0, io) \state -> (
+            let counter = state.get_0;
+            let io = state.get_1;
+            if counter == 3 then
+                break ((), io)
+            else
+                let ret = io.print "Hello World! ";
+                let io = ret.get_1;
+                continue (counter + 1, io)
+        )
+    );
     "#;
     let answer = 0;
     test_run_source(source, answer, OptimizationLevel::Default);
