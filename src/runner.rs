@@ -120,7 +120,6 @@ fn build_module<'c>(
 
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
-    let main_obj_ty = main_obj.ty.to_string();
     let main_runner = main_obj.load_field_nocap(&mut gc, 0).into_pointer_value(); // IOState -> ((), IOState)
     let main_runner = Object::new(main_runner, io_runner_ty(unit_ty()));
     let iostate = allocate_obj(
