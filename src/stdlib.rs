@@ -9,7 +9,10 @@ type Vector a = unbox struct ( data : Array a );
 
 type String = unbox struct ( data : Vector Byte );
 
-type IO a = box struct ( data : IOState -> (a, IOState) );
+type IO a = box struct ( run : IOState -> (a, IOState) );
+
+print : String -> IO ();
+print = \str -> IO.new $ print_internal str;
 "#;
 
 pub fn make_std_mod() -> FixModule {
@@ -98,6 +101,10 @@ pub fn make_std_mod() -> FixModule {
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
         length_array(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], "print_internal"),
+        print_internal(),
     );
 
     fix_module

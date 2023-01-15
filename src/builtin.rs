@@ -7,8 +7,9 @@ pub const STD_NAME: &str = "Std";
 pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
 pub const BYTE_NAME: &str = "Byte";
-pub const ARRAY_NAME: &str = "Array";
 pub const IOSTATE_NAME: &str = "IOState";
+pub const ARRAY_NAME: &str = "Array";
+pub const VECTOR_NAME: &str = "Vector";
 pub const STRING_NAME: &str = "String";
 
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
@@ -44,6 +45,16 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
         },
     );
     ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Struct,
+            is_unbox: false,
+            tyvars: vec![],
+            field_types: vec![],
+        },
+    );
+    ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], ARRAY_NAME)),
         TyConInfo {
             kind: kind_arrow(kind_star(), kind_star()),
@@ -51,16 +62,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: false,
             tyvars: vec!["a".to_string()],
             field_types: vec![type_tyvar_star("a")],
-        },
-    );
-    ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)),
-        TyConInfo {
-            kind: kind_star(),
-            variant: TyConVariant::Primitive,
-            is_unbox: true,
-            tyvars: vec![],
-            field_types: vec![],
         },
     );
     // String is defined by source code.
@@ -96,6 +97,11 @@ pub fn array_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
+// Get Vector type.
+pub fn vector_lit_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], VECTOR_NAME)))
+}
+
 // Get IOState type.
 pub fn iostate_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
@@ -109,6 +115,11 @@ pub fn string_lit_ty() -> Arc<TypeNode> {
 // Get LoopResult type.
 pub fn loop_result_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
+}
+
+// Get Unit type.
+pub fn unit_ty() -> Arc<TypeNode> {
+    make_tuple_ty(vec![])
 }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
@@ -1301,6 +1312,84 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
                 vec![initial_state_name, loop_body_name],
                 format!("loop {} {}", INITIAL_STATE_NAME, LOOP_BODY_NAME),
                 type_tyvar_star(B_NAME),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+// print_internal : String -> IOState -> ((), IOState).
+pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const STRING_NAME: &str = "str";
+    const IOSTATE_NAME: &str = "iostate";
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        let string_name = FullName::local(STRING_NAME);
+        let iostate_name = FullName::local(IOSTATE_NAME);
+
+        // Get argments.
+        let iostate = gc.get_var(&iostate_name).ptr.get(gc);
+        gc.panic_if_shared(&iostate, "panic: IOState value is shared!");
+        let string = gc.get_var(&string_name).ptr.get(gc);
+
+        // Get ptr to string buffer
+        let vector_byte_ty = type_tyapp(vector_lit_ty(), byte_lit_ty());
+        let vector = Object::new(string.ptr_to_field_nocap(gc, 0), vector_byte_ty);
+        let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+        let array = Object::new(vector.ptr_to_field_nocap(gc, 0), array_byte_ty);
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+
+        // Print string.
+        gc.call_runtime(RuntimeFunctions::Printf, &[buf.into()]);
+
+        gc.release(string);
+
+        // Make return value
+        let ret = if rvo.is_some() {
+            assert!(ty.is_unbox(gc.type_env()));
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some("allocate_ret_print_internal"),
+            )
+        };
+        let unit_val = unit_ty()
+            .get_object_type(&vec![], gc.type_env())
+            .to_struct_type(gc)
+            .const_zero();
+        ret.store_field_nocap(gc, 0, unit_val);
+        let iostate_val = iostate.load_nocap(gc);
+        ret.store_field_nocap(gc, 1, iostate_val);
+
+        ret
+    });
+
+    let result_ty = make_tuple_ty(vec![unit_ty(), iostate_lit_ty()]);
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(
+            string_lit_ty(),
+            type_fun(iostate_lit_ty(), result_ty.clone()),
+        ),
+    );
+
+    let expr = expr_abs(
+        var_local(STRING_NAME, None),
+        expr_abs(
+            var_local(IOSTATE_NAME, None),
+            expr_lit(
+                generator,
+                vec![FullName::local(STRING_NAME), FullName::local(IOSTATE_NAME)],
+                format!("print_inner {} {}", STRING_NAME, IOSTATE_NAME),
+                result_ty,
                 None,
             ),
             None,

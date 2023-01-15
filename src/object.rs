@@ -775,8 +775,16 @@ pub fn get_object_type(
                     ret.field_types.push(ObjectFieldType::ControlBlock);
                 }
                 assert_eq!(ret.field_types.len(), struct_field_idx(is_unbox) as usize);
-                for field_ty in ty.fields_types(type_env) {
-                    ret.field_types.push(ObjectFieldType::SubObject(field_ty));
+                let field_types = ty.fields_types(type_env);
+                if field_types.is_empty() {
+                    // if this struct has no field, then this is unit `()` or IOState.
+                    if is_unbox {
+                        ret.field_types.push(ObjectFieldType::I8); // Avoid empty struct.
+                    }
+                } else {
+                    for field_ty in field_types {
+                        ret.field_types.push(ObjectFieldType::SubObject(field_ty));
+                    }
                 }
             }
             TyConVariant::Union => {
