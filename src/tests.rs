@@ -1416,9 +1416,6 @@ pub fn test61() {
     let source = r#"
     module Main;
 
-    // loop_hello_world : () -> IO ();
-    // loop_hello_world = \g -> print "Hello World!" .and_then loop_hello_world;
-
     main : IO ();
     main = print "Hello " .and_then \x -> print "World!";
     "#;
