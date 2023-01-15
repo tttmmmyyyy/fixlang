@@ -1397,8 +1397,8 @@ pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             .to_struct_type(gc)
             .const_zero();
         ret.store_field_nocap(gc, 0, unit_val);
-        let iostate_val = iostate.load_nocap(gc);
-        ret.store_field_nocap(gc, 1, iostate_val);
+        let iostate_ptr = iostate.ptr(gc);
+        ret.store_field_nocap(gc, 1, iostate_ptr);
 
         ret
     });
