@@ -11,6 +11,21 @@ type String = unbox struct ( data : Vector Byte );
 
 type IO a = unbox struct ( run : IOState -> (a, IOState) );
 
+namespace IO {
+    and_then : (a -> IO b) -> IO a -> IO b;
+    and_then = \cont -> \first_io -> (
+        let first_io_runner = first_io.get_run;
+        let runner = \iostate -> (
+            let first_io_ret = first_io_runner iostate;
+            let first_io_out = first_io_ret.get_0;
+            let iostate = first_io_ret.get_1;
+            let second_io = cont first_io_out;
+            second_io.get_run $ iostate
+        );
+        IO.new runner
+    );
+}
+
 print : String -> IO ();
 print = \str -> IO.new $ print_internal str;
 "#;
