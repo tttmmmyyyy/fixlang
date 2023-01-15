@@ -194,8 +194,8 @@ pub fn make_string_value(string: String, source: Option<Span>) -> Arc<ExprNode> 
             .ok()
             .unwrap();
 
-        // Allocate String.
-        let obj = if rvo.is_none() {
+        // Allocate String and store the array into it.
+        let string = if rvo.is_none() {
             allocate_obj(
                 ty.clone(),
                 &vec![],
@@ -206,15 +206,11 @@ pub fn make_string_value(string: String, source: Option<Span>) -> Arc<ExprNode> 
         } else {
             rvo.unwrap()
         };
-        // Since String and Vector are just aliases to Array, simply store `array` to the 0th field of `obj`.
-        let array_field = obj.ptr(gc);
-        let array_field = gc.cast_pointer(
-            array_field,
-            ptr_to_object_type(gc.context).ptr_type(AddressSpace::from(0)),
-        );
-        gc.builder().build_store(array_field, array.value(gc));
+        let array_in_string = extract_array_from_string(gc, &string);
+        gc.builder()
+            .build_store(array_in_string.ptr(gc), array.value(gc));
 
-        obj
+        string
     });
     expr_lit(
         generator,
@@ -1321,6 +1317,18 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Get Array object from the given array (no retained)
+fn extract_array_from_string<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    string: &Object<'c>,
+) -> Object<'c> {
+    let vector_byte_ty = type_tyapp(vector_lit_ty(), byte_lit_ty());
+    let vector = Object::new(string.ptr_to_field_nocap(gc, 0), vector_byte_ty);
+    let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+    let array = Object::new(vector.ptr_to_field_nocap(gc, 0), array_byte_ty);
+    array
+}
+
 // print_internal : String -> IOState -> ((), IOState).
 pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     const STRING_NAME: &str = "str";
@@ -1335,11 +1343,8 @@ pub fn print_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
         gc.panic_if_shared(&iostate, "panic: IOState value is shared!");
         let string = gc.get_var(&string_name).ptr.get(gc);
 
-        // Get ptr to string buffer
-        let vector_byte_ty = type_tyapp(vector_lit_ty(), byte_lit_ty());
-        let vector = Object::new(string.ptr_to_field_nocap(gc, 0), vector_byte_ty);
-        let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
-        let array = Object::new(vector.ptr_to_field_nocap(gc, 0), array_byte_ty);
+        // Get ptr to string buffer.
+        let array = extract_array_from_string(gc, &string);
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
 
         // Print string.
