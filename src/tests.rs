@@ -1420,7 +1420,7 @@ pub fn test61() {
     // loop_hello_world = \g -> print "Hello World!" .and_then loop_hello_world;
 
     main : IO ();
-    main = print "Hello World!";
+    main = print "Hello " .and_then \x -> print "World!";
     "#;
     let answer = 0;
     test_run_source(source, answer, OptimizationLevel::Default);
