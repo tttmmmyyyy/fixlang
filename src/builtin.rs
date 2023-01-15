@@ -206,9 +206,10 @@ pub fn make_string_value(string: String, source: Option<Span>) -> Arc<ExprNode> 
         } else {
             rvo.unwrap()
         };
-        let array_in_string = extract_array_from_string(gc, &string);
-        gc.builder()
-            .build_store(array_in_string.ptr(gc), array.value(gc));
+        let vector = extract_vector_from_string(gc, &string);
+        assert!(vector.is_unbox(gc.type_env()));
+        let array_field = vector.ptr_to_field_nocap(gc, 0);
+        gc.builder().build_store(array_field, array.value(gc));
 
         string
     });
@@ -1322,11 +1323,23 @@ fn extract_array_from_string<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     string: &Object<'c>,
 ) -> Object<'c> {
+    let vector = extract_vector_from_string(gc, string);
+    let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+    let array = Object::new(
+        vector.load_field_nocap(gc, 0).into_pointer_value(),
+        array_byte_ty,
+    );
+    array
+}
+
+// Get `Vector Byte` object from the given array (no retained)
+fn extract_vector_from_string<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    string: &Object<'c>,
+) -> Object<'c> {
     let vector_byte_ty = type_tyapp(vector_lit_ty(), byte_lit_ty());
     let vector = Object::new(string.ptr_to_field_nocap(gc, 0), vector_byte_ty);
-    let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
-    let array = Object::new(vector.ptr_to_field_nocap(gc, 0), array_byte_ty);
-    array
+    vector
 }
 
 // print_internal : String -> IOState -> ((), IOState).
