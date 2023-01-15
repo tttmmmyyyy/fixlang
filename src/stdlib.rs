@@ -8,6 +8,18 @@ module Std;
 type Vector a = unbox struct ( data : Array a );
 
 type String = unbox struct ( data : Vector Byte );
+
+namespace Debug {
+    assert_eq : [a: Eq] a -> a -> String -> ();
+    assert_eq = \lhs -> \rhs -> \msg -> (
+        if lhs != rhs then
+            let u = debug_print "assert_eq failed!: ";
+            let u = debug_print msg;
+            abort ()
+        else
+            ()
+    );
+}
 "#;
 
 pub fn make_std_mod() -> FixModule {
@@ -98,6 +110,14 @@ pub fn make_std_mod() -> FixModule {
         length_array(),
     );
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "print"), print_io_func());
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, DEBUG_NAME], "debug_print"),
+        debug_print_function(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, DEBUG_NAME], "abort"),
+        abort_function(),
+    );
 
     fix_module
 }

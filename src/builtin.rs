@@ -2,6 +2,7 @@
 use super::*;
 
 pub const STD_NAME: &str = "Std";
+pub const DEBUG_NAME: &str = "Debug";
 
 // Primitive types.
 pub const INT_NAME: &str = "Int";
@@ -1380,11 +1381,11 @@ pub fn print_io_func() -> (Arc<ExprNode>, Arc<Scheme>) {
         } else {
             allocate_obj(ty.clone(), &vec![], None, gc, Some("allocate_ret_print"))
         };
-        let unit_val = unit_ty()
-            .get_object_type(&vec![], gc.type_env())
-            .to_struct_type(gc)
-            .const_zero();
-        ret.store_field_nocap(gc, 0, unit_val);
+        // let unit_val = unit_ty()
+        //     .get_object_type(&vec![], gc.type_env())
+        //     .to_struct_type(gc)
+        //     .const_zero();
+        // ret.store_field_nocap(gc, 0, unit_val);
         let iostate_ptr = iostate.ptr(gc);
         ret.store_field_nocap(gc, 1, iostate_ptr);
 
@@ -1411,6 +1412,92 @@ pub fn print_io_func() -> (Arc<ExprNode>, Arc<Scheme>) {
             None,
         ),
         None,
+    );
+    (expr, scm)
+}
+
+// `debug_print` built-in function
+pub fn debug_print_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const MSG_NAME: &str = "msg";
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        let msg_name = FullName::local(MSG_NAME);
+        let string = gc.get_var(&msg_name).ptr.get(gc);
+
+        // Get ptr to string buffer.
+        let array = extract_array_from_string(gc, &string);
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let buf = gc.cast_pointer(buf, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
+
+        // Print string.
+        gc.call_runtime(RuntimeFunctions::Printf, &[buf.into()]);
+
+        // Release argument
+        gc.release(string);
+
+        // Return
+        if rvo.is_some() {
+            assert!(ty.is_unbox(gc.type_env()));
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("debug_print {}", MSG_NAME)),
+            )
+        }
+    });
+    let expr = expr_abs(
+        var_local(MSG_NAME, None),
+        expr_lit(
+            generator,
+            vec![FullName::local(MSG_NAME)],
+            format!("debug_print {}", MSG_NAME),
+            unit_ty(),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(string_lit_ty(), unit_ty()),
+    );
+    (expr, scm)
+}
+
+// `abort` built-in function
+pub fn abort_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const A_NAME: &str = "a";
+    const UNIT_NAME: &str = "iostate";
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        // Abort
+        gc.call_runtime(RuntimeFunctions::Abort, &[]);
+
+        // Return
+        if rvo.is_some() {
+            assert!(ty.is_unbox(gc.type_env()));
+            rvo.unwrap()
+        } else {
+            allocate_obj(ty.clone(), &vec![], None, gc, Some(&"abort"))
+        }
+    });
+    let expr = expr_abs(
+        var_local(UNIT_NAME, None),
+        expr_lit(
+            generator,
+            vec![],
+            "abort".to_string(),
+            type_tyvar_star(A_NAME),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        HashMap::from([(A_NAME.to_string(), kind_star())]),
+        vec![],
+        type_fun(unit_ty(), type_tyvar_star(A_NAME)),
     );
     (expr, scm)
 }
