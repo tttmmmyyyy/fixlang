@@ -8,7 +8,6 @@ pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
 pub const BYTE_NAME: &str = "Byte";
 pub const IOSTATE_NAME: &str = "IOState";
-pub const IO_NAME: &str = "IO";
 pub const ARRAY_NAME: &str = "Array";
 pub const VECTOR_NAME: &str = "Vector";
 pub const STRING_NAME: &str = "String";
@@ -107,11 +106,6 @@ pub fn vector_lit_ty() -> Arc<TypeNode> {
 // Get IOState type.
 pub fn iostate_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
-}
-
-// Get IO type.
-pub fn io_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME)))
 }
 
 // Get String type.

@@ -28,7 +28,6 @@ fn build_module<'c>(
     module: &Module<'c>,
     target: Either<TargetMachine, ExecutionEngine<'c>>,
     mut fix_mod: FixModule,
-    result_as_main_return: bool,
 ) -> Either<TargetMachine, ExecutionEngine<'c>> {
     // Calculate list of type constructors.
     fix_mod.calculate_type_env();
@@ -152,21 +151,14 @@ fn build_module<'c>(
     gc.target
 }
 
-pub fn run_source(source: &str, opt_level: OptimizationLevel, result_as_main_return: bool) -> i32 {
+pub fn run_source(source: &str, opt_level: OptimizationLevel) -> i32 {
     let mut fix_mod = make_std_mod();
     fix_mod.import(parse_source(source));
 
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
     let ee = module.create_jit_execution_engine(opt_level).unwrap();
-    let ee = build_module(
-        &ctx,
-        &module,
-        Either::Right(ee),
-        fix_mod,
-        result_as_main_return,
-    )
-    .unwrap_right();
+    let ee = build_module(&ctx, &module, Either::Right(ee), fix_mod).unwrap_right();
     execute_main_module(&ee)
 }
 
@@ -187,8 +179,8 @@ pub fn read_file(path: &Path) -> String {
     s
 }
 
-pub fn run_file(path: &Path, opt_level: OptimizationLevel, result_as_main_return: bool) -> i32 {
-    run_source(read_file(path).as_str(), opt_level, result_as_main_return)
+pub fn run_file(path: &Path, opt_level: OptimizationLevel) -> i32 {
+    run_source(read_file(path).as_str(), opt_level)
 }
 
 fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
@@ -216,7 +208,7 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
     }
 }
 
-pub fn build_file(path: &Path, opt_level: OptimizationLevel, result_as_main_return: bool) {
+pub fn build_file(path: &Path, opt_level: OptimizationLevel) {
     let mut out_path = PathBuf::from(path);
     out_path.set_extension("o");
     let tm = get_target_machine(opt_level);
@@ -226,14 +218,7 @@ pub fn build_file(path: &Path, opt_level: OptimizationLevel, result_as_main_retu
 
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
-    let tm = build_module(
-        &ctx,
-        &module,
-        Either::Left(tm),
-        fix_mod,
-        result_as_main_return,
-    )
-    .unwrap_left();
+    let tm = build_module(&ctx, &module, Either::Left(tm), fix_mod).unwrap_left();
     tm.write_to_file(&module, inkwell::targets::FileType::Object, &out_path)
         .map_err(|e| error_exit(&format!("failed to write to file: {}", e)))
         .unwrap();

@@ -76,11 +76,11 @@ fn main() {
     match app.get_matches().subcommand() {
         Some(("run", m)) => {
             let path = m.value_of("source-file").unwrap();
-            run_file(Path::new(path), OptimizationLevel::Aggressive, false);
+            run_file(Path::new(path), OptimizationLevel::Aggressive);
         }
         Some(("build", m)) => {
             let path = m.value_of("source-file").unwrap();
-            build_file(Path::new(path), OptimizationLevel::Aggressive, false);
+            build_file(Path::new(path), OptimizationLevel::Aggressive);
         }
         _ => eprintln!("Unknown command!"),
     }
