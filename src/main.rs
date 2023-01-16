@@ -54,7 +54,7 @@ use stdlib::*;
 use typecheck::*;
 use uncurry_optimization::*;
 
-const SANITIZE_MEMORY: bool = true;
+const SANITIZE_MEMORY: bool = false;
 
 const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
 const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We should make tuple generation on-demand.
