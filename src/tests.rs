@@ -1553,7 +1553,9 @@ pub fn test63() {
     module Main;
 
     main : IOState -> ((), IOState);
-    main = print "Neko";
+    main = (
+        print $ 42.to_string
+    );
     "#;
     run_source(source, OptimizationLevel::Default);
 }
