@@ -24,27 +24,20 @@ truth = 42;
 
 The name of value has to start with a lower-case alphabet.
 
-When fix program starts to run, the runtime calculates for a `main` global value of type `Int` and prints its value.
+`Main` module has to include a `main` global value of type `IOState -> ((), IOState)`. When fix program starts to run, the runtime generates an `IOState` value and pass it to `Main.main` function.
 
 ## Let binding
 
 To define a local name and it's value, use `let`-binding. 
 
 ```
-module Main;
-
-main : Int;
-main = let x = 5 in 2 + x;
+let x = 5 in 2 + x // 7
 ```
 
 ```
-module Main;
-main : Int;
-main = (
-    let x = 3;
-    let y = 5;
-    x + y
-);
+let x = 3;
+let y = 5;
+x + y // 8
 ```
 The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {expression_0}; {expression_1}`.
 
@@ -95,8 +88,8 @@ fib = \n -> (
         fib (n-1) + fib (n-2)
 );
 
-main : Int;
-main = fib 30; // 832040
+main : IOState -> ((), IOState);
+main = print $ fib 30.to_string; // 832040
 ```
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
@@ -252,10 +245,10 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 ```
 module Main;
 
-main : Int;
+main : IOState -> ((), IOState);
 main = (
     let fact = fix \loop -> \n -> if n == 0 then 1 else n * loop (n-1);
-    fact 5 // evaluates to 5 * 4 * 3 * 2 * 1 = 120
+    print $ fact 5.to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
 );
 ```
 
@@ -272,15 +265,18 @@ type LoopResult s r = union (s: continue, r: break);
 ```
 module Main;
     
-main : Int;
+main : IOState -> ((), IOState);
 main = (
-    loop (0, 0) \state -> 
-        let i = state.get_0;
-        let sum = state.get_1;
-        if i == 100 then 
-            break sum 
-        else
-            continue (i+1, sum+i)
+    let sum = (
+        loop (0, 0) \state -> 
+            let i = state.get_0;
+            let sum = state.get_1;
+            if i == 100 then 
+                break sum 
+            else
+                continue (i+1, sum+i)
+    );
+    print $ sum.to_string
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 

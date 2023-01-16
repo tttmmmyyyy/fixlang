@@ -14,7 +14,7 @@ main = (
             let x = arr.get (idx-1);
             let y = arr.get (idx-2);
             let arr = arr.set! idx (x+y);
-            continue $ (idx+1, arr)
+            continue (idx+1, arr)
     );
     print $ arr.get 30.to_string // 832040
 );
