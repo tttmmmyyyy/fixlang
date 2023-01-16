@@ -607,7 +607,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     ObjectFieldType::DtorFunction => unreachable!(),
                     ObjectFieldType::LambdaFunction(_) => unreachable!(),
                     ObjectFieldType::I64 => {}
-                    ObjectFieldType::Bool => {}
+                    ObjectFieldType::I8 => {}
                     ObjectFieldType::SubObject(ty) => {
                         let ptr = if ty.is_box(self.type_env()) {
                             self.load_obj_field(ptr, struct_type, i as u32)
@@ -695,6 +695,52 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     ) -> CallSiteValue<'c> {
         self.builder()
             .build_call(*self.runtimes.get(&func).unwrap(), args, "call_runtime")
+    }
+
+    // Panics if the given object is shared.
+    pub fn panic_if_shared(&mut self, obj: &Object<'c>, msg: &str) {
+        // If object is unboxed, it is always unique; do nothing.
+        if obj.is_unbox(self.type_env()) {
+            return;
+        }
+
+        // Get refcnt.
+        let refcnt = {
+            let control_block = obj.ptr_to_field_nocap(self, 0);
+            self.load_obj_field(control_block, control_block_type(self.context), 0)
+                .into_int_value()
+        };
+
+        // Jump by refcnt.
+        let current_fn = self
+            .builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+        let unique_bb = self
+            .context
+            .append_basic_block(current_fn, "unique_bb_panic_if_shared");
+        let shared_bb = self
+            .context
+            .append_basic_block(current_fn, "shared_bb_panic_if_shared");
+        // Jump to shared_bb if refcnt > 1.
+        let one = refcnt_type(self.context).const_int(1, false);
+        let is_unique = self.builder().build_int_compare(
+            IntPredicate::EQ,
+            refcnt,
+            one,
+            "is_unique_panic_if_shared",
+        );
+        self.builder()
+            .build_conditional_branch(is_unique, unique_bb, shared_bb);
+
+        // In shared_bb, panic.
+        self.builder().position_at_end(shared_bb);
+        self.panic(msg);
+        self.builder().build_unconditional_branch(unique_bb);
+
+        self.builder().position_at_end(unique_bb);
     }
 
     // Evaluate expression.

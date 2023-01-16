@@ -24,33 +24,26 @@ truth = 42;
 
 The name of value has to start with a lower-case alphabet.
 
-When fix program starts to run, the runtime calculates for a `main` global value of type `Int` and prints its value.
+`Main` module has to include a `main` global value of type `IOState -> ((), IOState)`. When fix program starts to run, the runtime generates an `IOState` value and pass it to `Main.main` function.
 
 ## Let binding
 
 To define a local name and it's value, use `let`-binding. 
 
 ```
-module Main;
-
-main : Int;
-main = let x = 5 in 2 + x;
+let x = 5 in 2 + x // 7
 ```
 
 ```
-module Main;
-main : Int;
-main = (
-    let x = 3;
-    let y = 5;
-    x + y
-);
+let x = 3;
+let y = 5;
+x + y // 8
 ```
 The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {expression_0}; {expression_1}`.
 
 If the name of the lhs of `let`-binding is already in the scope, `let` evaluates `{expression_0}` in the old scope (i.e., with the old value of the name) and evaluates `{expression_1}` in the new scope (i.e., with the new value of the name).
 
-Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
+Fix's `let`-binding doesn't allow making recursive definition. To define a recursive function locally, use `fix` built-in function.
 
 ## If
 
@@ -95,8 +88,8 @@ fib = \n -> (
         fib (n-1) + fib (n-2)
 );
 
-main : Int;
-main = fib 30; // 832040
+main : IOState -> ((), IOState);
+main = print $ fib 30.to_string; // 832040
 ```
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
@@ -121,6 +114,10 @@ Arrow types are boxed, because it may contain many captured values.
 ### Tuples
 
 Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
+
+### Unit type
+
+Unit `()` is a type allows only one value, which is also written as `()`.
 
 ### Structs
 
@@ -231,6 +228,14 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 - `Std.Array.len : Std.Array a -> Int`
     - Returns the length of an array.
 
+### Std.Vector
+
+`Std.Vector` is the type of variable-length array.
+
+### Std.String
+
+`Std.String` is the type of string.
+
 ## Functions
 
 ### Std.fix : ((a -> b) -> a -> b) -> a -> b
@@ -240,10 +245,10 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 ```
 module Main;
 
-main : Int;
+main : IOState -> ((), IOState);
 main = (
     let fact = fix \loop -> \n -> if n == 0 then 1 else n * loop (n-1);
-    fact 5 // evaluates to 5 * 4 * 3 * 2 * 1 = 120
+    print $ fact 5.to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
 );
 ```
 
@@ -260,15 +265,18 @@ type LoopResult s r = union (s: continue, r: break);
 ```
 module Main;
     
-main : Int;
+main : IOState -> ((), IOState);
 main = (
-    loop (0, 0) \state -> 
-        let i = state.get_0;
-        let sum = state.get_1;
-        if i == 100 then 
-            break sum 
-        else
-            continue (i+1, sum+i)
+    let sum = (
+        loop (0, 0) \state -> 
+            let i = state.get_0;
+            let sum = state.get_1;
+            if i == 100 then 
+                break sum 
+            else
+                continue (i+1, sum+i)
+    );
+    print $ sum.to_string
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
@@ -276,7 +284,7 @@ main = (
 
 The following is the table of operators sorted by it's precedence (operator of higher precedence appears earlier).
 
-| Operator       | Associativity | Trant / method                     | Explanation                                                 | 
+| Operator       | Associativity | Trait / method                     | Explanation                                                 | 
 | -------------- | ------------- | ---------------------------------- | ----------------------------------------------------------- | 
 | (whitespace)   | left          | -                                  | function application                                        | 
 | .              | left          | -                                  | right-to-left function application: x.f = f x               | 

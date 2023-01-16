@@ -24,7 +24,7 @@ You can learn the syntax by reading files in the "examples" directory (or codes 
 ```
 module Main;
 
-main : Int;
+main : IOState -> ((), IOState);
 main = (
     let arr = Array.new 31 0;
     let arr = arr.set! 0 0;
@@ -38,12 +38,12 @@ main = (
             let x = arr.get (idx-1);
             let y = arr.get (idx-2);
             let arr = arr.set! idx (x+y);
-            continue $ (idx+1, arr)
+            continue (idx+1, arr)
     );
-    arr.get 30 // 832040
+    print $ arr.get 30.to_string // 832040
 );
 ```
-Currently, what fix can do is only to calculate and print a single `Int` value! In a source file, you need to declare the module name for the source file as `Main` and define `main` object of type `Int`.
+In a source file, you need to declare the module name for the source file as `Main` and define `main` object of type `IOState -> ((), IOState)`. The runtime generates a value of `IOState` and pass it to `Main.main` function.
 
 `Array.new` in the first line of `main` is the constructor function for `Array`. It takes the length and the initial value and returns a new Array. The `Array` here is not a type, but a namespace: the name of the constructor function is `new`, and it is defined in the namespace `Std.Array`, where `Std` is a namspace for standard libraries / built-in functions. So the full-name of the constructor function is `Std.Array.new`, but you can omit some prefix of the full namespace when the compiler can infer it.
 
@@ -51,10 +51,12 @@ To apply a function `f` to a variable `x`, just write `f x`. This is left-associ
 
 The operator `.` in the `arr.set! 0 0` and `arr.get 30` is NOT the composition operator (as used in Haskell), but the right-to-left application operator: `x.f = f x`. The precedence between two ways of application is whitespace (usual application) > `.` . This allows you to write `obj.method arg` to call a function `method: Arg -> Obj -> Result` on `obj` as if you are writing OOP languages. There is also right-associative `$` operator that is well-known in Haskell and useful for reducing parentheses: `f $ x = f x` and `f $ g $ x = f (g x)`. The precedence of `$` is weaker than that of whitespace (usual application) and `.`.
 
-`set!: Int -> a -> Array a -> Array a` in the code above is a method of Array which updates the value of the given array if it is uniquely referenced (i.e. the reference counter is one) or stops the program otherwise. This allows you to avoid cloning array while keeping purity (no side effect). If you are ok for cloning array when it is shared between multiple references, use `set` method instead.
+`set!: Int -> a -> Array a -> Array a` in the program above is a method of Array which updates the value of the given array if it is uniquely referenced (i.e. the reference counter is one) or stops the program otherwise. This allows you to avoid cloning array while keeping purity (no side effect). If you are ok for cloning array when it is shared between multiple references, use `set` method instead.
 
 The `loop` function takes two arguments: the initial state of the loop `s0` and the loop body function `body`. It first calls `body` on `s0`. The return value of `body` has to be made by `break` function or `continue` function. If `body` returns `break r`, then the loop ends and returns `r` as the result. If `body` returns `continue s`, then the loop calls again `body` on `s`.
 
 In the above exapmle, the state of the loop is `(Int, Array Int)`, which is the tuple (pair) of the loop index and the array under construction. It starts from index 2, and the body stores the next value of fibonacci sequence to the array, or breaks when the loop index reached to the length of the array.
+
+In the last, this prgram prints the the 30th element of the fibonacci array. The `print` function has type `print: String -> IOState -> ((), IOState)`, so `print some_string` matches to the type of `main`. The `IOState` type is a virtual type that represents the outer state of the Fix program, and the `print` function is considered to be a function that changes the outer state by printing a string to the screen. Since `print` updates the outer state, it only accepts a unique `IOState` value. If you duplicate an `IOState` value and pass it to `print`, then it stops the program.
 
 For more informations on syntax and built-in functions, see [documentation](/Documentation.md).

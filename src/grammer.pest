@@ -29,7 +29,17 @@ expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
 expr_bool_lit = { "true" | "false" }
 
-expr_lit = { expr_int_lit | expr_bool_lit }
+expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
+
+string_lit_inner = { string_char* }
+
+string_char = {
+    !("\"" | "\\") ~ ANY 
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit }
 
 expr_var = { (namespace ~ ".")? ~ var }
 
@@ -40,7 +50,7 @@ expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ s
 expr_lam = { "\\" ~ sep* ~ var ~ sep*  ~ arrow_of_lam ~ sep* ~ expr }
 
 // For n = 0 or n >= 2 this is interpreted as tuple, and for n = 1 this is treated as braced type.
-expr_tuple = { "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }
+expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)*)? ~ sep* ~ ")" }
 
 // nlr = non left recursive
 expr_nlr = { expr_lit | expr_var | expr_let | expr_if | expr_lam | expr_tuple }
@@ -92,7 +102,7 @@ expr = { expr_type_annotation }
 type_expr = { type_fun }
 
 // For n = 0 or n >= 2 this is interpreted as tuple, and for n = 1 this is treated as braced type.
-type_tuple = { "(" ~ sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)* ~ sep* ~ ")" }
+type_tuple = { "(" ~ (sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)*)? ~ sep* ~ ")" }
 
 type_nlr = { type_tycon | type_var | type_tuple }
 

@@ -2,11 +2,16 @@
 use super::*;
 
 pub const STD_NAME: &str = "Std";
+pub const DEBUG_NAME: &str = "Debug";
 
 // Primitive types.
 pub const INT_NAME: &str = "Int";
 pub const BOOL_NAME: &str = "Bool";
+pub const BYTE_NAME: &str = "Byte";
+pub const IOSTATE_NAME: &str = "IOState";
 pub const ARRAY_NAME: &str = "Array";
+pub const VECTOR_NAME: &str = "Vector";
+pub const STRING_NAME: &str = "String";
 
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
@@ -31,6 +36,27 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
         },
     );
     ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], BYTE_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            field_types: vec![],
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Struct,
+            is_unbox: false,
+            tyvars: vec![],
+            field_types: vec![],
+        },
+    );
+    // IO is defined in the source code of Std.
+    ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], ARRAY_NAME)),
         TyConInfo {
             kind: kind_arrow(kind_star(), kind_star()),
@@ -40,6 +66,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             field_types: vec![type_tyvar_star("a")],
         },
     );
+    // String is defined in the source code of Std.
     ret
 }
 
@@ -62,14 +89,45 @@ pub fn bool_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOOL_NAME)))
 }
 
+// Get Byte type.
+pub fn byte_lit_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BYTE_NAME)))
+}
+
 // Get Array type.
 pub fn array_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
+// Get Vector type.
+pub fn vector_lit_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], VECTOR_NAME)))
+}
+
+// Get IOState type.
+pub fn iostate_lit_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
+}
+
+// Get String type.
+pub fn string_lit_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
+}
+
 // Get LoopResult type.
 pub fn loop_result_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
+}
+
+// Get Unit type.
+pub fn unit_ty() -> Arc<TypeNode> {
+    make_tuple_ty(vec![])
+}
+
+// Get type IOState -> (output_ty, IOState).
+pub fn io_runner_ty(output_ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    let result_ty = make_tuple_ty(vec![output_ty, iostate_lit_ty()]);
+    type_fun(iostate_lit_ty(), result_ty.clone())
 }
 
 pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
@@ -112,6 +170,87 @@ pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
 }
 
+pub fn make_string_from_ptr<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    buf_with_null_terminator: PointerValue<'c>,
+    len_with_null_terminator: IntValue<'c>,
+    rvo: Option<Object<'c>>,
+) -> Object<'c> {
+    // Create `Array Byte` which contains null-terminated string.
+    let array_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+    let array = allocate_obj(
+        array_ty,
+        &vec![],
+        Some(len_with_null_terminator),
+        gc,
+        Some("array@make_string_from_ptr"),
+    );
+    let dst = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+    let len_ptr = gc.builder().build_int_cast(
+        len_with_null_terminator,
+        gc.context.ptr_sized_int_type(gc.target_data(), None),
+        "len_ptr@make_string_from_ptr",
+    );
+    gc.builder()
+        .build_memcpy(dst, 1, buf_with_null_terminator, 1, len_ptr)
+        .ok()
+        .unwrap();
+
+    // Allocate String and store the array into it.
+    let string = if rvo.is_none() {
+        allocate_obj(
+            string_lit_ty(),
+            &vec![],
+            None,
+            gc,
+            Some(&format!("string@make_string_from_ptr")),
+        )
+    } else {
+        rvo.unwrap()
+    };
+    let vector = extract_vector_from_string(gc, &string);
+    assert!(vector.is_unbox(gc.type_env()));
+
+    // Store array to data.
+    let array_val = array.value(gc);
+    vector.store_field_nocap(gc, VECTOR_DATA_IDX, array_val);
+    // Store length.
+    let len_obj = allocate_obj(
+        int_lit_ty(),
+        &vec![],
+        None,
+        gc,
+        Some("len_in_make_string_value"),
+    );
+    len_obj.store_field_nocap(gc, 0, len_with_null_terminator);
+    let int_val = len_obj.value(gc);
+    vector.store_field_nocap(gc, VECTOR_LEN_IDX, int_val);
+
+    string
+}
+
+pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        let string_ptr = gc
+            .builder()
+            .build_global_string_ptr(&string, "string_literal")
+            .as_basic_value_enum()
+            .into_pointer_value();
+        let len_with_null_terminator = gc
+            .context
+            .i64_type()
+            .const_int(string.as_bytes().len() as u64 + 1, false);
+        make_string_from_ptr(gc, string_ptr, len_with_null_terminator, rvo)
+    });
+    expr_lit(
+        generator,
+        vec![],
+        "string_literal".to_string(),
+        string_lit_ty(),
+        source,
+    )
+}
+
 fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
@@ -143,6 +282,73 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
         ]),
         vec![],
         type_fun(type_fun(fixed_ty.clone(), fixed_ty.clone()), fixed_ty),
+    );
+    (expr, scm)
+}
+
+// int_to_string : Int -> String
+pub fn int_to_string_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const VAL_NAME: &str = "val";
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        // Get value
+        let val = gc
+            .get_var_field(&FullName::local(VAL_NAME), 0)
+            .into_int_value();
+        gc.release(gc.get_var(&FullName::local(VAL_NAME)).ptr.get(gc));
+
+        // Allocate buffer for sprintf.
+        const BUF_SIZE: i32 = 21;
+        let buf_size = gc.context.i32_type().const_int(BUF_SIZE as u64, false);
+        let buf = gc.builder().build_array_alloca(
+            gc.context.i8_type(),
+            buf_size,
+            "buf_for_sprintf@int_to_string",
+        );
+
+        // Call sprintf.
+        let format = gc
+            .builder()
+            .build_global_string_ptr("%lld", "format@int_to_string")
+            .as_basic_value_enum()
+            .into_pointer_value();
+        let len = gc
+            .call_runtime(
+                RuntimeFunctions::Sprintf,
+                &[buf.into(), format.into(), val.into()],
+            )
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_int_value();
+
+        // Make String.
+        let len_with_null_terminator_i32 = gc.builder().build_int_add(
+            len,
+            gc.context.i32_type().const_int(1, false),
+            "len_with_null_terminator_i32@int_to_string",
+        );
+        let len_with_null_terminator = gc.builder().build_int_cast(
+            len_with_null_terminator_i32,
+            gc.context.i64_type(),
+            "len_with_null_terminator@int_to_string",
+        );
+
+        make_string_from_ptr(gc, buf, len_with_null_terminator, rvo)
+    });
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(int_lit_ty(), string_lit_ty()),
+    );
+    let expr = expr_abs(
+        var_local(VAL_NAME, None),
+        expr_lit(
+            generator,
+            vec![FullName::local(VAL_NAME)],
+            format!("int_to_string {}", VAL_NAME),
+            string_lit_ty(),
+            None,
+        ),
+        None,
     );
     (expr, scm)
 }
@@ -1208,6 +1414,184 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Get Array object from the given String (no retained)
+fn extract_array_from_string<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    string: &Object<'c>,
+) -> Object<'c> {
+    let vector = extract_vector_from_string(gc, string);
+    let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+    let array = Object::new(
+        vector
+            .load_field_nocap(gc, VECTOR_DATA_IDX)
+            .into_pointer_value(),
+        array_byte_ty,
+    );
+    array
+}
+
+// Get `Vector Byte` object from the given String (no retained)
+fn extract_vector_from_string<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    string: &Object<'c>,
+) -> Object<'c> {
+    let vector_byte_ty = type_tyapp(vector_lit_ty(), byte_lit_ty());
+    let vector = Object::new(string.ptr_to_field_nocap(gc, 0), vector_byte_ty);
+    vector
+}
+
+// print : String -> IOState -> ((), IOState).
+pub fn print_io_func() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const STRING_NAME: &str = "str";
+    const IOSTATE_NAME: &str = "iostate";
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        let string_name = FullName::local(STRING_NAME);
+        let iostate_name = FullName::local(IOSTATE_NAME);
+
+        // Get argments.
+        let iostate = gc.get_var(&iostate_name).ptr.get(gc);
+        gc.panic_if_shared(&iostate, "panic: IOState value is shared!");
+        let string = gc.get_var(&string_name).ptr.get(gc);
+
+        // Get ptr to string buffer.
+        let array = extract_array_from_string(gc, &string);
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let buf = gc.cast_pointer(buf, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
+
+        // Print string.
+        gc.call_runtime(RuntimeFunctions::Printf, &[buf.into()]);
+
+        gc.release(string);
+
+        // Make return value
+        let ret = if rvo.is_some() {
+            assert!(ty.is_unbox(gc.type_env()));
+            rvo.unwrap()
+        } else {
+            allocate_obj(ty.clone(), &vec![], None, gc, Some("allocate_ret_print"))
+        };
+        // let unit_val = unit_ty()
+        //     .get_object_type(&vec![], gc.type_env())
+        //     .to_struct_type(gc)
+        //     .const_zero();
+        // ret.store_field_nocap(gc, 0, unit_val);
+        let iostate_ptr = iostate.ptr(gc);
+        ret.store_field_nocap(gc, 1, iostate_ptr);
+
+        ret
+    });
+
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(string_lit_ty(), io_runner_ty(unit_ty())),
+    );
+
+    let expr = expr_abs(
+        var_local(STRING_NAME, None),
+        expr_abs(
+            var_local(IOSTATE_NAME, None),
+            expr_lit(
+                generator,
+                vec![FullName::local(STRING_NAME), FullName::local(IOSTATE_NAME)],
+                format!("print {} {}", STRING_NAME, IOSTATE_NAME),
+                make_tuple_ty(vec![unit_ty(), iostate_lit_ty()]),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+// `debug_print` built-in function
+pub fn debug_print_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const MSG_NAME: &str = "msg";
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        let msg_name = FullName::local(MSG_NAME);
+        let string = gc.get_var(&msg_name).ptr.get(gc);
+
+        // Get ptr to string buffer.
+        let array = extract_array_from_string(gc, &string);
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let buf = gc.cast_pointer(buf, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
+
+        // Print string.
+        gc.call_runtime(RuntimeFunctions::Printf, &[buf.into()]);
+
+        // Release argument
+        gc.release(string);
+
+        // Return
+        if rvo.is_some() {
+            assert!(ty.is_unbox(gc.type_env()));
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("debug_print {}", MSG_NAME)),
+            )
+        }
+    });
+    let expr = expr_abs(
+        var_local(MSG_NAME, None),
+        expr_lit(
+            generator,
+            vec![FullName::local(MSG_NAME)],
+            format!("debug_print {}", MSG_NAME),
+            unit_ty(),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(string_lit_ty(), unit_ty()),
+    );
+    (expr, scm)
+}
+
+// `abort` built-in function
+pub fn abort_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const A_NAME: &str = "a";
+    const UNIT_NAME: &str = "iostate";
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        // Abort
+        gc.call_runtime(RuntimeFunctions::Abort, &[]);
+
+        // Return
+        if rvo.is_some() {
+            assert!(ty.is_unbox(gc.type_env()));
+            rvo.unwrap()
+        } else {
+            allocate_obj(ty.clone(), &vec![], None, gc, Some(&"abort"))
+        }
+    });
+    let expr = expr_abs(
+        var_local(UNIT_NAME, None),
+        expr_lit(
+            generator,
+            vec![],
+            "abort".to_string(),
+            type_tyvar_star(A_NAME),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        HashMap::from([(A_NAME.to_string(), kind_star())]),
+        vec![],
+        type_fun(unit_ty(), type_tyvar_star(A_NAME)),
+    );
+    (expr, scm)
+}
+
 pub fn tuple_defn(size: u32) -> TypeDefn {
     let tyvars = (0..size)
         .map(|i| "t".to_string() + &i.to_string())
@@ -1402,7 +1786,7 @@ pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
                 .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
         let value = gc.builder().build_int_cast(
             value,
-            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             "eq",
         );
         let obj = if rvo.is_none() {
@@ -1464,7 +1848,7 @@ pub fn less_than_trait_instance_int() -> TraitInstance {
         );
         let value = gc.builder().build_int_cast(
             value,
-            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             LESS_THAN_TRAIT_LT_NAME,
         );
         let obj = if rvo.is_none() {
@@ -1526,7 +1910,7 @@ pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
         );
         let value = gc.builder().build_int_cast(
             value,
-            ObjectFieldType::Bool.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
         let obj = if rvo.is_none() {
@@ -1984,7 +2368,7 @@ pub fn not_trait_instance_bool() -> TraitInstance {
     ) -> Object<'c> {
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
-        let bool_ty = ObjectFieldType::Bool.to_basic_type(gc).into_int_type();
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
         let false_val = bool_ty.const_zero();
         let value =
             gc.builder()

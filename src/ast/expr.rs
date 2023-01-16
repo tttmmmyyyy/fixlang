@@ -422,6 +422,7 @@ impl NameSpace {
         return true;
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.names.len()
     }

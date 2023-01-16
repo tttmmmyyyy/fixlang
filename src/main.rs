@@ -14,6 +14,7 @@ mod object;
 mod parser;
 mod runner;
 mod runtime;
+mod stdlib;
 #[cfg(test)]
 mod tests;
 mod typecheck;
@@ -49,6 +50,7 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use std::vec::Vec;
+use stdlib::*;
 use typecheck::*;
 use uncurry_optimization::*;
 
@@ -57,7 +59,7 @@ const SANITIZE_MEMORY: bool = false;
 const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
 const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We should make tuple generation on-demand.
 
-const UNCURRY_OPTIMIZATION: bool = true;
+const UNCURRY_OPTIMIZATION: bool = false;
 const TUPLE_UNBOX: bool = true;
 const NOT_RETAIN_GLOBAL: bool = true;
 
@@ -74,11 +76,11 @@ fn main() {
     match app.get_matches().subcommand() {
         Some(("run", m)) => {
             let path = m.value_of("source-file").unwrap();
-            run_file(Path::new(path), OptimizationLevel::Aggressive, false);
+            run_file(Path::new(path), OptimizationLevel::Aggressive);
         }
         Some(("build", m)) => {
             let path = m.value_of("source-file").unwrap();
-            build_file(Path::new(path), OptimizationLevel::Aggressive, false);
+            build_file(Path::new(path), OptimizationLevel::Aggressive);
         }
         _ => eprintln!("Unknown command!"),
     }
