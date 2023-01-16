@@ -1530,6 +1530,23 @@ pub fn test61() {
 
 #[test]
 #[serial]
+pub fn test62() {
+    // Test String length.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let len = "Hello World!".get_len;
+        let u = assert_eq "" len 12;
+        pure ()
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 

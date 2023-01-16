@@ -216,8 +216,21 @@ pub fn make_string_value(string: String, source: Option<Span>) -> Arc<ExprNode> 
         };
         let vector = extract_vector_from_string(gc, &string);
         assert!(vector.is_unbox(gc.type_env()));
-        let array_field = vector.ptr_to_field_nocap(gc, 0);
-        gc.builder().build_store(array_field, array.value(gc));
+
+        // Store array to data.
+        let array_val = array.value(gc);
+        vector.store_field_nocap(gc, VECTOR_DATA_IDX, array_val);
+        // Store length.
+        let int_obj = allocate_obj(
+            int_lit_ty(),
+            &vec![],
+            None,
+            gc,
+            Some("len_in_make_string_value"),
+        );
+        int_obj.store_field_nocap(gc, 0, buf_len_int);
+        let int_val = int_obj.value(gc);
+        vector.store_field_nocap(gc, VECTOR_LEN_IDX, int_val);
 
         string
     });
@@ -264,6 +277,9 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     (expr, scm)
 }
+
+// int_to_string : Int -> String
+// pub fn int_to_string() -> (Arc<ExprNode>, Arc<Scheme>) {}
 
 // Implementation of Array.new built-in function.
 fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
@@ -1326,7 +1342,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Get Array object from the given array (no retained)
+// Get Array object from the given String (no retained)
 fn extract_array_from_string<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     string: &Object<'c>,
@@ -1334,13 +1350,15 @@ fn extract_array_from_string<'c, 'm>(
     let vector = extract_vector_from_string(gc, string);
     let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
     let array = Object::new(
-        vector.load_field_nocap(gc, 0).into_pointer_value(),
+        vector
+            .load_field_nocap(gc, VECTOR_DATA_IDX)
+            .into_pointer_value(),
         array_byte_ty,
     );
     array
 }
 
-// Get `Vector Byte` object from the given array (no retained)
+// Get `Vector Byte` object from the given String (no retained)
 fn extract_vector_from_string<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     string: &Object<'c>,

@@ -1,13 +1,20 @@
 use super::*;
 
 pub const FIX_NAME: &str = "fix";
+pub const VECTOR_LEN_IDX: u32 = 0;
+pub const VECTOR_DATA_IDX: u32 = 1;
 
 const STD_SOURCE: &str = r#"
 module Std;
 
-type Vector a = unbox struct ( data : Array a );
+type Vector a = unbox struct ( len : Int, data : Array a );
 
 type String = unbox struct ( data : Vector Byte );
+
+namespace String {
+    get_len : String -> Int;
+    get_len = \s -> s.get_data.get_len - 1; // remove null terminator
+}
 
 namespace IO {
     pure : a -> (IOState -> (a, IOState));
