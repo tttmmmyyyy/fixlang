@@ -288,7 +288,7 @@ main = (
 
 The following is the table of operators sorted by it's precedence (operator of higher precedence appears earlier).
 
-| Operator       | Associativity | Trant / method                     | Explanation                                                 | 
+| Operator       | Associativity | Trait / method                     | Explanation                                                 | 
 | -------------- | ------------- | ---------------------------------- | ----------------------------------------------------------- | 
 | (whitespace)   | left          | -                                  | function application                                        | 
 | .              | left          | -                                  | right-to-left function application: x.f = f x               | 

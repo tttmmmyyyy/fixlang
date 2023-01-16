@@ -170,69 +170,77 @@ pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
 }
 
-pub fn make_string_value(string: String, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
-        // Define string literal.
-        let string_ptr = gc
-            .builder()
-            .build_global_string_ptr(&string, "string_literal");
+pub fn make_string_from_ptr<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    buf_with_null_terminator: PointerValue<'c>,
+    len_with_null_terminator: IntValue<'c>,
+    rvo: Option<Object<'c>>,
+) -> Object<'c> {
+    // Create `Array Byte` which contains null-terminated string.
+    let array_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+    let array = allocate_obj(
+        array_ty,
+        &vec![],
+        Some(len_with_null_terminator),
+        gc,
+        Some("string@make_string_from_ptr"),
+    );
+    let dst = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+    let len_ptr = gc.builder().build_int_cast(
+        len_with_null_terminator,
+        gc.context.ptr_sized_int_type(gc.target_data(), None),
+        "len_ptr@make_string_from_ptr",
+    );
+    gc.builder()
+        .build_memcpy(dst, 1, buf_with_null_terminator, 1, len_ptr)
+        .ok()
+        .unwrap();
 
-        // Create `Array Byte` which contains null-terminated string.
-        let array_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
-        let buf_len: u64 = string.as_bytes().len() as u64 + 1/* null termination */;
-        let buf_len_int = gc.context.i64_type().const_int(buf_len, false);
-        let array = allocate_obj(
-            array_ty,
-            &vec![],
-            Some(buf_len_int),
-            gc,
-            Some("string_constructed_from_literal"),
-        );
-        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-        gc.builder()
-            .build_memcpy(
-                buf,
-                1,
-                string_ptr.as_pointer_value(),
-                1,
-                gc.context
-                    .ptr_sized_int_type(gc.target_data(), None)
-                    .const_int(buf_len, false),
-            )
-            .ok()
-            .unwrap();
-
-        // Allocate String and store the array into it.
-        let string = if rvo.is_none() {
-            allocate_obj(
-                ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("string_literal")),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        let vector = extract_vector_from_string(gc, &string);
-        assert!(vector.is_unbox(gc.type_env()));
-
-        // Store array to data.
-        let array_val = array.value(gc);
-        vector.store_field_nocap(gc, VECTOR_DATA_IDX, array_val);
-        // Store length.
-        let int_obj = allocate_obj(
-            int_lit_ty(),
+    // Allocate String and store the array into it.
+    let string = if rvo.is_none() {
+        allocate_obj(
+            string_lit_ty(),
             &vec![],
             None,
             gc,
-            Some("len_in_make_string_value"),
-        );
-        int_obj.store_field_nocap(gc, 0, buf_len_int);
-        let int_val = int_obj.value(gc);
-        vector.store_field_nocap(gc, VECTOR_LEN_IDX, int_val);
+            Some(&format!("string_literal")),
+        )
+    } else {
+        rvo.unwrap()
+    };
+    let vector = extract_vector_from_string(gc, &string);
+    assert!(vector.is_unbox(gc.type_env()));
 
-        string
+    // Store array to data.
+    let array_val = array.value(gc);
+    vector.store_field_nocap(gc, VECTOR_DATA_IDX, array_val);
+    // Store length.
+    let len_obj = allocate_obj(
+        int_lit_ty(),
+        &vec![],
+        None,
+        gc,
+        Some("len_in_make_string_value"),
+    );
+    len_obj.store_field_nocap(gc, 0, len_with_null_terminator);
+    let int_val = len_obj.value(gc);
+    vector.store_field_nocap(gc, VECTOR_LEN_IDX, int_val);
+
+    string
+}
+
+pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        let string_ptr = gc
+            .builder()
+            .build_global_string_ptr(&string, "string_literal")
+            .as_basic_value_enum()
+            .into_pointer_value();
+        let len_with_null_terminator = gc
+            .context
+            .i64_type()
+            .const_int(string.as_bytes().len() as u64 + 1, false);
+        make_string_from_ptr(gc, string_ptr, len_with_null_terminator, rvo)
     });
     expr_lit(
         generator,
@@ -279,7 +287,71 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // int_to_string : Int -> String
-// pub fn int_to_string() -> (Arc<ExprNode>, Arc<Scheme>) {}
+pub fn int_to_string_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const VAL_NAME: &str = "val";
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        // Get value
+        let val = gc
+            .get_var_field(&FullName::local(VAL_NAME), 0)
+            .into_int_value();
+        gc.release(gc.get_var(&FullName::local(VAL_NAME)).ptr.get(gc));
+
+        // Allocate buffer for sprintf.
+        const BUF_SIZE: i32 = 21;
+        let buf_size = gc.context.i32_type().const_int(BUF_SIZE as u64, false);
+        let buf = gc.builder().build_array_alloca(
+            gc.context.i8_type(),
+            buf_size,
+            "buf_for_sprintf@int_to_string",
+        );
+
+        // Call sprintf.
+        let format = gc
+            .builder()
+            .build_global_string_ptr("%lld", "format@int_to_string")
+            .as_basic_value_enum()
+            .into_pointer_value();
+        let len = gc
+            .call_runtime(
+                RuntimeFunctions::Sprintf,
+                &[buf.into(), format.into(), val.into()],
+            )
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_int_value();
+
+        // Make String.
+        let len_with_null_terminator_i32 = gc.builder().build_int_add(
+            len,
+            gc.context.i32_type().const_int(1, false),
+            "len_with_null_terminator_i32@int_to_string",
+        );
+        let len_with_null_terminator = gc.builder().build_int_cast(
+            len_with_null_terminator_i32,
+            gc.context.i64_type(),
+            "len_with_null_terminator@int_to_string",
+        );
+
+        make_string_from_ptr(gc, buf, len_with_null_terminator, rvo)
+    });
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(int_lit_ty(), string_lit_ty()),
+    );
+    let expr = expr_abs(
+        var_local(VAL_NAME, None),
+        expr_lit(
+            generator,
+            vec![FullName::local(VAL_NAME)],
+            format!("int_to_string {}", VAL_NAME),
+            string_lit_ty(),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
 
 // Implementation of Array.new built-in function.
 fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {

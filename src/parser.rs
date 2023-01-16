@@ -933,7 +933,7 @@ fn parse_expr_string_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &pair);
     let string = pair.into_inner().next().unwrap().as_str().to_string();
     // TODO: resolve escape sequences.
-    make_string_value(string, Some(span))
+    make_string_from_rust_string(string, Some(span))
 }
 
 fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeNode> {

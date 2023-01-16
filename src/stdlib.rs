@@ -16,6 +16,14 @@ namespace String {
     get_len = \s -> s.get_data.get_len - 1; // remove null terminator
 }
 
+trait a : ToString {
+    to_string : a -> String;
+}
+
+impl Int : ToString {
+    to_string = int_to_string;
+}
+
 namespace IO {
     pure : a -> (IOState -> (a, IOState));
     pure = \val -> \io -> (val, io);
@@ -129,6 +137,10 @@ pub fn make_std_mod() -> FixModule {
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, DEBUG_NAME], "abort"),
         abort_function(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], "int_to_string"),
+        int_to_string_function(),
     );
 
     fix_module

@@ -1547,6 +1547,19 @@ pub fn test62() {
 
 #[test]
 #[serial]
+pub fn test63() {
+    // Test Int ToString.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = print "Neko";
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 
