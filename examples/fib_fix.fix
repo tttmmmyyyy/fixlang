@@ -1,6 +1,6 @@
 module Main;
 
-main : Int;
+main : IOState -> ((), IOState);
 main = (
     let arr = Array.new 31 0;
     // arr.set! asserts that the given array is uniquely referenced and 
@@ -20,5 +20,5 @@ main = (
                 loop arr (n+1)
     );
     let fib_array = calc_fib_array arr 2;
-    fib_array.get 30 // 832040
+    print $ fib_array.get 30.to_string // 832040
 );

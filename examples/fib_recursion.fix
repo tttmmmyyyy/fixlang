@@ -10,5 +10,5 @@ fib = \n -> (
         fib (n-1) + fib (n-2)
 );
 
-main : Int;
-main = fib 30; // 832040
+main : IOState -> ((), IOState);
+main = print $ fib 30.to_string; // 832040

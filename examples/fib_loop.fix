@@ -1,6 +1,6 @@
 module Main;
 
-main : Int;
+main : IOState -> ((), IOState);
 main = (
     let arr = Array.new 31 0;
     let arr = arr.set! 0 0;
@@ -16,5 +16,5 @@ main = (
             let arr = arr.set! idx (x+y);
             continue $ (idx+1, arr)
     );
-    arr.get 30 // 832040
+    print $ arr.get 30.to_string // 832040
 );
