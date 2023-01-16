@@ -24,7 +24,7 @@ pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
     let name_c_str = unsafe { CStr::from_ptr(name) };
     let name_c_str = name_c_str.to_str();
     if name_c_str.is_err() {
-        println!("[report_malloc] Failed to convert given name to &str.");
+        println!("[Sanitizer] Failed to convert given name to &str.");
     }
     let name_c_str = name_c_str.unwrap();
     let mut guard = (*OBJECT_ID).lock().unwrap();
@@ -32,7 +32,7 @@ pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
     let obj_id = *guard;
     if VERBOSE {
         println!(
-            "Object id={} is allocated. refcnt=(0 -> 1), addr={:#X}, code = {}",
+            "[Sanitizer] Object id={} is allocated. refcnt=(0 -> 1), addr={:#X}, code = {}",
             obj_id, address as usize, name_c_str
         );
     }
@@ -53,14 +53,14 @@ pub extern "C" fn mark_as_global(obj_id: i64) -> () {
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_table.contains_key(&obj_id),
-        "Object of object id={} isn't registered to sanitizer.",
+        "[Sanitizer] Object of object id={} isn't registered to sanitizer.",
         obj_id
     );
     let info = object_table.get_mut(&obj_id).unwrap();
     info.is_global = true;
     if VERBOSE {
         println!(
-            "Object id={} is marked as global. refcnt={}, addr={:#X}, code = {}",
+            "[Sanitizer] Object id={} is marked as global. refcnt={}, addr={:#X}, code = {}",
             obj_id, info.refcnt, info.addr, info.code
         );
     }
@@ -71,20 +71,20 @@ pub extern "C" fn mark_as_global(obj_id: i64) -> () {
 pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) -> () {
     assert_ne!(
         refcnt, 0,
-        "Object id={} whose refcnt zero is retained!",
+        "[Sanitizer] Object id={} whose refcnt zero is retained!",
         obj_id
     );
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_table.contains_key(&obj_id),
-        "Retain of object id={} is reported but it isn't registered to sanitizer.",
+        "[Sanitizer] Retain of object id={} is reported but it isn't registered to sanitizer.",
         obj_id
     );
     let info = object_table.get_mut(&obj_id).unwrap();
     if !info.is_global {
         assert_eq!(
             info.refcnt, refcnt,
-            "The refcnt of object id={} in report_retain mismatch! reported={}, sanitizer={}",
+            "[Sanitizer] The refcnt of object id={} in report_retain mismatch! reported={}, sanitizer={}",
             obj_id, refcnt, info.refcnt
         );
     } else if refcnt != info.refcnt {
@@ -96,7 +96,7 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
     info.refcnt += 1;
     if VERBOSE {
         println!(
-            "Object id={} is retained. refcnt=({} -> {}), addr={:#X}, code = {}",
+            "[Sanitizer] Object id={} is retained. refcnt=({} -> {}), addr={:#X}, code = {}",
             obj_id,
             refcnt,
             refcnt + 1,
@@ -111,20 +111,20 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
 pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -> () {
     assert_ne!(
         refcnt, 0,
-        "Object id={} whose refcnt zero is retained!",
+        "[Sanitizer] Object id={} whose refcnt zero is retained!",
         obj_id
     );
     let mut object_info = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_info.contains_key(&obj_id),
-        "Release of object id={} is reported but it isn't registered to sanitizer.",
+        "[Sanitizer] Release of object id={} is reported but it isn't registered to sanitizer.",
         obj_id
     );
     let info = object_info.get_mut(&obj_id).unwrap();
     if !info.is_global {
         assert_eq!(
             info.refcnt, refcnt,
-            "The refcnt of object id={} in report_release mismatch! reported={}, sanitizer={}",
+            "[Sanitizer] The refcnt of object id={} in report_release mismatch! reported={}, sanitizer={}",
             obj_id, refcnt, info.refcnt
         );
         info.refcnt -= 1;
@@ -136,7 +136,7 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
     }
     if VERBOSE {
         println!(
-            "Object id={} is released. refcnt=({} -> {}), addr={:#X}, code = {}",
+            "[Sanitizer] Object id={} is released. refcnt=({} -> {}), addr={:#X}, code = {}",
             obj_id,
             refcnt,
             refcnt - 1,
@@ -148,7 +148,7 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
     if info.refcnt == 0 {
         assert!(
             !info.is_global,
-            "Object of object id={} is global but deallocated!",
+            "[Sanitizer] Object of object id={} is global but deallocated!",
             obj_id
         );
         // When deallocated, remove it from OBJECT_INFO
@@ -168,14 +168,14 @@ pub extern "C" fn check_leak() -> () {
         if !info.is_global {
             leak = true;
             println!(
-                "Object id={} is leaked. refcnt={}, addr={:#X}, code = {}",
+                "[Sanitizer] Object id={} is leaked. refcnt={}, addr={:#X}, code = {}",
                 id, info.refcnt, info.addr, info.code
             );
         }
     }
     if leak {
-        panic!("Some objects leaked!");
+        panic!("[Sanitizer] Some objects leaked!");
     }
 }
 
-const VERBOSE: bool = false;
+const VERBOSE: bool = true;

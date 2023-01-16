@@ -404,7 +404,7 @@ impl FixModule {
                 let infty = refcnt_type(gc.context).const_int(u64::MAX / 2, false);
                 gc.builder().build_store(ptr_to_refcnt, infty);
             }
-            // If we didn't rvo, then store the result to gloval_ptr.
+            // If we didn't rvo, then store the result to global_ptr.
             if rvo.is_none() {
                 let obj_val = obj.value(gc);
                 gc.builder().build_store(global_var, obj_val);

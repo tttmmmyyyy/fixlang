@@ -183,7 +183,7 @@ pub fn make_string_from_ptr<'c, 'm>(
         &vec![],
         Some(len_with_null_terminator),
         gc,
-        Some("string@make_string_from_ptr"),
+        Some("array@make_string_from_ptr"),
     );
     let dst = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
     let len_ptr = gc.builder().build_int_cast(
@@ -203,7 +203,7 @@ pub fn make_string_from_ptr<'c, 'm>(
             &vec![],
             None,
             gc,
-            Some(&format!("string_literal")),
+            Some(&format!("string@make_string_from_ptr")),
         )
     } else {
         rvo.unwrap()
