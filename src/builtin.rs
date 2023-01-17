@@ -230,7 +230,7 @@ pub fn make_string_from_ptr<'c, 'm>(
 }
 
 pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
         let string_ptr = gc
             .builder()
             .build_global_string_ptr(&string, "string_literal")
@@ -289,7 +289,7 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
 // int_to_string : Int -> String
 pub fn int_to_string_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const VAL_NAME: &str = "val";
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
         // Get value
         let val = gc
             .get_var_field(&FullName::local(VAL_NAME), 0)
