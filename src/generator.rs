@@ -244,7 +244,7 @@ pub struct GenerationContext<'c, 'm> {
     pub module: &'m Module<'c>,
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
-    global: HashMap<FullName, Variable<'c>>,
+    pub global: HashMap<FullName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typechecker: Option<TypeCheckContext>,
     pub target: Either<TargetMachine, ExecutionEngine<'c>>,
@@ -359,8 +359,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if self.global.contains_key(&name) {
             error_exit(&format!("duplicate symbol: {}", name.to_string()));
         } else {
-            let used_later = if NOT_RETAIN_GLOBAL {
-                // Global objects are pre-retained, so we do not need to retain. Always move out it.
+            let used_later = if NOT_RETAIN_GLOBAL && ty.is_box(self.type_env()) {
+                // Global boxed objects are pre-retained, so we do not need to retain. Always move out it.
                 0
             } else {
                 u32::MAX / 2

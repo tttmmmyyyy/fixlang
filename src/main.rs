@@ -54,14 +54,14 @@ use stdlib::*;
 use typecheck::*;
 use uncurry_optimization::*;
 
-const SANITIZE_MEMORY: bool = false;
+const SANITIZE_MEMORY: bool = true;
 
 const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
 const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We should make tuple generation on-demand.
 
 const UNCURRY_OPTIMIZATION: bool = false;
 const TUPLE_UNBOX: bool = true;
-const NOT_RETAIN_GLOBAL: bool = true;
+const NOT_RETAIN_GLOBAL: bool = true && !SANITIZE_MEMORY;
 
 fn main() {
     let source_file = Arg::new("source-file").required(true);

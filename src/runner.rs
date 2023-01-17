@@ -131,6 +131,16 @@ fn build_module<'c>(
 
     // Perform leak check
     if SANITIZE_MEMORY {
+        // Deallocate all global objects.
+        let mut global_names = vec![];
+        for (name, _) in &gc.global {
+            global_names.push(name.clone());
+        }
+        for name in global_names {
+            let obj = gc.get_var(&name).ptr.get(&gc);
+            gc.release(obj);
+        }
+
         gc.call_runtime(RuntimeFunctions::CheckLeak, &[]);
     }
 
