@@ -96,7 +96,7 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ## Type annotation
 
-## Types
+## Basic types
 
 ### Boxed and unboxed types
 
@@ -107,17 +107,25 @@ Types in fix are divided into boxed types and unboxed types. Boxed types and unb
 
 In general, types that contain a lot of data (such as `Array`) are suited to be boxed because boxed types have lower copying costs. On the other hand, types containing small data (such as `Int`) can be unboxed to reduce the cost of increasing or decreasing the reference counter.
 
-### Arrow types
+### Functions
 
-Arrow types are boxed, because it may contain many captured values.
+Types of functions are represented as `a -> b`. For example, `Int -> Bool` is the type of functions which takes an `Int` value and returns a `Bool` value.
+
+The type constructor `->` is right-associative: `a -> b -> c` is interpreted as `a -> (b -> c)`.
+
+Functions are boxed, because it may contain many captured values.
 
 ### Tuples
 
 Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
 
-### Unit type
+### Unit
 
 Unit `()` is a type allows only one value, which is also written as `()`.
+
+### Array
+
+`Std.Array` is the type of fixed-length array. This is a basic type in fix and used to construct `Std.Vector`, the type of variable-length array. `Std.Array` is a boxed type.
 
 ### Structs
 
@@ -205,13 +213,25 @@ truth = true;
 
 two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth : Bool`.
 
-# Built-in features
+# Built-in / library features
 
 ## Types
 
+### Std.Int
+
+`Std.Int` is the type of 64-bit signed integers.
+
+### Std.Bool
+
+`Std.Bool` is the type of boolean values. 
+
+### Std.Byte
+
+`Std.Byte` is the type of 8-bit unsigned integers.
+
 ### Std.Array
 
-`Std.Array` is the type of fixed-length array.
+`Std.Array` is the type of fixed-length arrays.
 
 - `Std.Array.new : Int -> a -> Std.Array a`
     - Creates an array of the specified length and elements of the specified value.
@@ -232,9 +252,17 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 
 `Std.Vector` is the type of variable-length array.
 
+```
+type Vector a = unbox struct ( len : Int, data : Array a );
+```
+
 ### Std.String
 
-`Std.String` is the type of string.
+`Std.String` is the type of strings.
+
+```
+type String = unbox struct ( data : Vector Byte );
+```
 
 ## Functions
 
@@ -279,6 +307,20 @@ main = (
     print $ sum.to_string
 ); // evaluates to 0 + 1 + ... + 99 
 ```
+
+### Std.print : Std.String -> Std.IOState -> ((), Std.IOState)
+
+### Std.Debug.debug_print : Std.String -> ()
+
+### Std.Debug.abort : () -> a
+
+### Std.Debug.assert_eq : [a: Eq] String -> a -> a -> ()
+
+## Traits
+
+### Std.ToString
+
+- `to_string : [a: Std.ToString] a -> Std.String`
 
 ## Operators
 
