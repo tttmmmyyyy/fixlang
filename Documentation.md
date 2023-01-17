@@ -100,10 +100,10 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ### Boxed and unboxed types
 
-Types in fix are divided into boxed types and unboxed types. 
+Types in fix are divided into boxed types and unboxed types. Boxed types and unboxed types are similar to things called as "reference types" and "value types" in other languages, respectively.
 
 * Value of boxed types are allocated in heap memory. Local names and struct / union fields whose types are boxed are compiled as pointers to the values. 
-* Values of unboxed types are directly embedded into the stack memoroy, structs and unions. 
+* Values of unboxed types are directly embedded into the stack memory, structs and unions. 
 
 In general, types that contain a lot of data (such as `Array`) are suited to be boxed because boxed types have lower copying costs. On the other hand, types containing small data (such as `Int`) can be unboxed to reduce the cost of increasing or decreasing the reference counter.
 
