@@ -35,7 +35,7 @@ string_lit_inner = { string_char* }
 
 string_char = {
     !("\"" | "\\") ~ ANY 
-    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("\"" | "\\" | "n" | "r" | "t")
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
 

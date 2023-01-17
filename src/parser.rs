@@ -932,7 +932,46 @@ fn parse_expr_string_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_string_lit);
     let span = Span::from_pair(&src, &pair);
     let string = pair.into_inner().next().unwrap().as_str().to_string();
-    // TODO: resolve escape sequences.
+    // Resolve escape sequences.
+    let mut string = string.chars();
+    let mut out_string: Vec<char> = vec![];
+    loop {
+        match string.next() {
+            None => {
+                break;
+            }
+            Some(c) => {
+                if c != '\\' {
+                    out_string.push(c);
+                    continue;
+                }
+                let c = string.next().unwrap();
+                if c == '\"' {
+                    out_string.push('"');
+                } else if c == '\\' {
+                    out_string.push('\\');
+                } else if c == 'n' {
+                    out_string.push('\n');
+                } else if c == 'r' {
+                    out_string.push('\r');
+                } else if c == 't' {
+                    out_string.push('\t');
+                } else if c == 'u' {
+                    let mut code: u32 = 0;
+                    for i in 0..4 {
+                        let c = string.next().unwrap().to_digit(16).unwrap();
+                        code += c << 4 * (3 - i);
+                    }
+                    let c = match char::from_u32(code) {
+                        None => error_exit(&format!("invalid unicode character: u{:X}", code)),
+                        Some(c) => c,
+                    };
+                    out_string.push(c);
+                }
+            }
+        }
+    }
+    let string = String::from_iter(out_string.iter());
     make_string_from_rust_string(string, Some(span))
 }
 

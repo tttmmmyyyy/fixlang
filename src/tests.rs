@@ -1554,7 +1554,23 @@ pub fn test63() {
 
     main : IOState -> ((), IOState);
     main = (
-        print $ 42.to_string
+        let min = -9223372036854775808;
+        print $ min.to_string
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test64() {
+    // Test escape sequence.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        print "\u2764"
     );
     "#;
     run_source(source, OptimizationLevel::Default);
