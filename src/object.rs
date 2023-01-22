@@ -600,8 +600,8 @@ impl ObjectFieldType {
 
         if str.is_box(gc.type_env()) {
             // If struct is boxed, simply retain fields and release the struct.
-            for (field_idx, _) in &field_indices_rvo {
-                gc.retain(ret[*field_idx as usize].clone());
+            for field in &ret {
+                gc.retain(field.clone());
             }
             gc.release(str.clone());
         } else {
