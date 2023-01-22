@@ -1671,6 +1671,26 @@ pub fn test68() {
 
 #[test]
 #[serial]
+pub fn test69() {
+    // Test boxed union pattern matching.
+    let source = r#"
+    module Main;
+
+    type IntOrBool = box union (int: Int, bool: Bool);
+
+    main : IOState -> ((), IOState);
+    main = (
+        let u = IntOrBool.bool true;
+        let IntOrBool.bool(x) = u;
+        let u = assert_eq "" x true;
+        pure ()
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 
