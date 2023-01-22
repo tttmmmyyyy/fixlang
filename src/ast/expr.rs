@@ -500,7 +500,7 @@ impl Pattern {
                         ret += ": ";
                         ret += &t.to_string();
                     }
-                    None => todo!(),
+                    None => {}
                 }
                 ret
             }
