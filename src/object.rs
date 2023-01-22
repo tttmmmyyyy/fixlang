@@ -485,22 +485,34 @@ impl ObjectFieldType {
         gc.builder().build_store(buf, val);
     }
 
-    pub fn get_object_from_union_buf<'c, 'm>(
+    // Get field of union (with refcnt managed).
+    pub fn get_union_field<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        buf: PointerValue<'c>,
+        union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        let val = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
-        let obj = if rvo.is_none() {
-            Object::create_from_value(val, elem_ty.clone(), gc)
+        let is_unbox = union.ty.is_unbox(gc.type_env());
+        let offset = if is_unbox { 0 } else { 1 };
+        let buf = union.ptr_to_field_nocap(gc, 1 + offset);
+
+        // Make return value by cloning the field in the union buffer,
+        // because lifetime of returned value may be longer than that of union object itself.
+        let field_val = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
+        let field = if rvo.is_none() {
+            Object::create_from_value(field_val, elem_ty.clone(), gc)
         } else {
             let rvo = rvo.unwrap();
-            rvo.store_unbox(gc, val);
+            rvo.store_unbox(gc, field_val);
             rvo
         };
-        gc.retain(obj.clone());
-        obj
+        if union.is_box(gc.type_env()) {
+            gc.retain(field.clone());
+            gc.release(union);
+        } else {
+            // If unbox, retaining and releasing cancel each other out, so do nothing.
+        }
+        field
     }
 
     pub fn get_value_from_union_buf<'c, 'm>(
@@ -515,8 +527,37 @@ impl ObjectFieldType {
         gc.builder().build_load(buf, "value_at_union_buf")
     }
 
-    // Get field of struct as Object (unretained, uncloned).
-    pub fn get_struct_field<'c, 'm>(
+    pub fn panic_if_union_tag_unmatch<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        union: Object<'c>,
+        expect_tag: IntValue<'c>,
+    ) {
+        let is_unbox = union.ty.is_unbox(gc.type_env());
+        let offset = if is_unbox { 0 } else { 1 };
+
+        // Get tag value.
+        let tag_value = union.load_field_nocap(gc, 0 + offset).into_int_value();
+
+        // If tag unmatch, panic.
+        let is_tag_unmatch = gc.builder().build_int_compare(
+            IntPredicate::NE,
+            expect_tag,
+            tag_value,
+            "is_tag_unmatch",
+        );
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
+        let match_bb = gc.context.append_basic_block(current_func, "match_bb");
+        gc.builder()
+            .build_conditional_branch(is_tag_unmatch, unmatch_bb, match_bb);
+        gc.builder().position_at_end(unmatch_bb);
+        gc.panic("tag unmatch.");
+        gc.builder().build_unconditional_branch(match_bb);
+    }
+
+    // Get field of struct as Object (no refcnt management and no cloned).
+    pub fn get_struct_field_noclone<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         str: &Object<'c>,
         field_idx: u32,
@@ -530,6 +571,54 @@ impl ObjectFieldType {
             str.ptr_to_field_nocap(gc, field_idx + field_offset)
         };
         Object::new(field_ptr, field_ty)
+    }
+
+    // Get field of struct as Objects (with refcnt managed).
+    pub fn get_struct_fields<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        str: &Object<'c>,
+        field_indices_rvo: Vec<(u32, Option<Object<'c>>)>,
+    ) -> Vec<Object<'c>> {
+        // Collect unretained (but cloned) fields.
+        // We need clone here since lifetime of returned fields may be longer than that of struct object.
+        let mut ret = vec![];
+        for (field_idx, rvo) in &field_indices_rvo {
+            // Get ptr to field.
+            let field = ObjectFieldType::get_struct_field_noclone(gc, str, *field_idx);
+
+            // Clone the field.
+            let field_val = field.value(gc);
+            let field = if rvo.is_none() {
+                Object::create_from_value(field_val, field.ty, gc)
+            } else {
+                let rvo = rvo.as_ref().unwrap();
+                rvo.store_unbox(gc, field_val);
+                rvo.clone()
+            };
+            ret.push(field);
+        }
+
+        if str.is_box(gc.type_env()) {
+            // If struct is boxed, simply retain fields and release the struct.
+            for (field_idx, _) in &field_indices_rvo {
+                gc.retain(ret[*field_idx as usize].clone());
+            }
+            gc.release(str.clone());
+        } else {
+            // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
+            // just release fields that are not not in `ret`.
+            let field_indices: HashSet<u32> =
+                HashSet::from_iter(field_indices_rvo.iter().map(|(i, _)| i.clone()));
+            for field_idx in 0..str.ty.fields_types(gc.type_env()).len() {
+                let field_idx = field_idx as u32;
+                if !field_indices.contains(&field_idx) {
+                    let field = ObjectFieldType::get_struct_field_noclone(gc, str, field_idx);
+                    gc.release(field);
+                }
+            }
+        }
+
+        ret
     }
 
     // Set an Object to field of struct. The old value isn't released in this function.

@@ -62,6 +62,34 @@ impl TyCon {
     pub fn to_string(&self) -> String {
         self.name.to_string()
     }
+
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.name = ctx.resolve(&self.name, NameResolutionType::Type);
+    }
+
+    // Get the type of struct / union value.
+    // If struct / union have type parameter, introduces new type arguments.
+    pub fn get_struct_union_value_type(
+        self: &Arc<TyCon>,
+        typechcker: &mut TypeCheckContext,
+    ) -> Arc<TypeNode> {
+        let ti = typechcker.type_env.tycons.get(self).unwrap();
+        assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
+        // Make type variables for type parameters.
+        // Currently type parameters for struct / union must have kind *.
+        let mut tyvars: Vec<Arc<TypeNode>> = vec![];
+        let tyvars_cnt = ti.tyvars.len();
+        for _ in 0..tyvars_cnt {
+            tyvars.push(type_tyvar_star(&typechcker.new_tyvar()));
+        }
+
+        // Make type.
+        let mut ty = type_tycon(self);
+        for tv in tyvars {
+            ty = type_tyapp(ty, tv);
+        }
+        ty
+    }
 }
 
 #[derive(Clone)]
@@ -70,13 +98,13 @@ pub struct TyConInfo {
     pub variant: TyConVariant,
     pub is_unbox: bool,
     pub tyvars: Vec<Name>,
-    pub field_types: Vec<Arc<TypeNode>>, // For array, element type.
+    pub fields: Vec<Field>, // For array, element type.
 }
 
 impl TyConInfo {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        for ty in &mut self.field_types {
-            *ty = ty.resolve_namespace(ctx);
+        for field in &mut self.fields {
+            field.resolve_namespace(ctx);
         }
     }
 }
@@ -211,7 +239,7 @@ impl TypeNode {
             Type::TyVar(_tv) => self.clone(),
             Type::TyCon(tc) => {
                 let mut tc = tc.as_ref().clone();
-                tc.name = ctx.resolve(&tc.name, NameResolutionType::Type);
+                tc.resolve_namespace(ctx);
                 self.set_tycon_tc(Arc::new(tc))
             }
             Type::TyApp(fun, arg) => self
@@ -233,10 +261,7 @@ impl TypeNode {
         for (i, tv) in ti.tyvars.iter().enumerate() {
             s.add_substitution(&Substitution::single(tv, args[i].clone()));
         }
-        ti.field_types
-            .iter()
-            .map(|ty| s.substitute_type(ty))
-            .collect()
+        ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
     }
 
     fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {

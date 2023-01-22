@@ -22,7 +22,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             variant: TyConVariant::Primitive,
             is_unbox: true,
             tyvars: vec![],
-            field_types: vec![],
+            fields: vec![],
         },
     );
     ret.insert(
@@ -32,7 +32,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             variant: TyConVariant::Primitive,
             is_unbox: true,
             tyvars: vec![],
-            field_types: vec![],
+            fields: vec![],
         },
     );
     ret.insert(
@@ -42,7 +42,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             variant: TyConVariant::Primitive,
             is_unbox: true,
             tyvars: vec![],
-            field_types: vec![],
+            fields: vec![],
         },
     );
     ret.insert(
@@ -52,7 +52,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             variant: TyConVariant::Struct,
             is_unbox: false,
             tyvars: vec![],
-            field_types: vec![],
+            fields: vec![],
         },
     );
     // IO is defined in the source code of Std.
@@ -63,7 +63,10 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             variant: TyConVariant::Array,
             is_unbox: false,
             tyvars: vec!["a".to_string()],
-            field_types: vec![type_tyvar_star("a")],
+            fields: vec![Field {
+                name: "array_elem".to_string(), // Unused
+                ty: type_tyvar_star("a"),
+            }],
         },
     );
     // String is defined in the source code of Std.
@@ -461,7 +464,7 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Implementation of readArray built-in function.
+// Implementation of Array.get built-in function.
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
@@ -482,8 +485,8 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     expr_lit(generator, free_vars, name, elem_ty, None)
 }
 
-// "readArray" built-in function.
-// readArray = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
+// "Array.get" built-in function.
+// Array.get = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
 pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         var_local("idx", None),
@@ -767,21 +770,23 @@ pub fn struct_get_lit(
         let str = gc.get_var(&var_name_clone).ptr.get(gc);
 
         // Extract field.
-        let field = ObjectFieldType::get_struct_field(gc, &str, field_idx as u32);
-        let field_val = field.value(gc);
-        let field = if rvo.is_none() {
-            Object::create_from_value(field_val, field.ty, gc)
-        } else {
-            let rvo = rvo.unwrap();
-            rvo.store_unbox(gc, field_val);
-            rvo
-        };
+        // let field = ObjectFieldType::get_struct_field(gc, &str, field_idx as u32);
+        // let field_val = field.value(gc);
+        // let field = if rvo.is_none() {
+        //     Object::create_from_value(field_val, field.ty, gc)
+        // } else {
+        //     let rvo = rvo.unwrap();
+        //     rvo.store_unbox(gc, field_val);
+        //     rvo
+        // };
 
-        // Retain field and release struct.
-        gc.retain(field.clone());
-        gc.release(str);
+        // // Retain field and release struct.
+        // gc.retain(field.clone());
+        // gc.release(str);
 
-        field
+        // field
+
+        ObjectFieldType::get_struct_fields(gc, &str, vec![(field_idx as u32, rvo)])[0].clone()
     });
     let free_vars = vec![FullName::local(var_name)];
     let name = format!("{}.get_{}", struct_name.to_string(), field_name);
@@ -893,7 +898,7 @@ pub fn struct_mod_lit(
             );
             for i in 0..field_count {
                 // Retain field.
-                let field = ObjectFieldType::get_struct_field(gc, &str, i as u32);
+                let field = ObjectFieldType::get_struct_field_noclone(gc, &str, i as u32);
                 gc.retain(field.clone());
                 // Clone field.
                 ObjectFieldType::set_struct_field(gc, &cloned_str, i as u32, &field);
@@ -917,7 +922,7 @@ pub fn struct_mod_lit(
         }
 
         // Modify field
-        let field = ObjectFieldType::get_struct_field(gc, &str, field_idx as u32);
+        let field = ObjectFieldType::get_struct_field_noclone(gc, &str, field_idx as u32);
         let field = gc.apply_lambda(modfier, field, None);
         ObjectFieldType::set_struct_field(gc, &str, field_idx as u32, &field);
 
@@ -1114,8 +1119,6 @@ pub fn union_as_lit(
         // Get union object.
         let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
 
-        let is_unbox = obj.ty.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { 1 };
         let elem_ty = ty.clone();
 
         // Create specified tag value.
@@ -1124,33 +1127,11 @@ pub fn union_as_lit(
             .into_int_type()
             .const_int(field_idx as u64, false);
 
-        // Get tag value.
-        let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
-
         // If tag unmatch, panic.
-        let is_tag_unmatch = gc.builder().build_int_compare(
-            IntPredicate::NE,
-            specified_tag_value,
-            tag_value,
-            "is_tag_unmatch",
-        );
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
-        let match_bb = gc.context.append_basic_block(current_func, "match_bb");
-        gc.builder()
-            .build_conditional_branch(is_tag_unmatch, unmatch_bb, match_bb);
-        gc.builder().position_at_end(unmatch_bb);
-        gc.panic("tag unmatch.");
-        gc.builder().build_unconditional_branch(match_bb);
+        ObjectFieldType::panic_if_union_tag_unmatch(gc, obj.clone(), specified_tag_value);
 
-        // When match, return the value.
-        gc.builder().position_at_end(match_bb);
-        let buf = obj.ptr_to_field_nocap(gc, 1 + offset);
-        let value = ObjectFieldType::get_object_from_union_buf(gc, buf, &elem_ty, rvo);
-
-        gc.release(obj);
-        value
+        // If tag match, return the field value.
+        ObjectFieldType::get_union_field(gc, obj, &elem_ty, rvo)
     });
     expr_lit(generator, free_vars, name, field_ty, None)
 }
@@ -1388,10 +1369,8 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         gc.builder().position_at_end(break_bb);
         gc.release(loop_body);
         assert!(loop_res.is_unbox(gc.type_env()));
-        let union_buf = loop_res.ptr_to_field_nocap(gc, 1);
-        let result = ObjectFieldType::get_object_from_union_buf(gc, union_buf, ty, rvo);
-        gc.release(loop_res);
-        result
+
+        ObjectFieldType::get_union_field(gc, loop_res, ty, rvo)
     });
 
     let initial_state_name = FullName::local(INITIAL_STATE_NAME);

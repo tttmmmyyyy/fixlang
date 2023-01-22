@@ -604,7 +604,7 @@ impl FixModule {
     }
 
     // Resolve namespaces of types and traits that appear in this module.
-    // NOTE: names in types/traits defined in this module have to be full-names already when calling this function.
+    // NOTE: names in types/traits defined in this module have to be full-names already when this function called.
     pub fn resolve_namespace(&mut self) {
         let ctx = NameResolutionContext {
             types: self.tycon_names(),

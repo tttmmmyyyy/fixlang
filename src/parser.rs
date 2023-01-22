@@ -847,29 +847,12 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
-    let var = pairs.next().unwrap();
+    let pat = parse_pattern(pairs.next().unwrap(), src);
     let _eq_of_let = pairs.next().unwrap();
-    let bound = pairs.next().unwrap();
+    let bound = parse_expr(pairs.next().unwrap(), src);
     let _in_of_let = pairs.next().unwrap();
-    let val = pairs.next().unwrap();
-    let (var, ty_anno) = parse_var_with_type(var, src);
-    let mut bound = parse_expr(bound, src);
-    match ty_anno {
-        Some(ty_anno) => {
-            bound = expr_tyanno(bound, ty_anno, Some(span.clone()));
-        }
-        None => {}
-    }
-    expr_let(var, bound, parse_expr(val, src), Some(span))
-}
-
-fn parse_var_with_type(pair: Pair<Rule>, src: &Arc<String>) -> (Arc<Var>, Option<Arc<TypeNode>>) {
-    assert_eq!(pair.as_rule(), Rule::var_with_type);
-    let span = Span::from_pair(&src, &pair);
-    let mut pairs = pair.into_inner();
-    let var_name = pairs.next().unwrap().as_str();
-    let ty = pairs.next().map(|ty| parse_type(ty));
-    (var_local(var_name, Some(span)), ty)
+    let val = parse_expr(pairs.next().unwrap(), src);
+    expr_let(pat, bound, val, Some(span))
 }
 
 fn parse_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
@@ -1046,6 +1029,80 @@ fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
         }
         res
     }
+}
+
+fn parse_pattern(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+    assert_eq!(pair.as_rule(), Rule::pattern);
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::pattern_var => parse_pattern_var(pair, src),
+        Rule::pattern_tuple => parse_pattern_tuple(pair, src),
+        Rule::pattern_struct => parse_pattern_struct(pair, src),
+        Rule::pattern_union => parse_pattern_union(pair, src),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_pattern_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+    assert_eq!(pair.as_rule(), Rule::pattern_var);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let var_name = pairs.next().unwrap().as_str();
+    let ty = pairs.next().map(|ty| parse_type(ty));
+    Arc::new(Pattern::Var(var_local(var_name, Some(span)), ty))
+}
+
+fn parse_pattern_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+    assert_eq!(pair.as_rule(), Rule::pattern_tuple);
+    let pairs = pair.into_inner();
+    let pats = pairs
+        .map(|pair| parse_pattern(pair, src))
+        .collect::<Vec<_>>();
+    Arc::new(Pattern::Struct(
+        tycon(FullName::from_strs(
+            &[STD_NAME],
+            &make_tuple_name(pats.len() as u32),
+        )),
+        pats.iter()
+            .enumerate()
+            .map(|(i, pat)| (i.to_string(), pat.clone()))
+            .collect(),
+    ))
+}
+
+fn parse_pattern_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+    assert_eq!(pair.as_rule(), Rule::pattern_struct);
+    let mut pairs = pair.clone().into_inner();
+    let tycon = tycon(FullName::from_strs(&[], pairs.next().unwrap().as_str()));
+    let mut field_to_pats = Vec::default();
+    let mut field_names: HashSet<Name> = Default::default();
+    while pairs.next().is_some() {
+        let field_name = pairs.next().unwrap().as_str().to_string();
+
+        // Validate that field_name doesn't appear upto here.
+        if field_names.contains(&field_name) {
+            error_exit(&format!(
+                "in the struct pattern `{}`, field `{}` appears multiple times.",
+                pair.as_str(),
+                field_name
+            ));
+        } else {
+            field_names.insert(field_name.clone());
+        }
+
+        let pat = parse_pattern(pairs.next().unwrap(), src);
+        field_to_pats.push((field_name, pat));
+    }
+    Arc::new(Pattern::Struct(tycon, field_to_pats))
+}
+
+fn parse_pattern_union(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+    assert_eq!(pair.as_rule(), Rule::pattern_var);
+    let mut pairs = pair.into_inner();
+    let tycon = tycon(FullName::from_strs(&[], pairs.next().unwrap().as_str()));
+    let field_name = pairs.next().unwrap().as_str().to_string();
+    let pat = parse_pattern(pairs.next().unwrap(), src);
+    Arc::new(Pattern::Union(tycon, field_name, pat))
 }
 
 fn rule_to_string(r: &Rule) -> String {

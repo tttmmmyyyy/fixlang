@@ -761,9 +761,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::Lam(arg, val) => {
                 self.eval_lam(arg.clone(), val.clone(), expr.inferred_ty.clone().unwrap())
             }
-            Expr::Let(var, bound, expr) => {
-                self.eval_let(var.clone(), bound.clone(), expr.clone(), rvo)
-            }
+            Expr::Let(pat, bound, expr) => self.eval_let(pat, bound.clone(), expr.clone(), rvo),
             Expr::If(cond_expr, then_expr, else_expr) => {
                 self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), rvo)
             }
@@ -922,24 +920,105 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate let
     fn eval_let(
         &mut self,
-        var: Arc<Var>,
+        pat: &Arc<Pattern>,
         bound: Arc<ExprNode>,
         val: Arc<ExprNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        let var_name = &var.name;
-        let mut used_in_val_except_var = val.free_vars().clone();
-        used_in_val_except_var.remove(var_name);
-        self.scope_lock_as_used_later(&used_in_val_except_var);
-        let bound_code = self.eval_expr(bound.clone(), None);
-        self.scope_unlock_as_used_later(&used_in_val_except_var);
-        self.scope_push(&var_name, &bound_code);
-        if !val.free_vars().contains(var_name) {
-            self.release(bound_code);
+        let vars = pat.vars();
+        let mut used_in_val_except_pat = val.free_vars().clone();
+        for v in vars {
+            used_in_val_except_pat.remove(&v);
+        }
+        self.scope_lock_as_used_later(&used_in_val_except_pat);
+        let bound = self.eval_expr(bound.clone(), None);
+        self.scope_unlock_as_used_later(&used_in_val_except_pat);
+        let suboobjs = self.destructure_object_by_pattern(pat, &bound);
+        for (var_name, obj) in &suboobjs {
+            if val.free_vars().contains(&var_name) {
+                self.scope_push(var_name, &obj);
+            } else {
+                self.release(obj.clone());
+            }
         }
         let val_code = self.eval_expr(val.clone(), rvo);
-        self.scope_pop(&var_name);
+        for (var_name, _) in &suboobjs {
+            if val.free_vars().contains(&var_name) {
+                self.scope_pop(var_name);
+            }
+        }
         val_code
+    }
+
+    // Destructure object by pattern
+    fn destructure_object_by_pattern(
+        &mut self,
+        pat: &Arc<Pattern>,
+        obj: &Object<'c>,
+    ) -> Vec<(FullName, Object<'c>)> {
+        let mut ret = vec![];
+        match pat.as_ref() {
+            Pattern::Var(v, _) => {
+                ret.push((v.name.clone(), obj.clone()));
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                // Get field names of the struct.
+                let str_fields = self
+                    .type_env()
+                    .tycons
+                    .get(tc.as_ref())
+                    .unwrap()
+                    .fields
+                    .iter()
+                    .map(|field| field.name.clone());
+
+                // Calculate a map that maps field name to its index.
+                let field_to_idx = str_fields
+                    .enumerate()
+                    .map(|(i, name)| (name.clone(), i as u32))
+                    .collect::<HashMap<_, _>>();
+
+                // Extract fields.
+                let field_indices_rvo = field_to_pat
+                    .iter()
+                    .map(|(name, _)| (field_to_idx[name], None))
+                    .collect::<Vec<_>>();
+                let fields = ObjectFieldType::get_struct_fields(self, obj, field_indices_rvo);
+
+                // Match to subpatterns.
+                for (i, (_, pat)) in field_to_pat.iter().enumerate() {
+                    ret.append(&mut self.destructure_object_by_pattern(&pat, &fields[i]));
+                }
+                todo!("check duplication");
+            }
+            Pattern::Union(tc, field_name, pat) => {
+                let union_fields = self
+                    .type_env()
+                    .tycons
+                    .get(tc.as_ref())
+                    .unwrap()
+                    .fields
+                    .iter();
+                let (field_idx, field_ty) = union_fields
+                    .enumerate()
+                    .find_map(|(i, f)| {
+                        if &f.name == field_name {
+                            Some((i, f.ty.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap();
+                let expect_tag_value = ObjectFieldType::UnionTag
+                    .to_basic_type(self)
+                    .into_int_type()
+                    .const_int(field_idx as u64, false);
+                ObjectFieldType::panic_if_union_tag_unmatch(self, obj.clone(), expect_tag_value);
+                let field = ObjectFieldType::get_union_field(self, obj.clone(), &field_ty, None);
+                ret.append(&mut self.destructure_object_by_pattern(pat, &field));
+            }
+        }
+        ret
     }
 
     // Evaluate if
@@ -1042,7 +1121,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let field_expr = field_exprs[i].clone();
             let field_ty = field_types[i].clone();
             if field_ty.is_unbox(self.type_env()) {
-                let rvo = ObjectFieldType::get_struct_field(self, &pair, i as u32);
+                let rvo = ObjectFieldType::get_struct_field_noclone(self, &pair, i as u32);
                 self.eval_expr(field_expr, Some(rvo));
             } else {
                 let field_obj = self.eval_expr(field_expr, None);

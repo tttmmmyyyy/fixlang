@@ -80,7 +80,7 @@ fn convert_to_uncurried_name(name: &mut Name, count: usize) {
     *name += &format!("@uncurry{}", count);
 }
 
-fn make_pair_name(size: usize) -> FullName {
+pub fn make_pair_name(size: usize) -> FullName {
     FullName::from_strs(&[STD_NAME], &make_tuple_name(size as u32))
 }
 
@@ -146,7 +146,7 @@ fn uncurry_lambda(
     let mut lam_body = body.clone();
     for i in (0..vars_count).rev() {
         lam_body = expr_let(
-            args[i].clone(),
+            Pattern::var_pattern(args[i].clone()),
             expr_app(
                 getters[i].clone(),
                 expr_var(tuple_arg_name.clone(), None).set_inferred_type(tuple_ty.clone()),
@@ -383,7 +383,7 @@ fn replace_free_var(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc
         }
         Expr::Let(v, bound, val) => {
             let bound = replace_free_var(bound, from, to);
-            let val = if v.name == *from {
+            let val = if v.vars().contains(from) {
                 // then, the from-name is shadowed in val, so we should not replace val.
                 val.clone()
             } else {

@@ -17,8 +17,6 @@ name_head_large = _{ ASCII_ALPHA_UPPER }
 
 var = { !keywords ~ (name_head_small ~ var_char* ~ "!"? ) }
 
-var_with_type = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
-
 // === Expressions ===
 
 namespace_item = { name_head_large ~ var_char* }
@@ -43,7 +41,7 @@ expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit }
 
 expr_var = { (namespace ~ ".")? ~ var }
 
-expr_let = { "let" ~ sep+ ~ var_with_type ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
+expr_let = { "let" ~ sep+ ~ pattern ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
@@ -97,6 +95,18 @@ expr_rtl_app = { expr_or ~ (sep* ~ combinator_dollar ~ sep* ~ expr_or)* }
 expr_type_annotation = { expr_rtl_app ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 expr = { expr_type_annotation }
+
+// === Patterns === 
+
+pattern = { pattern_var | pattern_tuple | pattern_struct | pattern_union }
+
+pattern_var = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
+
+pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~  sep* ~ pattern ~ (sep* ~ pattern)+ ~ ")" }
+
+pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern ~ sep* ~ "}" }
+
+pattern_union = { type_tycon ~ sep* ~ "." ~ sep* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern ~ sep* ~ ")" }
 
 // === Types ===
 type_expr = { type_fun }

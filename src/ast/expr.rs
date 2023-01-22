@@ -1,4 +1,5 @@
 use super::*;
+use core::panic;
 use std::{collections::HashSet, sync::Arc};
 
 pub type Name = String;
@@ -131,11 +132,11 @@ impl ExprNode {
     }
 
     #[allow(dead_code)]
-    pub fn set_let_var(&self, var: Arc<Var>) -> Arc<Self> {
+    pub fn set_let_pat(&self, pat: Arc<Pattern>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Let(_, bound, val) => {
-                ret.expr = Arc::new(Expr::Let(var, bound.clone(), val.clone()));
+                ret.expr = Arc::new(Expr::Let(pat, bound.clone(), val.clone()));
             }
             _ => {
                 panic!()
@@ -279,8 +280,9 @@ impl ExprNode {
                 .set_app_func(fun.resolve_namespace(ctx))
                 .set_app_arg(arg.resolve_namespace(ctx)),
             Expr::Lam(_, body) => self.clone().set_lam_body(body.resolve_namespace(ctx)),
-            Expr::Let(_, bound, value) => self
+            Expr::Let(pat, bound, value) => self
                 .clone()
+                .set_let_pat(pat.resolve_namespace(ctx))
                 .set_let_bound(bound.resolve_namespace(ctx))
                 .set_let_value(value.resolve_namespace(ctx)),
             Expr::If(cond, then_expr, else_expr) => self
@@ -310,7 +312,7 @@ pub enum Expr {
     Lit(Arc<Literal>),
     App(Arc<ExprNode>, Arc<ExprNode>),
     Lam(Arc<Var>, Arc<ExprNode>),
-    Let(Arc<Var>, Arc<ExprNode>, Arc<ExprNode>),
+    Let(Arc<Pattern>, Arc<ExprNode>, Arc<ExprNode>),
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>), // TODO: Implement case
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
 
@@ -319,6 +321,211 @@ pub enum Expr {
     // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakePair x y`.
     // `MakePair x y` is compiled to a faster code than function call.
     MakeTuple(Vec<Arc<ExprNode>>),
+}
+
+#[derive(Clone)]
+pub enum Pattern {
+    Var(Arc<Var>, Option<Arc<TypeNode>>),
+    Struct(Arc<TyCon>, Vec<(Name, Arc<Pattern>)>),
+    Union(Arc<TyCon>, Name, Arc<Pattern>),
+}
+
+impl Pattern {
+    pub fn var_pattern(var: Arc<Var>) -> Arc<Pattern> {
+        Arc::new(Pattern::Var(var, None))
+    }
+
+    // Returns the type of whole pattern and each variable.
+    pub fn get_type(
+        &self,
+        typechcker: &mut TypeCheckContext,
+    ) -> (Arc<TypeNode>, HashMap<FullName, Arc<TypeNode>>) {
+        match self {
+            Pattern::Var(v, ty) => {
+                let var_name = v.name.clone();
+                let ty = if ty.is_none() {
+                    type_tyvar_star(&typechcker.new_tyvar())
+                } else {
+                    ty.as_ref().unwrap().clone()
+                };
+                let mut var_to_ty = HashMap::default();
+                var_to_ty.insert(var_name, ty.clone());
+                (ty, var_to_ty)
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                let ty = tc.get_struct_union_value_type(typechcker);
+                let mut var_to_ty = HashMap::default();
+                let field_tys = ty.fields_types(&typechcker.type_env);
+                let fields = &typechcker.type_env.tycons.get(tc).unwrap().fields;
+                assert_eq!(fields.len(), field_tys.len());
+                let field_name_to_ty = fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| {
+                        let ty = field_tys[i].clone();
+                        (field.name.clone(), ty)
+                    })
+                    .collect::<HashMap<_, _>>();
+                for (field_name, pat) in field_to_pat {
+                    let (pat_ty, var_ty) = pat.get_type(typechcker);
+                    var_to_ty.extend(var_ty);
+                    let ok = typechcker.unify(&pat_ty, field_name_to_ty.get(field_name).unwrap());
+                    if !ok {
+                        error_exit(&format!(
+                            "inappropriate pattern `{}` for field `{}` of struct `{}`",
+                            pat.to_string(),
+                            field_name,
+                            tc.to_string(),
+                        ));
+                    }
+                }
+                (ty, var_to_ty)
+            }
+            Pattern::Union(tc, field_name, pat) => {
+                let ty = tc.get_struct_union_value_type(typechcker);
+                let mut var_to_ty = HashMap::default();
+                let fields = &typechcker.type_env.tycons.get(tc).unwrap().fields;
+                let field_tys = ty.fields_types(&typechcker.type_env);
+                assert_eq!(fields.len(), field_tys.len());
+                let field_idx = fields
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
+                    .unwrap();
+                let field_ty = field_tys[field_idx].get_funty_dst();
+                let (pat_ty, var_ty) = pat.get_type(typechcker);
+                var_to_ty.extend(var_ty);
+                let ok = typechcker.unify(&pat_ty, &field_ty);
+                if !ok {
+                    error_exit(&format!(
+                        "inappropriate pattern `{}` for field `{}` of union `{}`",
+                        pat.to_string(),
+                        field_name,
+                        tc.to_string(),
+                    ));
+                }
+                (ty, var_to_ty)
+            }
+        }
+    }
+
+    // Calculate the set of variables that appears in this pattern.
+    pub fn vars(&self) -> HashSet<FullName> {
+        match self {
+            Pattern::Var(var, _) => HashSet::from([var.name.clone()]),
+            Pattern::Struct(_, pats) => {
+                let mut ret = HashSet::default();
+                for (_, pat) in pats {
+                    ret.extend(pat.vars());
+                }
+                ret
+            }
+            Pattern::Union(_, _, pat) => pat.vars(),
+        }
+    }
+
+    pub fn set_var_tyanno(self: &Arc<Pattern>, tyanno: Option<Arc<TypeNode>>) -> Arc<Pattern> {
+        match &**self {
+            Pattern::Var(v, _) => Arc::new(Pattern::Var(v.clone(), tyanno)),
+            _ => panic!(),
+        }
+    }
+
+    pub fn set_struct_tycon(self: &Arc<Pattern>, tc: Arc<TyCon>) -> Arc<Pattern> {
+        match &**self {
+            Pattern::Struct(_, field_to_pat) => Arc::new(Pattern::Struct(tc, field_to_pat.clone())),
+            _ => panic!(),
+        }
+    }
+
+    pub fn set_struct_field_to_pat(
+        self: &Arc<Pattern>,
+        field_to_pat: Vec<(Name, Arc<Pattern>)>,
+    ) -> Arc<Pattern> {
+        match &**self {
+            Pattern::Struct(tc, _) => Arc::new(Pattern::Struct(tc.clone(), field_to_pat)),
+            _ => panic!(),
+        }
+    }
+
+    pub fn set_union_tycon(self: &Arc<Pattern>, tc: Arc<TyCon>) -> Arc<Pattern> {
+        match &**self {
+            Pattern::Union(_, field_name, pat) => {
+                Arc::new(Pattern::Union(tc, field_name.clone(), pat.clone()))
+            }
+            _ => panic!(),
+        }
+    }
+
+    pub fn set_union_pat(self: &Arc<Pattern>, pat: Arc<Pattern>) -> Arc<Pattern> {
+        match &**self {
+            Pattern::Union(tc, field_name, _) => {
+                Arc::new(Pattern::Union(tc.clone(), field_name.clone(), pat))
+            }
+            _ => panic!(),
+        }
+    }
+
+    pub fn resolve_namespace(self: &Arc<Pattern>, ctx: &NameResolutionContext) -> Arc<Pattern> {
+        match &**self {
+            Pattern::Var(_, ty) => {
+                self.set_var_tyanno(ty.as_ref().map(|ty| ty.resolve_namespace(ctx)))
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                let mut tc = tc.as_ref().clone();
+                tc.resolve_namespace(ctx);
+                let field_to_pat = field_to_pat
+                    .iter()
+                    .map(|(field_name, pat)| (field_name.clone(), pat.resolve_namespace(ctx)))
+                    .collect::<Vec<_>>();
+                self.set_struct_tycon(Arc::new(tc))
+                    .set_struct_field_to_pat(field_to_pat)
+            }
+            Pattern::Union(tc, _, pat) => {
+                let mut tc = tc.as_ref().clone();
+                tc.resolve_namespace(ctx);
+                self.set_union_tycon(Arc::new(tc))
+                    .set_union_pat(pat.resolve_namespace(ctx))
+            }
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut ret = "".to_string();
+        match self {
+            Pattern::Var(v, t) => {
+                ret += &v.name.to_string();
+                match t {
+                    Some(t) => {
+                        ret += ": ";
+                        ret += &t.to_string();
+                    }
+                    None => todo!(),
+                }
+                ret
+            }
+            Pattern::Struct(tc, fields) => {
+                if tc.name.namespace == NameSpace::new_str(&[STD_NAME])
+                    && tc.name.name.starts_with(TUPLE_NAME)
+                {
+                    let pats = fields
+                        .iter()
+                        .map(|(_, pat)| pat.to_string())
+                        .collect::<Vec<_>>();
+                    format!("({})", pats.join(", "))
+                } else {
+                    let pats = fields
+                        .iter()
+                        .map(|(name, pat)| format!("{}: {}", name, pat.to_string()))
+                        .collect::<Vec<_>>();
+                    format!("{} {{{}}}", tc.to_string(), pats.join(", "))
+                }
+            }
+            Pattern::Union(tc, field, pat) => {
+                format!("{}.{}({})", tc.to_string(), field, pat.to_string())
+            }
+        }
+    }
 }
 
 impl Expr {
@@ -337,9 +544,9 @@ impl Expr {
             Expr::Lit(l) => l.name.clone(),
             Expr::App(f, a) => format!("({}) ({})", f.expr.to_string(), a.expr.to_string()),
             Expr::Lam(x, fx) => format!("\\{}->({})", x.name.to_string(), fx.expr.to_string()),
-            Expr::Let(x, b, v) => format!(
+            Expr::Let(p, b, v) => format!(
                 "let {}={} in ({})",
-                x.name.to_string(),
+                p.to_string(),
                 b.expr.to_string(),
                 v.expr.to_string()
             ),
@@ -538,12 +745,12 @@ pub fn expr_lit(
 }
 
 pub fn expr_let(
-    var: Arc<Var>,
+    pat: Arc<Pattern>,
     bound: Arc<ExprNode>,
     expr: Arc<ExprNode>,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::Let(var, bound, expr)).into_expr_info(src)
+    Arc::new(Expr::Let(pat, bound, expr)).into_expr_info(src)
 }
 
 pub fn expr_abs(var: Arc<Var>, val: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
@@ -603,14 +810,16 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             free_vars.remove(&FullName::local(SELF_NAME));
             ei.set_lam_body(body).set_free_vars(free_vars)
         }
-        Expr::Let(var, bound, val) => {
+        Expr::Let(pat, bound, val) => {
             // NOTE: Our Let is non-recursive let, i.e.,
             // "let x = f x in g x" is equal to "let y = f x in g y",
             // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
             let bound = calculate_free_vars(bound.clone());
             let val = calculate_free_vars(val.clone());
             let mut free_vars = val.free_vars.clone().unwrap();
-            free_vars.remove(&var.name);
+            for v in pat.vars() {
+                free_vars.remove(&v);
+            }
             free_vars.extend(bound.free_vars.clone().unwrap());
             ei.set_let_bound(bound)
                 .set_let_value(val)

@@ -23,24 +23,16 @@ impl TypeDefn {
         for _ in &self.tyvars {
             kind = kind_arrow(kind_star(), kind);
         }
-        let (variant, is_unbox, field_types) = match &self.value {
-            TypeDeclValue::Struct(s) => (
-                TyConVariant::Struct,
-                s.is_unbox,
-                s.fields.iter().map(|f| f.ty.clone()).collect::<Vec<_>>(),
-            ),
-            TypeDeclValue::Union(u) => (
-                TyConVariant::Union,
-                u.is_unbox,
-                u.fields.iter().map(|f| f.ty.clone()).collect::<Vec<_>>(),
-            ),
+        let (variant, is_unbox, fields) = match &self.value {
+            TypeDeclValue::Struct(s) => (TyConVariant::Struct, s.is_unbox, s.fields.clone()),
+            TypeDeclValue::Union(u) => (TyConVariant::Union, u.is_unbox, u.fields.clone()),
         };
         TyConInfo {
             kind,
             variant,
             is_unbox,
             tyvars: self.tyvars.clone(),
-            field_types,
+            fields,
         }
     }
 
@@ -124,7 +116,7 @@ impl Union {
 
 #[derive(Clone)]
 pub struct Field {
-    pub name: String,
+    pub name: Name,
     pub ty: Arc<TypeNode>,
 }
 

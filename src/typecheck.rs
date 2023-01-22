@@ -358,7 +358,7 @@ impl TypeCheckContext {
     }
 
     // Generate new type variable.
-    fn new_tyvar(&mut self) -> String {
+    pub fn new_tyvar(&mut self) -> String {
         let id = self.tyvar_id;
         self.tyvar_id += 1;
         "%a".to_string() + &id.to_string() // To avlid confliction with user-defined type variable, we add prefix #.
@@ -594,14 +594,23 @@ impl TypeCheckContext {
                 self.scope.pop(&arg.name.name);
                 ei.set_lam_body(body)
             }
-            Expr::Let(var, val, body) => {
-                let var_ty = type_tyvar_star(&self.new_tyvar());
-                let val = self.unify_type_of_expr(val, var_ty.clone());
-                let var_scm = Scheme::generalize(HashMap::default(), vec![], var_ty.clone());
-                assert!(var.name.is_local());
-                self.scope.push(&var.name.name, &var_scm);
+            Expr::Let(pat, val, body) => {
+                let (pat_ty, var_ty) = pat.get_type(self);
+                let val = self.unify_type_of_expr(val, pat_ty.clone());
+                let var_scm = var_ty.iter().map(|(name, ty)| {
+                    (
+                        name.clone(),
+                        Scheme::generalize(HashMap::default(), vec![], ty.clone()),
+                    )
+                });
+                for (name, scm) in var_scm.clone() {
+                    assert!(name.is_local());
+                    self.scope.push(&name.name, &scm);
+                }
                 let body = self.unify_type_of_expr(body, ty);
-                self.scope.pop(&var.name.name);
+                for (name, _) in var_scm {
+                    self.scope.pop(&name.name);
+                }
                 ei.set_let_bound(val).set_let_value(body)
             }
             Expr::If(cond, then_expr, else_expr) => {
