@@ -989,7 +989,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 for (i, (_, pat)) in field_to_pat.iter().enumerate() {
                     ret.append(&mut self.destructure_object_by_pattern(&pat, &fields[i]));
                 }
-                todo!("check duplication");
             }
             Pattern::Union(tc, field_name, pat) => {
                 let union_fields = self
