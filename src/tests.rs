@@ -1691,6 +1691,48 @@ pub fn test69() {
 
 #[test]
 #[serial]
+pub fn test70() {
+    // Test tuple in union pattern.
+    let source = r#"
+    module Main;
+
+    type Union = union (left: (Int, String), right: Bool);
+
+    main : IOState -> ((), IOState);
+    main = (
+        let u = Union.left (42, "truth");
+        let Union.left((x, y)) = u;
+        let u = assert_eq "" x 42;
+        pure ()
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test71() {
+    // Test union in struct pattern.
+    let source = r#"
+    module Main;
+
+    type Struct = struct (uni: Union, value: Int);
+    type Union = union (left: (Int, String), right: Bool);
+
+    main : IOState -> ((), IOState);
+    main = (
+        let u = Struct.new (Union.left (42, "truth")) 13;
+        let Struct { uni: Union.left((truth, string)), value: val } = u;
+        let u = assert_eq "" truth 42;
+        let u = assert_eq "" val 13;
+        pure ()
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 
