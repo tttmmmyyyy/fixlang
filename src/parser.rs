@@ -4,6 +4,7 @@ struct FixParser;
 
 use std::mem::swap;
 
+use clap::error;
 use pest::error::Error;
 
 use super::*;
@@ -848,6 +849,12 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let pat = parse_pattern(pairs.next().unwrap(), src);
+    if pat.validate_duplicated_vars() {
+        error_exit(&format!(
+            "each name defined in pattern must appear exactly at once. pattern: {}",
+            pat.to_string()
+        ));
+    }
     let _eq_of_let = pairs.next().unwrap();
     let bound = parse_expr(pairs.next().unwrap(), src);
     let _in_of_let = pairs.next().unwrap();

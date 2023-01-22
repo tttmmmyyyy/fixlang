@@ -331,8 +331,30 @@ pub enum Pattern {
 }
 
 impl Pattern {
+    // Make basic variable pattern.
     pub fn var_pattern(var: Arc<Var>) -> Arc<Pattern> {
         Arc::new(Pattern::Var(var, None))
+    }
+
+    // Check if variables defined in this pattern is duplicated or not.
+    // For example, pattern (x, y) is ok, but (x, x) is invalid.
+    pub fn validate_duplicated_vars(&self) -> bool {
+        (self.vars().len() as u32) < self.count_vars()
+    }
+
+    // Count if variables defined in this pattern.
+    fn count_vars(&self) -> u32 {
+        match self {
+            Pattern::Var(_, _) => 1,
+            Pattern::Struct(_, field_to_pat) => {
+                let mut ret = 0;
+                for (_, pat) in field_to_pat {
+                    ret += pat.count_vars();
+                }
+                ret
+            }
+            Pattern::Union(_, _, pat) => pat.count_vars(),
+        }
     }
 
     // Returns the type of whole pattern and each variable.

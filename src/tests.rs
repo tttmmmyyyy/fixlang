@@ -1579,7 +1579,7 @@ pub fn test64() {
 #[test]
 #[serial]
 pub fn test65() {
-    // Test pattern matching.
+    // Test tuple pattern matching.
     let source = r#"
     module Main;
 
