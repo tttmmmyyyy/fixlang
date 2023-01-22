@@ -554,6 +554,7 @@ impl ObjectFieldType {
         gc.builder().position_at_end(unmatch_bb);
         gc.panic("tag unmatch.");
         gc.builder().build_unconditional_branch(match_bb);
+        gc.builder().position_at_end(match_bb);
     }
 
     // Get field of struct as Object (no refcnt management and no cloned).
