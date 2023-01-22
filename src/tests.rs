@@ -1626,6 +1626,51 @@ pub fn test66() {
 
 #[test]
 #[serial]
+pub fn test67() {
+    // Test boxed struct pattern matching.
+    let source = r#"
+    module Main;
+
+    type State = box struct (idx: Int, sum: Int);
+
+    main : IOState -> ((), IOState);
+    main = (
+        let sum = loop (State.new 0 0) \state -> (
+            let State {idx: i, sum: sum} = state;
+            if i == 10 then 
+                break sum
+            else
+                continue $ State.new (i+1) (sum+i)
+        );
+        let u = assert_eq "" sum 45;
+        pure ()
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test68() {
+    // Test unboxed union pattern matching.
+    let source = r#"
+    module Main;
+
+    type IntOrBool = unbox union (int: Int, bool: Bool);
+
+    main : IOState -> ((), IOState);
+    main = (
+        let u = IntOrBool.int 42;
+        let IntOrBool.int(x) = u;
+        let u = assert_eq "" x 42;
+        pure ()
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 

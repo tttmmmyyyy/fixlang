@@ -1104,7 +1104,7 @@ fn parse_pattern_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
 }
 
 fn parse_pattern_union(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
-    assert_eq!(pair.as_rule(), Rule::pattern_var);
+    assert_eq!(pair.as_rule(), Rule::pattern_union);
     let mut pairs = pair.into_inner();
     let tycon = tycon(FullName::from_strs(&[], pairs.next().unwrap().as_str()));
     let field_name = pairs.next().unwrap().as_str().to_string();
