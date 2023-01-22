@@ -104,7 +104,7 @@ pattern_var = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)+ ~ ")" }
 
-pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern ~ sep* ~ "}" }
+pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern)* ~ sep* ~ "}" }
 
 pattern_union = { type_tycon ~ sep* ~ "." ~ sep* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern ~ sep* ~ ")" }
 
