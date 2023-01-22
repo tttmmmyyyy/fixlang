@@ -1083,7 +1083,7 @@ fn parse_pattern_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
     let tycon = tycon(FullName::from_strs(&[], pairs.next().unwrap().as_str()));
     let mut field_to_pats = Vec::default();
     let mut field_names: HashSet<Name> = Default::default();
-    while pairs.next().is_some() {
+    while pairs.peek().is_some() {
         let field_name = pairs.next().unwrap().as_str().to_string();
 
         // Validate that field_name doesn't appear upto here.
