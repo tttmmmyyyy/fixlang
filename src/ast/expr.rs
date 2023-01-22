@@ -414,7 +414,7 @@ impl Pattern {
                     .enumerate()
                     .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
                     .unwrap();
-                let field_ty = field_tys[field_idx].get_funty_dst();
+                let field_ty = field_tys[field_idx].clone();
                 let (pat_ty, var_ty) = pat.get_type(typechcker);
                 var_to_ty.extend(var_ty);
                 let ok = typechcker.unify(&pat_ty, &field_ty);
