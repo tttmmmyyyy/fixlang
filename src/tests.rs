@@ -1733,6 +1733,28 @@ pub fn test71() {
 
 #[test]
 #[serial]
+pub fn test72() {
+    // Test pattern matching on argment.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let sum = loop (0, 0) \(i, sum) -> (
+            if i == 10 then 
+                break sum
+            else
+                continue $ (i + 1, sum + i)
+        );
+        let u = assert_eq "" sum 45;
+        pure ()
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 

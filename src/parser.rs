@@ -4,7 +4,6 @@ struct FixParser;
 
 use std::mem::swap;
 
-use clap::error;
 use pest::error::Error;
 
 use super::*;
@@ -862,18 +861,24 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     expr_let(pat, bound, val, Some(span))
 }
 
-fn parse_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
-    assert_eq!(pair.as_rule(), Rule::var);
-    var_local(pair.as_str(), Some(Span::from_pair(&src, &pair)))
-}
+// fn parse_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
+//     assert_eq!(pair.as_rule(), Rule::var);
+//     var_local(pair.as_str(), Some(Span::from_pair(&src, &pair)))
+// }
 
 fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
-    let var = pairs.next().unwrap();
+    let pat = parse_pattern(pairs.next().unwrap(), src);
     let _arrow_of_lam = pairs.next().unwrap();
-    let val = pairs.next().unwrap();
-    expr_abs(parse_var(var, src), parse_expr(val, src), Some(span))
+    let body = parse_expr(pairs.next().unwrap(), src);
+    const ARG_NAME: &str = "%arg";
+    let var = var_local(ARG_NAME, None);
+    expr_abs(
+        var,
+        expr_let(pat, expr_var(FullName::local(ARG_NAME), None), body, None),
+        Some(span),
+    )
 }
 
 fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
