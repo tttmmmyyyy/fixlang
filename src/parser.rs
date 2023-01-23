@@ -780,17 +780,31 @@ fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     ret
 }
 
-// Parse application sequence, e.g., `f x y`. (left-associative)
+// Parse application sequence, e.g., `f(x, y)`. (left-associative)
 fn parse_expr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_app);
-    let exprs = parse_combinator_sequence(pair, src, parse_expr_nlr);
-    let mut exprs_iter = exprs.iter();
-    let mut ret = exprs_iter.next().unwrap().clone();
-    for expr in exprs_iter {
+    let mut pairs = pair.into_inner();
+    let head = parse_expr_nlr(pairs.next().unwrap(), src);
+    let mut args = vec![];
+    if pairs.peek().is_some() {
+        // If parentheses for arguments are given,
+        args = parse_arg_list(pairs.next().unwrap(), src);
+        if args.len() == 0 {
+            // `f()` is interpreted as application to unit: `f $ ()`.
+            args.push(expr_make_tuple(vec![]))
+        }
+    }
+    let mut ret = head;
+    for expr in args {
         let span = unite_span(&expr.source, &ret.source);
         ret = expr_app(ret, expr.clone(), span);
     }
     ret
+}
+
+fn parse_arg_list(pair: Pair<Rule>, src: &Arc<String>) -> Vec<Arc<ExprNode>> {
+    assert_eq!(pair.as_rule(), Rule::arg_list);
+    parse_combinator_sequence(pair, src, parse_expr)
 }
 
 fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {

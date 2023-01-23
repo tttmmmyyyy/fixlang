@@ -33,9 +33,9 @@ namespace Debug {
     assert_eq : [a: Eq] String -> a -> a -> ();
     assert_eq = \msg -> \lhs -> \rhs -> (
         if lhs != rhs then
-            let u = debug_print "assert_eq failed!: ";
-            let u = debug_print msg;
-            abort ()
+            let u = debug_print("assert_eq failed!: ");
+            let u = debug_print(msg);
+            abort()
         else
             ()
     );

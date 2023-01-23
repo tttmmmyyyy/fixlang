@@ -9,8 +9,8 @@ pub fn test0() {
     
             main : IOState -> ((), IOState);
             main = (
-                let u = assert_eq "" (5 + 3 * 8 / 5 + 7 % 3) 10;
-                pure ()
+                let u = assert_eq("", 5 + 3 * 8 / 5 + 7 % 3, 10);
+                pure()
             );
         "#;
     run_source(&source, OptimizationLevel::Default);
@@ -24,8 +24,8 @@ pub fn test1() {
             
             main : IOState -> ((), IOState);
             main = (
-                let u = assert_eq "" (let x = 5 in -x) (-5);
-                pure ()
+                let u = assert_eq("", let x = 5 in -x, -5);
+                pure()
             );
         "#;
     run_source(&source, OptimizationLevel::Default);
@@ -38,8 +38,8 @@ pub fn test2() {
             module Main;
             main : IOState -> ((), IOState);
             main = (
-                let u = assert_eq "" (let x = 5 in 3) 3;
-                pure ()
+                let u = assert_eq("", let x = 5 in 3, 3);
+                pure()
             );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -52,8 +52,8 @@ pub fn test3() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (let n = -5 in let p = 5 in n) (-5);
-            pure ()
+            let u = assert_eq("", let n = -5 in let p = 5 in n, -5);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -66,9 +66,8 @@ pub fn test4() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (let n = -5 in let p = 5 in p) 5;
-            pure ()
-            
+            let u = assert_eq("", let n = -5 in let p = 5 in p, 5);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -81,8 +80,8 @@ pub fn test5() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (let x = -5 in let x = 5 in x) 5;
-            pure ()
+            let u = assert_eq("", let x = -5 in let x = 5 in x, 5);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -95,8 +94,8 @@ pub fn test6() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (let x = let y = 3 in y in x) 3;
-            pure ()
+            let u = assert_eq("", let x = let y = 3 in y in x, 3);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -109,8 +108,8 @@ pub fn test7() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" ((\x -> 5) 10) 5;
-            pure ()
+            let u = assert_eq("", (\x -> 5)(10), 5);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -124,23 +123,8 @@ pub fn test8() {
 
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" ((\x -> x) 6) 6;
-            pure ()
-        );
-    "#;
-    run_source(source, OptimizationLevel::Default);
-}
-
-#[test]
-#[serial]
-pub fn test9() {
-    let source = r#"
-        module Main;
-        
-        main : IOState -> ((), IOState);
-        main = (
-            let u = assert_eq "" (3 + 5) 8;
-            pure ()
+            let u = assert_eq("", (\x -> x) $ 6, 6);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -156,8 +140,8 @@ pub fn test9_5() {
         main = (
             let x = 3;
             let y = 5;
-            let u = assert_eq "" (x - y) -2;
-            pure ()
+            let u = assert_eq("", x - y, -2);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -171,8 +155,8 @@ pub fn test10() {
 
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (let x = 5 in 2 + x) 7;
-            pure ()
+            let u = assert_eq("", let x = 5 in 2 + x, 7);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -188,8 +172,8 @@ pub fn test11() {
         main = (
             let x = 5 in 
             let y = -3 in
-            let u = assert_eq "" (x + y) 2;
-            pure ()
+            let u = assert_eq("", x + y, 2);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -207,8 +191,8 @@ pub fn test12() {
             let y = -3 in
             let z = 12 in
             let xy = x + y in
-            let u = assert_eq "" (xy + z) 14;
-            pure ()
+            let u = assert_eq("", xy + z, 14);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -221,9 +205,9 @@ pub fn test13() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let f = add 5 in
-            let u = assert_eq "" (f 3) (5+3);
-            pure ()
+            let f = add(5) in
+            let u = assert_eq("", f(3), 5+3);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -236,9 +220,9 @@ pub fn test13_5() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let f = add 5 in
-            let u = assert_eq "" (f -3 + f 12) (5 - 3 + 5 + 12);
-            pure ()
+            let f = add(5) in
+            let u = assert_eq("", f(-3) + f(12), 5 - 3 + 5 + 12);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -253,9 +237,9 @@ pub fn test14() {
         main = (
             let x = 3 in 
             let y = 5 in
-            let f = add x in
-            let u = assert_eq "" (f y) (3 + 5);
-            pure ()
+            let f = add(x) in
+            let u = assert_eq("", f(y), 3 + 5);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -269,8 +253,8 @@ pub fn test15() {
         main : IOState -> ((), IOState);
         main = (
             let f = \x -> 3 + x in
-            let u = assert_eq "" (f 5) (3 + 5);
-            pure ()
+            let u = assert_eq("", f(5), 3 + 5);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -285,8 +269,8 @@ pub fn test15_5() {
         main = (
             let x = 3;
             let f = \y -> x;
-            let u = assert_eq "" (f 5) 3;
-            pure ()
+            let u = assert_eq("", f(5), 3);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -300,8 +284,8 @@ pub fn test16() {
         main : IOState -> ((), IOState);
         main = (
             let f = \x -> x + 3 in
-            let u = assert_eq "" (f 5) (3 + 5);
-            pure ()
+            let u = assert_eq("", f(5), 3 + 5);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -314,8 +298,8 @@ pub fn test17() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (if true then 3 else 5) 3;
-            pure ()
+            let u = assert_eq("", if true then 3 else 5, 3);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -328,8 +312,8 @@ pub fn test18() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (if false then 3 else 5) 5;
-            pure ()
+            let u = assert_eq("", if false then 3 else 5, 5);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -342,8 +326,8 @@ pub fn test19() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (if 3 == 3 then 1 else 0) 1;
-            pure ()
+            let u = assert_eq("", if 3 == 3 then 1 else 0, 1);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -356,8 +340,8 @@ pub fn test20() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (if 3 == 5 then 1 else 0) 0;
-            pure ()
+            let u = assert_eq("", if 3 == 5 then 1 else 0, 0);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -377,7 +361,7 @@ pub fn test20_5() {
                     1
                 else 2
             );
-            let u = assert_eq "" ans 2;
+            let u = assert_eq("", ans, 2);
             pure ()
         );
     "#;
@@ -392,9 +376,9 @@ pub fn test21() {
 
             main : IOState -> ((), IOState);
             main = (
-                let fact = fix \loop -> \n -> if n == 0 then 1 else n * loop (n-1);
-                let u = assert_eq "" (fact 5) (5 * 4 * 3 * 2 * 1);
-                pure ()
+                let fact = fix $ \loop -> \n -> if n == 0 then 1 else n * loop(n-1);
+                let u = assert_eq("", fact(5), 5 * 4 * 3 * 2 * 1);
+                pure()
             );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -410,16 +394,16 @@ pub fn test22() {
             module Main;
             main : IOState -> ((), IOState);
             main = (
-                let g = fix \loop -> \a -> \x -> 
+                let g = fix $ \loop -> \a -> \x -> 
                             if x == 0 then 
                                 a 
                             else
                                 let a2 = a + x;
                                 let x2 = x + -1;
-                                loop a2 x2
+                                loop(a2, x2)
                 in 
-                    let u = assert_eq "" (g 0 {}) {};
-                    pure ()
+                    let u = assert_eq("", g(0, {}), {});
+                    pure()
             );
         "#,
         n,
@@ -436,16 +420,16 @@ pub fn test22_5() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let fib = fix \f -> \n ->
+            let fib = fix $ \f -> \n ->
                         if n == 0 then
                             0
                         else if n == 1 then
                             1
                         else
-                            f (n+-1) + f (n+-2)
+                            f(n+-1) + f(n+-2)
             in 
-                let u = assert_eq "" (fib 10) 55;
-                pure ()
+                let u = assert_eq("", fib(10), 55);
+                pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -465,13 +449,13 @@ pub fn test22_7() {
             else if n == 1 then
                 1
             else
-                fib (n-1) + fib (n-2)
+                fib(n-1) + fib(n-2)
         );
         
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (fib 30) 832040;
-            pure ()
+            let u = assert_eq("", fib(30), 832040);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -485,8 +469,8 @@ pub fn test23() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new 0 42;
-            pure ()
+            let arr = Array.new(0, 42);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -500,9 +484,9 @@ pub fn test24() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new 100 42;
-            let u = assert_eq "" (arr.len) 100;
-            pure ()
+            let arr = Array.new(100, 42);
+            let u = assert_eq("", arr.len, 100);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -516,10 +500,10 @@ pub fn test25() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new 100 42;
-            let elem = arr.get 50;
-            let u = assert_eq "" elem 42;
-            pure ()
+            let arr = Array.new(100, 42);
+            let elem = arr.get(50);
+            let u = assert_eq("", elem, 42);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -533,10 +517,10 @@ pub fn test26() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new 100 42;
-            let arr = arr.set 50 21;
-            let u = assert_eq "" (arr.get 50) 21;
-            pure ()
+            let arr = Array.new(100, 42);
+            let arr = arr.set(50, 21);
+            let u = assert_eq("", arr.get(50), 21);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -550,10 +534,10 @@ pub fn test27() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr0 = Array.new 100 42;
-            let arr1 = arr0.set 50 21;
-            let u = assert_eq "" (arr0.get 50 + arr1.get 50) 63;
-            pure ()
+            let arr0 = Array.new(100, 42);
+            let arr1 = arr0.set(50, 21);
+            let u = assert_eq("", arr0.get(50) + arr1.get(50), 63);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -567,10 +551,10 @@ pub fn test27_5() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.from_map 100 $ \i -> add i;
-            let arr = arr.set 99 \x -> x - 100;
-            let u = assert_eq "" (arr.get 99 $ arr.get 50 $ 1) (1 + 50 - 100);
-            pure ()
+            let arr = Array.from_map(100) $ \i -> add(i);
+            let arr = arr.set(99, \x -> x - 100);
+            let u = assert_eq("", arr.get(99) $ arr.get(50) $ 1, 1 + 50 - 100);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -584,20 +568,20 @@ pub fn test28() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new 31 0;
-            let arr = arr.set! 0 0;
-            let arr = arr.set! 1 1;
-            let loop = fix \f -> \arr -> \n ->
+            let arr = Array.new(31, 0);
+            let arr = arr.set!(0, 0);
+            let arr = arr.set!(1, 1);
+            let loop = fix $ \f -> \arr -> \n ->
                 if n == 31 then
                     arr
                 else
-                    let x = arr.get (add n (-1));
-                    let y = arr.get (add n (-2));
-                    let arr = arr.set! n (x+y);
-                    f arr (n+1);
-            let fib = loop arr 2;
-            let u = assert_eq "" (fib.get 30) 832040;
-            pure ()
+                    let x = arr.get(add(n, -1));
+                    let y = arr.get(add(n, -2));
+                    let arr = arr.set!(n, x+y);
+                    f(arr, n+1);
+            let fib = loop(arr, 2);
+            let u = assert_eq("", fib.get(30), 832040);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -614,8 +598,8 @@ pub fn test29() {
 
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq "" (if id true then id 100 else 30) 100;
-            pure ()
+            let u = assert_eq("", if id(true) then id(100) else 30, 100);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -632,8 +616,8 @@ pub fn test30() {
             let f = \x -> x + 3;
             let g = \x -> x == 8;
             let ans = g $ f $ 5;
-            let u = assert_eq "" (if ans then 1 else 0) 1;
-            pure ()
+            let u = assert_eq("", if ans then 1 else 0, 1);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -650,8 +634,8 @@ pub fn test31() {
             let f = \x -> x + 3;
             let g = \x -> x == 8;
             let ans = 5 .f. g;
-            let u = assert_eq "" (if ans then 1 else 0) 1;
-            pure ()
+            let u = assert_eq("", if ans then 1 else 0, 1);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -666,8 +650,8 @@ pub fn test32() {
         main : IOState -> ((), IOState);
         main = (
             let f = \x -> x + 10;
-            let u = assert_eq "" (5.add $ 3.f) 18;
-            pure ()
+            let u = assert_eq("", 5.add $ 3.f, 18);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -683,10 +667,10 @@ pub fn test33() {
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool.new 18 false;
-            let obj = IntBool.mod_x (\x -> x + 42) obj;
-            let u = assert_eq "" (IntBool.get_x obj) 60;
-            pure ()
+            let obj = IntBool.new(18, false);
+            let obj = IntBool.mod_x(\x -> x + 42, obj);
+            let u = assert_eq("", IntBool.get_x(obj), 60);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -702,10 +686,10 @@ pub fn test34_5() {
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool.new 18 false;
-            let obj = IntBool.mod_x (\x -> x + 42) obj;
-            let u = assert_eq "" (IntBool.get_x obj) 60;
-            pure ()
+            let obj = IntBool.new(18, false);
+            let obj = IntBool.mod_x(\x -> x + 42, obj);
+            let u = assert_eq("", IntBool.get_x(obj), 60);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -723,10 +707,10 @@ pub fn test34() {
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool.new 18 false;
-            let obj = obj . mod_x (\x -> x + 42);
-            let u = assert_eq "" (obj . get_x) 60;
-            pure ()
+            let obj = IntBool.new(18, false);
+            let obj = obj.mod_x(\x -> x + 42);
+            let u = assert_eq("", obj.get_x, 60);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -744,11 +728,11 @@ pub fn test35() {
             
         main : IOState -> ((), IOState);
         main = (
-            let a = A.new 3 true;
-            let b = B.new true 5;
-            let ans = add (if a.get_y then a.get_x else 0) (if b.get_x then b.get_y else 0);
-            let u = assert_eq "" ans 8;
-            pure ()
+            let a = A.new(3, true);
+            let b = B.new(true, 5);
+            let ans = add(if a.get_y then a.get_x else 0, if b.get_x then b.get_y else 0);
+            let u = assert_eq("", ans, 8);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -766,10 +750,10 @@ pub fn test36() {
             
         main : IOState -> ((), IOState);
         main = (
-            let a = A.new (B.new 16);
+            let a = A.new(B.new(16));
             let a = a.(mod_x $ mod_x $ \x -> x + 15);
             let ans = a . get_x . get_x;
-            let u = assert_eq "" ans 31;
+            let u = assert_eq("", ans, 31);
             pure ()
         );
         "#;
@@ -788,11 +772,11 @@ pub fn test37() {
 
         main : IOState -> ((), IOState);
         main = (
-            let a = A.new (B.new 16);
+            let a = A.new (B.new $ 16);
             let b = a . (mod_x! $ mod_x! $ \x -> x + 15);
             let ans = b . get_x . get_x;
-            let u = assert_eq "" ans 31;
-            pure ()
+            let u = assert_eq("", ans, 31);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -810,11 +794,11 @@ pub fn test37_5() {
 
         main : IOState -> ((), IOState);
         main = (
-            let a = A.new (B.new 16);
+            let a = A.new (B.new $ 16);
             let b = a.(mod_x $ mod_x $ \x -> x + 15);
             let ans = a.get_x.get_x + b.get_x.get_x;
-            let u = assert_eq "" ans ((16 + 15) + 16);
-            pure ()
+            let u = assert_eq("", ans, (16 + 15) + 16);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -832,12 +816,12 @@ pub fn test38() {
 
         main : IOState -> ((), IOState);
         main = (    
-            let a = A.new (B.new 16);
+            let a = A.new (B.new $ 16);
             let f = \a -> (a : A) . (mod_x! $ mod_x! $ \x -> x + 15);
             let a = a.f;
             let ans = a.get_x.get_x;
-            let u = assert_eq "" ans 31;
-            pure ()
+            let u = assert_eq("", ans, 31);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -855,12 +839,12 @@ pub fn test39() {
         
         main : IOState -> ((), IOState);
         main = (
-            let a = A.new (B.new 16);
+            let a = A.new (B.new (16));
             let f = \a -> a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ \x -> x + 15);
             let a = a.f;
             let ans = a.get_x.get_x;
-            let u = assert_eq "" ans 31;
-            pure ()
+            let u = assert_eq("", ans, 31);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -878,12 +862,12 @@ pub fn test40() {
         
         main : IOState -> ((), IOState);
         main = (
-            let a = A.new (B.new 16);
+            let a = A.new (B.new $ 16);
             let f: A -> A = \a -> a.(mod_x! $ mod_x! $ \x -> x + 15);
             let a = a .f;
             let ans = a .get_x .get_x;
-            let u = assert_eq "" ans 31;
-            pure ()
+            let u = assert_eq("", ans, 31);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -899,9 +883,9 @@ pub fn test41() {
         main : IOState -> ((), IOState);
         main = (
             let x: Int -> Int = \x -> x;
-            let ans = x 42;
-            let u = assert_eq "" ans 42;
-            pure ()
+            let ans = x(42);
+            let u = assert_eq("", ans, 42);
+            pure()
         );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -917,13 +901,13 @@ pub fn test42() {
             module Main;
             
             loop : Int -> Int;
-            loop = \x -> if x == 0 then 0 else add x $ loop $ add x -1;
+            loop = \x -> if x == 0 then 0 else add(x) $ loop $ add(x, -1);
     
             main : IOState -> ((), IOState);
             main = (
-                let ans = Main.loop {};
-                let u = assert_eq "" ans {};
-                pure ()
+                let ans = Main.loop({});
+                let u = assert_eq("", ans, {});
+                pure()
             );
         "#,
         n,
@@ -942,13 +926,13 @@ pub fn test43() {
             module Main;
             
             my_loop : Int -> Int -> Int;
-            my_loop = \x -> \acc -> if x == 0 then acc else my_loop (x + -1) (acc + x);
+            my_loop = \x -> \acc -> if x == 0 then acc else my_loop(x + -1, acc + x);
     
             main : IOState -> ((), IOState);
             main = (
-                let ans = my_loop {} 0;
-                let u = assert_eq "" ans {};
-                pure ()
+                let ans = my_loop({}, 0);
+                let u = assert_eq("", ans, {});
+                pure()
             );
         "#,
         n,
@@ -978,25 +962,25 @@ pub fn test44() {
 
         add_head_and_next : [a: ToInt] Array a -> Int; 
         add_head_and_next = \arr -> (
-            let head = arr.get 0.toInt;
-            let next = arr.get 1.toInt;
-            add head next
+            let head = arr.get(0).toInt;
+            let next = arr.get(1).toInt;
+            add(head, next)
         );
 
         main : IOState -> ((), IOState);
         main = (
-            let arr0 = Array.new 2 false;
-            let arr0 = arr0.set! 0 true;
-            let x = add_head_and_next arr0;
+            let arr0 = Array.new(2, false);
+            let arr0 = arr0.set!(0, true);
+            let x = add_head_and_next(arr0);
 
-            let arr1 = Array.new 2 3;
-            let arr1 = arr1.set! 1 5;
-            let z = add_head_and_next arr1;
+            let arr1 = Array.new(2, 3);
+            let arr1 = arr1.set!(1, 5);
+            let z = add_head_and_next(arr1);
 
-            let y = toInt 5 + toInt false;
+            let y = toInt(5) + toInt(false);
             let ans = x + y + z;
-            let u = assert_eq "" ans 11;
-            pure ()
+            let u = assert_eq("", ans, 11);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1011,20 +995,20 @@ pub fn test44_5() {
 
         sum : Array Int -> Int;
         sum = \arr -> (
-            let loop = fix \loop -> \idx -> \sum -> (
+            let loop = fix $ \loop -> \idx -> \sum -> (
                 if idx == arr.len 
                 then sum
-                else loop (idx + 1) (sum + arr.get idx)
+                else loop(idx + 1, sum + arr.get(idx))
             );
-            loop 0 0
+            loop(0, 0)
         );
 
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.from_map 10 \x -> x * x;
-            let ans = sum arr;
-            let u = assert_eq "" ans 285;
-            pure ()
+            let arr = Array.from_map(10, \x -> x * x);
+            let ans = sum(arr);
+            let u = assert_eq("", ans, 285);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1043,27 +1027,27 @@ pub fn test45() {
 
         impl Array : Functor {
             map = \f -> \arr -> (
-                Array.from_map (arr.len) \idx -> f (arr.get idx)
+                Array.from_map(arr.len, \idx -> f $ arr.get(idx))
             );
         }
 
         sum : Array Int -> Int;
         sum = \arr -> (
-            let loop = fix \loop -> \idx -> \sum -> (
+            let loop = fix $ \loop -> \idx -> \sum -> (
                 if idx == arr.len 
                 then sum
-                else loop (idx + 1) (sum + arr.get idx)
+                else loop(idx + 1, sum + arr.get(idx))
             );
-            loop 0 0
+            loop(0, 0)
         );
 
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.from_map 10 \x -> x;
-            let arr = arr.map \x -> x * x;
+            let arr = Array.from_map(10, \x -> x);
+            let arr = arr.map(\x -> x * x);
             let ans = arr.sum;
-            let u = assert_eq "" ans 285;
-            pure ()
+            let u = assert_eq("", ans, 285);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1084,9 +1068,9 @@ pub fn test46() {
 
         main : IOState -> ((), IOState);
         main = (
-            let ans = (let x = 3 in let y = 2 in add x Main.y) + x;
-            let u = assert_eq "" ans 15;
-            pure ()
+            let ans = (let x = 3 in let y = 2 in add(x, Main.y)) + x;
+            let u = assert_eq("", ans, 15);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1103,13 +1087,13 @@ pub fn test47() {
 
         main : IOState -> ((), IOState);
         main = (
-            let int_union = int 3;
-            let bool_union = bool true;
+            let int_union = int(3);
+            let bool_union = bool(true);
             let int_val = if int_union.is_int then int_union.as_int else 0;
             let bool_val = if bool_union.is_bool then bool_union.as_bool else false;
             let ans = if bool_val then int_val else 0;
-            let u = assert_eq "" ans 3;
-            pure ()
+            let u = assert_eq("", ans, 3);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1126,13 +1110,13 @@ pub fn test47_2() {
 
         main : IOState -> ((), IOState);
         main = (
-            let int_union = int 3;
-            let bool_union = bool true;
+            let int_union = int(3);
+            let bool_union = bool(true);
             let int_val = if int_union.is_int then int_union.as_int else 0;
             let bool_val = if bool_union.is_bool then bool_union.as_bool else false;
             let ans = if bool_val then int_val else 0;
-            let u = assert_eq "" ans 3;
-            pure ()
+            let u = assert_eq("", ans, 3);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1149,11 +1133,11 @@ pub fn test47_5() {
 
         main : IOState -> ((), IOState);
         main = (
-            let val = Union.val 3;
-            let func = Union.func \x -> x + 5;
+            let val = Union.val(3);
+            let func = Union.func(\x -> x + 5);
             let ans = func.as_func $ val.as_val;
-            let u = assert_eq "" ans (5 + 3);
-            pure ()
+            let u = assert_eq("", ans, 5 + 3);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1170,13 +1154,13 @@ pub fn test48() {
 
         main : IOState -> ((), IOState);
         main = (
-            let int_vec = Vec.new $ Array.new 2 5;
-            let int_vec = int_vec.mod_data! \arr -> arr.set 0 3;
-            let head = int_vec.get_data.get 0;
-            let next = int_vec.get_data.get 1;
-            let ans = add head next;
-            let u = assert_eq "" ans 8;
-            pure ()
+            let int_vec = Vec.new $ Array.new(2, 5);
+            let int_vec = int_vec.mod_data!(\arr -> arr.set(0, 3));
+            let head = int_vec.get_data.get(0);
+            let next = int_vec.get_data.get(1);
+            let ans = add(head, next);
+            let u = assert_eq("", ans, 8);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1193,14 +1177,14 @@ pub fn test49() {
 
         main : IOState -> ((), IOState);
         main = (
-            let int_left = Either.left 5;
+            let int_left = Either.left(5);
             let ans = (
                 if int_left.is_left 
                     then int_left.as_left 
                     else if int_left.as_right then 1 else 0
             );
-            let u = assert_eq "" ans 5;
-            pure ()
+            let u = assert_eq("", ans, 5);
+            pure()
         );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1218,13 +1202,14 @@ pub fn test50() {
             main : IOState -> ((), IOState);
             main = (
                 let ans = (
-                    loop (0, 0) \state -> 
+                    loop((0, 0), \state -> 
                         let i = state.get_0;
                         let sum = state.get_1;
-                        if i == {} then break sum else continue $ (i+1, sum+i)
+                        if i == {} then break(sum) else continue $ (i+1, sum+i)
+                    )
                 );
-                let u = assert_eq "" ans {};
-                pure ()
+                let u = assert_eq("", ans, {});
+                pure()
             );
         "#,
         n,
@@ -1247,22 +1232,22 @@ pub fn test51() {
     }
 
     search : [a: Eq] a -> Array a -> Int;
-    search = \elem -> \arr -> loop 0 \idx -> (
-        if idx == arr.len then break -1
-        else if arr.get idx == elem then break idx
+    search = \elem -> \arr -> loop(0) $ \idx -> (
+        if idx == arr.len then break $ -1
+        else if arr.get(idx) == elem then break $ idx
         else continue $ idx + 1
     );
     
     main : IOState -> ((), IOState);
     main = (
-        let arr = Array.new 4 (0, false);
-        let arr = arr.set 0 (0, false);
-        let arr = arr.set 1 (0, true);
-        let arr = arr.set 2 (1, false);
-        let arr = arr.set 3 (1, true);
-        let ans = arr.search (1, false); // evaluates to 2
-        let u = assert_eq "" ans 2;
-        pure ()
+        let arr = Array.new(4, (0, false));
+        let arr = arr.set(0, (0, false));
+        let arr = arr.set(1, (0, true));
+        let arr = arr.set(2, (1, false));
+        let arr = arr.set(3, (1, true));
+        let ans = arr.search((1, false)); // evaluates to 2
+        let u = assert_eq("", ans, 2);
+        pure()
     );
         "#;
     run_source(source, OptimizationLevel::Default);
@@ -1280,45 +1265,45 @@ pub fn test52() {
     // Calculate a Bool array whose element is true iff idx is prime.
     is_prime : Int -> Array Bool;
     is_prime = \n -> (
-        let arr = Array.new n true;
-        let arr = arr.set! 0 false;
-        let arr = arr.set! 1 false;
-        loop (SieveState.new 2 arr) \state -> (
+        let arr = Array.new(n, true);
+        let arr = arr.set!(0, false);
+        let arr = arr.set!(1, false);
+        loop(SieveState.new(2, arr)) $ \state -> (
             let i = state.get_i;
             let arr = state.get_arr;
-            if i*i > n then break arr else 
-            let next_arr = if arr.get i then (
-                loop (SieveState.new (i+i) arr) \state -> (
+            if i*i > n then break $ arr else 
+            let next_arr = if arr.get(i) then (
+                loop(SieveState.new(i+i, arr)) $ \state -> (
                     let q = state.get_i;
                     let arr = state.get_arr;
                     if n-1 < q then 
-                        break arr
+                        break $ arr
                     else 
-                        continue $ SieveState.new (q + i) $ arr.set! q false
+                        continue $ SieveState.new (q + i) $ arr.set!(q, false)
                 )
             ) else arr;
-            continue $ SieveState.new (i + 1) next_arr
+            continue $ SieveState.new((i + 1), next_arr)
         )
     );
 
     // Count the appearance of a value in an array.
     count : [a: Eq] a -> Array a -> Int;
     count = \elem -> \arr -> (
-        loop (0, 0) \state -> (
+        loop((0, 0)) $ \state -> (
             let i = state.get_0;
             let sum = state.get_1;
-            if arr.len == i then break sum 
+            if arr.len == i then break $ sum 
             else 
-                let sum = sum + (if arr.get i == elem then 1 else 0);
+                let sum = sum + (if arr.get(i) == elem then 1 else 0);
                 continue $ (i+1, sum)
         )
     );
     
     main : IOState -> ((), IOState);
     main = (
-        let ans = (is_prime 100).count true;
-        let u = assert_eq "" ans 25;
-        pure ()
+        let ans = (is_prime $ 100).count(true);
+        let u = assert_eq("", ans, 25);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1333,14 +1318,14 @@ pub fn test53() {
     
     main : IOState -> ((), IOState);
     main = (
-        let pair = (13, Array.new 1 0);
-        let pair = pair.mod_0! \x -> x + 3;
-        let pair = pair.mod_1! \arr -> arr.set! 0 5;
+        let pair = (13, Array.new(1, 0));
+        let pair = pair.mod_0!(\x -> x + 3);
+        let pair = pair.mod_1!(\arr -> arr.set!(0, 5));
         let x = pair.get_0;
-        let y = pair.get_1.get 0;
+        let y = pair.get_1.get(0);
         let ans = x + y;
-        let u = assert_eq "" ans (13 + 3 + 5);
-        pure ()
+        let u = assert_eq("", ans, 13 + 3 + 5);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1355,14 +1340,14 @@ pub fn test54() {
     
     main : IOState -> ((), IOState);
     main = (
-        let pair0 = (13, Array.new 1 0);
-        let pair1 = pair0.mod_1 \arr -> arr.set 0 5;
-        let pair2 = pair0.mod_0! \x -> x + 3;
-        let x = pair1.get_1.get 0;
+        let pair0 = (13, Array.new(1, 0));
+        let pair1 = pair0.mod_1(\arr -> arr.set(0, 5));
+        let pair2 = pair0.mod_0!(\x -> x + 3);
+        let x = pair1.get_1.get(0);
         let y = pair2.get_0;
         let ans = x + y;
-        let u = assert_eq "" ans (13 + 3 + 5);
-        pure ()
+        let u = assert_eq("", ans, 13 + 3 + 5);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1385,7 +1370,7 @@ pub fn test55() {
             else 
                 2
         );
-        let u = assert_eq "" ans 1;
+        let u = assert_eq("", ans, 1);
         pure ()
     );
     "#;
@@ -1408,7 +1393,7 @@ pub fn test56() {
             && true || true == true 
             then 1 else 0
         );
-        let u = assert_eq "" ans 1;
+        let u = assert_eq("", ans, 1);
         pure ()
     );
     "#;
@@ -1428,8 +1413,8 @@ pub fn test57() {
             if !false == true && !true == false
             then 1 else 0
         );
-        let u = assert_eq "" ans 1;
-        pure ()
+        let u = assert_eq("", ans, 1);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1448,8 +1433,8 @@ pub fn test58() {
             if false != true && true != false && !(true != true) && !(false != false)
             then 1 else 0
         );
-        let u = assert_eq "" ans 1;
-        pure ()
+        let u = assert_eq("", ans, 1);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1481,8 +1466,8 @@ pub fn test59() {
     main : IOState -> ((), IOState);
     main = (
         let ans = (if y then A.x + B.x + A.y else 0);
-        let u = assert_eq "" ans 9;
-        pure ()
+        let u = assert_eq("", ans, 9);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1513,15 +1498,13 @@ pub fn test61() {
 
     main : IOState -> ((), IOState);
     main = \io -> (
-        loop (0, io) \state -> (
-            let counter = state.get_0;
-            let io = state.get_1;
+        loop((0, io)) $ \(counter, io) -> (
             if counter == 3 then
-                break ((), io)
+                break $ ((), io)
             else
-                let ret = io.print "Hello World! ";
+                let ret = io.print("Hello World! ");
                 let io = ret.get_1;
-                continue (counter + 1, io)
+                continue $ (counter + 1, io)
         )
     );
     "#;
@@ -1538,8 +1521,8 @@ pub fn test62() {
     main : IOState -> ((), IOState);
     main = (
         let len = "Hello World!".get_len;
-        let u = assert_eq "" len 12;
-        pure ()
+        let u = assert_eq("", len, 12);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1570,7 +1553,7 @@ pub fn test64() {
 
     main : IOState -> ((), IOState);
     main = (
-        print "\u2764"
+        print $ "\u2764"
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1585,14 +1568,14 @@ pub fn test65() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop (0, 0) \state -> (
+        let sum = loop((0, 0), \state -> 
             let (i, sum) = state;
             if i == 10 then 
-                break sum
+                break $ sum
             else
-                continue (i+1, sum+i)
+                continue $ (i+1, sum+i)
         );
-        let u = assert_eq "" sum 45;
+        let u = assert_eq("", sum, 45);
         pure ()
     );
     "#;
@@ -1610,15 +1593,15 @@ pub fn test66() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop (State.new 0 0) \state -> (
+        let sum = loop(State.new(0, 0), \state -> 
             let State {idx: i, sum: sum} = state;
             if i == 10 then 
-                break sum
+                break $ sum
             else
-                continue $ State.new (i+1) (sum+i)
+                continue $ State.new(i+1, sum+i)
         );
-        let u = assert_eq "" sum 45;
-        pure ()
+        let u = assert_eq("", sum, 45);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1635,15 +1618,15 @@ pub fn test67() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop (State.new 0 0) \state -> (
+        let sum = loop(State.new(0, 0), \state -> 
             let State {idx: i, sum: sum} = state;
             if i == 10 then 
-                break sum
+                break $ sum
             else
-                continue $ State.new (i+1) (sum+i)
+                continue $ State.new(i+1, sum+i)
         );
-        let u = assert_eq "" sum 45;
-        pure ()
+        let u = assert_eq("", sum, 45);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1660,10 +1643,10 @@ pub fn test68() {
 
     main : IOState -> ((), IOState);
     main = (
-        let u = IntOrBool.int 42;
+        let u = IntOrBool.int(42);
         let IntOrBool.int(x) = u;
-        let u = assert_eq "" x 42;
-        pure ()
+        let u = assert_eq("", x, 42);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1680,10 +1663,10 @@ pub fn test69() {
 
     main : IOState -> ((), IOState);
     main = (
-        let u = IntOrBool.bool true;
+        let u = IntOrBool.bool(true);
         let IntOrBool.bool(x) = u;
-        let u = assert_eq "" x true;
-        pure ()
+        let u = assert_eq("", x, true);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1700,10 +1683,10 @@ pub fn test70() {
 
     main : IOState -> ((), IOState);
     main = (
-        let u = Union.left (42, "truth");
+        let u = Union.left((42, "truth"));
         let Union.left((x, y)) = u;
-        let u = assert_eq "" x 42;
-        pure ()
+        let u = assert_eq("", x, 42);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1721,11 +1704,11 @@ pub fn test71() {
 
     main : IOState -> ((), IOState);
     main = (
-        let u = Struct.new (Union.left (42, "truth")) 13;
+        let u = Struct.new(Union.left((42, "truth")), 13);
         let Struct { uni: Union.left((truth, string)), value: val } = u;
-        let u = assert_eq "" truth 42;
-        let u = assert_eq "" val 13;
-        pure ()
+        let u = assert_eq("", truth, 42);
+        let u = assert_eq("", val, 13);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1740,14 +1723,14 @@ pub fn test72() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop (0, 0) \(i, sum) -> (
+        let sum = loop((0, 0), \(i, sum) -> 
             if i == 10 then 
-                break sum
+                break $ sum
             else
                 continue $ (i + 1, sum + i)
         );
-        let u = assert_eq "" sum 45;
-        pure ()
+        let u = assert_eq("", sum, 45);
+        pure()
     );
     "#;
     run_source(source, OptimizationLevel::Default);
@@ -1771,8 +1754,8 @@ pub fn test_comment_0() {
             multiple line 
             block comment
             */
-            let z = /* sub 1 */add x/* This comment is parsed as a separater */y/* comment */;
-            pure ()
+            let z = /* sub 1 */add(x,/* This comment is parsed as a separater */y)/* comment */;
+            pure()
         );
         /*tail*/";
     run_source(source, OptimizationLevel::Default);
@@ -1790,8 +1773,8 @@ pub fn test_comment_1() {
             // let x = 3 in
 // some excellent and brilliant comment
             let y = -3 in// comment
-            let z = add x y;
-            pure ()
+            let z = add(x, y);
+            pure()
         //
         );";
     run_source(source, OptimizationLevel::Default);

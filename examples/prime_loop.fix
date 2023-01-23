@@ -3,37 +3,43 @@ module Main;
 // Calculate a Bool array whose element is true iff idx is prime.
 is_prime : Int -> Array Bool;
 is_prime = \n -> (
-    let arr = Array.new n true;
-    let arr = arr.set! 0 false;
-    let arr = arr.set! 1 false;
+    let arr = Array.new(n, true);
+    let arr = arr.set!(0, false);
+    let arr = arr.set!(1, false);
     // For usual loop, use `loop`, `continue` and `break`.
     // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body.
     // continue : s -> LoopResult s r -- Take the next state and continues the loop.
     // break : r -> LoopResult s r -- Break the loop and `loop` returns the value given to `break`.
-    loop (2, arr) \(i, arr) -> (
-        if n < i*i then break arr else 
-        let next_arr = if arr.get i then (
-            loop (i+i, arr) \(q, arr) -> (
-                if n-1 < q then 
-                    break arr
-                else 
-                    continue $ (q + i, arr.set! q false)
-            )
-        ) else arr;
-        continue $ (i + 1, next_arr)
+    loop((2, arr), \(i, arr) -> 
+        if n < i*i then 
+            break $ arr 
+        else 
+            let next_arr = (
+                if arr.get(i) then
+                    loop((i+i, arr), \(q, arr) -> 
+                        if n-1 < q then 
+                            break $ arr
+                        else 
+                            continue $ (q+i, arr.set!(q, false))
+                    )
+                else
+                    arr
+            );
+            continue $ (i+1, next_arr)
     )
 );
 
 // Count the appearance of a value in an array.
 count : [a: Eq] a -> Array a -> Int;
 count = \elem -> \arr -> (
-    loop (0, 0) \(i, sum) -> (
-        if arr.len == i then break sum 
+    loop((0, 0), \(i, sum) -> 
+        if arr.len == i then 
+            break $ sum 
         else 
-            let sum = sum + (if arr.get i == elem then 1 else 0);
+            let sum = sum + (if arr.get(i) == elem then 1 else 0);
             continue $ (i+1, sum)
     )
 );
 
 main : IOState -> ((), IOState);
-main = print $ (is_prime 10000000).count true.to_string; // 664579
+main = print $ is_prime(10000000).count(true).to_string; // 664579
