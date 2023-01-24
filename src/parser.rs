@@ -817,6 +817,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         Rule::expr_if => parse_expr_if(pair, src),
         Rule::expr_lam => parse_expr_lam(pair, src),
         Rule::expr_tuple => parse_expr_tuple(pair, src),
+        Rule::expr_make_struct => parse_expr_make_struct(pair, src),
         _ => unreachable!(),
     }
 }
@@ -941,6 +942,20 @@ fn parse_expr_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     }
 }
 
+fn parse_expr_make_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_make_struct);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let tycon = parse_tycon(pairs.next().unwrap());
+    let mut fields = vec![];
+    while pairs.peek().is_some() {
+        let field_name = pairs.next().unwrap().as_str().to_string();
+        let field_expr = parse_expr(pairs.next().unwrap(), src);
+        fields.push((field_name, field_expr));
+    }
+    expr_make_struct(tycon, fields).set_source(Some(span))
+}
+
 fn parse_expr_int_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_int_lit);
     let span = Span::from_pair(&src, &pair);
@@ -1055,7 +1070,12 @@ fn parse_type_var(pair: Pair<Rule>) -> Arc<TypeNode> {
 
 fn parse_type_tycon(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_tycon);
-    type_tycon(&tycon(FullName::from_strs(&[], type_expr.as_str())))
+    type_tycon(&parse_tycon(type_expr))
+}
+
+fn parse_tycon(pair: Pair<Rule>) -> Arc<TyCon> {
+    assert_eq!(pair.as_rule(), Rule::type_tycon);
+    tycon(FullName::from_strs(&[], pair.as_str()))
 }
 
 fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
@@ -1111,7 +1131,7 @@ fn parse_pattern_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
 fn parse_pattern_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
     assert_eq!(pair.as_rule(), Rule::pattern_struct);
     let mut pairs = pair.clone().into_inner();
-    let tycon = tycon(FullName::from_strs(&[], pairs.next().unwrap().as_str()));
+    let tycon = parse_tycon(pairs.next().unwrap());
     let mut field_to_pats = Vec::default();
     let mut field_names: HashSet<Name> = Default::default();
     while pairs.peek().is_some() {
@@ -1137,7 +1157,7 @@ fn parse_pattern_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
 fn parse_pattern_union(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
     assert_eq!(pair.as_rule(), Rule::pattern_union);
     let mut pairs = pair.into_inner();
-    let tycon = tycon(FullName::from_strs(&[], pairs.next().unwrap().as_str()));
+    let tycon = parse_tycon(pairs.next().unwrap());
     let field_name = pairs.next().unwrap().as_str().to_string();
     let pat = parse_pattern(pairs.next().unwrap(), src);
     Arc::new(Pattern::Union(tycon, field_name, pat))

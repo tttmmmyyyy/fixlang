@@ -48,8 +48,10 @@ expr_lam = { "|" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ sep* ~ "|" 
 // For n = 0 or n >= 2 this is interpreted as tuple, and for n = 1 this is treated as braced type.
 expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)*)? ~ sep* ~ ")" }
 
+expr_make_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ sep* ~ "}" }
+
 // nlr = non left recursive
-expr_nlr = { expr_lit | expr_var | expr_let | expr_if | expr_lam | expr_tuple }
+expr_nlr = { expr_lit | expr_var | expr_let | expr_if | expr_lam | expr_tuple | expr_make_struct }
 
 // List of arguments. Can be an empty list.
 arg_list = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }

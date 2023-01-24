@@ -642,6 +642,39 @@ impl TypeCheckContext {
                 ei.set_tyanno_expr(e)
             }
             Expr::MakeStruct(tc, fields) => {
+                // Get list of field names.
+                let ti = self.type_env.tycons.get(tc);
+                if ti.is_none() {
+                    error_exit(&format!("unknown type constructor `{}`", tc.to_string()));
+                }
+                let ti = ti.unwrap();
+                let field_names = ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+
+                // Validate fields.
+                let field_names_in_struct_defn: HashSet<Name> =
+                    HashSet::from_iter(field_names.iter().cloned());
+                let field_names_in_expression: HashSet<Name> =
+                    HashSet::from_iter(fields.iter().map(|(name, _)| name.clone()));
+                for f in &field_names_in_struct_defn {
+                    if !field_names_in_expression.contains(f) {
+                        error_exit(&format!(
+                            "missing field `{}` of struct `{}`",
+                            f,
+                            tc.to_string()
+                        ))
+                    }
+                }
+                for f in &field_names_in_expression {
+                    if !field_names_in_struct_defn.contains(f) {
+                        error_exit(&format!(
+                            "unknown field `{}` for struct `{}`",
+                            f,
+                            tc.to_string()
+                        ))
+                    }
+                }
+
+                // Get field types.
                 let struct_ty = tc.get_struct_union_value_type(self);
                 if !self.unify(&struct_ty, &ty) {
                     error_exit_with_src(
@@ -655,12 +688,19 @@ impl TypeCheckContext {
                 }
                 let field_tys = struct_ty.field_types(&self.type_env);
                 assert_eq!(field_tys.len(), fields.len());
-                let mut ei = ei.clone();
-                for (field_ty, (field_name, field_expr)) in field_tys.iter().zip(fields.iter()) {
-                    let field_expr = self.unify_type_of_expr(field_expr, field_ty.clone());
-                    ei = ei.set_make_struct_field(field_name, field_expr);
+
+                // Reorder fields as ordering of fields in struct definition.
+                let fields: HashMap<Name, Arc<ExprNode>> =
+                    HashMap::from_iter(fields.iter().cloned());
+                let mut fields = field_names
+                    .iter()
+                    .map(|name| (name.clone(), fields[name].clone()))
+                    .collect::<Vec<_>>();
+
+                for (field_ty, (_, field_expr)) in field_tys.iter().zip(fields.iter_mut()) {
+                    *field_expr = self.unify_type_of_expr(field_expr, field_ty.clone());
                 }
-                ei
+                ei.set_make_struct_fields(fields)
             }
         }
     }

@@ -1756,6 +1756,26 @@ pub fn test72() {
 
 #[test]
 #[serial]
+pub fn test73() {
+    // Test pattern matching on argment.
+    let source = r#"
+    module Main;
+
+    type IntBool = struct (x: Int, y: Bool);
+
+    main : IOState -> ((), IOState);
+    main = (
+        let int_bool = IntBool { y: true, x: 42 };
+        let u = assert_eq("", int_bool.get_x, 42);
+        let u = assert_eq("", int_bool.get_y, true);
+        pure()
+    );
+    "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 

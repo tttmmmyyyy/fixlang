@@ -281,6 +281,19 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_make_struct_fields(&self, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::MakeStruct(tc, _) => {
+                ret.expr = Arc::new(Expr::MakeStruct(tc.clone(), fields));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
     pub fn resolve_namespace(self: &Arc<ExprNode>, ctx: &NameResolutionContext) -> Arc<ExprNode> {
         match &*self.expr {
             Expr::Var(_) => {
