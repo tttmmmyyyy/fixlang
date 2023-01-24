@@ -663,7 +663,7 @@ pub fn test33() {
     // Test struct declaration and new, mod.
     let source = r#"
         module Main;
-        type IntBool = struct (x: Int, y: Bool);
+        type IntBool = struct {x: Int, y: Bool};
 
         main : IOState -> ((), IOState);
         main = (
@@ -682,7 +682,7 @@ pub fn test34_5() {
     // Test unboxed struct declaration and new, mod.
     let source = r#"
         module Main;
-        type IntBool = unbox struct (x: Int, y: Bool);
+        type IntBool = unbox struct {x: Int, y: Bool};
 
         main : IOState -> ((), IOState);
         main = (
@@ -702,8 +702,8 @@ pub fn test34() {
     let source = r#"
         module Main;        
         
-        type OtherStruct = struct (y: Int, x: Bool);
-        type IntBool = struct (x: Int, y: Bool);
+        type OtherStruct = struct {y: Int, x: Bool};
+        type IntBool = struct {x: Int, y: Bool};
 
         main : IOState -> ((), IOState);
         main = (
@@ -723,8 +723,8 @@ pub fn test35() {
     let source = r#"
         module Main;
 
-        type A = struct (x: Int, y: Bool);
-        type B = struct (x: Bool, y: Int);
+        type A = struct {x: Int, y: Bool};
+        type B = struct {x: Bool, y: Int};
             
         main : IOState -> ((), IOState);
         main = (
@@ -745,8 +745,8 @@ pub fn test36() {
     let source = r#"
         module Main;
 
-        type A = struct (x: B);
-        type B = struct (x: Int);
+        type A = struct {x: B};
+        type B = struct {x: Int};
             
         main : IOState -> ((), IOState);
         main = (
@@ -767,8 +767,8 @@ pub fn test37() {
     let source = r#"
         module Main;
 
-        type A = struct (x: B);
-        type B = struct (x: Int);
+        type A = struct {x: B};
+        type B = struct {x: Int};
 
         main : IOState -> ((), IOState);
         main = (
@@ -789,8 +789,8 @@ pub fn test37_5() {
     let source = r#"
         module Main;
 
-        type A = struct (x: B);
-        type B = struct (x: Int);
+        type A = struct {x: B};
+        type B = struct {x: Int};
 
         main : IOState -> ((), IOState);
         main = (
@@ -811,8 +811,8 @@ pub fn test38() {
     let source = r#"
         module Main;
 
-        type A = struct (x: B);
-        type B = struct (x: Int);
+        type A = struct {x: B};
+        type B = struct {x: Int};
 
         main : IOState -> ((), IOState);
         main = (    
@@ -834,8 +834,8 @@ pub fn test39() {
     let source = r#"
         module Main;
 
-        type A = struct (x: B);
-        type B = struct (x: Int);
+        type A = struct {x: B};
+        type B = struct {x: Int};
         
         main : IOState -> ((), IOState);
         main = (
@@ -857,8 +857,8 @@ pub fn test40() {
     let source = r#"
         module Main;
 
-        type A = struct (x: B);
-        type B = struct (x: Int);
+        type A = struct {x: B};
+        type B = struct {x: Int};
         
         main : IOState -> ((), IOState);
         main = (
@@ -1101,7 +1101,7 @@ pub fn test47() {
     let source = r#"
         module Main;
 
-        type IntOrBool = union (int : Int, bool: Bool);
+        type IntOrBool = union {int : Int, bool: Bool};
 
         main : IOState -> ((), IOState);
         main = (
@@ -1124,7 +1124,7 @@ pub fn test47_2() {
     let source = r#"
         module Main;
 
-        type IntOrBool = box union (int : Int, bool: Bool);
+        type IntOrBool = box union {int : Int, bool: Bool};
 
         main : IOState -> ((), IOState);
         main = (
@@ -1147,7 +1147,7 @@ pub fn test47_5() {
     let source = r#"
         module Main;
 
-        type Union = union (val: Int, func: Int -> Int);
+        type Union = union {val: Int, func: Int -> Int};
 
         main : IOState -> ((), IOState);
         main = (
@@ -1168,7 +1168,7 @@ pub fn test48() {
     let source = r#"
         module Main;
 
-        type Vec a = struct (data: Array a);
+        type Vec a = struct {data: Array a};
 
         main : IOState -> ((), IOState);
         main = (
@@ -1191,7 +1191,7 @@ pub fn test49() {
     let source = r#"
         module Main;
 
-        type Either a b = union (left: a, right: b);
+        type Either a b = union {left: a, right: b};
 
         main : IOState -> ((), IOState);
         main = (
@@ -1278,7 +1278,7 @@ pub fn test52() {
     let source = r#"
     module Main;
 
-    type SieveState = struct (i: Int, arr: Array Bool);
+    type SieveState = struct {i: Int, arr: Array Bool};
     
     // Calculate a Bool array whose element is true iff idx is prime.
     is_prime : Int -> Array Bool;
@@ -1607,7 +1607,7 @@ pub fn test66() {
     let source = r#"
     module Main;
 
-    type State = unbox struct (idx: Int, sum: Int);
+    type State = unbox struct {idx: Int, sum: Int};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1632,7 +1632,7 @@ pub fn test67() {
     let source = r#"
     module Main;
 
-    type State = box struct (idx: Int, sum: Int);
+    type State = box struct {idx: Int, sum: Int};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1657,7 +1657,7 @@ pub fn test68() {
     let source = r#"
     module Main;
 
-    type IntOrBool = unbox union (int: Int, bool: Bool);
+    type IntOrBool = unbox union {int: Int, bool: Bool};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1677,7 +1677,7 @@ pub fn test69() {
     let source = r#"
     module Main;
 
-    type IntOrBool = box union (int: Int, bool: Bool);
+    type IntOrBool = box union {int: Int, bool: Bool};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1697,7 +1697,7 @@ pub fn test70() {
     let source = r#"
     module Main;
 
-    type Union = union (left: (Int, String), right: Bool);
+    type Union = union {left: (Int, String), right: Bool};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1717,8 +1717,8 @@ pub fn test71() {
     let source = r#"
     module Main;
 
-    type Struct = struct (uni: Union, value: Int);
-    type Union = union (left: (Int, String), right: Bool);
+    type Struct = struct {uni: Union, value: Int};
+    type Union = union {left: (Int, String), right: Bool};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1761,7 +1761,7 @@ pub fn test73() {
     let source = r#"
     module Main;
 
-    type IntBool = struct (x: Int, y: Bool);
+    type IntBool = struct {x: Int, y: Bool};
 
     main : IOState -> ((), IOState);
     main = (

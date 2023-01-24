@@ -7,9 +7,9 @@ pub const VECTOR_DATA_IDX: u32 = 1;
 const STD_SOURCE: &str = r#"
 module Std;
 
-type Vector a = unbox struct ( len : Int, data : Array a );
+type Vector a = unbox struct { len : Int, data : Array a };
 
-type String = unbox struct ( data : Vector Byte );
+type String = unbox struct { data : Vector Byte };
 
 namespace String {
     get_len : String -> Int;
