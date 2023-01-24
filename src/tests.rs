@@ -108,7 +108,7 @@ pub fn test7() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq("", (\x -> 5)(10), 5);
+            let u = assert_eq("", (|x| 5)(10), 5);
             pure()
         );
     "#;
@@ -123,7 +123,7 @@ pub fn test8() {
 
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq("", (\x -> x) $ 6, 6);
+            let u = assert_eq("", (|x| x) $ 6, 6);
             pure()
         );
     "#;
@@ -252,7 +252,7 @@ pub fn test15() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let f = \x -> 3 + x in
+            let f = |x| 3 + x in
             let u = assert_eq("", f(5), 3 + 5);
             pure()
         );
@@ -268,7 +268,7 @@ pub fn test15_5() {
         main : IOState -> ((), IOState);
         main = (
             let x = 3;
-            let f = \y -> x;
+            let f = |y| x;
             let u = assert_eq("", f(5), 3);
             pure()
         );
@@ -283,7 +283,7 @@ pub fn test16() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let f = \x -> x + 3 in
+            let f = |x| x + 3 in
             let u = assert_eq("", f(5), 3 + 5);
             pure()
         );
@@ -376,7 +376,7 @@ pub fn test21() {
 
             main : IOState -> ((), IOState);
             main = (
-                let fact = fix $ \loop -> \n -> if n == 0 then 1 else n * loop(n-1);
+                let fact = fix $ |loop, n| if n == 0 then 1 else n * loop(n-1);
                 let u = assert_eq("", fact(5), 5 * 4 * 3 * 2 * 1);
                 pure()
             );
@@ -394,7 +394,7 @@ pub fn test22() {
             module Main;
             main : IOState -> ((), IOState);
             main = (
-                let g = fix $ \loop -> \a -> \x -> 
+                let g = fix $ |loop, a, x|
                             if x == 0 then 
                                 a 
                             else
@@ -420,7 +420,7 @@ pub fn test22_5() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let fib = fix $ \f -> \n ->
+            let fib = fix $ |f, n|
                         if n == 0 then
                             0
                         else if n == 1 then
@@ -443,7 +443,7 @@ pub fn test22_7() {
         module Main;
 
         fib : Int -> Int;
-        fib = \n -> (
+        fib = |n| (
             if n == 0 then
                 0
             else if n == 1 then
@@ -551,8 +551,8 @@ pub fn test27_5() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.from_map(100) $ \i -> add(i);
-            let arr = arr.set(99, \x -> x - 100);
+            let arr = Array.from_map(100) $ |i| add(i);
+            let arr = arr.set(99, |x| x - 100);
             let u = assert_eq("", arr.get(99) $ arr.get(50) $ 1, 1 + 50 - 100);
             pure()
         );
@@ -571,7 +571,7 @@ pub fn test28() {
             let arr = Array.new(31, 0);
             let arr = arr.set!(0, 0);
             let arr = arr.set!(1, 1);
-            let loop = fix $ \f -> \arr -> \n ->
+            let loop = fix $ |f, arr, n|
                 if n == 31 then
                     arr
                 else
@@ -594,7 +594,7 @@ pub fn test29() {
         module Main;
 
         id : a -> a;
-        id = \x -> x;
+        id = |x| x;
 
         main : IOState -> ((), IOState);
         main = (
@@ -613,8 +613,8 @@ pub fn test30() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let f = \x -> x + 3;
-            let g = \x -> x == 8;
+            let f = |x| x + 3;
+            let g = |x| x == 8;
             let ans = g $ f $ 5;
             let u = assert_eq("", if ans then 1 else 0, 1);
             pure()
@@ -631,8 +631,8 @@ pub fn test31() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let f = \x -> x + 3;
-            let g = \x -> x == 8;
+            let f = |x| x + 3;
+            let g = |x| x == 8;
             let ans = 5 .f. g;
             let u = assert_eq("", if ans then 1 else 0, 1);
             pure()
@@ -649,7 +649,7 @@ pub fn test32() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let f = \x -> x + 10;
+            let f = |x| x + 10;
             let u = assert_eq("", 5.add $ 3.f, 18);
             pure()
         );
@@ -668,7 +668,7 @@ pub fn test33() {
         main : IOState -> ((), IOState);
         main = (
             let obj = IntBool.new(18, false);
-            let obj = IntBool.mod_x(\x -> x + 42, obj);
+            let obj = IntBool.mod_x(|x| x + 42, obj);
             let u = assert_eq("", IntBool.get_x(obj), 60);
             pure()
         );
@@ -687,7 +687,7 @@ pub fn test34_5() {
         main : IOState -> ((), IOState);
         main = (
             let obj = IntBool.new(18, false);
-            let obj = IntBool.mod_x(\x -> x + 42, obj);
+            let obj = IntBool.mod_x(|x| x + 42, obj);
             let u = assert_eq("", IntBool.get_x(obj), 60);
             pure()
         );
@@ -708,7 +708,7 @@ pub fn test34() {
         main : IOState -> ((), IOState);
         main = (
             let obj = IntBool.new(18, false);
-            let obj = obj.mod_x(\x -> x + 42);
+            let obj = obj.mod_x(|x| x + 42);
             let u = assert_eq("", obj.get_x, 60);
             pure()
         );
@@ -751,7 +751,7 @@ pub fn test36() {
         main : IOState -> ((), IOState);
         main = (
             let a = A.new(B.new(16));
-            let a = a.(mod_x $ mod_x $ \x -> x + 15);
+            let a = a.(mod_x $ mod_x $ |x| x + 15);
             let ans = a . get_x . get_x;
             let u = assert_eq("", ans, 31);
             pure ()
@@ -773,7 +773,7 @@ pub fn test37() {
         main : IOState -> ((), IOState);
         main = (
             let a = A.new (B.new $ 16);
-            let b = a . (mod_x! $ mod_x! $ \x -> x + 15);
+            let b = a . (mod_x! $ mod_x! $ |x| x + 15);
             let ans = b . get_x . get_x;
             let u = assert_eq("", ans, 31);
             pure()
@@ -795,7 +795,7 @@ pub fn test37_5() {
         main : IOState -> ((), IOState);
         main = (
             let a = A.new (B.new $ 16);
-            let b = a.(mod_x $ mod_x $ \x -> x + 15);
+            let b = a.(mod_x $ mod_x $ |x| x + 15);
             let ans = a.get_x.get_x + b.get_x.get_x;
             let u = assert_eq("", ans, (16 + 15) + 16);
             pure()
@@ -817,7 +817,7 @@ pub fn test38() {
         main : IOState -> ((), IOState);
         main = (    
             let a = A.new (B.new $ 16);
-            let f = \a -> (a : A) . (mod_x! $ mod_x! $ \x -> x + 15);
+            let f = |a| (a : A) . (mod_x! $ mod_x! $ |x| x + 15);
             let a = a.f;
             let ans = a.get_x.get_x;
             let u = assert_eq("", ans, 31);
@@ -840,7 +840,7 @@ pub fn test39() {
         main : IOState -> ((), IOState);
         main = (
             let a = A.new (B.new (16));
-            let f = \a -> a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ \x -> x + 15);
+            let f = |a| a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ |x| x + 15);
             let a = a.f;
             let ans = a.get_x.get_x;
             let u = assert_eq("", ans, 31);
@@ -863,7 +863,7 @@ pub fn test40() {
         main : IOState -> ((), IOState);
         main = (
             let a = A.new (B.new $ 16);
-            let f: A -> A = \a -> a.(mod_x! $ mod_x! $ \x -> x + 15);
+            let f: A -> A = |a| a.(mod_x! $ mod_x! $ |x| x + 15);
             let a = a .f;
             let ans = a .get_x .get_x;
             let u = assert_eq("", ans, 31);
@@ -882,7 +882,25 @@ pub fn test41() {
         
         main : IOState -> ((), IOState);
         main = (
-            let x: Int -> Int = \x -> x;
+            let x: Int -> Int = |x| x;
+            let ans = x(42);
+            let u = assert_eq("", ans, 42);
+            pure()
+        );
+        "#;
+    run_source(source, OptimizationLevel::Default);
+}
+
+#[test]
+#[serial]
+pub fn test41_5() {
+    // Test type annotation at lambda
+    let source = r#"
+        module Main;
+        
+        main : IOState -> ((), IOState);
+        main = (
+            let x = |x: Int| x;
             let ans = x(42);
             let u = assert_eq("", ans, 42);
             pure()
@@ -901,7 +919,7 @@ pub fn test42() {
             module Main;
             
             loop : Int -> Int;
-            loop = \x -> if x == 0 then 0 else add(x) $ loop $ add(x, -1);
+            loop = |x| if x == 0 then 0 else add(x) $ loop $ add(x, -1);
     
             main : IOState -> ((), IOState);
             main = (
@@ -926,7 +944,7 @@ pub fn test43() {
             module Main;
             
             my_loop : Int -> Int -> Int;
-            my_loop = \x -> \acc -> if x == 0 then acc else my_loop(x + -1, acc + x);
+            my_loop = |x, acc| if x == 0 then acc else my_loop(x + -1, acc + x);
     
             main : IOState -> ((), IOState);
             main = (
@@ -953,15 +971,15 @@ pub fn test44() {
         }
 
         impl Int : ToInt {
-            toInt = \x -> x;
+            toInt = |x| x;
         }
 
         impl Bool : ToInt {
-            toInt = \b -> if b then 0 else -1;
+            toInt = |b| if b then 0 else -1;
         }
 
         add_head_and_next : [a: ToInt] Array a -> Int; 
-        add_head_and_next = \arr -> (
+        add_head_and_next = |arr| (
             let head = arr.get(0).toInt;
             let next = arr.get(1).toInt;
             add(head, next)
@@ -994,8 +1012,8 @@ pub fn test44_5() {
         module Main;
 
         sum : Array Int -> Int;
-        sum = \arr -> (
-            let loop = fix $ \loop -> \idx -> \sum -> (
+        sum = |arr| (
+            let loop = fix $ |loop, idx, sum| (
                 if idx == arr.len 
                 then sum
                 else loop(idx + 1, sum + arr.get(idx))
@@ -1005,7 +1023,7 @@ pub fn test44_5() {
 
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.from_map(10, \x -> x * x);
+            let arr = Array.from_map(10, |x| x * x);
             let ans = sum(arr);
             let u = assert_eq("", ans, 285);
             pure()
@@ -1026,14 +1044,14 @@ pub fn test45() {
         }
 
         impl Array : Functor {
-            map = \f -> \arr -> (
-                Array.from_map(arr.len, \idx -> f $ arr.get(idx))
+            map = |f, arr| (
+                Array.from_map(arr.len, |idx| f $ arr.get(idx))
             );
         }
 
         sum : Array Int -> Int;
-        sum = \arr -> (
-            let loop = fix $ \loop -> \idx -> \sum -> (
+        sum = |arr| (
+            let loop = fix $ |loop, idx, sum| (
                 if idx == arr.len 
                 then sum
                 else loop(idx + 1, sum + arr.get(idx))
@@ -1043,8 +1061,8 @@ pub fn test45() {
 
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.from_map(10, \x -> x);
-            let arr = arr.map(\x -> x * x);
+            let arr = Array.from_map(10, |x| x);
+            let arr = arr.map(|x| x * x);
             let ans = arr.sum;
             let u = assert_eq("", ans, 285);
             pure()
@@ -1134,7 +1152,7 @@ pub fn test47_5() {
         main : IOState -> ((), IOState);
         main = (
             let val = Union.val(3);
-            let func = Union.func(\x -> x + 5);
+            let func = Union.func(|x| x + 5);
             let ans = func.as_func $ val.as_val;
             let u = assert_eq("", ans, 5 + 3);
             pure()
@@ -1155,7 +1173,7 @@ pub fn test48() {
         main : IOState -> ((), IOState);
         main = (
             let int_vec = Vec.new $ Array.new(2, 5);
-            let int_vec = int_vec.mod_data!(\arr -> arr.set(0, 3));
+            let int_vec = int_vec.mod_data!(|arr| arr.set(0, 3));
             let head = int_vec.get_data.get(0);
             let next = int_vec.get_data.get(1);
             let ans = add(head, next);
@@ -1202,7 +1220,7 @@ pub fn test50() {
             main : IOState -> ((), IOState);
             main = (
                 let ans = (
-                    loop((0, 0), \state -> 
+                    loop((0, 0), |state|
                         let i = state.get_0;
                         let sum = state.get_1;
                         if i == {} then break(sum) else continue $ (i+1, sum+i)
@@ -1226,13 +1244,13 @@ pub fn test51() {
     module Main;
     
     impl [a: Eq, b: Eq] (a, b) : Eq {
-        eq = \lhs -> \rhs -> (
+        eq = |lhs, rhs| (
             lhs.get_0 == rhs.get_0 && lhs.get_1 == rhs.get_1
         );
     }
 
     search : [a: Eq] a -> Array a -> Int;
-    search = \elem -> \arr -> loop(0) $ \idx -> (
+    search = |elem, arr| loop(0) $ |idx| (
         if idx == arr.len then break $ -1
         else if arr.get(idx) == elem then break $ idx
         else continue $ idx + 1
@@ -1264,16 +1282,16 @@ pub fn test52() {
     
     // Calculate a Bool array whose element is true iff idx is prime.
     is_prime : Int -> Array Bool;
-    is_prime = \n -> (
+    is_prime = |n| (
         let arr = Array.new(n, true);
         let arr = arr.set!(0, false);
         let arr = arr.set!(1, false);
-        loop(SieveState.new(2, arr)) $ \state -> (
+        loop(SieveState.new(2, arr)) $ |state| (
             let i = state.get_i;
             let arr = state.get_arr;
             if i*i > n then break $ arr else 
             let next_arr = if arr.get(i) then (
-                loop(SieveState.new(i+i, arr)) $ \state -> (
+                loop(SieveState.new(i+i, arr)) $ |state| (
                     let q = state.get_i;
                     let arr = state.get_arr;
                     if n-1 < q then 
@@ -1288,8 +1306,8 @@ pub fn test52() {
 
     // Count the appearance of a value in an array.
     count : [a: Eq] a -> Array a -> Int;
-    count = \elem -> \arr -> (
-        loop((0, 0)) $ \state -> (
+    count = |elem, arr| (
+        loop((0, 0)) $ |state| (
             let i = state.get_0;
             let sum = state.get_1;
             if arr.len == i then break $ sum 
@@ -1319,8 +1337,8 @@ pub fn test53() {
     main : IOState -> ((), IOState);
     main = (
         let pair = (13, Array.new(1, 0));
-        let pair = pair.mod_0!(\x -> x + 3);
-        let pair = pair.mod_1!(\arr -> arr.set!(0, 5));
+        let pair = pair.mod_0!(|x| x + 3);
+        let pair = pair.mod_1!(|arr| arr.set!(0, 5));
         let x = pair.get_0;
         let y = pair.get_1.get(0);
         let ans = x + y;
@@ -1341,8 +1359,8 @@ pub fn test54() {
     main : IOState -> ((), IOState);
     main = (
         let pair0 = (13, Array.new(1, 0));
-        let pair1 = pair0.mod_1(\arr -> arr.set(0, 5));
-        let pair2 = pair0.mod_0!(\x -> x + 3);
+        let pair1 = pair0.mod_1(|arr| arr.set(0, 5));
+        let pair2 = pair0.mod_0!(|x| x + 3);
         let x = pair1.get_1.get(0);
         let y = pair2.get_0;
         let ans = x + y;
@@ -1497,8 +1515,8 @@ pub fn test61() {
     module Main;
 
     main : IOState -> ((), IOState);
-    main = \io -> (
-        loop((0, io)) $ \(counter, io) -> (
+    main = |io| (
+        loop((0, io)) $ |(counter, io)| (
             if counter == 3 then
                 break $ ((), io)
             else
@@ -1568,7 +1586,7 @@ pub fn test65() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop((0, 0), \state -> 
+        let sum = loop((0, 0), |state| 
             let (i, sum) = state;
             if i == 10 then 
                 break $ sum
@@ -1593,7 +1611,7 @@ pub fn test66() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop(State.new(0, 0), \state -> 
+        let sum = loop(State.new(0, 0), |state|
             let State {idx: i, sum: sum} = state;
             if i == 10 then 
                 break $ sum
@@ -1618,7 +1636,7 @@ pub fn test67() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop(State.new(0, 0), \state -> 
+        let sum = loop(State.new(0, 0), |state|
             let State {idx: i, sum: sum} = state;
             if i == 10 then 
                 break $ sum
@@ -1723,7 +1741,7 @@ pub fn test72() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop((0, 0), \(i, sum) -> 
+        let sum = loop((0, 0), |(i, sum)|
             if i == 10 then 
                 break $ sum
             else
