@@ -2,7 +2,7 @@ module Main;
 
 // Calculate a Bool array whose element is true iff idx is prime.
 is_prime : Int -> Array Bool;
-is_prime = \n -> (
+is_prime = |n| (
     let arr = Array.new(n, true);
     let arr = arr.set!(0, false);
     let arr = arr.set!(1, false);
@@ -10,13 +10,13 @@ is_prime = \n -> (
     // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body.
     // continue : s -> LoopResult s r -- Take the next state and continues the loop.
     // break : r -> LoopResult s r -- Break the loop and `loop` returns the value given to `break`.
-    loop((2, arr), \(i, arr) -> 
+    loop((2, arr), |(i, arr)|
         if n < i*i then 
             break $ arr 
         else 
             let next_arr = (
                 if arr.get(i) then
-                    loop((i+i, arr), \(q, arr) -> 
+                    loop((i+i, arr), |(q, arr)|
                         if n-1 < q then 
                             break $ arr
                         else 
@@ -31,8 +31,8 @@ is_prime = \n -> (
 
 // Count the appearance of a value in an array.
 count : [a: Eq] a -> Array a -> Int;
-count = \elem -> \arr -> (
-    loop((0, 0), \(i, sum) -> 
+count = |elem, arr| (
+    loop((0, 0), |(i, sum)|
         if arr.len == i then 
             break $ sum 
         else 
