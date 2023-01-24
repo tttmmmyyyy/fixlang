@@ -80,13 +80,14 @@ fn convert_to_uncurried_name(name: &mut Name, count: usize) {
     *name += &format!("@uncurry{}", count);
 }
 
-pub fn make_pair_name(size: usize) -> FullName {
-    FullName::from_strs(&[STD_NAME], &make_tuple_name(size as u32))
+pub fn make_tuple_name(size: u32) -> FullName {
+    let name = format!("{}{}", TUPLE_NAME, size);
+    FullName::from_strs(&[STD_NAME], &name)
 }
 
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     assert!(tys.len() <= TUPLE_SIZE_MAX as usize);
-    let mut ty = type_tycon(&tycon(make_pair_name(tys.len())));
+    let mut ty = type_tycon(&tycon(make_tuple_name(tys.len() as u32)));
     for field_ty in tys {
         ty = type_tyapp(ty, field_ty);
     }
@@ -130,7 +131,7 @@ fn uncurry_lambda(
     let getters = (0..vars_count)
         .map(|i| {
             let name = FullName::new(
-                &make_pair_name(vars_count).to_namespace(),
+                &make_tuple_name(vars_count as u32).to_namespace(),
                 &format!("{}_{}", STRUCT_GETTER_NAME, i),
             );
             let name = fix_mod.require_instantiated_symbol(&name, &getter_types[i]);
@@ -253,7 +254,14 @@ fn uncurry_global_function_call(
                 .set_inferred_type(type_fun(tuple_ty.clone(), result_ty.clone()));
             expr_app(
                 f_uncurry,
-                expr_make_tuple(args).set_inferred_type(tuple_ty),
+                expr_make_struct(
+                    tycon(make_tuple_name(args.len() as u32)),
+                    args.iter()
+                        .enumerate()
+                        .map(|(i, arg)| (i.to_string(), arg.clone()))
+                        .collect(),
+                )
+                .set_inferred_type(tuple_ty),
                 None,
             )
             .set_inferred_type(result_ty)
@@ -286,12 +294,12 @@ fn uncurry_global_function_call_subexprs(
         Expr::TyAnno(e, _) => {
             expr.set_tyanno_expr(uncurry_global_function_call_subexprs(e, symbols))
         }
-        Expr::MakeTuple(fields) => {
+        Expr::MakeStruct(_, fields) => {
             let fields = fields.clone();
             let mut expr = expr;
-            for (idx, field) in fields.iter().enumerate() {
-                let field = uncurry_global_function_call_subexprs(field, symbols);
-                expr = expr.set_make_tuple_field(field, idx);
+            for (field_name, field_expr) in fields {
+                let field_expr = uncurry_global_function_call_subexprs(&field_expr, symbols);
+                expr = expr.set_make_struct_field(&field_name, field_expr);
             }
             expr
         }
@@ -401,11 +409,11 @@ fn replace_free_var(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc
             let e = replace_free_var(e, from, to);
             expr.set_tyanno_expr(e)
         }
-        Expr::MakeTuple(fields) => {
+        Expr::MakeStruct(_, fields) => {
             let mut expr = expr.clone();
-            for (idx, field) in fields.iter().enumerate() {
-                let field = replace_free_var(field, from, to);
-                expr = expr.set_make_tuple_field(field, idx);
+            for (field_name, field_expr) in fields {
+                let field_expr = replace_free_var(field_expr, from, to);
+                expr = expr.set_make_struct_field(field_name, field_expr);
             }
             expr
         }

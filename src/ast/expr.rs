@@ -249,13 +249,30 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_make_tuple_field(&self, field: Arc<ExprNode>, idx: usize) -> Arc<Self> {
+    pub fn set_make_struct_tycon(&self, tc: Arc<TyCon>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
-            Expr::MakeTuple(fields) => {
+            Expr::MakeStruct(_, fields) => {
+                ret.expr = Arc::new(Expr::MakeStruct(tc, fields.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_make_struct_field(&self, field_name: &Name, field_expr: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::MakeStruct(tc, fields) => {
                 let mut fields = fields.clone();
-                fields[idx] = field;
-                ret.expr = Arc::new(Expr::MakeTuple(fields));
+                for (name, expr) in &mut fields {
+                    if name == field_name {
+                        *expr = field_expr.clone();
+                    }
+                }
+                ret.expr = Arc::new(Expr::MakeStruct(tc.clone(), fields));
             }
             _ => {
                 panic!()
@@ -294,11 +311,14 @@ impl ExprNode {
                 .clone()
                 .set_tyanno_expr(expr.resolve_namespace(ctx))
                 .set_tyanno_ty(ty.resolve_namespace(ctx)),
-            Expr::MakeTuple(fields) => {
+            Expr::MakeStruct(tc, fields) => {
                 let mut expr = self.clone();
-                for (i, field) in fields.iter().enumerate() {
-                    let field = field.resolve_namespace(ctx);
-                    expr = expr.set_make_tuple_field(field, i);
+                let mut tc = tc.as_ref().clone();
+                tc.resolve_namespace(ctx);
+                expr = expr.set_make_struct_tycon(Arc::new(tc));
+                for (field_name, field_expr) in fields {
+                    let field_expr = field_expr.resolve_namespace(ctx);
+                    expr = expr.set_make_struct_field(field_name, field_expr);
                 }
                 expr
             }
@@ -315,12 +335,9 @@ pub enum Expr {
     Let(Arc<Pattern>, Arc<ExprNode>, Arc<ExprNode>),
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>), // TODO: Implement case
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
-
-    // The following nodes are generated in optimization
-
-    // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakePair x y`.
-    // `MakePair x y` is compiled to a faster code than function call.
-    MakeTuple(Vec<Arc<ExprNode>>),
+    // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakeStruct x y`.
+    // `MakeStruct x y` is compiled to a faster code than function call (currently).
+    MakeStruct(Arc<TyCon>, Vec<(Name, Arc<ExprNode>)>),
 }
 
 #[derive(Clone)]
@@ -377,7 +394,7 @@ impl Pattern {
             Pattern::Struct(tc, field_to_pat) => {
                 let ty = tc.get_struct_union_value_type(typechcker);
                 let mut var_to_ty = HashMap::default();
-                let field_tys = ty.fields_types(&typechcker.type_env);
+                let field_tys = ty.field_types(&typechcker.type_env);
                 let fields = &typechcker.type_env.tycons.get(tc).unwrap().fields;
                 assert_eq!(fields.len(), field_tys.len());
                 let field_name_to_ty = fields
@@ -407,7 +424,7 @@ impl Pattern {
                 let ty = tc.get_struct_union_value_type(typechcker);
                 let mut var_to_ty = HashMap::default();
                 let fields = &typechcker.type_env.tycons.get(tc).unwrap().fields;
-                let field_tys = ty.fields_types(&typechcker.type_env);
+                let field_tys = ty.field_types(&typechcker.type_env);
                 assert_eq!(fields.len(), field_tys.len());
                 let field_idx = fields
                     .iter()
@@ -579,12 +596,13 @@ impl Expr {
                 e.expr.to_string()
             ),
             Expr::TyAnno(e, t) => format!("({} : {})", e.expr.to_string(), t.to_string()),
-            Expr::MakeTuple(fields) => {
+            Expr::MakeStruct(tc, fields) => {
                 format!(
-                    "({})",
+                    "{} {{{}}}",
+                    tc.to_string(),
                     fields
                         .iter()
-                        .map(|f| f.expr.to_string())
+                        .map(|(name, expr)| format!("{}: {}", name, expr.expr.to_string()))
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
@@ -801,8 +819,8 @@ pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) ->
     Arc::new(Expr::TyAnno(expr, ty)).into_expr_info(src)
 }
 
-pub fn expr_make_tuple(fields: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
-    Arc::new(Expr::MakeTuple(fields)).into_expr_info(None)
+pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<ExprNode> {
+    Arc::new(Expr::MakeStruct(tc, fields)).into_expr_info(None)
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
@@ -864,13 +882,13 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             let free_vars = e.free_vars.clone().unwrap();
             ei.set_tyanno_expr(e).set_free_vars(free_vars)
         }
-        Expr::MakeTuple(fields) => {
+        Expr::MakeStruct(_, fields) => {
             let mut free_vars: HashSet<FullName> = Default::default();
             let mut ei = ei.clone();
-            for (i, field) in fields.iter().enumerate() {
-                let field = calculate_free_vars(field.clone());
-                free_vars.extend(field.free_vars.clone().unwrap());
-                ei = ei.set_make_tuple_field(field, i);
+            for (field_name, field_expr) in fields {
+                let field_expr = calculate_free_vars(field_expr.clone());
+                free_vars.extend(field_expr.free_vars.clone().unwrap());
+                ei = ei.set_make_struct_field(field_name, field_expr);
             }
             ei.set_free_vars(free_vars)
         }

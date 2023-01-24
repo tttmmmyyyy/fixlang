@@ -564,7 +564,7 @@ impl ObjectFieldType {
         field_idx: u32,
     ) -> Object<'c> {
         let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
-        let field_ty = str.ty.fields_types(gc.type_env())[field_idx as usize].clone();
+        let field_ty = str.ty.field_types(gc.type_env())[field_idx as usize].clone();
         let field_ptr = if field_ty.is_box(gc.type_env()) {
             str.load_field_nocap(gc, field_idx + field_offset)
                 .into_pointer_value()
@@ -610,7 +610,7 @@ impl ObjectFieldType {
             // just release fields that are not not in `ret`.
             let field_indices: HashSet<u32> =
                 HashSet::from_iter(field_indices_rvo.iter().map(|(i, _)| i.clone()));
-            for field_idx in 0..str.ty.fields_types(gc.type_env()).len() {
+            for field_idx in 0..str.ty.field_types(gc.type_env()).len() {
                 let field_idx = field_idx as u32;
                 if !field_indices.contains(&field_idx) {
                     let field = ObjectFieldType::get_struct_field_noclone(gc, str, field_idx);
@@ -855,7 +855,7 @@ pub fn get_object_type(
                 ret.field_types.push(ObjectFieldType::ControlBlock);
                 assert_eq!(ret.field_types.len(), ARRAY_SIZE_IDX as usize);
                 ret.field_types.push(ObjectFieldType::ArraySize(
-                    ty.fields_types(type_env)[0].clone(),
+                    ty.field_types(type_env)[0].clone(),
                 ))
             }
             TyConVariant::Struct => {
@@ -865,7 +865,7 @@ pub fn get_object_type(
                     ret.field_types.push(ObjectFieldType::ControlBlock);
                 }
                 assert_eq!(ret.field_types.len(), struct_field_idx(is_unbox) as usize);
-                let field_types = ty.fields_types(type_env);
+                let field_types = ty.field_types(type_env);
                 if field_types.is_empty() {
                     // if this struct has no field, then this is unit `()` or IOState.
                     if is_unbox {
@@ -885,7 +885,7 @@ pub fn get_object_type(
                 }
                 ret.field_types.push(ObjectFieldType::UnionTag);
                 ret.field_types
-                    .push(ObjectFieldType::UnionBuf(ty.fields_types(type_env)));
+                    .push(ObjectFieldType::UnionBuf(ty.field_types(type_env)));
             }
         }
     }
@@ -1097,7 +1097,7 @@ pub fn create_dtor<'c, 'm>(
                             gc,
                             buf,
                             union_tag.unwrap(),
-                            &ty.fields_types(gc.type_env()),
+                            &ty.field_types(gc.type_env()),
                         );
                     }
                     ObjectFieldType::DtorFunction => {}

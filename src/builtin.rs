@@ -77,11 +77,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
 pub const LOOP_RESULT_NAME: &str = "LoopResult";
 pub const TUPLE_NAME: &str = "Tuple";
 
-// Make name of tuples.
-pub fn make_tuple_name(size: u32) -> Name {
-    format!("{}{}", TUPLE_NAME, size)
-}
-
 // Get Int type.
 pub fn int_lit_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], INT_NAME)))
@@ -537,7 +532,7 @@ fn write_array_lit(
     let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
         assert!(rvo.is_none());
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
-        let elem_ty = ty.fields_types(gc.type_env())[0].clone();
+        let elem_ty = ty.field_types(gc.type_env())[0].clone();
         // Get argments
         let array = gc.get_var(&array_str).ptr.get(gc);
         let original_array_ptr = array.ptr(gc);
@@ -1576,7 +1571,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
         .map(|i| "t".to_string() + &i.to_string())
         .collect::<Vec<_>>();
     TypeDefn {
-        name: FullName::from_strs(&[STD_NAME], &make_tuple_name(size)),
+        name: make_tuple_name(size),
         tyvars: tyvars.clone(),
         value: TypeDeclValue::Struct(Struct {
             fields: (0..size)

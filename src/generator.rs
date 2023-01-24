@@ -625,7 +625,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                             self,
                             buf,
                             union_tag.unwrap(),
-                            &obj.ty.fields_types(self.type_env()),
+                            &obj.ty.field_types(self.type_env()),
                         );
                     }
                     ObjectFieldType::UnionTag => {
@@ -766,9 +766,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), rvo)
             }
             Expr::TyAnno(e, _) => self.eval_expr(e.clone(), rvo),
-            Expr::MakeTuple(fields) => {
-                let tuple_ty = expr.inferred_ty.clone().unwrap();
-                self.eval_make_tuple(fields.clone(), tuple_ty, rvo)
+            Expr::MakeStruct(_, fields) => {
+                let struct_ty = expr.inferred_ty.clone().unwrap();
+                self.eval_make_struct(fields.clone(), struct_ty, rvo)
             }
         };
         ret.ty = expr.inferred_ty.clone().unwrap();
@@ -1091,33 +1091,34 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate make pair
-    fn eval_make_tuple(
+    fn eval_make_struct(
         &mut self,
-        field_exprs: Vec<Arc<ExprNode>>,
-        tuple_ty: Arc<TypeNode>,
+        fields: Vec<(Name, Arc<ExprNode>)>,
+        struct_ty: Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let pair = if rvo.is_some() {
-            assert!(tuple_ty.is_unbox(self.type_env()));
+            assert!(struct_ty.is_unbox(self.type_env()));
             rvo.unwrap()
         } else {
             allocate_obj(
-                tuple_ty.clone(),
+                struct_ty.clone(),
                 &vec![],
                 None,
                 self,
-                Some("allocate_MakePair"),
+                Some("allocate_MakeStruct"),
             )
         };
-        let field_types = tuple_ty.fields_types(self.type_env());
+        let field_types = struct_ty.field_types(self.type_env());
+        assert_eq!(field_types.len(), fields.len());
 
-        for i in 0..field_types.len() {
-            self.scope_lock_as_used_later(field_exprs[i].free_vars());
+        for i in 0..fields.len() {
+            self.scope_lock_as_used_later(fields[i].1.free_vars());
         }
-        for i in 0..field_types.len() {
-            self.scope_unlock_as_used_later(field_exprs[i].free_vars());
+        for i in 0..fields.len() {
+            self.scope_unlock_as_used_later(fields[i].1.free_vars());
 
-            let field_expr = field_exprs[i].clone();
+            let field_expr = fields[i].1.clone();
             let field_ty = field_types[i].clone();
             if field_ty.is_unbox(self.type_env()) {
                 let rvo = ObjectFieldType::get_struct_field_noclone(self, &pair, i as u32);
@@ -1125,7 +1126,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             } else {
                 let field_obj = self.eval_expr(field_expr, None);
                 let field_val = field_obj.value(self);
-                let offset = if tuple_ty.is_box(self.type_env()) {
+                let offset = if struct_ty.is_box(self.type_env()) {
                     1
                 } else {
                     0

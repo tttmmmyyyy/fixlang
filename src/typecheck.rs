@@ -641,27 +641,24 @@ impl TypeCheckContext {
                 let e = self.unify_type_of_expr(e, ty.clone());
                 ei.set_tyanno_expr(e)
             }
-            Expr::MakeTuple(fields) => {
-                let fields = fields.clone();
-                let mut field_tys: Vec<Arc<TypeNode>> = vec![];
-                for _ in 0..fields.len() {
-                    field_tys.push(type_tyvar_star(&self.new_tyvar()));
-                }
-                let tuple_ty = make_tuple_ty(field_tys.clone());
-                if !self.unify(&tuple_ty, &ty) {
+            Expr::MakeStruct(tc, fields) => {
+                let struct_ty = tc.get_struct_union_value_type(self);
+                if !self.unify(&struct_ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "type mismatch. Expected `{}`, Found `{}`",
                             &self.substitute_type(&ty).to_string(),
-                            &self.substitute_type(&tuple_ty).to_string(),
+                            &self.substitute_type(&struct_ty).to_string(),
                         ),
                         &ei.source,
                     );
                 }
-                let mut ei = ei;
-                for (i, field) in fields.iter().enumerate() {
-                    let field = self.unify_type_of_expr(field, field_tys[i].clone());
-                    ei = ei.set_make_tuple_field(field, i);
+                let field_tys = struct_ty.field_types(&self.type_env);
+                assert_eq!(field_tys.len(), fields.len());
+                let mut ei = ei.clone();
+                for (field_ty, (field_name, field_expr)) in field_tys.iter().zip(fields.iter()) {
+                    let field_expr = self.unify_type_of_expr(field_expr, field_ty.clone());
+                    ei = ei.set_make_struct_field(field_name, field_expr);
                 }
                 ei
             }

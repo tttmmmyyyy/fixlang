@@ -791,7 +791,7 @@ fn parse_expr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         args = parse_arg_list(pairs.next().unwrap(), src);
         if args.len() == 0 {
             // `f()` is interpreted as application to unit: `f $ ()`.
-            args.push(expr_make_tuple(vec![]))
+            args.push(expr_make_struct(tycon(make_tuple_name(0)), vec![]))
         }
     }
     let mut ret = head;
@@ -929,7 +929,15 @@ fn parse_expr_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     if exprs.len() == 1 {
         exprs[0].clone()
     } else {
-        expr_make_tuple(exprs)
+        expr_make_struct(
+            tycon(make_tuple_name(exprs.len() as u32)),
+            exprs
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(i, expr)| (i.to_string(), expr))
+                .collect(),
+        )
     }
 }
 
@@ -1056,10 +1064,7 @@ fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
     if types.len() == 1 {
         types[0].clone()
     } else {
-        let mut res = type_tycon(&tycon(FullName::from_strs(
-            &[STD_NAME],
-            &make_tuple_name(types.len() as u32),
-        )));
+        let mut res = type_tycon(&tycon(make_tuple_name(types.len() as u32)));
         for ty in types {
             res = type_tyapp(res, ty);
         }
@@ -1095,10 +1100,7 @@ fn parse_pattern_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
         .map(|pair| parse_pattern(pair, src))
         .collect::<Vec<_>>();
     Arc::new(Pattern::Struct(
-        tycon(FullName::from_strs(
-            &[STD_NAME],
-            &make_tuple_name(pats.len() as u32),
-        )),
+        tycon(make_tuple_name(pats.len() as u32)),
         pats.iter()
             .enumerate()
             .map(|(i, pat)| (i.to_string(), pat.clone()))

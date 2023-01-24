@@ -253,7 +253,7 @@ impl TypeNode {
 
     // For structs and unions, return types of fields.
     // For Array, return element type.
-    pub fn fields_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
+    pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_argments();
         let ti = self.toplevel_tycon_info(type_env);
         assert_eq!(args.len(), ti.tyvars.len());

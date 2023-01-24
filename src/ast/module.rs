@@ -524,11 +524,11 @@ impl FixModule {
                 let e = self.instantiate_expr(tc, e);
                 expr.set_tyanno_expr(e)
             }
-            Expr::MakeTuple(fields) => {
+            Expr::MakeStruct(_, fields) => {
                 let mut expr = expr.clone();
-                for (i, field) in fields.iter().enumerate() {
-                    let field = self.instantiate_expr(tc, field);
-                    expr = expr.set_make_tuple_field(field, i);
+                for (field_name, field_expr) in fields {
+                    let field_expr = self.instantiate_expr(tc, field_expr);
+                    expr = expr.set_make_struct_field(field_name, field_expr);
                 }
                 expr
             }
