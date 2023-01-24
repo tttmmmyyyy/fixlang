@@ -13,7 +13,7 @@ type String = unbox struct ( data : Vector Byte );
 
 namespace String {
     get_len : String -> Int;
-    get_len = \s -> s.get_data.get_len - 1; // remove null terminator
+    get_len = |s| s.get_data.get_len - 1; // remove null terminator
 }
 
 trait a : ToString {
@@ -25,13 +25,13 @@ impl Int : ToString {
 }
 
 namespace IO {
-    pure : a -> (IOState -> (a, IOState));
-    pure = \val -> \io -> (val, io);
+    pure : a -> IOState -> (a, IOState);
+    pure = |val, io| (val, io);
 }
 
 namespace Debug {
     assert_eq : [a: Eq] String -> a -> a -> ();
-    assert_eq = \msg -> \lhs -> \rhs -> (
+    assert_eq = |msg, lhs, rhs| (
         if lhs != rhs then
             let u = debug_print("assert_eq failed!: ");
             let u = debug_print(msg);

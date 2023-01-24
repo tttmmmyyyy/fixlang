@@ -7,8 +7,6 @@ in_of_let = { "in" | ";" }
 
 eq_of_let = { "=" }
 
-arrow_of_lam = { "->" }
-
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 
 name_head_small = _{ ASCII_ALPHA_LOWER | "_" }
@@ -45,7 +43,7 @@ expr_let = { "let" ~ sep+ ~ pattern ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
-expr_lam = { "\\" ~ sep* ~ pattern ~ sep* ~ arrow_of_lam ~ sep* ~ expr }
+expr_lam = { "|" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ sep* ~ "|" ~ sep* ~ expr }
 
 // For n = 0 or n >= 2 this is interpreted as tuple, and for n = 1 this is treated as braced type.
 expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)*)? ~ sep* ~ ")" }

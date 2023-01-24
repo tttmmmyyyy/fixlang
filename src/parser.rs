@@ -883,16 +883,26 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
-    let pat = parse_pattern(pairs.next().unwrap(), src);
-    let _arrow_of_lam = pairs.next().unwrap();
-    let body = parse_expr(pairs.next().unwrap(), src);
+    let mut pats = vec![];
+    while pairs.peek().unwrap().as_rule() == Rule::pattern {
+        pats.push(parse_pattern(pairs.next().unwrap(), src));
+    }
+    let mut expr = parse_expr(pairs.next().unwrap(), src);
     const ARG_NAME: &str = "%arg";
     let var = var_local(ARG_NAME, None);
-    expr_abs(
-        var,
-        expr_let(pat, expr_var(FullName::local(ARG_NAME), None), body, None),
-        Some(span),
-    )
+    for pat in pats.iter().rev() {
+        expr = expr_abs(
+            var.clone(),
+            expr_let(
+                pat.clone(),
+                expr_var(FullName::local(ARG_NAME), None),
+                expr,
+                None,
+            ),
+            None,
+        )
+    }
+    expr.set_source(Some(span))
 }
 
 fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
@@ -1141,7 +1151,6 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::in_of_let => "`in` or `;`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
         Rule::type_expr => "type".to_string(),
-        Rule::arrow_of_lam => "`->`".to_string(),
         _ => format!("{:?}", r),
     }
 }
