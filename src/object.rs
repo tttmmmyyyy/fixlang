@@ -985,9 +985,7 @@ pub fn allocate_obj<'c, 'm>(
             }
             ObjectFieldType::I64 => {}
             ObjectFieldType::SubObject(_) => {}
-            ObjectFieldType::LambdaFunction(_) => {
-                assert_eq!(i, CLOSURE_FUNPTR_IDX as usize);
-            }
+            ObjectFieldType::LambdaFunction(_) => {}
             ObjectFieldType::I8 => {}
             ObjectFieldType::ArraySize(_) => {
                 assert_eq!(i, ARRAY_SIZE_IDX as usize);
