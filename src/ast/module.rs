@@ -332,57 +332,41 @@ impl FixModule {
             .iter()
             .map(|(name, sym)| {
                 gc.typechecker = sym.typechecker.clone();
+
+                let flag_name = format!("InitFlag{}", name.to_string());
+                let global_var_name = format!("GlobalVar{}", name.to_string());
+                let acc_fn_name = format!("Get{}", name.to_string());
+
                 let obj_ty = sym.typechecker.as_ref().unwrap().substitute_type(&sym.ty);
-                if obj_ty.is_funptr() {
-                    // If the global object is function pointer,
-                    let expr = sym.expr.clone().unwrap().clone();
-                    let (args, body) = match &*expr.expr {
-                        Expr::Lam(args, body) => (args, body.clone()),
-                        _ => unreachable!(),
-                    };
-                    let fun = gc.generate_lambda_function(args, body, obj_ty.clone());
-                    gc.add_global_object(name.clone(), fun, obj_ty.clone());
-                    None
-                } else {
-                    // If the global object is not function pointer.
-                    let flag_name = format!("InitFlag{}", name.to_string());
-                    let global_var_name = format!("GlobalVar{}", name.to_string());
-                    let acc_fn_name = format!("Get{}", name.to_string());
+                let obj_embed_ty = obj_ty.get_embedded_type(gc, &vec![]);
 
-                    let obj_embed_ty = obj_ty.get_embedded_type(gc, &vec![]);
+                // Add global variable.
+                let global_var = gc.module.add_global(obj_embed_ty, None, &global_var_name);
+                global_var.set_initializer(&obj_embed_ty.const_zero());
+                let global_var = global_var.as_basic_value_enum().into_pointer_value();
 
-                    // Add global variable.
-                    let global_var = gc.module.add_global(obj_embed_ty, None, &global_var_name);
-                    global_var.set_initializer(&obj_embed_ty.const_zero());
-                    let global_var = global_var.as_basic_value_enum().into_pointer_value();
+                // Add initialized flag.
+                let flag_ty = gc.context.i8_type();
+                let init_flag = gc.module.add_global(flag_ty, None, &flag_name);
+                init_flag.set_initializer(&flag_ty.const_zero());
+                let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
 
-                    // Add initialized flag.
-                    let flag_ty = gc.context.i8_type();
-                    let init_flag = gc.module.add_global(flag_ty, None, &flag_name);
-                    init_flag.set_initializer(&flag_ty.const_zero());
-                    let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
+                // Add accessor function.
+                let acc_fn_type = ptr_to_object_type(gc.context).fn_type(&[], false);
+                let acc_fn =
+                    gc.module
+                        .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
 
-                    // Add accessor function.
-                    let acc_fn_type = ptr_to_object_type(gc.context).fn_type(&[], false);
-                    let acc_fn =
-                        gc.module
-                            .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
+                // Register the accessor function to gc.
+                gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
 
-                    // Register the accessor function to gc.
-                    gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
-
-                    // Return global variable and accessor.
-                    Some((global_var, init_flag, acc_fn, sym.clone(), obj_ty))
-                }
+                // Return global variable and accessor.
+                (global_var, init_flag, acc_fn, sym.clone(), obj_ty)
             })
             .collect::<Vec<_>>();
 
         // Implement global accessor function.
-        for global_obj in global_objs {
-            if global_obj.is_none() {
-                continue;
-            }
-            let (global_var, init_flag, acc_fn, sym, obj_ty) = global_obj.unwrap();
+        for (global_var, init_flag, acc_fn, sym, obj_ty) in global_objs {
             gc.typechecker = sym.typechecker;
 
             let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
