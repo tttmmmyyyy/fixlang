@@ -126,7 +126,7 @@ fn build_module<'c>(
         &mut gc,
         Some("iostate_for_main"),
     );
-    let ret = gc.apply_lambda(main_obj, iostate, None);
+    let ret = gc.apply_lambda(main_obj, vec![iostate], None);
     gc.release(ret);
 
     // Perform leak check

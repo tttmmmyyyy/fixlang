@@ -92,6 +92,22 @@ pub fn make_funptr_name(arity: u32) -> Name {
     format!("{}{}", FUNPTR_NAME, arity)
 }
 
+// If given tycon is function pointer, returns it's arity
+pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
+    if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
+        return None;
+    }
+    if !tc.name.name.starts_with(FUNPTR_NAME) {
+        return None;
+    }
+    let mut chars = tc.name.name.chars();
+    for _ in 0..FUNPTR_NAME.len() {
+        chars.next();
+    }
+    let number = chars.as_str().to_string();
+    Some(number.parse::<u32>().unwrap())
+}
+
 pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
     let mut res = kind_star();
     for _ in 0..arity {
@@ -142,6 +158,22 @@ pub fn string_lit_ty() -> Arc<TypeNode> {
 // Get LoopResult type.
 pub fn loop_result_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
+}
+
+// Get tuple type.
+pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+    assert!(tys.len() <= TUPLE_SIZE_MAX as usize);
+    let mut ty = type_tycon(&tycon(make_tuple_name(tys.len() as u32)));
+    for field_ty in tys {
+        ty = type_tyapp(ty, field_ty);
+    }
+    ty
+}
+
+// Make tuple name.
+pub fn make_tuple_name(size: u32) -> FullName {
+    let name = format!("{}{}", TUPLE_NAME, size);
+    FullName::from_strs(&[STD_NAME], &name)
 }
 
 // Get Unit type.
@@ -285,8 +317,8 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
         let fixf = gc.get_var(&FullName::local(SELF_NAME)).ptr.get(gc);
         let x = gc.get_var(&x_str).ptr.get(gc);
         let f = gc.get_var(&f_str).ptr.get(gc);
-        let f_fixf = gc.apply_lambda(f, fixf, None);
-        let f_fixf_x = gc.apply_lambda(f_fixf, x, rvo);
+        let f_fixf = gc.apply_lambda(f, vec![fixf], None);
+        let f_fixf_x = gc.apply_lambda(f_fixf, vec![x], rvo);
         f_fixf_x
     });
     expr_lit(generator, free_vars, name, type_tyvar_star(b), None)
@@ -295,8 +327,8 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("f", None),
-        expr_abs(var_local("x", None), fix_lit("b", "f", "x"), None),
+        vec![var_local("f", None)],
+        expr_abs(vec![var_local("x", None)], fix_lit("b", "f", "x"), None),
         None,
     );
     let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
@@ -365,7 +397,7 @@ pub fn int_to_string_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         type_fun(int_lit_ty(), string_lit_ty()),
     );
     let expr = expr_abs(
-        var_local(VAL_NAME, None),
+        vec![var_local(VAL_NAME, None)],
         expr_lit(
             generator,
             vec![FullName::local(VAL_NAME)],
@@ -414,9 +446,9 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
 // newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
 pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("size", None),
+        vec![var_local("size", None)],
         expr_abs(
-            var_local("value", None),
+            vec![var_local("value", None)],
             new_array_lit("a", "size", "value"),
             None,
         ),
@@ -464,9 +496,9 @@ pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         array
     });
     let expr = expr_abs(
-        var_local(SIZE_NAME, None),
+        vec![var_local(SIZE_NAME, None)],
         expr_abs(
-            var_local(MAP_NAME, None),
+            vec![var_local(MAP_NAME, None)],
             expr_lit(generator, vec![size_name, map_name], name, arr_ty, None),
             None,
         ),
@@ -511,9 +543,9 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
 // Array.get = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
 pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("idx", None),
+        vec![var_local("idx", None)],
         expr_abs(
-            var_local("array", None),
+            vec![var_local("array", None)],
             read_array_lit("a", "array", "idx"),
             None,
         ),
@@ -651,11 +683,11 @@ fn write_array_lit(
 // Array.set built-in function.
 pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
-        var_local("idx", None),
+        vec![var_local("idx", None)],
         expr_abs(
-            var_local("value", None),
+            vec![var_local("value", None)],
             expr_abs(
-                var_local("array", None),
+                vec![var_local("array", None)],
                 write_array_lit("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
@@ -707,7 +739,7 @@ pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     });
 
     let expr = expr_abs(
-        var_local(ARR_NAME, None),
+        vec![var_local(ARR_NAME, None)],
         expr_lit(
             generator,
             vec![FullName::local(ARR_NAME)],
@@ -771,7 +803,7 @@ pub fn struct_new(struct_name: &FullName, definition: &TypeDefn) -> (Arc<ExprNod
     );
     let mut ty = definition.ty();
     for field in definition.fields().iter().rev() {
-        expr = expr_abs(var_local(&field.name, None), expr, None);
+        expr = expr_abs(vec![var_local(&field.name, None)], expr, None);
         ty = type_fun(field.ty.clone(), ty);
     }
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
@@ -838,7 +870,7 @@ pub fn struct_get(
 
     let str_ty = definition.ty();
     let expr = expr_abs(
-        var_local("f", None),
+        vec![var_local("f", None)],
         struct_get_lit("f", field_idx, field.ty.clone(), struct_name, field_name),
         None,
     );
@@ -945,7 +977,7 @@ pub fn struct_mod_lit(
 
         // Modify field
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, field_idx as u32);
-        let field = gc.apply_lambda(modfier, field, None);
+        let field = gc.apply_lambda(modfier, vec![field], None);
         ObjectFieldType::set_struct_field(gc, &str, field_idx as u32, &field);
 
         if rvo.is_some() {
@@ -987,9 +1019,9 @@ pub fn struct_mod(
     let field_count = definition.fields().len();
     let str_ty = definition.ty();
     let expr = expr_abs(
-        var_local("f", None),
+        vec![var_local("f", None)],
         expr_abs(
-            var_local("x", None),
+            vec![var_local("x", None)],
             struct_mod_lit(
                 "f",
                 "x",
@@ -1034,7 +1066,7 @@ pub fn union_new(
         ));
     }
     let expr = expr_abs(
-        var_local(field_name, None),
+        vec![var_local(field_name, None)],
         union_new_lit(union_name, union, field_name, field_idx),
         None,
     );
@@ -1109,7 +1141,7 @@ pub fn union_as(
     }
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
-        var_local(&union_arg_name, None),
+        vec![var_local(&union_arg_name, None)],
         union_as_lit(
             union_name,
             &union_arg_name,
@@ -1181,7 +1213,7 @@ pub fn union_is(
     }
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
-        var_local(&union_arg_name, None),
+        vec![var_local(&union_arg_name, None)],
         union_is_lit(union_name, &union_arg_name, field_name, field_idx),
         None,
     );
@@ -1354,7 +1386,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 
         // Run loop_body on init_state.
         gc.retain(loop_body.clone());
-        let loop_res = gc.apply_lambda(loop_body.clone(), loop_state, None);
+        let loop_res = gc.apply_lambda(loop_body.clone(), vec![loop_state], None);
 
         // Branch due to loop_res.
         assert!(loop_res.ty.is_unbox(gc.type_env()));
@@ -1398,9 +1430,9 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     let initial_state_name = FullName::local(INITIAL_STATE_NAME);
     let loop_body_name = FullName::local(LOOP_BODY_NAME);
     let expr = expr_abs(
-        var_var(initial_state_name.clone(), None),
+        vec![var_var(initial_state_name.clone(), None)],
         expr_abs(
-            var_var(loop_body_name.clone(), None),
+            vec![var_var(loop_body_name.clone(), None)],
             expr_lit(
                 generator,
                 vec![initial_state_name, loop_body_name],
@@ -1490,9 +1522,9 @@ pub fn print_io_func() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
 
     let expr = expr_abs(
-        var_local(STRING_NAME, None),
+        vec![var_local(STRING_NAME, None)],
         expr_abs(
-            var_local(IOSTATE_NAME, None),
+            vec![var_local(IOSTATE_NAME, None)],
             expr_lit(
                 generator,
                 vec![FullName::local(STRING_NAME), FullName::local(IOSTATE_NAME)],
@@ -1540,7 +1572,7 @@ pub fn debug_print_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         }
     });
     let expr = expr_abs(
-        var_local(MSG_NAME, None),
+        vec![var_local(MSG_NAME, None)],
         expr_lit(
             generator,
             vec![FullName::local(MSG_NAME)],
@@ -1575,7 +1607,7 @@ pub fn abort_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         }
     });
     let expr = expr_abs(
-        var_local(UNIT_NAME, None),
+        vec![var_local(UNIT_NAME, None)],
         expr_lit(
             generator,
             vec![],
@@ -1661,7 +1693,7 @@ pub fn unary_opeartor_instance(
         methods: HashMap::from([(
             method_name.to_string(),
             expr_abs(
-                var_local(RHS_NAME, None),
+                vec![var_local(RHS_NAME, None)],
                 expr_lit(
                     generator,
                     vec![FullName::local(RHS_NAME)],
@@ -1736,9 +1768,9 @@ pub fn binary_opeartor_instance(
         methods: HashMap::from([(
             method_name.to_string(),
             expr_abs(
-                var_local(LHS_NAME, None),
+                vec![var_local(LHS_NAME, None)],
                 expr_abs(
-                    var_local(RHS_NAME, None),
+                    vec![var_local(RHS_NAME, None)],
                     expr_lit(
                         generator,
                         vec![FullName::local(LHS_NAME), FullName::local(RHS_NAME)],

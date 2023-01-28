@@ -555,10 +555,10 @@ fn parse_binary_operator_sequence(
                         ),
                         next_op_span.clone(),
                     ),
-                    lhs,
+                    vec![lhs],
                     span.clone(),
                 ),
-                rhs,
+                vec![rhs],
                 span.clone(),
             );
             match next_operation.post_unary.as_ref() {
@@ -568,7 +568,7 @@ fn parse_binary_operator_sequence(
                             FullName::from_strs(&[STD_NAME, &op.trait_name], &op.method_name),
                             next_op_span.clone(),
                         ),
-                        expr.clone(),
+                        vec![expr.clone()],
                         span,
                     );
                 }
@@ -740,7 +740,7 @@ fn parse_expr_unary(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
                                 FullName::from_strs(&[STD_NAME, &op.trait_name], &op.method_name),
                                 Some(op_span.clone()),
                             ),
-                            expr.clone(),
+                            vec![expr.clone()],
                             expr.source.as_ref().map(|s0| s0.unite(&op_span)),
                         );
                     }
@@ -761,7 +761,7 @@ fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let mut ret = exprs_iter.next().unwrap().clone();
     for expr in exprs_iter {
         let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(expr.clone(), ret, span);
+        ret = expr_app(expr.clone(), vec![ret], span);
     }
     ret
 }
@@ -774,7 +774,7 @@ fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let mut ret = exprs_iter.next().unwrap().clone();
     for expr in exprs_iter {
         let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(expr.clone(), ret, span)
+        ret = expr_app(expr.clone(), vec![ret], span)
             .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
     }
     ret
@@ -797,7 +797,7 @@ fn parse_expr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let mut ret = head;
     for expr in args {
         let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(ret, expr.clone(), span);
+        ret = expr_app(ret, vec![expr.clone()], span);
     }
     ret
 }
@@ -893,7 +893,7 @@ fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let var = var_local(ARG_NAME, None);
     for pat in pats.iter().rev() {
         expr = expr_abs(
-            var.clone(),
+            vec![var.clone()],
             expr_let(
                 pat.clone(),
                 expr_var(FullName::local(ARG_NAME), None),

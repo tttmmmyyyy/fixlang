@@ -501,10 +501,13 @@ impl FixModule {
                 }
             }
             Expr::Lit(_) => expr.clone(),
-            Expr::App(fun, arg) => {
+            Expr::App(fun, args) => {
                 let fun = self.instantiate_expr(tc, fun);
-                let arg = self.instantiate_expr(tc, arg);
-                expr.set_app_func(fun).set_app_arg(arg)
+                let args = args
+                    .iter()
+                    .map(|arg| self.instantiate_expr(tc, arg))
+                    .collect::<Vec<_>>();
+                expr.set_app_func(fun).set_app_args(args)
             }
             Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(tc, body)),
             Expr::Let(_, bound, val) => {

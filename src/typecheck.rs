@@ -562,19 +562,23 @@ impl TypeCheckContext {
                 }
                 ei.clone()
             }
-            Expr::App(fun, arg) => {
+            Expr::App(fun, args) => {
+                assert_eq!(args.len(), 1); // lambda of multiple arguments generated in optimization.
+                let arg = args[0].clone();
                 let arg_ty = type_tyvar_star(&self.new_tyvar());
                 if ei.app_order == AppSourceCodeOrderType::ArgumentIsFormer {
-                    let arg = self.unify_type_of_expr(arg, arg_ty.clone());
+                    let arg = self.unify_type_of_expr(&arg, arg_ty.clone());
                     let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty));
-                    ei.set_app_arg(arg).set_app_func(fun)
+                    ei.set_app_args(vec![arg]).set_app_func(fun)
                 } else {
                     let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty));
-                    let arg = self.unify_type_of_expr(arg, arg_ty.clone());
-                    ei.set_app_arg(arg).set_app_func(fun)
+                    let arg = self.unify_type_of_expr(&arg, arg_ty.clone());
+                    ei.set_app_args(vec![arg]).set_app_func(fun)
                 }
             }
-            Expr::Lam(arg, body) => {
+            Expr::Lam(args, body) => {
+                assert_eq!(args.len(), 1); // lambda of multiple arguments generated in optimization.
+                let arg = args[0].clone();
                 let arg_ty = type_tyvar_star(&self.new_tyvar());
                 let body_ty = type_tyvar_star(&self.new_tyvar());
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());

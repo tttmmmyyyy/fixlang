@@ -4,6 +4,67 @@ use super::*;
 // Before optimization, `func x y` creates lambda object `func x` on heap, capturing `x`.
 // After optimization, if construction of (x, y) is implemented as a special code that avoids heap allocation, then `func@uncurry (x, y)` requires no heap allocation.
 
+pub fn uncurry_optimization(_fix_mod: &mut FixModule) {
+    // let mut next_var_id: u32 = 0;
+    // // First, define uncurried versions of global symbols.
+    // let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
+    // for (sym_name, sym) in syms {
+    //     let typechcker = sym.typechecker.as_ref().unwrap();
+
+    //     fix_mod
+    //         .instantiated_global_symbols
+    //         .insert(sym_name.clone(), sym.clone());
+
+    //     // Add uncurried function as long as possible.
+    //     for arg_cnt in 2..(TUPLE_SIZE_MAX + 1) {
+    //         let mut expr = uncurry_lambda(
+    //             &sym.template_name,
+    //             sym.expr.as_ref().unwrap(),
+    //             fix_mod,
+    //             typechcker,
+    //             &mut next_var_id,
+    //             arg_cnt as usize,
+    //         );
+    //         if expr.is_none() {
+    //             break;
+    //         }
+    //         let expr = calculate_free_vars(expr.take().unwrap());
+    //         let ty = expr.inferred_ty.clone().unwrap();
+    //         let mut name = sym_name.clone();
+    //         convert_to_uncurried_name(name.name_as_mut(), arg_cnt as usize);
+    //         fix_mod.instantiated_global_symbols.insert(
+    //             name.clone(),
+    //             InstantiatedSymbol {
+    //                 template_name: FullName::local(&format!(
+    //                     "{} created by uncurry_optimization from {}",
+    //                     &name.to_string(),
+    //                     sym.template_name.to_string()
+    //                 )),
+    //                 ty,
+    //                 expr: Some(expr.clone()),
+    //                 typechecker: sym.typechecker.clone(),
+    //             },
+    //         );
+    //     }
+    // }
+
+    // // Then replace expressions in the global symbols.
+    // let mut symbol_names: HashSet<FullName> = Default::default();
+    // for (name, _sym) in &fix_mod.instantiated_global_symbols {
+    //     symbol_names.insert(name.clone());
+    // }
+    // for (_name, sym) in &mut fix_mod.instantiated_global_symbols {
+    //     let expr = uncurry_global_function_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
+    //     let expr = calculate_free_vars(expr);
+    //     sym.expr = Some(expr);
+    // }
+
+    // // In the above process, there is possibility that constructor / getter of pairs is required to be instanciated.
+    // fix_mod.instantiate_symbols();
+}
+
+/*
+
 // Global functions that cannot be uncurried.
 pub fn exclude(name: &FullName) -> bool {
     let fix_name = FullName::from_strs(&[STD_NAME], FIX_NAME);
@@ -17,81 +78,9 @@ pub fn exclude(name: &FullName) -> bool {
     return false;
 }
 
-pub fn uncurry_optimization(fix_mod: &mut FixModule) {
-    let mut next_var_id: u32 = 0;
-    // First, define uncurried versions of global symbols.
-    let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
-    for (sym_name, sym) in syms {
-        let typechcker = sym.typechecker.as_ref().unwrap();
-
-        fix_mod
-            .instantiated_global_symbols
-            .insert(sym_name.clone(), sym.clone());
-
-        // Add uncurried function as long as possible.
-        for arg_cnt in 2..(TUPLE_SIZE_MAX + 1) {
-            let mut expr = uncurry_lambda(
-                &sym.template_name,
-                sym.expr.as_ref().unwrap(),
-                fix_mod,
-                typechcker,
-                &mut next_var_id,
-                arg_cnt as usize,
-            );
-            if expr.is_none() {
-                break;
-            }
-            let expr = calculate_free_vars(expr.take().unwrap());
-            let ty = expr.inferred_ty.clone().unwrap();
-            let mut name = sym_name.clone();
-            convert_to_uncurried_name(name.name_as_mut(), arg_cnt as usize);
-            fix_mod.instantiated_global_symbols.insert(
-                name.clone(),
-                InstantiatedSymbol {
-                    template_name: FullName::local(&format!(
-                        "{} created by uncurry_optimization from {}",
-                        &name.to_string(),
-                        sym.template_name.to_string()
-                    )),
-                    ty,
-                    expr: Some(expr.clone()),
-                    typechecker: sym.typechecker.clone(),
-                },
-            );
-        }
-    }
-
-    // Then replace expressions in the global symbols.
-    let mut symbol_names: HashSet<FullName> = Default::default();
-    for (name, _sym) in &fix_mod.instantiated_global_symbols {
-        symbol_names.insert(name.clone());
-    }
-    for (_name, sym) in &mut fix_mod.instantiated_global_symbols {
-        let expr = uncurry_global_function_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
-        let expr = calculate_free_vars(expr);
-        sym.expr = Some(expr);
-    }
-
-    // In the above process, there is possibility that constructor / getter of pairs is required to be instanciated.
-    fix_mod.instantiate_symbols();
-}
 
 fn convert_to_uncurried_name(name: &mut Name, count: usize) {
     *name += &format!("@uncurry{}", count);
-}
-
-pub fn make_tuple_name(size: u32) -> FullName {
-    let name = format!("{}{}", TUPLE_NAME, size);
-    FullName::from_strs(&[STD_NAME], &name)
-}
-
-pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    assert!(tys.len() <= TUPLE_SIZE_MAX as usize);
-    let mut ty = type_tycon(&tycon(make_tuple_name(tys.len() as u32)));
-    for field_ty in tys {
-        ty = type_tyapp(ty, field_ty);
-    }
-    ty
 }
 
 // Convert expression `\x -> \y -> z` to `\(x, y) -> z`.
@@ -188,18 +177,6 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
     let mut vars: Vec<Arc<Var>> = vec![];
     let val = collect_abs_inner(expr, &mut vars, vars_limit);
     (vars, val)
-}
-
-// Convert x y z to (x, [y, z]).
-fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
-    match &*expr.expr {
-        Expr::App(fun, arg) => {
-            let (fun, mut args) = collect_app(fun);
-            args.push(arg.clone());
-            (fun, args)
-        }
-        _ => (expr.clone(), vec![]),
-    }
 }
 
 // Convert A -> B -> C to ([A, B], C)
@@ -462,3 +439,5 @@ fn replace_free_var(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc
 //         }
 //     }
 // }
+
+ */

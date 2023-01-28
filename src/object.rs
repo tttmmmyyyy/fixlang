@@ -1,4 +1,8 @@
-use inkwell::{basic_block::BasicBlock, module::Linkage, types::BasicType};
+use inkwell::{
+    basic_block::BasicBlock,
+    module::Linkage,
+    types::{BasicMetadataTypeEnum, BasicType},
+};
 
 use super::*;
 
@@ -224,7 +228,7 @@ impl ObjectFieldType {
                              ptr_to_buffer: PointerValue<'c>| {
                 // Apply map to idx object to get initial value at this idx.
                 gc.retain(map.clone());
-                let value = gc.apply_lambda(map.clone(), idx.clone(), None);
+                let value = gc.apply_lambda(map.clone(), vec![idx.clone()], None);
 
                 // Store value.
                 let idx_val = idx.load_field_nocap(gc, 0).into_int_value();
@@ -775,30 +779,33 @@ pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut GenerationContext<'c, 'm>,
 ) -> FunctionType<'c> {
-    // A function that takes argument and context (=lambda object itself).
-    // In addition, if ret_ty is unboxed, then add parameter for pointer of return value and return void.
-    let arg_ty = ty.get_funty_src().get_embedded_type(gc, &vec![]);
-    let ret_ty = ty.get_funty_dst().get_embedded_type(gc, &vec![]);
-    if ty.get_funty_dst().is_box(gc.type_env()) {
-        ret_ty.fn_type(
-            &[arg_ty.into(), ptr_to_object_type(gc.context).into()],
-            false,
-        )
+    // Any lamba takes argments.
+    // In addition, if the lambda is closure (in other words, not a function pointer), it takes SELF (=closure object itself).
+    // In the last, if ret_ty is unboxed, it takes parameter for pointer to store return value and return void.
+
+    // Arguments.
+    let mut arg_tys: Vec<BasicMetadataTypeEnum> = ty
+        .get_lambda_srcs()
+        .iter()
+        .map(|src| src.get_embedded_type(gc, &vec![]).into())
+        .collect::<Vec<_>>();
+
+    // SELF for closure.
+    if ty.is_closure() {
+        arg_tys.push(ptr_to_object_type(gc.context).into());
+    }
+    if ty.get_lambda_dst().is_box(gc.type_env()) {
+        ptr_to_object_type(gc.context).fn_type(&arg_tys, false)
     } else {
-        gc.context.void_type().fn_type(
-            &[
-                arg_ty.into(),
-                ptr_to_object_type(gc.context).into(),
-                ptr_to_object_type(gc.context).into(),
-            ],
-            false,
-        )
+        // Add ptr to rvo.
+        arg_tys.push(ptr_to_object_type(gc.context).into());
+        gc.context.void_type().fn_type(&arg_tys, false)
     }
 }
 
 pub const DTOR_IDX: u32 = 1/* ControlBlock */;
-pub const LAMBDA_FUNCTION_IDX: u32 = DTOR_IDX + 1;
-pub const CAPTURED_OBJECT_IDX: u32 = LAMBDA_FUNCTION_IDX + 1;
+pub const CLOSURE_FUNPTR_IDX: u32 = DTOR_IDX + 1;
+pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 pub const ARRAY_SIZE_IDX: u32 = 1;
 pub const ARRAY_BUF_IDX: u32 = ARRAY_SIZE_IDX + 1;
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
@@ -819,17 +826,22 @@ pub fn get_object_type(
         field_types: vec![],
         is_unbox: true,
     };
-    if ty.is_function() {
+    if ty.is_closure() {
         ret.is_unbox = false;
         ret.field_types.push(ObjectFieldType::ControlBlock);
         ret.field_types.push(ObjectFieldType::DtorFunction);
-        assert_eq!(ret.field_types.len(), LAMBDA_FUNCTION_IDX as usize);
+        assert_eq!(ret.field_types.len(), CLOSURE_FUNPTR_IDX as usize);
         ret.field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
         for cap in capture {
             ret.field_types
                 .push(ObjectFieldType::SubObject(cap.clone()));
         }
+    } else if ty.is_funptr() {
+        assert!(capture.is_empty());
+        ret.is_unbox = true;
+        ret.field_types
+            .push(ObjectFieldType::LambdaFunction(ty.clone()));
     } else {
         assert!(capture.is_empty());
         let tc = ty.toplevel_tycon().unwrap();
@@ -974,7 +986,7 @@ pub fn allocate_obj<'c, 'm>(
             ObjectFieldType::I64 => {}
             ObjectFieldType::SubObject(_) => {}
             ObjectFieldType::LambdaFunction(_) => {
-                assert_eq!(i, LAMBDA_FUNCTION_IDX as usize);
+                assert_eq!(i, CLOSURE_FUNPTR_IDX as usize);
             }
             ObjectFieldType::I8 => {}
             ObjectFieldType::ArraySize(_) => {
@@ -1021,7 +1033,7 @@ pub fn create_dtor<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());
-    if ty.is_function() && capture.is_empty() {
+    if ty.is_closure() && capture.is_empty() {
         return None;
     }
     let dtor_name = ty.dtor_name(capture);

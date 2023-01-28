@@ -211,17 +211,32 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    pub fn get_funty_src(&self) -> Arc<TypeNode> {
+    pub fn get_lambda_srcs(&self) -> Vec<Arc<TypeNode>> {
         match &self.ty {
-            Type::FunTy(src, _dst) => src.clone(),
-            _ => panic!(),
+            Type::FunTy(src, _dst) => vec![src.clone()],
+            _ => {
+                if self.is_funptr() {
+                    let mut type_args = self.collect_type_argments();
+                    type_args.pop();
+                    type_args
+                } else {
+                    panic!();
+                }
+            }
         }
     }
 
-    pub fn get_funty_dst(&self) -> Arc<TypeNode> {
+    pub fn get_lambda_dst(&self) -> Arc<TypeNode> {
         match &self.ty {
             Type::FunTy(_src, dst) => dst.clone(),
-            _ => panic!(),
+            _ => {
+                if self.is_funptr() {
+                    let mut type_args = self.collect_type_argments();
+                    type_args.pop().unwrap()
+                } else {
+                    panic!()
+                }
+            }
         }
     }
 
@@ -288,15 +303,28 @@ impl TypeNode {
         }
     }
 
-    pub fn is_function(&self) -> bool {
+    pub fn is_closure(&self) -> bool {
         match self.ty {
             Type::FunTy(_, _) => true,
             _ => false,
         }
     }
 
+    pub fn is_funptr(&self) -> bool {
+        let tc = self.toplevel_tycon();
+        if tc.is_none() {
+            return false;
+        }
+        let tc = tc.unwrap();
+        if let Some(_) = is_funptr_tycon(tc.as_ref()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
-        assert!(!self.is_function());
+        assert!(!self.is_closure());
         type_env
             .tycons
             .get(&self.toplevel_tycon().unwrap())
@@ -305,7 +333,7 @@ impl TypeNode {
     }
 
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
-        !self.is_function() && self.toplevel_tycon_info(type_env).is_unbox
+        !self.is_closure() && self.toplevel_tycon_info(type_env).is_unbox
     }
 
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
