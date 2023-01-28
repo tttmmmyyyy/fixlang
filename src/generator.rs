@@ -11,7 +11,7 @@ use inkwell::{
     module::Linkage,
     targets::{TargetData, TargetMachine},
     types::AnyType,
-    values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
+    values::{AnyValue, BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
 
 use super::*;
@@ -26,6 +26,29 @@ pub struct Variable<'c> {
 pub enum VarValue<'c> {
     Local(Object<'c>),
     Global(FunctionValue<'c>, Arc<TypeNode>),
+}
+
+impl<'c> VarValue<'c> {
+    // Get object.
+    pub fn get<'m>(&self, gc: &GenerationContext<'c, 'm>) -> Object<'c> {
+        match self {
+            VarValue::Local(ptr) => ptr.clone(),
+            VarValue::Global(fun, ty) => {
+                let ty = gc.typechecker.as_ref().unwrap().substitute_type(ty);
+                let ptr = if ty.is_funptr() {
+                    fun.as_global_value().as_pointer_value()
+                } else {
+                    gc.builder()
+                        .build_call(fun.clone(), &[], "get_ptr")
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap()
+                        .into_pointer_value()
+                };
+                Object::new(ptr, ty.clone())
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -154,28 +177,6 @@ impl<'c> Object<'c> {
     ) -> Option<FunctionValue<'c>> {
         assert!(self.is_unbox(gc.type_env()));
         create_dtor(&self.ty, &vec![], gc)
-    }
-}
-
-// Additional implementation of Object with another set of life parameters.
-impl<'s, 'c: 's, 'm> Object<'c> {}
-
-impl<'c> VarValue<'c> {
-    // Get pointer.
-    pub fn get<'m>(&self, gc: &GenerationContext<'c, 'm>) -> Object<'c> {
-        match self {
-            VarValue::Local(ptr) => ptr.clone(),
-            VarValue::Global(fun, ty) => {
-                let ptr = gc
-                    .builder()
-                    .build_call(fun.clone(), &[], "get_ptr")
-                    .try_as_basic_value()
-                    .left()
-                    .unwrap()
-                    .into_pointer_value();
-                Object::new(ptr, ty.clone())
-            }
-        }
     }
 }
 
@@ -836,16 +837,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         (lit.generator)(self, &ty, rvo)
     }
 
-    // Evaluate lambda abstraction.
-    fn eval_lam(
+    fn calculate_lambda_captured_info(
         &mut self,
         args: &Vec<Arc<Var>>,
         body: Arc<ExprNode>,
-        lam_ty: Arc<TypeNode>,
-    ) -> Object<'c> {
-        let context = self.context;
-        let module = self.module;
-
+    ) -> Vec<(FullName, Arc<TypeNode>)> {
         // Calculate captured variables.
         let mut captured_names = body.free_vars().clone();
         for arg in args {
@@ -861,6 +857,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .filter(|name| name.is_local())
             .map(|name| (name.clone(), self.get_var(&name).ptr.get(self).ty))
             .collect::<Vec<_>>();
+
+        captured_vars
+    }
+
+    // Generate function of lambda.
+    pub fn generate_lambda_function(
+        &mut self,
+        args: &Vec<Arc<Var>>,
+        body: Arc<ExprNode>,
+        lam_ty: Arc<TypeNode>,
+    ) -> FunctionValue<'c> {
+        let context = self.context;
+        let module = self.module;
+
+        let captured_vars = self.calculate_lambda_captured_info(args, body.clone());
         let captured_types = captured_vars
             .iter()
             .map(|(_name, ty)| ty.clone())
@@ -965,6 +976,30 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.builder().build_return(Some(&val.value(self)));
             }
         }
+
+        lam_fn
+    }
+
+    // Evaluate lambda abstraction.
+    fn eval_lam(
+        &mut self,
+        args: &Vec<Arc<Var>>,
+        body: Arc<ExprNode>,
+        lam_ty: Arc<TypeNode>,
+    ) -> Object<'c> {
+        // Get captured info.
+        let captured_vars = self.calculate_lambda_captured_info(args, body.clone());
+        let captured_types = captured_vars
+            .iter()
+            .map(|(_name, ty)| ty.clone())
+            .collect::<Vec<_>>();
+
+        // Determine the type of lambda
+        let lam_obj_ty = lam_ty.get_object_type(&captured_types, self.type_env());
+        let lam_str_ty = lam_obj_ty.to_struct_type(self);
+
+        // Get lambda function
+        let lam_fn = self.generate_lambda_function(args, body.clone(), lam_ty.clone());
 
         // Allocate lambda
         let name = expr_abs(args.clone(), body, None).expr.to_string();
