@@ -632,7 +632,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 match ft {
                     ObjectFieldType::ControlBlock => unreachable!(),
                     ObjectFieldType::DtorFunction => unreachable!(),
-                    ObjectFieldType::LambdaFunction(_) => unreachable!(),
+                    ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::I8 => {}
                     ObjectFieldType::SubObject(ty) => {
