@@ -11,7 +11,7 @@ use inkwell::{
     module::Linkage,
     targets::{TargetData, TargetMachine},
     types::AnyType,
-    values::{AnyValue, BasicMetadataValueEnum, CallSiteValue, StructValue},
+    values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
 
 use super::*;
