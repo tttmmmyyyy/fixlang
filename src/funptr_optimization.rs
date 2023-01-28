@@ -50,8 +50,11 @@ pub fn funptr_optimization(fix_mod: &mut FixModule) {
         symbol_names.insert(name.clone());
     }
     for (_name, sym) in &mut fix_mod.instantiated_global_symbols {
-        let expr =
-            replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
+        let expr = replace_closure_call_to_funptr_call_subexprs(
+            sym.expr.as_ref().unwrap(),
+            &symbol_names,
+            sym.typechecker.as_ref().unwrap(),
+        );
         let expr = calculate_free_vars(expr);
         sym.expr = Some(expr);
     }
@@ -173,9 +176,11 @@ fn collect_app_src(ty: &Arc<TypeNode>, vars_limit: usize) -> (Vec<Arc<TypeNode>>
 fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
+    typechcker: &TypeCheckContext,
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
-    if fun.inferred_ty.clone().unwrap().is_funptr() {
+    let fun_ty = typechcker.substitute_type(fun.inferred_ty.as_ref().unwrap());
+    if fun_ty.is_funptr() {
         return expr.clone();
     }
     match &*fun.expr {
@@ -212,37 +217,51 @@ fn replace_closure_call_to_funptr_call(
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
+    typechcker: &TypeCheckContext,
 ) -> Arc<ExprNode> {
-    let expr = replace_closure_call_to_funptr_call(expr, symbols);
+    let expr = replace_closure_call_to_funptr_call(expr, symbols, typechcker);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::Lit(_) => expr.clone(),
         Expr::App(fun, args) => {
             let args = args
                 .iter()
-                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbols))
+                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbols, typechcker))
                 .collect();
-            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(fun, symbols))
-                .set_app_args(args)
+            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(
+                fun, symbols, typechcker,
+            ))
+            .set_app_args(args)
         }
-        Expr::Lam(_, val) => {
-            expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(val, symbols))
-        }
+        Expr::Lam(_, val) => expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(
+            val, symbols, typechcker,
+        )),
         Expr::Let(_, bound, val) => expr
-            .set_let_bound(replace_closure_call_to_funptr_call_subexprs(bound, symbols))
-            .set_let_value(replace_closure_call_to_funptr_call_subexprs(val, symbols)),
+            .set_let_bound(replace_closure_call_to_funptr_call_subexprs(
+                bound, symbols, typechcker,
+            ))
+            .set_let_value(replace_closure_call_to_funptr_call_subexprs(
+                val, symbols, typechcker,
+            )),
         Expr::If(c, t, e) => expr
-            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(c, symbols))
-            .set_if_then(replace_closure_call_to_funptr_call_subexprs(t, symbols))
-            .set_if_else(replace_closure_call_to_funptr_call_subexprs(e, symbols)),
-        Expr::TyAnno(e, _) => {
-            expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(e, symbols))
-        }
+            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(
+                c, symbols, typechcker,
+            ))
+            .set_if_then(replace_closure_call_to_funptr_call_subexprs(
+                t, symbols, typechcker,
+            ))
+            .set_if_else(replace_closure_call_to_funptr_call_subexprs(
+                e, symbols, typechcker,
+            )),
+        Expr::TyAnno(e, _) => expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(
+            e, symbols, typechcker,
+        )),
         Expr::MakeStruct(_, fields) => {
             let fields = fields.clone();
             let mut expr = expr;
             for (field_name, field_expr) in fields {
-                let field_expr = replace_closure_call_to_funptr_call_subexprs(&field_expr, symbols);
+                let field_expr =
+                    replace_closure_call_to_funptr_call_subexprs(&field_expr, symbols, typechcker);
                 expr = expr.set_make_struct_field(&field_name, field_expr);
             }
             expr

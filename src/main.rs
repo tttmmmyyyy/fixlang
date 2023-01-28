@@ -59,7 +59,7 @@ const SANITIZE_MEMORY: bool = true;
 const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
 const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We should make tuple generation on-demand.
 
-const FUNPTR_OPTIMIZATION: bool = false;
+const FUNPTR_OPTIMIZATION: bool = true;
 const FUNPTR_ARGS_MAX: u32 = 100;
 const TUPLE_UNBOX: bool = true;
 const NOT_RETAIN_GLOBAL: bool = true && !SANITIZE_MEMORY;
