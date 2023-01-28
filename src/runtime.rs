@@ -137,7 +137,7 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
     gc.builder().build_store(ptr_to_refcnt, refcnt);
     gc.builder().build_return(None);
     retain_func
-    // TODO: Add fence instruction for incrementing refcnt
+    // TOOD: use atomic_rmw
 }
 
 fn build_release_boxed_function<'c, 'm, 'b>(
@@ -178,6 +178,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     let one = gc.context.i64_type().const_int(1, false);
     let refcnt = gc.builder().build_int_sub(refcnt, one, "refcnt");
     gc.builder().build_store(ptr_to_refcnt, refcnt);
+    // TOOD: use atomic_rmw
 
     // Branch if refcnt is zero.
     let zero = gc.context.i64_type().const_zero();

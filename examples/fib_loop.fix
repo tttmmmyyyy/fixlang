@@ -2,19 +2,19 @@ module Main;
 
 main : IOState -> ((), IOState);
 main = (
-    let arr = Array.new 31 0;
-    let arr = arr.set! 0 0;
-    let arr = arr.set! 1 1;
-    let arr = loop (2, arr) \state -> (
+    let arr = Array.new(31, 0);
+    let arr = arr.set!(0, 0);
+    let arr = arr.set!(1, 1);
+    let arr = loop((2, arr), |state|
         let idx = state.get_0;
         let arr = state.get_1;        
         if idx == arr.len then 
-            break arr
+            break $ arr
         else
-            let x = arr.get (idx-1);
-            let y = arr.get (idx-2);
-            let arr = arr.set! idx (x+y);
-            continue (idx+1, arr)
+            let x = arr.get(idx-1);
+            let y = arr.get(idx-2);
+            let arr = arr.set!(idx, x+y);
+            continue $ (idx+1, arr)
     );
-    print $ arr.get 30.to_string // 832040
+    print $ arr.get(30).to_string // 832040
 );
