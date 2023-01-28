@@ -73,9 +73,9 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     // String is defined in the source code of Std.
 
     // Function Pointers
-    for arity in 1..=TUPLE_SIZE_MAX {
+    for arity in 1..=FUNPTR_ARGS_MAX {
         ret.insert(
-            TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity))),
+            make_funptr_tycon(arity),
             TyConInfo {
                 kind: make_kind_fun(arity),
                 variant: TyConVariant::Primitive,
@@ -90,6 +90,10 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
 
 pub fn make_funptr_name(arity: u32) -> Name {
     format!("{}{}", FUNPTR_NAME, arity)
+}
+
+pub fn make_funptr_tycon(arity: u32) -> TyCon {
+    TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
 }
 
 // If given tycon is function pointer, returns it's arity
@@ -162,7 +166,7 @@ pub fn loop_result_ty() -> Arc<TypeNode> {
 
 // Get tuple type.
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    assert!(tys.len() <= TUPLE_SIZE_MAX as usize);
+    assert!(tys.len() <= FUNPTR_ARGS_MAX as usize);
     let mut ty = type_tycon(&tycon(make_tuple_name(tys.len() as u32)));
     for field_ty in tys {
         ty = type_tyapp(ty, field_ty);

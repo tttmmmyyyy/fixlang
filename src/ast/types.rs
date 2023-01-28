@@ -343,7 +343,7 @@ impl TypeNode {
     // Create new type node with default info.
     fn new(ty: Type) -> Self {
         Self {
-            ty: ty,
+            ty,
             info: Arc::new(TypeInfo::default()),
         }
     }
@@ -563,6 +563,15 @@ pub fn type_var_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
 
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::FunTy(src, dst))
+}
+
+pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    let mut ty = TypeNode::new_arc(Type::TyCon(Arc::new(make_funptr_tycon(srcs.len() as u32))));
+    for src in srcs {
+        ty = type_tyapp(ty, src);
+    }
+    ty = type_tyapp(ty, dst);
+    ty
 }
 
 pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {

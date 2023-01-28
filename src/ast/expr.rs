@@ -600,7 +600,7 @@ impl Expr {
             Expr::Var(v) => v.name.to_string(),
             Expr::Lit(l) => l.name.clone(),
             Expr::App(_, _) => {
-                let (fun, argss) = collect_app(&Arc::new(self.clone()).into_expr_info(None));
+                let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_info(None));
                 let mut omit_brace_around_fun = false;
                 match *(fun.expr) {
                     Expr::Var(_) => omit_brace_around_fun = true,
@@ -609,7 +609,6 @@ impl Expr {
                     _ => {}
                 }
                 let fun_str = fun.expr.to_string();
-                let args = argss.into_iter().flatten().collect::<Vec<_>>();
 
                 let args_str = args
                     .iter()
@@ -789,6 +788,10 @@ impl FullName {
     pub fn module(&self) -> Name {
         self.namespace.module()
     }
+
+    pub fn name_as_mut(&mut self) -> &mut Name {
+        &mut self.name
+    }
 }
 
 impl Var {
@@ -948,11 +951,11 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
 }
 
 // Convert f(y, z) to (f, [y, z]).
-pub fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Vec<Arc<ExprNode>>>) {
+pub fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
     match &*expr.expr {
         Expr::App(fun, arg) => {
             let (fun, mut args) = collect_app(fun);
-            args.push(arg.clone());
+            args.append(&mut arg.clone());
             (fun, args)
         }
         _ => (expr.clone(), vec![]),

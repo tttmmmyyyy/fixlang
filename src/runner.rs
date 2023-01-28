@@ -98,8 +98,8 @@ fn build_module<'c>(
 
     // Instanciate main function and all called functions.
     let main_expr = fix_mod.instantiate_main_function();
-    if UNCURRY_OPTIMIZATION {
-        uncurry_optimization(&mut fix_mod);
+    if FUNPTR_OPTIMIZATION {
+        funptr_optimization(&mut fix_mod);
     }
 
     // Create GenerationContext.
