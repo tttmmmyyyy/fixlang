@@ -786,7 +786,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
             Expr::App(lambda, args) => self.eval_app(lambda.clone(), args.clone(), rvo),
             Expr::Lam(args, val) => {
-                self.eval_lam(args, val.clone(), expr.inferred_ty.clone().unwrap())
+                self.eval_lam(args, val.clone(), expr.inferred_ty.clone().unwrap(), rvo)
             }
             Expr::Let(pat, bound, expr) => self.eval_let(pat, bound.clone(), expr.clone(), rvo),
             Expr::If(cond_expr, then_expr, else_expr) => {
@@ -842,6 +842,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         args: &Vec<Arc<Var>>,
         body: Arc<ExprNode>,
         lam_ty: Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let context = self.context;
         let module = self.module;
@@ -968,13 +969,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Allocate lambda
         let name = expr_abs(args.clone(), body, None).expr.to_string();
-        let obj = allocate_obj(
-            lam_ty.clone(),
-            &captured_types,
-            None,
-            self,
-            Some(name.as_str()),
-        );
+        let obj = if rvo.is_some() {
+            assert!(lam_ty.is_funptr());
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                lam_ty.clone(),
+                &captured_types,
+                None,
+                self,
+                Some(name.as_str()),
+            )
+        };
 
         // Set function pointer to lambda.
         let obj_ptr = obj.ptr(self);
