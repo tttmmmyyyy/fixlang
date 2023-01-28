@@ -12,6 +12,7 @@ pub const IOSTATE_NAME: &str = "IOState";
 pub const ARRAY_NAME: &str = "Array";
 pub const VECTOR_NAME: &str = "Vector";
 pub const STRING_NAME: &str = "String";
+pub const FUNPTR_NAME: &str = "%FunPtr"; // Users cannot access this type constructor.
 
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
@@ -70,7 +71,33 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
         },
     );
     // String is defined in the source code of Std.
+
+    // Function Pointers
+    for arity in 1..=TUPLE_SIZE_MAX {
+        ret.insert(
+            TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity))),
+            TyConInfo {
+                kind: make_kind_fun(arity),
+                variant: TyConVariant::Primitive,
+                is_unbox: true,
+                tyvars: (0..arity).map(|i| format!("a{}", i)).collect(),
+                fields: vec![],
+            },
+        );
+    }
     ret
+}
+
+pub fn make_funptr_name(arity: u32) -> Name {
+    format!("{}{}", FUNPTR_NAME, arity)
+}
+
+pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
+    let mut res = kind_star();
+    for _ in 0..arity {
+        res = kind_arrow(kind_star(), res);
+    }
+    res
 }
 
 // Following types are coustructed using primitive types.
