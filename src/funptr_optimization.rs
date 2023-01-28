@@ -297,7 +297,7 @@ fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                         }
                         if lam_var_name != lam_var.name {
                             // If Replace is needed,
-                            lam_var.set_name(lam_var_name.clone());
+                            *lam_var = lam_var.set_name(lam_var_name.clone());
                             lam_val = replace_free_var(&lam_val, &original_name, &lam_var_name);
                         }
                     }
