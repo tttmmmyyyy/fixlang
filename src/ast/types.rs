@@ -147,6 +147,11 @@ impl TypeNode {
             Type::FunTy(src, dst) => self
                 .set_funty_src(src.set_kinds(kinds))
                 .set_funty_dst(dst.set_kinds(kinds)),
+            Type::MulFunTy(srcs, dst) => {
+                let srcs = srcs.iter().map(|src| src.set_kinds(kinds)).collect();
+                let dst = dst.set_kinds(kinds);
+                self.set_mulfun_srcs(srcs).set_mulfun_dst(dst)
+            }
         }
     }
 
@@ -157,6 +162,7 @@ impl TypeNode {
             Type::TyCon(_) => false,
             Type::TyApp(head, _) => head.is_hnf(),
             Type::FunTy(head, _) => head.is_hnf(),
+            Type::MulFunTy(_, _) => false,
         }
     }
 
@@ -206,6 +212,24 @@ impl TypeNode {
         let mut ret = self.clone();
         match &self.ty {
             Type::FunTy(src, _) => ret.ty = Type::FunTy(src.clone(), dst),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_mulfun_srcs(&self, srcs: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::MulFunTy(_, dst) => ret.ty = Type::MulFunTy(srcs, dst.clone()),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_mulfun_dst(&self, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::MulFunTy(srcs, _) => ret.ty = Type::MulFunTy(srcs.clone(), dst),
             _ => panic!(),
         }
         Arc::new(ret)
@@ -414,6 +438,7 @@ pub enum Type {
     TyCon(Arc<TyCon>),
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
     FunTy(Arc<TypeNode>, Arc<TypeNode>),
+    MulFunTy(Vec<Arc<TypeNode>>, Arc<TypeNode>),
 }
 
 impl Clone for Type {
