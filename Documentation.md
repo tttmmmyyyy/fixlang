@@ -55,20 +55,20 @@ if false then 1 else 0 // evaluates to 0
 
 ## Function application
 
-To apply a function `f` to a variable `x`, just write `f x`. This is left-associative: `f x y` is interpreted as `(f x) y`.
+To apply a function `f` to a variable `x`, just write `f(x)`. `f(x, y)` is interpreted as `(f(x))(y)`.
 
 ```
-neg 3 // -3 -- `neg` is a built-in function that takes a Int value and returns negative of it.
+neg(3) // -3 -- `neg` is a built-in function that takes a Int value and returns negative of it.
 ```
 
 ## Function definition (Lambda abstraction)
 
-You can make a function value (which is similar to things called "lambda" or "closure" in other languages) by `\{name} -> {expression}`. 
+You can make a function value (which is similar to things called "lambda" or "closure" in other languages) by `|arg| body`. `|arg0, arg1| body` is intepreted as `|arg0| (|arg1| body)`.
 
 ```
 let x = 3;
-let add_x = \n -> n + x;
-add_x 4 + add_x 5 // (4 + 3) + (5 + 3) = 15
+let add_x = |n| n + x;
+add_x(4) + add_x(5) // (4 + 3) + (5 + 3) = 15
 ```
 
 ## Recursion
@@ -79,17 +79,17 @@ You can make recursive global function as usual.
 module Main;
 
 fib : Int -> Int;
-fib = \n -> (
+fib = |n| (
     if n == 0 then
         0
     else if n == 1 then
         1
     else
-        fib (n-1) + fib (n-2)
+        fib(n-1) + fib(n-2)
 );
 
 main : IOState -> ((), IOState);
-main = print $ fib 30.to_string; // 832040
+main = print $ fib(30).to_string; // 832040
 ```
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
@@ -268,15 +268,15 @@ type String = unbox struct ( data : Vector Byte );
 
 ### Std.fix : ((a -> b) -> a -> b) -> a -> b
 
-`fix` enables you to make a recursive function locally. The idiom is: `fix \loop -> \var -> (expression calls loop)`.
+`fix` enables you to make a recursive function locally. The idiom is: `fix $ |loop, var| -> (expression calls loop)`.
 
 ```
 module Main;
 
 main : IOState -> ((), IOState);
 main = (
-    let fact = fix \loop -> \n -> if n == 0 then 1 else n * loop (n-1);
-    print $ fact 5.to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
+    let fact = fix $ |loop, n| if n == 0 then 1 else n * loop (n-1);
+    print $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
 );
 ```
 
@@ -296,13 +296,12 @@ module Main;
 main : IOState -> ((), IOState);
 main = (
     let sum = (
-        loop (0, 0) \state -> 
-            let i = state.get_0;
-            let sum = state.get_1;
+        loop((0, 0), |(i, sum)|
             if i == 100 then 
-                break sum 
+                break $ sum 
             else
-                continue (i+1, sum+i)
+                continue $ (i+1, sum+i)
+        )
     );
     print $ sum.to_string
 ); // evaluates to 0 + 1 + ... + 99 
@@ -328,8 +327,8 @@ The following is the table of operators sorted by it's precedence (operator of h
 
 | Operator       | Associativity | Trait / method                     | Explanation                                                 | 
 | -------------- | ------------- | ---------------------------------- | ----------------------------------------------------------- | 
-| (whitespace)   | left          | -                                  | function application                                        | 
-| .              | left          | -                                  | right-to-left function application: x.f = f x               | 
+| f(x)           | left          | -                                  | function application                                        | 
+| .              | left          | -                                  | right-to-left function application: x.f = f(x)              | 
 | - (minus sign) | -             | Std.Neg / neg                      | negative of number                                          | 
 | !              | -             | Std.Not / not                      | logical NOT                                                 | 
 | *              | left          | Std.Mul / mul                      | multiplication of numbers                                   | 
@@ -345,6 +344,6 @@ The following is the table of operators sorted by it's precedence (operator of h
 | >              | left          | -                                  | `x > y` is interpreted as `y < x`                           | 
 | &&             | left          | Std.And / and                      | logical AND                                                 | 
 | &#124;&#124;   | left          | Std.Or / or                        | logical OR                                                  | 
-| $              | right         | -                                  | right associative function application: f $ g $ x = f (g x) | 
+| $              | right         | -                                  | right associative function application: f $ g $ x = f(g(x)) | 
 
 # Features of "fix" command
