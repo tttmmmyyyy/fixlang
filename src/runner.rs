@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use either::Either;
 use inkwell::{
     execution_engine::ExecutionEngine,
+    passes::{PassManager, PassManagerSubType},
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
 
@@ -147,6 +148,19 @@ fn build_module<'c>(
     // Return main function.
     gc.builder()
         .build_return(Some(&gc.context.i32_type().const_int(0, false)));
+
+    // Run optimization
+    let passmgr = PassManager::create(());
+    // let passmgr_builder = PassManagerBuilder::create();
+    // passmgr_builder.set_optimization_level(OptimizationLevel::Aggressive);
+    // passmgr_builder.populate_module_pass_manager(&passmgr);
+    passmgr.add_tail_call_elimination_pass();
+    passmgr.add_function_inlining_pass();
+
+    passmgr.run_on(module);
+    unsafe {
+        module.run_in_pass_manager(&passmgr);
+    }
 
     // Print LLVM bitcode to file
     module.print_to_file("main.ll").unwrap();
