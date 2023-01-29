@@ -326,113 +326,138 @@ impl FixModule {
 
     // Generate codes of global symbols.
     pub fn generate_code(&self, gc: &mut GenerationContext) {
-        // Create global symbols, global variable and accessor function.
+        // First,
+        // - For function pointer, declare the function and register it to global variable.
+        // - For others, create global variable and declare accessor function and register it to global variable.
         let global_objs = self
             .instantiated_global_symbols
             .iter()
             .map(|(name, sym)| {
                 gc.typechecker = sym.typechecker.clone();
-
-                let flag_name = format!("InitFlag{}", name.to_string());
-                let global_var_name = format!("GlobalVar{}", name.to_string());
-                let acc_fn_name = format!("Get{}", name.to_string());
-
                 let obj_ty = sym.typechecker.as_ref().unwrap().substitute_type(&sym.ty);
-                let obj_embed_ty = obj_ty.get_embedded_type(gc, &vec![]);
+                if obj_ty.is_funptr() {
+                    let lam = sym.expr.as_ref().unwrap().clone();
+                    let lam = lam.set_inferred_type(obj_ty.clone());
+                    let lam_fn = gc.declare_lambda_function(lam);
+                    gc.add_global_object(name.clone(), lam_fn, obj_ty.clone());
+                    (None, None, lam_fn, sym.clone(), obj_ty)
+                } else {
+                    let flag_name = format!("InitFlag{}", name.to_string());
+                    let global_var_name = format!("GlobalVar{}", name.to_string());
+                    let acc_fn_name = format!("Get{}", name.to_string());
 
-                // Add global variable.
-                let global_var = gc.module.add_global(obj_embed_ty, None, &global_var_name);
-                global_var.set_initializer(&obj_embed_ty.const_zero());
-                let global_var = global_var.as_basic_value_enum().into_pointer_value();
+                    let obj_embed_ty = obj_ty.get_embedded_type(gc, &vec![]);
 
-                // Add initialized flag.
-                let flag_ty = gc.context.i8_type();
-                let init_flag = gc.module.add_global(flag_ty, None, &flag_name);
-                init_flag.set_initializer(&flag_ty.const_zero());
-                let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
+                    // Add global variable.
+                    let global_var = gc.module.add_global(obj_embed_ty, None, &global_var_name);
+                    global_var.set_initializer(&obj_embed_ty.const_zero());
+                    let global_var = global_var.as_basic_value_enum().into_pointer_value();
 
-                // Add accessor function.
-                let acc_fn_type = ptr_to_object_type(gc.context).fn_type(&[], false);
-                let acc_fn =
-                    gc.module
-                        .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
+                    // Add initialized flag.
+                    let flag_ty = gc.context.i8_type();
+                    let init_flag = gc.module.add_global(flag_ty, None, &flag_name);
+                    init_flag.set_initializer(&flag_ty.const_zero());
+                    let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
 
-                // Register the accessor function to gc.
-                gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
+                    // Add accessor function.
+                    let acc_fn_type = ptr_to_object_type(gc.context).fn_type(&[], false);
+                    let acc_fn =
+                        gc.module
+                            .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
 
-                // Return global variable and accessor.
-                (global_var, init_flag, acc_fn, sym.clone(), obj_ty)
+                    // Register the accessor function to gc.
+                    gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
+
+                    // Return global variable and accessor function.
+                    (
+                        Some(global_var),
+                        Some(init_flag),
+                        acc_fn,
+                        sym.clone(),
+                        obj_ty,
+                    )
+                }
             })
             .collect::<Vec<_>>();
 
-        // Implement global accessor function.
+        // Implement functions.
         for (global_var, init_flag, acc_fn, sym, obj_ty) in global_objs {
             gc.typechecker = sym.typechecker;
-
-            let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
-            gc.builder().position_at_end(entry_bb);
-            let flag = gc
-                .builder()
-                .build_load(init_flag, "load_init_flag")
-                .into_int_value();
-            let is_zero = gc.builder().build_int_compare(
-                IntPredicate::EQ,
-                flag,
-                flag.get_type().const_zero(),
-                "flag_is_zero",
-            );
-            let init_bb = gc.context.append_basic_block(acc_fn, "flag_is_zero");
-            let end_bb = gc.context.append_basic_block(acc_fn, "flag_is_nonzero");
-            gc.builder()
-                .build_conditional_branch(is_zero, init_bb, end_bb);
-
-            // If flag is zero, then create object and store it to the global variable.
-            gc.builder().position_at_end(init_bb);
-            // Prepare memory space for rvo.
-            let rvo = if obj_ty.is_unbox(gc.type_env()) {
-                Some(Object::new(global_var, obj_ty))
+            if obj_ty.is_funptr() {
+                // Implement lambda function.
+                let lam_fn = acc_fn;
+                let lam = sym.expr.as_ref().unwrap().clone();
+                let lam = lam.set_inferred_type(obj_ty);
+                gc.implement_lambda_function(lam, lam_fn, None);
             } else {
-                None
-            };
-            // Execute expression.
-            let obj = gc.eval_expr(sym.expr.unwrap().clone(), rvo.clone());
-
-            if NOT_RETAIN_GLOBAL && obj.is_box(gc.type_env()) {
-                let obj_ptr = obj.ptr(gc);
-                let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-                // Pre-retain global objects (to omit retaining later).
-                let infty = refcnt_type(gc.context).const_int(u64::MAX / 2, false);
-                gc.builder().build_store(ptr_to_refcnt, infty);
-            }
-            // If we didn't rvo, then store the result to global_ptr.
-            if rvo.is_none() {
-                let obj_val = obj.value(gc);
-                gc.builder().build_store(global_var, obj_val);
-            }
-
-            // Set the initialized flag 1.
-            gc.builder()
-                .build_store(init_flag, gc.context.i8_type().const_int(1, false));
-
-            if SANITIZE_MEMORY && obj.is_box(gc.type_env()) {
-                // Mark this object as global.
-                let ptr = obj.ptr(gc);
-                let obj_id = gc.get_obj_id(ptr);
-                gc.call_runtime(RuntimeFunctions::MarkGlobal, &[obj_id.into()]);
-            }
-            gc.builder().build_unconditional_branch(end_bb);
-
-            // Return object.
-            gc.builder().position_at_end(end_bb);
-            let ret = if obj.is_box(gc.type_env()) {
+                // Implement accessor function.
+                let global_var = global_var.unwrap();
+                let init_flag = init_flag.unwrap();
+                let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
+                gc.builder().position_at_end(entry_bb);
+                let flag = gc
+                    .builder()
+                    .build_load(init_flag, "load_init_flag")
+                    .into_int_value();
+                let is_zero = gc.builder().build_int_compare(
+                    IntPredicate::EQ,
+                    flag,
+                    flag.get_type().const_zero(),
+                    "flag_is_zero",
+                );
+                let init_bb = gc.context.append_basic_block(acc_fn, "flag_is_zero");
+                let end_bb = gc.context.append_basic_block(acc_fn, "flag_is_nonzero");
                 gc.builder()
-                    .build_load(global_var, "PtrToObj")
-                    .into_pointer_value()
-            } else {
-                global_var
-            };
-            let ret = gc.cast_pointer(ret, ptr_to_object_type(gc.context));
-            gc.builder().build_return(Some(&ret));
+                    .build_conditional_branch(is_zero, init_bb, end_bb);
+
+                // If flag is zero, then create object and store it to the global variable.
+                gc.builder().position_at_end(init_bb);
+                // Prepare memory space for rvo.
+                let rvo = if obj_ty.is_unbox(gc.type_env()) {
+                    Some(Object::new(global_var, obj_ty))
+                } else {
+                    None
+                };
+                // Execute expression.
+                let obj = gc.eval_expr(sym.expr.unwrap().clone(), rvo.clone());
+
+                if NOT_RETAIN_GLOBAL && obj.is_box(gc.type_env()) {
+                    let obj_ptr = obj.ptr(gc);
+                    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+                    // Pre-retain global objects (to omit retaining later).
+                    let infty = refcnt_type(gc.context).const_int(u64::MAX / 2, false);
+                    gc.builder().build_store(ptr_to_refcnt, infty);
+                }
+                // If we didn't rvo, then store the result to global_ptr.
+                if rvo.is_none() {
+                    let obj_val = obj.value(gc);
+                    gc.builder().build_store(global_var, obj_val);
+                }
+
+                // Set the initialized flag 1.
+                gc.builder()
+                    .build_store(init_flag, gc.context.i8_type().const_int(1, false));
+
+                if SANITIZE_MEMORY && obj.is_box(gc.type_env()) {
+                    // Mark this object as global.
+                    let ptr = obj.ptr(gc);
+                    let obj_id = gc.get_obj_id(ptr);
+                    gc.call_runtime(RuntimeFunctions::MarkGlobal, &[obj_id.into()]);
+                }
+                gc.builder().build_unconditional_branch(end_bb);
+
+                // Return object.
+                gc.builder().position_at_end(end_bb);
+                let ret = if obj.is_box(gc.type_env()) {
+                    gc.builder()
+                        .build_load(global_var, "PtrToObj")
+                        .into_pointer_value()
+                } else {
+                    global_var
+                };
+                let ret = gc.cast_pointer(ret, ptr_to_object_type(gc.context));
+                gc.builder().build_return(Some(&ret));
+            }
         }
     }
 

@@ -28,6 +28,28 @@ pub enum VarValue<'c> {
     Global(FunctionValue<'c>, Arc<TypeNode>),
 }
 
+impl<'c> VarValue<'c> {
+    // Get pointer.
+    pub fn get<'m>(&self, gc: &GenerationContext<'c, 'm>) -> Object<'c> {
+        match self {
+            VarValue::Local(ptr) => ptr.clone(),
+            VarValue::Global(fun, ty) => {
+                let ptr = if ty.is_funptr() {
+                    fun.as_global_value().as_pointer_value()
+                } else {
+                    gc.builder()
+                        .build_call(fun.clone(), &[], "get_ptr")
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap()
+                        .into_pointer_value()
+                };
+                Object::new(ptr, ty.clone())
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Object<'c> {
     ptr: PointerValue<'c>,
@@ -47,7 +69,7 @@ impl<'c> Object<'c> {
         ty: Arc<TypeNode>,
         gc: &mut GenerationContext<'c, 'm>,
     ) -> Object<'c> {
-        let ptr = if ty.is_box(gc.type_env()) {
+        let ptr = if ty.is_box(gc.type_env()) || ty.is_funptr() {
             val.into_pointer_value()
         } else {
             let str = ty.get_struct_type(gc, &vec![]);
@@ -59,7 +81,7 @@ impl<'c> Object<'c> {
     }
 
     pub fn value<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> BasicValueEnum<'c> {
-        if self.ty.is_box(gc.type_env()) {
+        if self.ty.is_box(gc.type_env()) || self.is_funptr() {
             self.ptr(gc).as_basic_value_enum()
         } else {
             self.load_nocap(gc).as_basic_value_enum()
@@ -74,9 +96,16 @@ impl<'c> Object<'c> {
         self.ty.is_box(type_env)
     }
 
+    pub fn is_funptr(&self) -> bool {
+        self.ty.is_funptr()
+    }
+
     pub fn ptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
         if self.is_box(gc.type_env()) {
             gc.cast_pointer(self.ptr, ptr_to_object_type(gc.context))
+        } else if self.is_funptr() {
+            let fun_ty = lambda_function_type(&self.ty, gc);
+            gc.cast_pointer(self.ptr, fun_ty.ptr_type(AddressSpace::from(0)))
         } else {
             let str_ty = self.struct_ty(gc);
             gc.cast_pointer(self.ptr, ptr_type(str_ty))
@@ -84,10 +113,12 @@ impl<'c> Object<'c> {
     }
 
     pub fn struct_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
+        assert!(!self.is_funptr());
         get_object_type(&self.ty, &vec![], gc.type_env()).to_struct_type(gc)
     }
 
     pub fn load_nocap<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
+        assert!(!self.is_funptr());
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder()
@@ -100,6 +131,7 @@ impl<'c> Object<'c> {
         V: BasicValue<'c>,
     {
         assert!(self.is_unbox(gc.type_env()));
+        assert!(!self.is_funptr());
         let ptr = self.ptr(gc);
         gc.builder().build_store(ptr, value);
     }
@@ -109,6 +141,7 @@ impl<'c> Object<'c> {
         gc: &mut GenerationContext<'c, 'm>,
         field_idx: u32,
     ) -> PointerValue<'c> {
+        assert!(!self.is_funptr());
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder()
@@ -121,6 +154,7 @@ impl<'c> Object<'c> {
         gc: &mut GenerationContext<'c, 'm>,
         field_idx: u32,
     ) -> BasicValueEnum<'c> {
+        assert!(!self.is_funptr());
         let struct_ty = self.struct_ty(gc);
         gc.load_obj_field(self.ptr, struct_ty, field_idx)
     }
@@ -133,6 +167,7 @@ impl<'c> Object<'c> {
     ) where
         V: BasicValue<'c>,
     {
+        assert!(!self.is_funptr());
         let struct_ty = self.struct_ty(gc);
         gc.store_obj_field(self.ptr, struct_ty, field_idx, val)
     }
@@ -140,6 +175,7 @@ impl<'c> Object<'c> {
     // Get function pointer to destructor.
     pub fn get_dtor_ptr_boxed<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
         assert!(self.is_box(gc.type_env()));
+        assert!(!self.is_funptr());
         if self.ty.is_closure() {
             self.load_field_nocap(gc, DTOR_IDX).into_pointer_value()
         } else {
@@ -153,29 +189,8 @@ impl<'c> Object<'c> {
         gc: &mut GenerationContext<'c, 'm>,
     ) -> Option<FunctionValue<'c>> {
         assert!(self.is_unbox(gc.type_env()));
+        assert!(!self.is_funptr());
         create_dtor(&self.ty, &vec![], gc)
-    }
-}
-
-// Additional implementation of Object with another set of life parameters.
-impl<'s, 'c: 's, 'm> Object<'c> {}
-
-impl<'c> VarValue<'c> {
-    // Get pointer.
-    pub fn get<'m>(&self, gc: &GenerationContext<'c, 'm>) -> Object<'c> {
-        match self {
-            VarValue::Local(ptr) => ptr.clone(),
-            VarValue::Global(fun, ty) => {
-                let ptr = gc
-                    .builder()
-                    .build_call(fun.clone(), &[], "get_ptr")
-                    .try_as_basic_value()
-                    .left()
-                    .unwrap()
-                    .into_pointer_value();
-                Object::new(ptr, ty.clone())
-            }
-        }
     }
 }
 
@@ -353,7 +368,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     pub fn add_global_object(
         &mut self,
         name: FullName,
-        accessor: FunctionValue<'c>,
+        function: FunctionValue<'c>,
         ty: Arc<TypeNode>,
     ) {
         if self.global.contains_key(&name) {
@@ -368,7 +383,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.global.insert(
                 name.clone(),
                 Variable {
-                    ptr: VarValue::Global(accessor, ty),
+                    ptr: VarValue::Global(function, ty),
                     used_later,
                 },
             );
@@ -531,7 +546,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             obj.load_field_nocap(self, CLOSURE_FUNPTR_IDX)
                 .into_pointer_value()
         } else if obj.ty.is_funptr() {
-            obj.load_field_nocap(self, 0).into_pointer_value()
+            obj.ptr(self)
         } else {
             panic!()
         }
