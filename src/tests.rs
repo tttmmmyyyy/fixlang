@@ -13,7 +13,7 @@ pub fn test0() {
                 pure()
             );
         "#;
-    run_source(&source, OptimizationLevel::None);
+    run_source(&source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -28,7 +28,7 @@ pub fn test1() {
                 pure()
             );
         "#;
-    run_source(&source, OptimizationLevel::None);
+    run_source(&source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -42,7 +42,7 @@ pub fn test2() {
                 pure()
             );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -56,7 +56,7 @@ pub fn test3() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -70,7 +70,7 @@ pub fn test4() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -84,7 +84,7 @@ pub fn test5() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -98,7 +98,7 @@ pub fn test6() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -112,7 +112,7 @@ pub fn test7() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -127,7 +127,7 @@ pub fn test8() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -144,7 +144,7 @@ pub fn test9_5() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -159,7 +159,7 @@ pub fn test10() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -176,7 +176,7 @@ pub fn test11() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -195,7 +195,7 @@ pub fn test12() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -210,7 +210,7 @@ pub fn test13() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -225,7 +225,7 @@ pub fn test13_5() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -242,7 +242,7 @@ pub fn test14() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -257,7 +257,7 @@ pub fn test15() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -273,7 +273,7 @@ pub fn test15_5() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -288,7 +288,7 @@ pub fn test16() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -302,7 +302,7 @@ pub fn test17() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -316,7 +316,7 @@ pub fn test18() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -330,7 +330,7 @@ pub fn test19() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -344,7 +344,7 @@ pub fn test20() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -365,7 +365,7 @@ pub fn test20_5() {
             pure ()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -381,14 +381,14 @@ pub fn test21() {
                 pure()
             );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
 #[serial]
 pub fn test22() {
     // Test recursion function defined by fix with two variables that is tail-call.
-    let n: i64 = 1000;
+    let n: i64 = 1000000;
     let source = format!(
         r#"
             module Main;
@@ -409,7 +409,7 @@ pub fn test22() {
         n,
         (n * (n + 1)) / 2
     );
-    run_source(source.as_str(), OptimizationLevel::None);
+    run_source(source.as_str(), OptimizationLevel::Default);
 }
 
 #[test]
@@ -432,7 +432,7 @@ pub fn test22_5() {
                 pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -458,7 +458,7 @@ pub fn test22_7() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -473,7 +473,7 @@ pub fn test23() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -489,7 +489,7 @@ pub fn test24() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -506,7 +506,7 @@ pub fn test25() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -523,7 +523,7 @@ pub fn test26() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -540,7 +540,7 @@ pub fn test27() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -557,7 +557,7 @@ pub fn test27_5() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -584,7 +584,7 @@ pub fn test28() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -602,7 +602,7 @@ pub fn test29() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -620,7 +620,7 @@ pub fn test30() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -638,7 +638,7 @@ pub fn test31() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -654,7 +654,7 @@ pub fn test32() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -673,7 +673,7 @@ pub fn test33() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -692,7 +692,7 @@ pub fn test34_5() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -713,7 +713,7 @@ pub fn test34() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -735,7 +735,7 @@ pub fn test35() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -757,7 +757,7 @@ pub fn test36() {
             pure ()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -779,7 +779,7 @@ pub fn test37() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -801,7 +801,7 @@ pub fn test37_5() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -824,7 +824,7 @@ pub fn test38() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -847,7 +847,7 @@ pub fn test39() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -870,7 +870,7 @@ pub fn test40() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -888,7 +888,7 @@ pub fn test41() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -906,7 +906,7 @@ pub fn test41_5() {
             pure()
         );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -931,14 +931,14 @@ pub fn test42() {
         n,
         (n * (n + 1)) / 2
     );
-    run_source(source.as_str(), OptimizationLevel::None);
+    run_source(source.as_str(), OptimizationLevel::Default);
 }
 
 #[test]
 #[serial]
 pub fn test43() {
     // Recursion function using global variable (tail call).
-    let n: i64 = 10000;
+    let n: i64 = 10000000;
     let source = format!(
         r#"
             module Main;
@@ -956,7 +956,7 @@ pub fn test43() {
         n,
         (n * (n + 1)) / 2
     );
-    run_source(source.as_str(), OptimizationLevel::None);
+    run_source(source.as_str(), OptimizationLevel::Default);
 }
 
 #[test]
@@ -1001,7 +1001,7 @@ pub fn test44() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1029,7 +1029,7 @@ pub fn test44_5() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1068,7 +1068,7 @@ pub fn test45() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1091,7 +1091,7 @@ pub fn test46() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1114,7 +1114,7 @@ pub fn test47() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1137,7 +1137,7 @@ pub fn test47_2() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1158,7 +1158,7 @@ pub fn test47_5() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1181,7 +1181,7 @@ pub fn test48() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1205,7 +1205,7 @@ pub fn test49() {
             pure()
         );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1233,7 +1233,7 @@ pub fn test50() {
         n,
         (n * (n - 1)) / 2
     );
-    run_source(&source, OptimizationLevel::None);
+    run_source(&source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1268,7 +1268,7 @@ pub fn test51() {
         pure()
     );
         "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1324,7 +1324,7 @@ pub fn test52() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1346,7 +1346,7 @@ pub fn test53() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1368,7 +1368,7 @@ pub fn test54() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1392,7 +1392,7 @@ pub fn test55() {
         pure ()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1415,7 +1415,7 @@ pub fn test56() {
         pure ()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1435,7 +1435,7 @@ pub fn test57() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1455,7 +1455,7 @@ pub fn test58() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1488,7 +1488,7 @@ pub fn test59() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1504,7 +1504,7 @@ pub fn test60() {
     main : IOState -> ((), IOState);
     main = let u = unit; pure ();
     ";
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1526,7 +1526,7 @@ pub fn test61() {
         )
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1543,7 +1543,7 @@ pub fn test62() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1559,7 +1559,7 @@ pub fn test63() {
         print $ min.to_string
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1574,7 +1574,7 @@ pub fn test64() {
         print $ "\u2764"
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1597,7 +1597,7 @@ pub fn test65() {
         pure ()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1622,7 +1622,7 @@ pub fn test66() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1647,7 +1647,7 @@ pub fn test67() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1667,7 +1667,7 @@ pub fn test68() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1687,7 +1687,7 @@ pub fn test69() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1707,7 +1707,7 @@ pub fn test70() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1729,7 +1729,7 @@ pub fn test71() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1751,7 +1751,7 @@ pub fn test72() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1771,7 +1771,7 @@ pub fn test73() {
         pure()
     );
     "#;
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1796,7 +1796,7 @@ pub fn test_comment_0() {
             pure()
         );
         /*tail*/";
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }
 
 #[test]
@@ -1815,5 +1815,5 @@ pub fn test_comment_1() {
             pure()
         //
         );";
-    run_source(source, OptimizationLevel::None);
+    run_source(source, OptimizationLevel::Default);
 }

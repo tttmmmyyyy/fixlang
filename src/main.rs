@@ -54,7 +54,7 @@ use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
 
-const SANITIZE_MEMORY: bool = true;
+const SANITIZE_MEMORY: bool = false;
 
 const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
 const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We should make tuple generation on-demand.
@@ -77,11 +77,11 @@ fn main() {
     match app.get_matches().subcommand() {
         Some(("run", m)) => {
             let path = m.value_of("source-file").unwrap();
-            run_file(Path::new(path), OptimizationLevel::None);
+            run_file(Path::new(path), OptimizationLevel::Aggressive);
         }
         Some(("build", m)) => {
             let path = m.value_of("source-file").unwrap();
-            build_file(Path::new(path), OptimizationLevel::None);
+            build_file(Path::new(path), OptimizationLevel::Aggressive);
         }
         _ => eprintln!("Unknown command!"),
     }
