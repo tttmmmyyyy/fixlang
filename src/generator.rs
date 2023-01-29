@@ -695,6 +695,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 RuntimeFunctions::ReleaseBoxedObject,
                 &[ptr.into(), dtor.into()],
             );
+        } else if obj.is_funptr() {
+            // Nothing to do.
         } else {
             match obj.get_dtor_unboxed(self) {
                 Some(dtor) => {
