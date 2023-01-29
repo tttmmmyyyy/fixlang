@@ -610,7 +610,7 @@ fn write_array_lit(
         // Get refcnt.
         let refcnt = {
             let array_ptr = array.ptr(gc);
-            gc.load_obj_field(array_ptr, control_block_type(gc.context), 0)
+            gc.load_obj_field(array_ptr, control_block_type(gc), 0)
                 .into_int_value()
         };
 
@@ -921,7 +921,7 @@ pub fn struct_mod_lit(
             // Get refcnt.
             let refcnt = {
                 let str_ptr = str.ptr(gc);
-                gc.load_obj_field(str_ptr, control_block_type(gc.context), 0)
+                gc.load_obj_field(str_ptr, control_block_type(gc), 0)
                     .into_int_value()
             };
 

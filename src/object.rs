@@ -22,7 +22,7 @@ pub enum ObjectFieldType {
 impl ObjectFieldType {
     pub fn to_basic_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> BasicTypeEnum<'c> {
         match self {
-            ObjectFieldType::ControlBlock => control_block_type(gc.context).into(),
+            ObjectFieldType::ControlBlock => control_block_type(gc).into(),
             ObjectFieldType::DtorFunction => ptr_to_dtor_type(gc.context).into(),
             ObjectFieldType::LambdaFunction(ty) => lambda_function_type(ty, gc)
                 .ptr_type(AddressSpace::from(0))
@@ -763,16 +763,16 @@ fn ptr_to_dtor_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     dtor_type(context).ptr_type(AddressSpace::from(0))
 }
 
-pub fn control_block_type<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
-    let mut fields = vec![refcnt_type(context).into()];
-    if SANITIZE_MEMORY {
-        fields.push(obj_id_type(context).into())
+pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
+    let mut fields = vec![refcnt_type(gc.context).into()];
+    if gc.config.sanitize_memory {
+        fields.push(obj_id_type(gc.context).into())
     }
-    context.struct_type(&fields, false)
+    gc.context.struct_type(&fields, false)
 }
 
-pub fn ptr_to_control_block_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    control_block_type(context).ptr_type(AddressSpace::from(0))
+pub fn ptr_to_control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> PointerType<'c> {
+    control_block_type(gc).ptr_type(AddressSpace::from(0))
 }
 
 pub fn lambda_function_type<'c, 'm>(
@@ -938,7 +938,7 @@ pub fn allocate_obj<'c, 'm>(
 
     // If sanitize memory, create object id.
     let mut object_id = obj_id_type(gc.context).const_int(0, false);
-    if SANITIZE_MEMORY && !object_type.is_unbox {
+    if gc.config.sanitize_memory && !object_type.is_unbox {
         let string_ptr = name.unwrap_or("N/A");
         let string_ptr = gc
             .builder()
@@ -975,7 +975,7 @@ pub fn allocate_obj<'c, 'm>(
                     .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
 
                 // If sanitize memory, set object id.
-                if SANITIZE_MEMORY {
+                if gc.config.sanitize_memory {
                     let ptr_to_obj_id = gc
                         .builder()
                         .build_struct_gep(ptr_to_control_block, 1, "ptr_to_obj_id")

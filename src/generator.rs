@@ -264,6 +264,7 @@ pub struct GenerationContext<'c, 'm> {
     pub typechecker: Option<TypeCheckContext>,
     pub target: Either<TargetMachine, ExecutionEngine<'c>>,
     target_data_cache: Option<TargetData>,
+    pub config: Configuration,
 }
 
 pub struct PopBuilderGuard<'c> {
@@ -334,6 +335,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ctx: &'c Context,
         module: &'m Module<'c>,
         target: Either<TargetMachine, ExecutionEngine<'c>>,
+        config: Configuration,
     ) -> Self {
         let ret = Self {
             context: ctx,
@@ -345,6 +347,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             typechecker: None,
             target,
             target_data_cache: None,
+            config,
         };
         ret
     }
@@ -374,7 +377,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if self.global.contains_key(&name) {
             error_exit(&format!("duplicate symbol: {}", name.to_string()));
         } else {
-            let used_later = if NOT_RETAIN_GLOBAL && ty.is_box(self.type_env()) {
+            let used_later = if self.config.preretain_global && ty.is_box(self.type_env()) {
                 // Global boxed objects are pre-retained, so we do not need to retain. Always move out it.
                 0
             } else {
@@ -496,7 +499,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Get pointer to control block of a given object.
     pub fn get_control_block_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
-        self.cast_pointer(obj, ptr_to_control_block_type(self.context))
+        self.cast_pointer(obj, ptr_to_control_block_type(self))
     }
 
     // Get pointer to reference counter of a given object.
@@ -631,9 +634,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Retain object.
     pub fn retain(&mut self, obj: Object<'c>) {
-        if NO_RETAIN_RELEASE {
-            return;
-        }
         if obj.is_box(self.type_env()) {
             let obj_ptr = obj.ptr(self);
             self.call_runtime(RuntimeFunctions::RetainBoxedObject, &[obj_ptr.into()]);
@@ -684,9 +684,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Release object.
     pub fn release(&mut self, obj: Object<'c>) {
-        if NO_RETAIN_RELEASE {
-            return;
-        }
         if obj.is_box(self.type_env()) {
             let ptr = obj.ptr(self);
             let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
@@ -726,8 +723,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Get object id of a object
     pub fn get_obj_id(&self, ptr_to_obj: PointerValue<'c>) -> IntValue<'c> {
-        assert!(SANITIZE_MEMORY);
-        self.load_obj_field(ptr_to_obj, control_block_type(self.context), 1)
+        assert!(self.config.sanitize_memory);
+        self.load_obj_field(ptr_to_obj, control_block_type(self), 1)
             .into_int_value()
     }
 
@@ -751,7 +748,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Get refcnt.
         let refcnt = {
             let control_block = obj.ptr_to_field_nocap(self, 0);
-            self.load_obj_field(control_block, control_block_type(self.context), 0)
+            self.load_obj_field(control_block, control_block_type(self), 0)
                 .into_int_value()
         };
 

@@ -421,7 +421,7 @@ impl FixModule {
                 // Execute expression.
                 let obj = gc.eval_expr(sym.expr.unwrap().clone(), rvo.clone());
 
-                if NOT_RETAIN_GLOBAL && obj.is_box(gc.type_env()) {
+                if gc.config.preretain_global && obj.is_box(gc.type_env()) {
                     let obj_ptr = obj.ptr(gc);
                     let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
                     // Pre-retain global objects (to omit retaining later).
@@ -438,7 +438,7 @@ impl FixModule {
                 gc.builder()
                     .build_store(init_flag, gc.context.i8_type().const_int(1, false));
 
-                if SANITIZE_MEMORY && obj.is_box(gc.type_env()) {
+                if gc.config.sanitize_memory && obj.is_box(gc.type_env()) {
                     // Mark this object as global.
                     let ptr = obj.ptr(gc);
                     let obj_id = gc.get_obj_id(ptr);

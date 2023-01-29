@@ -54,15 +54,49 @@ use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
 
-const SANITIZE_MEMORY: bool = false;
+// Max number of arguments if function pointer lambda.
+pub const FUNPTR_ARGS_MAX: u32 = 100;
+// Max tuple size.
+// This affects on compilation time heavily. We should make tuple generation on-demand in a future.
+pub const TUPLE_SIZE_MAX: u32 = 4;
+// Is tuple unboxed?
+pub const TUPLE_UNBOX: bool = true;
 
-const NO_RETAIN_RELEASE: bool = false; // In this mode, not only memory leak occurrs, reference transparency breaks.
-const TUPLE_SIZE_MAX: u32 = 4; // This affects on compilation time heavily. We should make tuple generation on-demand.
+#[derive(Clone)]
+pub struct Configuration {
+    // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
+    // Requires shared library sanitizer/libfixsanitizer.so.
+    sanitize_memory: bool,
+    // Perform function pointer optimization.
+    funptr_optimization: bool,
+    // If true, pre-retain global object (i.e., set refcnt to large value) at it's construction
+    // and do not retain global object thereafter.
+    preretain_global: bool,
+    // LLVM optimization level.
+    llvm_opt_level: OptimizationLevel,
+}
 
-const FUNPTR_OPTIMIZATION: bool = true;
-const FUNPTR_ARGS_MAX: u32 = 100;
-const TUPLE_UNBOX: bool = true;
-const NOT_RETAIN_GLOBAL: bool = true && !SANITIZE_MEMORY;
+impl Configuration {
+    // Configuration for release build.
+    pub fn release() -> Configuration {
+        Configuration {
+            sanitize_memory: false,
+            funptr_optimization: true,
+            preretain_global: true,
+            llvm_opt_level: OptimizationLevel::Aggressive,
+        }
+    }
+
+    // Usual configuration for compiler development
+    pub fn develop_compiler() -> Configuration {
+        Configuration {
+            sanitize_memory: true,
+            funptr_optimization: false,
+            preretain_global: false,
+            llvm_opt_level: OptimizationLevel::Default,
+        }
+    }
+}
 
 fn main() {
     let source_file = Arg::new("source-file").required(true);
@@ -77,11 +111,11 @@ fn main() {
     match app.get_matches().subcommand() {
         Some(("run", m)) => {
             let path = m.value_of("source-file").unwrap();
-            run_file(Path::new(path), OptimizationLevel::Aggressive);
+            run_file(Path::new(path), Configuration::release());
         }
         Some(("build", m)) => {
             let path = m.value_of("source-file").unwrap();
-            build_file(Path::new(path), OptimizationLevel::Aggressive);
+            build_file(Path::new(path), Configuration::release());
         }
         _ => eprintln!("Unknown command!"),
     }

@@ -123,7 +123,7 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
         .into_int_value();
 
     // Report retain to sanitizer.
-    if SANITIZE_MEMORY {
+    if gc.config.sanitize_memory {
         let obj_id = gc.get_obj_id(ptr_to_obj);
         gc.call_runtime(
             RuntimeFunctions::ReportRetain,
@@ -166,7 +166,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
         .into_int_value();
 
     // Report release to sanitizer.
-    if SANITIZE_MEMORY {
+    if gc.config.sanitize_memory {
         let obj_id = gc.get_obj_id(ptr_to_obj);
         gc.call_runtime(
             RuntimeFunctions::ReportRelease,
@@ -239,7 +239,7 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
         .insert(RuntimeFunctions::Printf, build_printf_function(gc));
     gc.runtimes
         .insert(RuntimeFunctions::Sprintf, build_sprintf_function(gc));
-    if SANITIZE_MEMORY {
+    if gc.config.sanitize_memory {
         gc.runtimes.insert(
             RuntimeFunctions::ReportMalloc,
             build_report_malloc_function(gc),
