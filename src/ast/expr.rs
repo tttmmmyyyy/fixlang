@@ -104,6 +104,14 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    // destructure lambda expression to list of variables and body expression
+    pub fn destructure_lam(&self) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
+        match &*self.expr {
+            Expr::Lam(args, body) => (args.clone(), body.clone()),
+            _ => panic!(""),
+        }
+    }
+
     #[allow(dead_code)]
     pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
         let mut ret = self.clone();

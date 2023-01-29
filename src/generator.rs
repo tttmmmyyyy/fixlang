@@ -785,9 +785,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.eval_lit(lit.clone(), expr.inferred_ty.clone().unwrap().clone(), rvo)
             }
             Expr::App(lambda, args) => self.eval_app(lambda.clone(), args.clone(), rvo),
-            Expr::Lam(args, val) => {
-                self.eval_lam(args, val.clone(), expr.inferred_ty.clone().unwrap(), rvo)
-            }
+            Expr::Lam(_, _) => self.eval_lam(expr.clone(), rvo),
             Expr::Let(pat, bound, expr) => self.eval_let(pat, bound.clone(), expr.clone(), rvo),
             Expr::If(cond_expr, then_expr, else_expr) => {
                 self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), rvo)
@@ -836,150 +834,180 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         (lit.generator)(self, &ty, rvo)
     }
 
-    // Evaluate lambda abstraction.
-    fn eval_lam(
+    // Calculate captured variables and their types of lambda expression.
+    // Normalize it's orderings.
+    pub fn calculate_captured_vars_of_lambda(
         &mut self,
-        args: &Vec<Arc<Var>>,
-        body: Arc<ExprNode>,
-        lam_ty: Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let context = self.context;
-        let module = self.module;
+        lam: Arc<ExprNode>,
+    ) -> Vec<(FullName, Arc<TypeNode>)> {
+        let (args, body) = lam.destructure_lam();
 
-        // Calculate captured variables.
-        let mut captured_names = body.free_vars().clone();
+        let mut cap_names = body.free_vars().clone();
         for arg in args {
-            captured_names.remove(&arg.name);
+            cap_names.remove(&arg.name);
         }
-        captured_names.remove(&FullName::local(SELF_NAME));
+        cap_names.remove(&FullName::local(SELF_NAME));
 
         // We need not and should not capture global variable
         // If we capture global variable, then global recursive function such as
         // "main = |x| if x == 0 then 0 else x + main(x-1)" results in infinite recursion at it's initialization.
-        let captured_vars = captured_names
+        let mut cap_vars = cap_names
             .into_iter()
             .filter(|name| name.is_local())
             .map(|name| (name.clone(), self.get_var(&name).ptr.get(self).ty))
             .collect::<Vec<_>>();
-        let captured_types = captured_vars
-            .iter()
-            .map(|(_name, ty)| ty.clone())
-            .collect::<Vec<_>>();
+        cap_vars.sort_by_key(|(name, _)| name.to_string());
 
-        // Function poitners cannot capture.
-        assert!(!lam_ty.is_funptr() || captured_vars.len() == 0);
+        // Validation
+        let lam_ty = lam.inferred_ty.clone().unwrap();
+        assert!(!lam_ty.is_funptr() || cap_vars.len() == 0); // Function poitners cannot capture objects.
 
-        // Determine the type of lambda
-        let lam_obj_ty = lam_ty.get_object_type(&captured_types, self.type_env());
-        let lam_str_ty = lam_obj_ty.to_struct_type(self);
+        cap_vars
+    }
 
-        // Declare lambda function
+    // Declare function of lambda expression
+    pub fn declare_lambda_function(&mut self, lam: Arc<ExprNode>) -> FunctionValue<'c> {
+        let lam_ty = lam.inferred_ty.clone().unwrap();
         let lam_fn_ty = lambda_function_type(&lam_ty, self);
-        let lam_fn = module.add_function(
+        let lam_fn = self.module.add_function(
             &format!("lambda_{}", lam_ty.to_string_normalize()),
             lam_fn_ty,
             Some(Linkage::Internal),
         );
+        lam_fn
+    }
 
-        // Implement lambda function
-        {
-            // Create new builder and set up
-            let _builder_guard = self.push_builder();
-            let bb = context.append_basic_block(lam_fn, "entry");
-            self.builder().position_at_end(bb);
+    // Implement function of lambda expression
+    pub fn implement_lambda_function(
+        &mut self,
+        lam: Arc<ExprNode>,
+        lam_fn: FunctionValue<'c>,
+        cap_vars: Option<Vec<(FullName, Arc<TypeNode>)>>,
+    ) {
+        let lam_ty = lam.inferred_ty.clone().unwrap();
+        let (args, body) = lam.destructure_lam();
+        let cap_vars = if cap_vars.is_some() {
+            cap_vars.unwrap()
+        } else {
+            self.calculate_captured_vars_of_lambda(lam)
+        };
+        let cap_tys = cap_vars
+            .iter()
+            .map(|(_, ty)| ty.clone())
+            .collect::<Vec<_>>();
+        let lam_obj_ty = lam_ty.get_object_type(&cap_tys, self.type_env());
+        let lam_str_ty = lam_obj_ty.to_struct_type(self);
 
-            // Create new scope
-            let _scope_guard = self.push_scope();
+        // Create new builder and set up
+        let _builder_guard = self.push_builder();
+        let bb = self.context.append_basic_block(lam_fn, "entry");
+        self.builder().position_at_end(bb);
 
-            // Push argments on scope.
-            let mut arg_objs = vec![];
-            for ((i, arg), arg_ty) in args.iter().enumerate().zip(lam_ty.get_lambda_srcs().iter()) {
-                let arg_val = lam_fn.get_nth_param(i as u32).unwrap();
-                let arg_obj = Object::create_from_value(arg_val, arg_ty.clone(), self);
-                self.scope_push(&arg.name, &arg_obj);
-                arg_objs.push(arg_obj);
-            }
+        // Create new scope
+        let _scope_guard = self.push_scope();
 
-            // Get rvo field if return value is unboxed.
-            let ret_ty = lam_ty.get_lambda_dst();
-            let rvo = if ret_ty.is_unbox(self.type_env()) {
-                let rvo_idx = args.len() + if lam_ty.is_closure() { 1 } else { 0 };
-                let ptr = lam_fn
-                    .get_nth_param(rvo_idx as u32)
-                    .unwrap()
-                    .into_pointer_value();
-                Some(Object::new(ptr, ret_ty))
-            } else {
-                None
-            };
+        // Push argments on scope.
+        let mut arg_objs = vec![];
+        for ((i, arg), arg_ty) in args.iter().enumerate().zip(lam_ty.get_lambda_srcs().iter()) {
+            let arg_val = lam_fn.get_nth_param(i as u32).unwrap();
+            let arg_obj = Object::create_from_value(arg_val, arg_ty.clone(), self);
+            self.scope_push(&arg.name, &arg_obj);
+            arg_objs.push(arg_obj);
+        }
 
-            // Push SELF on scope if lambda is closure.
-            let (closure_ptr, closure_obj) = if lam_ty.is_closure() {
-                let self_idx = args.len();
-                let closure_ptr = lam_fn
-                    .get_nth_param(self_idx as u32)
-                    .unwrap()
-                    .into_pointer_value();
-                let closure_obj = Object::new(closure_ptr, lam_ty.clone());
-                self.scope_push(&FullName::local(SELF_NAME), &closure_obj);
-                (Some(closure_ptr), Some(closure_obj))
-            } else {
-                (None, None)
-            };
+        // Get rvo field if return value is unboxed.
+        let ret_ty = lam_ty.get_lambda_dst();
+        let rvo = if ret_ty.is_unbox(self.type_env()) {
+            let rvo_idx = args.len() + if lam_ty.is_closure() { 1 } else { 0 };
+            let ptr = lam_fn
+                .get_nth_param(rvo_idx as u32)
+                .unwrap()
+                .into_pointer_value();
+            Some(Object::new(ptr, ret_ty))
+        } else {
+            None
+        };
 
-            // Push captured objects on scope.
-            if lam_ty.is_closure() {
-                for (i, (cap_name, cap_ty)) in captured_vars.iter().enumerate() {
-                    let cap_val = self.load_obj_field(
-                        closure_ptr.unwrap(),
-                        lam_str_ty,
-                        i as u32 + CLOSURE_CAPTURE_IDX,
-                    );
-                    let cap_obj = Object::create_from_value(cap_val, cap_ty.clone(), self);
-                    self.retain(cap_obj.clone());
-                    self.scope_push(cap_name, &cap_obj);
-                }
-            }
+        // Push SELF on scope if lambda is closure.
+        let (closure_ptr, closure_obj) = if lam_ty.is_closure() {
+            let self_idx = args.len();
+            let closure_ptr = lam_fn
+                .get_nth_param(self_idx as u32)
+                .unwrap()
+                .into_pointer_value();
+            let closure_obj = Object::new(closure_ptr, lam_ty.clone());
+            self.scope_push(&FullName::local(SELF_NAME), &closure_obj);
+            (Some(closure_ptr), Some(closure_obj))
+        } else {
+            (None, None)
+        };
 
-            // Release SELF if unused
-            if lam_ty.is_closure() {
-                if !body.free_vars().contains(&FullName::local(SELF_NAME)) {
-                    self.release(closure_obj.unwrap());
-                }
-            }
-
-            // Release arguments if unused.
-            for (i, arg) in args.iter().enumerate() {
-                if !body.free_vars().contains(&arg.name) {
-                    self.release(arg_objs[i].clone());
-                }
-            }
-
-            // Calculate body.
-            let val = self.eval_expr(body.clone(), rvo.clone());
-
-            // Return lambda function.
-            if rvo.is_some() {
-                self.builder().build_return(None);
-            } else {
-                self.builder().build_return(Some(&val.value(self)));
+        // Push captured objects on scope.
+        if lam_ty.is_closure() {
+            for (i, (cap_name, cap_ty)) in cap_vars.iter().enumerate() {
+                let cap_val = self.load_obj_field(
+                    closure_ptr.unwrap(),
+                    lam_str_ty,
+                    i as u32 + CLOSURE_CAPTURE_IDX,
+                );
+                let cap_obj = Object::create_from_value(cap_val, cap_ty.clone(), self);
+                self.retain(cap_obj.clone());
+                self.scope_push(cap_name, &cap_obj);
             }
         }
 
+        // Release SELF if unused
+        if lam_ty.is_closure() {
+            if !body.free_vars().contains(&FullName::local(SELF_NAME)) {
+                self.release(closure_obj.unwrap());
+            }
+        }
+
+        // Release arguments if unused.
+        for (i, arg) in args.iter().enumerate() {
+            if !body.free_vars().contains(&arg.name) {
+                self.release(arg_objs[i].clone());
+            }
+        }
+
+        // Calculate body.
+        let val = self.eval_expr(body.clone(), rvo.clone());
+
+        // Return lambda function.
+        if rvo.is_some() {
+            self.builder().build_return(None);
+        } else {
+            self.builder().build_return(Some(&val.value(self)));
+        }
+    }
+
+    // Evaluate lambda abstraction.
+    fn eval_lam(&mut self, lam: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
+        let (args, body) = lam.destructure_lam();
+        let lam_ty = lam.inferred_ty.clone().unwrap();
+
+        // Calculate captured variables.
+        let cap_vars = self.calculate_captured_vars_of_lambda(lam.clone());
+        let cap_tys = cap_vars
+            .iter()
+            .map(|(_name, ty)| ty.clone())
+            .collect::<Vec<_>>();
+
+        // Determine the type of lambda
+        let lam_obj_ty = lam_ty.get_object_type(&cap_tys, self.type_env());
+        let lam_str_ty = lam_obj_ty.to_struct_type(self);
+
+        // define lambda function
+        let lam_fn = self.declare_lambda_function(lam.clone());
+        self.implement_lambda_function(lam, lam_fn, Some(cap_vars.clone()));
+
         // Allocate lambda
-        let name = expr_abs(args.clone(), body, None).expr.to_string();
+        let name = expr_abs(args.clone(), body.clone(), None).expr.to_string();
         let obj = if rvo.is_some() {
             assert!(lam_ty.is_funptr());
             rvo.unwrap()
         } else {
-            allocate_obj(
-                lam_ty.clone(),
-                &captured_types,
-                None,
-                self,
-                Some(name.as_str()),
-            )
+            allocate_obj(lam_ty.clone(), &cap_tys, None, self, Some(name.as_str()))
         };
 
         // Set function pointer to lambda.
@@ -997,7 +1025,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
 
         // Set captured objects to lambda.
-        for (i, (cap_name, _cap_ty)) in captured_vars.iter().enumerate() {
+        for (i, (cap_name, _cap_ty)) in cap_vars.iter().enumerate() {
             let cap_obj = self.get_var_retained_if_used_later(cap_name, None);
             let cap_val = cap_obj.value(self);
             let obj_ptr = obj.ptr(self);
