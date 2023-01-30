@@ -141,8 +141,8 @@ type Product = struct (price: Int, sold: Bool);
 For each struct, the following methods are defined in the namespace of {type_name} automatically: 
 - `new : {field_type}... -> {type_name}`
     - For the `Product` example above, `Main.Product.new : Int -> Bool -> Product`.
-- `get_{field_name} : {type_name} -> {field_type}`
-    - For the `Product` example above, `Main.Product.get_price : Product -> Int` and `Main.Product.get_sold : Product -> Bool`.
+- `@{field_name} : {type_name} -> {field_type}`
+    - For the `Product` example above, `Main.Product.@price : Product -> Int` and `Main.Product.@sold : Product -> Bool`.
 - `mod_{field_name} : ({field_type} -> {field_type}) -> {type_name} -> {type_name}`
     - For the `Product` example above, `Main.Product.mod_price : (Int -> Int) -> Product -> Product` and `Main.Product.mod_sold : (Bool -> Bool) -> Product -> Product`. 
     - This function receives a transformer function on a field and extends it to the transformer of a struct value.
