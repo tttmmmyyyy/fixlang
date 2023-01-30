@@ -46,7 +46,11 @@ expr_var = { (namespace ~ ".")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
-expr_if = { "if" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" ~ sep* ~ (("else" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}") | ((";" | ("else" ~ sep)) ~ sep* ~ expr)) }
+else_of_if = _{ ";" | "else" }
+
+else_of_if_with_space = _{ ";" | ("else" ~ sep) }
+
+expr_if = { "if" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" ~ sep* ~ ((else_of_if ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}") | (else_of_if_with_space ~ sep* ~ expr)) }
 
 expr_lam = { "|" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ sep* ~ "|" ~ sep* ~ expr }
 

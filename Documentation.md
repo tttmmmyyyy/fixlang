@@ -28,18 +28,31 @@ The name of value has to start with a lower-case alphabet.
 
 ## Let binding
 
-To define a local name and it's value, use `let`-binding. 
+To define a local name and it's value, use `let`-binding. The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {expression_0}; {expression_1}`.
 
+For one-line expression, it is preferred to use `in`:
 ```
 let x = 5 in 2 + x // 7
 ```
 
+On the other hand, if you want to `{epxression_0}` and `{expression_1}` in other lines, it is better to use semicolon:
 ```
 let x = 3;
 let y = 5;
 x + y // 8
 ```
-The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {expression_0}; {expression_1}`.
+
+If `{expression_0}` ranges several lines, it is good to put parentheses around `{expression_0}`:
+```
+let n_mod_2 = (
+    if n % 2 == 0 {
+        1
+    } else {
+        0
+    }
+);
+...
+```
 
 If the name of the lhs of `let`-binding is already in the scope, `let` evaluates `{expression_0}` in the old scope (i.e., with the old value of the name) and evaluates `{expression_1}` in the new scope (i.e., with the new value of the name).
 
@@ -47,10 +60,23 @@ Fix's `let`-binding doesn't allow making recursive definition. To define a recur
 
 ## If
 
-The syntax of `if` is `if {condition} then {expression_0} else {expression_1}`. The type of `{condition}` has to be `Bool`, and The types of `{expression_0}` and `{expression_1}` must coincide. Boolean value literals are `true` and `false`.
+The syntax of `if` is the following:
+- `if cond { expr_0 } (else|;) { expr_1 }` where curly braces around `expr_1` is optional.
+The type of `cond` has to be `Bool`, and The types of `expr_0` and `expr_1` must coincide.
 
+For usual case, use `if cond { expr_0 } else { expr_1 }`:
 ```
-if false then 1 else 0 // evaluates to 0
+if cond { 
+    "cond is true!"
+} else {
+    "cond is false!"
+}
+```
+
+To write "early return" pattern without introducing indent, it is good to omit curly braces around else-expression:
+```
+if edge_case { "a trivial value" };
+"a complicated calculation"
 ```
 
 ## Function application
