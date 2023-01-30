@@ -3,6 +3,7 @@ use super::*;
 
 pub const STD_NAME: &str = "Std";
 pub const DEBUG_NAME: &str = "Debug";
+#[allow(dead_code)]
 pub const IO_NAME: &str = "IO";
 
 // Primitive types.
