@@ -21,13 +21,19 @@ trait a : ToString {
 }
 
 impl Int : ToString {
-    to_string = int_to_string;
+    to_string = Int.int_to_string;
 }
 
 namespace IO {
 
     pure : a -> IOState -> (a, IOState);
     pure = |val, io| (val, io);
+
+    println : String -> IOState -> ((), IOState);
+    println = |msg, io| (
+        let (_, io) = io.print(msg);
+        io.print("\n")
+    );
 
 }
 
@@ -194,7 +200,10 @@ pub fn make_std_mod() -> FixModule {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
         length_array(),
     );
-    fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "print"), print_io_func());
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, IO_NAME], "print"),
+        print_io_func(),
+    );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, DEBUG_NAME], "debug_print"),
         debug_print_function(),
@@ -204,7 +213,7 @@ pub fn make_std_mod() -> FixModule {
         abort_function(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "int_to_string"),
+        FullName::from_strs(&[STD_NAME, INT_NAME], "int_to_string"),
         int_to_string_function(),
     );
 

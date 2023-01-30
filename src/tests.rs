@@ -1520,7 +1520,7 @@ pub fn test61() {
             if counter == 3 then
                 break $ ((), io)
             else
-                let ret = io.print("Hello World! ");
+                let ret = io.println("Hello World! ");
                 let io = ret.@1;
                 continue $ (counter + 1, io)
         )
@@ -1556,7 +1556,7 @@ pub fn test63() {
     main : IOState -> ((), IOState);
     main = (
         let min = -9223372036854775808;
-        print $ min.to_string
+        println $ min.to_string
     );
     "#;
     run_source(source, Configuration::develop_compiler());
@@ -1571,7 +1571,7 @@ pub fn test64() {
 
     main : IOState -> ((), IOState);
     main = (
-        print $ "\u2764"
+        println $ "\u2764"
     );
     "#;
     run_source(source, Configuration::develop_compiler());
