@@ -51,6 +51,15 @@ impl TypeDefn {
         }
     }
 
+    // Find the index of `field_name` in the given struct.
+    pub fn get_field_by_name(&self, field_name: &str) -> Option<(u32, Field)> {
+        self.fields()
+            .iter()
+            .enumerate()
+            .find(|(_i, f)| f.name == field_name)
+            .map(|(i, f)| (i as u32, f.clone()))
+    }
+
     // Check if all of type variables in field types appear in lhs of type definition.
     pub fn check_tyvars(&self) {
         let tyvars = HashSet::<String>::from_iter(self.tyvars.iter().map(|s| s.clone()));

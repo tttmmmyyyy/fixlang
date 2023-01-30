@@ -7,17 +7,19 @@ in_of_let = { "in" | ";" }
 
 eq_of_let = { "=" }
 
-var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
-
-name_head_small = _{ ASCII_ALPHA_LOWER | "_" }
-
-name_head_large = _{ ASCII_ALPHA_UPPER }
-
-var = { !keywords ~ (name_head_small ~ var_char* ~ "!"? ) }
+// Characters that can be used in value names, field names.
+// - "@" is used for getter function ("@x" for getter of field x)
+// - "=" is used for setter function ("x=" for setter of field x)
+// - "!" is used for uniqueness. Cannot appear at head because "!false" should be parsed as prefix operator "!" for boolean value.
+var_head = _{ ASCII_ALPHA_LOWER | "_" | "@" | "=" }
+var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" | "@" | "=" | "!" }
+var = { !keywords ~ (var_head ~ var_char*) }
 
 // === Expressions ===
 
-namespace_item = { name_head_large ~ var_char* }
+namespace_head = _{ ASCII_ALPHA_UPPER }
+namespace_char = _{ ASCII_ALPHA | ASCII_DIGIT }
+namespace_item = { namespace_head ~ namespace_char* }
 
 namespace = { namespace_item ~ ("." ~ namespace_item)* }
 
@@ -39,7 +41,7 @@ expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit }
 
 expr_var = { (namespace ~ ".")? ~ var }
 
-expr_let = { "let" ~ sep+ ~ pattern ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
+expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
 
@@ -81,7 +83,7 @@ expr_plus = { expr_mul ~ (sep* ~ operator_plus ~ sep* ~ expr_mul)* }
 // comparison operators
 // NOTE: "<=" and ">=" has to put in from of "<" and ">".
 operator_cmp = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
-expr_cmp = { expr_plus ~ (sep* ~ operator_cmp ~ sep* ~ expr_plus)? }
+expr_cmp = { expr_plus ~ (sep ~ operator_cmp ~ sep* ~ expr_plus)? }
 
 // operator && (left-associative)
 operator_and = { "&&" }
@@ -123,9 +125,13 @@ type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)* }
 
 type_fun = { type_tyapp ~ (sep* ~ "->" ~ sep* ~ type_expr)? }
 
-type_tycon = { name_head_large ~ var_char* }
+tycon_head = _{ ASCII_ALPHA_UPPER }
+tycon_char = _{ ASCII_ALPHA | ASCII_DIGIT }
+type_tycon = { tycon_head ~ tycon_char* }
 
-type_var = { !keywords ~ name_head_small ~ var_char* }
+tyvar_head = _{ ASCII_ALPHA_LOWER }
+tyvar_char = _{ ASCII_ALPHA | ASCII_DIGIT }
+type_var = { !keywords ~ tyvar_head ~ tyvar_char* }
 
 type_qualified = { predicates? ~ sep* ~ type_expr }
 
@@ -147,9 +153,9 @@ kind_nlr = { kind_star | kind_braced }
 kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 
 // === Type definitions ===
-type_name = { name_head_large ~ var_char* }
+type_name = { tycon_head ~ tycon_char* }
 
-type_field_name = { !keywords ~ name_head_small ~ var_char* }
+type_field_name = { !keywords ~ var_head ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
@@ -160,13 +166,13 @@ comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )
 box_or_unbox = { "box" | "unbox" }
 
 // === struct definitions ===
-struct_defn = { (box_or_unbox ~ sep*)? ~ "struct" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
+struct_defn = { (box_or_unbox ~ sep+)? ~ "struct" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
 
 // === union definitions ===
-union_defn = { (box_or_unbox ~ sep*)? ~ "union" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
+union_defn = { (box_or_unbox ~ sep+)? ~ "union" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
 
 // === Trait definitions ===
-trait_name = { name_head_large ~ var_char* }
+trait_name = { tycon_head ~ tycon_char* }
 
 trait_defn = { "trait" ~ sep+ ~ predicates? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 
@@ -182,10 +188,12 @@ trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" 
 // === Global names === 
 global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
 
-global_name_defn = { var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
+global_name_defn = { var ~ sep+ ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
 // === Module ===
-module_name = { name_head_large ~ var_char* }
+module_name_head = _{ ASCII_ALPHA_UPPER }
+module_name_char = _{ ASCII_ALPHA | ASCII_DIGIT }
+module_name = { module_name_head ~ module_name_char* }
 
 module_defn = { "module" ~ sep+ ~ namespace ~ sep* ~ ";" }
 

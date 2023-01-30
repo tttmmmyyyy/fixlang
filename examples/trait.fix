@@ -15,7 +15,7 @@ type Pair a b = struct { fst: a, snd: b };
 // In the trait implementation, you can specify assumptions of the trait in the `[]` bracket after `impl`.
 impl [a: Eq, b: Eq] Pair a b : Eq {
     eq = |lhs, rhs| (
-        lhs.get_fst == rhs.get_fst && lhs.get_snd == rhs.get_snd
+        lhs.@fst == rhs.@fst && lhs.@snd == rhs.@snd
     );
 }
 

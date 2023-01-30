@@ -12,8 +12,8 @@ type Vector a = unbox struct { len : Int, data : Array a };
 type String = unbox struct { data : Vector Byte };
 
 namespace String {
-    get_len : String -> Int;
-    get_len = |s| s.get_data.get_len - 1; // remove null terminator
+    @len : String -> Int;
+    @len = |s| s.@data.@len - 1; // exclude null terminator
 }
 
 trait a : ToString {
@@ -39,6 +39,17 @@ namespace Debug {
         else
             ()
     );
+}
+
+type Option a = union { none: (), some: a };
+
+type List a = struct { data: () -> Option (a, List a) };
+
+namespace List {
+
+    next: List a -> Option (a, List a);
+    next = |list| (list.@data)();
+
 }
 "#;
 

@@ -7,8 +7,9 @@ use super::*;
 
 const MAIN_FUNCTION_NAME: &str = "main";
 const MAIN_MODULE_NAME: &str = "Main";
-pub const INSTANCIATED_NAME_SEPARATOR: &str = "@";
-pub const STRUCT_GETTER_NAME: &str = "get";
+pub const INSTANCIATED_NAME_SEPARATOR: &str = "%";
+pub const GETTER_SYMBOL: &str = "@";
+pub const SETTER_SYMBOL: &str = "=";
 pub const STRUCT_NEW_NAME: &str = "new";
 
 pub struct FixModule {
@@ -702,7 +703,7 @@ impl FixModule {
                         self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
-                                &format!("{}_{}", STRUCT_GETTER_NAME, &field.name),
+                                &format!("{}{}", GETTER_SYMBOL, &field.name),
                             ),
                             struct_get(&struct_name, decl, &field.name),
                         );
@@ -718,6 +719,18 @@ impl FixModule {
                                 ),
                                 struct_mod(&struct_name, decl, &field.name, is_unique),
                             );
+                            self.add_global_value(
+                                FullName::new(
+                                    &decl.name.to_namespace(),
+                                    &format!(
+                                        "{}{}{}",
+                                        &field.name,
+                                        SETTER_SYMBOL,
+                                        if is_unique { "!" } else { "" }
+                                    ),
+                                ),
+                                struct_set(&struct_name, decl, &field.name, is_unique),
+                            )
                         }
                     }
                 }

@@ -851,18 +851,14 @@ pub fn struct_get_lit(
     expr_lit(generator, free_vars, name, field_ty, None)
 }
 
-// `get` built-in function for a given struct.
+// field getter function for a given struct.
 pub fn struct_get(
     struct_name: &FullName,
     definition: &TypeDefn,
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
-    let field = definition
-        .fields()
-        .iter()
-        .enumerate()
-        .find(|(_i, f)| f.name == field_name);
+    let field = definition.get_field_by_name(field_name);
     if field.is_none() {
         error_exit(&format!(
             "error: no field `{}` found in the struct `{}`.",
@@ -875,7 +871,13 @@ pub fn struct_get(
     let str_ty = definition.ty();
     let expr = expr_abs(
         vec![var_local("f", None)],
-        struct_get_lit("f", field_idx, field.ty.clone(), struct_name, field_name),
+        struct_get_lit(
+            "f",
+            field_idx as usize,
+            field.ty.clone(),
+            struct_name,
+            field_name,
+        ),
         None,
     );
     let ty = type_fun(str_ty, field.ty.clone());
@@ -895,7 +897,7 @@ pub fn struct_mod_lit(
     is_unique_version: bool,
 ) -> Arc<ExprNode> {
     let name = format!(
-        "{}.mod{}{} {} {}",
+        "{}.mod_{}{}({}, {})",
         struct_name.to_string(),
         field_name,
         if is_unique_version { "!" } else { "" },
@@ -905,79 +907,14 @@ pub fn struct_mod_lit(
     let f_name = FullName::local(f_name);
     let x_name = FullName::local(x_name);
     let free_vars = vec![f_name.clone(), x_name.clone()];
-    let name_cloned = name.clone();
     let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
         let is_unbox = ty.is_unbox(gc.type_env());
 
         // Get arguments
         let modfier = gc.get_var(&f_name).ptr.get(gc);
-        let mut str = gc.get_var(&x_name).ptr.get(gc);
+        let str = gc.get_var(&x_name).ptr.get(gc);
 
-        if !is_unbox {
-            // In boxed case, str should be replaced to cloned object if it is shared.
-            // In unboxed case, str is always treated as unique object.
-            assert!(rvo.is_none());
-
-            // Get refcnt.
-            let refcnt = {
-                let str_ptr = str.ptr(gc);
-                gc.load_obj_field(str_ptr, control_block_type(gc), 0)
-                    .into_int_value()
-            };
-
-            // Add shared / cont bbs.
-            let current_bb = gc.builder().get_insert_block().unwrap();
-            let current_func = current_bb.get_parent().unwrap();
-            let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
-            let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
-
-            let original_str_ptr = str.ptr(gc);
-
-            // Jump to shared_bb if refcnt > 1.
-            let one = refcnt_type(gc.context).const_int(1, false);
-            let is_unique =
-                gc.builder()
-                    .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
-            gc.builder()
-                .build_conditional_branch(is_unique, cont_bb, shared_bb);
-
-            // In shared_bb, create new struct and clone fields.
-            gc.builder().position_at_end(shared_bb);
-            if is_unique_version {
-                // In case of unique version, panic in this case.
-                gc.panic(&format!("The argument of mod! is shared!\n"));
-            }
-            let cloned_str = allocate_obj(
-                str.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(name_cloned.as_str()),
-            );
-            for i in 0..field_count {
-                // Retain field.
-                let field = ObjectFieldType::get_struct_field_noclone(gc, &str, i as u32);
-                gc.retain(field.clone());
-                // Clone field.
-                ObjectFieldType::set_struct_field(gc, &cloned_str, i as u32, &field);
-            }
-            gc.release(str.clone());
-            let cloned_str_ptr = cloned_str.ptr(gc);
-            let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-            gc.builder().build_unconditional_branch(cont_bb);
-
-            // Implement cont_bb
-            gc.builder().position_at_end(cont_bb);
-
-            // Build phi value
-            let str_phi = gc.builder().build_phi(str.ptr(gc).get_type(), "str_phi");
-            str_phi.add_incoming(&[
-                (&original_str_ptr, current_bb),
-                (&cloned_str_ptr, succ_of_shared_bb),
-            ]);
-
-            str = Object::new(str_phi.as_basic_value().into_pointer_value(), ty.clone());
-        }
+        let mut str = make_struct_unique(gc, str, field_count as u32, is_unique_version);
 
         // Modify field
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, field_idx as u32);
@@ -1006,11 +943,7 @@ pub fn struct_mod(
     is_unique_version: bool,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
-    let field = definition
-        .fields()
-        .iter()
-        .enumerate()
-        .find(|(_i, f)| f.name == field_name);
+    let field = definition.get_field_by_name(field_name);
     if field.is_none() {
         error_exit(&format!(
             "error: no field `{}` found in the struct `{}`.",
@@ -1030,7 +963,7 @@ pub fn struct_mod(
                 "f",
                 "x",
                 field_count,
-                field_idx,
+                field_idx as usize,
                 struct_name,
                 definition,
                 field_name,
@@ -1044,6 +977,159 @@ pub fn struct_mod(
         type_fun(field.ty.clone(), field.ty.clone()),
         type_fun(str_ty.clone(), str_ty.clone()),
     );
+    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
+    (expr, scm)
+}
+
+// Make struct object to unique.
+// If it is (unboxed or) unique, do nothing.
+// If it is shared, clone the object or panics if panic_if_shared is true.
+fn make_struct_unique<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    mut str: Object<'c>,
+    field_count: u32,
+    panic_if_shared: bool,
+) -> Object<'c> {
+    let is_unbox = str.ty.is_unbox(gc.type_env());
+    if !is_unbox {
+        // In boxed case, str should be replaced to cloned object if it is shared.
+        // In unboxed case, str is always treated as unique object.
+
+        // Get refcnt.
+        let refcnt = {
+            let str_ptr = str.ptr(gc);
+            gc.load_obj_field(str_ptr, control_block_type(gc), 0)
+                .into_int_value()
+        };
+
+        // Add shared / cont bbs.
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
+        let cont_bb = gc
+            .context
+            .append_basic_block(current_func, "unique_or_cloned_bb");
+
+        let original_str_ptr = str.ptr(gc);
+
+        // Jump to shared_bb if refcnt > 1.
+        let one = refcnt_type(gc.context).const_int(1, false);
+        let is_unique = gc
+            .builder()
+            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+        gc.builder()
+            .build_conditional_branch(is_unique, cont_bb, shared_bb);
+
+        // In shared_bb, create new struct and clone fields.
+        gc.builder().position_at_end(shared_bb);
+        if panic_if_shared {
+            // In case of unique version, panic in this case.
+            gc.panic(&format!("The argument of mod! is shared!\n"));
+        }
+        let cloned_str = allocate_obj(str.ty.clone(), &vec![], None, gc, Some("cloned_str"));
+        for i in 0..field_count {
+            // Retain field.
+            let field = ObjectFieldType::get_struct_field_noclone(gc, &str, i as u32);
+            gc.retain(field.clone());
+            // Clone field.
+            ObjectFieldType::set_struct_field(gc, &cloned_str, i as u32, &field);
+        }
+        gc.release(str.clone());
+        let cloned_str_ptr = cloned_str.ptr(gc);
+        let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
+        gc.builder().build_unconditional_branch(cont_bb);
+
+        // Implement cont_bb
+        gc.builder().position_at_end(cont_bb);
+
+        // Build phi value
+        let str_phi = gc.builder().build_phi(str.ptr(gc).get_type(), "str_phi");
+        str_phi.add_incoming(&[
+            (&original_str_ptr, current_bb),
+            (&cloned_str_ptr, succ_of_shared_bb),
+        ]);
+
+        str = Object::new(
+            str_phi.as_basic_value().into_pointer_value(),
+            str.ty.clone(),
+        );
+    }
+    str
+}
+
+// `set` built-in function for a given struct.
+pub fn struct_set(
+    struct_name: &FullName,
+    definition: &TypeDefn,
+    field_name: &str,
+    is_unique_version: bool,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const VALUE_NAME: &str = "val";
+    const STRUCT_NAME: &str = "str";
+
+    // Find the index of `field_name` in the given struct.
+    let field = definition.get_field_by_name(field_name);
+    if field.is_none() {
+        error_exit(&format!(
+            "error: no field `{}` found in the struct `{}`.",
+            &field_name,
+            struct_name.to_string(),
+        ));
+    }
+    let (field_idx, field) = field.unwrap();
+    let field_count = definition.fields().len() as u32;
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, str_ty, rvo| {
+        // Get arguments
+        let value = gc.get_var(&FullName::local(VALUE_NAME)).ptr.get(gc);
+        let str = gc.get_var(&FullName::local(STRUCT_NAME)).ptr.get(gc);
+
+        // Make struct object unique.
+        let mut str = make_struct_unique(gc, str, field_count, is_unique_version);
+
+        // Release old value
+        let old_value = ObjectFieldType::get_struct_field_noclone(gc, &str, field_idx as u32);
+        gc.release(old_value);
+
+        // Set new value
+        ObjectFieldType::set_struct_field(gc, &str, field_idx as u32, &value);
+
+        // If rvo, store the result to the rvo.
+        if rvo.is_some() {
+            assert!(str_ty.is_unbox(gc.type_env()));
+            // Move str to rvo.
+            let rvo = rvo.unwrap();
+            let str_val = str.load_nocap(gc);
+            rvo.store_unbox(gc, str_val);
+            str = rvo;
+        }
+
+        str
+    });
+
+    let str_ty = definition.ty();
+    let expr = expr_abs(
+        vec![var_local(VALUE_NAME, None)],
+        expr_abs(
+            vec![var_local(STRUCT_NAME, None)],
+            expr_lit(
+                generator,
+                vec![FullName::local(VALUE_NAME), FullName::local(STRUCT_NAME)],
+                format!(
+                    "{}.{}={}({})",
+                    STRUCT_NAME,
+                    field_name,
+                    if is_unique_version { "!" } else { "" },
+                    VALUE_NAME
+                ),
+                str_ty.clone(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    let ty = type_fun(field.ty.clone(), type_fun(str_ty.clone(), str_ty.clone()));
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
 }
@@ -1081,7 +1167,7 @@ pub fn union_new(
     (expr, scm)
 }
 
-// `new_{field}` built-in function for a given union.
+// constructor function for a given union.
 pub fn union_new_lit(
     union_name: &FullName,
     union_defn: &TypeDefn,

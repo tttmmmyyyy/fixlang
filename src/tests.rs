@@ -669,7 +669,7 @@ pub fn test33() {
         main = (
             let obj = IntBool.new(18, false);
             let obj = IntBool.mod_x(|x| x + 42, obj);
-            let u = assert_eq("", IntBool.get_x(obj), 60);
+            let u = assert_eq("", IntBool.@x(obj), 60);
             pure()
         );
         "#;
@@ -688,7 +688,7 @@ pub fn test34_5() {
         main = (
             let obj = IntBool.new(18, false);
             let obj = IntBool.mod_x(|x| x + 42, obj);
-            let u = assert_eq("", IntBool.get_x(obj), 60);
+            let u = assert_eq("", IntBool.@x(obj), 60);
             pure()
         );
         "#;
@@ -709,7 +709,7 @@ pub fn test34() {
         main = (
             let obj = IntBool.new(18, false);
             let obj = obj.mod_x(|x| x + 42);
-            let u = assert_eq("", obj.get_x, 60);
+            let u = assert_eq("", obj.@x, 60);
             pure()
         );
         "#;
@@ -730,7 +730,7 @@ pub fn test35() {
         main = (
             let a = A.new(3, true);
             let b = B.new(true, 5);
-            let ans = add(if a.get_y then a.get_x else 0, if b.get_x then b.get_y else 0);
+            let ans = add(if a.@y then a.@x else 0, if b.@x then b.@y else 0);
             let u = assert_eq("", ans, 8);
             pure()
         );
@@ -752,7 +752,7 @@ pub fn test36() {
         main = (
             let a = A.new(B.new(16));
             let a = a.(mod_x $ mod_x $ |x| x + 15);
-            let ans = a . get_x . get_x;
+            let ans = a . @x . @x;
             let u = assert_eq("", ans, 31);
             pure ()
         );
@@ -774,7 +774,7 @@ pub fn test37() {
         main = (
             let a = A.new (B.new $ 16);
             let b = a . (mod_x! $ mod_x! $ |x| x + 15);
-            let ans = b . get_x . get_x;
+            let ans = b . @x . @x;
             let u = assert_eq("", ans, 31);
             pure()
         );
@@ -796,7 +796,7 @@ pub fn test37_5() {
         main = (
             let a = A.new (B.new $ 16);
             let b = a.(mod_x $ mod_x $ |x| x + 15);
-            let ans = a.get_x.get_x + b.get_x.get_x;
+            let ans = a.@x.@x + b.@x.@x;
             let u = assert_eq("", ans, (16 + 15) + 16);
             pure()
         );
@@ -819,7 +819,7 @@ pub fn test38() {
             let a = A.new (B.new $ 16);
             let f = |a| (a : A) . (mod_x! $ mod_x! $ |x| x + 15);
             let a = a.f;
-            let ans = a.get_x.get_x;
+            let ans = a.@x.@x;
             let u = assert_eq("", ans, 31);
             pure()
         );
@@ -842,7 +842,7 @@ pub fn test39() {
             let a = A.new (B.new (16));
             let f = |a| a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ |x| x + 15);
             let a = a.f;
-            let ans = a.get_x.get_x;
+            let ans = a.@x.@x;
             let u = assert_eq("", ans, 31);
             pure()
         );
@@ -865,7 +865,7 @@ pub fn test40() {
             let a = A.new (B.new $ 16);
             let f: A -> A = |a| a.(mod_x! $ mod_x! $ |x| x + 15);
             let a = a .f;
-            let ans = a .get_x .get_x;
+            let ans = a .@x .@x;
             let u = assert_eq("", ans, 31);
             pure()
         );
@@ -1174,8 +1174,8 @@ pub fn test48() {
         main = (
             let int_vec = Vec.new $ Array.new(2, 5);
             let int_vec = int_vec.mod_data!(|arr| arr.set(0, 3));
-            let head = int_vec.get_data.get(0);
-            let next = int_vec.get_data.get(1);
+            let head = int_vec.@data.get(0);
+            let next = int_vec.@data.get(1);
             let ans = add(head, next);
             let u = assert_eq("", ans, 8);
             pure()
@@ -1221,8 +1221,8 @@ pub fn test50() {
             main = (
                 let ans = (
                     loop((0, 0), |state|
-                        let i = state.get_0;
-                        let sum = state.get_1;
+                        let i = state.@0;
+                        let sum = state.@1;
                         if i == {} then break(sum) else continue $ (i+1, sum+i)
                     )
                 );
@@ -1245,7 +1245,7 @@ pub fn test51() {
     
     impl [a: Eq, b: Eq] (a, b) : Eq {
         eq = |lhs, rhs| (
-            lhs.get_0 == rhs.get_0 && lhs.get_1 == rhs.get_1
+            lhs.@0 == rhs.@0 && lhs.@1 == rhs.@1
         );
     }
 
@@ -1287,13 +1287,13 @@ pub fn test52() {
         let arr = arr.set!(0, false);
         let arr = arr.set!(1, false);
         loop(SieveState.new(2, arr)) $ |state| (
-            let i = state.get_i;
-            let arr = state.get_arr;
+            let i = state.@i;
+            let arr = state.@arr;
             if i*i > n then break $ arr else 
             let next_arr = if arr.get(i) then (
                 loop(SieveState.new(i+i, arr)) $ |state| (
-                    let q = state.get_i;
-                    let arr = state.get_arr;
+                    let q = state.@i;
+                    let arr = state.@arr;
                     if n-1 < q then 
                         break $ arr
                     else 
@@ -1308,8 +1308,8 @@ pub fn test52() {
     count : [a: Eq] a -> Array a -> Int;
     count = |elem, arr| (
         loop((0, 0)) $ |state| (
-            let i = state.get_0;
-            let sum = state.get_1;
+            let i = state.@0;
+            let sum = state.@1;
             if arr.len == i then break $ sum 
             else 
                 let sum = sum + (if arr.get(i) == elem then 1 else 0);
@@ -1339,8 +1339,8 @@ pub fn test53() {
         let pair = (13, Array.new(1, 0));
         let pair = pair.mod_0!(|x| x + 3);
         let pair = pair.mod_1!(|arr| arr.set!(0, 5));
-        let x = pair.get_0;
-        let y = pair.get_1.get(0);
+        let x = pair.@0;
+        let y = pair.@1.get(0);
         let ans = x + y;
         let u = assert_eq("", ans, 13 + 3 + 5);
         pure()
@@ -1361,8 +1361,8 @@ pub fn test54() {
         let pair0 = (13, Array.new(1, 0));
         let pair1 = pair0.mod_1(|arr| arr.set(0, 5));
         let pair2 = pair0.mod_0!(|x| x + 3);
-        let x = pair1.get_1.get(0);
-        let y = pair2.get_0;
+        let x = pair1.@1.get(0);
+        let y = pair2.@0;
         let ans = x + y;
         let u = assert_eq("", ans, 13 + 3 + 5);
         pure()
@@ -1521,7 +1521,7 @@ pub fn test61() {
                 break $ ((), io)
             else
                 let ret = io.print("Hello World! ");
-                let io = ret.get_1;
+                let io = ret.@1;
                 continue $ (counter + 1, io)
         )
     );
@@ -1538,7 +1538,7 @@ pub fn test62() {
 
     main : IOState -> ((), IOState);
     main = (
-        let len = "Hello World!".get_len;
+        let len = "Hello World!".@len;
         let u = assert_eq("", len, 12);
         pure()
     );
@@ -1766,8 +1766,8 @@ pub fn test73() {
     main : IOState -> ((), IOState);
     main = (
         let int_bool = IntBool { y: true, x: 42 };
-        let u = assert_eq("", int_bool.get_x, 42);
-        let u = assert_eq("", int_bool.get_y, true);
+        let u = assert_eq("", int_bool.@x, 42);
+        let u = assert_eq("", int_bool.@y, true);
         pure()
     );
     "#;
