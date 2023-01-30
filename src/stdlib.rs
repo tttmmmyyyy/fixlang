@@ -70,7 +70,7 @@ namespace Option {
 }
 
 // Iterator (a.k.a lazy list)
-type Iterator a = struct { data: () -> Option (a, Iterator a) };
+type Iterator a = unbox struct { data: () -> Option (a, Iterator a) };
 
 namespace Iterator {
 
