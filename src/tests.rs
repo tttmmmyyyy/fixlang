@@ -1,3 +1,5 @@
+use std::fs;
+
 use super::*;
 
 // Tests should run sequentially, since OBJECT_TABLE in libfixsanitizer.so is shared between tests and check_leak() asserts OBJECT_TABLE is empty.
@@ -1843,6 +1845,35 @@ pub fn test76() {
     );
     "#;
     run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn run_examples() {
+    let paths = fs::read_dir("./examples").unwrap();
+
+    for path in paths {
+        let path = path.unwrap().path();
+        let display = path.display();
+        if path.extension().unwrap() != "fix" {
+            continue;
+        }
+        println!("[run_examples] {}:", display);
+
+        let mut file = match File::open(&path) {
+            Err(why) => panic!("couldn't open {}: {}", display, why),
+            Ok(file) => file,
+        };
+
+        let mut s = String::new();
+        match file.read_to_string(&mut s) {
+            Err(why) => panic!("couldn't read {}: {}", display, why),
+            Ok(_) => {}
+        }
+
+        // Since examples may include heavy computation, perform optimization.
+        run_source(&s, Configuration::release());
+    }
 }
 
 #[test]
