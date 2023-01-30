@@ -89,6 +89,7 @@ namespace Iterator {
     );
 
     // Apply a function to each value of iterator.
+    // map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]
     map : (a -> b) -> Iterator a -> Iterator b;
     map = |f, a_iter| (
         let data = |_| (
@@ -100,6 +101,7 @@ namespace Iterator {
     );
 
     // Create iterator from mapping function.
+    // from_map(f) = [f(0), f(1), f(2), ...]
     from_map : (Int -> a) -> Iterator a;
     from_map = |f| count_up(0).map(f);
 }
