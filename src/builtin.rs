@@ -473,51 +473,113 @@ pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// "Array.from_map" built-in function.
-pub fn from_map_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-    let arr_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
+// Makes an uninitialized array.
+pub fn new_uninitialized() -> (Arc<ExprNode>, Arc<Scheme>) {
     const SIZE_NAME: &str = "size";
-    const MAP_NAME: &str = "map";
-    let name = "Array.from_map size map".to_string();
-    let name_cloned = name.clone();
-    let size_name = FullName::local(SIZE_NAME);
-    let map_name = FullName::local(MAP_NAME);
-    let size_name_cloned = size_name.clone();
-    let map_name_cloned = map_name.clone();
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
-        let size = gc.get_var_field(&size_name_cloned, 0).into_int_value();
-        gc.release(gc.get_var(&size_name_cloned).ptr.get(gc));
-        let map = gc.get_var(&map_name_cloned).ptr.get(gc);
+    const ELEM_TYPE: &str = "a";
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, arr_ty, rvo| {
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
-        let array = allocate_obj(
-            ty.clone(),
+
+        // Get size
+        let size = gc
+            .get_var_field(&FullName::local(SIZE_NAME), 0)
+            .into_int_value();
+
+        // Allocate
+        allocate_obj(
+            arr_ty.clone(),
             &vec![],
             Some(size),
             gc,
-            Some(name_cloned.as_str()),
-        );
-        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-        ObjectFieldType::initialize_array_buf_by_map(gc, size, buf, map);
-        array
+            Some(&format!("new_uninitialized({})", SIZE_NAME)),
+        )
     });
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar);
+
     let expr = expr_abs(
         vec![var_local(SIZE_NAME, None)],
-        expr_abs(
-            vec![var_local(MAP_NAME, None)],
-            expr_lit(generator, vec![size_name, map_name], name, arr_ty, None),
+        expr_lit(
+            generator,
+            vec![FullName::local(SIZE_NAME)],
+            format!("new_uninitialized({})", SIZE_NAME),
+            array_ty.clone(),
             None,
         ),
         None,
     );
     let scm = Scheme::generalize(
-        HashMap::from([("a".to_string(), kind_star())]),
+        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![],
+        type_fun(int_lit_ty(), array_ty),
+    );
+    (expr, scm)
+}
+
+// Set an element of an uninitialized array, with no uniqueness checking.
+pub fn set_uninitialized_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const IDX_NAME: &str = "idx";
+    const ARR_NAME: &str = "array";
+    const VALUE_NAME: &str = "val";
+    const ELEM_TYPE: &str = "a";
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+        assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
+
+        // Get argments
+        let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
+        let idx = gc
+            .get_var_field(&FullName::local(IDX_NAME), 0)
+            .into_int_value();
+        let value = gc.get_var(&FullName::local(VALUE_NAME)).ptr.get(gc);
+
+        // Get array size and buffer.
+        let array_size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
+        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+
+        // Perform write and return.
+        ObjectFieldType::write_to_array_buf(gc, array_size, array_buf, idx, value, false);
+        array
+    });
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(IDX_NAME, None)],
+        expr_abs(
+            vec![var_local(VALUE_NAME, None)],
+            expr_abs(
+                vec![var_local(ARR_NAME, None)],
+                expr_lit(
+                    generator,
+                    vec![
+                        FullName::local(IDX_NAME),
+                        FullName::local(VALUE_NAME),
+                        FullName::local(ARR_NAME),
+                    ],
+                    format!(
+                        "{}.set_uninitialized_unique_array({}, {})",
+                        ARR_NAME, IDX_NAME, VALUE_NAME
+                    ),
+                    array_ty.clone(),
+                    None,
+                ),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+
+    let scm = Scheme::generalize(
+        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
         vec![],
         type_fun(
             int_lit_ty(),
-            type_fun(
-                type_fun(int_lit_ty(), type_tyvar_star("a")),
-                type_tyapp(array_lit_ty(), type_tyvar_star("a")),
-            ),
+            type_fun(elem_tyvar.clone(), type_fun(array_ty.clone(), array_ty)),
         ),
     );
     (expr, scm)

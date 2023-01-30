@@ -212,51 +212,6 @@ impl ObjectFieldType {
         }
     }
 
-    // Initialize an array by map.
-    pub fn initialize_array_buf_by_map<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        size: IntValue<'c>,
-        buffer: PointerValue<'c>,
-        map: Object<'c>,
-    ) {
-        // Initialize elements
-        {
-            // In loop body, retain value and store it at idx.
-            let loop_body = |gc: &mut GenerationContext<'c, 'm>,
-                             idx: Object<'c>,
-                             _size: IntValue<'c>,
-                             ptr_to_buffer: PointerValue<'c>| {
-                // Apply map to idx object to get initial value at this idx.
-                gc.retain(map.clone());
-                let value = gc.apply_lambda(map.clone(), vec![idx.clone()], None);
-
-                // Store value.
-                let idx_val = idx.load_field_nocap(gc, 0).into_int_value();
-                let ptr_to_obj_ptr = unsafe {
-                    gc.builder()
-                        .build_gep(ptr_to_buffer, &[idx_val.into()], "ptr_to_elem_of_array")
-                };
-                if value.is_box(gc.type_env()) {
-                    gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
-                } else {
-                    gc.builder()
-                        .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
-                }
-            };
-
-            // After loop, release map.
-            let after_loop = |gc: &mut GenerationContext<'c, 'm>,
-                              _size: IntValue<'c>,
-                              _ptr_to_buffer: PointerValue<'c>| {
-                gc.release(map.clone());
-            };
-
-            // Generate loop.
-            // NOTE: if you see error at here, try `cargo clean`.
-            Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
-        }
-    }
-
     // Panic if idx is out_of_range for the array.
     pub fn panic_if_out_of_range<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,

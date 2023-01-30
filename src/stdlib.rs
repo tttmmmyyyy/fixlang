@@ -24,6 +24,23 @@ impl Int : ToString {
     to_string = Int.int_to_string;
 }
 
+namespace Array {
+
+    from_map : Int -> (Int -> a) -> Array a;
+    from_map = |size, map| (
+        let arr = Array.__new_uninitialized(size);
+        loop((0, arr), |(idx, arr)|(
+            if idx == size then (
+                break $ arr
+            ) else (
+                let arr = arr.__set_uninitialized_unique_array(idx, map(idx));
+                continue $ (idx + 1, arr)
+            )
+        ))
+    );
+
+}
+
 namespace IO {
 
     pure : a -> IOState -> (a, IOState);
@@ -181,8 +198,12 @@ pub fn make_std_mod() -> FixModule {
         new_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "from_map"),
-        from_map_array(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__new_uninitialized"),
+        new_uninitialized(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__set_uninitialized_unique_array"),
+        set_uninitialized_unique_array(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),

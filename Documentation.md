@@ -252,9 +252,11 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 `Std.Array` is the type of fixed-length arrays.
 
 - `Std.Array.new : Int -> a -> Std.Array a`
-    - Creates an array of the specified length and elements of the specified value.
+    - Creates an array filled by the initial value.
+    - `new(n, x) = [x, x, x, ..., x]` (of length `n`).
 - `Std.Array.from_map : Int -> (Int -> a) -> Std.Array a`
-    - Creates an array of the specified length and elements specified by the function given as the second argument at each index.
+    - Creates an array by a mapping function.
+    - `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
 - `Std.Array.len : Std.Array a -> Int`
     - Returns the length of an array.    
 - `Std.Array.get : Int -> Std.Array a -> a`
@@ -271,6 +273,13 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 - `Std.Array.mod! : Int -> (a -> a) -> Std.Array a -> Std.Array a`
     - This function clones the array if it is shared between multiple references.
     - This function always update the array. If the array is shared between multiple references, this function panics.
+- (unsafe) `Std.Array.__new_uninitialized : Int -> Std.Array a`
+    - Creates an array of specified length with uninitialized elements.
+    - After allocating array by this function, you should initialize all elements using `__set_uninitialized_unique_array` function.
+- (unsafe) `Std.Array.__set_uninitialized_unique_array : Int -> a -> Std.Array a -> Std.Array a`
+    - Sets a value into an array. 
+    - This function doesn't release the old value of the element.
+    - This function updates the array without checking uniqueness.
 
 NOTE: In a future, we will add lens functions such as `act : [f: Functor] Int -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
 
