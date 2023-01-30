@@ -570,6 +570,96 @@ pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Make array object to unique.
+// If it is (unboxed or) unique, do nothing.
+// If it is shared, clone the object or panics if panic_if_shared is true.
+// Returns tuple of array object, size and pointer to buffer.
+fn make_array_unique<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    array: Object<'c>,
+    panic_if_shared: bool,
+) -> (Object<'c>, IntValue<'c>, PointerValue<'c>) {
+    let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+    let original_array_ptr = array.ptr(gc);
+
+    // Get array size and buffer.
+    let array_size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
+    let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+
+    // Get refcnt.
+    let refcnt = {
+        let array_ptr = array.ptr(gc);
+        gc.load_obj_field(array_ptr, control_block_type(gc), 0)
+            .into_int_value()
+    };
+
+    // Add shared / cont bbs.
+    let current_bb = gc.builder().get_insert_block().unwrap();
+    let current_func = current_bb.get_parent().unwrap();
+    let shared_bb = gc
+        .context
+        .append_basic_block(current_func, "array_shared_bb");
+    let cont_bb = gc
+        .context
+        .append_basic_block(current_func, "after_unique_array_bb");
+
+    // Jump to shared_bb if refcnt > 1.
+    let one = refcnt_type(gc.context).const_int(1, false);
+    let is_unique = gc
+        .builder()
+        .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+    gc.builder()
+        .build_conditional_branch(is_unique, cont_bb, shared_bb);
+
+    // In shared_bb, create new array and clone array field.
+    gc.builder().position_at_end(shared_bb);
+    if panic_if_shared {
+        // In case of unique version, panic in this case.
+        gc.panic("a struct object is asserted as unique but is shared!\n");
+    }
+    let cloned_array = allocate_obj(
+        array.ty.clone(),
+        &vec![],
+        Some(array_size),
+        gc,
+        Some("cloned_array_for_uniqueness"),
+    );
+    let cloned_array_buf = cloned_array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+
+    ObjectFieldType::clone_array_buf(gc, array_size, array_buf, cloned_array_buf, elem_ty);
+    gc.release(array.clone()); // Given array should be released here.
+    let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
+    let cloned_array_ptr = cloned_array.ptr(gc);
+    gc.builder().build_unconditional_branch(cont_bb);
+
+    // Implement cont_bb
+    gc.builder().position_at_end(cont_bb);
+
+    // Build phi value of array and array_field.
+    let array_phi = gc
+        .builder()
+        .build_phi(original_array_ptr.get_type(), "array_phi");
+    array_phi.add_incoming(&[
+        (&original_array_ptr, current_bb),
+        (&cloned_array_ptr, succ_of_shared_bb),
+    ]);
+    let array = Object::new(
+        array_phi.as_basic_value().into_pointer_value(),
+        array.ty.clone(),
+    );
+    let array_buf_phi = gc
+        .builder()
+        .build_phi(array_buf.get_type(), "array_field_phi");
+    assert_eq!(array_buf.get_type(), cloned_array_buf.get_type());
+    array_buf_phi.add_incoming(&[
+        (&array_buf, current_bb),
+        (&cloned_array_buf, succ_of_shared_bb),
+    ]);
+    let array_buf = array_buf_phi.as_basic_value().into_pointer_value();
+
+    (array, array_size, array_buf)
+}
+
 // Implementation of Array.set/Array.set! built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
 fn write_array_lit(
@@ -591,89 +681,21 @@ fn write_array_lit(
         }
     });
     let name = format!("{} {} {} {}", func_name, idx, value, array);
-    let name_cloned = name.clone();
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
         assert!(rvo.is_none());
-        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
-        let elem_ty = ty.field_types(gc.type_env())[0].clone();
+
         // Get argments
         let array = gc.get_var(&array_str).ptr.get(gc);
-        let original_array_ptr = array.ptr(gc);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
 
-        // Get array size and buffer.
-        let array_size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
-        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-
-        // Get refcnt.
-        let refcnt = {
-            let array_ptr = array.ptr(gc);
-            gc.load_obj_field(array_ptr, control_block_type(gc), 0)
-                .into_int_value()
-        };
-
-        // Add shared / cont bbs.
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
-        let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
-
-        // Jump to shared_bb if refcnt > 1.
-        let one = refcnt_type(gc.context).const_int(1, false);
-        let is_unique = gc
-            .builder()
-            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
-        gc.builder()
-            .build_conditional_branch(is_unique, cont_bb, shared_bb);
-
-        // In shared_bb, create new array and clone array field.
-        gc.builder().position_at_end(shared_bb);
-        if is_unique_version {
-            // In case of unique version, panic in this case.
-            gc.panic(format!("The argument of {} is shared!\n", func_name.as_str()).as_str());
-        }
-        let cloned_array = allocate_obj(
-            ty.clone(),
-            &vec![],
-            Some(array_size),
-            gc,
-            Some(name_cloned.as_str()),
-        );
-        let cloned_array_buf = cloned_array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-
-        ObjectFieldType::clone_array_buf(gc, array_size, array_buf, cloned_array_buf, elem_ty);
-        gc.release(array.clone()); // Given array should be released here.
-        let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-        let cloned_array_ptr = cloned_array.ptr(gc);
-        gc.builder().build_unconditional_branch(cont_bb);
-
-        // Implement cont_bb
-        gc.builder().position_at_end(cont_bb);
-
-        // Build phi value of array and array_field.
-        let array_phi = gc
-            .builder()
-            .build_phi(original_array_ptr.get_type(), "array_phi");
-        array_phi.add_incoming(&[
-            (&original_array_ptr, current_bb),
-            (&cloned_array_ptr, succ_of_shared_bb),
-        ]);
-        let array = Object::new(array_phi.as_basic_value().into_pointer_value(), ty.clone());
-        let array_buf_phi = gc
-            .builder()
-            .build_phi(array_buf.get_type(), "array_field_phi");
-        assert_eq!(array_buf.get_type(), cloned_array_buf.get_type());
-        array_buf_phi.add_incoming(&[
-            (&array_buf, current_bb),
-            (&cloned_array_buf, succ_of_shared_bb),
-        ]);
-        let array_buf = array_buf_phi.as_basic_value().into_pointer_value();
+        // Make array unique
+        let (array, array_size, array_buf) = make_array_unique(gc, array, is_unique_version);
 
         // Perform write and return.
-        ObjectFieldType::write_to_array_buf(gc, array_size, array_buf, idx, value);
+        ObjectFieldType::write_to_array_buf(gc, array_size, array_buf, idx, value, true);
         array
     });
     expr_lit(
@@ -720,6 +742,88 @@ pub fn write_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // set! built-in function.
 pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
     write_array_common(true)
+}
+
+pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const MODIFIED_ARRAY_NAME: &str = "arr";
+    const MODIFIER_NAME: &str = "f";
+    const INDEX_NAME: &str = "idx";
+    const ELEM_TYPE: &str = "a";
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+        assert!(rvo.is_none());
+
+        // Get argments
+        let array = gc
+            .get_var(&FullName::local(MODIFIED_ARRAY_NAME))
+            .ptr
+            .get(gc);
+        let idx = gc
+            .get_var_field(&FullName::local(INDEX_NAME), 0)
+            .into_int_value();
+        let modifier = gc.get_var(&FullName::local(MODIFIER_NAME)).ptr.get(gc);
+
+        // Make array unique
+        let (array, array_size, array_buf) = make_array_unique(gc, array, is_unique_version);
+
+        // Get old element without retain.
+        let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+        let elem = ObjectFieldType::read_from_array_buf_noretain(
+            gc, array_size, array_buf, elem_ty, idx, None,
+        );
+
+        // Apply modifier to get a new value.
+        let elem = gc.apply_lambda(modifier, vec![elem], None);
+
+        // Perform write and return.
+        ObjectFieldType::write_to_array_buf(gc, array_size, array_buf, idx, elem, false);
+        array
+    });
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(INDEX_NAME, None)],
+        expr_abs(
+            vec![var_local(MODIFIER_NAME, None)],
+            expr_abs(
+                vec![var_local(MODIFIED_ARRAY_NAME, None)],
+                expr_lit(
+                    generator,
+                    vec![
+                        FullName::local(INDEX_NAME),
+                        FullName::local(MODIFIER_NAME),
+                        FullName::local(MODIFIED_ARRAY_NAME),
+                    ],
+                    format!(
+                        "{}.mod{}({}, {})",
+                        MODIFIED_ARRAY_NAME,
+                        if is_unique_version { "!" } else { "" },
+                        INDEX_NAME,
+                        MODIFIER_NAME
+                    ),
+                    array_ty.clone(),
+                    None,
+                ),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![],
+        type_fun(
+            int_lit_ty(),
+            type_fun(
+                type_fun(elem_tyvar.clone(), elem_tyvar),
+                type_fun(array_ty.clone(), array_ty),
+            ),
+        ),
+    );
+    (expr, scm)
 }
 
 // `len` built-in function for Array.
@@ -791,7 +895,7 @@ pub fn struct_new_lit(
 
         // Set fields.
         for (i, field) in fields.iter().enumerate() {
-            ObjectFieldType::set_struct_field(gc, &obj, i as u32, field);
+            ObjectFieldType::set_struct_field_norelease(gc, &obj, i as u32, field);
         }
 
         obj
@@ -920,7 +1024,7 @@ pub fn struct_mod_lit(
         // Modify field
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, field_idx as u32);
         let field = gc.apply_lambda(modfier, vec![field], None);
-        ObjectFieldType::set_struct_field(gc, &str, field_idx as u32, &field);
+        ObjectFieldType::set_struct_field_norelease(gc, &str, field_idx as u32, &field);
 
         if rvo.is_some() {
             assert!(is_unbox);
@@ -1025,7 +1129,9 @@ fn make_struct_unique<'c, 'm>(
         gc.builder().position_at_end(shared_bb);
         if panic_if_shared {
             // In case of unique version, panic in this case.
-            gc.panic(&format!("The argument of mod! is shared!\n"));
+            gc.panic(&format!(
+                "a struct object is asserted as unique but is shared!\n"
+            ));
         }
         let cloned_str = allocate_obj(str.ty.clone(), &vec![], None, gc, Some("cloned_str"));
         for i in 0..field_count {
@@ -1033,7 +1139,7 @@ fn make_struct_unique<'c, 'm>(
             let field = ObjectFieldType::get_struct_field_noclone(gc, &str, i as u32);
             gc.retain(field.clone());
             // Clone field.
-            ObjectFieldType::set_struct_field(gc, &cloned_str, i as u32, &field);
+            ObjectFieldType::set_struct_field_norelease(gc, &cloned_str, i as u32, &field);
         }
         gc.release(str.clone());
         let cloned_str_ptr = cloned_str.ptr(gc);
@@ -1093,7 +1199,7 @@ pub fn struct_set(
         gc.release(old_value);
 
         // Set new value
-        ObjectFieldType::set_struct_field(gc, &str, field_idx as u32, &value);
+        ObjectFieldType::set_struct_field_norelease(gc, &str, field_idx as u32, &value);
 
         // If rvo, store the result to the rvo.
         if rvo.is_some() {

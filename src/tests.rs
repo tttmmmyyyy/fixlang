@@ -1538,7 +1538,7 @@ pub fn test62() {
 
     main : IOState -> ((), IOState);
     main = (
-        let len = "Hello World!".@len;
+        let len = "Hello World!".len;
         let u = assert_eq("", len, 12);
         pure()
     );
@@ -1821,6 +1821,24 @@ pub fn test75() {
         let _ = assert_eq("", n, 3*3);
         let Option.some((n, iter)) = iter.next;
         let _ = assert_eq("", n, 4*4);
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test76() {
+    // Test array modifier.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let array = Array.from_map(3, |_i| Array.from_map(3, |_j| 0));
+        let array = array.mod!(1, |inner_arr| inner_arr.set!(1, 9));
+        let _ = assert_eq("", array.get(1).get(1), 9);
         pure()
     );
     "#;

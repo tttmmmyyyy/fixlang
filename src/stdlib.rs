@@ -12,8 +12,8 @@ type Vector a = unbox struct { len : Int, data : Array a };
 type String = unbox struct { data : Vector Byte };
 
 namespace String {
-    @len : String -> Int;
-    @len = |s| s.@data.@len - 1; // exclude null terminator
+    len : String -> Int;
+    len = |s| s.@data.@len - 1; // exclude null terminator
 }
 
 trait a : ToString {
@@ -195,6 +195,14 @@ pub fn make_std_mod() -> FixModule {
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set!"),
         write_array_unique(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
+        mod_array(false),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod!"),
+        mod_array(true),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),

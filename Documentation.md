@@ -169,6 +169,8 @@ For each struct, the following methods are defined in the namespace of {type_nam
     - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
     - For the `Product.price` example above, `Main.Product.mod_price! : (Int -> Int) -> Product -> Product`. 
 
+NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Functor] ({field_type} -> f {field_type}) -> {struct_type} -> f {struct_type} `, which are generalization of `mod` functions.
+
 Structs are boxed by default because they are assumed to have many fields. To define unboxed struct type, write `unbox` specifier before `struct`.
 
 ```
@@ -253,23 +255,31 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
     - Creates an array of the specified length and elements of the specified value.
 - `Std.Array.from_map : Int -> (Int -> a) -> Std.Array a`
     - Creates an array of the specified length and elements specified by the function given as the second argument at each index.
+- `Std.Array.len : Std.Array a -> Int`
+    - Returns the length of an array.    
 - `Std.Array.get : Int -> Std.Array a -> a`
-    - Returns an element of an array at the specified index.
+    - Returns an element of an array at an index.
 - `Std.Array.set : Int -> a -> Std.Array a -> Std.Array a`
-    - Updates a value of an element at the specified index of an array.
+    - Updates a value of an element at an index of an array.
     - This function clones the given array if it is shared between multiple references.
 - `Std.Array.set! : Int -> a -> Std.Array a -> Std.Array a`
-    - Updates a value of an element at the specified index of an array.
+    - Updates a value of an element at an index of an array.
     - This function always update the given array. If the given array is shared between multiple references, this function panics.
-- `Std.Array.len : Std.Array a -> Int`
-    - Returns the length of an array.
+- `Std.Array.mod : Int -> (a -> a) -> Std.Array a -> Std.Array a`
+    - Modifies a value of an element at the specified index of an array by a function.
+    - This function clones the array if it is shared between multiple references.
+- `Std.Array.mod! : Int -> (a -> a) -> Std.Array a -> Std.Array a`
+    - This function clones the array if it is shared between multiple references.
+    - This function always update the array. If the array is shared between multiple references, this function panics.
+
+NOTE: In a future, we will add lens functions such as `act : [f: Functor] Int -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
 
 ### Std.Vector
 
 `Std.Vector` is the type of variable-length array.
 
 ```
-type Vector a = unbox struct ( len : Int, data : Array a );
+type Vector a = unbox struct { len : Int, data : Array a };
 ```
 
 ### Std.String
@@ -277,7 +287,7 @@ type Vector a = unbox struct ( len : Int, data : Array a );
 `Std.String` is the type of strings.
 
 ```
-type String = unbox struct ( data : Vector Byte );
+type String = unbox struct { data : Vector Byte };
 ```
 
 ## Functions

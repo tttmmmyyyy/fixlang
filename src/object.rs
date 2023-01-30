@@ -279,8 +279,8 @@ impl ObjectFieldType {
     }
 
     // Read an element of array.
-    // Returned object is already retained.
-    pub fn read_from_array_buf<'c, 'm>(
+    // Returned object is not retained.
+    pub fn read_from_array_buf_noretain<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
@@ -300,6 +300,7 @@ impl ObjectFieldType {
         // Get value
         let elem_val = gc.builder().build_load(ptr_to_elem, "elem");
 
+        // Return value
         let elem_obj = if rvo.is_some() {
             let rvo = rvo.unwrap();
             rvo.store_unbox(gc, elem_val);
@@ -307,10 +308,23 @@ impl ObjectFieldType {
         } else {
             Object::create_from_value(elem_val, elem_ty, gc)
         };
-
-        // Retain element and return it.
-        gc.retain(elem_obj.clone());
         elem_obj
+    }
+
+    // Read an element of array.
+    // Returned object is already retained.
+    pub fn read_from_array_buf<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        size: IntValue<'c>,
+        buffer: PointerValue<'c>,
+        elem_ty: Arc<TypeNode>,
+        idx: IntValue<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let elem =
+            ObjectFieldType::read_from_array_buf_noretain(gc, size, buffer, elem_ty, idx, rvo);
+        gc.retain(elem.clone());
+        elem
     }
 
     // Write an element into array.
@@ -320,6 +334,7 @@ impl ObjectFieldType {
         buffer: PointerValue<'c>,
         idx: IntValue<'c>,
         value: Object<'c>,
+        release_old_value: bool,
     ) {
         let elem_ty = value.ty.clone();
 
@@ -333,13 +348,15 @@ impl ObjectFieldType {
         };
 
         // Release element that is already at the place.
-        let elem = if elem_ty.is_box(gc.type_env()) {
-            gc.builder().build_load(place, "elem").into_pointer_value()
-        } else {
-            place
-        };
-        let elem_obj = Object::new(elem, elem_ty);
-        gc.release(elem_obj);
+        if release_old_value {
+            let elem = if elem_ty.is_box(gc.type_env()) {
+                gc.builder().build_load(place, "elem").into_pointer_value()
+            } else {
+                place
+            };
+            let elem_obj = Object::new(elem, elem_ty);
+            gc.release(elem_obj);
+        }
 
         // Insert the given value to the place.
         gc.builder().build_store(place, value.value(gc));
@@ -627,7 +644,7 @@ impl ObjectFieldType {
     }
 
     // Set an Object to field of struct. The old value isn't released in this function.
-    pub fn set_struct_field<'c, 'm>(
+    pub fn set_struct_field_norelease<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         str: &Object<'c>,
         field_idx: u32,
