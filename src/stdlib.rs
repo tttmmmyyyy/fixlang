@@ -13,12 +13,12 @@ namespace Array {
     from_map = |size, map| (
         let arr = Array.__new_uninitialized(size);
         loop((0, arr), |(idx, arr)|(
-            if idx == size then (
+            if idx == size {
                 break $ arr
-            ) else (
+            } else {
                 let arr = arr.__set_uninitialized_unique_array(idx, map(idx));
                 continue $ (idx + 1, arr)
-            )
+            }
         ))
     );
 
@@ -31,13 +31,13 @@ namespace Debug {
 
     assert : String -> Bool -> ();
     assert = |msg, b| (
-        if !b then (
+        if !b {
             let u = debug_print("assertion failed!: ");
             let u = debug_print(msg);
             abort()
-        ) else (
+        } else {
             ()
-        )
+        }
     );
 }
 
@@ -79,12 +79,12 @@ namespace Iterator {
     fold = |init, op, iter| (
         loop((init, iter), |(accum, iter)|
             let next = iter.next;
-            if next.is_none then (
+            if next.is_none {
                 break $ accum
-            ) else (
+            } else {
                 let (next, iter) = next.unwrap;
                 continue $ (op(accum, next), iter)
-            )
+            }
         )
     );
 
@@ -113,9 +113,9 @@ namespace Iterator {
     take : Int -> Iterator a -> Iterator a;
     take = |n, iter| (
         let data = |_| (
-            if n == 0 then none() else
+            if n == 0 { none() };
             let iter_next = iter.next;
-            if iter_next.is_none then none() else
+            if iter_next.is_none { none() };
             let (v, iter) = iter_next.unwrap;
             some $ (v, iter.take(n-1))
         );
@@ -127,9 +127,9 @@ namespace Iterator {
     zip = |iter0, iter1| (
         let data = |_| (
             let iter0_next = iter0.next;
-            if iter0_next.is_none then none() else
+            if iter0_next.is_none { none() };
             let iter1_next = iter1.next;
-            if iter1_next.is_none then none() else 
+            if iter1_next.is_none { none() };
             let (v0, iter0) = iter0_next.unwrap;
             let (v1, iter1) = iter1_next.unwrap;
             some $ ((v0, v1), zip(iter0, iter1))
@@ -144,11 +144,11 @@ namespace Option {
 
     map : (a -> b) -> Option a -> Option b;
     map = |f, opt| (
-        if opt.is_none then (
+        if opt.is_none {
             none()
-        ) else (
+        } else {
             some $ f $ opt.unwrap
-        )
+        }
     );
 
     unwrap : Option a -> a;

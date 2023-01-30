@@ -2,12 +2,13 @@ module Main;
 
 fib : Int -> Int;
 fib = |n| (
-    if n == 0 then
+    if n == 0 {
         0
-    else if n == 1 then
+    } else if n == 1 {
         1
-    else
+    } else {
         fib(n-1) + fib(n-2)
+    }
 );
 
 main : IOState -> ((), IOState);

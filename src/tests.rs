@@ -300,7 +300,7 @@ pub fn test17() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq("", if true then 3 else 5, 3);
+            let u = assert_eq("", if true { 3 } else { 5 }, 3);
             pure()
         );
     "#;
@@ -314,7 +314,7 @@ pub fn test18() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq("", if false then 3 else 5, 5);
+            let u = assert_eq("", if false { 3 } else { 5 }, 5);
             pure()
         );
     "#;
@@ -328,7 +328,7 @@ pub fn test19() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq("", if 3 == 3 then 1 else 0, 1);
+            let u = assert_eq("", if 3 == 3 { 1 } else { 0 }, 1);
             pure()
         );
     "#;
@@ -342,7 +342,7 @@ pub fn test20() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq("", if 3 == 5 then 1 else 0, 0);
+            let u = assert_eq("", if 3 == 5 { 1 } else { 0 }, 0);
             pure()
         );
     "#;
@@ -357,11 +357,13 @@ pub fn test20_5() {
         main : IOState -> ((), IOState);
         main = (
             let ans = (
-                if 2 == 0 then
+                if 2 == 0 {
                     0 
-                else if 2 == 1 then 
+                } else if 2 == 1 {
                     1
-                else 2
+                } else { 
+                    2 
+                }
             );
             let u = assert_eq("", ans, 2);
             pure ()
@@ -378,7 +380,7 @@ pub fn test21() {
 
             main : IOState -> ((), IOState);
             main = (
-                let fact = fix $ |loop, n| if n == 0 then 1 else n * loop(n-1);
+                let fact = fix $ |loop, n| if n == 0 { 1 } else { n * loop(n-1) };
                 let u = assert_eq("", fact(5), 5 * 4 * 3 * 2 * 1);
                 pure()
             );
@@ -397,12 +399,13 @@ pub fn test22() {
             main : IOState -> ((), IOState);
             main = (
                 let g = fix $ |loop, a, x|
-                            if x == 0 then 
+                            if x == 0 {{ 
                                 a 
-                            else
+                            }} else {{
                                 let a2 = a + x;
                                 let x2 = x + -1;
                                 loop(a2, x2)
+                            }}
                 in 
                     let u = assert_eq("", g(0, {}), {});
                     pure()
@@ -411,7 +414,7 @@ pub fn test22() {
         n,
         (n * (n + 1)) / 2
     );
-    run_source(source.as_str(), Configuration::develop_compiler());
+    run_source(source.as_str(), Configuration::release());
 }
 
 #[test]
@@ -423,12 +426,13 @@ pub fn test22_5() {
         main : IOState -> ((), IOState);
         main = (
             let fib = fix $ |f, n|
-                        if n == 0 then
+                        if n == 0 {
                             0
-                        else if n == 1 then
+                        } else if n == 1 {
                             1
-                        else
+                        } else {
                             f(n+-1) + f(n+-2)
+                        }
             in 
                 let u = assert_eq("", fib(10), 55);
                 pure()
@@ -446,12 +450,13 @@ pub fn test22_7() {
 
         fib : Int -> Int;
         fib = |n| (
-            if n == 0 then
+            if n == 0 {
                 0
-            else if n == 1 then
+            } else if n == 1 {
                 1
-            else
+            } else {
                 fib(n-1) + fib(n-2)
+            }
         );
         
         main : IOState -> ((), IOState);
@@ -573,14 +578,16 @@ pub fn test28() {
             let arr = Array.new(31, 0);
             let arr = arr.set!(0, 0);
             let arr = arr.set!(1, 1);
-            let loop = fix $ |f, arr, n|
-                if n == 31 then
+            let loop = fix $ |f, arr, n| (
+                if n == 31 {
                     arr
-                else
+                } else {
                     let x = arr.get(add(n, -1));
                     let y = arr.get(add(n, -2));
                     let arr = arr.set!(n, x+y);
-                    f(arr, n+1);
+                    f(arr, n+1)
+                }
+            );
             let fib = loop(arr, 2);
             let u = assert_eq("", fib.get(30), 832040);
             pure()
@@ -600,7 +607,7 @@ pub fn test29() {
 
         main : IOState -> ((), IOState);
         main = (
-            let u = assert_eq("", if id(true) then id(100) else 30, 100);
+            let u = assert_eq("", if id(true) { id(100) } else { 30 }, 100);
             pure()
         );
     "#;
@@ -618,7 +625,7 @@ pub fn test30() {
             let f = |x| x + 3;
             let g = |x| x == 8;
             let ans = g $ f $ 5;
-            let u = assert_eq("", if ans then 1 else 0, 1);
+            let u = assert_eq("", if ans { 1 } else { 0 }, 1);
             pure()
         );
         "#;
@@ -636,7 +643,7 @@ pub fn test31() {
             let f = |x| x + 3;
             let g = |x| x == 8;
             let ans = 5 .f. g;
-            let u = assert_eq("", if ans then 1 else 0, 1);
+            let u = assert_eq("", if ans { 1 } else { 0 } , 1);
             pure()
         );
         "#;
@@ -732,7 +739,7 @@ pub fn test35() {
         main = (
             let a = A.new(3, true);
             let b = B.new(true, 5);
-            let ans = add(if a.@y then a.@x else 0, if b.@x then b.@y else 0);
+            let ans = add(if a.@y { a.@x } else { 0 }, if b.@x { b.@y } else { 0 });
             let u = assert_eq("", ans, 8);
             pure()
         );
@@ -921,7 +928,7 @@ pub fn test42() {
             module Main;
             
             loop : Int -> Int;
-            loop = |x| if x == 0 then 0 else add(x) $ loop $ add(x, -1);
+            loop = |x| if x == 0 {{ 0 }} else {{ add(x) $ loop $ add(x, -1) }};
     
             main : IOState -> ((), IOState);
             main = (
@@ -946,7 +953,7 @@ pub fn test43() {
             module Main;
             
             my_loop : Int -> Int -> Int;
-            my_loop = |x, acc| if x == 0 then acc else my_loop(x + -1, acc + x);
+            my_loop = |x, acc| if x == 0 {{ acc }} else {{ my_loop(x + -1, acc + x) }};
     
             main : IOState -> ((), IOState);
             main = (
@@ -958,7 +965,7 @@ pub fn test43() {
         n,
         (n * (n + 1)) / 2
     );
-    run_source(source.as_str(), Configuration::develop_compiler());
+    run_source(source.as_str(), Configuration::release());
 }
 
 #[test]
@@ -977,7 +984,7 @@ pub fn test44() {
         }
 
         impl Bool : ToInt {
-            toInt = |b| if b then 0 else -1;
+            toInt = |b| if b { 0 } else { -1 };
         }
 
         add_head_and_next : [a: ToInt] Array a -> Int; 
@@ -1016,9 +1023,8 @@ pub fn test44_5() {
         sum : Array Int -> Int;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
-                if idx == arr.len 
-                then sum
-                else loop(idx + 1, sum + arr.get(idx))
+                if idx == arr.len { sum };
+                loop(idx + 1, sum + arr.get(idx))
             );
             loop(0, 0)
         );
@@ -1054,9 +1060,8 @@ pub fn test45() {
         sum : Array Int -> Int;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
-                if idx == arr.len 
-                then sum
-                else loop(idx + 1, sum + arr.get(idx))
+                if idx == arr.len { sum };
+                loop(idx + 1, sum + arr.get(idx))
             );
             loop(0, 0)
         );
@@ -1109,9 +1114,9 @@ pub fn test47() {
         main = (
             let int_union = int(3);
             let bool_union = bool(true);
-            let int_val = if int_union.is_int then int_union.as_int else 0;
-            let bool_val = if bool_union.is_bool then bool_union.as_bool else false;
-            let ans = if bool_val then int_val else 0;
+            let int_val = if int_union.is_int { int_union.as_int } else { 0 };
+            let bool_val = if bool_union.is_bool { bool_union.as_bool } else { false };
+            let ans = if bool_val { int_val } else { 0 };
             let u = assert_eq("", ans, 3);
             pure()
         );
@@ -1132,9 +1137,9 @@ pub fn test47_2() {
         main = (
             let int_union = int(3);
             let bool_union = bool(true);
-            let int_val = if int_union.is_int then int_union.as_int else 0;
-            let bool_val = if bool_union.is_bool then bool_union.as_bool else false;
-            let ans = if bool_val then int_val else 0;
+            let int_val = if int_union.is_int { int_union.as_int } else { 0 };
+            let bool_val = if bool_union.is_bool { bool_union.as_bool } else { false };
+            let ans = if bool_val { int_val } else { 0 };
             let u = assert_eq("", ans, 3);
             pure()
         );
@@ -1199,9 +1204,13 @@ pub fn test49() {
         main = (
             let int_left = Either.left(5);
             let ans = (
-                if int_left.is_left 
-                    then int_left.as_left 
-                    else if int_left.as_right then 1 else 0
+                if int_left.is_left {
+                    int_left.as_left
+                } else if int_left.as_right {
+                    1
+                } else {
+                    0
+                } 
             );
             let u = assert_eq("", ans, 5);
             pure()
@@ -1225,7 +1234,11 @@ pub fn test50() {
                     loop((0, 0), |state|
                         let i = state.@0;
                         let sum = state.@1;
-                        if i == {} then break(sum) else continue $ (i+1, sum+i)
+                        if i == {} {{
+                            break(sum)
+                        }} else {{
+                            continue $ (i+1, sum+i)
+                        }} 
                     )
                 );
                 let u = assert_eq("", ans, {});
@@ -1253,9 +1266,13 @@ pub fn test51() {
 
     search : [a: Eq] a -> Array a -> Int;
     search = |elem, arr| loop(0) $ |idx| (
-        if idx == arr.len then break $ -1
-        else if arr.get(idx) == elem then break $ idx
-        else continue $ idx + 1
+        if idx == arr.len {
+            break $ -1
+        } else if arr.get(idx) == elem { 
+            break $ idx
+        } else { 
+            continue $ idx + 1 
+        } 
     );
     
     main : IOState -> ((), IOState);
@@ -1291,17 +1308,20 @@ pub fn test52() {
         loop(SieveState.new(2, arr)) $ |state| (
             let i = state.@i;
             let arr = state.@arr;
-            if i*i > n then break $ arr else 
-            let next_arr = if arr.get(i) then (
+            if i*i > n { break $ arr };
+            let next_arr = if arr.get(i) {
                 loop(SieveState.new(i+i, arr)) $ |state| (
                     let q = state.@i;
                     let arr = state.@arr;
-                    if n-1 < q then 
+                    if n-1 < q { 
                         break $ arr
-                    else 
+                    } else {
                         continue $ SieveState.new (q + i) $ arr.set!(q, false)
+                    }
                 )
-            ) else arr;
+            } else {
+                arr
+            };
             continue $ SieveState.new((i + 1), next_arr)
         )
     );
@@ -1312,10 +1332,9 @@ pub fn test52() {
         loop((0, 0)) $ |state| (
             let i = state.@0;
             let sum = state.@1;
-            if arr.len == i then break $ sum 
-            else 
-                let sum = sum + (if arr.get(i) == elem then 1 else 0);
-                continue $ (i+1, sum)
+            if arr.len == i { break $ sum };
+            let sum = sum + (if arr.get(i) == elem {1} else {0});
+            continue $ (i+1, sum)
         )
     );
     
@@ -1383,12 +1402,13 @@ pub fn test55() {
     main : IOState -> ((), IOState);
     main = (
         let ans = (
-            if 0 <= -1 && -1 >= 0 then
+            if 0 <= -1 && -1 >= 0 {
                 0
-            else if 0 <= 0 && 0 <= 1 && 0 >= 0 && 1 >= 0 then
+            } else if 0 <= 0 && 0 <= 1 && 0 >= 0 && 1 >= 0 {
                 1
-            else 
+            } else {
                 2
+            }
         );
         let u = assert_eq("", ans, 1);
         pure ()
@@ -1411,7 +1431,7 @@ pub fn test56() {
             && false || true == true 
             && true || false == true 
             && true || true == true 
-            then 1 else 0
+            {1} else {0}
         );
         let u = assert_eq("", ans, 1);
         pure ()
@@ -1430,8 +1450,11 @@ pub fn test57() {
     main : IOState -> ((), IOState);
     main = (
         let ans = (
-            if !false == true && !true == false
-            then 1 else 0
+            if !false == true && !true == false {
+                1
+            } else {
+                0
+            }
         );
         let u = assert_eq("", ans, 1);
         pure()
@@ -1450,8 +1473,11 @@ pub fn test58() {
     main : IOState -> ((), IOState);
     main = (
         let ans = (
-            if false != true && true != false && !(true != true) && !(false != false)
-            then 1 else 0
+            if false != true && true != false && !(true != true) && !(false != false) {
+                1
+            } else {
+                0
+            }
         );
         let u = assert_eq("", ans, 1);
         pure()
@@ -1485,7 +1511,7 @@ pub fn test59() {
 
     main : IOState -> ((), IOState);
     main = (
-        let ans = (if y then A.x + B.x + A.y else 0);
+        let ans = (if y {A.x + B.x + A.y} else {0});
         let u = assert_eq("", ans, 9);
         pure()
     );
@@ -1519,12 +1545,13 @@ pub fn test61() {
     main : IOState -> ((), IOState);
     main = |io| (
         loop((0, io)) $ |(counter, io)| (
-            if counter == 3 then
+            if counter == 3 {
                 break $ ((), io)
-            else
+            } else {
                 let ret = io.println("Hello World! ");
                 let io = ret.@1;
                 continue $ (counter + 1, io)
+            }
         )
     );
     "#;
@@ -1590,10 +1617,11 @@ pub fn test65() {
     main = (
         let sum = loop((0, 0), |state| 
             let (i, sum) = state;
-            if i == 10 then 
+            if i == 10 {
                 break $ sum
-            else
+            } else {
                 continue $ (i+1, sum+i)
+            }
         );
         let u = assert_eq("", sum, 45);
         pure ()
@@ -1615,10 +1643,11 @@ pub fn test66() {
     main = (
         let sum = loop(State.new(0, 0), |state|
             let State {idx: i, sum: sum} = state;
-            if i == 10 then 
+            if i == 10 {
                 break $ sum
-            else
+            } else {
                 continue $ State.new(i+1, sum+i)
+            }
         );
         let u = assert_eq("", sum, 45);
         pure()
@@ -1640,10 +1669,11 @@ pub fn test67() {
     main = (
         let sum = loop(State.new(0, 0), |state|
             let State {idx: i, sum: sum} = state;
-            if i == 10 then 
+            if i == 10 {
                 break $ sum
-            else
+            } else {
                 continue $ State.new(i+1, sum+i)
+            }
         );
         let u = assert_eq("", sum, 45);
         pure()
@@ -1744,10 +1774,11 @@ pub fn test72() {
     main : IOState -> ((), IOState);
     main = (
         let sum = loop((0, 0), |(i, sum)|
-            if i == 10 then 
+            if i == 10 {
                 break $ sum
-            else
+            } else {
                 continue $ (i + 1, sum + i)
+            }
         );
         let u = assert_eq("", sum, 45);
         pure()
@@ -1907,7 +1938,7 @@ pub fn test_comment_0() {
             let x = 5 in 
             let y = -3 in
             /* If the closing symbol is put on the end of this line, g will evaluate.
-            let g = fix \f -> \x -> if x == 0 then 0 else add x (f (add x -1));
+            let g = fix \f -> \x -> if x == 0 {0} else {add x (f (add x -1))};
             g 100
             /* */
             //

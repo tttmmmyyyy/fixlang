@@ -1,9 +1,11 @@
 // === Basic rules ===
 sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
-keywords = _{ ("let" | "in" | "if" | "then" | "else" | "for" | "true" | "false" | "type" | "trait" | "impl" | "struct" | "union") ~ sep+ }
+keywords = _{ ("let" | "in" | "if" | "else" | "true" | "false" | "type" | "trait" | "impl") ~ sep+ }
 
 in_of_let = { "in" | ";" }
+
+else_of_inline_if = _{ "else" | ";" }
 
 eq_of_let = { "=" }
 
@@ -44,7 +46,7 @@ expr_var = { (namespace ~ ".")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
-expr_if = { "if" ~ sep+ ~ expr ~ sep+ ~ "then" ~ sep+ ~ expr ~ sep+ ~ "else" ~ sep+ ~ expr }
+expr_if = { "if" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" ~ sep* ~ (("else" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}") | ((";" | ("else" ~ sep)) ~ sep* ~ expr)) }
 
 expr_lam = { "|" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ sep* ~ "|" ~ sep* ~ expr }
 

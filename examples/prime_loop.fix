@@ -11,21 +11,15 @@ is_prime = |n| (
     // continue : s -> LoopResult s r -- Take the next state and continues the loop.
     // break : r -> LoopResult s r -- Break the loop and `loop` returns the value given to `break`.
     loop((2, arr), |(i, arr)|
-        if n < i*i then 
-            break $ arr 
-        else 
-            let next_arr = (
-                if arr.get(i) then
-                    loop((i+i, arr), |(q, arr)|
-                        if n-1 < q then 
-                            break $ arr
-                        else 
-                            continue $ (q+i, arr.set!(q, false))
-                    )
-                else
-                    arr
-            );
-            continue $ (i+1, next_arr)
+        if i*i > n { break $ arr };
+        let next_arr = (
+            if !arr.get(i) { arr };
+            loop((i+i, arr), |(q, arr)|
+                if n-1 < q { break $ arr };
+                continue $ (q+i, arr.set!(q, false))
+            )
+        );
+        continue $ (i+1, next_arr)
     )
 );
 
@@ -33,11 +27,9 @@ is_prime = |n| (
 count : [a: Eq] a -> Array a -> Int;
 count = |elem, arr| (
     loop((0, 0), |(i, sum)|
-        if arr.len == i then 
-            break $ sum 
-        else 
-            let sum = sum + (if arr.get(i) == elem then 1 else 0);
-            continue $ (i+1, sum)
+        if arr.len == i { break $ sum };
+        let sum = sum + (if arr.get(i) == elem {1} else {0});
+        continue $ (i+1, sum)
     )
 );
 

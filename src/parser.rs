@@ -815,6 +815,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         Rule::expr_var => parse_expr_var(pair, src),
         Rule::expr_let => parse_expr_let(pair, src),
         Rule::expr_if => parse_expr_if(pair, src),
+        // Rule::expr_if_inline => parse_expr_if(pair, src),
         Rule::expr_lam => parse_expr_lam(pair, src),
         Rule::expr_tuple => parse_expr_tuple(pair, src),
         Rule::expr_make_struct => parse_expr_make_struct(pair, src),
@@ -907,6 +908,7 @@ fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(expr.as_rule(), Rule::expr_if);
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let cond = pairs.next().unwrap();
