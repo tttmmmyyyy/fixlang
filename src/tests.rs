@@ -1849,6 +1849,27 @@ pub fn test76() {
 
 #[test]
 #[serial]
+pub fn test77() {
+    // Test Iterator.zip / map / take / fold.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let iter0 = Iterator.count_up(5);
+        let iter1 = Iterator.from_map(|i| 2*i);
+        let iter = iter0.zip(iter1);
+        let iter = iter.map(|(a,b)| a+b).take(3);
+        let res = iter.fold(0, add);
+        let _ = assert_eq("", res, (5+2*0) + (6+2*1) + (7+2*2));
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

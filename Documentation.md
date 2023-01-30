@@ -321,6 +321,9 @@ Methods:
 - `count_up : Int -> Iterator Int`
     - Create an iterator that counts up from a number.
     - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)
+- `fold : b -> (b -> a -> b) -> Iterator a -> b`
+    - Folds iterator from left.
+    - `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
 - `from_map : (Int -> a) -> Iterator a`
     - Create iterator from mapping function.
     - `from_map(f) = [f(0), f(1), f(2), ...]`
@@ -329,6 +332,10 @@ Methods:
     - `map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]`
 - `next : Iterator a -> Option (a, Iterator a)`
     - Get next value and next iterator.
+- `take : Int -> Iterator a -> Iterator a`
+    - Take at most n elements from an iterator.
+- `zip : Iterator a -> Iterator b -> Iterator (a, b)`
+    - Zip two iterators.
 
 ### Std.Option
 

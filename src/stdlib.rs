@@ -73,6 +73,21 @@ namespace Iterator {
         Iterator { _data: data }
     );
 
+    // Folds iterator from left.
+    // fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...
+    fold : b -> (b -> a -> b) -> Iterator a -> b;
+    fold = |init, op, iter| (
+        loop((init, iter), |(accum, iter)|
+            let next = iter.next;
+            if next.is_none then (
+                break $ accum
+            ) else (
+                let (next, iter) = next.unwrap;
+                continue $ (op(accum, next), iter)
+            )
+        )
+    );
+
     // Creates iterator from mapping function.
     // from_map(f) = [f(0), f(1), f(2), ...]
     from_map : (Int -> a) -> Iterator a;
@@ -93,6 +108,34 @@ namespace Iterator {
     // Get next value and next iterator.
     next : Iterator a -> Option (a, Iterator a);
     next = |iter| (iter.@_data)();
+
+    // Take at most n elements from an iterator.
+    take : Int -> Iterator a -> Iterator a;
+    take = |n, iter| (
+        let data = |_| (
+            if n == 0 then none() else
+            let iter_next = iter.next;
+            if iter_next.is_none then none() else
+            let (v, iter) = iter_next.unwrap;
+            some $ (v, iter.take(n-1))
+        );
+        Iterator { _data: data }
+    );
+
+    // Zip two iterators.
+    zip : Iterator a -> Iterator b -> Iterator (a, b);
+    zip = |iter0, iter1| (
+        let data = |_| (
+            let iter0_next = iter0.next;
+            if iter0_next.is_none then none() else
+            let iter1_next = iter1.next;
+            if iter1_next.is_none then none() else 
+            let (v0, iter0) = iter0_next.unwrap;
+            let (v1, iter1) = iter1_next.unwrap;
+            some $ ((v0, v1), zip(iter0, iter1))
+        );
+        Iterator { _data: data }
+    );
 }
 
 type Option a = union { none: (), some: a };
