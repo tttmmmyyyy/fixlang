@@ -1810,19 +1810,17 @@ pub fn test75() {
 
     main : IOState -> ((), IOState);
     main = (
-        let iter = Iterator.from_map(|i| if i == 5 then none() else some(i) );
+        let iter = Iterator.from_map(|i| i*i );
         let Option.some((n, iter)) = iter.next;
-        let u = assert_eq("", n, 0);
+        let u = assert_eq("", n, 0*0);
         let Option.some((n, iter)) = iter.next;
-        let u = assert_eq("", n, 1);
+        let u = assert_eq("", n, 1*1);
         let Option.some((n, iter)) = iter.next;
-        let u = assert_eq("", n, 2);
+        let u = assert_eq("", n, 2*2);
         let Option.some((n, iter)) = iter.next;
-        let u = assert_eq("", n, 3);
+        let u = assert_eq("", n, 3*3);
         let Option.some((n, iter)) = iter.next;
-        let u = assert_eq("", n, 4);
-        let next_opt = iter.next;
-        let u = assert("", next_opt.is_none);
+        let u = assert_eq("", n, 4*4);
         pure()
     );
     "#;

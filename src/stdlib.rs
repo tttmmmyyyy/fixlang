@@ -58,29 +58,50 @@ namespace Option {
         val
     );
 
+    map : (a -> b) -> Option a -> Option b;
+    map = |f, opt| (
+        if opt.is_none then (
+            none()
+        ) else (
+            some $ f $ opt.unwrap
+        )
+    );
+
 }
 
+// Iterator (a.k.a lazy list)
 type Iterator a = struct { data: () -> Option (a, Iterator a) };
 
 namespace Iterator {
 
+    // Get next value and iterator.
     next : Iterator a -> Option (a, Iterator a);
     next = |iter| (iter.@data)();
 
-    from_map : (Int -> Option a) -> Iterator a;
-    from_map = |map| (
-        let data = |_| ( 
-            let next_opt = map(0);
-            if next_opt.is_none then (
-                none()
-            ) else (
-                let next_val = next_opt.unwrap;
-                let next_map = |i| map(i+1);
-                some $ (next_val, Iterator.from_map(next_map))
+    // Create iterator that counts up from a number.
+    // count_up(n) = [n, n+1, n+2, ...]
+    count_up : Int -> Iterator Int;
+    count_up = |i| (
+        let data = |_| (
+            some $ (i, Iterator.count_up(i+1))
+        );
+        Iterator { data: data }
+    );
+
+    // Apply a function to each value of iterator.
+    map : (a -> b) -> Iterator a -> Iterator b;
+    map = |f, a_iter| (
+        let data = |_| (
+            a_iter.next.map(
+                |(a_val, a_iter)| (f(a_val), a_iter.map(f))
             )
         );
         Iterator { data: data }
     );
+
+    // Create iterator from mapping function.
+    from_map : (Int -> a) -> Iterator a;
+    from_map = |f| count_up(0).map(f);
 }
 "#;
 
