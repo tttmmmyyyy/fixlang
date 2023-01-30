@@ -1131,16 +1131,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     .unwrap()
                     .fields
                     .iter();
-                let (field_idx, field_ty) = union_fields
+                let field_idx = union_fields
                     .enumerate()
-                    .find_map(|(i, f)| {
-                        if &f.name == field_name {
-                            Some((i, f.ty.clone()))
-                        } else {
-                            None
-                        }
-                    })
+                    .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
                     .unwrap();
+                let field_ty = obj.ty.field_types(self.type_env())[field_idx].clone();
                 let expect_tag_value = ObjectFieldType::UnionTag
                     .to_basic_type(self)
                     .into_int_type()

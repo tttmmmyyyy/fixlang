@@ -118,6 +118,7 @@ Functions are boxed, because it may contain many captured values.
 ### Tuples
 
 Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
+Tuples are special forms of [structs](#Structs) whose field names are `0`, `1`, `2`, etc. 
 
 ### Unit
 
@@ -135,23 +136,38 @@ Example:
 ```
 module Main;
 
-type Product = struct (price: Int, sold: Bool);
+type Product = struct { price: Int, sold: Bool };
+```
+
+You can construct a struct value by the syntax `{struct_name} { ({field_name}: {field_value}) } `:
+
+```
+let product = Product { price: 100, sold: false };
 ```
 
 For each struct, the following methods are defined in the namespace of {type_name} automatically: 
-- `new : {field_type}... -> {type_name}`
+- `new : {field_type}... -> {struct_type}`
+    - Construct a struct value.
     - For the `Product` example above, `Main.Product.new : Int -> Bool -> Product`.
-- `@{field_name} : {type_name} -> {field_type}`
-    - For the `Product` example above, `Main.Product.@price : Product -> Int` and `Main.Product.@sold : Product -> Bool`.
-- `mod_{field_name} : ({field_type} -> {field_type}) -> {type_name} -> {type_name}`
-    - For the `Product` example above, `Main.Product.mod_price : (Int -> Int) -> Product -> Product` and `Main.Product.mod_sold : (Bool -> Bool) -> Product -> Product`. 
-    - This function receives a transformer function on a field and extends it to the transformer of a struct value.
-    - This function clones the given struct value if it is shared between multiple references.
-- `mod_{field_name}! : ({field_type} -> {field_type}) -> {type_name} -> {type_name}`
-    - For the `Product` example above, `Main.Product.mod_price! : (Int -> Int) -> Product -> Product` and `Main.Product.mod_sold! : (Bool -> Bool) -> Product -> Product`. 
-    - This function always update the given struct value. If the given struct value is shared between multiple references, this function panics (i.e., stops the execution of the program).
-
-Convenient `set_{field_name}` and `set_{field_name}!` functions (or more is general lens function) will be added in the future.
+- `@{field_name} : {struct_type} -> {field_type}`
+    - Get the field value of a struct value.
+    - For the `Product.price` example above, `Main.Product.@price : Product -> Int`.
+- `={field_name} : {struct_type} -> {field_type} -> {field_type}`
+    - Set the field value of a struct value.
+    - This function clones the struct value if it is shared between multiple references.
+    - For the `Product.price` example above, `Main.Product.=price : Int -> Product -> Product`.
+- `={field_name}! : {struct_type} -> {field_type} -> {field_type}`
+    - Set the field value of a struct value.
+    - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+    - For the `Product.price` example above, `Main.Product.=price! : Int -> Product -> Product`.
+- `mod_{field_name} : ({field_type} -> {field_type}) -> {struct_type} -> {struct_type}`
+    - Modify the field value of a struct value by a function which acts to a field value.
+    - For the `Product.price` example above, `Main.Product.mod_price : (Int -> Int) -> Product -> Product`.
+    - This function clones the struct value if it is shared between multiple references.
+- `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct_type} -> {struct_type}`
+    - Modify the field value of a struct value by a function which acts to a field value.
+    - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+    - For the `Product.price` example above, `Main.Product.mod_price! : (Int -> Int) -> Product -> Product`. 
 
 Structs are boxed by default because they are assumed to have many fields. To define unboxed struct type, write `unbox` specifier before `struct`.
 

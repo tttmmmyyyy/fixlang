@@ -724,8 +724,8 @@ impl FixModule {
                                     &decl.name.to_namespace(),
                                     &format!(
                                         "{}{}{}",
-                                        &field.name,
                                         SETTER_SYMBOL,
+                                        &field.name,
                                         if is_unique { "!" } else { "" }
                                     ),
                                 ),

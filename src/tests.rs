@@ -1776,6 +1776,61 @@ pub fn test73() {
 
 #[test]
 #[serial]
+pub fn test74() {
+    // Test setter function of struct / tuple.
+    let source = r#"
+    module Main;
+
+    type IntBool = struct {x: Int, y: Bool};
+
+    main : IOState -> ((), IOState);
+    main = (
+        let int_bool = IntBool { y: false, x: 0 };
+        let int_bool = int_bool.=x(3);
+        let u = assert_eq("", int_bool.@x, 3);
+        let int_bool = int_bool.=x!(5);
+        let u = assert_eq("", int_bool.@x, 5);
+        let pair = (false, 0);
+        let pair = pair.=0(true);
+        let u = assert_eq("", pair.@0, true);
+        let pair = pair.=0!(false);
+        let u = assert_eq("", pair.@0, false);
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test75() {
+    // Test iterator.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let iter = Iterator.from_map(|i| if i == 5 then none() else some(i) );
+        let Option.some((n, iter)) = iter.next;
+        let u = assert_eq("", n, 0);
+        let Option.some((n, iter)) = iter.next;
+        let u = assert_eq("", n, 1);
+        let Option.some((n, iter)) = iter.next;
+        let u = assert_eq("", n, 2);
+        let Option.some((n, iter)) = iter.next;
+        let u = assert_eq("", n, 3);
+        let Option.some((n, iter)) = iter.next;
+        let u = assert_eq("", n, 4);
+        let next_opt = iter.next;
+        let u = assert("", next_opt.is_none);
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 

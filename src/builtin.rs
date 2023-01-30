@@ -1116,8 +1116,9 @@ pub fn struct_set(
                 generator,
                 vec![FullName::local(VALUE_NAME), FullName::local(STRUCT_NAME)],
                 format!(
-                    "{}.{}={}({})",
+                    "{}.{}{}{}({})",
                     STRUCT_NAME,
+                    SETTER_SYMBOL,
                     field_name,
                     if is_unique_version { "!" } else { "" },
                     VALUE_NAME
