@@ -19,7 +19,7 @@ Fix is a functional language focused on ease of learning and use.
 
 ## Explanation / basic example
 
-You can learn the syntax by reading files in the "examples" directory (or codes in tests.rs). The following is a basic example ("exapmles/fib_loop.fix") about which I explain below.
+You can learn the syntax by reading files in the [examples](./examples) (or codes in [tests.rs](./src/tests.rs)). The following is a basic example ("exapmles/fib_loop.fix") about which I explain below.
 
 ```
 module Main;
