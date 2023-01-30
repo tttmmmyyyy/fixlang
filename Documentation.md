@@ -235,69 +235,137 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 
 ## Types
 
-### Std.Int
+### Std.Array
 
-`Std.Int` is the type of 64-bit signed integers.
+`Std.Array` is the type of fixed-length arrays.
+
+Methods:
+
+- (unsafe) `__new_uninitialized : Int -> Array a`
+    - Creates an array of specified length with uninitialized elements.
+    - After allocating array by this function, you should initialize all elements using `__set_uninitialized_unique_array` function.
+- (unsafe) `__set_uninitialized_unique_array : Int -> a -> Array a -> Array a`
+    - Sets a value into an array. 
+    - This function doesn't release the old value of the element.
+    - This function updates the array without checking uniqueness.
+- `from_map : Int -> (Int -> a) -> Array a`
+    - Creates an array by a mapping function.
+    - `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
+- `get : Int -> Array a -> a`
+    - Returns an element of an array at an index.
+- `len : Array a -> Int`
+    - Returns the length of an array.
+- `mod : Int -> (a -> a) -> Array a -> Array a`
+    - Modifies a value of an element at the specified index of an array by a function.
+    - This function clones the array if it is shared between multiple references.
+- `mod! : Int -> (a -> a) -> Array a -> Array a`
+    - This function clones the array if it is shared between multiple references.
+    - This function always update the array. If the array is shared between multiple references, this function panics.  
+- `new : Int -> a -> Array a`
+    - Creates an array filled by the initial value.
+    - `new(n, x) = [x, x, x, ..., x]` (of length `n`).
+- `set : Int -> a -> Array a -> Array a`
+    - Updates a value of an element at an index of an array.
+    - This function clones the given array if it is shared between multiple references.
+- `set! : Int -> a -> Array a -> Array a`
+    - Updates a value of an element at an index of an array.
+    - This function always update the given array. If the given array is shared between multiple references, this function panics.
+
+NOTE: In a future, we will add lens functions such as `act : [f: Functor] Int -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
 
 ### Std.Bool
 
-`Std.Bool` is the type of boolean values. 
+`Std.Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
 
 ### Std.Byte
 
 `Std.Byte` is the type of 8-bit unsigned integers.
 
-### Std.Array
+### Std.IOState
 
-`Std.Array` is the type of fixed-length arrays.
+The virtual type that represents the state of world (=the outside of the Fix program). 
 
-- `Std.Array.new : Int -> a -> Std.Array a`
-    - Creates an array filled by the initial value.
-    - `new(n, x) = [x, x, x, ..., x]` (of length `n`).
-- `Std.Array.from_map : Int -> (Int -> a) -> Std.Array a`
-    - Creates an array by a mapping function.
-    - `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
-- `Std.Array.len : Std.Array a -> Int`
-    - Returns the length of an array.    
-- `Std.Array.get : Int -> Std.Array a -> a`
-    - Returns an element of an array at an index.
-- `Std.Array.set : Int -> a -> Std.Array a -> Std.Array a`
-    - Updates a value of an element at an index of an array.
-    - This function clones the given array if it is shared between multiple references.
-- `Std.Array.set! : Int -> a -> Std.Array a -> Std.Array a`
-    - Updates a value of an element at an index of an array.
-    - This function always update the given array. If the given array is shared between multiple references, this function panics.
-- `Std.Array.mod : Int -> (a -> a) -> Std.Array a -> Std.Array a`
-    - Modifies a value of an element at the specified index of an array by a function.
-    - This function clones the array if it is shared between multiple references.
-- `Std.Array.mod! : Int -> (a -> a) -> Std.Array a -> Std.Array a`
-    - This function clones the array if it is shared between multiple references.
-    - This function always update the array. If the array is shared between multiple references, this function panics.
-- (unsafe) `Std.Array.__new_uninitialized : Int -> Std.Array a`
-    - Creates an array of specified length with uninitialized elements.
-    - After allocating array by this function, you should initialize all elements using `__set_uninitialized_unique_array` function.
-- (unsafe) `Std.Array.__set_uninitialized_unique_array : Int -> a -> Std.Array a -> Std.Array a`
-    - Sets a value into an array. 
-    - This function doesn't release the old value of the element.
-    - This function updates the array without checking uniqueness.
+For example, `Std.IOState.print(msg) : Std.IOState -> ((), Std.IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std.IOState` and return the updated `Std.IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
 
-NOTE: In a future, we will add lens functions such as `act : [f: Functor] Int -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
+All functions that perform I/O action by `IOState` assert that the given state is unique.
 
-### Std.Vector
+Methods:
 
-`Std.Vector` is the type of variable-length array.
+- `pure : () -> IOState -> ((), IOState)`
+    - Makes a "do nothing" I/O action.
+- `print : String -> IOState -> ((), IOState)`
+    - Prints a string to standard output.
+- `println : String -> IOState -> ((), IOState)`
+    - Prints a string and a newline to standard output.
+
+### Std.Int
+
+`Std.Int` is the type of 64-bit signed integers.
+
+Methods:
+
+- `Std.Int._int_to_string : Int -> String`
+    - Convert an integer to a decimal number string.
+    - Implementation of trait method `Std.ToString.to_string`.
+
+Implementing traits:
+
+- `Std.ToString`
+
+### Std.Iterator
+
+Iterators (a.k.a. lazy lists) are generators of sequenced values.
+
+Methods:
+
+- `count_up : Int -> Iterator Int`
+    - Create an iterator that counts up from a number.
+    - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)
+- `from_map : (Int -> a) -> Iterator a`
+    - Create iterator from mapping function.
+    - `from_map(f) = [f(0), f(1), f(2), ...]`
+- `map : map : (a -> b) -> Iterator a -> Iterator b`
+    - Apply a function to each value of iterator.
+    - `map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]`
+- `next : Iterator a -> Option (a, Iterator a)`
+    - Get next value and next iterator.
+
+### Std.Option
+
+`Option a` contains a value of type `a`, or contains nothing.
 
 ```
-type Vector a = unbox struct { len : Int, data : Array a };
+type Option a = union { none: (), some: a };
 ```
+
+Methods:
+
+- `map : (a -> b) -> Option a -> Option b`
+    - Apply a function to the contained value. If the option is `none()`, do nothing.
+- `unwrap : Option a -> a`
+    - Exctract the contained value. If the option is `none()`, this function panics.
 
 ### Std.String
 
-`Std.String` is the type of strings.
+The type of strings.
+
+Methods:
+
+- `len : String -> Int`
+    - Returns the length of the string.
+
+### Std.Vector
+
+The type of variable-length array.
 
 ```
-type String = unbox struct { data : Vector Byte };
+type Vector a = unbox struct { _len : Int, _data : Array a };
 ```
+
+Methods:
+
+- `len : Vector a -> Int`
+    - Returns the length of the vector.
 
 ## Functions
 
@@ -315,7 +383,7 @@ main = (
 );
 ```
 
-### Std.loop : s -> (s -> Std.LoopResult s r) -> r
+### Std.loop : s -> (s -> LoopResult s r) -> r
 
 `loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
 
@@ -342,11 +410,11 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
-### Std.print : Std.String -> Std.IOState -> ((), Std.IOState)
-
-### Std.Debug.debug_print : Std.String -> ()
+### Std.Debug.debug_print : String -> ()
 
 ### Std.Debug.abort : () -> a
+
+### Std.Debug.assert_eq : String -> Bool -> ()
 
 ### Std.Debug.assert_eq : [a: Eq] String -> a -> a -> ()
 
@@ -354,7 +422,7 @@ main = (
 
 ### Std.ToString
 
-- `to_string : [a: Std.ToString] a -> Std.String`
+- `to_string : [a: ToString] a -> String`
 
 ## Operators
 
