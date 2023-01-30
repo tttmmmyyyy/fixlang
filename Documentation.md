@@ -347,6 +347,8 @@ Methods:
 - `count_up : Int -> Iterator Int`
     - Create an iterator that counts up from a number.
     - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)
+- `filter : (a -> Bool) -> Iterator a -> Iterator a`
+    - Filter elements by a condition function.
 - `fold : b -> (b -> a -> b) -> Iterator a -> b`
     - Folds iterator from left.
     - `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`

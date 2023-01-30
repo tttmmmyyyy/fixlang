@@ -73,6 +73,22 @@ namespace Iterator {
         Iterator { _data: data }
     );
 
+    // Filter elements by a condition function
+    filter : (a -> Bool) -> Iterator a -> Iterator a;
+    filter = |cond, iter| (
+        let data = |_| (
+            loop(iter, |iter| (
+                let next = iter.next;
+                if next.is_none { break $ none() };
+                let (v, iter) = next.unwrap;
+                if !cond(v) { continue $ iter };
+                let iter = filter(cond, iter);
+                break $ some((v, iter))
+            ))
+        );
+        Iterator { _data: data }
+    );
+
     // Folds iterator from left.
     // fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...
     fold : b -> (b -> a -> b) -> Iterator a -> b;

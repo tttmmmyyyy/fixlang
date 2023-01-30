@@ -1901,6 +1901,25 @@ pub fn test77() {
 
 #[test]
 #[serial]
+pub fn test78() {
+    // Test Iterator.filter
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let iter = Iterator.count_up(1).take(100);
+        let iter = iter.filter(|n| n%3 == 0 || n%5 == 0);
+        let count = iter.map(|_|1).fold(0, add);
+        let _ = assert_eq("", count, 100/3 + 100/5 - 100/15);
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
