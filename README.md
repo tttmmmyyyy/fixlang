@@ -38,7 +38,7 @@ main = (
             let arr = arr.set!(idx, x+y);
             continue $ (idx+1, arr)
     );
-    print $ arr.get(30).to_string // 832040
+    println $ arr.get(30).to_string // 832040
 );
 ```
 In a source file, you need to declare the module name for the source file as `Main` and define `main` object of type `IOState -> ((), IOState)`. The runtime generates a value of `IOState` and pass it to `Main.main` function.
