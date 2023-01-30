@@ -1837,7 +1837,7 @@ pub fn test76() {
     main : IOState -> ((), IOState);
     main = (
         let array = Array.from_map(3, |_i| Array.from_map(3, |_j| 0));
-        let array = array.mod!(1, |inner_arr| inner_arr.set!(1, 9));
+        let array = array.mod!(1, Array.set!(1, 9));
         let _ = assert_eq("", array.get(1).get(1), 9);
         pure()
     );
