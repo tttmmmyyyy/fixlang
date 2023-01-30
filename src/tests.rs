@@ -1849,7 +1849,7 @@ pub fn test76() {
 
 #[test]
 #[serial]
-pub fn run_examples() {
+pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
     for path in paths {
