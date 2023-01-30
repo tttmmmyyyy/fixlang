@@ -17,9 +17,13 @@ Fix is a functional language focused on ease of learning and use.
 - `cargo build --release`. Then the compiler binary will be generated at "fixlang/target/release/fix". 
 - You can run the source file of fix-lang by `fix run source-file.fix`, or build object file `source-file.o` by `fix build source-file.fix`. In the latter case, by passing the object file to gcc (`gcc source-file.o`) will generate executable binary.
 
+## Documentation
+
+See [documentation](/Documentation.md).
+
 ## Explanation / basic example
 
-You can learn the syntax by reading files in the [examples](./examples) (or codes in [tests.rs](./src/tests.rs)). The following is a basic example ("exapmles/fib_loop.fix") about which I explain below.
+You can learn the syntax by reading files in the [examples](./examples) (or codes in [tests.rs](./src/tests.rs)). The following is a basic example ([exaples/fib_loop.fix](./examples/fib_loop.fix)) about which I explain below.
 
 ```
 module Main;
