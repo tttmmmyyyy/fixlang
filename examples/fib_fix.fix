@@ -20,5 +20,5 @@ main = (
                 loop(arr, n+1)
     );
     let fib_array = calc_fib_array(arr, 2) ;
-    print $ fib_array.get(30).to_string // 832040
+    println $ fib_array.get(30).to_string // 832040
 );
