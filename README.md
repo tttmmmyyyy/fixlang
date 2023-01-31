@@ -4,6 +4,7 @@ Fix-lang
 ## Overview
 
 Fix is a functional language focused on ease of learning and use.
+You can try it in [Google Colaboratory](./run_fix.ipynb).
 
 (This project is still a WIP and has no practical use yet.)
 
