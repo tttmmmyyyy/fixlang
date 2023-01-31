@@ -83,7 +83,7 @@ impl Configuration {
             sanitize_memory: false,
             funptr_optimization: true,
             preretain_global: true,
-            llvm_opt_level: OptimizationLevel::Aggressive,
+            llvm_opt_level: OptimizationLevel::Default,
         }
     }
 

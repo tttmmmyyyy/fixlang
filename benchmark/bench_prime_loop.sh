@@ -1,5 +1,5 @@
 echo "C++:"
-g++ ./benchmark/prime_loop.cpp && time ./a.out
+g++ -O2 ./benchmark/prime_loop.cpp && time ./a.out
 
 echo ""
 echo "Fix:"
