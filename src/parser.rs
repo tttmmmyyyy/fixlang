@@ -1175,6 +1175,12 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::in_of_let => "`in` or `;`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
         Rule::type_expr => "type".to_string(),
+        Rule::arg_list => "arguments".to_string(),
+        Rule::operator_mul => "*".to_string(),
+        Rule::operator_plus => "+".to_string(),
+        Rule::operator_and => "&&".to_string(),
+        Rule::operator_or => "||".to_string(),
+        Rule::type_nlr => "type".to_string(),
         _ => format!("{:?}", r),
     }
 }
@@ -1182,8 +1188,10 @@ fn rule_to_string(r: &Rule) -> String {
 fn message_parse_error(e: Error<Rule>) -> String {
     let mut msg: String = Default::default();
 
+    let mut suggestion: Option<String> = None;
+
     // Show error content.
-    msg += "parse error: expected ";
+    msg += "Expected ";
     match &e.variant {
         pest::error::ErrorVariant::ParsingError {
             positives,
@@ -1206,15 +1214,26 @@ fn message_parse_error(e: Error<Rule>) -> String {
                 if negatives.len() > 0 {
                     msg += " and ";
                 }
+                msg += ".";
             }
-            if negatives.len() > 0 {
-                msg += "neither ";
-                let words: Vec<String> = negatives.iter().map(rule_to_string).collect();
-                msg += &concat_words(words, "nor");
+            if suggestion.is_none()
+                && positives
+                    .iter()
+                    .find(|rule| **rule == Rule::arg_list)
+                    .is_some()
+            {
+                suggestion = Some(
+                    "Expression ended unexpectedly. Maybe forgot semicolon after definition?"
+                        .to_string(),
+                )
             }
         }
         pest::error::ErrorVariant::CustomError { message: _ } => unreachable!(),
     };
+    if suggestion.is_some() {
+        msg += "\n";
+        msg += &suggestion.unwrap();
+    }
     msg += "\n";
 
     // Show line and column number.

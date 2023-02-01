@@ -2,7 +2,7 @@ use super::*;
 use std::process;
 
 pub fn error_exit(msg: &str) -> ! {
-    eprintln!("{}", msg);
+    eprintln!("error: {}", msg);
     process::exit(1)
 }
 
