@@ -1029,7 +1029,7 @@ pub fn struct_get(
     let field = definition.get_field_by_name(field_name);
     if field.is_none() {
         error_exit(&format!(
-            "error: no field `{}` found in the struct `{}`.",
+            "No field `{}` found in the struct `{}`.",
             &field_name,
             struct_name.to_string(),
         ));
@@ -1241,7 +1241,7 @@ pub fn struct_set(
     let field = definition.get_field_by_name(field_name);
     if field.is_none() {
         error_exit(&format!(
-            "error: no field `{}` found in the struct `{}`.",
+            "No field `{}` found in the struct `{}`.",
             &field_name,
             struct_name.to_string(),
         ));

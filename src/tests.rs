@@ -11,7 +11,7 @@ pub fn test0() {
     
             main : IOState -> ((), IOState);
             main = (
-                let u = assert_eq("", 5 + 3 * 8 / 5 + 7 % 3, 10);
+                let _ = assert_eq("", 5 + 3 * 8 / 5 + 7 % 3, 10);
                 pure()
             );
         "#;
@@ -1871,8 +1871,8 @@ pub fn test76() {
     main = (
         let array = Array.from_map(3, |_i| Array.from_map(3, |_j| 0));
         let array = array.mod!(1, Array.set!(1, 9));
-        let _ = assert_eq("", array.get(1).get(1), 9);
-        pure()
+        let _ = assert_eq(true, array.get(1).get(1), 9);
+        pure();
     );
     "#;
     run_source(source, Configuration::develop_compiler());
@@ -1912,7 +1912,7 @@ pub fn test78() {
         let iter = iter.filter(|n| n%3 == 0 || n%5 == 0);
         let count = iter.map(|_|1).fold(0, add);
         let _ = assert_eq("", count, 100/3 + 100/5 - 100/15);
-        pure()
+        pure();
     );
     "#;
     run_source(source, Configuration::develop_compiler());

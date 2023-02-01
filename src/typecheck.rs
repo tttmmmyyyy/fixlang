@@ -553,7 +553,7 @@ impl TypeCheckContext {
                 if !self.unify(&lit.ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "type mismatch. Expected `{}`, Found `{}`",
+                            "Type mismatch. Expected `{}`, found `{}`",
                             &self.substitute_type(&ty).to_string(),
                             &lit.ty.to_string(),
                         ),
@@ -585,7 +585,7 @@ impl TypeCheckContext {
                 if !self.unify(&fun_ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "type mismatch. Expected `{}`, Found `{}`",
+                            "Type mismatch. Expected `{}`, found `{}`",
                             &self.substitute_type(&ty).to_string(),
                             &self.substitute_type(&fun_ty).to_string(),
                         ),
@@ -635,7 +635,7 @@ impl TypeCheckContext {
                 if !self.unify(&ty, anno_ty) {
                     error_exit_with_src(
                         &format!(
-                            "type mismatch. Expected `{}`, Found `{}`",
+                            "Type mismatch. Expected `{}`, found `{}`",
                             &self.substitute_type(&ty).to_string(),
                             &self.substitute_type(&anno_ty).to_string(),
                         ),
@@ -683,7 +683,7 @@ impl TypeCheckContext {
                 if !self.unify(&struct_ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "type mismatch. Expected `{}`, Found `{}`",
+                            "Type mismatch. Expected `{}`, found `{}`",
                             &self.substitute_type(&ty).to_string(),
                             &self.substitute_type(&struct_ty).to_string(),
                         ),
@@ -722,7 +722,7 @@ impl TypeCheckContext {
         let s = Substitution::matching(&self.type_env, &deduced_ty, &specified_ty);
         if s.is_none() {
             error_exit(&format!(
-                "type mismatch. Expected `{}`, found `{}`",
+                "Type mismatch. Expected `{}`, found `{}`",
                 specified_ty.to_string(),
                 deduced_ty.to_string()
             ));
@@ -733,7 +733,7 @@ impl TypeCheckContext {
             s.substitute_predicate(&mut p);
             if !self.trait_env.entail(&given_preds, &p, &self.type_env) {
                 error_exit(&format!(
-                    "condition `{}` is necessary for this expression but not assumed in the specified type.",
+                    "Condition `{}` is necessary for this expression but not assumed in the specified type.",
                     p.to_string()
                 ));
             }

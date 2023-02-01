@@ -2,7 +2,7 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
-use std::mem::swap;
+use std::{cmp::min, mem::swap};
 
 use pest::error::Error;
 
@@ -11,9 +11,9 @@ use super::*;
 // lifetime-free version of pest::Span
 #[derive(Clone)]
 pub struct Span {
-    input: Arc<String>,
-    start: usize,
-    end: usize,
+    pub input: Arc<String>,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl Span {
@@ -83,7 +83,7 @@ pub fn parse_source(source: &str) -> FixModule {
     let file = FixParser::parse(Rule::file, &source);
     let file = match file {
         Ok(res) => res,
-        Err(e) => error_exit(&message_parse_error(e)),
+        Err(e) => error_exit(&message_parse_error(e, &source)),
     };
     parse_file(file, &source)
 }
@@ -1185,7 +1185,7 @@ fn rule_to_string(r: &Rule) -> String {
     }
 }
 
-fn message_parse_error(e: Error<Rule>) -> String {
+fn message_parse_error(e: Error<Rule>, src: &Arc<String>) -> String {
     let mut msg: String = Default::default();
 
     let mut suggestion: Option<String> = None;
@@ -1237,23 +1237,18 @@ fn message_parse_error(e: Error<Rule>) -> String {
     msg += "\n";
 
     // Show line and column number.
-    // TODO: Show filename here.
-    let (line, col) = match e.line_col {
-        pest::error::LineColLocation::Pos(s) => s,
-        pest::error::LineColLocation::Span(s, _) => s,
+    let span = match e.location {
+        pest::error::InputLocation::Pos(s) => Span {
+            input: src.clone(),
+            start: s,
+            end: min(s + 1, src.len()),
+        },
+        pest::error::InputLocation::Span((s, e)) => Span {
+            input: src.clone(),
+            start: s,
+            end: e,
+        },
     };
-    msg += &format!("at {}:{}", line, col);
-    msg += "\n";
-
-    // Show source code.
-    let linenum_str = line.to_string();
-    let linnum_chars = linenum_str.len();
-    msg += &(" ".repeat(linnum_chars) + " | " + "\n");
-    msg += &(linenum_str.clone() + " | ");
-    msg += e.line();
-    msg += "\n";
-    msg += &(" ".repeat(linnum_chars) + " | ");
-    msg += &(" ".repeat(col - 1) + "^");
-    msg += "\n";
+    msg += &span.to_string();
     msg
 }
