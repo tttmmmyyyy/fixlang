@@ -253,7 +253,7 @@ impl Substitution {
             error_exit(&format!(
                 "cannot identify type `{}` and `{}`.",
                 tyvar1.name,
-                ty2.to_string()
+                ty2.to_string_normalize()
             ));
         }
         if tyvar1.kind != ty2.kind(type_env) {
@@ -519,9 +519,9 @@ impl TypeCheckContext {
                 if candidates.is_empty() {
                     error_exit_with_src(
                         &format!(
-                            "name `{}` of type `{}` is not found.",
+                            "No name `{}` of type `{}` is found.",
                             var.name.to_string(),
-                            &self.substitute_type(&ty).to_string()
+                            &self.substitute_type(&ty).to_string_normalize()
                         ),
                         &var.source,
                     );
@@ -554,8 +554,8 @@ impl TypeCheckContext {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`",
-                            &self.substitute_type(&ty).to_string(),
-                            &lit.ty.to_string(),
+                            &self.substitute_type(&ty).to_string_normalize(),
+                            &lit.ty.to_string_normalize(),
                         ),
                         &ei.source,
                     );
@@ -586,8 +586,8 @@ impl TypeCheckContext {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`",
-                            &self.substitute_type(&ty).to_string(),
-                            &self.substitute_type(&fun_ty).to_string(),
+                            &self.substitute_type(&ty).to_string_normalize(),
+                            &self.substitute_type(&fun_ty).to_string_normalize(),
                         ),
                         &ei.source,
                     );
@@ -636,8 +636,8 @@ impl TypeCheckContext {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`",
-                            &self.substitute_type(&ty).to_string(),
-                            &self.substitute_type(&anno_ty).to_string(),
+                            &self.substitute_type(&ty).to_string_normalize(),
+                            &self.substitute_type(&anno_ty).to_string_normalize(),
                         ),
                         &ei.source,
                     );
@@ -684,8 +684,8 @@ impl TypeCheckContext {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`",
-                            &self.substitute_type(&ty).to_string(),
-                            &self.substitute_type(&struct_ty).to_string(),
+                            &self.substitute_type(&ty).to_string_normalize(),
+                            &self.substitute_type(&struct_ty).to_string_normalize(),
                         ),
                         &ei.source,
                     );
@@ -723,8 +723,8 @@ impl TypeCheckContext {
         if s.is_none() {
             error_exit(&format!(
                 "Type mismatch. Expected `{}`, found `{}`",
-                specified_ty.to_string(),
-                deduced_ty.to_string()
+                specified_ty.to_string_normalize(),
+                deduced_ty.to_string_normalize()
             ));
         }
         let s = s.unwrap();
