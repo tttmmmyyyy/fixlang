@@ -1920,6 +1920,27 @@ pub fn test78() {
 
 #[test]
 #[serial]
+pub fn test79() {
+    // Test Iterator.append
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let ls = Iterator.empty;
+        let ls = ls.append(1).append(2);
+        let (e, ls) = ls.next.unwrap;
+        let _ = assert_eq("", 2, e);
+        let (e, ls) = ls.next.unwrap;
+        let _ = assert_eq("", 1, e);
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

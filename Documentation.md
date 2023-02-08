@@ -344,9 +344,13 @@ Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
 Methods:
 
+- `append : a -> Iterator a -> Iterator a`
+    - Append an element to an iterator.
 - `count_up : Int -> Iterator Int`
     - Create an iterator that counts up from a number.
     - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)
+- `empty : Iterator a`
+    - Creates an empty iterator.
 - `filter : (a -> Bool) -> Iterator a -> Iterator a`
     - Filter elements by a condition function.
 - `fold : b -> (b -> a -> b) -> Iterator a -> b`

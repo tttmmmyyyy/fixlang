@@ -63,6 +63,15 @@ type Iterator a = unbox struct { _data: () -> Option (a, Iterator a) };
 
 namespace Iterator {
 
+    // Append an elemnt to an iterator.
+    append : a -> Iterator a -> Iterator a;
+    append = |elem, iter| (
+        let data = |_| (
+            some $ (elem, iter)
+        );
+        Iterator { _data: data }     
+    );
+
     // Creates an iterator that counts up from a number.
     // count_up(n) = [n, n+1, n+2, ...]
     count_up : Int -> Iterator Int;
@@ -70,6 +79,13 @@ namespace Iterator {
         let data = |_| (
             some $ (i, Iterator.count_up(i+1))
         );
+        Iterator { _data: data }
+    );
+
+    // Create an empty iterator.
+    empty : Iterator a;
+    empty = (
+        let data = |_| (none());
         Iterator { _data: data }
     );
 
