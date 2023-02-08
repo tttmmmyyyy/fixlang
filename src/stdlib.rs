@@ -63,9 +63,9 @@ type Iterator a = unbox struct { _data: () -> Option (a, Iterator a) };
 
 namespace Iterator {
 
-    // Append an elemnt to an iterator.
-    append : a -> Iterator a -> Iterator a;
-    append = |elem, iter| (
+    // Push an elemnt to an iterator.
+    push_head : a -> Iterator a -> Iterator a;
+    push_head = |elem, iter| (
         let data = |_| (
             some $ (elem, iter)
         );
@@ -83,8 +83,8 @@ namespace Iterator {
     );
 
     // Create an empty iterator.
-    empty : Iterator a;
-    empty = (
+    make_empty : Iterator a;
+    make_empty = (
         let data = |_| (none());
         Iterator { _data: data }
     );
@@ -124,6 +124,22 @@ namespace Iterator {
     // from_map(f) = [f(0), f(1), f(2), ...]
     from_map : (Int -> a) -> Iterator a;
     from_map = |f| count_up(0).map(f);
+
+    // Takes the last element of an iterator.
+    take_last : Iterator a -> Option a;
+    take_last = |iter| (
+        if iter.is_empty { none() };
+        let (elem, iter) = iter.next.unwrap;
+        if iter.is_empty { 
+            some(elem)
+        } else {
+            iter.take_last
+        }
+    );
+
+    // Checks if an iterator is empty.
+    is_empty : Iterator a -> Bool;
+    is_empty = |iter| iter.next.is_none;
 
     // Apply a function to each value of iterator.
     // map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]

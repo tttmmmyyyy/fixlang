@@ -1927,12 +1927,32 @@ pub fn test79() {
 
     main : IOState -> ((), IOState);
     main = (
-        let ls = Iterator.empty;
-        let ls = ls.append(1).append(2);
+        let ls = Iterator.make_empty;
+        let ls = ls.push_head(1).push_head(2);
         let (e, ls) = ls.next.unwrap;
         let _ = assert_eq("", 2, e);
         let (e, ls) = ls.next.unwrap;
         let _ = assert_eq("", 1, e);
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test80() {
+    // Test Iterator.last
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let iter = Iterator.make_empty.push_head(4).push_head(3).push_head(2).push_head(1);
+        let last = iter.take_last.unwrap;
+        let _ = assert_eq("", last, 4);
+        let last: Option Bool = Iterator.make_empty.take_last;
+        let _ = assert("", last.is_none);
         pure()
     );
     "#;
