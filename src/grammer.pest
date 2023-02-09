@@ -32,7 +32,7 @@ expr_bool_lit = { "true" | "false" }
 
 expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
 
-expr_array_lit = { "[" ~ (sep* ~ expr)* ~ sep* ~ "]" }
+expr_array_lit = { "[" ~ (expr ~ sep* ~ ("," ~ sep* ~ expr)*)? ~ sep* ~ "]" }
 
 string_lit_inner = { string_char* }
 

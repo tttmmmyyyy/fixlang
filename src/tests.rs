@@ -1920,6 +1920,23 @@ pub fn test78() {
 
 #[test]
 #[serial]
+pub fn test79() {
+    // Test array literal.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = (
+        let arr = [1,2,3,4];
+        let _ = assert_eq("", arr.len, 4);
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
