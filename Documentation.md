@@ -297,6 +297,8 @@ Methods:
     - Updates a value of an element at an index of an array.
     - This function always update the given array. If the given array is shared between multiple references, this function panics.
 
+You can create array by the syntax `[a0, a1, ..., an]`.
+
 NOTE: In a future, we will add lens functions such as `act : [f: Functor] Int -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
 
 ### Std.Bool
