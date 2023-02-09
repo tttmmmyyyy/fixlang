@@ -719,9 +719,10 @@ impl TypeCheckContext {
                         &ei.source,
                     );
                 }
+                let mut ei = ei.clone();
                 for (i, e) in elems.iter().enumerate() {
                     let e = self.unify_type_of_expr(e, elem_ty.clone());
-                    ei.set_array_lit_elem(e, i);
+                    ei = ei.set_array_lit_elem(e, i);
                 }
                 ei
             }
