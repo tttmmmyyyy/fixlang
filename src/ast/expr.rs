@@ -1000,7 +1000,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
                 ei = ei.set_array_lit_elem(e.clone(), i);
                 free_vars.extend(e.free_vars.clone().unwrap());
             }
-            ei
+            ei.set_free_vars(free_vars)
         }
     }
 }
