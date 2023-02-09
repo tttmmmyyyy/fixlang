@@ -358,6 +358,8 @@ Methods:
 - `fold : b -> (b -> a -> b) -> Iterator a -> b`
     - Folds iterator from left.
     - `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
+- `from_array : Array a -> Iterator a`
+    - Create iterator from an array.
 - `from_map : (Int -> a) -> Iterator a`
     - Create iterator from mapping function.
     - `from_map(f) = [f(0), f(1), f(2), ...]`

@@ -120,6 +120,10 @@ namespace Iterator {
         )
     );
 
+    // Create iterator from an array.
+    from_array : Array a -> Iterator a;
+    from_array = |arr| count_up(0).take(arr.len).map(|i| arr.get(i));
+
     // Creates iterator from mapping function.
     // from_map(f) = [f(0), f(1), f(2), ...]
     from_map : (Int -> a) -> Iterator a;
