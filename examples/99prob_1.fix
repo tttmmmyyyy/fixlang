@@ -1,0 +1,16 @@
+/*
+
+https://wiki.haskell.org/99_questions/1_to_10
+Problem 1
+(*) Find the last element of a list.
+
+*/
+
+module Main;
+
+main : IOState -> ((), IOState);
+main = |io| (
+    let iter = Iterator.make_empty.push_head(4).push_head(3).push_head(2).push_head(1);
+    let last = iter.take_last.unwrap;
+    io.println(last.to_string)
+);
