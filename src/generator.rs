@@ -809,6 +809,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let struct_ty = expr.inferred_ty.clone().unwrap();
                 self.eval_make_struct(fields.clone(), struct_ty, rvo)
             }
+            Expr::ArrayLit(elems) => {
+                self.eval_array_lit(elems, expr.inferred_ty.clone().unwrap(), rvo)
+            }
         };
         ret.ty = expr.inferred_ty.clone().unwrap();
         ret
@@ -1263,6 +1266,45 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         }
         pair
+    }
+
+    fn eval_array_lit(
+        &mut self,
+        elems: &Vec<Arc<ExprNode>>,
+        array_ty: Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        assert!(rvo.is_none());
+
+        // Make size value
+        let size = self.context.i64_type().const_int(elems.len() as u64, false);
+
+        // Allocate
+        let array = allocate_obj(
+            array_ty,
+            &vec![],
+            Some(size),
+            self,
+            Some(&format!("array_literal[{}]", elems.len())),
+        );
+        let buffer = array.ptr_to_field_nocap(self, ARRAY_BUF_IDX);
+
+        // Evaluate each element and store to the array
+        for i in 0..elems.len() {
+            self.scope_lock_as_used_later(elems[i].free_vars());
+        }
+        for i in 0..elems.len() {
+            self.scope_unlock_as_used_later(elems[i].free_vars());
+
+            // Evaluate element
+            let value = self.eval_expr(elems[i].clone(), None);
+
+            // Store into the array.
+            let idx = self.context.i64_type().const_int(i as u64, false);
+            ObjectFieldType::write_to_array_buf(self, size, buffer, idx, value, false);
+        }
+
+        array
     }
 }
 

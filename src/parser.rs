@@ -856,6 +856,7 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
         Rule::expr_int_lit => parse_expr_int_lit(pair, src),
         Rule::expr_bool_lit => parse_expr_bool_lit(pair, src),
         Rule::expr_string_lit => parse_expr_string_lit(pair, src),
+        Rule::expr_array_lit => parse_expr_array_lit(pair, src),
         _ => unreachable!(),
     }
 }
@@ -970,6 +971,16 @@ fn parse_expr_bool_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     let val = pair.as_str().parse::<bool>().unwrap();
     let span = Span::from_pair(&src, &pair);
     bool(val, Some(span))
+}
+
+fn parse_expr_array_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_array_lit);
+    let span = Span::from_pair(&src, &pair);
+    let elems = pair
+        .into_inner()
+        .map(|pair| parse_expr(pair, src))
+        .collect::<Vec<_>>();
+    expr_array_lit(elems, Some(span))
 }
 
 fn parse_expr_string_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {

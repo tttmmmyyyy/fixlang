@@ -266,6 +266,16 @@ fn replace_closure_call_to_funptr_call_subexprs(
             }
             expr
         }
+        Expr::ArrayLit(elems) => {
+            let mut expr = expr.clone();
+            for (i, e) in elems.iter().enumerate() {
+                expr = expr.set_array_lit_elem(
+                    replace_closure_call_to_funptr_call_subexprs(e, symbols, typechcker),
+                    i,
+                )
+            }
+            expr
+        }
     }
 }
 
@@ -383,6 +393,13 @@ fn replace_free_var(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc
             for (field_name, field_expr) in fields {
                 let field_expr = replace_free_var(field_expr, from, to);
                 expr = expr.set_make_struct_field(field_name, field_expr);
+            }
+            expr
+        }
+        Expr::ArrayLit(elems) => {
+            let mut expr = expr.clone();
+            for (i, e) in elems.iter().enumerate() {
+                expr = expr.set_array_lit_elem(e.clone(), i);
             }
             expr
         }

@@ -561,6 +561,14 @@ impl FixModule {
                 }
                 expr
             }
+            Expr::ArrayLit(elems) => {
+                let mut expr = expr.clone();
+                for (i, e) in elems.iter().enumerate() {
+                    let e = self.instantiate_expr(tc, e);
+                    expr = expr.set_array_lit_elem(e, i);
+                }
+                expr
+            }
         };
         calculate_free_vars(ret)
     }

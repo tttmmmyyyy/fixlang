@@ -32,6 +32,8 @@ expr_bool_lit = { "true" | "false" }
 
 expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
 
+expr_array_lit = { "[" ~ (sep* ~ expr)* ~ sep* ~ "]" }
+
 string_lit_inner = { string_char* }
 
 string_char = {
@@ -40,7 +42,7 @@ string_char = {
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
 
-expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit }
+expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit | expr_array_lit }
 
 expr_var = { (namespace ~ ".")? ~ var }
 

@@ -302,6 +302,21 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_array_lit_elem(&self, elem: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::ArrayLit(elems) => {
+                let mut elems = elems.clone();
+                elems[idx] = elem;
+                ret.expr = Arc::new(Expr::ArrayLit(elems));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
     pub fn resolve_namespace(self: &Arc<ExprNode>, ctx: &NameResolutionContext) -> Arc<ExprNode> {
         match &*self.expr {
             Expr::Var(_) => {
@@ -345,6 +360,13 @@ impl ExprNode {
                 }
                 expr
             }
+            Expr::ArrayLit(elems) => {
+                let expr = self.clone();
+                for (i, elem) in elems.iter().enumerate() {
+                    expr.set_array_lit_elem(elem.resolve_namespace(ctx), i);
+                }
+                expr
+            }
         }
     }
 }
@@ -360,6 +382,7 @@ pub enum Expr {
     Let(Arc<Pattern>, Arc<ExprNode>, Arc<ExprNode>),
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>),
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
+    ArrayLit(Vec<Arc<ExprNode>>),
     // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakeStruct x y`.
     // `MakeStruct x y` is compiled to a more performant code than function call (currently).
     MakeStruct(Arc<TyCon>, Vec<(Name, Arc<ExprNode>)>),
@@ -663,6 +686,16 @@ impl Expr {
                         .join(", ")
                 )
             }
+            Expr::ArrayLit(elems) => {
+                format!(
+                    "[{}]",
+                    elems
+                        .iter()
+                        .map(|e| e.expr.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
         }
     }
 }
@@ -879,6 +912,10 @@ pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> A
     Arc::new(Expr::MakeStruct(tc, fields)).into_expr_info(None)
 }
 
+pub fn expr_array_lit(elems: Vec<Arc<ExprNode>>, src: Option<Span>) -> Arc<ExprNode> {
+    Arc::new(Expr::ArrayLit(elems)).into_expr_info(src)
+}
+
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
 pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
     match &*ei.expr {
@@ -954,6 +991,16 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
                 ei = ei.set_make_struct_field(field_name, field_expr);
             }
             ei.set_free_vars(free_vars)
+        }
+        Expr::ArrayLit(elems) => {
+            let mut free_vars: HashSet<FullName> = Default::default();
+            let mut ei = ei.clone();
+            for (i, e) in elems.iter().enumerate() {
+                let e = calculate_free_vars(e.clone());
+                ei = ei.set_array_lit_elem(e.clone(), i);
+                free_vars.extend(e.free_vars.clone().unwrap());
+            }
+            ei
         }
     }
 }

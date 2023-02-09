@@ -683,7 +683,7 @@ impl TypeCheckContext {
                 if !self.unify(&struct_ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "Type mismatch. Expected `{}`, found `{}`",
+                            "Type mismatch. Expected `{}`, found `{}`.",
                             &self.substitute_type(&ty).to_string_normalize(),
                             &self.substitute_type(&struct_ty).to_string_normalize(),
                         ),
@@ -705,6 +705,25 @@ impl TypeCheckContext {
                     *field_expr = self.unify_type_of_expr(field_expr, field_ty.clone());
                 }
                 ei.set_make_struct_fields(fields)
+            }
+            Expr::ArrayLit(elems) => {
+                // Prepare type of element.
+                let elem_ty = type_tyvar_star(&self.new_tyvar());
+                let array_ty = type_tyapp(array_lit_ty(), elem_ty.clone());
+                if !self.unify(&array_ty, &ty) {
+                    error_exit_with_src(
+                        &format!(
+                            "Type mismatch. Expected `{}`, found an array.",
+                            &self.substitute_type(&ty).to_string_normalize(),
+                        ),
+                        &ei.source,
+                    );
+                }
+                for (i, e) in elems.iter().enumerate() {
+                    let e = self.unify_type_of_expr(e, elem_ty.clone());
+                    ei.set_array_lit_elem(e, i);
+                }
+                ei
             }
         }
     }
