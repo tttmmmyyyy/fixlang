@@ -1929,6 +1929,8 @@ pub fn test79() {
     main = (
         let arr = [1,2,3,4];
         let _ = assert_eq("", arr.len, 4);
+        let arr: Array Bool = [];
+        let _ = assert_eq("", arr.len, 0);
         pure()
     );
     "#;
