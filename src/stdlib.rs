@@ -165,6 +165,20 @@ namespace Iterator {
     next : Iterator a -> Option (a, Iterator a);
     next = |iter| (iter.@_data)();
 
+    // Reverse an iterator.
+    reverse : Iterator a -> Iterator a;
+    reverse = |iter| (
+        loop((Iterator.make_empty, iter), |(out_iter, in_iter)|(
+            if in_iter.is_empty {
+                break $ out_iter
+            } else {
+                let (elem, in_iter) = in_iter.next.unwrap;
+                let out_iter = out_iter.push_head(elem);
+                continue $ (out_iter, in_iter)
+            }
+        ))
+    );
+
     // Take at most n elements from an iterator.
     take : Int -> Iterator a -> Iterator a;
     take = |n, iter| (

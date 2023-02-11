@@ -1,0 +1,34 @@
+/*
+https://wiki.haskell.org/99_questions/1_to_10
+
+Problem 5
+(*) Reverse a list.
+*/
+
+module Main;
+
+my_reverse : Iterator a -> Iterator a;
+my_reverse = |iter| (
+    loop((Iterator.make_empty, iter), |(out_iter, in_iter)|(
+        if in_iter.is_empty {
+            break $ out_iter
+        } else {
+            let (elem, in_iter) = in_iter.next.unwrap;
+            let out_iter = out_iter.push_head(elem);
+            continue $ (out_iter, in_iter)
+        }
+    ))
+);
+
+main : IOState -> ((), IOState);
+main = |io| (
+    let iter = Iterator.from_array([1,2,3,4]).my_reverse;
+    let (e, iter) = iter.next.unwrap;
+    let (_, io) = io.println!(e.to_string);
+    let (e, iter) = iter.next.unwrap;
+    let (_, io) = io.println!(e.to_string);
+    let (e, iter) = iter.next.unwrap;
+    let (_, io) = io.println!(e.to_string);
+    let (e, iter) = iter.next.unwrap;
+    io.println!(e.to_string)
+);

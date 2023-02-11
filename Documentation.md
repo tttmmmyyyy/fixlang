@@ -370,6 +370,8 @@ Methods:
     - `map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]`
 - `next : Iterator a -> Option (a, Iterator a)`
     - Get next value and next iterator.
+- `reverse : Iterator a -> Iterator a`
+    - Reverse an iterator.
 - `take : Int -> Iterator a -> Iterator a`
     - Take at most n elements from an iterator.
 - `zip : Iterator a -> Iterator b -> Iterator (a, b)`
