@@ -91,7 +91,7 @@ impl Configuration {
     pub fn develop_compiler() -> Configuration {
         Configuration {
             sanitize_memory: true,
-            funptr_optimization: false,
+            funptr_optimization: true,
             preretain_global: false,
             llvm_opt_level: OptimizationLevel::Default,
         }
