@@ -33,14 +33,23 @@ where
     T: Clone,
 {
     // TODO: throw TypeError when unwrap fails.
-    fn push(self: &mut Self, name: &str, ty: &T) {
+    pub fn push(self: &mut Self, name: &str, ty: &T) {
         if !self.var.contains_key(name) {
             self.var.insert(String::from(name), Default::default());
         }
         self.var.get_mut(name).unwrap().local.push(ty.clone());
     }
-    fn pop(self: &mut Self, name: &str) {
+    pub fn pop(self: &mut Self, name: &str) {
         self.var.get_mut(name).unwrap().local.pop();
+    }
+    pub fn local_names(&self) -> HashSet<Name> {
+        let mut res: HashSet<Name> = Default::default();
+        for (name, sv) in &self.var {
+            if !sv.local.is_empty() {
+                res.insert(name.clone());
+            }
+        }
+        res
     }
     fn get_mut(self: &mut Self, name: &str) -> Option<&mut ScopeValue<T>> {
         self.var.get_mut(name)

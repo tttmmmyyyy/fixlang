@@ -72,6 +72,10 @@ namespace Iterator {
         Iterator { _data: data }     
     );
 
+    // Counts the length of an iterator.
+    @length : Iterator a -> Int;
+    @length = fold(0, |acm, _| acm + 1);
+
     // Creates an iterator that counts up from a number.
     // count_up(n) = [n, n+1, n+2, ...]
     count_up : Int -> Iterator Int;

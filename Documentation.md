@@ -348,6 +348,8 @@ Methods:
 
 - `push_head : a -> Iterator a -> Iterator a`
     - Append an element to an iterator.
+- `@length : Iterator a -> Int`
+    - Counts the length of an iterator.
 - `count_up : Int -> Iterator Int`
     - Create an iterator that counts up from a number.
     - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)

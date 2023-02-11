@@ -1,3 +1,5 @@
+use crate::typecheck::Scope;
+
 use super::*;
 
 // function pointer optimization:
@@ -299,16 +301,36 @@ fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                     for lam_var in &mut lam_vars {
                         let original_name = lam_var.name.clone();
                         let mut lam_var_name = original_name.clone();
-                        let mut counter = 0;
-                        while let_bound_free_vars.contains(&lam_var_name) {
-                            *lam_var_name.name_as_mut() =
-                                format!("{}@{}", original_name.name, counter);
-                            counter += 1;
-                        }
-                        if lam_var_name != lam_var.name {
-                            // If Replace is needed,
-                            *lam_var = lam_var.set_name(lam_var_name.clone());
-                            lam_val = replace_free_var(&lam_val, &original_name, &lam_var_name);
+                        if let_bound_free_vars.contains(&lam_var_name) {
+                            // If replace is necessary,
+                            let mut counter = -1;
+                            loop {
+                                counter += 1;
+                                // Make a candidate for the new name.
+                                *lam_var_name.name_as_mut() =
+                                    format!("{}@{}", original_name.name, counter);
+
+                                // If it is still appears in let_bound, try another name.
+                                if let_bound_free_vars.contains(&lam_var_name) {
+                                    continue;
+                                }
+
+                                // Replace original_name in lam_val.
+                                let replaced = replace_free_var(
+                                    &lam_val,
+                                    &original_name,
+                                    &lam_var_name,
+                                    &mut Scope::default(),
+                                );
+                                // If replacement to lam_var_name fails, try another name.
+                                if replaced.is_err() {
+                                    continue;
+                                }
+
+                                *lam_var = lam_var.set_name(lam_var_name.clone());
+                                lam_val = replaced.unwrap();
+                                break;
+                            }
                         }
                     }
 
@@ -341,67 +363,93 @@ fn move_abs_front_let_all(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     }
 }
 
-fn replace_free_var(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc<ExprNode> {
+// Replace the name of a free variable in an expression.
+// If the name `to` is bound at the place `from` appears, returns Err.
+fn replace_free_var(
+    expr: &Arc<ExprNode>,
+    from: &FullName,
+    to: &FullName,
+    scope: &mut Scope<()>,
+) -> Result<Arc<ExprNode>, ()> {
     match &*expr.expr {
         Expr::Var(v) => {
             if v.name == *from {
-                expr.clone().set_var_var(v.set_name(to.clone()))
+                if scope.local_names().contains(&to.name) {
+                    Err(())
+                } else {
+                    Ok(expr.clone().set_var_var(v.set_name(to.clone())))
+                }
             } else {
-                expr.clone()
+                Ok(expr.clone())
             }
         }
-        Expr::Lit(_) => expr.clone(),
+        Expr::Lit(_) => Ok(expr.clone()),
         Expr::App(func, args) => {
-            let func = replace_free_var(func, from, to);
+            let func = replace_free_var(func, from, to, scope)?;
             let args = args
                 .iter()
-                .map(|arg| replace_free_var(arg, from, to))
-                .collect();
-            expr.set_app_func(func).set_app_args(args)
+                .map(|arg| replace_free_var(arg, from, to, scope))
+                .collect::<Result<_, ()>>()?;
+            Ok(expr.set_app_func(func).set_app_args(args))
         }
         Expr::Lam(vs, val) => {
             let val = if vs.iter().any(|v| v.name == *from) {
                 // then, the from-name is shadowed in val, so we should not replace val.
                 val.clone()
             } else {
-                replace_free_var(val, from, to)
+                for v in vs {
+                    scope.push(&v.name.name, &());
+                }
+                let res = replace_free_var(val, from, to, scope)?;
+                for v in vs {
+                    scope.pop(&v.name.name);
+                }
+                res
             };
-            expr.set_lam_body(val)
+            Ok(expr.set_lam_body(val))
         }
-        Expr::Let(v, bound, val) => {
-            let bound = replace_free_var(bound, from, to);
-            let val = if v.vars().contains(from) {
+        Expr::Let(pat, bound, val) => {
+            let bound = replace_free_var(bound, from, to, scope)?;
+            let val = if pat.vars().contains(from) {
                 // then, the from-name is shadowed in val, so we should not replace val.
                 val.clone()
             } else {
-                replace_free_var(val, from, to)
+                for v in pat.vars() {
+                    scope.push(&v.name, &());
+                }
+                let res = replace_free_var(val, from, to, scope)?;
+                for v in pat.vars() {
+                    scope.pop(&v.name);
+                }
+                res
             };
-            expr.set_let_bound(bound).set_let_value(val)
+            Ok(expr.set_let_bound(bound).set_let_value(val))
         }
         Expr::If(c, t, e) => {
-            let c = replace_free_var(c, from, to);
-            let t = replace_free_var(t, from, to);
-            let e = replace_free_var(e, from, to);
-            expr.set_if_cond(c).set_if_then(t).set_if_else(e)
+            let c = replace_free_var(c, from, to, scope)?;
+            let t = replace_free_var(t, from, to, scope)?;
+            let e = replace_free_var(e, from, to, scope)?;
+            Ok(expr.set_if_cond(c).set_if_then(t).set_if_else(e))
         }
         Expr::TyAnno(e, _) => {
-            let e = replace_free_var(e, from, to);
-            expr.set_tyanno_expr(e)
+            let e = replace_free_var(e, from, to, scope)?;
+            Ok(expr.set_tyanno_expr(e))
         }
         Expr::MakeStruct(_, fields) => {
             let mut expr = expr.clone();
             for (field_name, field_expr) in fields {
-                let field_expr = replace_free_var(field_expr, from, to);
+                let field_expr = replace_free_var(field_expr, from, to, scope)?;
                 expr = expr.set_make_struct_field(field_name, field_expr);
             }
-            expr
+            Ok(expr)
         }
         Expr::ArrayLit(elems) => {
             let mut expr = expr.clone();
             for (i, e) in elems.iter().enumerate() {
-                expr = expr.set_array_lit_elem(e.clone(), i);
+                let e = replace_free_var(e, from, to, scope)?;
+                expr = expr.set_array_lit_elem(e, i);
             }
-            expr
+            Ok(expr)
         }
     }
 }
