@@ -1,0 +1,22 @@
+/*
+https://wiki.haskell.org/99_questions/1_to_10
+
+Problem 2
+(*) Find the last but one element of a list.
+*/
+
+module Main;
+
+take_last_but : Iterator a -> Option a;
+take_last_but = |iter| (
+    let len = iter.@length;
+    if len <= 1 { none() };
+    iter.take(len-1).take_last
+);
+
+main : IOState -> ((), IOState);
+main = |io| (
+    let iter = Iterator.from_array([1,2,3,4]);
+    let last_but = iter.take_last_but;
+    io.println!(last_but.unwrap.to_string)
+);
