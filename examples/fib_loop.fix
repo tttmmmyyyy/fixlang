@@ -15,5 +15,5 @@ main = (
             continue $ (idx+1, arr)
         }
     );
-    println $ arr.get(30).to_string // 832040
+    println! $ arr.get(30).to_string // 832040
 );

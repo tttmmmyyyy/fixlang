@@ -50,10 +50,10 @@ namespace IOState {
     pure : a -> IOState -> (a, IOState);
     pure = |val, io| (val, io);
 
-    println : String -> IOState -> ((), IOState);
-    println = |msg, io| (
-        let (_, io) = io.print(msg);
-        io.print("\n")
+    println! : String -> IOState -> ((), IOState);
+    println! = |msg, io| (
+        let (_, io) = io.print!(msg);
+        io.print!("\n")
     );
 
 }
@@ -334,7 +334,7 @@ pub fn make_std_mod() -> FixModule {
         length_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, IOSTATE_NAME], "print"),
+        FullName::from_strs(&[STD_NAME, IOSTATE_NAME], "print!"),
         print_io_func(),
     );
     fix_module.add_global_value(

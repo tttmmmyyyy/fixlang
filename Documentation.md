@@ -115,7 +115,7 @@ fib = |n| (
 );
 
 main : IOState -> ((), IOState);
-main = print $ fib(30).to_string; // 832040
+main = print! $ fib(30).to_string; // 832040
 ```
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
@@ -313,7 +313,7 @@ NOTE: In a future, we will add lens functions such as `act : [f: Functor] Int ->
 
 The virtual type that represents the state of world (=the outside of the Fix program). 
 
-For example, `Std.IOState.print(msg) : Std.IOState -> ((), Std.IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std.IOState` and return the updated `Std.IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
+For example, `Std.IOState.print!(msg) : Std.IOState -> ((), Std.IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std.IOState` and return the updated `Std.IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
 
 All functions that perform I/O action by `IOState` assert that the given state is unique.
 
@@ -321,9 +321,9 @@ Methods:
 
 - `pure : () -> IOState -> ((), IOState)`
     - Makes a "do nothing" I/O action.
-- `print : String -> IOState -> ((), IOState)`
+- `print! : String -> IOState -> ((), IOState)`
     - Prints a string to standard output.
-- `println : String -> IOState -> ((), IOState)`
+- `println! : String -> IOState -> ((), IOState)`
     - Prints a string and a newline to standard output.
 
 ### Std.Int
@@ -424,7 +424,7 @@ module Main;
 main : IOState -> ((), IOState);
 main = (
     let fact = fix $ |loop, n| if n == 0 then 1 else n * loop (n-1);
-    print $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
+    print! $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
 );
 ```
 
@@ -451,7 +451,7 @@ main = (
                 continue $ (i+1, sum+i)
         )
     );
-    print $ sum.to_string
+    print! $ sum.to_string
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
