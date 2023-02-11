@@ -279,7 +279,7 @@ Methods:
     - `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
 - `get : Int -> Array a -> a`
     - Returns an element of an array at an index.
-- `len : Array a -> Int`
+- `@length : Array a -> Int`
     - Returns the length of an array.
 - `mod : Int -> (a -> a) -> Array a -> Array a`
     - Modifies a value of an element at the specified index of an array by a function.
@@ -396,7 +396,7 @@ The type of strings.
 
 Methods:
 
-- `len : String -> Int`
+- `@length : String -> Int`
     - Returns the length of the string.
 
 ### Std.Vector
@@ -409,7 +409,7 @@ type Vector a = unbox struct { _len : Int, _data : Array a };
 
 Methods:
 
-- `len : Vector a -> Int`
+- `@length : Vector a -> Int`
     - Returns the length of the vector.
 
 ## Functions

@@ -126,7 +126,7 @@ namespace Iterator {
 
     // Create iterator from an array.
     from_array : Array a -> Iterator a;
-    from_array = |arr| count_up(0).take(arr.len).map(|i| arr.get(i));
+    from_array = |arr| count_up(0).take(arr.@length).map(|i| arr.get(i));
 
     // Creates iterator from mapping function.
     // from_map(f) = [f(0), f(1), f(2), ...]
@@ -218,15 +218,15 @@ namespace Option {
 type String = unbox struct { _data : Vector Byte };
 
 namespace String {
-    len : String -> Int;
-    len = |s| s.@_data.@_len - 1; // exclude null terminator
+    @length : String -> Int;
+    @length = |s| s.@_data.@_len - 1; // exclude null terminator
 }
 
 type Vector a = unbox struct { _len : Int, _data : Array a };
 
 namespace Vector {
-    len : Vector a -> Int;
-    len = |v| v.@_len;
+    @length : Vector a -> Int;
+    @length = @_len;
 }
 
 trait a : ToString {
@@ -330,7 +330,7 @@ pub fn make_std_mod() -> FixModule {
         mod_array(true),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "len"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "@length"),
         length_array(),
     );
     fix_module.add_global_value(

@@ -492,7 +492,7 @@ pub fn test24() {
         main : IOState -> ((), IOState);
         main = (
             let arr = Array.new(100, 42);
-            let u = assert_eq("", arr.len, 100);
+            let u = assert_eq("", arr.@length, 100);
             pure()
         );
         "#;
@@ -1023,7 +1023,7 @@ pub fn test44_5() {
         sum : Array Int -> Int;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
-                if idx == arr.len { sum };
+                if idx == arr.@length { sum };
                 loop(idx + 1, sum + arr.get(idx))
             );
             loop(0, 0)
@@ -1053,14 +1053,14 @@ pub fn test45() {
 
         impl Array : Functor {
             map = |f, arr| (
-                Array.from_map(arr.len, |idx| f $ arr.get(idx))
+                Array.from_map(arr.@length, |idx| f $ arr.get(idx))
             );
         }
 
         sum : Array Int -> Int;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
-                if idx == arr.len { sum };
+                if idx == arr.@length { sum };
                 loop(idx + 1, sum + arr.get(idx))
             );
             loop(0, 0)
@@ -1266,7 +1266,7 @@ pub fn test51() {
 
     search : [a: Eq] a -> Array a -> Int;
     search = |elem, arr| loop(0) $ |idx| (
-        if idx == arr.len {
+        if idx == arr.@length {
             break $ -1
         } else if arr.get(idx) == elem { 
             break $ idx
@@ -1332,7 +1332,7 @@ pub fn test52() {
         loop((0, 0)) $ |state| (
             let i = state.@0;
             let sum = state.@1;
-            if arr.len == i { break $ sum };
+            if arr.@length == i { break $ sum };
             let sum = sum + (if arr.get(i) == elem {1} else {0});
             continue $ (i+1, sum)
         )
@@ -1567,7 +1567,7 @@ pub fn test62() {
 
     main : IOState -> ((), IOState);
     main = (
-        let len = "Hello World!".len;
+        let len = "Hello World!".@length;
         let u = assert_eq("", len, 12);
         pure()
     );
@@ -1969,9 +1969,9 @@ pub fn test81() {
     main : IOState -> ((), IOState);
     main = (
         let arr = [1,2,3,4];
-        let _ = assert_eq("", arr.len, 4);
+        let _ = assert_eq("", arr.@length, 4);
         let arr: Array Bool = [];
-        let _ = assert_eq("", arr.len, 0);
+        let _ = assert_eq("", arr.@length, 0);
         pure()
     );
     "#;

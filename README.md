@@ -35,7 +35,7 @@ main = (
     let arr = arr.set!(0, 0);
     let arr = arr.set!(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.len {
+        if idx == arr.@length {
             break $ arr
         } else {
             let x = arr.get(idx-1);
