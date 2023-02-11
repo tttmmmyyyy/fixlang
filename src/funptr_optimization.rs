@@ -315,6 +315,13 @@ fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                                     continue;
                                 }
 
+                                // If new name is already appears freely in lam_val, it cannot be used.
+                                let lam_val_frees =
+                                    calculate_free_vars(lam_val.clone()).free_vars().clone();
+                                if lam_val_frees.contains(&lam_var_name) {
+                                    continue;
+                                }
+
                                 // Replace original_name in lam_val.
                                 let replaced = replace_free_var(
                                     &lam_val,
@@ -354,10 +361,12 @@ fn move_abs_front_let_all(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
             let val = move_abs_front_let_all(val);
             expr.set_lam_body(val)
         }
-        Expr::Let(_, _, val) => {
-            let val = move_abs_front_let_all(val);
-            let expr = &expr.set_let_value(val);
-            move_abs_front_let_one(&expr)
+        Expr::Let(_, _, _) => {
+            let expr = move_abs_front_let_one(&expr);
+            match &*expr.expr {
+                Expr::Lam(_, _) => move_abs_front_let_all(&expr),
+                _ => expr,
+            }
         }
         _ => expr.clone(),
     }

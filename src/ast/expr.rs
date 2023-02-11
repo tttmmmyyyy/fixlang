@@ -179,6 +179,16 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
+    pub fn get_let_value(&self) -> Arc<Self> {
+        match &*self.expr {
+            Expr::Let(_, _, val) => val.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
     pub fn set_if_cond(&self, cond: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
