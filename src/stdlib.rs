@@ -73,8 +73,8 @@ namespace Iterator {
     );
 
     // Counts the length of an iterator.
-    @length : Iterator a -> Int;
-    @length = fold(0, |acm, _| acm + 1);
+    get_length : Iterator a -> Int;
+    get_length = fold(0, |acm, _| acm + 1);
 
     // Creates an iterator that counts up from a number.
     // count_up(n) = [n, n+1, n+2, ...]
@@ -126,7 +126,7 @@ namespace Iterator {
 
     // Create iterator from an array.
     from_array : Array a -> Iterator a;
-    from_array = |arr| count_up(0).take(arr.@length).map(|i| arr.get(i));
+    from_array = |arr| count_up(0).take(arr.get_length).map(|i| arr.get(i));
 
     // Creates iterator from mapping function.
     // from_map(f) = [f(0), f(1), f(2), ...]
@@ -218,15 +218,15 @@ namespace Option {
 type String = unbox struct { _data : Vector Byte };
 
 namespace String {
-    @length : String -> Int;
-    @length = |s| s.@_data.@_len - 1; // exclude null terminator
+    get_length : String -> Int;
+    get_length = |s| s.@_data.@_len - 1; // exclude null terminator
 }
 
 type Vector a = unbox struct { _len : Int, _data : Array a };
 
 namespace Vector {
-    @length : Vector a -> Int;
-    @length = @_len;
+    get_length : Vector a -> Int;
+    get_length = @_len;
 }
 
 trait a : ToString {
@@ -330,7 +330,7 @@ pub fn make_std_mod() -> FixModule {
         mod_array(true),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "@length"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_length"),
         length_array(),
     );
     fix_module.add_global_value(

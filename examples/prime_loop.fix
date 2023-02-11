@@ -27,7 +27,7 @@ is_prime = |n| (
 count : [a: Eq] a -> Array a -> Int;
 count = |elem, arr| (
     loop((0, 0), |(i, sum)|
-        if arr.@length == i { break $ sum };
+        if arr.get_length == i { break $ sum };
         let sum = sum + (if arr.get(i) == elem {1} else {0});
         continue $ (i+1, sum)
     )

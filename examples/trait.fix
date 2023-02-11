@@ -23,7 +23,7 @@ impl [a: Eq, b: Eq] Pair a b : Eq {
 // in the `[]` bracket before the type signature.
 search : [a: Eq] a -> Array a -> Int;
 search = |elem, arr| loop(0, |idx|
-    if idx == arr.@length { break $ -1 };
+    if idx == arr.get_length { break $ -1 };
     if arr.get(idx) == elem { break $ idx };
     continue $ (idx + 1)
 );
@@ -36,7 +36,7 @@ trait [f:*->*] f : Functor {
 
 impl Array : Functor {
     map = |f, arr| (
-        Array.from_map(arr.@length, |idx| f(arr.get(idx)))
+        Array.from_map(arr.get_length, |idx| f(arr.get(idx)))
     );
 }
 
