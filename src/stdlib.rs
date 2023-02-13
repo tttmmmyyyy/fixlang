@@ -263,8 +263,8 @@ namespace Vector {
         // Destructure v1.
         let Vector { _data : v1_data, _reserved_length : reserved_length } = v1;
 
-        // Assure uniqueness by modifying element (workaround).
-        let v1_data = v1_data.mod(0, |x|x);
+        // Force uniqueness of v1_data
+        let v1_data = v1_data.force_unique;
         
         // Set length.
         let v1_data = v1_data.__set_unique_array_length(len);
@@ -414,6 +414,14 @@ pub fn make_std_mod() -> FixModule {
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__set_unique_array_length"),
         set_unique_array_length(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique!"),
+        force_unique_array(true),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique"),
+        force_unique_array(false),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),

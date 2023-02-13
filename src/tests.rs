@@ -2037,6 +2037,16 @@ pub fn test82() {
         let x = v.get(3) $ x;
         let _ = assert_eq("wrong value (boxed) 0+1+2+3+4", x, 0+1+2+3+4);
 
+        // Test appending shared array.
+        let v1 = Vector.from_array([add(1), add(2)]).reserve(4);
+        let v2 = Vector.from_array([add(3), add(4)]);
+        let v = v1.append(v2);
+        let w = v2.append(v1);
+        let x = 0;
+        let x = v.get(0) $ x; // += 1
+        let x = w.get(3) $ x; // += 2
+        let _ = assert_eq("", x, 3);
+
         pure()
     );
     "#;

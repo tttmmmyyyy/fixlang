@@ -940,6 +940,48 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+pub fn force_unique_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const ARRAY_NAME: &str = "arr";
+    const ELEM_TYPE: &str = "a";
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+        assert!(rvo.is_none());
+
+        // Get argments
+        let array = gc.get_var(&FullName::local(ARRAY_NAME)).ptr.get(gc);
+
+        // Make array unique
+        let (array, _, _) = make_array_unique(gc, array, is_unique_version);
+
+        array
+    });
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(ARRAY_NAME, None)],
+        expr_lit(
+            generator,
+            vec![FullName::local(ARRAY_NAME)],
+            format!(
+                "{}.force_unique{}",
+                ARRAY_NAME,
+                if is_unique_version { "!" } else { "" },
+            ),
+            array_ty.clone(),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![],
+        type_fun(array_ty.clone(), array_ty),
+    );
+    (expr, scm)
+}
+
 // `get_length` built-in function for Array.
 pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";

@@ -277,6 +277,12 @@ Methods:
     - Sets a value into an array. 
     - This function doesn't release the old value of the element.
     - This function updates the array without checking uniqueness.
+- `force_unique : Array a -> Array a`
+    - Force the uniqueness of an array.
+    - If the given array is shared, this function returns the cloned array.
+- `force_unique! : Array a -> Array a`
+    - Force the uniqueness of an array.
+    - If the given array is shared, this function panics.
 - `from_map : Int -> (Int -> a) -> Array a`
     - Creates an array by a mapping function.
     - `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
