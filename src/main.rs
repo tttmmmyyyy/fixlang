@@ -80,9 +80,9 @@ impl Configuration {
     // Configuration for release build.
     pub fn release() -> Configuration {
         Configuration {
-            sanitize_memory: false,
-            funptr_optimization: true,
-            preretain_global: true,
+            sanitize_memory: true,
+            funptr_optimization: false,
+            preretain_global: false,
             llvm_opt_level: OptimizationLevel::Default,
         }
     }

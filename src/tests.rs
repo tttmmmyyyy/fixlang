@@ -2024,19 +2024,18 @@ pub fn test82() {
         let _ = assert_eq("wrong length (0+0)", v.get_length, 0);
 
         // Test boxed elements.
-
-        // let v1 = Vector.from_array([add(1), add(2)]);
-        // let v2 = Vector.from_array([add(3), add(4)]);
-        // let v = v1.append(v2);
-        // let x = 0;
-        // let x = v.get(0) $ x;
-        // let _ = assert_eq("wrong value (boxed) 0+1", x, 0+1);
-        // let x = v.get(1) $ x;
-        // let _ = assert_eq("wrong value (boxed) 0+1+2", x, 0+1+2);
-        // let x = v.get(2) $ x;
-        // let _ = assert_eq("wrong value (boxed) 0+1+2+3", x, 0+1+2+3);
-        // let x = v.get(3) $ x;
-        // let _ = assert_eq("wrong value (boxed) 0+1+2+3+4", x, 0+1+2+3+4);
+        let v1 = Vector.from_array([add(1), add(2)]);
+        let v2 = Vector.from_array([add(3), add(4)]);
+        let v = v1.append(v2);
+        let x = 0;
+        let x = v.get(0) $ x;
+        let _ = assert_eq("wrong value (boxed) 0+1", x, 0+1);
+        let x = v.get(1) $ x;
+        let _ = assert_eq("wrong value (boxed) 0+1+2", x, 0+1+2);
+        let x = v.get(2) $ x;
+        let _ = assert_eq("wrong value (boxed) 0+1+2+3", x, 0+1+2+3);
+        let x = v.get(3) $ x;
+        let _ = assert_eq("wrong value (boxed) 0+1+2+3+4", x, 0+1+2+3+4);
 
         pure()
     );

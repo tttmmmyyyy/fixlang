@@ -251,6 +251,10 @@ namespace Vector {
 
         let v2_data = v2.@_data;
         let v1_len = v1.get_length;
+
+        // if v1 is empty, return early to avoid unnecessary clone.
+        if v1_len == 0 { v2 };
+
         let len = v1_len + v2_len;
 
         // Reserve v1's buffer.
@@ -258,6 +262,9 @@ namespace Vector {
 
         // Destructure v1.
         let Vector { _data : v1_data, _reserved_length : reserved_length } = v1;
+
+        // Assure uniqueness by modifying element (workaround).
+        let v1_data = v1_data.mod(0, |x|x);
         
         // Set length.
         let v1_data = v1_data.__set_array_length(len);
@@ -265,7 +272,7 @@ namespace Vector {
         // Copy elements of v2_data to v1_data.
         let v1_data = loop((0, v1_data), |(idx, v1_data)|(
             if idx >= v2.get_length { break $ v1_data };
-            let v1_data = v1_data.set!(v1_len + idx, v2_data.get(idx));
+            let v1_data = v1_data.__set_uninitialized_unique_array(v1_len + idx, v2_data.get(idx));
             continue $ (idx+1, v1_data)
         ));
 
