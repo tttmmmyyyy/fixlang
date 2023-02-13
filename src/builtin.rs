@@ -588,7 +588,7 @@ pub fn set_uninitialized_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Set the size of an array, with no uniqueness checking, no validation of size argument.
-pub fn set_array_length() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn set_unique_array_length() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "array";
     const SIZE_NAME: &str = "size";
     const ELEM_TYPE: &str = "a";

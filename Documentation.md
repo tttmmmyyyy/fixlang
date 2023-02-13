@@ -267,7 +267,7 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 
 Methods:
 
-- (unsafe) `__set_array_length : Int -> Array a -> Array a`
+- (unsafe) `__set_unique_array_length : Int -> Array a -> Array a`
     - Modifies the length field of an array, without uniqueness checking.
     - In the `Array` destructor, elements after length are not released.
 - (unsafe) `__new_uninitialized : Int -> Array a`

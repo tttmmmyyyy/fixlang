@@ -267,7 +267,7 @@ namespace Vector {
         let v1_data = v1_data.mod(0, |x|x);
         
         // Set length.
-        let v1_data = v1_data.__set_array_length(len);
+        let v1_data = v1_data.__set_unique_array_length(len);
 
         // Copy elements of v2_data to v1_data.
         let v1_data = loop((0, v1_data), |(idx, v1_data)|(
@@ -310,7 +310,7 @@ namespace Vector {
             let arr = Array.__new_uninitialized(size);
 
             // Set length.
-            let arr = arr.__set_array_length(vec.get_length);
+            let arr = arr.__set_unique_array_length(vec.get_length);
 
             // Copy elements.
             let arr = loop((0, arr), |(idx, arr)|(
@@ -412,8 +412,8 @@ pub fn make_std_mod() -> FixModule {
         set_uninitialized_unique_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__set_array_length"),
-        set_array_length(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__set_unique_array_length"),
+        set_unique_array_length(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),
