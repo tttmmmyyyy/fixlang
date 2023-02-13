@@ -277,17 +277,6 @@ pub fn make_string_from_ptr<'c, 'm>(
     // Store array to data.
     let array_val = array.value(gc);
     vector.store_field_nocap(gc, VECTOR_DATA_IDX, array_val);
-    // Store length.
-    let len_obj = allocate_obj(
-        int_lit_ty(),
-        &vec![],
-        None,
-        gc,
-        Some("len_in_make_string_value"),
-    );
-    len_obj.store_field_nocap(gc, 0, len_with_null_terminator);
-    let int_val = len_obj.value(gc);
-    vector.store_field_nocap(gc, VECTOR_LEN_IDX, int_val);
 
     string
 }
