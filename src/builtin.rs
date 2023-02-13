@@ -586,6 +586,56 @@ pub fn set_uninitialized_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Set the size of an array, with no uniqueness checking, no validation of size argument.
+pub fn set_array_length() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const ARR_NAME: &str = "array";
+    const SIZE_NAME: &str = "size";
+    const ELEM_TYPE: &str = "a";
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+        assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
+
+        // Get argments
+        let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
+        let size = gc
+            .get_var_field(&FullName::local(SIZE_NAME), 0)
+            .into_int_value();
+
+        // Get pointer to length field.
+        let ptr_to_length = array.ptr_to_field_nocap(gc, ARRAY_SIZE_IDX);
+
+        // Perform write and return.
+        gc.builder().build_store(ptr_to_length, size);
+        array
+    });
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(SIZE_NAME, None)],
+        expr_abs(
+            vec![var_local(ARR_NAME, None)],
+            expr_lit(
+                generator,
+                vec![FullName::local(SIZE_NAME), FullName::local(ARR_NAME)],
+                format!("{}.set_array_length({})", ARR_NAME, SIZE_NAME),
+                array_ty.clone(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+
+    let scm = Scheme::generalize(
+        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![],
+        type_fun(int_lit_ty(), type_fun(array_ty.clone(), array_ty)),
+    );
+    (expr, scm)
+}
+
 // Implementation of Array.get built-in function.
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
@@ -889,7 +939,7 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// `len` built-in function for Array.
+// `get_length` built-in function for Array.
 pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 

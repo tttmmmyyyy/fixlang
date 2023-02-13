@@ -324,6 +324,10 @@ pub fn make_std_mod() -> FixModule {
         set_uninitialized_unique_array(),
     );
     fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__set_array_length"),
+        set_array_length(),
+    );
+    fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),
         read_array(),
     );
