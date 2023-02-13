@@ -2055,6 +2055,62 @@ pub fn test82() {
 
 #[test]
 #[serial]
+pub fn test83() {
+    // Test Vector.push_back, pop_back
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        // Unboxed element
+        let v = Vector.from_array([]);
+        let v = loop((0, v), |(idx, v)|(
+            if idx == 100 { break $ v };
+            let v = v.push_back(idx);
+            continue $ (idx+1, v)
+        ));
+        let _ = loop(0, |idx|(
+            if idx == 100 { break $ () };
+            let _ = assert_eq("wrong element", idx, v.get(idx));
+            continue $ idx + 1
+        ));
+        let v = loop((0, v), |(idx, v)|(
+            if idx == 100 { break $ v };
+            let v = v.pop_back;
+            continue $ (idx+1, v)
+        ));
+        let _ = assert_eq("wrong length after pop", 0, v.get_length);
+        let _ = assert("wrong reserved length after pop", v.get_reserved_length >= 100);
+    
+        // Boxed element
+        let v = Vector.from_array([]);
+        let v = loop((0, v), |(idx, v)|(
+            if idx == 100 { break $ v };
+            let v = v.push_back(add(idx));
+            continue $ (idx+1, v)
+        ));
+        let x = loop((0, 0), |(idx, x)|(
+            if idx == 100 { break $ x };
+            let x = v.get(idx) $ x;
+            continue $ (idx + 1, x)
+        ));
+        let _ = assert_eq("wrong value (boxed)", x, 99 * 100 / 2);
+        let v = loop((0, v), |(idx, v)|(
+            if idx == 100 { break $ v };
+            let v = v.pop_back;
+            continue $ (idx+1, v)
+        ));
+        let _ = assert_eq("wrong length after pop (boxed)", 0, v.get_length);
+        let _ = assert("wrong reserved length after pop (boxed)", v.get_reserved_length >= 100);
+    
+        io.pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

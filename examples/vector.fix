@@ -1,21 +1,10 @@
 module Main;
 
 namespace Vector {
+
 }
 
 main : IOState -> ((), IOState);
 main = |io| (
-    let v1 = Vector.from_array([1,2]).reserve(6);
-    let v2 = Vector.from_array([3,4]);
-    let v = v1.append(v2);
-    let ((), io) = io.print!("len: ");
-    let ((), io) = io.println!(v.get_length.to_string);
-    let ((), io) = io.print!("reserve: ");
-    let ((), io) = io.println!(v.get_reserved_length.to_string);
-    let ((), io) = io.print!("elems: ");
-    let ((), io) = io.println!(v.get(0).to_string);
-    let ((), io) = io.println!(v.get(1).to_string);
-    let ((), io) = io.println!(v.get(2).to_string);
-    let ((), io) = io.println!(v.get(3).to_string);
     io.pure()
 );

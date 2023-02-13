@@ -300,6 +300,28 @@ namespace Vector {
     get_reserved_length : Vector a -> Int;
     get_reserved_length = Vector.@_reserved_length;
 
+    // Pop an element at the back of a vector.
+    // If the vector is empty, this function does nothing.
+    pop_back : Vector a -> Vector a;
+    pop_back = |v| (
+        let len = v.get_length;
+        if len == 0 { v };
+        let Vector { _data : data, _reserved_length : reserved_length } = v;
+        let data = data.force_unique.__set_unique_array_length(len-1);
+        Vector { _data : data, _reserved_length : reserved_length }
+    );
+
+    // Push an element to the back of a vector.
+    push_back : a -> Vector a -> Vector a;
+    push_back = |e, v| (
+        let len = v.get_length;
+        let v = v.reserve(2*(len + 1));
+        let Vector { _data : data, _reserved_length : reserved_length } = v;
+        let data = data.force_unique.__set_unique_array_length(len+1);
+        let data = data.__set_uninitialized_unique_array(len, e);
+        Vector { _data : data, _reserved_length : reserved_length }
+    );
+
     // Reserve the internal array.
     reserve : Int -> Vector a -> Vector a;
     reserve = |size, vec| (

@@ -263,7 +263,8 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 
 ### Std.Array
 
-`Std.Array` is the type of fixed-length arrays.
+`Std.Array` is the type of fixed-length arrays. 
+This type itself is not so useful and used as a building-block of `Std.Vector`.
 
 Methods:
 
@@ -433,6 +434,11 @@ Methods:
     - Get length of an vector.
 - `get_reserved_length : Vector a -> Int`
     - Get reserved length.
+- `pop_back : Vector a -> Vector a`
+    - Pop an element at the back of a vector.
+    - If the vector is empty, this function does nothing.
+- `push_back : a -> Vector a -> Vector a`
+    - Push an element to the back of a vector.
 - `reserve : Int -> Vector a -> Vector a`
     - Reserve the internal array.
 - `set! : Int -> a -> Vector a -> Vector a`
