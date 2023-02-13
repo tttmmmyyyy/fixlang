@@ -502,7 +502,7 @@ pub fn test24() {
 #[test]
 #[serial]
 pub fn test25() {
-    // Test Array.read.
+    // Test Array.get.
     let source = r#"
         module Main;
         main : IOState -> ((), IOState);
