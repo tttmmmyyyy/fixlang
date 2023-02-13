@@ -414,8 +414,24 @@ type Vector a = unbox struct { _len : Int, _data : Array a };
 
 Methods:
 
+- `append : Vector a -> Vector a -> Vector a`
+    - Append a vector to a vector.
+    - Note: Since `v1.append(v2)` puts `v2` after `v1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 - `get_length : Vector a -> Int`
     - Returns the length of the vector.
+- `from_array : Array a -> Vector a`
+    - Create Vector from an array.
+- `get : Int -> Vector a -> a`
+    - Get the element at an index.
+- `get_length : Vector a -> Int`
+    - Get length of an vector.
+- `get_reserved_length : Vector a -> Int`
+    - Get reserved length.
+- `reserve : Int -> Vector a -> Vector a`
+    - Reserve the internal array.
+- `set! : Int -> a -> Vector a -> Vector a`
+    - Updates an elemnt at an index.
+    - This function asserts the Vector's internal array is unique.
 
 ## Functions
 

@@ -239,8 +239,89 @@ namespace String {
 type Vector a = unbox struct { _data : Array a, _reserved_length : Int };
 
 namespace Vector {
+
+    // Append a vector to a vector.
+    // Note: Since `v1.append(v2)` puts `v2` after `v1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
+    append : Vector a -> Vector a -> Vector a;
+    append = |v2, v1| (
+        let v2_len = v2.get_length;
+
+        // if v2 is empty, return early to avoid unnecessary clone.
+        if v2_len == 0 { v1 };
+
+        let v2_data = v2.@_data;
+        let v1_len = v1.get_length;
+        let len = v1_len + v2_len;
+
+        // Reserve v1's buffer.
+        let v1 = v1.reserve(len);
+
+        // Destructure v1.
+        let Vector { _data : v1_data, _reserved_length : reserved_length } = v1;
+        
+        // Set length.
+        let v1_data = v1_data.__set_array_length(len);
+
+        // Copy elements of v2_data to v1_data.
+        let v1_data = loop((0, v1_data), |(idx, v1_data)|(
+            if idx >= v2.get_length { break $ v1_data };
+            let v1_data = v1_data.set!(v1_len + idx, v2_data.get(idx));
+            continue $ (idx+1, v1_data)
+        ));
+
+        Vector { _data : v1_data, _reserved_length : reserved_length }
+    );
+
+    // Create Vector from an array.
+    from_array : Array a -> Vector a;
+    from_array = |arr| (
+        Vector { _data : arr, _reserved_length : arr.get_length }
+    );
+
+    // Get the element at an index.
+    get : Int -> Vector a -> a;
+    get = |idx, vec| (
+        let _ = Debug.assert("Index out of range at Vector.get.", 0 <= idx && idx < vec.get_length);
+        vec.@_data.get(idx)
+    );
+
+    // Get length of an vector.
     get_length : Vector a -> Int;
     get_length = |v| v.@_data.get_length;
+
+    // Get reserved length.
+    get_reserved_length : Vector a -> Int;
+    get_reserved_length = Vector.@_reserved_length;
+
+    // Reserve the internal array.
+    reserve : Int -> Vector a -> Vector a;
+    reserve = |size, vec| (
+        if size <= vec.get_reserved_length {
+            vec
+        } else {
+            // Allocate internal array.
+            let arr = Array.__new_uninitialized(size);
+
+            // Set length.
+            let arr = arr.__set_array_length(vec.get_length);
+
+            // Copy elements.
+            let arr = loop((0, arr), |(idx, arr)|(
+                if idx >= vec.get_length { break $ arr };
+                let arr = arr.__set_uninitialized_unique_array(idx, vec.@_data.get(idx));
+                continue $ (idx+1, arr)
+            ));
+
+            Vector { _data : arr, _reserved_length : size }
+        }
+    );
+
+    // Updates an elemnt at an index.
+    // This function asserts the Vector's internal array is unique.
+    set! : Int -> a -> Vector a -> Vector a;
+    set! = |idx, elem, vec| (
+        vec.mod__data(|arr| arr.set!(idx, elem))
+    );
 }
 
 trait a : ToString {
