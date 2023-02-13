@@ -278,6 +278,18 @@ pub fn make_string_from_ptr<'c, 'm>(
     let array_val = array.value(gc);
     vector.store_field_nocap(gc, VECTOR_DATA_IDX, array_val);
 
+    // Store reserved length.
+    let len_obj = allocate_obj(
+        int_lit_ty(),
+        &vec![],
+        None,
+        gc,
+        Some("reserved_length_in_make_string_value"),
+    );
+    len_obj.store_field_nocap(gc, 0, len_with_null_terminator);
+    let int_val = len_obj.value(gc);
+    vector.store_field_nocap(gc, VECTOR_RESERVED_LEN_IDX, int_val);
+
     string
 }
 

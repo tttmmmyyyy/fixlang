@@ -269,6 +269,7 @@ Methods:
 
 - (unsafe) `__set_array_length : Int -> Array a -> Array a`
     - Modifies the length field of an array, without uniqueness checking.
+    - In the `Array` destructor, elements after length are not released.
 - (unsafe) `__new_uninitialized : Int -> Array a`
     - Creates an array of specified length with uninitialized elements.
     - After allocating array by this function, you should initialize all elements using `__set_uninitialized_unique_array` function.

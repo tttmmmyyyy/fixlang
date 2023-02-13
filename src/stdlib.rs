@@ -2,6 +2,7 @@ use super::*;
 
 pub const FIX_NAME: &str = "fix";
 pub const VECTOR_DATA_IDX: u32 = 0;
+pub const VECTOR_RESERVED_LEN_IDX: u32 = 1;
 
 const STD_SOURCE: &str = r#"
 module Std;
@@ -235,7 +236,7 @@ namespace String {
     get_length = |s| s.@_data.get_length - 1; // exclude null terminator
 }
 
-type Vector a = unbox struct { _data : Array a };
+type Vector a = unbox struct { _data : Array a, _reserved_length : Int };
 
 namespace Vector {
     get_length : Vector a -> Int;
