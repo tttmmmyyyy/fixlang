@@ -545,7 +545,7 @@ impl TypeCheckContext {
                         .join(", ");
                     error_exit_with_src(
                         &format!(
-                            "name `{}` is ambiguous: there are {}.",
+                            "Name `{}` is ambiguous: there are {}.",
                             var.name.to_string(),
                             candidates_str
                         ),
