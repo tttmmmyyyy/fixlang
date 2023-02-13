@@ -578,7 +578,7 @@ pub fn test28() {
             let arr = Array.new(31, 0);
             let arr = arr.set!(0, 0);
             let arr = arr.set!(1, 1);
-            let loop = fix $ |f, arr, n| (
+            let loop = fix $ |f, arr: Array Int, n| (
                 if n == 31 {
                     arr
                 } else {

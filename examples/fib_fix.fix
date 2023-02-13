@@ -10,7 +10,7 @@ main = (
     let calc_fib_array = (
         // To make recursive function locally, use the idiom:
         // fix \loop -> \(argments) -> (body of recursive_function that calls `loop`).
-        fix $ |loop, arr, n|
+        fix $ |loop, arr: Array Int, n|
             if n == 31 { arr };
             let x = arr.get(n-1);
             let y = arr.get(n-2);
