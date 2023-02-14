@@ -287,10 +287,7 @@ namespace Vector {
 
     // Get the element at an index.
     get : Int -> Vector a -> a;
-    get = |idx, vec| (
-        let _ = Debug.assert("Index out of range at Vector.get.", 0 <= idx && idx < vec.get_length);
-        vec.@_data.get(idx)
-    );
+    get = |idx, vec| vec.@_data.get(idx);
 
     // Get length of an vector.
     get_length : Vector a -> Int;
@@ -307,7 +304,9 @@ namespace Vector {
         let len = v.get_length;
         if len == 0 { v };
         let Vector { _data : data, _reserved_length : reserved_length } = v;
-        let data = data.force_unique.__set_unique_array_length(len-1);
+        let data = data.force_unique;
+        let _deleted_elem = data.__get_array_element_noretain(len-1);
+        let data = data.__set_unique_array_length(len-1);
         Vector { _data : data, _reserved_length : reserved_length }
     );
 
@@ -436,6 +435,10 @@ pub fn make_std_mod() -> FixModule {
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__set_unique_array_length"),
         set_unique_array_length(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__get_array_element_noretain"),
+        get_array_noretain(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique!"),

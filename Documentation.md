@@ -270,7 +270,7 @@ Methods:
 
 - (unsafe) `__set_unique_array_length : Int -> Array a -> Array a`
     - Modifies the length field of an array, without uniqueness checking.
-    - In the `Array` destructor, elements after length are not released.
+    - In the `Array` destructor, elements stored after length are not released.
 - (unsafe) `__new_uninitialized : Int -> Array a`
     - Creates an array of specified length with uninitialized elements.
     - After allocating array by this function, you should initialize all elements using `__set_uninitialized_unique_array` function.
@@ -278,6 +278,9 @@ Methods:
     - Sets a value into an array. 
     - This function doesn't release the old value of the element.
     - This function updates the array without checking uniqueness.
+- (unsafe) `__get_array_element_noretain`
+    - Get an element of an array, without retaining value.
+    - After decreasing length by `__set_unique_array_length`, you can get elements stored after length by this funtion to release them.
 - `force_unique : Array a -> Array a`
     - Force the uniqueness of an array.
     - If the given array is shared, this function returns the cloned array.

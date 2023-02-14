@@ -587,6 +587,59 @@ pub fn set_uninitialized_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Get an element of an array without retaining element.
+pub fn get_array_noretain() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const IDX_NAME: &str = "idx";
+    const ARR_NAME: &str = "array";
+    const ELEM_TYPE: &str = "a";
+
+    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+        // Get argments
+        let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
+        let idx = gc
+            .get_var_field(&FullName::local(IDX_NAME), 0)
+            .into_int_value();
+
+        // Get array buffer
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+
+        // Get element
+        let elem =
+            ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx, rvo);
+
+        // Release array.
+        gc.release(array);
+
+        elem
+    });
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(IDX_NAME, None)],
+        expr_abs(
+            vec![var_local(ARR_NAME, None)],
+            expr_lit(
+                generator,
+                vec![FullName::local(IDX_NAME), FullName::local(ARR_NAME)],
+                format!("{}.get_array_noretain({})", ARR_NAME, IDX_NAME),
+                elem_tyvar.clone(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+
+    let scm = Scheme::generalize(
+        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![],
+        type_fun(int_lit_ty(), type_fun(array_ty, elem_tyvar.clone())),
+    );
+    (expr, scm)
+}
+
 // Set the size of an array, with no uniqueness checking, no validation of size argument.
 pub fn set_unique_array_length() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "array";
@@ -651,7 +704,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let elem = ObjectFieldType::read_from_array_buf(gc, size, buf, ty.clone(), idx, rvo);
+        let elem = ObjectFieldType::read_from_array_buf(gc, Some(size), buf, ty.clone(), idx, rvo);
         gc.release(array);
         elem
     });
@@ -883,7 +936,12 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         // Get old element without retain.
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let elem = ObjectFieldType::read_from_array_buf_noretain(
-            gc, array_size, array_buf, elem_ty, idx, None,
+            gc,
+            Some(array_size),
+            array_buf,
+            elem_ty,
+            idx,
+            None,
         );
 
         // Apply modifier to get a new value.

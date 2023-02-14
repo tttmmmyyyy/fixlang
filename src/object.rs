@@ -237,14 +237,16 @@ impl ObjectFieldType {
     // Returned object is not retained.
     pub fn read_from_array_buf_noretain<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size: IntValue<'c>,
+        size: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Panic if out_of_range.
-        Self::panic_if_out_of_range(gc, size, idx);
+        if size.is_some() {
+            Self::panic_if_out_of_range(gc, size.unwrap(), idx);
+        }
 
         // Get element.
         let ptr_to_elem = unsafe {
@@ -270,7 +272,7 @@ impl ObjectFieldType {
     // Returned object is already retained.
     pub fn read_from_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size: IntValue<'c>,
+        size: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,

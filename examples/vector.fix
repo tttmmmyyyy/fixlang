@@ -1,9 +1,5 @@
 module Main;
 
-namespace Vector {
-
-}
-
 main : IOState -> ((), IOState);
 main = |io| (
     io.pure()
