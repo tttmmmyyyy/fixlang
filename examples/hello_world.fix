@@ -2,5 +2,5 @@ module Main;
 
 main : IOState -> ((), IOState);
 main = |io| (
-    io.pure()
+    io.println!("Hello World!")
 );
