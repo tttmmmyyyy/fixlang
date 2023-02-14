@@ -225,12 +225,23 @@ namespace Option {
 type String = unbox struct { _data : Vector Byte };
 
 namespace String {
+
     // Concatenate two strings.
     // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
     concat : String -> String -> String;
     concat = |rhs, lhs| (
         // Remove null terminator from lhs and append rhs.
         String { _data : lhs.@_data.pop_back.append(rhs.@_data) }
+    );
+
+    // Concatenate an iterator of strings.
+    concat_iter : Iterator String -> String;
+    concat_iter = |iter| (
+        let len = iter.map(get_length).fold(0, add);
+        let data_len = len + 1; // Add space for null terminator.
+        let data = "".@_data.reserve(data_len);
+        let data = iter.fold(data, |data, str| data.pop_back.append(str.@_data));
+        String { _data : data }
     );
 
     // Get the length of a string.

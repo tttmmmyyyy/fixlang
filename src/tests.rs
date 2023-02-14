@@ -2163,6 +2163,24 @@ pub fn test85() {
 
 #[test]
 #[serial]
+pub fn test86() {
+    // Test concat_iter
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let iter = Iterator.from_array(["Hello", " ", "World", "!"]);
+        let _ = assert_eq("", iter.concat_iter, "Hello World!");
+        io.pure()
+    );
+    
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

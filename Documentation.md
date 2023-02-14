@@ -414,6 +414,8 @@ Methods:
 - `concat : String -> String -> String`
     - Concatenate two strings.
     - Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
+- `concat_iter : Iterator String -> String`
+    - Concatenate an iterator of strings.
 - `get_length : String -> Int`
     - Returns the length of the string.
 
