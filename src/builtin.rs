@@ -114,7 +114,7 @@ pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     Some(number.parse::<u32>().unwrap())
 }
 
-pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
+pub fn make_kind_fun(arity: u32) -> Rc<Kind> {
     let mut res = kind_star();
     for _ in 0..arity {
         res = kind_arrow(kind_star(), res);
@@ -127,47 +127,47 @@ pub const LOOP_RESULT_NAME: &str = "LoopResult";
 pub const TUPLE_NAME: &str = "Tuple";
 
 // Get Int type.
-pub fn int_lit_ty() -> Arc<TypeNode> {
+pub fn int_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], INT_NAME)))
 }
 
 // Get Bool type.
-pub fn bool_lit_ty() -> Arc<TypeNode> {
+pub fn bool_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOOL_NAME)))
 }
 
 // Get Byte type.
-pub fn byte_lit_ty() -> Arc<TypeNode> {
+pub fn byte_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BYTE_NAME)))
 }
 
 // Get Array type.
-pub fn array_lit_ty() -> Arc<TypeNode> {
+pub fn array_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
 // Get Vector type.
-pub fn vector_lit_ty() -> Arc<TypeNode> {
+pub fn vector_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], VECTOR_NAME)))
 }
 
 // Get IOState type.
-pub fn iostate_lit_ty() -> Arc<TypeNode> {
+pub fn iostate_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
 }
 
 // Get String type.
-pub fn string_lit_ty() -> Arc<TypeNode> {
+pub fn string_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
 }
 
 // Get LoopResult type.
-pub fn loop_result_ty() -> Arc<TypeNode> {
+pub fn loop_result_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
 }
 
 // Get tuple type.
-pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+pub fn make_tuple_ty(tys: Vec<Rc<TypeNode>>) -> Rc<TypeNode> {
     assert!(tys.len() <= FUNPTR_ARGS_MAX as usize);
     let mut ty = type_tycon(&tycon(make_tuple_name(tys.len() as u32)));
     for field_ty in tys {
@@ -183,18 +183,18 @@ pub fn make_tuple_name(size: u32) -> FullName {
 }
 
 // Get Unit type.
-pub fn unit_ty() -> Arc<TypeNode> {
+pub fn unit_ty() -> Rc<TypeNode> {
     make_tuple_ty(vec![])
 }
 
 // Get type IOState -> (output_ty, IOState).
-pub fn io_runner_ty(output_ty: Arc<TypeNode>) -> Arc<TypeNode> {
+pub fn io_runner_ty(output_ty: Rc<TypeNode>) -> Rc<TypeNode> {
     let result_ty = make_tuple_ty(vec![output_ty, iostate_lit_ty()]);
     type_fun(iostate_lit_ty(), result_ty.clone())
 }
 
-pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+pub fn int(val: i64, source: Option<Span>) -> Rc<ExprNode> {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
             allocate_obj(
                 ty.clone(),
@@ -213,8 +213,8 @@ pub fn int(val: i64, source: Option<Span>) -> Arc<ExprNode> {
     expr_lit(generator, vec![], val.to_string(), int_lit_ty(), source)
 }
 
-pub fn bool(val: bool, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+pub fn bool(val: bool, source: Option<Span>) -> Rc<ExprNode> {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
             allocate_obj(
                 ty.clone(),
@@ -293,8 +293,8 @@ pub fn make_string_from_ptr<'c, 'm>(
     string
 }
 
-pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<ExprNode> {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         let string_ptr = gc
             .builder()
             .build_global_string_ptr(&string, "string_literal")
@@ -315,12 +315,12 @@ pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc
     )
 }
 
-fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
+fn fix_lit(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
     let name = format!("fix {} {}", f_str.to_string(), x_str.to_string());
     let free_vars = vec![FullName::local(SELF_NAME), f_str.clone(), x_str.clone()];
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
         let fixf = gc.get_var(&FullName::local(SELF_NAME)).ptr.get(gc);
         let x = gc.get_var(&x_str).ptr.get(gc);
         let f = gc.get_var(&f_str).ptr.get(gc);
@@ -332,7 +332,7 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
 }
 
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
-pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("f", None)],
         expr_abs(vec![var_local("x", None)], fix_lit("b", "f", "x"), None),
@@ -351,9 +351,9 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // int_to_string : Int -> String
-pub fn int_to_string_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const VAL_NAME: &str = "val";
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         // Get value
         let val = gc
             .get_var_field(&FullName::local(VAL_NAME), 0)
@@ -418,13 +418,13 @@ pub fn int_to_string_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Implementation of Array.new built-in function.
-fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
+fn new_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     let size_str = FullName::local(size);
     let value_str = FullName::local(value);
     let name = format!("Array.new {} {}", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let size = gc.get_var_field(&size_str, 0).into_int_value();
         gc.release(gc.get_var(&size_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
@@ -451,7 +451,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
 
 // "newArray" built-in function.
 // newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
-pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn new_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("size", None)],
         expr_abs(
@@ -476,11 +476,11 @@ pub fn new_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Makes an uninitialized array.
-pub fn new_uninitialized() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn new_uninitialized() -> (Rc<ExprNode>, Rc<Scheme>) {
     const SIZE_NAME: &str = "size";
     const ELEM_TYPE: &str = "a";
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, arr_ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, arr_ty, rvo| {
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
 
         // Get size
@@ -521,13 +521,13 @@ pub fn new_uninitialized() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Set an element of an uninitialized array, with no uniqueness checking.
-pub fn set_uninitialized_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn set_uninitialized_unique_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const VALUE_NAME: &str = "val";
     const ELEM_TYPE: &str = "a";
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
 
         // Get argments
@@ -588,12 +588,12 @@ pub fn set_uninitialized_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Get an element of an array without retaining element.
-pub fn get_array_noretain() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn get_array_noretain() -> (Rc<ExprNode>, Rc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         // Get argments
         let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
         let idx = gc
@@ -641,12 +641,12 @@ pub fn get_array_noretain() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Set the size of an array, with no uniqueness checking, no validation of size argument.
-pub fn set_unique_array_length() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn set_unique_array_length() -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARR_NAME: &str = "array";
     const SIZE_NAME: &str = "size";
     const ELEM_TYPE: &str = "a";
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
 
         // Get argments
@@ -691,13 +691,13 @@ pub fn set_unique_array_length() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Implementation of Array.get built-in function.
-fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
+fn read_array_lit(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
     let name = format!("Array.get {} {}", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array = gc.get_var(&array_str).ptr.get(gc);
         let size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
@@ -713,7 +713,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
 
 // "Array.get" built-in function.
 // Array.get = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
-pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx", None)],
         expr_abs(
@@ -835,7 +835,7 @@ fn write_array_lit(
     idx: &str,
     value: &str,
     is_unique_version: bool,
-) -> Arc<ExprNode> {
+) -> Rc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
@@ -849,7 +849,7 @@ fn write_array_lit(
     });
     let name = format!("{} {} {} {}", func_name, idx, value, array);
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         assert!(rvo.is_none());
 
         // Get argments
@@ -875,7 +875,7 @@ fn write_array_lit(
 }
 
 // Array.set built-in function.
-pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn write_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx", None)],
         expr_abs(
@@ -902,22 +902,22 @@ pub fn write_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
 }
 
 // set built-in function.
-pub fn write_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn write_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     write_array_common(false)
 }
 
 // set! built-in function.
-pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn write_array_unique() -> (Rc<ExprNode>, Rc<Scheme>) {
     write_array_common(true)
 }
 
-pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     const MODIFIED_ARRAY_NAME: &str = "arr";
     const MODIFIER_NAME: &str = "f";
     const INDEX_NAME: &str = "idx";
     const ELEM_TYPE: &str = "a";
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         assert!(rvo.is_none());
 
         // Get argments
@@ -998,11 +998,11 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-pub fn force_unique_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARRAY_NAME: &str = "arr";
     const ELEM_TYPE: &str = "a";
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         assert!(rvo.is_none());
 
         // Get argments
@@ -1041,10 +1041,10 @@ pub fn force_unique_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
 }
 
 // `get_length` built-in function for Array.
-pub fn length_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
         let arr_name = FullName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
@@ -1086,14 +1086,14 @@ pub fn struct_new_lit(
     struct_name: &FullName,
     struct_defn: &TypeDefn,
     field_names: Vec<String>,
-) -> Arc<ExprNode> {
+) -> Rc<ExprNode> {
     let free_vars = field_names
         .iter()
         .map(|name| FullName::local(name))
         .collect();
     let name = format!("{}.new {}", struct_name.to_string(), field_names.join(" "));
     let name_cloned = name.clone();
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         // Get field values.
         let fields = field_names
             .iter()
@@ -1118,7 +1118,7 @@ pub fn struct_new_lit(
 }
 
 // `new` built-in function for a given struct.
-pub fn struct_new(struct_name: &FullName, definition: &TypeDefn) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn struct_new(struct_name: &FullName, definition: &TypeDefn) -> (Rc<ExprNode>, Rc<Scheme>) {
     let mut expr = struct_new_lit(
         struct_name,
         definition,
@@ -1137,12 +1137,12 @@ pub fn struct_new(struct_name: &FullName, definition: &TypeDefn) -> (Arc<ExprNod
 pub fn struct_get_lit(
     var_name: &str,
     field_idx: usize,
-    field_ty: Arc<TypeNode>,
+    field_ty: Rc<TypeNode>,
     struct_name: &FullName,
     field_name: &str,
-) -> Arc<ExprNode> {
+) -> Rc<ExprNode> {
     let var_name_clone = FullName::local(var_name);
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
         // Get struct object.
         let str = gc.get_var(&var_name_clone).ptr.get(gc);
 
@@ -1175,7 +1175,7 @@ pub fn struct_get(
     struct_name: &FullName,
     definition: &TypeDefn,
     field_name: &str,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+) -> (Rc<ExprNode>, Rc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let field = definition.get_field_by_name(field_name);
     if field.is_none() {
@@ -1214,7 +1214,7 @@ pub fn struct_mod_lit(
     struct_defn: &TypeDefn,
     field_name: &str,
     is_unique_version: bool,
-) -> Arc<ExprNode> {
+) -> Rc<ExprNode> {
     let name = format!(
         "{}.mod_{}{}({}, {})",
         struct_name.to_string(),
@@ -1226,7 +1226,7 @@ pub fn struct_mod_lit(
     let f_name = FullName::local(f_name);
     let x_name = FullName::local(x_name);
     let free_vars = vec![f_name.clone(), x_name.clone()];
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let is_unbox = ty.is_unbox(gc.type_env());
 
         // Get arguments
@@ -1260,7 +1260,7 @@ pub fn struct_mod(
     definition: &TypeDefn,
     field_name: &str,
     is_unique_version: bool,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+) -> (Rc<ExprNode>, Rc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let field = definition.get_field_by_name(field_name);
     if field.is_none() {
@@ -1384,7 +1384,7 @@ pub fn struct_set(
     definition: &TypeDefn,
     field_name: &str,
     is_unique_version: bool,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+) -> (Rc<ExprNode>, Rc<Scheme>) {
     const VALUE_NAME: &str = "val";
     const STRUCT_NAME: &str = "str";
 
@@ -1400,7 +1400,7 @@ pub fn struct_set(
     let (field_idx, field) = field.unwrap();
     let field_count = definition.fields().len() as u32;
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, str_ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, str_ty, rvo| {
         // Get arguments
         let value = gc.get_var(&FullName::local(VALUE_NAME)).ptr.get(gc);
         let str = gc.get_var(&FullName::local(STRUCT_NAME)).ptr.get(gc);
@@ -1461,7 +1461,7 @@ pub fn union_new(
     union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+) -> (Rc<ExprNode>, Rc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
     for field in union.fields() {
@@ -1495,12 +1495,12 @@ pub fn union_new_lit(
     union_defn: &TypeDefn,
     field_name: &Name,
     field_idx: usize,
-) -> Arc<ExprNode> {
+) -> Rc<ExprNode> {
     let free_vars = vec![FullName::local(field_name)];
     let name = format!("{}.new_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
     let field_name_cloned = field_name.clone();
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let is_unbox = ty.is_unbox(gc.type_env());
         let offset: u32 = if is_unbox { 0 } else { 1 };
 
@@ -1535,7 +1535,7 @@ pub fn union_as(
     union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+) -> (Rc<ExprNode>, Rc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
     for field in union.fields() {
@@ -1576,12 +1576,12 @@ pub fn union_as_lit(
     union_arg_name: &Name,
     field_name: &Name,
     field_idx: usize,
-    field_ty: Arc<TypeNode>,
-) -> Arc<ExprNode> {
+    field_ty: Rc<TypeNode>,
+) -> Rc<ExprNode> {
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         // Get union object.
         let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
 
@@ -1607,7 +1607,7 @@ pub fn union_is(
     union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+) -> (Rc<ExprNode>, Rc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
     for field in union.fields() {
@@ -1641,12 +1641,12 @@ pub fn union_is_lit(
     union_arg_name: &Name,
     field_name: &Name,
     field_idx: usize,
-) -> Arc<ExprNode> {
+) -> Rc<ExprNode> {
     let name = format!("{}.is_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         // Get union object.
         let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
 
@@ -1725,7 +1725,7 @@ pub fn loop_result_defn() -> TypeDefn {
 
 // `loop` built-in function.
 // loop : s -> (s -> LoopResult s b) -> b;
-pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
     const S_NAME: &str = "s";
     const B_NAME: &str = "b";
     const INITIAL_STATE_NAME: &str = "initial_state";
@@ -1750,7 +1750,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
     );
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let initial_state_name = FullName::local(INITIAL_STATE_NAME);
         let loop_body_name = FullName::local(LOOP_BODY_NAME);
 
@@ -1781,7 +1781,7 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
         fn get_loop_state<'c, 'm>(
             gc: &mut GenerationContext<'c, 'm>,
             state_ptr: PointerValue<'c>,
-            state_ty: &Arc<TypeNode>,
+            state_ty: &Rc<TypeNode>,
         ) -> Object<'c> {
             Object::new(
                 if state_ty.is_box(gc.type_env()) {
@@ -1886,11 +1886,11 @@ fn extract_vector_from_string<'c, 'm>(
 }
 
 // print : String -> IOState -> ((), IOState).
-pub fn print_io_func() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn print_io_func() -> (Rc<ExprNode>, Rc<Scheme>) {
     const STRING_NAME: &str = "str";
     const IOSTATE_NAME: &str = "iostate";
 
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let string_name = FullName::local(STRING_NAME);
         let iostate_name = FullName::local(IOSTATE_NAME);
 
@@ -1952,9 +1952,9 @@ pub fn print_io_func() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // `debug_print` built-in function
-pub fn debug_print_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const MSG_NAME: &str = "msg";
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let msg_name = FullName::local(MSG_NAME);
         let string = gc.get_var(&msg_name).ptr.get(gc);
 
@@ -2003,10 +2003,10 @@ pub fn debug_print_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // `abort` built-in function
-pub fn abort_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const A_NAME: &str = "a";
     const UNIT_NAME: &str = "iostate";
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         // Abort
         gc.call_runtime(RuntimeFunctions::Abort, &[]);
 
@@ -2079,8 +2079,8 @@ pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
 pub fn unary_opeartor_instance(
     trait_id: TraitId,
     method_name: &Name,
-    operand_ty: Arc<TypeNode>,
-    result_ty: Arc<TypeNode>,
+    operand_ty: Rc<TypeNode>,
+    result_ty: Rc<TypeNode>,
     generator: for<'c, 'm> fn(
         &mut GenerationContext<'c, 'm>, // gc
         Object<'c>,                     // rhs
@@ -2088,7 +2088,7 @@ pub fn unary_opeartor_instance(
     ) -> Object<'c>,
 ) -> TraitInstance {
     const RHS_NAME: &str = "rhs";
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
         let rhs_name = FullName::local(RHS_NAME);
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
         generator(gc, rhs, rvo)
@@ -2122,7 +2122,7 @@ pub fn unary_opeartor_instance(
 pub fn binary_operator_trait(
     trait_id: TraitId,
     method_name: Name,
-    output_ty: Option<Arc<TypeNode>>,
+    output_ty: Option<Rc<TypeNode>>,
 ) -> TraitInfo {
     const TYVAR_NAME: &str = "a";
     let kind = kind_star();
@@ -2150,8 +2150,8 @@ pub fn binary_operator_trait(
 pub fn binary_opeartor_instance(
     trait_id: TraitId,
     method_name: &Name,
-    operand_ty: Arc<TypeNode>,
-    result_ty: Arc<TypeNode>,
+    operand_ty: Rc<TypeNode>,
+    result_ty: Rc<TypeNode>,
     generator: for<'c, 'm> fn(
         &mut GenerationContext<'c, 'm>, // gc
         Object<'c>,                     // lhs
@@ -2161,7 +2161,7 @@ pub fn binary_opeartor_instance(
 ) -> TraitInstance {
     const LHS_NAME: &str = "lhs";
     const RHS_NAME: &str = "rhs";
-    let generator: Arc<InlineLLVM> = Arc::new(move |gc, _ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
         let lhs = FullName::local(LHS_NAME);
         let rhs = FullName::local(RHS_NAME);
         let lhs_val = gc.get_var(&lhs).ptr.get(gc);
@@ -2215,7 +2215,7 @@ pub fn eq_trait() -> TraitInfo {
     )
 }
 
-pub fn eq_trait_instance_primitive(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn eq_trait_instance_primitive(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_eq_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,

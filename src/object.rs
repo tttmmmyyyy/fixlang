@@ -10,13 +10,13 @@ use super::*;
 pub enum ObjectFieldType {
     ControlBlock,
     DtorFunction,
-    LambdaFunction(Arc<TypeNode>), // Specify type of lambda
+    LambdaFunction(Rc<TypeNode>), // Specify type of lambda
     I64,
     I8,
-    SubObject(Arc<TypeNode>),
-    UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
-    UnionTag,                     // TODO: I should merge UnionTag and UnionBuf as like Array.
-    ArraySize(Arc<TypeNode>),     // Size of array.
+    SubObject(Rc<TypeNode>),
+    UnionBuf(Vec<Rc<TypeNode>>), // Embedded union.
+    UnionTag,                    // TODO: I should merge UnionTag and UnionBuf as like Array.
+    ArraySize(Rc<TypeNode>),     // Size of array.
 }
 
 impl ObjectFieldType {
@@ -137,7 +137,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
+        elem_ty: Rc<TypeNode>,
     ) {
         // In loop body, release object of idx = counter_val.
         let loop_body = |gc: &mut GenerationContext<'c, 'm>,
@@ -239,7 +239,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         size: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
+        elem_ty: Rc<TypeNode>,
         idx: IntValue<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
@@ -274,7 +274,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         size: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
+        elem_ty: Rc<TypeNode>,
         idx: IntValue<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
@@ -325,7 +325,7 @@ impl ObjectFieldType {
         size: IntValue<'c>,
         src_buffer: PointerValue<'c>,
         dst_buffer: PointerValue<'c>,
-        elem_ty: Arc<TypeNode>,
+        elem_ty: Rc<TypeNode>,
     ) {
         // Clone each elements.
         {
@@ -367,7 +367,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         tag: IntValue<'c>,
-        field_types: &Vec<Arc<TypeNode>>,
+        field_types: &Vec<Rc<TypeNode>>,
         is_retain: bool,
     ) {
         // Retain or release field.
@@ -439,7 +439,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         tag: IntValue<'c>,
-        field_types: &Vec<Arc<TypeNode>>,
+        field_types: &Vec<Rc<TypeNode>>,
     ) {
         ObjectFieldType::retain_release_union_buf(gc, buf, tag, field_types, true);
     }
@@ -448,7 +448,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         tag: IntValue<'c>,
-        field_types: &Vec<Arc<TypeNode>>,
+        field_types: &Vec<Rc<TypeNode>>,
     ) {
         ObjectFieldType::retain_release_union_buf(gc, buf, tag, field_types, false);
     }
@@ -467,7 +467,7 @@ impl ObjectFieldType {
     pub fn get_union_field<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         union: Object<'c>,
-        elem_ty: &Arc<TypeNode>,
+        elem_ty: &Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let is_unbox = union.ty.is_unbox(gc.type_env());
@@ -496,7 +496,7 @@ impl ObjectFieldType {
     pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
-        elem_ty: &Arc<TypeNode>,
+        elem_ty: &Rc<TypeNode>,
     ) -> BasicValueEnum<'c> {
         let elem_ptr_ty = elem_ty
             .get_embedded_type(gc, &vec![])
@@ -750,7 +750,7 @@ pub fn ptr_to_control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Poin
 }
 
 pub fn lambda_function_type<'c, 'm>(
-    ty: &Arc<TypeNode>,
+    ty: &Rc<TypeNode>,
     gc: &mut GenerationContext<'c, 'm>,
 ) -> FunctionType<'c> {
     // Any lamba takes argments.
@@ -791,8 +791,8 @@ pub fn struct_field_idx(is_unbox: bool) -> u32 {
 }
 
 pub fn get_object_type(
-    ty: &Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>,
+    ty: &Rc<TypeNode>,
+    capture: &Vec<Rc<TypeNode>>,
     type_env: &TypeEnv,
 ) -> ObjectType {
     assert!(ty.free_vars().is_empty());
@@ -880,8 +880,8 @@ pub fn get_object_type(
 
 // Allocate an object.
 pub fn allocate_obj<'c, 'm>(
-    ty: Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>,     // used in lambda
+    ty: Rc<TypeNode>,
+    capture: &Vec<Rc<TypeNode>>,      // used in lambda
     array_size: Option<IntValue<'c>>, // used in array
     gc: &mut GenerationContext<'c, 'm>,
     name: Option<&str>,
@@ -989,8 +989,8 @@ pub fn allocate_obj<'c, 'm>(
 }
 
 pub fn get_dtor_ptr<'c, 'm>(
-    ty: &Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
+    ty: &Rc<TypeNode>,
+    capture: &Vec<Rc<TypeNode>>, // used in destructor of lambda
     gc: &mut GenerationContext<'c, 'm>,
 ) -> PointerValue<'c> {
     match create_dtor(ty, capture, gc) {
@@ -1000,8 +1000,8 @@ pub fn get_dtor_ptr<'c, 'm>(
 }
 
 pub fn create_dtor<'c, 'm>(
-    ty: &Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
+    ty: &Rc<TypeNode>,
+    capture: &Vec<Rc<TypeNode>>, // used in destructor of lambda
     gc: &mut GenerationContext<'c, 'm>,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());

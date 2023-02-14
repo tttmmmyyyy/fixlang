@@ -36,8 +36,8 @@ impl TypeDefn {
         }
     }
 
-    pub fn ty(&self) -> Arc<TypeNode> {
-        let mut ty = type_tycon(&Arc::new(self.tycon()));
+    pub fn ty(&self) -> Rc<TypeNode> {
+        let mut ty = type_tycon(&Rc::new(self.tycon()));
         for tyvar in &self.tyvars {
             ty = type_tyapp(ty, type_tyvar(tyvar, &kind_star()));
         }
@@ -126,7 +126,7 @@ impl Union {
 #[derive(Clone)]
 pub struct Field {
     pub name: Name,
-    pub ty: Arc<TypeNode>,
+    pub ty: Rc<TypeNode>,
 }
 
 impl Field {

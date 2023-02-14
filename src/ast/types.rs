@@ -5,21 +5,21 @@ use super::*;
 #[derive(Eq, PartialEq, Clone)]
 pub struct TyVar {
     pub name: String,
-    pub kind: Arc<Kind>,
+    pub kind: Rc<Kind>,
 }
 
 impl TyVar {
-    pub fn set_kind(&self, kind: Arc<Kind>) -> Arc<TyVar> {
+    pub fn set_kind(&self, kind: Rc<Kind>) -> Rc<TyVar> {
         let mut ret = self.clone();
         ret.kind = kind;
-        Arc::new(ret)
+        Rc::new(ret)
     }
 }
 
 #[derive(Eq, PartialEq)]
 pub enum Kind {
     Star,
-    Arrow(Arc<Kind>, Arc<Kind>),
+    Arrow(Rc<Kind>, Rc<Kind>),
 }
 
 impl Kind {
@@ -70,14 +70,14 @@ impl TyCon {
     // Get the type of struct / union value.
     // If struct / union have type parameter, introduces new type arguments.
     pub fn get_struct_union_value_type(
-        self: &Arc<TyCon>,
+        self: &Rc<TyCon>,
         typechcker: &mut TypeCheckContext,
-    ) -> Arc<TypeNode> {
+    ) -> Rc<TypeNode> {
         let ti = typechcker.type_env.tycons.get(self).unwrap();
         assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
         // Make type variables for type parameters.
         // Currently type parameters for struct / union must have kind *.
-        let mut tyvars: Vec<Arc<TypeNode>> = vec![];
+        let mut tyvars: Vec<Rc<TypeNode>> = vec![];
         let tyvars_cnt = ti.tyvars.len();
         for _ in 0..tyvars_cnt {
             tyvars.push(type_tyvar_star(&typechcker.new_tyvar()));
@@ -94,7 +94,7 @@ impl TyCon {
 
 #[derive(Clone)]
 pub struct TyConInfo {
-    pub kind: Arc<Kind>,
+    pub kind: Rc<Kind>,
     pub variant: TyConVariant,
     pub is_unbox: bool,
     pub tyvars: Vec<Name>,
@@ -112,7 +112,7 @@ impl TyConInfo {
 // Node of type ast tree with user defined additional information
 pub struct TypeNode {
     pub ty: Type,
-    pub info: Arc<TypeInfo>,
+    pub info: Rc<TypeInfo>,
 }
 
 impl PartialEq for TypeNode {
@@ -131,7 +131,7 @@ impl std::fmt::Debug for TypeNode {
 
 impl TypeNode {
     // Set kinds to type variables.
-    pub fn set_kinds(self: &Arc<TypeNode>, kinds: &HashMap<Name, Arc<Kind>>) -> Arc<TypeNode> {
+    pub fn set_kinds(self: &Rc<TypeNode>, kinds: &HashMap<Name, Rc<Kind>>) -> Rc<TypeNode> {
         match &self.ty {
             Type::TyVar(tv) => {
                 if kinds.contains_key(&tv.name) {
@@ -160,7 +160,7 @@ impl TypeNode {
         }
     }
 
-    pub fn set_tyvar_kind(&self, kind: Arc<Kind>) -> Arc<TypeNode> {
+    pub fn set_tyvar_kind(&self, kind: Rc<Kind>) -> Rc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
             Type::TyVar(tv) => {
@@ -168,50 +168,50 @@ impl TypeNode {
             }
             _ => panic!(),
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     #[allow(dead_code)]
-    pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
+    pub fn set_tyapp_fun(&self, fun: Rc<TypeNode>) -> Rc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
             Type::TyApp(_, arg) => ret.ty = Type::TyApp(fun, arg.clone()),
             _ => panic!(),
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     #[allow(dead_code)]
-    pub fn set_tyapp_arg(&self, arg: Arc<TypeNode>) -> Arc<TypeNode> {
+    pub fn set_tyapp_arg(&self, arg: Rc<TypeNode>) -> Rc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
             Type::TyApp(fun, _) => ret.ty = Type::TyApp(fun.clone(), arg),
             _ => panic!(),
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     #[allow(dead_code)]
-    pub fn set_funty_src(&self, src: Arc<TypeNode>) -> Arc<TypeNode> {
+    pub fn set_funty_src(&self, src: Rc<TypeNode>) -> Rc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
             Type::FunTy(_, dst) => ret.ty = Type::FunTy(src, dst.clone()),
             _ => panic!(),
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     #[allow(dead_code)]
-    pub fn set_funty_dst(&self, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    pub fn set_funty_dst(&self, dst: Rc<TypeNode>) -> Rc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
             Type::FunTy(src, _) => ret.ty = Type::FunTy(src.clone(), dst),
             _ => panic!(),
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn get_lambda_srcs(&self) -> Vec<Arc<TypeNode>> {
+    pub fn get_lambda_srcs(&self) -> Vec<Rc<TypeNode>> {
         match &self.ty {
             Type::FunTy(src, _dst) => vec![src.clone()],
             _ => {
@@ -226,7 +226,7 @@ impl TypeNode {
         }
     }
 
-    pub fn get_lambda_dst(&self) -> Arc<TypeNode> {
+    pub fn get_lambda_dst(&self) -> Rc<TypeNode> {
         match &self.ty {
             Type::FunTy(_src, dst) => dst.clone(),
             _ => {
@@ -240,22 +240,22 @@ impl TypeNode {
         }
     }
 
-    pub fn set_tycon_tc(&self, tc: Arc<TyCon>) -> Arc<TypeNode> {
+    pub fn set_tycon_tc(&self, tc: Rc<TyCon>) -> Rc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
             Type::TyCon(_) => ret.ty = Type::TyCon(tc),
             _ => panic!(),
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn resolve_namespace(self: &Arc<TypeNode>, ctx: &NameResolutionContext) -> Arc<TypeNode> {
+    pub fn resolve_namespace(self: &Rc<TypeNode>, ctx: &NameResolutionContext) -> Rc<TypeNode> {
         match &self.ty {
             Type::TyVar(_tv) => self.clone(),
             Type::TyCon(tc) => {
                 let mut tc = tc.as_ref().clone();
                 tc.resolve_namespace(ctx);
-                self.set_tycon_tc(Arc::new(tc))
+                self.set_tycon_tc(Rc::new(tc))
             }
             Type::TyApp(fun, arg) => self
                 .set_tyapp_fun(fun.resolve_namespace(ctx))
@@ -268,7 +268,7 @@ impl TypeNode {
 
     // For structs and unions, return types of fields.
     // For Array, return element type.
-    pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
+    pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Rc<TypeNode>> {
         let args = self.collect_type_argments();
         let ti = self.toplevel_tycon_info(type_env);
         assert_eq!(args.len(), ti.tyvars.len());
@@ -279,8 +279,8 @@ impl TypeNode {
         ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
     }
 
-    fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
-        let mut ret: Vec<Arc<TypeNode>> = vec![];
+    fn collect_type_argments(&self) -> Vec<Rc<TypeNode>> {
+        let mut ret: Vec<Rc<TypeNode>> = vec![];
         match &self.ty {
             Type::TyApp(fun, arg) => {
                 ret.append(&mut fun.collect_type_argments());
@@ -294,7 +294,7 @@ impl TypeNode {
 
     // Get top-level type constructor.
     // Returns None if this is function type.
-    pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
+    pub fn toplevel_tycon(&self) -> Option<Rc<TyCon>> {
         match &self.ty {
             Type::TyVar(_) => panic!(),
             Type::TyCon(tc) => Some(tc.clone()),
@@ -344,33 +344,33 @@ impl TypeNode {
     fn new(ty: Type) -> Self {
         Self {
             ty,
-            info: Arc::new(TypeInfo::default()),
+            info: Rc::new(TypeInfo::default()),
         }
     }
 
     // Create shared new type node with default info.
-    fn new_arc(ty: Type) -> Arc<Self> {
-        Arc::new(Self::new(ty))
+    fn new_arc(ty: Type) -> Rc<Self> {
+        Rc::new(Self::new(ty))
     }
 
     // Set new info for shared instance.
     #[allow(dead_code)]
-    pub fn set_info(self: Arc<Self>, info: Arc<TypeInfo>) -> Arc<Self> {
+    pub fn set_info(self: Rc<Self>, info: Rc<TypeInfo>) -> Rc<Self> {
         let mut ret = (*self).clone();
         ret.info = info;
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     // Set new type for shared instance.
     #[allow(dead_code)]
-    pub fn set_ty(self: &Arc<Self>, ty: Type) -> Arc<Self> {
+    pub fn set_ty(self: &Rc<Self>, ty: Type) -> Rc<Self> {
         let mut ret = (**self).clone();
         ret.ty = ty;
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     // Calculate kind.
-    pub fn kind(&self, type_env: &TypeEnv) -> Arc<Kind> {
+    pub fn kind(&self, type_env: &TypeEnv) -> Rc<Kind> {
         match &self.ty {
             Type::TyVar(tv) => tv.kind.clone(),
             Type::TyCon(tc) => type_env.kind(&tc),
@@ -400,26 +400,26 @@ impl TypeNode {
     }
 
     pub fn get_object_type(
-        self: &Arc<TypeNode>,
-        capture: &Vec<Arc<TypeNode>>,
+        self: &Rc<TypeNode>,
+        capture: &Vec<Rc<TypeNode>>,
         type_env: &TypeEnv,
     ) -> ObjectType {
         get_object_type(self, capture, type_env)
     }
 
     pub fn get_struct_type<'c, 'm>(
-        self: &Arc<TypeNode>,
+        self: &Rc<TypeNode>,
         gc: &mut GenerationContext<'c, 'm>,
-        capture: &Vec<Arc<TypeNode>>,
+        capture: &Vec<Rc<TypeNode>>,
     ) -> StructType<'c> {
         self.get_object_type(capture, gc.type_env())
             .to_struct_type(gc)
     }
 
     pub fn get_embedded_type<'c, 'm>(
-        self: &Arc<TypeNode>,
+        self: &Rc<TypeNode>,
         gc: &mut GenerationContext<'c, 'm>,
-        capture: &Vec<Arc<TypeNode>>,
+        capture: &Vec<Rc<TypeNode>>,
     ) -> BasicTypeEnum<'c> {
         self.get_object_type(capture, gc.type_env())
             .to_embedded_type(gc)
@@ -438,10 +438,10 @@ impl Clone for TypeNode {
 // Variant of type
 #[derive(PartialEq, Eq)]
 pub enum Type {
-    TyVar(Arc<TyVar>),
-    TyCon(Arc<TyCon>),
-    TyApp(Arc<TypeNode>, Arc<TypeNode>),
-    FunTy(Arc<TypeNode>, Arc<TypeNode>),
+    TyVar(Rc<TyVar>),
+    TyCon(Rc<TyCon>),
+    TyApp(Rc<TypeNode>, Rc<TypeNode>),
+    FunTy(Rc<TypeNode>, Rc<TypeNode>),
 }
 
 impl Clone for Type {
@@ -474,7 +474,7 @@ impl TypeNode {
     }
 
     // Get dtor name.
-    pub fn dtor_name(&self, capture: &Vec<Arc<TypeNode>>) -> String {
+    pub fn dtor_name(&self, capture: &Vec<Rc<TypeNode>>) -> String {
         let mut str = "".to_string();
         str += &self.to_string_normalize();
         for ty in capture {
@@ -534,39 +534,39 @@ impl TypeNode {
     }
 }
 
-pub fn kind_star() -> Arc<Kind> {
-    Arc::new(Kind::Star)
+pub fn kind_star() -> Rc<Kind> {
+    Rc::new(Kind::Star)
 }
 
-pub fn kind_arrow(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
-    Arc::new(Kind::Arrow(src, dst))
+pub fn kind_arrow(src: Rc<Kind>, dst: Rc<Kind>) -> Rc<Kind> {
+    Rc::new(Kind::Arrow(src, dst))
 }
 
-pub fn tyvar_from_name(var_name: &str, kind: &Arc<Kind>) -> Arc<TyVar> {
-    Arc::new(TyVar {
+pub fn tyvar_from_name(var_name: &str, kind: &Rc<Kind>) -> Rc<TyVar> {
+    Rc::new(TyVar {
         name: String::from(var_name),
         kind: kind.clone(),
     })
 }
 
-pub fn type_tyvar(var_name: &str, kind: &Arc<Kind>) -> Arc<TypeNode> {
+pub fn type_tyvar(var_name: &str, kind: &Rc<Kind>) -> Rc<TypeNode> {
     TypeNode::new_arc(Type::TyVar(tyvar_from_name(var_name, kind)))
 }
 
-pub fn type_tyvar_star(var_name: &str) -> Arc<TypeNode> {
+pub fn type_tyvar_star(var_name: &str) -> Rc<TypeNode> {
     TypeNode::new_arc(Type::TyVar(tyvar_from_name(var_name, &kind_star())))
 }
 
-pub fn type_var_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
+pub fn type_var_from_tyvar(tyvar: Rc<TyVar>) -> Rc<TypeNode> {
     TypeNode::new_arc(Type::TyVar(tyvar))
 }
 
-pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+pub fn type_fun(src: Rc<TypeNode>, dst: Rc<TypeNode>) -> Rc<TypeNode> {
     TypeNode::new_arc(Type::FunTy(src, dst))
 }
 
-pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
-    let mut ty = TypeNode::new_arc(Type::TyCon(Arc::new(make_funptr_tycon(srcs.len() as u32))));
+pub fn type_funptr(srcs: Vec<Rc<TypeNode>>, dst: Rc<TypeNode>) -> Rc<TypeNode> {
+    let mut ty = TypeNode::new_arc(Type::TyCon(Rc::new(make_funptr_tycon(srcs.len() as u32))));
     for src in srcs {
         ty = type_tyapp(ty, src);
     }
@@ -574,16 +574,16 @@ pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode
     ty
 }
 
-pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
+pub fn type_tyapp(tyfun: Rc<TypeNode>, param: Rc<TypeNode>) -> Rc<TypeNode> {
     TypeNode::new_arc(Type::TyApp(tyfun, param))
 }
 
-pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
+pub fn type_tycon(tycon: &Rc<TyCon>) -> Rc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }
 
-pub fn tycon(name: FullName) -> Arc<TyCon> {
-    Arc::new(TyCon { name })
+pub fn tycon(name: FullName) -> Rc<TyCon> {
+    Rc::new(TyCon { name })
 }
 
 // Additional information of types.
@@ -592,8 +592,8 @@ pub struct TypeInfo {}
 
 impl TypeNode {
     // Calculate free type variables.
-    pub fn free_vars(self: &Arc<Self>) -> HashMap<Name, Arc<Kind>> {
-        let mut free_vars: HashMap<String, Arc<Kind>> = HashMap::default();
+    pub fn free_vars(self: &Rc<Self>) -> HashMap<Name, Rc<Kind>> {
+        let mut free_vars: HashMap<String, Rc<Kind>> = HashMap::default();
         match &self.ty {
             Type::TyVar(tv) => {
                 free_vars.insert(tv.name.clone(), tv.kind.clone());
@@ -615,22 +615,22 @@ impl TypeNode {
 // Type scheme.
 #[derive(Clone)]
 pub struct Scheme {
-    pub vars: HashMap<Name, Arc<Kind>>,
+    pub vars: HashMap<Name, Rc<Kind>>,
     pub preds: Vec<Predicate>,
-    pub ty: Arc<TypeNode>,
+    pub ty: Rc<TypeNode>,
 }
 
 impl Scheme {
     #[allow(dead_code)]
-    pub fn set_ty(&self, ty: Arc<TypeNode>) -> Arc<Scheme> {
+    pub fn set_ty(&self, ty: Rc<TypeNode>) -> Rc<Scheme> {
         let mut ret = self.clone();
         ret.ty = ty;
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_kinds(&self, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) -> Arc<Scheme> {
+    pub fn set_kinds(&self, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) -> Rc<Scheme> {
         let mut ret = self.clone();
-        let mut scope: HashMap<Name, Arc<Kind>> = Default::default();
+        let mut scope: HashMap<Name, Rc<Kind>> = Default::default();
         QualPredicate::extend_kind_scope(&mut scope, &ret.preds, &vec![], trait_kind_map);
         for p in &mut ret.preds {
             p.set_kinds(&scope);
@@ -641,10 +641,10 @@ impl Scheme {
                 *k = scope[v].clone();
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
+    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) {
         for p in &self.preds {
             p.check_kinds(type_env, trait_kind_map);
         }
@@ -653,15 +653,15 @@ impl Scheme {
 
     // Create new instance.
     fn new_arc(
-        vars: HashMap<String, Arc<Kind>>,
+        vars: HashMap<String, Rc<Kind>>,
         preds: Vec<Predicate>,
-        ty: Arc<TypeNode>,
-    ) -> Arc<Scheme> {
-        Arc::new(Scheme { vars, preds, ty })
+        ty: Rc<TypeNode>,
+    ) -> Rc<Scheme> {
+        Rc::new(Scheme { vars, preds, ty })
     }
 
     #[allow(dead_code)]
-    pub fn substitute(&self, s: &Substitution) -> Arc<Scheme> {
+    pub fn substitute(&self, s: &Substitution) -> Rc<Scheme> {
         // Generalized variables cannot be replaced.
         for (v, _) in &self.vars {
             assert!(!s.data.contains_key(v));
@@ -675,15 +675,15 @@ impl Scheme {
 
     // Create instance by generalizaing type.
     pub fn generalize(
-        vars: HashMap<String, Arc<Kind>>,
+        vars: HashMap<String, Rc<Kind>>,
         mut preds: Vec<Predicate>,
-        ty: Arc<TypeNode>,
-    ) -> Arc<Scheme> {
+        ty: Rc<TypeNode>,
+    ) -> Rc<Scheme> {
         // All predicates should be head normal form.
         assert!(preds.iter().all(|p| p.ty.is_hnf()));
 
         let mut s = Substitution::default();
-        let mut gen_vars: HashMap<String, Arc<Kind>> = Default::default();
+        let mut gen_vars: HashMap<String, Rc<Kind>> = Default::default();
         for (i, (v, k)) in vars.iter().enumerate() {
             let gen_name = format!("%g{}", i); // To avoid confliction with user-defined type varible, add prefix %.
             s.add_substitution(&Substitution::single(v, type_tyvar(&gen_name, k)));
@@ -696,13 +696,13 @@ impl Scheme {
         Scheme::new_arc(gen_vars, preds, ty)
     }
 
-    pub fn from_type(ty: Arc<TypeNode>) -> Arc<Scheme> {
+    pub fn from_type(ty: Rc<TypeNode>) -> Rc<Scheme> {
         Scheme::generalize(HashMap::default(), vec![], ty)
     }
 
     // Get free type variables.
     #[allow(dead_code)]
-    pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
+    pub fn free_vars(&self) -> HashMap<Name, Rc<Kind>> {
         let mut ret = self.ty.free_vars();
         for var in &self.vars {
             ret.remove(var.0);
@@ -710,12 +710,12 @@ impl Scheme {
         ret
     }
 
-    pub fn resolve_namespace(&self, ctx: &NameResolutionContext) -> Arc<Scheme> {
+    pub fn resolve_namespace(&self, ctx: &NameResolutionContext) -> Rc<Scheme> {
         let mut res = self.clone();
         for p in &mut res.preds {
             p.resolve_namespace(ctx);
         }
         res.ty = res.ty.resolve_namespace(ctx);
-        Arc::new(res)
+        Rc::new(res)
     }
 }

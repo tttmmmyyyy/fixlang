@@ -25,7 +25,7 @@ pub struct Variable<'c> {
 #[derive(Clone)]
 pub enum VarValue<'c> {
     Local(Object<'c>),
-    Global(FunctionValue<'c>, Arc<TypeNode>),
+    Global(FunctionValue<'c>, Rc<TypeNode>),
 }
 
 impl<'c> VarValue<'c> {
@@ -53,11 +53,11 @@ impl<'c> VarValue<'c> {
 #[derive(Clone)]
 pub struct Object<'c> {
     ptr: PointerValue<'c>,
-    pub ty: Arc<TypeNode>,
+    pub ty: Rc<TypeNode>,
 }
 
 impl<'c> Object<'c> {
-    pub fn new(ptr: PointerValue<'c>, ty: Arc<TypeNode>) -> Self {
+    pub fn new(ptr: PointerValue<'c>, ty: Rc<TypeNode>) -> Self {
         assert!(ty.free_vars().is_empty());
         Object { ptr, ty }
     }
@@ -66,7 +66,7 @@ impl<'c> Object<'c> {
     // If unboxed type, then store the value to stack and create Object.
     pub fn create_from_value<'m>(
         val: BasicValueEnum<'c>,
-        ty: Arc<TypeNode>,
+        ty: Rc<TypeNode>,
         gc: &mut GenerationContext<'c, 'm>,
     ) -> Object<'c> {
         let ptr = if ty.is_box(gc.type_env()) || ty.is_funptr() {
@@ -372,7 +372,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         &mut self,
         name: FullName,
         function: FunctionValue<'c>,
-        ty: Arc<TypeNode>,
+        ty: Rc<TypeNode>,
     ) {
         if self.global.contains_key(&name) {
             error_exit(&format!("duplicate symbol: {}", name.to_string()));
@@ -785,7 +785,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate expression.
-    pub fn eval_expr(&mut self, expr: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
+    pub fn eval_expr(&mut self, expr: Rc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
         let expr = expr.set_inferred_type(
             self.typechecker
                 .as_ref()
@@ -818,15 +818,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate variable.
-    fn eval_var(&mut self, var: Arc<Var>, rvo: Option<Object<'c>>) -> Object<'c> {
+    fn eval_var(&mut self, var: Rc<Var>, rvo: Option<Object<'c>>) -> Object<'c> {
         self.get_var_retained_if_used_later(&var.name, rvo)
     }
 
     // Evaluate application
     fn eval_app(
         &mut self,
-        fun: Arc<ExprNode>,
-        args: Vec<Arc<ExprNode>>,
+        fun: Rc<ExprNode>,
+        args: Vec<Rc<ExprNode>>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         for arg in &args {
@@ -844,8 +844,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate literal
     fn eval_lit(
         &mut self,
-        lit: Arc<Literal>,
-        ty: Arc<TypeNode>,
+        lit: Rc<Literal>,
+        ty: Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         (lit.generator)(self, &ty, rvo)
@@ -855,8 +855,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Normalize it's orderings.
     pub fn calculate_captured_vars_of_lambda(
         &mut self,
-        lam: Arc<ExprNode>,
-    ) -> Vec<(FullName, Arc<TypeNode>)> {
+        lam: Rc<ExprNode>,
+    ) -> Vec<(FullName, Rc<TypeNode>)> {
         let (args, body) = lam.destructure_lam();
 
         let mut cap_names = body.free_vars().clone();
@@ -883,7 +883,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Declare function of lambda expression
-    pub fn declare_lambda_function(&mut self, lam: Arc<ExprNode>) -> FunctionValue<'c> {
+    pub fn declare_lambda_function(&mut self, lam: Rc<ExprNode>) -> FunctionValue<'c> {
         let lam_ty = lam.inferred_ty.clone().unwrap();
         let lam_fn_ty = lambda_function_type(&lam_ty, self);
         let lam_fn = self.module.add_function(
@@ -897,9 +897,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Implement function of lambda expression
     pub fn implement_lambda_function(
         &mut self,
-        lam: Arc<ExprNode>,
+        lam: Rc<ExprNode>,
         lam_fn: FunctionValue<'c>,
-        cap_vars: Option<Vec<(FullName, Arc<TypeNode>)>>,
+        cap_vars: Option<Vec<(FullName, Rc<TypeNode>)>>,
     ) {
         let lam_ty = lam.inferred_ty.clone().unwrap();
         let (args, body) = lam.destructure_lam();
@@ -999,7 +999,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate lambda abstraction.
-    fn eval_lam(&mut self, lam: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
+    fn eval_lam(&mut self, lam: Rc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
         let (args, body) = lam.destructure_lam();
         let lam_ty = lam.inferred_ty.clone().unwrap();
 
@@ -1056,9 +1056,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate let
     fn eval_let(
         &mut self,
-        pat: &Arc<Pattern>,
-        bound: Arc<ExprNode>,
-        val: Arc<ExprNode>,
+        pat: &Rc<Pattern>,
+        bound: Rc<ExprNode>,
+        val: Rc<ExprNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let vars = pat.vars();
@@ -1089,7 +1089,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Destructure object by pattern
     fn destructure_object_by_pattern(
         &mut self,
-        pat: &Arc<Pattern>,
+        pat: &Rc<Pattern>,
         obj: &Object<'c>,
     ) -> Vec<(FullName, Object<'c>)> {
         let mut ret = vec![];
@@ -1154,9 +1154,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate if
     fn eval_if(
         &mut self,
-        cond_expr: Arc<ExprNode>,
-        then_expr: Arc<ExprNode>,
-        else_expr: Arc<ExprNode>,
+        cond_expr: Rc<ExprNode>,
+        then_expr: Rc<ExprNode>,
+        else_expr: Rc<ExprNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let mut used_then_or_else = then_expr.free_vars().clone();
@@ -1224,8 +1224,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate make pair
     fn eval_make_struct(
         &mut self,
-        fields: Vec<(Name, Arc<ExprNode>)>,
-        struct_ty: Arc<TypeNode>,
+        fields: Vec<(Name, Rc<ExprNode>)>,
+        struct_ty: Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let pair = if rvo.is_some() {
@@ -1270,8 +1270,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     fn eval_array_lit(
         &mut self,
-        elems: &Vec<Arc<ExprNode>>,
-        array_ty: Arc<TypeNode>,
+        elems: &Vec<Rc<ExprNode>>,
+        array_ty: Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         assert!(rvo.is_none());

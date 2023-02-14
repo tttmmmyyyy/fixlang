@@ -1,6 +1,6 @@
 use super::*;
 use core::panic;
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 pub type Name = String;
 
@@ -12,19 +12,19 @@ pub enum AppSourceCodeOrderType {
 
 #[derive(Clone)]
 pub struct ExprNode {
-    pub expr: Arc<Expr>,
+    pub expr: Rc<Expr>,
     pub free_vars: Option<HashSet<FullName>>,
     pub source: Option<Span>,
     pub app_order: AppSourceCodeOrderType,
-    pub inferred_ty: Option<Arc<TypeNode>>,
+    pub inferred_ty: Option<Rc<TypeNode>>,
 }
 
 impl ExprNode {
     // Set free vars
-    fn set_free_vars(&self, free_vars: HashSet<FullName>) -> Arc<Self> {
+    fn set_free_vars(&self, free_vars: HashSet<FullName>) -> Rc<Self> {
         let mut ret = self.clone();
         ret.free_vars = Some(free_vars);
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     // Get free vars
@@ -33,79 +33,79 @@ impl ExprNode {
     }
 
     // Set source
-    pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
+    pub fn set_source(&self, src: Option<Span>) -> Rc<Self> {
         let mut ret = self.clone();
         ret.source = src;
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     // Set app order
-    pub fn set_app_order(&self, app_order: AppSourceCodeOrderType) -> Arc<Self> {
+    pub fn set_app_order(&self, app_order: AppSourceCodeOrderType) -> Rc<Self> {
         let mut ret = self.clone();
         ret.app_order = app_order;
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     // Set inferred type.
-    pub fn set_inferred_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
+    pub fn set_inferred_type(&self, ty: Rc<TypeNode>) -> Rc<Self> {
         let mut ret = self.clone();
         ret.inferred_ty = Some(ty);
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_var_namespace(&self, ns: NameSpace) -> Arc<Self> {
+    pub fn set_var_namespace(&self, ns: NameSpace) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Var(var) => {
                 let var = var.set_namsapce(ns);
-                ret.expr = Arc::new(Expr::Var(var))
+                ret.expr = Rc::new(Expr::Var(var))
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_var_var(&self, v: Arc<Var>) -> Arc<Self> {
+    pub fn set_var_var(&self, v: Rc<Var>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
-            Expr::Var(_) => ret.expr = Arc::new(Expr::Var(v)),
+            Expr::Var(_) => ret.expr = Rc::new(Expr::Var(v)),
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_app_func(&self, func: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_app_func(&self, func: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::App(_, arg) => {
-                ret.expr = Arc::new(Expr::App(func, arg.clone()));
+                ret.expr = Rc::new(Expr::App(func, arg.clone()));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_app_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<Self> {
+    pub fn set_app_args(&self, args: Vec<Rc<ExprNode>>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::App(func, _) => {
-                ret.expr = Arc::new(Expr::App(func.clone(), args));
+                ret.expr = Rc::new(Expr::App(func.clone(), args));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     // destructure lambda expression to list of variables and body expression
-    pub fn destructure_lam(&self) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
+    pub fn destructure_lam(&self) -> (Vec<Rc<Var>>, Rc<ExprNode>) {
         match &*self.expr {
             Expr::Lam(args, body) => (args.clone(), body.clone()),
             _ => panic!(""),
@@ -113,74 +113,74 @@ impl ExprNode {
     }
 
     #[allow(dead_code)]
-    pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
+    pub fn set_lam_params(&self, params: Vec<Rc<Var>>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Lam(_, body) => {
-                ret.expr = Arc::new(Expr::Lam(params, body.clone()));
+                ret.expr = Rc::new(Expr::Lam(params, body.clone()));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_lam_body(&self, body: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_lam_body(&self, body: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Lam(arg, _) => {
-                ret.expr = Arc::new(Expr::Lam(arg.clone(), body));
+                ret.expr = Rc::new(Expr::Lam(arg.clone(), body));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     #[allow(dead_code)]
-    pub fn set_let_pat(&self, pat: Arc<Pattern>) -> Arc<Self> {
+    pub fn set_let_pat(&self, pat: Rc<Pattern>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Let(_, bound, val) => {
-                ret.expr = Arc::new(Expr::Let(pat, bound.clone(), val.clone()));
+                ret.expr = Rc::new(Expr::Let(pat, bound.clone(), val.clone()));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_let_bound(&self, bound: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_let_bound(&self, bound: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Let(var, _, val) => {
-                ret.expr = Arc::new(Expr::Let(var.clone(), bound, val.clone()));
+                ret.expr = Rc::new(Expr::Let(var.clone(), bound, val.clone()));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_let_value(&self, value: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_let_value(&self, value: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Let(var, bound, _) => {
-                ret.expr = Arc::new(Expr::Let(var.clone(), bound.clone(), value));
+                ret.expr = Rc::new(Expr::Let(var.clone(), bound.clone(), value));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
     #[allow(dead_code)]
-    pub fn get_let_value(&self) -> Arc<Self> {
+    pub fn get_let_value(&self) -> Rc<Self> {
         match &*self.expr {
             Expr::Let(_, _, val) => val.clone(),
             _ => {
@@ -189,98 +189,98 @@ impl ExprNode {
         }
     }
 
-    pub fn set_if_cond(&self, cond: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_if_cond(&self, cond: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::If(_, then_expr, else_expr) => {
-                ret.expr = Arc::new(Expr::If(cond, then_expr.clone(), else_expr.clone()));
+                ret.expr = Rc::new(Expr::If(cond, then_expr.clone(), else_expr.clone()));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_if_then(&self, then_expr: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_if_then(&self, then_expr: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::If(cond, _, else_expr) => {
-                ret.expr = Arc::new(Expr::If(cond.clone(), then_expr, else_expr.clone()));
+                ret.expr = Rc::new(Expr::If(cond.clone(), then_expr, else_expr.clone()));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_if_else(&self, else_expr: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_if_else(&self, else_expr: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::If(cond, then_expr, _) => {
-                ret.expr = Arc::new(Expr::If(cond.clone(), then_expr.clone(), else_expr));
+                ret.expr = Rc::new(Expr::If(cond.clone(), then_expr.clone(), else_expr));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_tyanno_expr(&self, expr: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_tyanno_expr(&self, expr: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::TyAnno(_, t) => {
-                ret.expr = Arc::new(Expr::TyAnno(expr, t.clone()));
+                ret.expr = Rc::new(Expr::TyAnno(expr, t.clone()));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_tyanno_ty(&self, ty: Arc<TypeNode>) -> Arc<Self> {
+    pub fn set_tyanno_ty(&self, ty: Rc<TypeNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::TyAnno(e, _) => {
-                ret.expr = Arc::new(Expr::TyAnno(e.clone(), ty));
+                ret.expr = Rc::new(Expr::TyAnno(e.clone(), ty));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_lit_lit(&self, lit: Arc<Literal>) -> Arc<Self> {
+    pub fn set_lit_lit(&self, lit: Rc<Literal>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::Lit(_) => {
-                ret.expr = Arc::new(Expr::Lit(lit));
+                ret.expr = Rc::new(Expr::Lit(lit));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_make_struct_tycon(&self, tc: Arc<TyCon>) -> Arc<Self> {
+    pub fn set_make_struct_tycon(&self, tc: Rc<TyCon>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::MakeStruct(_, fields) => {
-                ret.expr = Arc::new(Expr::MakeStruct(tc, fields.clone()));
+                ret.expr = Rc::new(Expr::MakeStruct(tc, fields.clone()));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_make_struct_field(&self, field_name: &Name, field_expr: Arc<ExprNode>) -> Arc<Self> {
+    pub fn set_make_struct_field(&self, field_name: &Name, field_expr: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::MakeStruct(tc, fields) => {
@@ -290,44 +290,44 @@ impl ExprNode {
                         *expr = field_expr.clone();
                     }
                 }
-                ret.expr = Arc::new(Expr::MakeStruct(tc.clone(), fields));
+                ret.expr = Rc::new(Expr::MakeStruct(tc.clone(), fields));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_make_struct_fields(&self, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<Self> {
+    pub fn set_make_struct_fields(&self, fields: Vec<(Name, Rc<ExprNode>)>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::MakeStruct(tc, _) => {
-                ret.expr = Arc::new(Expr::MakeStruct(tc.clone(), fields));
+                ret.expr = Rc::new(Expr::MakeStruct(tc.clone(), fields));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_array_lit_elem(&self, elem: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
+    pub fn set_array_lit_elem(&self, elem: Rc<ExprNode>, idx: usize) -> Rc<ExprNode> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::ArrayLit(elems) => {
                 let mut elems = elems.clone();
                 elems[idx] = elem;
-                ret.expr = Arc::new(Expr::ArrayLit(elems));
+                ret.expr = Rc::new(Expr::ArrayLit(elems));
             }
             _ => {
                 panic!()
             }
         }
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn resolve_namespace(self: &Arc<ExprNode>, ctx: &NameResolutionContext) -> Arc<ExprNode> {
+    pub fn resolve_namespace(self: &Rc<ExprNode>, ctx: &NameResolutionContext) -> Rc<ExprNode> {
         match &*self.expr {
             Expr::Var(_) => {
                 // Resolution of names of variables will be done in type checking phase.
@@ -336,7 +336,7 @@ impl ExprNode {
             Expr::Lit(lit) => {
                 let mut lit = lit.as_ref().clone();
                 lit.ty = lit.ty.resolve_namespace(ctx);
-                self.clone().set_lit_lit(Arc::new(lit))
+                self.clone().set_lit_lit(Rc::new(lit))
             }
             Expr::App(fun, args) => {
                 let args = args.iter().map(|arg| arg.resolve_namespace(ctx)).collect();
@@ -363,7 +363,7 @@ impl ExprNode {
                 let mut expr = self.clone();
                 let mut tc = tc.as_ref().clone();
                 tc.resolve_namespace(ctx);
-                expr = expr.set_make_struct_tycon(Arc::new(tc));
+                expr = expr.set_make_struct_tycon(Rc::new(tc));
                 for (field_name, field_expr) in fields {
                     let field_expr = field_expr.resolve_namespace(ctx);
                     expr = expr.set_make_struct_field(field_name, field_expr);
@@ -383,33 +383,33 @@ impl ExprNode {
 
 #[derive(Clone)]
 pub enum Expr {
-    Var(Arc<Var>),
-    Lit(Arc<Literal>),
+    Var(Rc<Var>),
+    Lit(Rc<Literal>),
     // application of multiple arguments is generated by optimization.
-    App(Arc<ExprNode>, Vec<Arc<ExprNode>>),
+    App(Rc<ExprNode>, Vec<Rc<ExprNode>>),
     // lambda of multiple arguments is generated by optimization.
-    Lam(Vec<Arc<Var>>, Arc<ExprNode>),
-    Let(Arc<Pattern>, Arc<ExprNode>, Arc<ExprNode>),
-    If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>),
-    TyAnno(Arc<ExprNode>, Arc<TypeNode>),
-    ArrayLit(Vec<Arc<ExprNode>>),
+    Lam(Vec<Rc<Var>>, Rc<ExprNode>),
+    Let(Rc<Pattern>, Rc<ExprNode>, Rc<ExprNode>),
+    If(Rc<ExprNode>, Rc<ExprNode>, Rc<ExprNode>),
+    TyAnno(Rc<ExprNode>, Rc<TypeNode>),
+    ArrayLit(Vec<Rc<ExprNode>>),
     // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakeStruct x y`.
     // `MakeStruct x y` is compiled to a more performant code than function call (currently).
-    MakeStruct(Arc<TyCon>, Vec<(Name, Arc<ExprNode>)>),
+    MakeStruct(Rc<TyCon>, Vec<(Name, Rc<ExprNode>)>),
 }
 
 #[derive(Clone)]
 pub enum Pattern {
-    Var(Arc<Var>, Option<Arc<TypeNode>>),
-    Struct(Arc<TyCon>, Vec<(Name, Arc<Pattern>)>),
-    Union(Arc<TyCon>, Name, Arc<Pattern>),
+    Var(Rc<Var>, Option<Rc<TypeNode>>),
+    Struct(Rc<TyCon>, Vec<(Name, Rc<Pattern>)>),
+    Union(Rc<TyCon>, Name, Rc<Pattern>),
 }
 
 impl Pattern {
     // Make basic variable pattern.
     #[allow(dead_code)]
-    pub fn var_pattern(var: Arc<Var>) -> Arc<Pattern> {
-        Arc::new(Pattern::Var(var, None))
+    pub fn var_pattern(var: Rc<Var>) -> Rc<Pattern> {
+        Rc::new(Pattern::Var(var, None))
     }
 
     // Check if variables defined in this pattern is duplicated or not.
@@ -437,7 +437,7 @@ impl Pattern {
     pub fn get_type(
         &self,
         typechcker: &mut TypeCheckContext,
-    ) -> (Arc<TypeNode>, HashMap<FullName, Arc<TypeNode>>) {
+    ) -> (Rc<TypeNode>, HashMap<FullName, Rc<TypeNode>>) {
         match self {
             Pattern::Var(v, ty) => {
                 let var_name = v.name.clone();
@@ -522,49 +522,49 @@ impl Pattern {
         }
     }
 
-    pub fn set_var_tyanno(self: &Arc<Pattern>, tyanno: Option<Arc<TypeNode>>) -> Arc<Pattern> {
+    pub fn set_var_tyanno(self: &Rc<Pattern>, tyanno: Option<Rc<TypeNode>>) -> Rc<Pattern> {
         match &**self {
-            Pattern::Var(v, _) => Arc::new(Pattern::Var(v.clone(), tyanno)),
+            Pattern::Var(v, _) => Rc::new(Pattern::Var(v.clone(), tyanno)),
             _ => panic!(),
         }
     }
 
-    pub fn set_struct_tycon(self: &Arc<Pattern>, tc: Arc<TyCon>) -> Arc<Pattern> {
+    pub fn set_struct_tycon(self: &Rc<Pattern>, tc: Rc<TyCon>) -> Rc<Pattern> {
         match &**self {
-            Pattern::Struct(_, field_to_pat) => Arc::new(Pattern::Struct(tc, field_to_pat.clone())),
+            Pattern::Struct(_, field_to_pat) => Rc::new(Pattern::Struct(tc, field_to_pat.clone())),
             _ => panic!(),
         }
     }
 
     pub fn set_struct_field_to_pat(
-        self: &Arc<Pattern>,
-        field_to_pat: Vec<(Name, Arc<Pattern>)>,
-    ) -> Arc<Pattern> {
+        self: &Rc<Pattern>,
+        field_to_pat: Vec<(Name, Rc<Pattern>)>,
+    ) -> Rc<Pattern> {
         match &**self {
-            Pattern::Struct(tc, _) => Arc::new(Pattern::Struct(tc.clone(), field_to_pat)),
+            Pattern::Struct(tc, _) => Rc::new(Pattern::Struct(tc.clone(), field_to_pat)),
             _ => panic!(),
         }
     }
 
-    pub fn set_union_tycon(self: &Arc<Pattern>, tc: Arc<TyCon>) -> Arc<Pattern> {
+    pub fn set_union_tycon(self: &Rc<Pattern>, tc: Rc<TyCon>) -> Rc<Pattern> {
         match &**self {
             Pattern::Union(_, field_name, pat) => {
-                Arc::new(Pattern::Union(tc, field_name.clone(), pat.clone()))
+                Rc::new(Pattern::Union(tc, field_name.clone(), pat.clone()))
             }
             _ => panic!(),
         }
     }
 
-    pub fn set_union_pat(self: &Arc<Pattern>, pat: Arc<Pattern>) -> Arc<Pattern> {
+    pub fn set_union_pat(self: &Rc<Pattern>, pat: Rc<Pattern>) -> Rc<Pattern> {
         match &**self {
             Pattern::Union(tc, field_name, _) => {
-                Arc::new(Pattern::Union(tc.clone(), field_name.clone(), pat))
+                Rc::new(Pattern::Union(tc.clone(), field_name.clone(), pat))
             }
             _ => panic!(),
         }
     }
 
-    pub fn resolve_namespace(self: &Arc<Pattern>, ctx: &NameResolutionContext) -> Arc<Pattern> {
+    pub fn resolve_namespace(self: &Rc<Pattern>, ctx: &NameResolutionContext) -> Rc<Pattern> {
         match &**self {
             Pattern::Var(_, ty) => {
                 self.set_var_tyanno(ty.as_ref().map(|ty| ty.resolve_namespace(ctx)))
@@ -576,13 +576,13 @@ impl Pattern {
                     .iter()
                     .map(|(field_name, pat)| (field_name.clone(), pat.resolve_namespace(ctx)))
                     .collect::<Vec<_>>();
-                self.set_struct_tycon(Arc::new(tc))
+                self.set_struct_tycon(Rc::new(tc))
                     .set_struct_field_to_pat(field_to_pat)
             }
             Pattern::Union(tc, _, pat) => {
                 let mut tc = tc.as_ref().clone();
                 tc.resolve_namespace(ctx);
-                self.set_union_tycon(Arc::new(tc))
+                self.set_union_tycon(Rc::new(tc))
                     .set_union_pat(pat.resolve_namespace(ctx))
             }
         }
@@ -627,8 +627,8 @@ impl Pattern {
 }
 
 impl Expr {
-    pub fn into_expr_info(self: &Arc<Self>, src: Option<Span>) -> Arc<ExprNode> {
-        Arc::new(ExprNode {
+    pub fn into_expr_info(self: &Rc<Self>, src: Option<Span>) -> Rc<ExprNode> {
+        Rc::new(ExprNode {
             expr: self.clone(),
             free_vars: Default::default(),
             source: src,
@@ -641,7 +641,7 @@ impl Expr {
             Expr::Var(v) => v.name.to_string(),
             Expr::Lit(l) => l.name.clone(),
             Expr::App(_, _) => {
-                let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_info(None));
+                let (fun, args) = collect_app(&Rc::new(self.clone()).into_expr_info(None));
                 let mut omit_brace_around_fun = false;
                 match *(fun.expr) {
                     Expr::Var(_) => omit_brace_around_fun = true,
@@ -714,16 +714,16 @@ pub type InlineLLVM = dyn Send
     + Sync
     + for<'c, 'm, 'b> Fn(
         &mut GenerationContext<'c, 'm>,
-        &Arc<TypeNode>,     // type of this literal
+        &Rc<TypeNode>,      // type of this literal
         Option<Object<'c>>, // rvo
     ) -> Object<'c>;
 
 #[derive(Clone)]
 pub struct Literal {
-    pub generator: Arc<InlineLLVM>,
+    pub generator: Rc<InlineLLVM>,
     pub free_vars: Vec<FullName>, // e.g. "+" literal has two free variables.
     name: String,
-    pub ty: Arc<TypeNode>,
+    pub ty: Rc<TypeNode>,
 }
 
 #[derive(Eq, Hash, PartialEq, Clone)]
@@ -846,35 +846,35 @@ impl FullName {
 }
 
 impl Var {
-    pub fn set_namsapce(&self, ns: NameSpace) -> Arc<Self> {
+    pub fn set_namsapce(&self, ns: NameSpace) -> Rc<Self> {
         let mut ret = self.clone();
         ret.name.namespace = ns;
-        Arc::new(ret)
+        Rc::new(ret)
     }
 
-    pub fn set_name(&self, nsn: FullName) -> Arc<Self> {
+    pub fn set_name(&self, nsn: FullName) -> Rc<Self> {
         let mut ret = self.clone();
         ret.name = nsn;
-        Arc::new(ret)
+        Rc::new(ret)
     }
 }
 
-pub fn var_var(name: FullName, src: Option<Span>) -> Arc<Var> {
-    Arc::new(Var { name, source: src })
+pub fn var_var(name: FullName, src: Option<Span>) -> Rc<Var> {
+    Rc::new(Var { name, source: src })
 }
 
-pub fn var_local(var_name: &str, src: Option<Span>) -> Arc<Var> {
+pub fn var_local(var_name: &str, src: Option<Span>) -> Rc<Var> {
     var_var(FullName::local(var_name), src)
 }
 
 pub fn expr_lit(
-    generator: Arc<InlineLLVM>,
+    generator: Rc<InlineLLVM>,
     free_vars: Vec<FullName>,
     name: String,
-    ty: Arc<TypeNode>,
+    ty: Rc<TypeNode>,
     src: Option<Span>,
-) -> Arc<ExprNode> {
-    Arc::new(Expr::Lit(Arc::new(Literal {
+) -> Rc<ExprNode> {
+    Rc::new(Expr::Lit(Rc::new(Literal {
         generator,
         free_vars,
         name,
@@ -884,50 +884,50 @@ pub fn expr_lit(
 }
 
 pub fn expr_let(
-    pat: Arc<Pattern>,
-    bound: Arc<ExprNode>,
-    expr: Arc<ExprNode>,
+    pat: Rc<Pattern>,
+    bound: Rc<ExprNode>,
+    expr: Rc<ExprNode>,
     src: Option<Span>,
-) -> Arc<ExprNode> {
-    Arc::new(Expr::Let(pat, bound, expr)).into_expr_info(src)
+) -> Rc<ExprNode> {
+    Rc::new(Expr::Let(pat, bound, expr)).into_expr_info(src)
 }
 
-pub fn expr_abs(vars: Vec<Arc<Var>>, val: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Lam(vars, val)).into_expr_info(src)
+pub fn expr_abs(vars: Vec<Rc<Var>>, val: Rc<ExprNode>, src: Option<Span>) -> Rc<ExprNode> {
+    Rc::new(Expr::Lam(vars, val)).into_expr_info(src)
 }
 
-pub fn expr_app(lam: Arc<ExprNode>, args: Vec<Arc<ExprNode>>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::App(lam, args)).into_expr_info(src)
+pub fn expr_app(lam: Rc<ExprNode>, args: Vec<Rc<ExprNode>>, src: Option<Span>) -> Rc<ExprNode> {
+    Rc::new(Expr::App(lam, args)).into_expr_info(src)
 }
 
 // Make variable expression.
-pub fn expr_var(name: FullName, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Var(var_var(name, src.clone()))).into_expr_info(src)
+pub fn expr_var(name: FullName, src: Option<Span>) -> Rc<ExprNode> {
+    Rc::new(Expr::Var(var_var(name, src.clone()))).into_expr_info(src)
 }
 
 pub fn expr_if(
-    cond: Arc<ExprNode>,
-    then_expr: Arc<ExprNode>,
-    else_expr: Arc<ExprNode>,
+    cond: Rc<ExprNode>,
+    then_expr: Rc<ExprNode>,
+    else_expr: Rc<ExprNode>,
     src: Option<Span>,
-) -> Arc<ExprNode> {
-    Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
+) -> Rc<ExprNode> {
+    Rc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
-pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::TyAnno(expr, ty)).into_expr_info(src)
+pub fn expr_tyanno(expr: Rc<ExprNode>, ty: Rc<TypeNode>, src: Option<Span>) -> Rc<ExprNode> {
+    Rc::new(Expr::TyAnno(expr, ty)).into_expr_info(src)
 }
 
-pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<ExprNode> {
-    Arc::new(Expr::MakeStruct(tc, fields)).into_expr_info(None)
+pub fn expr_make_struct(tc: Rc<TyCon>, fields: Vec<(Name, Rc<ExprNode>)>) -> Rc<ExprNode> {
+    Rc::new(Expr::MakeStruct(tc, fields)).into_expr_info(None)
 }
 
-pub fn expr_array_lit(elems: Vec<Arc<ExprNode>>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::ArrayLit(elems)).into_expr_info(src)
+pub fn expr_array_lit(elems: Vec<Rc<ExprNode>>, src: Option<Span>) -> Rc<ExprNode> {
+    Rc::new(Expr::ArrayLit(elems)).into_expr_info(src)
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
-pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
+pub fn calculate_free_vars(ei: Rc<ExprNode>) -> Rc<ExprNode> {
     match &*ei.expr {
         Expr::Var(var) => {
             let free_vars = vec![var.name.clone()].into_iter().collect();
@@ -1016,7 +1016,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
 }
 
 // Convert f(y, z) to (f, [y, z]).
-pub fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
+pub fn collect_app(expr: &Rc<ExprNode>) -> (Rc<ExprNode>, Vec<Rc<ExprNode>>) {
     match &*expr.expr {
         Expr::App(fun, arg) => {
             let (fun, mut args) = collect_app(fun);

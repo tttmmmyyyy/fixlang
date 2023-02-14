@@ -36,7 +36,7 @@ pub struct TraitInfo {
     // Identifier of this trait (i.e. the name).
     pub id: TraitId,
     // Type variable used in trait definition.
-    pub type_var: Arc<TyVar>,
+    pub type_var: Rc<TyVar>,
     // Methods of this trait.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String",
@@ -57,7 +57,7 @@ impl TraitInfo {
     // Get type-scheme of a method.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // this function returns "a -> String for a: Show" as type of "show" method.
-    pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
+    pub fn method_scheme(&self, name: &Name) -> Rc<Scheme> {
         let mut ty = self.methods.get(name).unwrap().clone();
         let vars = ty.free_vars();
         if !vars.contains_key(&self.type_var.name) {
@@ -102,7 +102,7 @@ pub struct TraitInstance {
     // Statement such as "(a, b): Show for a: Show, b: Show".
     pub qual_pred: QualPredicate,
     // Method implementation.
-    pub methods: HashMap<Name, Arc<ExprNode>>,
+    pub methods: HashMap<Name, Rc<ExprNode>>,
 }
 
 impl TraitInstance {
@@ -127,7 +127,7 @@ impl TraitInstance {
     // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
     // this function returns "a -> String for a: Show, b: Show" as the type of "show".
     // Give type of this method, e.g., "a -> String".
-    pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
+    pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Rc<Scheme> {
         let trait_tyvar = &trait_info.type_var.name;
         let impl_type = self.qual_pred.predicate.ty.clone();
         let s = Substitution::single(&trait_tyvar, impl_type);
@@ -142,7 +142,7 @@ impl TraitInstance {
     }
 
     // Get expression that implements a method.
-    pub fn method_expr(&self, name: &Name) -> Arc<ExprNode> {
+    pub fn method_expr(&self, name: &Name) -> Rc<ExprNode> {
         self.methods.get(name).unwrap().clone()
     }
 }
@@ -164,12 +164,12 @@ impl QualPredicate {
     }
 
     pub fn extend_kind_scope(
-        scope: &mut HashMap<Name, Arc<Kind>>,
+        scope: &mut HashMap<Name, Rc<Kind>>,
         preds: &Vec<Predicate>,
         kind_preds: &Vec<KindPredicate>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
     ) {
-        let mut new_kind_bounds: HashMap<Name, Arc<Kind>> = Default::default();
+        let mut new_kind_bounds: HashMap<Name, Rc<Kind>> = Default::default();
         for p in preds {
             let tyvar = match &p.ty.ty {
                 Type::TyVar(tv) => tv.name.clone(),
@@ -205,7 +205,7 @@ impl QualPredicate {
 pub struct QualType {
     pub preds: Vec<Predicate>,
     pub kind_preds: Vec<KindPredicate>,
-    pub ty: Arc<TypeNode>,
+    pub ty: Rc<TypeNode>,
 }
 
 impl QualType {
@@ -218,7 +218,7 @@ impl QualType {
     }
 
     // Calculate free type variables.
-    pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
+    pub fn free_vars(&self) -> HashMap<Name, Rc<Kind>> {
         self.ty.free_vars()
     }
 }
@@ -227,7 +227,7 @@ impl QualType {
 #[derive(Clone)]
 pub struct Predicate {
     pub trait_id: TraitId,
-    pub ty: Arc<TypeNode>,
+    pub ty: Rc<TypeNode>,
 }
 
 impl Predicate {
@@ -240,11 +240,11 @@ impl Predicate {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
 
-    pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &HashMap<Name, Rc<Kind>>) {
         self.ty = self.ty.set_kinds(scope);
     }
 
-    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
+    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) {
         let expected = &trait_kind_map[&self.trait_id];
         let found = self.ty.kind(type_env);
         if *expected != found {
@@ -261,7 +261,7 @@ impl Predicate {
 #[derive(Clone)]
 pub struct KindPredicate {
     pub name: Name,
-    pub kind: Arc<Kind>,
+    pub kind: Rc<Kind>,
 }
 
 // Trait environments.
@@ -493,8 +493,8 @@ impl TraitEnv {
         }
     }
 
-    pub fn trait_kind_map(&self) -> HashMap<TraitId, Arc<Kind>> {
-        let mut res: HashMap<TraitId, Arc<Kind>> = HashMap::default();
+    pub fn trait_kind_map(&self) -> HashMap<TraitId, Rc<Kind>> {
+        let mut res: HashMap<TraitId, Rc<Kind>> = HashMap::default();
         for (id, ti) in &self.traits {
             res.insert(id.clone(), ti.type_var.kind.clone());
         }

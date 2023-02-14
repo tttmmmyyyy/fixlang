@@ -49,7 +49,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;

@@ -11,13 +11,13 @@ use super::*;
 // lifetime-free version of pest::Span
 #[derive(Clone)]
 pub struct Span {
-    pub input: Arc<String>,
+    pub input: Rc<String>,
     pub start: usize,
     pub end: usize,
 }
 
 impl Span {
-    pub fn from_pair(src: &Arc<String>, pair: &Pair<Rule>) -> Self {
+    pub fn from_pair(src: &Rc<String>, pair: &Pair<Rule>) -> Self {
         let span = pair.as_span();
         Self {
             input: src.clone(),
@@ -79,7 +79,7 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 }
 
 pub fn parse_source(source: &str) -> FixModule {
-    let source = Arc::new(String::from(source));
+    let source = Rc::new(String::from(source));
     let file = FixParser::parse(Rule::file, &source);
     let file = match file {
         Ok(res) => res,
@@ -88,7 +88,7 @@ pub fn parse_source(source: &str) -> FixModule {
     parse_file(file, &source)
 }
 
-fn parse_file(mut file: Pairs<Rule>, src: &Arc<String>) -> FixModule {
+fn parse_file(mut file: Pairs<Rule>, src: &Rc<String>) -> FixModule {
     let pair = file.next().unwrap();
     match pair.as_rule() {
         Rule::module => return parse_module(pair, src),
@@ -96,7 +96,7 @@ fn parse_file(mut file: Pairs<Rule>, src: &Arc<String>) -> FixModule {
     }
 }
 
-fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
+fn parse_module(pair: Pair<Rule>, src: &Rc<String>) -> FixModule {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut pairs = pair.into_inner();
     let module_name = parse_module_defn(pairs.next().unwrap(), src);
@@ -104,8 +104,8 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
     let mut fix_mod = FixModule::new(module_name);
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
-    let mut global_name_type_signs: Vec<(FullName, Arc<Scheme>)> = vec![];
-    let mut global_value_defns: Vec<(FullName, Arc<ExprNode>)> = vec![];
+    let mut global_name_type_signs: Vec<(FullName, Rc<Scheme>)> = vec![];
+    let mut global_value_defns: Vec<(FullName, Rc<ExprNode>)> = vec![];
     let mut trait_infos: Vec<TraitInfo> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
 
@@ -136,10 +136,10 @@ fn parse_module(pair: Pair<Rule>, src: &Arc<String>) -> FixModule {
 
 fn parse_global_defns(
     pair: Pair<Rule>,
-    src: &Arc<String>,
+    src: &Rc<String>,
     namespace: &NameSpace,
-    global_name_type_signs: &mut Vec<(FullName, Arc<Scheme>)>,
-    global_value_defns: &mut Vec<(FullName, Arc<ExprNode>)>,
+    global_name_type_signs: &mut Vec<(FullName, Rc<Scheme>)>,
+    global_value_defns: &mut Vec<(FullName, Rc<ExprNode>)>,
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
 ) {
@@ -177,10 +177,10 @@ fn parse_global_defns(
 
 fn parse_global_defns_in_namespace(
     pair: Pair<Rule>,
-    src: &Arc<String>,
+    src: &Rc<String>,
     namespace: &NameSpace,
-    global_name_type_signs: &mut Vec<(FullName, Arc<Scheme>)>,
-    global_value_defns: &mut Vec<(FullName, Arc<ExprNode>)>,
+    global_name_type_signs: &mut Vec<(FullName, Rc<Scheme>)>,
+    global_value_defns: &mut Vec<(FullName, Rc<ExprNode>)>,
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
 ) {
@@ -200,7 +200,7 @@ fn parse_global_defns_in_namespace(
     }
 }
 
-fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>, namespace: &NameSpace) -> TraitInfo {
+fn parse_trait_defn(pair: Pair<Rule>, src: &Rc<String>, namespace: &NameSpace) -> TraitInfo {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let mut pairs = pair.into_inner();
     let kinds = if pairs.peek().unwrap().as_rule() == Rule::predicates {
@@ -226,7 +226,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Arc<String>, namespace: &NameSpace) 
     }
 }
 
-fn parse_trait_member_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, QualType) {
+fn parse_trait_member_defn(pair: Pair<Rule>, src: &Rc<String>) -> (Name, QualType) {
     assert_eq!(pair.as_rule(), Rule::trait_member_defn);
     let mut pairs = pair.into_inner();
     let method_name = pairs.next().unwrap().as_str().to_string();
@@ -234,17 +234,17 @@ fn parse_trait_member_defn(pair: Pair<Rule>, src: &Arc<String>) -> (Name, QualTy
     (method_name, qual_type)
 }
 
-fn parse_trait_impl(pair: Pair<Rule>, src: &Arc<String>) -> TraitInstance {
+fn parse_trait_impl(pair: Pair<Rule>, src: &Rc<String>) -> TraitInstance {
     assert_eq!(pair.as_rule(), Rule::trait_impl);
     let mut pairs = pair.into_inner();
     let qual_pred = parse_predicate_qualified(pairs.next().unwrap(), src);
-    let methods: HashMap<Name, Arc<ExprNode>> = pairs
+    let methods: HashMap<Name, Rc<ExprNode>> = pairs
         .map(|pair| parse_trait_member_impl(pair, src))
         .collect();
     TraitInstance { qual_pred, methods }
 }
 
-fn parse_trait_member_impl(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<ExprNode>) {
+fn parse_trait_member_impl(pair: Pair<Rule>, src: &Rc<String>) -> (Name, Rc<ExprNode>) {
     assert_eq!(pair.as_rule(), Rule::trait_member_impl);
     let mut pairs = pair.into_inner();
     let method_name = pairs.next().unwrap().as_str().to_string();
@@ -252,7 +252,7 @@ fn parse_trait_member_impl(pair: Pair<Rule>, src: &Arc<String>) -> (Name, Arc<Ex
     (method_name, expr)
 }
 
-fn parse_predicate_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualPredicate {
+fn parse_predicate_qualified(pair: Pair<Rule>, src: &Rc<String>) -> QualPredicate {
     assert_eq!(pair.as_rule(), Rule::predicate_qualified);
     let mut pairs = pair.into_inner();
     let (predicates, kinds) = if pairs.peek().unwrap().as_rule() == Rule::predicates {
@@ -271,9 +271,9 @@ fn parse_predicate_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualPredica
 
 fn parse_global_name_type_sign(
     pair: Pair<Rule>,
-    src: &Arc<String>,
+    src: &Rc<String>,
     namespace: &NameSpace,
-) -> (FullName, Arc<Scheme>) {
+) -> (FullName, Rc<Scheme>) {
     assert_eq!(pair.as_rule(), Rule::global_name_type_sign);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
@@ -288,9 +288,9 @@ fn parse_global_name_type_sign(
 
 fn parse_global_name_defn(
     pair: Pair<Rule>,
-    src: &Arc<String>,
+    src: &Rc<String>,
     namespace: &NameSpace,
-) -> (FullName, Arc<ExprNode>) {
+) -> (FullName, Rc<ExprNode>) {
     assert_eq!(pair.as_rule(), Rule::global_name_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
@@ -298,7 +298,7 @@ fn parse_global_name_defn(
     (FullName::new(namespace, &name), expr)
 }
 
-fn parse_type_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualType {
+fn parse_type_qualified(pair: Pair<Rule>, src: &Rc<String>) -> QualType {
     assert_eq!(pair.as_rule(), Rule::type_qualified);
     let mut pairs = pair.into_inner();
     let (preds, kinds) = if pairs.peek().unwrap().as_rule() == Rule::predicates {
@@ -315,7 +315,7 @@ fn parse_type_qualified(pair: Pair<Rule>, src: &Arc<String>) -> QualType {
     qt
 }
 
-fn parse_predicates(pair: Pair<Rule>, src: &Arc<String>) -> (Vec<Predicate>, Vec<KindPredicate>) {
+fn parse_predicates(pair: Pair<Rule>, src: &Rc<String>) -> (Vec<Predicate>, Vec<KindPredicate>) {
     assert_eq!(pair.as_rule(), Rule::predicates);
     let pairs = pair.into_inner();
     let mut ps: Vec<Predicate> = Default::default();
@@ -332,7 +332,7 @@ fn parse_predicates(pair: Pair<Rule>, src: &Arc<String>) -> (Vec<Predicate>, Vec
     (ps, ks)
 }
 
-fn parse_predicate_kind(pair: Pair<Rule>, src: &Arc<String>) -> KindPredicate {
+fn parse_predicate_kind(pair: Pair<Rule>, src: &Rc<String>) -> KindPredicate {
     assert_eq!(pair.as_rule(), Rule::predicate_kind);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
@@ -340,7 +340,7 @@ fn parse_predicate_kind(pair: Pair<Rule>, src: &Arc<String>) -> KindPredicate {
     KindPredicate { name, kind }
 }
 
-fn parse_predicate(pair: Pair<Rule>, _src: &Arc<String>) -> Predicate {
+fn parse_predicate(pair: Pair<Rule>, _src: &Rc<String>) -> Predicate {
     assert_eq!(pair.as_rule(), Rule::predicate);
     let mut pairs = pair.into_inner();
     let ty = parse_type(pairs.next().unwrap());
@@ -351,17 +351,17 @@ fn parse_predicate(pair: Pair<Rule>, _src: &Arc<String>) -> Predicate {
     }
 }
 
-fn parse_kind(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
+fn parse_kind(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Kind> {
     assert_eq!(pair.as_rule(), Rule::kind);
     let mut pairs = pair.into_inner();
-    let mut res: Arc<Kind> = parse_kind_nlr(pairs.next().unwrap(), src);
+    let mut res: Rc<Kind> = parse_kind_nlr(pairs.next().unwrap(), src);
     for pair in pairs {
         res = kind_arrow(res, parse_kind_nlr(pair, src));
     }
     res
 }
 
-fn parse_kind_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
+fn parse_kind_nlr(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Kind> {
     assert_eq!(pair.as_rule(), Rule::kind_nlr);
     let mut pairs = pair.into_inner();
     let pair = pairs.next().unwrap();
@@ -374,23 +374,23 @@ fn parse_kind_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
     }
 }
 
-fn parse_kind_star(pair: Pair<Rule>, _src: &Arc<String>) -> Arc<Kind> {
+fn parse_kind_star(pair: Pair<Rule>, _src: &Rc<String>) -> Rc<Kind> {
     assert_eq!(pair.as_rule(), Rule::kind_star);
     kind_star()
 }
 
-fn parse_kind_braced(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Kind> {
+fn parse_kind_braced(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Kind> {
     assert_eq!(pair.as_rule(), Rule::kind_braced);
     let mut pairs = pair.into_inner();
     let pair = pairs.next().unwrap();
     parse_kind(pair, src)
 }
 
-fn parse_module_defn(pair: Pair<Rule>, _src: &Arc<String>) -> String {
+fn parse_module_defn(pair: Pair<Rule>, _src: &Rc<String>) -> String {
     pair.into_inner().next().unwrap().as_str().to_string()
 }
 
-fn parse_type_defn(pair: Pair<Rule>, src: &Arc<String>, namespace: &NameSpace) -> TypeDefn {
+fn parse_type_defn(pair: Pair<Rule>, src: &Rc<String>, namespace: &NameSpace) -> TypeDefn {
     assert_eq!(pair.as_rule(), Rule::type_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
@@ -413,7 +413,7 @@ fn parse_type_defn(pair: Pair<Rule>, src: &Arc<String>, namespace: &NameSpace) -
     }
 }
 
-fn parse_struct_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
+fn parse_struct_defn(pair: Pair<Rule>, src: &Rc<String>) -> TypeDeclValue {
     assert_eq!(pair.as_rule(), Rule::struct_defn);
     let mut pairs = pair.into_inner();
     let mut fields: Vec<Field> = Vec::new();
@@ -427,7 +427,7 @@ fn parse_struct_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
     TypeDeclValue::Struct(Struct { fields, is_unbox })
 }
 
-fn parse_union_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
+fn parse_union_defn(pair: Pair<Rule>, src: &Rc<String>) -> TypeDeclValue {
     assert_eq!(pair.as_rule(), Rule::union_defn);
     let mut pairs = pair.into_inner();
     let mut fields: Vec<Field> = Vec::new();
@@ -442,7 +442,7 @@ fn parse_union_defn(pair: Pair<Rule>, src: &Arc<String>) -> TypeDeclValue {
 }
 
 // Return true if unbox.
-fn parse_box_unbox(pair: Pair<Rule>, _src: &Arc<String>) -> bool {
+fn parse_box_unbox(pair: Pair<Rule>, _src: &Rc<String>) -> bool {
     assert_eq!(pair.as_rule(), Rule::box_or_unbox);
     if pair.as_str() == "box" {
         return false;
@@ -452,7 +452,7 @@ fn parse_box_unbox(pair: Pair<Rule>, _src: &Arc<String>) -> bool {
     unreachable!();
 }
 
-fn parse_type_field(pair: Pair<Rule>, _src: &Arc<String>) -> Field {
+fn parse_type_field(pair: Pair<Rule>, _src: &Rc<String>) -> Field {
     assert_eq!(pair.as_rule(), Rule::type_field);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
@@ -463,13 +463,13 @@ fn parse_type_field(pair: Pair<Rule>, _src: &Arc<String>) -> Field {
     }
 }
 
-fn parse_expr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr);
     let pair = pair.into_inner().next().unwrap();
     parse_expr_type_annotation(pair, src)
 }
 
-fn parse_expr_type_annotation(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_type_annotation(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_type_annotation);
     let span = Span::from_pair(src, &pair);
     let mut pairs = pair.into_inner();
@@ -486,9 +486,9 @@ fn parse_expr_type_annotation(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNo
 // Parse combinator sequence, e.g., `f x y` or `x & f & g`
 fn parse_combinator_sequence(
     pair: Pair<Rule>,
-    src: &Arc<String>,
-    inner_parser: fn(Pair<Rule>, &Arc<String>) -> Arc<ExprNode>,
-) -> Vec<Arc<ExprNode>> {
+    src: &Rc<String>,
+    inner_parser: fn(Pair<Rule>, &Rc<String>) -> Rc<ExprNode>,
+) -> Vec<Rc<ExprNode>> {
     pair.into_inner()
         .map(|pair| inner_parser(pair, src))
         .collect()
@@ -526,11 +526,11 @@ impl BinaryOpInfo {
 // Binary operator
 fn parse_binary_operator_sequence(
     pair: Pair<Rule>,
-    src: &Arc<String>,
+    src: &Rc<String>,
     ops: HashMap<&str, BinaryOpInfo>,
     operator_rule: Rule,
-    inner_parser: fn(Pair<Rule>, &Arc<String>) -> Arc<ExprNode>,
-) -> Arc<ExprNode> {
+    inner_parser: fn(Pair<Rule>, &Rc<String>) -> Rc<ExprNode>,
+) -> Rc<ExprNode> {
     let mut pairs = pair.into_inner();
     let mut expr = inner_parser(pairs.next().unwrap(), src);
     let mut next_operation = BinaryOpInfo::default();
@@ -580,7 +580,7 @@ fn parse_binary_operator_sequence(
 }
 
 // comparison operators (left-associative)
-fn parse_expr_cmp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_cmp(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_cmp);
     parse_binary_operator_sequence(
         pair,
@@ -625,7 +625,7 @@ fn parse_expr_cmp(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 // Operator && (left-associative)
-fn parse_expr_and(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_and(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_and);
     parse_binary_operator_sequence(
         pair,
@@ -637,7 +637,7 @@ fn parse_expr_and(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 // Operator || (left-associative)
-fn parse_expr_or(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_or(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_or);
     parse_binary_operator_sequence(
         pair,
@@ -649,7 +649,7 @@ fn parse_expr_or(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 // Operator +/- (left associative)
-fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_plus(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_plus);
     parse_binary_operator_sequence(
         pair,
@@ -667,7 +667,7 @@ fn parse_expr_plus(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 // Operator *,/,% (left associative)
-fn parse_expr_mul(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_mul(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_mul);
     parse_binary_operator_sequence(
         pair,
@@ -707,7 +707,7 @@ impl UnaryOpInfo {
 }
 
 // Unary opeartors
-fn parse_expr_unary(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_unary(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     if pairs.peek().unwrap().as_rule() == Rule::expr_int_lit {
@@ -754,7 +754,7 @@ fn parse_expr_unary(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 // Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
-fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
     let exprs = parse_combinator_sequence(pair, src, parse_expr_or);
     let mut exprs_iter = exprs.iter().rev();
@@ -767,7 +767,7 @@ fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 // Parse left to right application sequence, e.g., `x & f & g`. (left-associative)
-fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_ltr_app);
     let exprs = parse_combinator_sequence(pair, src, parse_expr_app);
     let mut exprs_iter = exprs.iter();
@@ -781,7 +781,7 @@ fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
 }
 
 // Parse application sequence, e.g., `f(x, y)`. (left-associative)
-fn parse_expr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_app(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_app);
     let mut pairs = pair.into_inner();
     let head = parse_expr_nlr(pairs.next().unwrap(), src);
@@ -802,12 +802,12 @@ fn parse_expr_app(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     ret
 }
 
-fn parse_arg_list(pair: Pair<Rule>, src: &Arc<String>) -> Vec<Arc<ExprNode>> {
+fn parse_arg_list(pair: Pair<Rule>, src: &Rc<String>) -> Vec<Rc<ExprNode>> {
     assert_eq!(pair.as_rule(), Rule::arg_list);
     parse_combinator_sequence(pair, src, parse_expr)
 }
 
-fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_nlr(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_nlr);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
@@ -823,7 +823,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     }
 }
 
-fn parse_expr_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_var);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
@@ -840,7 +840,7 @@ fn parse_expr_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     expr_var(name, Some(span))
 }
 
-fn parse_namespace(pair: Pair<Rule>, _src: &Arc<String>) -> NameSpace {
+fn parse_namespace(pair: Pair<Rule>, _src: &Rc<String>) -> NameSpace {
     assert_eq!(pair.as_rule(), Rule::namespace);
     let pairs = pair.into_inner();
     let mut ret: Vec<String> = Vec::new();
@@ -850,7 +850,7 @@ fn parse_namespace(pair: Pair<Rule>, _src: &Arc<String>) -> NameSpace {
     NameSpace::new(ret)
 }
 
-fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_lit(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_int_lit => parse_expr_int_lit(pair, src),
@@ -861,7 +861,7 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     }
 }
 
-fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_let(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let pat = parse_pattern(pairs.next().unwrap(), src);
@@ -878,12 +878,12 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     expr_let(pat, bound, val, Some(span))
 }
 
-// fn parse_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Var> {
+// fn parse_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Var> {
 //     assert_eq!(pair.as_rule(), Rule::var);
 //     var_local(pair.as_str(), Some(Span::from_pair(&src, &pair)))
 // }
 
-fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_lam(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let mut pats = vec![];
@@ -908,7 +908,7 @@ fn parse_expr_lam(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     expr.set_source(Some(span))
 }
 
-fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_if(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(expr.as_rule(), Rule::expr_if);
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
@@ -923,7 +923,7 @@ fn parse_expr_if(expr: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     )
 }
 
-fn parse_expr_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_tuple);
     let span = Span::from_pair(&src, &pair);
     let exprs = pair
@@ -945,7 +945,7 @@ fn parse_expr_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     }
 }
 
-fn parse_expr_make_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_make_struct(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_make_struct);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
@@ -959,21 +959,21 @@ fn parse_expr_make_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> 
     expr_make_struct(tycon, fields).set_source(Some(span))
 }
 
-fn parse_expr_int_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_int_lit);
     let span = Span::from_pair(&src, &pair);
     let val = pair.as_str().parse::<i64>().unwrap();
     int(val, Some(span))
 }
 
-fn parse_expr_bool_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_bool_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_bool_lit);
     let val = pair.as_str().parse::<bool>().unwrap();
     let span = Span::from_pair(&src, &pair);
     bool(val, Some(span))
 }
 
-fn parse_expr_array_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_array_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_array_lit);
     let span = Span::from_pair(&src, &pair);
     let elems = pair
@@ -983,7 +983,7 @@ fn parse_expr_array_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     expr_array_lit(elems, Some(span))
 }
 
-fn parse_expr_string_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
+fn parse_expr_string_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_string_lit);
     let span = Span::from_pair(&src, &pair);
     let string = pair.into_inner().next().unwrap().as_str().to_string();
@@ -1030,7 +1030,7 @@ fn parse_expr_string_lit(pair: Pair<Rule>, src: &Arc<String>) -> Arc<ExprNode> {
     make_string_from_rust_string(string, Some(span))
 }
 
-fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type(type_expr: Pair<Rule>) -> Rc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_expr);
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
@@ -1040,7 +1040,7 @@ fn parse_type(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     }
 }
 
-fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_fun(type_expr: Pair<Rule>) -> Rc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_fun);
     let mut pairs = type_expr.into_inner();
     let src_ty = parse_type_tyapp(pairs.next().unwrap());
@@ -1053,7 +1053,7 @@ fn parse_type_fun(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     }
 }
 
-fn parse_type_tyapp(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_tyapp(type_expr: Pair<Rule>) -> Rc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_tyapp);
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
@@ -1064,7 +1064,7 @@ fn parse_type_tyapp(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     ret
 }
 
-fn parse_type_nlr(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_nlr(type_expr: Pair<Rule>) -> Rc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_nlr);
     let mut pairs = type_expr.into_inner();
     let pair = pairs.next().unwrap();
@@ -1076,22 +1076,22 @@ fn parse_type_nlr(type_expr: Pair<Rule>) -> Arc<TypeNode> {
     }
 }
 
-fn parse_type_var(pair: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_var(pair: Pair<Rule>) -> Rc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_var);
     type_tyvar(pair.as_str(), &kind_star())
 }
 
-fn parse_type_tycon(type_expr: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_tycon(type_expr: Pair<Rule>) -> Rc<TypeNode> {
     assert_eq!(type_expr.as_rule(), Rule::type_tycon);
     type_tycon(&parse_tycon(type_expr))
 }
 
-fn parse_tycon(pair: Pair<Rule>) -> Arc<TyCon> {
+fn parse_tycon(pair: Pair<Rule>) -> Rc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::type_tycon);
     tycon(FullName::from_strs(&[], pair.as_str()))
 }
 
-fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
+fn parse_type_tuple(pair: Pair<Rule>) -> Rc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_tuple);
     let types = pair.into_inner().map(|p| parse_type(p)).collect::<Vec<_>>();
     if types.len() == 1 {
@@ -1105,7 +1105,7 @@ fn parse_type_tuple(pair: Pair<Rule>) -> Arc<TypeNode> {
     }
 }
 
-fn parse_pattern(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+fn parse_pattern(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
     assert_eq!(pair.as_rule(), Rule::pattern);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
@@ -1117,22 +1117,22 @@ fn parse_pattern(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
     }
 }
 
-fn parse_pattern_var(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+fn parse_pattern_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
     assert_eq!(pair.as_rule(), Rule::pattern_var);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
     let ty = pairs.next().map(|ty| parse_type(ty));
-    Arc::new(Pattern::Var(var_local(var_name, Some(span)), ty))
+    Rc::new(Pattern::Var(var_local(var_name, Some(span)), ty))
 }
 
-fn parse_pattern_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+fn parse_pattern_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
     assert_eq!(pair.as_rule(), Rule::pattern_tuple);
     let pairs = pair.into_inner();
     let pats = pairs
         .map(|pair| parse_pattern(pair, src))
         .collect::<Vec<_>>();
-    Arc::new(Pattern::Struct(
+    Rc::new(Pattern::Struct(
         tycon(make_tuple_name(pats.len() as u32)),
         pats.iter()
             .enumerate()
@@ -1141,7 +1141,7 @@ fn parse_pattern_tuple(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
     ))
 }
 
-fn parse_pattern_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+fn parse_pattern_struct(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
     assert_eq!(pair.as_rule(), Rule::pattern_struct);
     let mut pairs = pair.clone().into_inner();
     let tycon = parse_tycon(pairs.next().unwrap());
@@ -1164,16 +1164,16 @@ fn parse_pattern_struct(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
         let pat = parse_pattern(pairs.next().unwrap(), src);
         field_to_pats.push((field_name, pat));
     }
-    Arc::new(Pattern::Struct(tycon, field_to_pats))
+    Rc::new(Pattern::Struct(tycon, field_to_pats))
 }
 
-fn parse_pattern_union(pair: Pair<Rule>, src: &Arc<String>) -> Arc<Pattern> {
+fn parse_pattern_union(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
     assert_eq!(pair.as_rule(), Rule::pattern_union);
     let mut pairs = pair.into_inner();
     let tycon = parse_tycon(pairs.next().unwrap());
     let field_name = pairs.next().unwrap().as_str().to_string();
     let pat = parse_pattern(pairs.next().unwrap(), src);
-    Arc::new(Pattern::Union(tycon, field_name, pat))
+    Rc::new(Pattern::Union(tycon, field_name, pat))
 }
 
 fn rule_to_string(r: &Rule) -> String {
@@ -1196,7 +1196,7 @@ fn rule_to_string(r: &Rule) -> String {
     }
 }
 
-fn message_parse_error(e: Error<Rule>, src: &Arc<String>) -> String {
+fn message_parse_error(e: Error<Rule>, src: &Rc<String>) -> String {
     let mut msg: String = Default::default();
 
     let mut suggestion: Option<String> = None;

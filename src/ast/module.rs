@@ -25,13 +25,13 @@ pub struct FixModule {
 #[derive(Clone)]
 pub struct TypeEnv {
     // List of type constructors including user-defined types.
-    pub tycons: Arc<HashMap<TyCon, TyConInfo>>,
+    pub tycons: Rc<HashMap<TyCon, TyConInfo>>,
 }
 
 impl Default for TypeEnv {
     fn default() -> Self {
         Self {
-            tycons: Arc::new(Default::default()),
+            tycons: Rc::new(Default::default()),
         }
     }
 }
@@ -39,11 +39,11 @@ impl Default for TypeEnv {
 impl TypeEnv {
     pub fn new(tycons: HashMap<TyCon, TyConInfo>) -> TypeEnv {
         TypeEnv {
-            tycons: Arc::new(tycons),
+            tycons: Rc::new(tycons),
         }
     }
 
-    pub fn kind(&self, tycon: &TyCon) -> Arc<Kind> {
+    pub fn kind(&self, tycon: &TyCon) -> Rc<Kind> {
         self.tycons.get(tycon).unwrap().kind.clone()
     }
 }
@@ -51,8 +51,8 @@ impl TypeEnv {
 #[derive(Clone)]
 pub struct InstantiatedSymbol {
     pub template_name: FullName,
-    pub ty: Arc<TypeNode>,
-    pub expr: Option<Arc<ExprNode>>,
+    pub ty: Rc<TypeNode>,
+    pub expr: Option<Rc<ExprNode>>,
     pub typechecker: Option<TypeCheckContext>, // type checker available for resolving types in expr.
 }
 
@@ -60,7 +60,7 @@ pub struct GlobalValue {
     // Type of this symbol.
     // For example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String for a: Show",
-    pub ty: Arc<Scheme>,
+    pub ty: Rc<Scheme>,
     pub expr: SymbolExpr,
     // Result of typechecking (mainly, substitution) of this symbol.
     pub typecheck_log: Option<TypeCheckContext>,
@@ -74,7 +74,7 @@ impl GlobalValue {
         self.expr.resolve_namespace(ctx);
     }
 
-    pub fn set_kinds(&mut self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) {
         self.ty = self.ty.set_kinds(trait_kind_map);
         self.ty.check_kinds(type_env, trait_kind_map);
         match &mut self.expr {
@@ -92,7 +92,7 @@ impl GlobalValue {
 // Expression of global symbol.
 #[derive(Clone)]
 pub enum SymbolExpr {
-    Simple(Arc<ExprNode>),   // Definition such as "id : a -> a; id = \x -> x".
+    Simple(Rc<ExprNode>),    // Definition such as "id : a -> a; id = \x -> x".
     Method(Vec<MethodImpl>), // Trait method implementations.
 }
 
@@ -117,9 +117,9 @@ pub struct MethodImpl {
     // Type of this method.
     // For example, in case "impl [a: Show, b: Show] (a, b): Show {...}",
     // the type of method "show" is "[a: Show, b: Show] (a, b) -> String",
-    pub ty: Arc<Scheme>,
+    pub ty: Rc<Scheme>,
     // Expression of this implementation
-    pub expr: Arc<ExprNode>,
+    pub expr: Rc<ExprNode>,
 }
 
 impl MethodImpl {
@@ -236,7 +236,7 @@ impl FixModule {
     }
 
     // Add a global value.
-    pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
+    pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Rc<ExprNode>, Rc<Scheme>)) {
         if self.global_values.contains_key(&name) {
             error_exit(&format!(
                 "duplicated definition for global value: `{}`",
@@ -256,12 +256,12 @@ impl FixModule {
     // Add global values
     pub fn add_global_values(
         &mut self,
-        exprs: Vec<(FullName, Arc<ExprNode>)>,
-        types: Vec<(FullName, Arc<Scheme>)>,
+        exprs: Vec<(FullName, Rc<ExprNode>)>,
+        types: Vec<(FullName, Rc<Scheme>)>,
     ) {
         struct GlobalValue {
-            expr: Option<Arc<ExprNode>>,
-            ty: Option<Arc<Scheme>>,
+            expr: Option<Rc<ExprNode>>,
+            ty: Option<Rc<Scheme>>,
         }
 
         let mut global_values: HashMap<FullName, GlobalValue> = Default::default();
@@ -473,7 +473,7 @@ impl FixModule {
             }
             SymbolExpr::Method(impls) => {
                 // Find method implementation that unifies to "sym.ty".
-                let mut e: Option<Arc<ExprNode>> = None;
+                let mut e: Option<Rc<ExprNode>> = None;
                 for method in impls {
                     if tc.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
                         e = Some(method.expr.clone());
@@ -502,7 +502,7 @@ impl FixModule {
     }
 
     // Instantiate main function.
-    pub fn instantiate_main_function(&mut self) -> Arc<ExprNode> {
+    pub fn instantiate_main_function(&mut self) -> Rc<ExprNode> {
         let main_func_name = FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME);
         if !self.global_values.contains_key(&main_func_name) {
             error_exit(&format!("{} not found.", main_func_name.to_string()));
@@ -514,7 +514,7 @@ impl FixModule {
     }
 
     // Instantiate expression.
-    fn instantiate_expr(&mut self, tc: &TypeCheckContext, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+    fn instantiate_expr(&mut self, tc: &TypeCheckContext, expr: &Rc<ExprNode>) -> Rc<ExprNode> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
                 if v.name.is_local() {
@@ -574,7 +574,7 @@ impl FixModule {
     }
 
     // Require instantiate generic symbol such that it has a specified type.
-    pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
+    pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
         if !ty.free_vars().is_empty() {
             error_exit(&format!("cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", name.to_string(), ty.to_string_normalize()));
         }
@@ -598,7 +598,7 @@ impl FixModule {
 
     // Determine the name of instantiated generic symbol so that it has a specified type.
     // tc: a typechecker (substituion) under which ty should be interpret.
-    fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
+    fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
         assert!(ty.free_vars().is_empty());
         let hash = ty.hash();
         let mut name = name.clone();
@@ -652,7 +652,7 @@ impl FixModule {
             for (_, ti) in &mut tycons {
                 ti.resolve_namespace(&ctx);
             }
-            self.type_env.tycons = Arc::new(tycons);
+            self.type_env.tycons = Rc::new(tycons);
         }
 
         self.trait_env.resolve_namespace(&ctx);
