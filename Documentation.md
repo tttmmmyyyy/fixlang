@@ -411,8 +411,15 @@ The type of strings.
 
 Methods:
 
+- `concat : String -> String -> String`
+    - Concatenate two strings.
+    - Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
 - `get_length : String -> Int`
     - Returns the length of the string.
+
+Implementing Traits:
+
+- `String : Eq`
 
 ### Std.Vector
 

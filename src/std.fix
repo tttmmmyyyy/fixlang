@@ -225,9 +225,22 @@ namespace Option {
 type String = unbox struct { _data : Vector Byte };
 
 namespace String {
+    // Concatenate two strings.
+    // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
+    concat : String -> String -> String;
+    concat = |rhs, lhs| (
+        // Remove null terminator from lhs and append rhs.
+        String { _data : lhs.@_data.pop_back.append(rhs.@_data) }
+    );
+
     // Get the length of a string.
     get_length : String -> Int;
     get_length = |s| s.@_data.get_length - 1; // exclude null terminator
+}
+
+impl String : Eq {
+    // Compare two strings.
+    eq = |lhs, rhs| (lhs.@_data == rhs.@_data);
 }
 
 type Vector a = unbox struct { _data : Array a, _reserved_length : Int };

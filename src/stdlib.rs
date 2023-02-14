@@ -40,6 +40,9 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(eq_trait_instance_primitive(bool_lit_ty()));
+    fix_module
+        .trait_env
+        .add_instance(eq_trait_instance_primitive(byte_lit_ty()));
     fix_module.trait_env.add_instance(add_trait_instance_int());
     fix_module
         .trait_env

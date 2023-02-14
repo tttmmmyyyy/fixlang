@@ -2142,6 +2142,27 @@ pub fn test84() {
 
 #[test]
 #[serial]
+pub fn test85() {
+    // Test concat string, compare string.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let s1 = "Hello";
+        let s2 = " ";
+        let s3 = "World!";
+        let _ = assert_eq("", s1.concat(s2).concat(s3) == "Hello World!");
+    
+        io.pure()
+    );
+    
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
