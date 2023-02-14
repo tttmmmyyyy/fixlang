@@ -232,6 +232,7 @@ namespace Option {
 type String = unbox struct { _data : Vector Byte };
 
 namespace String {
+    // Get the length of a string.
     get_length : String -> Int;
     get_length = |s| s.@_data.get_length - 1; // exclude null terminator
 }
@@ -349,6 +350,20 @@ namespace Vector {
     set! : Int -> a -> Vector a -> Vector a;
     set! = |idx, elem, vec| (
         vec.mod__data(|arr| arr.set!(idx, elem))
+    );
+}
+
+impl [a: Eq] Vector a : Eq {
+    
+    // Compare two vectors.
+    eq = |lhs, rhs| (
+        if lhs.get_length != rhs.get_length { false };
+        let len = lhs.get_length;
+        loop(0, |idx| (
+            if idx == len { break $ true };
+            if lhs.get(idx) != rhs.get(idx) { break $ false };
+            continue $ idx + 1
+        ))
     );
 }
 

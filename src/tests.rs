@@ -2111,6 +2111,37 @@ pub fn test83() {
 
 #[test]
 #[serial]
+pub fn test84() {
+    // Test Eq for Vector
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let v1 = Vector.from_array([1,2,3]);
+        let v2 = Vector.from_array([1,2,3]);
+        let _ = assert("", v1 == v2);
+    
+        let v1 = Vector.from_array([1,2,3]);
+        let v2 = Vector.from_array([0,2,3]);
+        let _ = assert("", v1 != v2);
+    
+        let v1 = Vector.from_array([]);
+        let v2 = Vector.from_array([0]);
+        let _ = assert("", v1 != v2);
+    
+        let v1: Vector Int = Vector.from_array([]);
+        let v2 = Vector.from_array([]);
+        let _ = assert("", v1 == v2);
+    
+        io.pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

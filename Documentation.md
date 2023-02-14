@@ -448,6 +448,10 @@ Methods:
     - Updates an elemnt at an index.
     - This function asserts the Vector's internal array is unique.
 
+Implementing Traits:
+
+- `[a : Eq] Vector a : Eq`
+
 ## Functions
 
 ### Std.fix : ((a -> b) -> a -> b) -> a -> b
