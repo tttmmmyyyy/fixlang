@@ -359,7 +359,7 @@ Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
 Methods:
 
-- `push_head : a -> Iterator a -> Iterator a`
+- `push_front : a -> Iterator a -> Iterator a`
     - Append an element to an iterator.
 - `get_length : Iterator a -> Int`
     - Counts the length of an iterator.

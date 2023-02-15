@@ -14,7 +14,7 @@ my_reverse = |iter| (
             break $ out_iter
         } else {
             let (elem, in_iter) = in_iter.next.unwrap;
-            let out_iter = out_iter.push_head(elem);
+            let out_iter = out_iter.push_front(elem);
             continue $ (out_iter, in_iter)
         }
     ))

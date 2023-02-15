@@ -57,8 +57,8 @@ type Iterator a = unbox struct { _data: () -> Option (a, Iterator a) };
 namespace Iterator {
 
     // Push an elemnt to an iterator.
-    push_head : a -> Iterator a -> Iterator a;
-    push_head = |elem, iter| (
+    push_front : a -> Iterator a -> Iterator a;
+    push_front = |elem, iter| (
         let data = |_| (
             some $ (elem, iter)
         );
@@ -166,7 +166,7 @@ namespace Iterator {
                 break $ out_iter
             } else {
                 let (elem, in_iter) = in_iter.next.unwrap;
-                let out_iter = out_iter.push_head(elem);
+                let out_iter = out_iter.push_front(elem);
                 continue $ (out_iter, in_iter)
             }
         ))
