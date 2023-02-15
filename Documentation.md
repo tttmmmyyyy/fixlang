@@ -359,13 +359,14 @@ Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
 Methods:
 
-- `push_front : a -> Iterator a -> Iterator a`
-    - Append an element to an iterator.
-- `get_length : Iterator a -> Int`
-    - Counts the length of an iterator.
 - `count_up : Int -> Iterator Int`
     - Create an iterator that counts up from a number.
     - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)
+- `get_length : Iterator a -> Int`
+    - Counts the length of an iterator.
+- `intersperse : a -> Iterator a -> Iterator a`
+    - Intersperse an elemnt between elements of an iterator.
+    - Example: `Iterator.from_array([1,2,3]).intersperse(0) == Iterator.from_array([1,0,2,0,3])`
 - `make_empty : Iterator a`
     - Creates an empty iterator.
 - `filter : (a -> Bool) -> Iterator a -> Iterator a`
@@ -383,6 +384,8 @@ Methods:
     - `map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]`
 - `next : Iterator a -> Option (a, Iterator a)`
     - Get next value and next iterator.
+- `push_front : a -> Iterator a -> Iterator a`
+    - Append an element to an iterator.
 - `reverse : Iterator a -> Iterator a`
     - Reverse an iterator.
 - `take : Int -> Iterator a -> Iterator a`
@@ -414,6 +417,9 @@ Methods:
 - `concat : String -> String -> String`
     - Concatenate two strings.
     - Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
+- `join : String -> Iterator String -> String`
+    - Join strings by a separator.
+    - Example: `Iterator.from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
 - `concat_iter : Iterator String -> String`
     - Concatenate an iterator of strings.
 - `get_length : String -> Int`

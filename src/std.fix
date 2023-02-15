@@ -56,19 +56,6 @@ type Iterator a = unbox struct { _data: () -> Option (a, Iterator a) };
 
 namespace Iterator {
 
-    // Push an elemnt to an iterator.
-    push_front : a -> Iterator a -> Iterator a;
-    push_front = |elem, iter| (
-        let data = |_| (
-            some $ (elem, iter)
-        );
-        Iterator { _data: data }     
-    );
-
-    // Counts the length of an iterator.
-    get_length : Iterator a -> Int;
-    get_length = fold(0, |acm, _| acm + 1);
-
     // Creates an iterator that counts up from a number.
     // count_up(n) = [n, n+1, n+2, ...]
     count_up : Int -> Iterator Int;
@@ -77,6 +64,23 @@ namespace Iterator {
             some $ (i, Iterator.count_up(i+1))
         );
         Iterator { _data: data }
+    );
+
+    // Counts the length of an iterator.
+    get_length : Iterator a -> Int;
+    get_length = fold(0, |acm, _| acm + 1);
+
+    // Intersperse an elemnt between elements of an iterator.
+    // Example: 
+    // ```
+    // Iterator.from_array([1,2,3]).intersperse(0) == Iterator.from_array([1,0,2,0,3])
+    // ```
+    intersperse : a -> Iterator a -> Iterator a;
+    intersperse = |sep, iter| (
+        if iter.is_empty { Iterator.make_empty };
+        let Option.some((e, tail)) = iter.next;
+        if tail.is_empty { iter };
+        Iterator.push_front(e) $ Iterator.push_front(sep) $ tail.intersperse(sep)
     );
 
     // Create an empty iterator.
@@ -158,6 +162,15 @@ namespace Iterator {
     next : Iterator a -> Option (a, Iterator a);
     next = |iter| (iter.@_data)();
 
+    // Push an elemnt to an iterator.
+    push_front : a -> Iterator a -> Iterator a;
+    push_front = |elem, iter| (
+        let data = |_| (
+            some $ (elem, iter)
+        );
+        Iterator { _data: data }     
+    );
+
     // Reverse an iterator.
     reverse : Iterator a -> Iterator a;
     reverse = |iter| (
@@ -198,6 +211,17 @@ namespace Iterator {
             some $ ((v0, v1), zip(iter0, iter1))
         );
         Iterator { _data: data }
+    );
+}
+
+impl [a : Eq] Iterator a : Eq {
+    eq = |lhs, rhs| (
+        if lhs.is_empty { rhs.is_empty };
+        if rhs.is_empty { false };
+        let Option.some((e, lhs)) = lhs.next;
+        let Option.some((f, rhs)) = rhs.next;
+        if e != f { false };
+        lhs == rhs
     );
 }
 
@@ -247,6 +271,12 @@ namespace String {
     // Get the length of a string.
     get_length : String -> Int;
     get_length = |s| s.@_data.get_length - 1; // exclude null terminator
+
+    // Join strings by a separator.
+    join : String -> Iterator String -> String;
+    join = |sep, strs| (
+        strs.intersperse(sep).concat_iter
+    );
 }
 
 impl String : Add {

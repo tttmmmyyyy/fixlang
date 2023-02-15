@@ -2181,6 +2181,62 @@ pub fn test86() {
 
 #[test]
 #[serial]
+pub fn test87() {
+    // Test iterator comparison
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let lhs = Iterator.from_array([1,2,3]);
+        let rhs = Iterator.from_array([1,2,3]);
+        let _ = assert_eq("", lhs, rhs);
+
+        let lhs: Iterator Bool = Iterator.from_array([]);
+        let rhs = Iterator.from_array([]);
+        let _ = assert_eq("", lhs, rhs);
+
+        let lhs = Iterator.from_array([]);
+        let rhs = Iterator.from_array([1,2]);
+        let _ = assert("", lhs != rhs);
+
+        io.pure()
+    );
+    
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test88() {
+    // Test iterator comparison
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let iter = Iterator.from_array([1,2,3]);
+        let iter = iter.intersperse(0);
+        let _ = assert_eq("", iter, Iterator.from_array([1,0,2,0,3]));
+    
+        let iter = Iterator.from_array([1]);
+        let iter = iter.intersperse(0);
+        let _ = assert_eq("", iter, Iterator.from_array([1]));
+    
+        let iter = Iterator.from_array([]);
+        let iter = iter.intersperse(0);
+        let _ = assert_eq("", iter, Iterator.from_array([]));
+    
+        io.pure()
+    );
+    
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
