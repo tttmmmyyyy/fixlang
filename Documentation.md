@@ -421,6 +421,8 @@ Methods:
 
 Implementing Traits:
 
+- `String : Add`
+    - Add two strings by `String.concat`.
 - `String : Eq`
 
 ### Std.Vector

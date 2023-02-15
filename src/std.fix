@@ -249,6 +249,11 @@ namespace String {
     get_length = |s| s.@_data.get_length - 1; // exclude null terminator
 }
 
+impl String : Add {
+    // Concatenate two strings.
+    add = |lhs, rhs| lhs.concat(rhs);
+}
+
 impl String : Eq {
     // Compare two strings.
     eq = |lhs, rhs| (lhs.@_data == rhs.@_data);
