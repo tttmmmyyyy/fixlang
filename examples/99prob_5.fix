@@ -23,12 +23,5 @@ my_reverse = |iter| (
 main : IOState -> ((), IOState);
 main = |io| (
     let iter = Iterator.from_array([1,2,3,4]).my_reverse;
-    let (e, iter) = iter.next.unwrap;
-    let (_, io) = io.println!(e.to_string);
-    let (e, iter) = iter.next.unwrap;
-    let (_, io) = io.println!(e.to_string);
-    let (e, iter) = iter.next.unwrap;
-    let (_, io) = io.println!(e.to_string);
-    let (e, iter) = iter.next.unwrap;
-    io.println!(e.to_string)
+    io.println!(iter.map(to_string).join(", "))
 );
