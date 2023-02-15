@@ -359,6 +359,9 @@ Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
 Methods:
 
+- `append : Iterator a -> Iterator a -> Iterator a`
+    - Append an iterator to a iterator.
+    - Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
 - `count_up : Int -> Iterator Int`
     - Create an iterator that counts up from a number.
     - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)
@@ -371,6 +374,8 @@ Methods:
     - Creates an empty iterator.
 - `filter : (a -> Bool) -> Iterator a -> Iterator a`
     - Filter elements by a condition function.
+- `flatten : Iterator (Iterator a) -> Iterator a`
+    - Flatten an iterator of iterators.
 - `fold : b -> (b -> a -> b) -> Iterator a -> b`
     - Folds iterator from left.
     - `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
@@ -392,6 +397,12 @@ Methods:
     - Take at most n elements from an iterator.
 - `zip : Iterator a -> Iterator b -> Iterator (a, b)`
     - Zip two iterators.
+
+Implementing Traits:
+
+- `Iterator a : Add`
+    - Adds two iterators by `Iterator.append`.
+- `[a : Eq] Iterator a : Eq`
 
 ### Std.Option
 

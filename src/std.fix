@@ -56,6 +56,15 @@ type Iterator a = unbox struct { _data: () -> Option (a, Iterator a) };
 
 namespace Iterator {
 
+    // Append an iterator to a iterator.
+    // Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
+    append : Iterator a -> Iterator a -> Iterator a;
+    append = |rhs, lhs| (
+        if lhs.is_empty { rhs };
+        let Option.some((e, lhs)) = lhs.next;
+        Iterator.push_front(e) $ lhs.append(rhs)
+    );
+
     // Creates an iterator that counts up from a number.
     // count_up(n) = [n, n+1, n+2, ...]
     count_up : Int -> Iterator Int;
@@ -105,6 +114,10 @@ namespace Iterator {
         );
         Iterator { _data: data }
     );
+
+    // Flatten an iterator of iterators.
+    flatten : Iterator (Iterator a) -> Iterator a;
+    flatten = |iter| iter.fold(Iterator.make_empty, Add.add);
 
     // Folds iterator from left.
     // fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...
@@ -212,6 +225,10 @@ namespace Iterator {
         );
         Iterator { _data: data }
     );
+}
+
+impl Iterator a : Add {
+    add = |lhs, rhs| lhs.append(rhs);
 }
 
 impl [a : Eq] Iterator a : Eq {

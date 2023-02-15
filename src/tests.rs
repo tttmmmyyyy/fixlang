@@ -2237,6 +2237,38 @@ pub fn test88() {
 
 #[test]
 #[serial]
+pub fn test89() {
+    // Test Iterator.append
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let lhs = Iterator.from_array([1,2,3]);
+        let rhs = Iterator.from_array([4,5,6]);
+        let _ = assert_eq("", lhs + rhs, Iterator.from_array([1,2,3,4,5,6]));
+    
+        let lhs = Iterator.from_array([]);
+        let rhs = Iterator.from_array([4,5,6]);
+        let _ = assert_eq("", lhs + rhs, Iterator.from_array([4,5,6]));
+
+        let lhs = Iterator.from_array([1,2,3]);
+        let rhs = Iterator.from_array([]);
+        let _ = assert_eq("", lhs + rhs, Iterator.from_array([1,2,3]));
+
+        let lhs: Iterator Int = Iterator.from_array([]);
+        let rhs = Iterator.from_array([]);
+        let _ = assert_eq("", lhs + rhs, Iterator.from_array([]));
+    
+        io.pure()
+    );
+    
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
