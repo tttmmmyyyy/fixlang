@@ -158,7 +158,14 @@ impl NameResolutionContext {
             })
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
-            error_exit(&format!("unknown name: {}", ns.to_string()))
+            match type_or_trait {
+                NameResolutionType::Type => {
+                    error_exit(&format!("Unknown type name: {}", ns.to_string()))
+                }
+                NameResolutionType::Trait => {
+                    error_exit(&format!("Unknown trait name: {}", ns.to_string()))
+                }
+            }
         } else if candidates.len() == 1 {
             candidates[0].clone()
         } else {
