@@ -589,6 +589,7 @@ pub fn tycon(name: FullName) -> Rc<TyCon> {
 // Additional information of types.
 #[derive(Default, Clone)]
 pub struct TypeInfo {
+    #[allow(dead_code)]
     source: Option<Span>,
 }
 

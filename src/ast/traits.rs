@@ -56,12 +56,12 @@ impl TraitInfo {
 
     // Get type-scheme of a method.
     // Here, for example, in case "trait a: Show { show: a -> String }",
-    // this function returns "a -> String for a: Show" as type of "show" method.
+    // this function returns "[a: Show] a -> String" as type of "show" method.
     pub fn method_scheme(&self, name: &Name) -> Rc<Scheme> {
         let mut ty = self.methods.get(name).unwrap().clone();
         let vars = ty.free_vars();
         if !vars.contains_key(&self.type_var.name) {
-            error_exit("type of trait method must contain bounded type.");
+            error_exit("Type of trait method must contain bounded type.");
             // TODO: check this in more early stage.
         }
         let mut preds = vec![Predicate {
@@ -82,12 +82,12 @@ impl TraitInfo {
     // Validate kind_predicates and set it to self.type_var.
     pub fn set_trait_kind(&mut self) {
         if self.kind_predicates.len() >= 2 {
-            error_exit("in trait declaration, only one constraint (specification of kind of the type variable trait is implemented to) is allowed.");
+            error_exit("In trait declaration, only one constraint (specification of kind of the type variable trait is implemented to) is allowed.");
         }
         if self.kind_predicates.len() > 0 {
             if self.kind_predicates[0].name != self.type_var.name {
                 error_exit(&format!(
-                    "the type variable {} is not used in trait declaration.",
+                    "The type variable {} is not used in trait declaration.",
                     self.kind_predicates[0].name
                 ));
             }

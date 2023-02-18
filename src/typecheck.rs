@@ -528,7 +528,7 @@ impl TypeCheckContext {
                 if candidates.is_empty() {
                     error_exit_with_src(
                         &format!(
-                            "No name `{}` of type `{}` is found.",
+                            "No name `{}` with required type `{}` is found.",
                             var.name.to_string(),
                             &self.substitute_type(&ty).to_string_normalize()
                         ),
@@ -637,7 +637,7 @@ impl TypeCheckContext {
             Expr::TyAnno(e, anno_ty) => {
                 if !anno_ty.free_vars().is_empty() {
                     error_exit(&format!(
-                        "unknown type variable `{}`",
+                        "Unknown type variable `{}`",
                         ty.free_vars().iter().next().unwrap().0
                     ))
                 }
@@ -658,7 +658,7 @@ impl TypeCheckContext {
                 // Get list of field names.
                 let ti = self.type_env.tycons.get(tc);
                 if ti.is_none() {
-                    error_exit(&format!("unknown type constructor `{}`", tc.to_string()));
+                    error_exit(&format!("Unknown type constructor `{}`", tc.to_string()));
                 }
                 let ti = ti.unwrap();
                 let field_names = ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
@@ -671,7 +671,7 @@ impl TypeCheckContext {
                 for f in &field_names_in_struct_defn {
                     if !field_names_in_expression.contains(f) {
                         error_exit(&format!(
-                            "missing field `{}` of struct `{}`",
+                            "Missing field `{}` of struct `{}`",
                             f,
                             tc.to_string()
                         ))
@@ -680,7 +680,7 @@ impl TypeCheckContext {
                 for f in &field_names_in_expression {
                     if !field_names_in_struct_defn.contains(f) {
                         error_exit(&format!(
-                            "unknown field `{}` for struct `{}`",
+                            "Unknown field `{}` for struct `{}`",
                             f,
                             tc.to_string()
                         ))

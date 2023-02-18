@@ -1472,7 +1472,7 @@ pub fn union_new(
     }
     if field_idx == union.fields().len() {
         error_exit(&format!(
-            "unknown field `{}` for union `{}`",
+            "Unknown field `{}` for union `{}`",
             field_name,
             union_name.to_string()
         ));
@@ -1546,7 +1546,7 @@ pub fn union_as(
     }
     if field_idx == union.fields().len() {
         error_exit(&format!(
-            "unknown field `{}` for union `{}`",
+            "Unknown field `{}` for union `{}`",
             field_name,
             union_name.to_string()
         ));
@@ -1618,7 +1618,7 @@ pub fn union_is(
     }
     if field_idx == union.fields().len() {
         error_exit(&format!(
-            "unknown field `{}` for union `{}`",
+            "Unknown field `{}` for union `{}`",
             field_name,
             union_name.to_string()
         ));
