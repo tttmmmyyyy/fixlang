@@ -33,7 +33,7 @@ int64_t count(T elem, const vector<T>& arr) {
 }
 
 int main(void) {
-    vector_bool table = is_prime(10000000);
+    vector_bool table = is_prime(100000000);
     int64_t prime_count = count((uint8_t)1, table);
     printf("%" PRId64 "\n", prime_count);
     return 0;
