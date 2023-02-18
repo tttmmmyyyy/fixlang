@@ -25,12 +25,18 @@ namespace Debug {
     assert : String -> Bool -> ();
     assert = |msg, b| (
         if !b {
-            let u = debug_print("assertion failed!: ");
-            let u = debug_print(msg);
+            let u = debug_println("assertion failed!: ");
+            let u = debug_println(msg);
             abort()
         } else {
             ()
         }
+    );
+
+    debug_println : String -> ();
+    debug_println = |str| (
+        let _ = debug_print(str);
+        debug_print("\n")
     );
 }
 

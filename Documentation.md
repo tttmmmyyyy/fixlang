@@ -525,6 +525,8 @@ main = (
 
 ### Std.Debug.debug_print : String -> ()
 
+### Std.Debug.debug_println : String -> ()
+
 ### Std.Debug.abort : () -> a
 
 ### Std.Debug.assert_eq : String -> Bool -> ()
