@@ -112,7 +112,7 @@ impl TyConInfo {
 // Node of type ast tree with user defined additional information
 pub struct TypeNode {
     pub ty: Type,
-    pub info: Rc<TypeInfo>,
+    pub info: TypeInfo,
 }
 
 impl PartialEq for TypeNode {
@@ -344,7 +344,7 @@ impl TypeNode {
     fn new(ty: Type) -> Self {
         Self {
             ty,
-            info: Rc::new(TypeInfo::default()),
+            info: TypeInfo::default(),
         }
     }
 
@@ -355,7 +355,7 @@ impl TypeNode {
 
     // Set new info for shared instance.
     #[allow(dead_code)]
-    pub fn set_info(self: Rc<Self>, info: Rc<TypeInfo>) -> Rc<Self> {
+    pub fn set_info(self: Rc<Self>, info: TypeInfo) -> Rc<Self> {
         let mut ret = (*self).clone();
         ret.info = info;
         Rc::new(ret)
@@ -588,7 +588,9 @@ pub fn tycon(name: FullName) -> Rc<TyCon> {
 
 // Additional information of types.
 #[derive(Default, Clone)]
-pub struct TypeInfo {}
+pub struct TypeInfo {
+    source: Option<Span>,
+}
 
 impl TypeNode {
     // Calculate free type variables.
