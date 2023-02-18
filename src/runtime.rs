@@ -5,6 +5,7 @@ pub enum RuntimeFunctions {
     Abort,
     Printf,
     Sprintf,
+    Fflush,
     ReportMalloc,
     ReportRetain,
     ReportRelease,
@@ -51,6 +52,29 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> Functio
     let func = module.add_function("sprintf", fn_type, None);
 
     func
+}
+
+fn build_fflush_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+    let context = gc.context;
+    let module = gc.module;
+
+    let i32_type = context.i32_type();
+    let file_ptr_type = get_c_file_type(gc).ptr_type(AddressSpace::from(0));
+
+    let fn_type = i32_type.fn_type(&[file_ptr_type.into()], false);
+    let func = module.add_function("fflush", fn_type, None);
+
+    func
+}
+
+// Get C's FILE struct
+pub fn get_c_file_type<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
+    const FILE_TYPE_NAME: &str = "FILE";
+    if let Some(file_type) = gc.context.get_struct_type(FILE_TYPE_NAME) {
+        file_type
+    } else {
+        gc.context.opaque_struct_type(FILE_TYPE_NAME)
+    }
 }
 
 fn build_report_malloc_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -239,6 +263,8 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
         .insert(RuntimeFunctions::Printf, build_printf_function(gc));
     gc.runtimes
         .insert(RuntimeFunctions::Sprintf, build_sprintf_function(gc));
+    gc.runtimes
+        .insert(RuntimeFunctions::Fflush, build_fflush_function(gc));
     if gc.config.sanitize_memory {
         gc.runtimes.insert(
             RuntimeFunctions::ReportMalloc,
