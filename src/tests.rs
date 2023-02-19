@@ -2295,6 +2295,26 @@ pub fn test90() {
     run_source(source, Configuration::develop_compiler());
 }
 
+// #[test]
+// #[serial]
+// pub fn test92() {
+//     // This test segfaults in JIT.
+//     let source = r#"
+//     module Main;
+
+//     main : IOState -> ((), IOState);
+//     main = |io| (
+//         let buf = Vector.from_array([]).reserve(5);
+//         let vec = buf;
+//         let vec = vec.push_back(0);
+//         let data = buf.@_data;
+//         io.pure()
+//     );
+
+//     "#;
+//     run_source(source, Configuration::develop_compiler());
+// }
+
 #[test]
 #[serial]
 pub fn test_run_examples() {
