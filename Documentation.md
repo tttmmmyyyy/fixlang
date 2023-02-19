@@ -470,11 +470,21 @@ Methods:
     - If the vector is empty, this function does nothing.
 - `push_back : a -> Vector a -> Vector a`
     - Push an element to the back of a vector.
+- `reduce_length : Int -> Vector a -> Vector a`
+    - Reduce the length of vector.
 - `reserve : Int -> Vector a -> Vector a`
     - Reserve the internal array.
+- `set : Int -> a -> Vector a -> Vector a`
+    - Updates an elemnt at an index.
+    - This function clones the vector if it is shared.
 - `set! : Int -> a -> Vector a -> Vector a`
     - Updates an elemnt at an index.
     - This function asserts the Vector's internal array is unique.
+- `sort_by : ((a, a) -> Bool) -> Vector a -> Vector a`
+    - Sort elements in a vector by "less than" comparator.
+- `_sort_range_by_using_buffer : Vector a -> Int -> Int -> ((a, a) -> Bool) -> Vector a -> (Vector a, Vector a)`
+    - Sort elements in a range of a vector by "less than" comparator.
+    - This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
 Implementing Traits:
 

@@ -2269,6 +2269,34 @@ pub fn test89() {
 
 #[test]
 #[serial]
+pub fn test90() {
+    // Test Vector.sort_by.
+    let source = r#"
+    module Main;
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let vec = Vector.from_array([5,3,1,7,4,6,9,8,2]);
+        let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
+        let _ = assert_eq("wrong result 9", vec, Vector.from_array([1,2,3,4,5,6,7,8,9]));
+
+        let vec = Vector.from_array([1]);
+        let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
+        let _ = assert_eq("wrong result 1", vec, Vector.from_array([1]));
+
+        let vec: Vector Int = Vector.from_array([]);
+        let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
+        let _ = assert_eq("wrong result 0", vec, Vector.from_array([]));
+
+        io.pure()
+    );
+    
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
