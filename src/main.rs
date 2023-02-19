@@ -10,6 +10,7 @@ mod ast;
 mod builtin;
 mod funptr_optimization;
 mod generator;
+mod llvm_passes;
 mod misc;
 mod object;
 mod parser;
@@ -32,12 +33,14 @@ use generator::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
+use inkwell::passes::PassManager;
 use inkwell::support::load_library_permanently;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructType};
 use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
+use llvm_passes::*;
 use misc::*;
 use object::*;
 use parser::*;

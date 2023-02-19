@@ -157,41 +157,7 @@ fn build_module<'c>(
     // passmgr_builder.populate_module_pass_manager(&passmgr);
 
     passmgr.add_verifier_pass();
-    passmgr.add_aggressive_dce_pass();
-    passmgr.add_global_dce_pass();
-    passmgr.add_function_inlining_pass();
-    passmgr.add_promote_memory_to_register_pass(); // mem2reg
-
-    // TODO: try all optimizations.
-    // passmgr.add_argument_promotion_pass();
-    // passmgr.add_slp_vectorize_pass();
-    // passmgr.add_loop_vectorize_pass();
-    // passmgr.add_partially_inline_lib_calls_pass();
-    // passmgr.add_constant_merge_pass();
-    // passmgr.add_dead_arg_elimination_pass();
-    // passmgr.add_dead_store_elimination_pass();
-    // passmgr.add_global_optimizer_pass();
-    // passmgr.add_global_dce_pass();
-    // passmgr.add_ind_var_simplify_pass();
-    // passmgr.add_aggressive_inst_combiner_pass();
-    // passmgr.add_jump_threading_pass();
-    // passmgr.add_licm_pass();
-    // passmgr.add_loop_deletion_pass();
-    // passmgr.add_loop_idiom_pass();
-    // passmgr.add_loop_reroll_pass();
-    // passmgr.add_loop_rotate_pass();
-    // passmgr.add_loop_unroll_and_jam_pass();
-    // passmgr.add_loop_unroll_pass();
-    // passmgr.add_loop_unswitch_pass();
-    // passmgr.add_loop_vectorize_pass();
-    // passmgr.add_merge_functions_pass();
-    // passmgr.add_merged_load_store_motion_pass();
-    // passmgr.add_reassociate_pass();
-    // passmgr.add_strip_symbol_pass();
-
-    // passmgr.add_memcpy_optimize_pass(); // prime_loop segfaults
-    // passmgr.add_instruction_combining_pass(); // prime_loop segfaults in build-mode (ok for jit)
-    // passmgr.add_aggressive_inst_combiner_pass();
+    add_passes(&passmgr);
 
     passmgr.run_on(module);
     unsafe {
