@@ -1166,7 +1166,12 @@ pub fn struct_get_lit(
         ObjectFieldType::get_struct_fields(gc, &str, vec![(field_idx as u32, rvo)])[0].clone()
     });
     let free_vars = vec![FullName::local(var_name)];
-    let name = format!("{}.get_{}", struct_name.to_string(), field_name);
+    let name = format!(
+        "{}.get_{}({})",
+        struct_name.to_string(),
+        field_name,
+        var_name
+    );
     expr_lit(generator, free_vars, name, field_ty, None)
 }
 
@@ -1188,10 +1193,11 @@ pub fn struct_get(
     let (field_idx, field) = field.unwrap();
 
     let str_ty = definition.ty();
+    const VAR_NAME: &str = "str_obj";
     let expr = expr_abs(
-        vec![var_local("f", None)],
+        vec![var_local(VAR_NAME, None)],
         struct_get_lit(
-            "f",
+            VAR_NAME,
             field_idx as usize,
             field.ty.clone(),
             struct_name,
