@@ -878,8 +878,9 @@ pub fn get_object_type(
                 assert_eq!(is_unbox, false);
                 ret.is_unbox = false;
                 ret.field_types.push(ObjectFieldType::ControlBlock);
-                ret.field_types.push(ObjectFieldType::DtorFunction);
                 assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_DTOR_IDX as usize);
+                ret.field_types.push(ObjectFieldType::DtorFunction);
+                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_CAP_IDX as usize);
                 for cap in capture {
                     ret.field_types
                         .push(ObjectFieldType::SubObject(cap.clone()));
