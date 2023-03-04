@@ -15,6 +15,7 @@ pub const ARRAY_NAME: &str = "Array";
 pub const VECTOR_NAME: &str = "Vector";
 pub const STRING_NAME: &str = "String";
 pub const FUNPTR_NAME: &str = "%FunPtr"; // Users cannot access this type constructor.
+pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";
 
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
@@ -87,7 +88,23 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             },
         );
     }
+    // Opaque object
+    ret.insert(
+        TyCon::new(make_dynamic_object_name()),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::DynamicObject,
+            is_unbox: false,
+            tyvars: vec![],
+            fields: vec![],
+        },
+    );
+
     ret
+}
+
+pub fn make_dynamic_object_name() -> FullName {
+    FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)
 }
 
 pub fn make_funptr_name(arity: u32) -> Name {
@@ -112,6 +129,11 @@ pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     }
     let number = chars.as_str().to_string();
     Some(number.parse::<u32>().unwrap())
+}
+
+// Returns is if given tycon is dyanmic object
+pub fn is_dynamic_object_tycon(tc: &TyCon) -> bool {
+    tc.name == make_dynamic_object_name()
 }
 
 pub fn make_kind_fun(arity: u32) -> Rc<Kind> {
@@ -164,6 +186,11 @@ pub fn string_lit_ty() -> Rc<TypeNode> {
 // Get LoopResult type.
 pub fn loop_result_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
+}
+
+// Get dynamic object type.
+pub fn make_dynamic_object_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)))
 }
 
 // Get tuple type.
@@ -318,12 +345,22 @@ pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<
 fn fix_lit(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
-    let name = format!("fix {} {}", f_str.to_string(), x_str.to_string());
-    let free_vars = vec![FullName::local(SELF_NAME), f_str.clone(), x_str.clone()];
+    let name = format!("fix({}, {})", f_str.to_string(), x_str.to_string());
+    let free_vars = vec![FullName::local(CAP_NAME), f_str.clone(), x_str.clone()];
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
-        let fixf = gc.get_var(&FullName::local(SELF_NAME)).ptr.get(gc);
+        // Get arguments
         let x = gc.get_var(&x_str).ptr.get(gc);
         let f = gc.get_var(&f_str).ptr.get(gc);
+
+        // Create "fix(f)" closure.
+        let fixf_ty = f.ty.get_lambda_dst();
+        let fixf = allocate_obj(fixf_ty.clone(), &vec![], None, gc, Some("fix(f)"));
+        let fixf_funptr = gc.builder().get_insert_block().unwrap().get_parent().unwrap().as_global_value().as_pointer_value();
+        fixf.store_field_nocap(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
+        let cap_obj = gc.get_var(&FullName::local(CAP_NAME)).ptr.get(gc);
+        let cap_obj_ptr = cap_obj.ptr(gc);
+        fixf.store_field_nocap(gc, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
+
         let f_fixf = gc.apply_lambda(f, vec![fixf], None);
         let f_fixf_x = gc.apply_lambda(f_fixf, vec![x], rvo);
         f_fixf_x

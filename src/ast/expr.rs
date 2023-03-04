@@ -957,7 +957,7 @@ pub fn calculate_free_vars(ei: Rc<ExprNode>) -> Rc<ExprNode> {
             for arg in args {
                 free_vars.remove(&arg.name);
             }
-            free_vars.remove(&FullName::local(SELF_NAME));
+            free_vars.remove(&FullName::local(CAP_NAME));
             ei.set_lam_body(body).set_free_vars(free_vars)
         }
         Expr::Let(pat, bound, val) => {

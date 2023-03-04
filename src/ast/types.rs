@@ -47,6 +47,8 @@ pub enum TyConVariant {
     Array,
     Struct,
     Union,
+    // Dynamic object is nullble and has the destructor as the first field.
+    DynamicObject
 }
 
 #[derive(Clone, PartialEq, Hash, Eq)]
@@ -323,6 +325,15 @@ impl TypeNode {
         }
     }
 
+    pub fn is_dynamic(&self) -> bool {
+        let tc = self.toplevel_tycon();
+        if tc.is_none() {
+            return false;
+        }
+        let tc = tc.unwrap();
+        is_dynamic_object_tycon(tc.as_ref())
+    }
+
     pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
         assert!(!self.is_closure());
         type_env
@@ -333,7 +344,7 @@ impl TypeNode {
     }
 
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
-        !self.is_closure() && self.toplevel_tycon_info(type_env).is_unbox
+        self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }
 
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {

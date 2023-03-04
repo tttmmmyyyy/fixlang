@@ -68,7 +68,7 @@ pub fn exclude(name: &FullName) -> bool {
     if *name == fix_name
         || (name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
     {
-        // fix cannot be function ptr, because it uses SELF.
+        // fix cannot be function ptr, because it calculates "fixf" in it's implementation.
         return true;
     }
     return false;
