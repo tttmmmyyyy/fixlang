@@ -1019,7 +1019,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 .get_nth_param(self_idx as u32)
                 .unwrap()
                 .into_pointer_value();
-            let cap_obj = Object::new(cap_obj_ptr, lam_ty.clone());
+            let cap_obj = Object::new(cap_obj_ptr, make_dynamic_object_ty());
             self.scope_push(&FullName::local(CAP_NAME), &cap_obj);
             (Some(cap_obj_ptr), Some(cap_obj))
         } else {
