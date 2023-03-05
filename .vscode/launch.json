@@ -11,7 +11,7 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=fixlang",
+                    "--bin=fix",
                     "--package=fixlang"
                 ],
                 "filter": {
@@ -33,11 +33,11 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=fixlang",
+                    "--bin=fix",
                     "--package=fixlang"
                 ],
                 "filter": {
-                    "name": "fixlang",
+                    "name": "fix",
                     "kind": "bin"
                 }
             },
