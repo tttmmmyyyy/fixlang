@@ -8,16 +8,18 @@ import random
 SOURCE_FILE = './src/llvm_passes.rs'
 
 INITIAL_PASSES = '''
-  add_scalar_repl_aggregates_pass
-  add_tail_call_elimination_pass
-  add_function_inlining_pass
-  add_new_gvn_pass
-  add_global_optimizer_pass
-  add_ipsccp_pass
-  add_licm_pass
-  add_strip_dead_prototypes_pass
-  add_ind_var_simplify_pass
-  add_global_dce_pass
+    add_scalar_repl_aggregates_pass
+    add_tail_call_elimination_pass
+    add_function_inlining_pass
+    add_new_gvn_pass
+    add_global_optimizer_pass
+    add_ipsccp_pass
+    add_licm_pass
+    add_strip_dead_prototypes_pass
+    add_ind_var_simplify_pass
+    add_global_dce_pass
+    add_promote_memory_to_register_pass
+    add_dead_store_elimination_pass
 '''
 INITIAL_PASSES = INITIAL_PASSES.split('\n')
 INITIAL_PASSES = [line.strip() for line in INITIAL_PASSES]
