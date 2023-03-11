@@ -807,7 +807,8 @@ pub fn get_object_type(
         ret.is_unbox = true;
         ret.field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
-        ret.field_types.push(ObjectFieldType::SubObject(make_dynamic_object_ty()));
+        ret.field_types
+            .push(ObjectFieldType::SubObject(make_dynamic_object_ty()));
     } else if ty.is_funptr() {
         assert!(capture.is_empty());
         ret.is_unbox = true;

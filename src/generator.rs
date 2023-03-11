@@ -181,7 +181,8 @@ impl<'c> Object<'c> {
         assert!(self.is_box(gc.type_env()));
         assert!(!self.is_funptr());
         if self.ty.is_dynamic() {
-            self.load_field_nocap(gc, DYNAMIC_OBJ_DTOR_IDX).into_pointer_value()
+            self.load_field_nocap(gc, DYNAMIC_OBJ_DTOR_IDX)
+                .into_pointer_value()
         } else {
             get_dtor_ptr(&self.ty, &vec![], gc)
         }
@@ -650,12 +651,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // Dynamic object can be null.
                 let current_bb = self.builder().get_insert_block().unwrap();
                 let current_func = current_bb.get_parent().unwrap();
-                let nonnull_bb = self.context.append_basic_block(current_func, "nonnull_in_retain_dynamic");
-                let cont_bb = self.context.append_basic_block(current_func, "cont_in_retain_dynamic");
-                
+                let nonnull_bb = self
+                    .context
+                    .append_basic_block(current_func, "nonnull_in_retain_dynamic");
+                let cont_bb = self
+                    .context
+                    .append_basic_block(current_func, "cont_in_retain_dynamic");
+
                 // Branch to nonnull_bb if object is not null.
                 let is_null = obj.is_null(self);
-                self.builder().build_conditional_branch(is_null, cont_bb, nonnull_bb);
+                self.builder()
+                    .build_conditional_branch(is_null, cont_bb, nonnull_bb);
 
                 // Implement nonnull_bb.
                 self.builder().position_at_end(nonnull_bb);
@@ -738,12 +744,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // Append basic blocks.
                 let current_bb = self.builder().get_insert_block().unwrap();
                 let current_func = current_bb.get_parent().unwrap();
-                let nonnull_bb = self.context.append_basic_block(current_func, "nonnull_in_release_dynamic");
-                let cont_bb = self.context.append_basic_block(current_func, "cont_in_release_dynamic");
-                
+                let nonnull_bb = self
+                    .context
+                    .append_basic_block(current_func, "nonnull_in_release_dynamic");
+                let cont_bb = self
+                    .context
+                    .append_basic_block(current_func, "cont_in_release_dynamic");
+
                 // Branch to nonnull_bb if object is not null.
                 let is_null = obj.is_null(self);
-                self.builder().build_conditional_branch(is_null, cont_bb, nonnull_bb);
+                self.builder()
+                    .build_conditional_branch(is_null, cont_bb, nonnull_bb);
 
                 // Implement nonnull_bb.
                 self.builder().position_at_end(nonnull_bb);
@@ -753,7 +764,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 None
             };
 
-            // If the object is boxed and not dynamic, 
+            // If the object is boxed and not dynamic,
             self.release_nonnull_boxed(&obj);
 
             if obj.is_dynamic_object() {
@@ -1099,27 +1110,44 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             0
         };
-        lam.store_field_nocap(self, funptr_idx, lam_fn.as_global_value().as_pointer_value());
+        lam.store_field_nocap(
+            self,
+            funptr_idx,
+            lam_fn.as_global_value().as_pointer_value(),
+        );
 
         if lam_ty.is_closure() {
-            // Set captured objects. 
+            // Set captured objects.
 
             let cap_obj_ptr = if cap_vars.len() > 0 {
-                // If some objects are captured, 
+                // If some objects are captured,
 
                 // Allocate dynamic object to store captured objects.
                 let dynamic_obj_ty = make_dynamic_object_ty();
-                let cap_obj = allocate_obj(dynamic_obj_ty.clone(), &cap_tys, None, self, Some(&format!("captured_objects_of_{}", name)));
+                let cap_obj = allocate_obj(
+                    dynamic_obj_ty.clone(),
+                    &cap_tys,
+                    None,
+                    self,
+                    Some(&format!("captured_objects_of_{}", name)),
+                );
                 let cap_obj_ptr = cap_obj.ptr(self);
 
                 // Get struct type of cap_obj.
-                let cap_obj_str_ty = dynamic_obj_ty.get_object_type(&cap_tys, self.type_env()).to_struct_type(self);
+                let cap_obj_str_ty = dynamic_obj_ty
+                    .get_object_type(&cap_tys, self.type_env())
+                    .to_struct_type(self);
 
                 // Set captured objects to cap_obj.
                 for (i, (cap_name, _cap_ty)) in cap_vars.iter().enumerate() {
                     let cap_obj = self.get_var_retained_if_used_later(cap_name, None);
                     let cap_val = cap_obj.value(self);
-                    self.store_obj_field(cap_obj_ptr, cap_obj_str_ty, i as u32 + DYNAMIC_OBJ_CAP_IDX, cap_val);
+                    self.store_obj_field(
+                        cap_obj_ptr,
+                        cap_obj_str_ty,
+                        i as u32 + DYNAMIC_OBJ_CAP_IDX,
+                        cap_val,
+                    );
                 }
 
                 cap_obj.ptr(self)
