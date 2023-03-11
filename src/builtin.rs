@@ -1801,21 +1801,42 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
         let initial_state_name = FullName::local(INITIAL_STATE_NAME);
         let loop_body_name = FullName::local(LOOP_BODY_NAME);
 
+        // Prepare constant.
+        let cont_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
+
         // Get argments.
         let init_state = gc.get_var(&initial_state_name).ptr.get(gc);
         let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
 
-        // Allocate a variable to store loop state on stack.
-        let state_ty = init_state.ty.clone();
-        let state_ptr = gc
-            .builder()
-            .build_alloca(state_ty.get_embedded_type(gc, &vec![]), "loop_state");
+        // Collect types.
+        let loop_state_ty = init_state.ty.clone();
+        let loop_res_ty = loop_body.ty.get_lambda_dst();
+        assert!(loop_res_ty.is_unbox(gc.type_env()));
 
-        // Initialize state.
-        let state_val = init_state.value(gc);
-        gc.builder().build_store(state_ptr, state_val);
+        // Allocate a space to store LoopResult on stack.
+        let loop_res = allocate_obj(loop_res_ty, &vec![], None, gc, Some("LoopResult_in_loop"));
 
-        // Create loop body bb and implement it.
+        // If loop_state_ty is boxed, allocate a space to store loop state on stack to avoid alloca in loop body.
+        let loop_state_buf = if loop_state_ty.is_unbox(gc.type_env()) {
+            Some(Object::new(
+                gc.builder().build_alloca(
+                    loop_state_ty.get_embedded_type(gc, &vec![]),
+                    "loop_state_in_loop",
+                ),
+                loop_state_ty.clone(),
+            ))
+        } else {
+            None
+        };
+
+        // Store the initial loop state to loop_res.
+        let buf = loop_res.ptr_to_field_nocap(gc, 1);
+        ObjectFieldType::set_value_to_union_buf(gc, buf, init_state.clone());
+
+        // Create loop body bb and jump to it.
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let loop_bb = gc.context.append_basic_block(current_func, "loop_bb");
@@ -1823,66 +1844,28 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
 
         // Implement loop body.
         gc.builder().position_at_end(loop_bb);
-        let stack_pos = gc.save_stack();
 
-        fn get_loop_state<'c, 'm>(
-            gc: &mut GenerationContext<'c, 'm>,
-            state_ptr: PointerValue<'c>,
-            state_ty: &Rc<TypeNode>,
-        ) -> Object<'c> {
-            Object::new(
-                if state_ty.is_box(gc.type_env()) {
-                    gc.builder()
-                        .build_load(state_ptr, "loop_state")
-                        .into_pointer_value()
-                } else {
-                    state_ptr
-                },
-                state_ty.clone(),
-            )
-        }
-        let loop_state = get_loop_state(gc, state_ptr, &state_ty);
-
-        // Run loop_body on init_state.
+        // Run loop_body on loop state.
         gc.retain(loop_body.clone());
-        let loop_res = gc.apply_lambda(loop_body.clone(), vec![loop_state], None);
+        let loop_state =
+            ObjectFieldType::get_union_field(gc, loop_res.clone(), &loop_state_ty, loop_state_buf);
+        let _ = gc.apply_lambda(loop_body.clone(), vec![loop_state], Some(loop_res.clone()));
 
         // Branch due to loop_res.
-        assert!(loop_res.ty.is_unbox(gc.type_env()));
         let tag_value = loop_res.load_field_nocap(gc, 0).into_int_value();
-        let cont_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc)
-            .into_int_type()
-            .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
         let is_continue = gc.builder().build_int_compare(
             IntPredicate::EQ,
             tag_value,
             cont_tag_value,
             "is_continue",
         );
-        let continue_bb = gc.context.append_basic_block(current_func, "continue_bb");
         let break_bb = gc.context.append_basic_block(current_func, "break_bb");
         gc.builder()
-            .build_conditional_branch(is_continue, continue_bb, break_bb);
+            .build_conditional_branch(is_continue, loop_bb, break_bb);
 
-        // Implement continue.
-        gc.builder().position_at_end(continue_bb);
-        assert!(loop_res.is_unbox(gc.type_env()));
-        let union_buf = loop_res.ptr_to_field_nocap(gc, 1);
-        let next_state_val = ObjectFieldType::get_value_from_union_buf(gc, union_buf, &state_ty);
-        gc.builder().build_store(state_ptr, next_state_val);
-        let loop_state = get_loop_state(gc, state_ptr, &state_ty);
-        gc.retain(loop_state);
-        gc.release(loop_res.clone());
-
-        gc.restore_stack(stack_pos);
-        gc.builder().build_unconditional_branch(loop_bb);
-
-        // Implement break.
+        // Implement break_bb.
         gc.builder().position_at_end(break_bb);
         gc.release(loop_body);
-        assert!(loop_res.is_unbox(gc.type_env()));
-
         ObjectFieldType::get_union_field(gc, loop_res, ty, rvo)
     });
 
