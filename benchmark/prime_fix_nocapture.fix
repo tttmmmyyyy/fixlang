@@ -1,0 +1,32 @@
+module Main;
+
+is_prime : Int -> Array Bool;
+is_prime = |n| (
+    let arr = Array.new(n, true);
+    let arr = arr.set!(0, false);
+    let arr = arr.set!(1, false);
+    (2, arr, n).fix(|continue, (i, arr, n)|
+        if i*i > n { arr };
+        let next_arr = (
+            if !arr.get(i) { arr };
+            (i+i, arr, n, i).fix(|continue, (q, arr, n, i)|
+                if n-1 < q { arr };
+                continue $ (q+i, arr.set!(q, false), n, i)
+            )
+        );
+        continue $ (i+1, next_arr, n)
+    )
+);
+
+// Count the appearance of a value in an array.
+count : [a: Eq] a -> Array a -> Int;
+count = |elem, arr| (
+    (0, 0, arr, elem).fix(|continue, (i, sum, arr, elem)|
+        if arr.get_length == i { sum };
+        let sum = sum + (if arr.get(i) == elem {1} else {0});
+        continue $ (i+1, sum, arr, elem)
+    )
+);
+
+main : IOState -> ((), IOState);
+main = println! $ is_prime(10000000).count(true).to_string; // 664579

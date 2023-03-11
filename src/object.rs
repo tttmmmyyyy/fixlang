@@ -754,8 +754,8 @@ pub fn lambda_function_type<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
 ) -> FunctionType<'c> {
     // Any lamba takes argments.
-    // In addition, if the lambda is closure (in other words, not a function pointer), it takes SELF (=closure object itself).
-    // In the last, if ret_ty is unboxed, it takes parameter for pointer to store return value and return void.
+    // In addition, if the lambda is closure (in other words, not a function pointer), it takes CAP, which is dynamic object consists of captured objects.
+    // In the last, if ret_ty is unboxed, it takes parameter for pointer to store return value and returns void.
 
     // Arguments.
     let mut arg_tys: Vec<BasicMetadataTypeEnum> = ty
@@ -764,7 +764,7 @@ pub fn lambda_function_type<'c, 'm>(
         .map(|src| src.get_embedded_type(gc, &vec![]).into())
         .collect::<Vec<_>>();
 
-    // SELF for closure.
+    // CAP for closure.
     if ty.is_closure() {
         arg_tys.push(ptr_to_object_type(gc.context).into());
     }
@@ -777,11 +777,12 @@ pub fn lambda_function_type<'c, 'm>(
     }
 }
 
-pub const DTOR_IDX: u32 = 1/* ControlBlock */;
-pub const CLOSURE_FUNPTR_IDX: u32 = DTOR_IDX + 1;
+pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 pub const ARRAY_SIZE_IDX: u32 = 1;
 pub const ARRAY_BUF_IDX: u32 = ARRAY_SIZE_IDX + 1;
+pub const DYNAMIC_OBJ_DTOR_IDX: u32 = 1/* ControlBlock */;
+pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_DTOR_IDX + 1;
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
@@ -796,32 +797,28 @@ pub fn get_object_type(
     type_env: &TypeEnv,
 ) -> ObjectType {
     assert!(ty.free_vars().is_empty());
+    assert!(ty.is_dynamic() || capture.is_empty());
     let mut ret = ObjectType {
         field_types: vec![],
         is_unbox: true,
     };
     if ty.is_closure() {
-        ret.is_unbox = false;
-        ret.field_types.push(ObjectFieldType::ControlBlock);
-        ret.field_types.push(ObjectFieldType::DtorFunction);
-        assert_eq!(ret.field_types.len(), CLOSURE_FUNPTR_IDX as usize);
+        assert!(capture.is_empty());
+        ret.is_unbox = true;
         ret.field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
-        for cap in capture {
-            ret.field_types
-                .push(ObjectFieldType::SubObject(cap.clone()));
-        }
+        ret.field_types.push(ObjectFieldType::SubObject(make_dynamic_object_ty()));
     } else if ty.is_funptr() {
         assert!(capture.is_empty());
         ret.is_unbox = true;
         ret.field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
     } else {
-        assert!(capture.is_empty());
         let tc = ty.toplevel_tycon().unwrap();
         let ti = type_env.tycons.get(&tc).unwrap();
         match ti.variant {
             TyConVariant::Primitive => {
+                assert!(capture.is_empty());
                 assert!(ti.is_unbox);
                 ret.is_unbox = ti.is_unbox;
                 if ty == &int_lit_ty() {
@@ -835,6 +832,7 @@ pub fn get_object_type(
                 }
             }
             TyConVariant::Array => {
+                assert!(capture.is_empty());
                 let is_unbox = ti.is_unbox;
                 assert!(!is_unbox);
                 ret.is_unbox = is_unbox;
@@ -845,6 +843,7 @@ pub fn get_object_type(
                 ))
             }
             TyConVariant::Struct => {
+                assert!(capture.is_empty());
                 let is_unbox = ti.is_unbox;
                 ret.is_unbox = is_unbox;
                 if !is_unbox {
@@ -864,6 +863,7 @@ pub fn get_object_type(
                 }
             }
             TyConVariant::Union => {
+                assert!(capture.is_empty());
                 let is_unbox = ti.is_unbox;
                 ret.is_unbox = is_unbox;
                 if !is_unbox {
@@ -873,6 +873,19 @@ pub fn get_object_type(
                 ret.field_types
                     .push(ObjectFieldType::UnionBuf(ty.field_types(type_env)));
             }
+            TyConVariant::DynamicObject => {
+                let is_unbox = ti.is_unbox;
+                assert_eq!(is_unbox, false);
+                ret.is_unbox = false;
+                ret.field_types.push(ObjectFieldType::ControlBlock);
+                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_DTOR_IDX as usize);
+                ret.field_types.push(ObjectFieldType::DtorFunction);
+                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_CAP_IDX as usize);
+                for cap in capture {
+                    ret.field_types
+                        .push(ObjectFieldType::SubObject(cap.clone()));
+                }
+            }
         }
     }
     ret
@@ -881,12 +894,13 @@ pub fn get_object_type(
 // Allocate an object.
 pub fn allocate_obj<'c, 'm>(
     ty: Rc<TypeNode>,
-    capture: &Vec<Rc<TypeNode>>,      // used in lambda
+    capture: &Vec<Rc<TypeNode>>,      // used in dynamic object
     array_size: Option<IntValue<'c>>, // used in array
     gc: &mut GenerationContext<'c, 'm>,
     name: Option<&str>,
 ) -> Object<'c> {
     assert!(ty.free_vars().is_empty());
+    assert!(ty.is_dynamic() || capture.is_empty());
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
     let struct_type = object_type.to_struct_type(gc);
@@ -972,7 +986,7 @@ pub fn allocate_obj<'c, 'm>(
                     .build_store(ptr_to_size_field, array_size.unwrap());
             }
             ObjectFieldType::DtorFunction => {
-                assert_eq!(i, DTOR_IDX as usize);
+                assert_eq!(i, DYNAMIC_OBJ_DTOR_IDX as usize);
                 let ptr_to_dtor_field = gc
                     .builder()
                     .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_dtor_field")
@@ -1001,11 +1015,12 @@ pub fn get_dtor_ptr<'c, 'm>(
 
 pub fn create_dtor<'c, 'm>(
     ty: &Rc<TypeNode>,
-    capture: &Vec<Rc<TypeNode>>, // used in destructor of lambda
+    capture: &Vec<Rc<TypeNode>>, // used in destructor of dynamic object.
     gc: &mut GenerationContext<'c, 'm>,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());
-    if ty.is_closure() && capture.is_empty() {
+    assert!(ty.is_dynamic() || capture.is_empty());
+    if ty.is_dynamic() && capture.is_empty() {
         return None;
     }
     let dtor_name = ty.dtor_name(capture);

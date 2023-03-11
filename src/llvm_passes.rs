@@ -14,4 +14,6 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_strip_dead_prototypes_pass();
     passmgr.add_ind_var_simplify_pass();
     passmgr.add_global_dce_pass();
+    passmgr.add_promote_memory_to_register_pass();
+    passmgr.add_dead_store_elimination_pass();
 }

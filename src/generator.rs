@@ -100,6 +100,10 @@ impl<'c> Object<'c> {
         self.ty.is_funptr()
     }
 
+    pub fn is_dynamic_object(&self) -> bool {
+        self.ty.is_dynamic()
+    }
+
     pub fn ptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
         if self.is_box(gc.type_env()) {
             gc.cast_pointer(self.ptr, ptr_to_object_type(gc.context))
@@ -176,8 +180,8 @@ impl<'c> Object<'c> {
     pub fn get_dtor_ptr_boxed<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
         assert!(self.is_box(gc.type_env()));
         assert!(!self.is_funptr());
-        if self.ty.is_closure() {
-            self.load_field_nocap(gc, DTOR_IDX).into_pointer_value()
+        if self.ty.is_dynamic() {
+            self.load_field_nocap(gc, DYNAMIC_OBJ_DTOR_IDX).into_pointer_value()
         } else {
             get_dtor_ptr(&self.ty, &vec![], gc)
         }
@@ -191,6 +195,11 @@ impl<'c> Object<'c> {
         assert!(self.is_unbox(gc.type_env()));
         assert!(!self.is_funptr());
         create_dtor(&self.ty, &vec![], gc)
+    }
+
+    // Check if the pointer is null.
+    pub fn is_null<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> IntValue<'c> {
+        gc.builder().build_is_null(self.ptr, "is_null")
     }
 }
 
@@ -600,13 +609,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let rvo_ptr = rvo.ptr(self);
             let rvo_ptr = self.cast_pointer(rvo_ptr, ptr_to_object_type(self.context));
 
-            // Call function pointer with arguments, SELF if closure, and rvo.
+            // Call function pointer with arguments, CAP if closure, and rvo.
             let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
             for arg in args {
                 call_args.push(arg.into())
             }
             if fun.ty.is_closure() {
-                call_args.push(fun.ptr(self).into());
+                call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
             }
             call_args.push(rvo_ptr.into());
             let ret = self.builder().build_call(func, &call_args, "call_lambda");
@@ -616,13 +625,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // If return type is boxed,
             assert!(rvo.is_none());
 
-            // Call function pointer with arguments, SELF if closure.
+            // Call function pointer with arguments, CAP if closure.
             let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
             for arg in args {
                 call_args.push(arg.into())
             }
             if fun.ty.is_closure() {
-                call_args.push(fun.ptr(self).into());
+                call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
             }
 
             let ret = self.builder().build_call(func, &call_args, "call_lambda");
@@ -632,11 +641,38 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    // Retain object.
+    // Retain an object.
     pub fn retain(&mut self, obj: Object<'c>) {
         if obj.is_box(self.type_env()) {
+            let cont_bb = if obj.is_dynamic_object() {
+                // Dynamic object can be null, so build null checking.
+
+                // Dynamic object can be null.
+                let current_bb = self.builder().get_insert_block().unwrap();
+                let current_func = current_bb.get_parent().unwrap();
+                let nonnull_bb = self.context.append_basic_block(current_func, "nonnull_in_retain_dynamic");
+                let cont_bb = self.context.append_basic_block(current_func, "cont_in_retain_dynamic");
+                
+                // Branch to nonnull_bb if object is not null.
+                let is_null = obj.is_null(self);
+                self.builder().build_conditional_branch(is_null, cont_bb, nonnull_bb);
+
+                // Implement nonnull_bb.
+                self.builder().position_at_end(nonnull_bb);
+
+                Some(cont_bb)
+            } else {
+                None
+            };
+
             let obj_ptr = obj.ptr(self);
             self.call_runtime(RuntimeFunctions::RetainBoxedObject, &[obj_ptr.into()]);
+
+            if obj.is_dynamic_object() {
+                // Dynamic object can be null, so build null checking.
+                self.builder().build_unconditional_branch(cont_bb.unwrap());
+                self.builder().position_at_end(cont_bb.unwrap());
+            }
         } else {
             let obj_type = get_object_type(&obj.ty, &vec![], self.type_env());
             let struct_type = obj_type.to_struct_type(self);
@@ -682,16 +718,49 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
+    // Release nonnull boxed object.
+    pub fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
+        let ptr = obj.ptr(self);
+        let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
+        let dtor = obj.get_dtor_ptr_boxed(self);
+        self.call_runtime(
+            RuntimeFunctions::ReleaseBoxedObject,
+            &[ptr.into(), dtor.into()],
+        );
+    }
+
     // Release object.
     pub fn release(&mut self, obj: Object<'c>) {
         if obj.is_box(self.type_env()) {
-            let ptr = obj.ptr(self);
-            let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
-            let dtor = obj.get_dtor_ptr_boxed(self);
-            self.call_runtime(
-                RuntimeFunctions::ReleaseBoxedObject,
-                &[ptr.into(), dtor.into()],
-            );
+            let cont_bb = if obj.is_dynamic_object() {
+                // Dynamic object can be null, so build null checking.
+
+                // Append basic blocks.
+                let current_bb = self.builder().get_insert_block().unwrap();
+                let current_func = current_bb.get_parent().unwrap();
+                let nonnull_bb = self.context.append_basic_block(current_func, "nonnull_in_release_dynamic");
+                let cont_bb = self.context.append_basic_block(current_func, "cont_in_release_dynamic");
+                
+                // Branch to nonnull_bb if object is not null.
+                let is_null = obj.is_null(self);
+                self.builder().build_conditional_branch(is_null, cont_bb, nonnull_bb);
+
+                // Implement nonnull_bb.
+                self.builder().position_at_end(nonnull_bb);
+
+                Some(cont_bb)
+            } else {
+                None
+            };
+
+            // If the object is boxed and not dynamic, 
+            self.release_nonnull_boxed(&obj);
+
+            if obj.is_dynamic_object() {
+                // Dynamic object can be null, so build null checking.
+                self.builder().build_unconditional_branch(cont_bb.unwrap());
+                self.builder().position_at_end(cont_bb.unwrap());
+            }
         } else if obj.is_funptr() {
             // Nothing to do.
         } else {
@@ -863,7 +932,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         for arg in args {
             cap_names.remove(&arg.name);
         }
-        cap_names.remove(&FullName::local(SELF_NAME));
+        cap_names.remove(&FullName::local(CAP_NAME));
 
         // We need not and should not capture global variable
         // If we capture global variable, then global recursive function such as
@@ -912,8 +981,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .iter()
             .map(|(_, ty)| ty.clone())
             .collect::<Vec<_>>();
-        let lam_obj_ty = lam_ty.get_object_type(&cap_tys, self.type_env());
-        let lam_str_ty = lam_obj_ty.to_struct_type(self);
 
         // Create new builder and set up
         let _builder_guard = self.push_builder();
@@ -945,27 +1012,30 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             None
         };
 
-        // Push SELF on scope if lambda is closure.
-        let (closure_ptr, closure_obj) = if lam_ty.is_closure() {
+        // Push CAP on scope if lambda is closure.
+        let (cap_obj_ptr, cap_obj) = if lam_ty.is_closure() {
             let self_idx = args.len();
-            let closure_ptr = lam_fn
+            let cap_obj_ptr = lam_fn
                 .get_nth_param(self_idx as u32)
                 .unwrap()
                 .into_pointer_value();
-            let closure_obj = Object::new(closure_ptr, lam_ty.clone());
-            self.scope_push(&FullName::local(SELF_NAME), &closure_obj);
-            (Some(closure_ptr), Some(closure_obj))
+            let cap_obj = Object::new(cap_obj_ptr, make_dynamic_object_ty());
+            self.scope_push(&FullName::local(CAP_NAME), &cap_obj);
+            (Some(cap_obj_ptr), Some(cap_obj))
         } else {
             (None, None)
         };
 
         // Push captured objects on scope.
         if lam_ty.is_closure() {
+            let cap_obj_ty = make_dynamic_object_ty().get_object_type(&cap_tys, self.type_env());
+            let cap_obj_str_ty = cap_obj_ty.to_struct_type(self);
+
             for (i, (cap_name, cap_ty)) in cap_vars.iter().enumerate() {
                 let cap_val = self.load_obj_field(
-                    closure_ptr.unwrap(),
-                    lam_str_ty,
-                    i as u32 + CLOSURE_CAPTURE_IDX,
+                    cap_obj_ptr.unwrap(),
+                    cap_obj_str_ty,
+                    i as u32 + DYNAMIC_OBJ_CAP_IDX,
                 );
                 let cap_obj = Object::create_from_value(cap_val, cap_ty.clone(), self);
                 self.retain(cap_obj.clone());
@@ -973,10 +1043,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         }
 
-        // Release SELF if unused
-        if lam_ty.is_closure() {
-            if !body.free_vars().contains(&FullName::local(SELF_NAME)) {
-                self.release(closure_obj.unwrap());
+        // Release CAP here if CAP is unused
+        if lam_ty.is_closure() && cap_vars.len() > 0 {
+            if !body.free_vars().contains(&FullName::local(CAP_NAME)) {
+                // To avoid null checking, call release_nonnull_boxed directly.
+                self.release_nonnull_boxed(&cap_obj.unwrap());
             }
         }
 
@@ -1010,47 +1081,58 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .map(|(_name, ty)| ty.clone())
             .collect::<Vec<_>>();
 
-        // Determine the type of lambda
-        let lam_obj_ty = lam_ty.get_object_type(&cap_tys, self.type_env());
-        let lam_str_ty = lam_obj_ty.to_struct_type(self);
-
-        // define lambda function
+        // Define lambda function
         let lam_fn = self.declare_lambda_function(lam.clone());
         self.implement_lambda_function(lam, lam_fn, Some(cap_vars.clone()));
 
         // Allocate lambda
         let name = expr_abs(args.clone(), body.clone(), None).expr.to_string();
-        let obj = if rvo.is_some() {
-            assert!(lam_ty.is_funptr());
+        let lam = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(lam_ty.clone(), &cap_tys, None, self, Some(name.as_str()))
+            allocate_obj(lam_ty.clone(), &vec![], None, self, Some(name.as_str()))
         };
 
         // Set function pointer to lambda.
-        let obj_ptr = obj.ptr(self);
         let funptr_idx = if lam_ty.is_closure() {
             CLOSURE_FUNPTR_IDX
         } else {
             0
         };
-        self.store_obj_field(
-            obj_ptr,
-            lam_str_ty,
-            funptr_idx,
-            lam_fn.as_global_value().as_pointer_value(),
-        );
+        lam.store_field_nocap(self, funptr_idx, lam_fn.as_global_value().as_pointer_value());
 
-        // Set captured objects to lambda.
-        for (i, (cap_name, _cap_ty)) in cap_vars.iter().enumerate() {
-            let cap_obj = self.get_var_retained_if_used_later(cap_name, None);
-            let cap_val = cap_obj.value(self);
-            let obj_ptr = obj.ptr(self);
-            self.store_obj_field(obj_ptr, lam_str_ty, i as u32 + CLOSURE_CAPTURE_IDX, cap_val);
+        if lam_ty.is_closure() {
+            // Set captured objects. 
+
+            let cap_obj_ptr = if cap_vars.len() > 0 {
+                // If some objects are captured, 
+
+                // Allocate dynamic object to store captured objects.
+                let dynamic_obj_ty = make_dynamic_object_ty();
+                let cap_obj = allocate_obj(dynamic_obj_ty.clone(), &cap_tys, None, self, Some(&format!("captured_objects_of_{}", name)));
+                let cap_obj_ptr = cap_obj.ptr(self);
+
+                // Get struct type of cap_obj.
+                let cap_obj_str_ty = dynamic_obj_ty.get_object_type(&cap_tys, self.type_env()).to_struct_type(self);
+
+                // Set captured objects to cap_obj.
+                for (i, (cap_name, _cap_ty)) in cap_vars.iter().enumerate() {
+                    let cap_obj = self.get_var_retained_if_used_later(cap_name, None);
+                    let cap_val = cap_obj.value(self);
+                    self.store_obj_field(cap_obj_ptr, cap_obj_str_ty, i as u32 + DYNAMIC_OBJ_CAP_IDX, cap_val);
+                }
+
+                cap_obj.ptr(self)
+            } else {
+                ptr_to_object_type(self.context).const_null()
+            };
+
+            // Store cap_obj to lambda
+            lam.store_field_nocap(self, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
         }
 
         // Return lambda object
-        obj
+        lam
     }
 
     // Evaluate let
@@ -1312,4 +1394,4 @@ pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
     ty.ptr_type(AddressSpace::from(0))
 }
 
-pub static SELF_NAME: &str = "%SELF";
+pub static CAP_NAME: &str = "%CAP";
