@@ -190,7 +190,10 @@ pub fn loop_result_ty() -> Rc<TypeNode> {
 
 // Get dynamic object type.
 pub fn make_dynamic_object_ty() -> Rc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)))
+    type_tycon(&tycon(FullName::from_strs(
+        &[STD_NAME],
+        DYNAMIC_OBJECT_NAME,
+    )))
 }
 
 // Get tuple type.
@@ -355,7 +358,14 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
         let fixf = allocate_obj(fixf_ty.clone(), &vec![], None, gc, Some("fix(f)"));
-        let fixf_funptr = gc.builder().get_insert_block().unwrap().get_parent().unwrap().as_global_value().as_pointer_value();
+        let fixf_funptr = gc
+            .builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap()
+            .as_global_value()
+            .as_pointer_value();
         fixf.store_field_nocap(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
         let cap_obj = gc.get_var(&FullName::local(CAP_NAME)).ptr.get(gc);
         let cap_obj_ptr = cap_obj.ptr(gc);
