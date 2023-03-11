@@ -1,0 +1,14 @@
+module Main;
+
+count : Int -> Int;
+count = |n| count_loop(n, 0, 0);
+
+count_loop : Int -> Int -> Int -> Int;
+count_loop = |n, i, sum| (
+    if i == n { sum };
+    let sum = sum + 1;
+    count_loop(n, i+1, sum)
+);
+
+main : IOState -> ((), IOState);
+main = println! $ count(1000000000).to_string; // 664579
