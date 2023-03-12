@@ -1084,7 +1084,7 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::Array(ty) => {
                         assert_eq!(i, ARRAY_CAP_IDX as usize);
                         let size = gc
-                            .load_obj_field(ptr_to_obj, struct_type, ARRAY_CAP_IDX)
+                            .load_obj_field(ptr_to_obj, struct_type, ARRAY_LEN_IDX)
                             .into_int_value();
                         let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
                         ObjectFieldType::release_array_buf(gc, size, buffer, ty.clone());

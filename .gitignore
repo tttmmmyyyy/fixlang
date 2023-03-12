@@ -2,3 +2,4 @@
 /sanitizer/target
 /sanitizer/libfixsanitizer.so
 /main.ll
+/examples/*.o

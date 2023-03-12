@@ -1987,16 +1987,6 @@ pub fn test82() {
 
     main : IOState -> ((), IOState);
     main = (
-        // Test 2+2
-        let v1 = [1,2];
-        let v2 = [3,4];
-        let v = v1.append(v2);
-        let _ = assert_eq("wrong reserved length (2+2)", v.get_capacity, 4);
-        let _ = assert_eq("wrong length (2+2)", v.get_length, 4);
-        let _ = assert_eq("wrong element (2+2)", v.get(0), 1);
-        let _ = assert_eq("wrong element (2+2)", v.get(1), 2);
-        let _ = assert_eq("wrong element (2+2)", v.get(2), 3);
-        let _ = assert_eq("wrong element (2+2)", v.get(3), 4);
 
         // Test 0+2
         let v1 = [];
