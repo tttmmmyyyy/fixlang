@@ -15,8 +15,8 @@ pub enum ObjectFieldType {
     I8,
     SubObject(Rc<TypeNode>),
     UnionBuf(Vec<Rc<TypeNode>>), // Embedded union.
-    UnionTag,                    // TODO: I should merge UnionTag and UnionBuf as like Array.
-    ArraySize(Rc<TypeNode>),     // Size of array.
+    UnionTag,
+    Array(Rc<TypeNode>), // field to store capacity (size) and buffer for elements.
 }
 
 impl ObjectFieldType {
@@ -32,7 +32,7 @@ impl ObjectFieldType {
             }
             ObjectFieldType::I64 => gc.context.i64_type().into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
-            ObjectFieldType::ArraySize(_) => gc.context.i64_type().into(), // size; buffer will be added on alloca.
+            ObjectFieldType::Array(_) => gc.context.i64_type().into(),
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut size = 0;
@@ -215,14 +215,14 @@ impl ObjectFieldType {
     // Panic if idx is out_of_range for the array.
     pub fn panic_if_out_of_range<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size: IntValue<'c>,
+        len: IntValue<'c>,
         idx: IntValue<'c>,
     ) {
         let curr_bb = gc.builder().get_insert_block().unwrap();
         let curr_func = curr_bb.get_parent().unwrap();
         let is_out_of_range =
             gc.builder()
-                .build_int_compare(IntPredicate::UGE, idx, size, "is_out_of_ramge");
+                .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_ramge");
         let out_of_range_bb = gc.context.append_basic_block(curr_func, "out_of_range_bb");
         let in_range_bb = gc.context.append_basic_block(curr_func, "in_range_bb");
         gc.builder()
@@ -237,15 +237,15 @@ impl ObjectFieldType {
     // Returned object is not retained.
     pub fn read_from_array_buf_noretain<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size: Option<IntValue<'c>>, // If none, bounds checking is omitted.
+        len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
         elem_ty: Rc<TypeNode>,
         idx: IntValue<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Panic if out_of_range.
-        if size.is_some() {
-            Self::panic_if_out_of_range(gc, size.unwrap(), idx);
+        if len.is_some() {
+            Self::panic_if_out_of_range(gc, len.unwrap(), idx);
         }
 
         // Get element.
@@ -269,17 +269,17 @@ impl ObjectFieldType {
     }
 
     // Read an element of array.
-    // Returned object is already retained.
+    // Returned object is retained.
     pub fn read_from_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size: Option<IntValue<'c>>, // If none, bounds checking is omitted.
+        len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
         elem_ty: Rc<TypeNode>,
         idx: IntValue<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let elem =
-            ObjectFieldType::read_from_array_buf_noretain(gc, size, buffer, elem_ty, idx, rvo);
+            ObjectFieldType::read_from_array_buf_noretain(gc, len, buffer, elem_ty, idx, rvo);
         gc.retain(elem.clone());
         elem
     }
@@ -287,7 +287,7 @@ impl ObjectFieldType {
     // Write an element into array.
     pub fn write_to_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size: IntValue<'c>,
+        len: Option<IntValue<'c>>,
         buffer: PointerValue<'c>,
         idx: IntValue<'c>,
         value: Object<'c>,
@@ -296,7 +296,9 @@ impl ObjectFieldType {
         let elem_ty = value.ty.clone();
 
         // Panic if out_of_range.
-        Self::panic_if_out_of_range(gc, size, idx);
+        if len.is_some() {
+            Self::panic_if_out_of_range(gc, len.unwrap(), idx);
+        }
 
         // Get ptr to the place at idx.
         let place = unsafe {
@@ -322,7 +324,7 @@ impl ObjectFieldType {
     // Clone an array
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        size: IntValue<'c>,
+        len: IntValue<'c>,
         src_buffer: PointerValue<'c>,
         dst_buffer: PointerValue<'c>,
         elem_ty: Rc<TypeNode>,
@@ -332,7 +334,7 @@ impl ObjectFieldType {
             // In loop body, retain value and store it at idx.
             let loop_body = |gc: &mut GenerationContext<'c, 'm>,
                              idx: Object<'c>,
-                             _size: IntValue<'c>,
+                             _len: IntValue<'c>,
                              _ptr_to_buffer: PointerValue<'c>| {
                 let idx = idx.load_field_nocap(gc, 0).into_int_value();
                 let ptr_to_src_elem = unsafe {
@@ -356,10 +358,10 @@ impl ObjectFieldType {
 
             // After loop, do nothing.
             let after_loop = |_gc: &mut GenerationContext<'c, 'm>,
-                              _size: IntValue<'c>,
+                              _len: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {};
 
-            Self::loop_over_array_buf(gc, size, src_buffer, loop_body, after_loop);
+            Self::loop_over_array_buf(gc, len, src_buffer, loop_body, after_loop);
         }
     }
 
@@ -625,7 +627,7 @@ impl ObjectType {
         for (i, field_type) in self.field_types.iter().enumerate() {
             fields.push(field_type.to_basic_type(gc));
             match field_type {
-                ObjectFieldType::ArraySize(ty) => {
+                ObjectFieldType::Array(ty) => {
                     assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
                     assert!(!self.is_unbox); // Array has to be boxed.
 
@@ -655,7 +657,7 @@ impl ObjectType {
 
             // Calculate sizeof(elem_ty) * size.
             let elem_ty = match self.field_types.last().unwrap() {
-                ObjectFieldType::ArraySize(ty) => ty.clone(),
+                ObjectFieldType::Array(ty) => ty.clone(),
                 _ => panic!(),
             };
             let elem_sizeof = elem_ty
@@ -779,8 +781,9 @@ pub fn lambda_function_type<'c, 'm>(
 
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
-pub const ARRAY_SIZE_IDX: u32 = 1;
-pub const ARRAY_BUF_IDX: u32 = ARRAY_SIZE_IDX + 1;
+pub const ARRAY_LEN_IDX: u32 = 1/* ControlBlock */;
+pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
+pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
 pub const DYNAMIC_OBJ_DTOR_IDX: u32 = 1/* ControlBlock */;
 pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_DTOR_IDX + 1;
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
@@ -838,10 +841,11 @@ pub fn get_object_type(
                 assert!(!is_unbox);
                 ret.is_unbox = is_unbox;
                 ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), ARRAY_SIZE_IDX as usize);
-                ret.field_types.push(ObjectFieldType::ArraySize(
-                    ty.field_types(type_env)[0].clone(),
-                ))
+                assert_eq!(ret.field_types.len(), ARRAY_LEN_IDX as usize);
+                ret.field_types.push(ObjectFieldType::I64); // length
+                assert_eq!(ret.field_types.len(), ARRAY_CAP_IDX as usize); // capacity
+                ret.field_types
+                    .push(ObjectFieldType::Array(ty.field_types(type_env)[0].clone()))
             }
             TyConVariant::Struct => {
                 assert!(capture.is_empty());
@@ -895,8 +899,8 @@ pub fn get_object_type(
 // Allocate an object.
 pub fn allocate_obj<'c, 'm>(
     ty: Rc<TypeNode>,
-    capture: &Vec<Rc<TypeNode>>,      // used in dynamic object
-    array_size: Option<IntValue<'c>>, // used in array
+    capture: &Vec<Rc<TypeNode>>,     // used in dynamic object
+    array_cap: Option<IntValue<'c>>, // used in array
     gc: &mut GenerationContext<'c, 'm>,
     name: Option<&str>,
 ) -> Object<'c> {
@@ -907,7 +911,7 @@ pub fn allocate_obj<'c, 'm>(
     let struct_type = object_type.to_struct_type(gc);
 
     // Allocate object
-    let sizeof = object_type.size_of(gc, array_size);
+    let sizeof = object_type.size_of(gc, array_cap);
     let ptr_to_obj = if object_type.is_unbox {
         gc.builder().build_array_alloca(
             gc.context.i8_type(),
@@ -976,15 +980,15 @@ pub fn allocate_obj<'c, 'm>(
             ObjectFieldType::SubObject(_) => {}
             ObjectFieldType::LambdaFunction(_) => {}
             ObjectFieldType::I8 => {}
-            ObjectFieldType::ArraySize(_) => {
-                assert_eq!(i, ARRAY_SIZE_IDX as usize);
+            ObjectFieldType::Array(_) => {
+                assert_eq!(i, ARRAY_CAP_IDX as usize);
                 // Set array size.
                 let ptr_to_size_field = gc
                     .builder()
-                    .build_struct_gep(ptr_to_obj, ARRAY_SIZE_IDX, "ptr_to_size_field")
+                    .build_struct_gep(ptr_to_obj, ARRAY_CAP_IDX, "ptr_to_size_field")
                     .unwrap();
                 gc.builder()
-                    .build_store(ptr_to_size_field, array_size.unwrap());
+                    .build_store(ptr_to_size_field, array_cap.unwrap());
             }
             ObjectFieldType::DtorFunction => {
                 assert_eq!(i, DYNAMIC_OBJ_DTOR_IDX as usize);
@@ -1077,10 +1081,10 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::I8 => {}
-                    ObjectFieldType::ArraySize(ty) => {
-                        assert_eq!(i, ARRAY_SIZE_IDX as usize);
+                    ObjectFieldType::Array(ty) => {
+                        assert_eq!(i, ARRAY_CAP_IDX as usize);
                         let size = gc
-                            .load_obj_field(ptr_to_obj, struct_type, ARRAY_SIZE_IDX)
+                            .load_obj_field(ptr_to_obj, struct_type, ARRAY_CAP_IDX)
                             .into_int_value();
                         let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
                         ObjectFieldType::release_array_buf(gc, size, buffer, ty.clone());

@@ -1,8 +1,6 @@
 use super::*;
 
 pub const FIX_NAME: &str = "fix";
-pub const VECTOR_DATA_IDX: u32 = 0;
-pub const VECTOR_RESERVED_LEN_IDX: u32 = 1;
 
 const STD_SOURCE: &str = include_str!("std.fix");
 
@@ -77,20 +75,20 @@ pub fn make_std_mod() -> FixModule {
         new_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__new_uninitialized"),
-        new_uninitialized(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set"),
+        unsafe_set_array(),
+    );
+    // fix_module.add_global_value(
+    //     FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set_capacity"),
+    //     unsafe_set_capacity_array(),
+    // );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set_length"),
+        unsafe_set_length_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__set_uninitialized_unique_array"),
-        set_uninitialized_unique_array(),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__set_unique_array_length"),
-        set_unique_array_length(),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__get_array_element_noretain"),
-        get_array_noretain(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_get"),
+        unsafe_get_array(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique!"),
@@ -113,6 +111,10 @@ pub fn make_std_mod() -> FixModule {
         write_array_unique(),
     );
     fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "make_empty"),
+        make_empty(),
+    );
+    fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
         mod_array(false),
     );
@@ -121,8 +123,12 @@ pub fn make_std_mod() -> FixModule {
         mod_array(true),
     );
     fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_capacity"),
+        get_capacity_array(),
+    );
+    fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_length"),
-        length_array(),
+        get_length_array(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, IOSTATE_NAME], "print!"),

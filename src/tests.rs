@@ -1978,93 +1978,92 @@ pub fn test81() {
     run_source(source, Configuration::develop_compiler());
 }
 
-// TODO Run this test by source file, because this test segfaults when run in JIT.
-// #[test]
-// #[serial]
-// pub fn test82() {
-//     // Test Vector.append.
-//     let source = r#"
-//     module Main;
+#[test]
+#[serial]
+pub fn test82() {
+    // Test Array.append.
+    let source = r#"
+    module Main;
 
-//     main : IOState -> ((), IOState);
-//     main = (
-//         // Test 2+2
-//         let v1 = Vector.from_array([1,2]);
-//         let v2 = Vector.from_array([3,4]);
-//         let v = v1.append(v2);
-//         let _ = assert_eq("wrong reserved length (2+2)", v.get_reserved_length, 4);
-//         let _ = assert_eq("wrong length (2+2)", v.get_length, 4);
-//         let _ = assert_eq("wrong element (2+2)", v.get(0), 1);
-//         let _ = assert_eq("wrong element (2+2)", v.get(1), 2);
-//         let _ = assert_eq("wrong element (2+2)", v.get(2), 3);
-//         let _ = assert_eq("wrong element (2+2)", v.get(3), 4);
+    main : IOState -> ((), IOState);
+    main = (
+        // Test 2+2
+        let v1 = [1,2];
+        let v2 = [3,4];
+        let v = v1.append(v2);
+        let _ = assert_eq("wrong reserved length (2+2)", v.get_capacity, 4);
+        let _ = assert_eq("wrong length (2+2)", v.get_length, 4);
+        let _ = assert_eq("wrong element (2+2)", v.get(0), 1);
+        let _ = assert_eq("wrong element (2+2)", v.get(1), 2);
+        let _ = assert_eq("wrong element (2+2)", v.get(2), 3);
+        let _ = assert_eq("wrong element (2+2)", v.get(3), 4);
 
-//         // Test 0+2
-//         let v1 = Vector.from_array([]);
-//         let v2 = Vector.from_array([3,4]);
-//         let v = v1.append(v2);
-//         let _ = assert_eq("wrong reserved length (0+2)", v.get_reserved_length, 2);
-//         let _ = assert_eq("wrong length (0+2)", v.get_length, 2);
-//         let _ = assert_eq("wrong element (0+2)", v.get(0), 3);
-//         let _ = assert_eq("wrong element (0+2)", v.get(1), 4);
+        // Test 0+2
+        let v1 = [];
+        let v2 = [3,4];
+        let v = v1.append(v2);
+        let _ = assert_eq("wrong reserved length (0+2)", v.get_capacity, 2);
+        let _ = assert_eq("wrong length (0+2)", v.get_length, 2);
+        let _ = assert_eq("wrong element (0+2)", v.get(0), 3);
+        let _ = assert_eq("wrong element (0+2)", v.get(1), 4);
 
-//         // Test 2+0
-//         let v1 = Vector.from_array([1,2]);
-//         let v2 = Vector.from_array([]);
-//         let v = v1.append(v2);
-//         let _ = assert_eq("wrong reserved length (2+0)", v.get_reserved_length, 2);
-//         let _ = assert_eq("wrong length (2+0)", v.get_length, 2);
-//         let _ = assert_eq("wrong element (2+0)", v.get(0), 1);
-//         let _ = assert_eq("wrong element (2+0)", v.get(1), 2);
+        // Test 2+0
+        let v1 = [1,2];
+        let v2 = [];
+        let v = v1.append(v2);
+        let _ = assert_eq("wrong reserved length (2+0)", v.get_capacity, 2);
+        let _ = assert_eq("wrong length (2+0)", v.get_length, 2);
+        let _ = assert_eq("wrong element (2+0)", v.get(0), 1);
+        let _ = assert_eq("wrong element (2+0)", v.get(1), 2);
 
-//         // Test 0+0
-//         let v1: Vector (Int -> Bool) = Vector.from_array([]);
-//         let v2 = Vector.from_array([]);
-//         let v = v1.append(v2);
-//         let _ = assert_eq("wrong reserved length (0+0)", v.get_reserved_length, 0);
-//         let _ = assert_eq("wrong length (0+0)", v.get_length, 0);
+        // Test 0+0
+        let v1: Array (Int -> Bool) = [];
+        let v2 = [];
+        let v = v1.append(v2);
+        let _ = assert_eq("wrong capacity (0+0)", v.get_capacity, 0);
+        let _ = assert_eq("wrong length (0+0)", v.get_length, 0);
 
-//         // Test boxed elements.
-//         let v1 = Vector.from_array([add(1), add(2)]);
-//         let v2 = Vector.from_array([add(3), add(4)]);
-//         let v = v1.append(v2);
-//         let x = 0;
-//         let x = v.get(0) $ x;
-//         let _ = assert_eq("wrong value (boxed) 0+1", x, 0+1);
-//         let x = v.get(1) $ x;
-//         let _ = assert_eq("wrong value (boxed) 0+1+2", x, 0+1+2);
-//         let x = v.get(2) $ x;
-//         let _ = assert_eq("wrong value (boxed) 0+1+2+3", x, 0+1+2+3);
-//         let x = v.get(3) $ x;
-//         let _ = assert_eq("wrong value (boxed) 0+1+2+3+4", x, 0+1+2+3+4);
+        // Test boxed elements.
+        let v1 = [add(1), add(2)];
+        let v2 = [add(3), add(4)];
+        let v = v1.append(v2);
+        let x = 0;
+        let x = v.get(0) $ x;
+        let _ = assert_eq("wrong value (boxed) 0+1", x, 0+1);
+        let x = v.get(1) $ x;
+        let _ = assert_eq("wrong value (boxed) 0+1+2", x, 0+1+2);
+        let x = v.get(2) $ x;
+        let _ = assert_eq("wrong value (boxed) 0+1+2+3", x, 0+1+2+3);
+        let x = v.get(3) $ x;
+        let _ = assert_eq("wrong value (boxed) 0+1+2+3+4", x, 0+1+2+3+4);
 
-//         // Test appending shared array.
-//         let v1 = Vector.from_array([add(1), add(2)]).reserve(4);
-//         let v2 = Vector.from_array([add(3), add(4)]);
-//         let v = v1.append(v2);
-//         let w = v2.append(v1);
-//         let x = 0;
-//         let x = v.get(0) $ x; // += 1
-//         let x = w.get(3) $ x; // += 2
-//         let _ = assert_eq("", x, 3);
+        // Test appending shared array.
+        let v1 = [add(1), add(2)].reserve(4);
+        let v2 = [add(3), add(4)];
+        let v = v1.append(v2);
+        let w = v2.append(v1);
+        let x = 0;
+        let x = v.get(0) $ x; // += 1
+        let x = w.get(3) $ x; // += 2
+        let _ = assert_eq("", x, 3);
 
-//         pure()
-//     );
-//     "#;
-//     run_source(source, Configuration::develop_compiler());
-// }
+        pure()
+    );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
 
 #[test]
 #[serial]
 pub fn test83() {
-    // Test Vector.push_back, pop_back
+    // Test Array.push_back, pop_back
     let source = r#"
     module Main;
 
     main : IOState -> ((), IOState);
     main = |io| (
         // Unboxed element
-        let v = Vector.from_array([]);
+        let v = [];
         let v = loop((0, v), |(idx, v)|(
             if idx == 100 { break $ v };
             let v = v.push_back(idx);
@@ -2081,10 +2080,10 @@ pub fn test83() {
             continue $ (idx+1, v)
         ));
         let _ = assert_eq("wrong length after pop", 0, v.get_length);
-        let _ = assert("wrong reserved length after pop", v.get_reserved_length >= 100);
+        let _ = assert("wrong reserved length after pop", v.get_capacity >= 100);
     
         // Boxed element
-        let v = Vector.from_array([]);
+        let v = [];
         let v = loop((0, v), |(idx, v)|(
             if idx == 100 { break $ v };
             let v = v.push_back(add(idx));
@@ -2102,7 +2101,7 @@ pub fn test83() {
             continue $ (idx+1, v)
         ));
         let _ = assert_eq("wrong length after pop (boxed)", 0, v.get_length);
-        let _ = assert("wrong reserved length after pop (boxed)", v.get_reserved_length >= 100);
+        let _ = assert("wrong reserved length after pop (boxed)", v.get_capacity >= 100);
     
         io.pure()
     );
@@ -2113,26 +2112,26 @@ pub fn test83() {
 #[test]
 #[serial]
 pub fn test84() {
-    // Test Eq for Vector
+    // Test Eq for Array
     let source = r#"
     module Main;
 
     main : IOState -> ((), IOState);
     main = |io| (
-        let v1 = Vector.from_array([1,2,3]);
-        let v2 = Vector.from_array([1,2,3]);
+        let v1 = [1,2,3];
+        let v2 = [1,2,3];
         let _ = assert("", v1 == v2);
     
-        let v1 = Vector.from_array([1,2,3]);
-        let v2 = Vector.from_array([0,2,3]);
+        let v1 = [1,2,3];
+        let v2 = [0,2,3];
         let _ = assert("", v1 != v2);
     
-        let v1 = Vector.from_array([]);
-        let v2 = Vector.from_array([0]);
+        let v1 = [];
+        let v2 = [0];
         let _ = assert("", v1 != v2);
     
-        let v1: Vector Int = Vector.from_array([]);
-        let v2 = Vector.from_array([]);
+        let v1: Array Int = [];
+        let v2 = [];
         let _ = assert("", v1 == v2);
     
         io.pure()
@@ -2271,23 +2270,23 @@ pub fn test89() {
 #[test]
 #[serial]
 pub fn test90() {
-    // Test Vector.sort_by.
+    // Test Array.sort_by.
     let source = r#"
     module Main;
 
     main : IOState -> ((), IOState);
     main = |io| (
-        let vec = Vector.from_array([5,3,1,7,4,6,9,8,2]);
+        let vec = [5,3,1,7,4,6,9,8,2];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
-        let _ = assert_eq("wrong result 9", vec, Vector.from_array([1,2,3,4,5,6,7,8,9]));
+        let _ = assert_eq("wrong result 9", vec, [1,2,3,4,5,6,7,8,9]);
 
-        let vec = Vector.from_array([1]);
+        let vec = [1];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
-        let _ = assert_eq("wrong result 1", vec, Vector.from_array([1]));
+        let _ = assert_eq("wrong result 1", vec, [1]);
 
-        let vec: Vector Int = Vector.from_array([]);
+        let vec: Array Int = [];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
-        let _ = assert_eq("wrong result 0", vec, Vector.from_array([]));
+        let _ = assert_eq("wrong result 0", vec, []);
 
         io.pure()
     );
@@ -2296,25 +2295,24 @@ pub fn test90() {
     run_source(source, Configuration::develop_compiler());
 }
 
-// #[test]
-// #[serial]
-// pub fn test92() {
-//     // This test segfaults in JIT.
-//     let source = r#"
-//     module Main;
+#[test]
+#[serial]
+pub fn test92() {
+    let source = r#"
+    module Main;
 
-//     main : IOState -> ((), IOState);
-//     main = |io| (
-//         let buf = Vector.from_array([]).reserve(5);
-//         let vec = buf;
-//         let vec = vec.push_back(0);
-//         let data = buf.@_data;
-//         io.pure()
-//     );
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let buf = [].reserve(5);
+        let vec = buf;
+        let vec = vec.push_back(0);
+        let buf = buf.push_back(1);
+        io.pure()
+    );
 
-//     "#;
-//     run_source(source, Configuration::develop_compiler());
-// }
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
 
 #[test]
 #[serial]

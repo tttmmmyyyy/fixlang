@@ -152,7 +152,7 @@ Unit `()` is a type allows only one value, which is also written as `()`.
 
 ### Array
 
-`Std.Array` is the type of fixed-length array. This is a basic type in fix and used to construct `Std.Vector`, the type of variable-length array. `Std.Array` is a boxed type.
+`Std.Array` is the type of variable-length array. `Std.Array` is a boxed type.
 
 ### Structs
 
@@ -263,24 +263,16 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 
 ### Std.Array
 
-`Std.Array` is the type of fixed-length arrays. 
-This type itself is not so useful and used as a building-block of `Std.Vector`.
+`Std.Array` is the type of variable-length arrays.
 
 Methods:
 
-- (unsafe) `__set_unique_array_length : Int -> Array a -> Array a`
-    - Modifies the length field of an array, without uniqueness checking.
-    - In the `Array` destructor, elements stored after length are not released.
-- (unsafe) `__new_uninitialized : Int -> Array a`
-    - Creates an array of specified length with uninitialized elements.
-    - After allocating array by this function, you should initialize all elements using `__set_uninitialized_unique_array` function.
-- (unsafe) `__set_uninitialized_unique_array : Int -> a -> Array a -> Array a`
-    - Sets a value into an array. 
-    - This function doesn't release the old value of the element.
-    - This function updates the array without checking uniqueness.
-- (unsafe) `__get_array_element_noretain`
-    - Get an element of an array, without retaining value.
-    - After decreasing length by `__set_unique_array_length`, you can get elements stored after length by this funtion to release them.
+- `__unsafe_set_length : Int -> Array a -> Array a`
+    - Updates the length of an array, without uniqueness checking or validation of the given length value.
+- `__unsafe_get : Int -> Array a -> a`
+    - Gets a value from an array, without bounds checking and retaining the returned value.
+- `__unsafe_set : Int -> a -> Array a -> Array a`
+    - Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
 - `force_unique : Array a -> Array a`
     - Force the uniqueness of an array.
     - If the given array is shared, this function returns the cloned array.
@@ -294,6 +286,10 @@ Methods:
     - Returns an element of an array at an index.
 - `get_length : Array a -> Int`
     - Returns the length of an array.
+- `get_capacity : Array a -> Int`
+    - Returns the capacity of an array.
+- `make_empty : Int -> Array a`
+    - Creates an empty array with specified capacity.
 - `mod : Int -> (a -> a) -> Array a -> Array a`
     - Modifies a value of an element at the specified index of an array by a function.
     - This function clones the array if it is shared between multiple references.
@@ -301,8 +297,11 @@ Methods:
     - This function clones the array if it is shared between multiple references.
     - This function always update the array. If the array is shared between multiple references, this function panics.  
 - `new : Int -> a -> Array a`
-    - Creates an array filled by the initial value.
+    - Creates an array filled with the initial value.
+    - The capacity is set to the same value as the length.
     - `new(n, x) = [x, x, x, ..., x]` (of length `n`).
+- `reserve : Int -> Array a -> Array a`
+    - Reserves the memory region for an array.
 - `set : Int -> a -> Array a -> Array a`
     - Updates a value of an element at an index of an array.
     - This function clones the given array if it is shared between multiple references.

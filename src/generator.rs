@@ -718,7 +718,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                                 .into_int_value(),
                         );
                     }
-                    ObjectFieldType::ArraySize(_) => unreachable!(),
+                    ObjectFieldType::Array(_) => unreachable!(),
                 }
             }
         }
@@ -1386,18 +1386,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     ) -> Object<'c> {
         assert!(rvo.is_none());
 
-        // Make size value
-        let size = self.context.i64_type().const_int(elems.len() as u64, false);
+        // Make length value
+        let len = self.context.i64_type().const_int(elems.len() as u64, false);
 
         // Allocate
         let array = allocate_obj(
             array_ty,
             &vec![],
-            Some(size),
+            Some(len),
             self,
             Some(&format!("array_literal[{}]", elems.len())),
         );
         let buffer = array.ptr_to_field_nocap(self, ARRAY_BUF_IDX);
+
+        // Set length.
+        array.store_field_nocap(self, ARRAY_LEN_IDX, len);
 
         // Evaluate each element and store to the array
         for i in 0..elems.len() {
@@ -1411,7 +1414,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // Store into the array.
             let idx = self.context.i64_type().const_int(i as u64, false);
-            ObjectFieldType::write_to_array_buf(self, size, buffer, idx, value, false);
+            ObjectFieldType::write_to_array_buf(self, None, buffer, idx, value, false);
         }
 
         array

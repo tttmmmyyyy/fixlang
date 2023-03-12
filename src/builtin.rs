@@ -12,7 +12,6 @@ pub const BOOL_NAME: &str = "Bool";
 pub const BYTE_NAME: &str = "Byte";
 pub const IOSTATE_NAME: &str = "IOState";
 pub const ARRAY_NAME: &str = "Array";
-pub const VECTOR_NAME: &str = "Vector";
 pub const STRING_NAME: &str = "String";
 pub const FUNPTR_NAME: &str = "%FunPtr"; // Users cannot access this type constructor.
 pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";
@@ -168,11 +167,6 @@ pub fn array_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
-// Get Vector type.
-pub fn vector_lit_ty() -> Rc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], VECTOR_NAME)))
-}
-
 // Get IOState type.
 pub fn iostate_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
@@ -278,6 +272,7 @@ pub fn make_string_from_ptr<'c, 'm>(
         gc,
         Some("array@make_string_from_ptr"),
     );
+    array.store_field_nocap(gc, ARRAY_LEN_IDX, len_with_null_terminator);
     let dst = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
     let len_ptr = gc.builder().build_int_cast(
         len_with_null_terminator,
@@ -301,24 +296,11 @@ pub fn make_string_from_ptr<'c, 'm>(
     } else {
         rvo.unwrap()
     };
-    let vector = extract_vector_from_string(gc, &string);
-    assert!(vector.is_unbox(gc.type_env()));
+    assert!(string.is_unbox(gc.type_env()));
 
     // Store array to data.
     let array_val = array.value(gc);
-    vector.store_field_nocap(gc, VECTOR_DATA_IDX, array_val);
-
-    // Store reserved length.
-    let len_obj = allocate_obj(
-        int_lit_ty(),
-        &vec![],
-        None,
-        gc,
-        Some("reserved_length_in_make_string_value"),
-    );
-    len_obj.store_field_nocap(gc, 0, len_with_null_terminator);
-    let int_val = len_obj.value(gc);
-    vector.store_field_nocap(gc, VECTOR_RESERVED_LEN_IDX, int_val);
+    string.store_field_nocap(gc, 0, array_val);
 
     string
 }
@@ -483,6 +465,7 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
             gc,
             Some(name_cloned.as_str()),
         );
+        array.store_field_nocap(gc, ARRAY_LEN_IDX, size);
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         ObjectFieldType::initialize_array_buf_by_value(gc, size, buf, value);
         array
@@ -496,8 +479,8 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     )
 }
 
-// "newArray" built-in function.
-// newArray = for<a> \size: Int -> \value: a -> new_array_lit(a, size, value): Array<a>
+// "Array.new : Int -> a -> Array a" built-in function.
+// Creates an array with same capacity.
 pub fn new_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("size", None)],
@@ -522,38 +505,44 @@ pub fn new_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Makes an uninitialized array.
-pub fn new_uninitialized() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const SIZE_NAME: &str = "size";
+// Make an empty array.
+pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const CAP_NAME: &str = "cap";
     const ELEM_TYPE: &str = "a";
 
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, arr_ty, rvo| {
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
 
-        // Get size
-        let size = gc
-            .get_var_field(&FullName::local(SIZE_NAME), 0)
+        // Get capacity
+        let cap = gc
+            .get_var_field(&FullName::local(CAP_NAME), 0)
             .into_int_value();
 
         // Allocate
-        allocate_obj(
+        let array = allocate_obj(
             arr_ty.clone(),
             &vec![],
-            Some(size),
+            Some(cap),
             gc,
-            Some(&format!("new_uninitialized({})", SIZE_NAME)),
-        )
+            Some(&format!("make_empty({})", CAP_NAME)),
+        );
+
+        // Set size to zero.
+        let cap = gc.context.i64_type().const_zero();
+        array.store_field_nocap(gc, ARRAY_LEN_IDX, cap);
+
+        array
     });
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar);
 
     let expr = expr_abs(
-        vec![var_local(SIZE_NAME, None)],
+        vec![var_local(CAP_NAME, None)],
         expr_lit(
             generator,
-            vec![FullName::local(SIZE_NAME)],
-            format!("new_uninitialized({})", SIZE_NAME),
+            vec![FullName::local(CAP_NAME)],
+            format!("make_empty({})", CAP_NAME),
             array_ty.clone(),
             None,
         ),
@@ -567,8 +556,8 @@ pub fn new_uninitialized() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Set an element of an uninitialized array, with no uniqueness checking.
-pub fn set_uninitialized_unique_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+// Set an element to an array, with no uniqueness checking and without releasing the old value.
+pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const VALUE_NAME: &str = "val";
@@ -584,12 +573,11 @@ pub fn set_uninitialized_unique_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             .into_int_value();
         let value = gc.get_var(&FullName::local(VALUE_NAME)).ptr.get(gc);
 
-        // Get array size and buffer.
-        let array_size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
+        // Get array cap and buffer.
         let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
 
         // Perform write and return.
-        ObjectFieldType::write_to_array_buf(gc, array_size, array_buf, idx, value, false);
+        ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, value, false);
         array
     });
 
@@ -609,10 +597,7 @@ pub fn set_uninitialized_unique_array() -> (Rc<ExprNode>, Rc<Scheme>) {
                         FullName::local(VALUE_NAME),
                         FullName::local(ARR_NAME),
                     ],
-                    format!(
-                        "{}.set_uninitialized_unique_array({}, {})",
-                        ARR_NAME, IDX_NAME, VALUE_NAME
-                    ),
+                    format!("{}.unsafe_set({}, {})", ARR_NAME, IDX_NAME, VALUE_NAME),
                     array_ty.clone(),
                     None,
                 ),
@@ -634,8 +619,8 @@ pub fn set_uninitialized_unique_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Get an element of an array without retaining element.
-pub fn get_array_noretain() -> (Rc<ExprNode>, Rc<Scheme>) {
+// Gets a value from an array, without bounds checking and retaining the returned value.
+pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";
@@ -654,7 +639,7 @@ pub fn get_array_noretain() -> (Rc<ExprNode>, Rc<Scheme>) {
         let elem =
             ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx, rvo);
 
-        // Release array.
+        // Release the array.
         gc.release(array);
 
         elem
@@ -687,10 +672,10 @@ pub fn get_array_noretain() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Set the size of an array, with no uniqueness checking, no validation of size argument.
-pub fn set_unique_array_length() -> (Rc<ExprNode>, Rc<Scheme>) {
+// Set the length of an array, with no uniqueness checking, no validation of size argument.
+pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARR_NAME: &str = "array";
-    const SIZE_NAME: &str = "size";
+    const LENGTH_NAME: &str = "length";
     const ELEM_TYPE: &str = "a";
 
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
@@ -698,15 +683,15 @@ pub fn set_unique_array_length() -> (Rc<ExprNode>, Rc<Scheme>) {
 
         // Get argments
         let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
-        let size = gc
-            .get_var_field(&FullName::local(SIZE_NAME), 0)
+        let length = gc
+            .get_var_field(&FullName::local(LENGTH_NAME), 0)
             .into_int_value();
 
         // Get pointer to length field.
-        let ptr_to_length = array.ptr_to_field_nocap(gc, ARRAY_SIZE_IDX);
+        let ptr_to_length = array.ptr_to_field_nocap(gc, ARRAY_LEN_IDX);
 
         // Perform write and return.
-        gc.builder().build_store(ptr_to_length, size);
+        gc.builder().build_store(ptr_to_length, length);
         array
     });
 
@@ -714,13 +699,13 @@ pub fn set_unique_array_length() -> (Rc<ExprNode>, Rc<Scheme>) {
     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(SIZE_NAME, None)],
+        vec![var_local(LENGTH_NAME, None)],
         expr_abs(
             vec![var_local(ARR_NAME, None)],
             expr_lit(
                 generator,
-                vec![FullName::local(SIZE_NAME), FullName::local(ARR_NAME)],
-                format!("{}.set_array_length({})", ARR_NAME, SIZE_NAME),
+                vec![FullName::local(LENGTH_NAME), FullName::local(ARR_NAME)],
+                format!("{}.unsafe_set_length({})", ARR_NAME, LENGTH_NAME),
                 array_ty.clone(),
                 None,
             ),
@@ -737,29 +722,71 @@ pub fn set_unique_array_length() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
+// // Set the capacity of an array, with no uniqueness checking, no validation of size argument.
+// pub fn unsafe_set_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+//     const ARR_NAME: &str = "array";
+//     const CAP_NAME: &str = "cap";
+//     const ELEM_TYPE: &str = "a";
+
+//     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+//         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
+//         let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
+//         let cap = gc
+//             .get_var_field(&FullName::local(CAP_NAME), 0)
+//             .into_int_value();
+//         array.store_field_nocap(gc, ARRAY_CAP_IDX, cap);
+//         array
+//     });
+
+//     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+//     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+
+//     let expr = expr_abs(
+//         vec![var_local(CAP_NAME, None)],
+//         expr_abs(
+//             vec![var_local(ARR_NAME, None)],
+//             expr_lit(
+//                 generator,
+//                 vec![FullName::local(CAP_NAME), FullName::local(ARR_NAME)],
+//                 format!("{}.unsafe_set_capacity({})", ARR_NAME, CAP_NAME),
+//                 array_ty.clone(),
+//                 None,
+//             ),
+//             None,
+//         ),
+//         None,
+//     );
+
+//     let scm = Scheme::generalize(
+//         HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+//         vec![],
+//         type_fun(int_lit_ty(), type_fun(array_ty.clone(), array_ty)),
+//     );
+//     (expr, scm)
+// }
+
 // Implementation of Array.get built-in function.
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
-    let name = format!("Array.get {} {}", idx, array);
+    let name = format!("Array.get({}, {})", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array = gc.get_var(&array_str).ptr.get(gc);
-        let size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
+        let len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         let idx = gc.get_var_field(&idx_str, 0).into_int_value();
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let elem = ObjectFieldType::read_from_array_buf(gc, Some(size), buf, ty.clone(), idx, rvo);
+        let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx, rvo);
         gc.release(array);
         elem
     });
     expr_lit(generator, free_vars, name, elem_ty, None)
 }
 
-// "Array.get" built-in function.
-// Array.get = for<a> \arr: Array<a> -> \idx: Int -> (...read_array_lit(a, arr, idx)...): a
+// "Array.get : Array a -> Int -> a" built-in function.
 pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx", None)],
@@ -784,21 +811,16 @@ pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Make array object to unique.
-// If it is (unboxed or) unique, do nothing.
+// Force array object to be unique.
+// If it is unique, do nothing.
 // If it is shared, clone the object or panics if panic_if_shared is true.
-// Returns tuple of array object, size and pointer to buffer.
 fn make_array_unique<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     array: Object<'c>,
     panic_if_shared: bool,
-) -> (Object<'c>, IntValue<'c>, PointerValue<'c>) {
+) -> Object<'c> {
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let original_array_ptr = array.ptr(gc);
-
-    // Get array size and buffer.
-    let array_size = array.load_field_nocap(gc, ARRAY_SIZE_IDX).into_int_value();
-    let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
 
     // Get refcnt.
     let refcnt = {
@@ -831,17 +853,25 @@ fn make_array_unique<'c, 'm>(
         // In case of unique version, panic in this case.
         gc.panic("a struct object is asserted as unique but is shared!\n");
     }
+    // Allocate cloned array.
+    let array_cap = array.load_field_nocap(gc, ARRAY_CAP_IDX).into_int_value();
     let cloned_array = allocate_obj(
         array.ty.clone(),
         &vec![],
-        Some(array_size),
+        Some(array_cap),
         gc,
         Some("cloned_array_for_uniqueness"),
     );
+    // Set the length of the cloned array.
+    let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
+    cloned_array.store_field_nocap(gc, ARRAY_LEN_IDX, array_len);
+    // Copy elements to the cloned array.
     let cloned_array_buf = cloned_array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-
-    ObjectFieldType::clone_array_buf(gc, array_size, array_buf, cloned_array_buf, elem_ty);
+    let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+    ObjectFieldType::clone_array_buf(gc, array_len, array_buf, cloned_array_buf, elem_ty);
     gc.release(array.clone()); // Given array should be released here.
+
+    // Jump to the next bb.
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
     let cloned_array_ptr = cloned_array.ptr(gc);
     gc.builder().build_unconditional_branch(cont_bb);
@@ -861,22 +891,22 @@ fn make_array_unique<'c, 'm>(
         array_phi.as_basic_value().into_pointer_value(),
         array.ty.clone(),
     );
-    let array_buf_phi = gc
-        .builder()
-        .build_phi(array_buf.get_type(), "array_field_phi");
-    assert_eq!(array_buf.get_type(), cloned_array_buf.get_type());
-    array_buf_phi.add_incoming(&[
-        (&array_buf, current_bb),
-        (&cloned_array_buf, succ_of_shared_bb),
-    ]);
-    let array_buf = array_buf_phi.as_basic_value().into_pointer_value();
+    // let array_buf_phi = gc
+    //     .builder()
+    //     .build_phi(array_buf.get_type(), "array_field_phi");
+    // assert_eq!(array_buf.get_type(), cloned_array_buf.get_type());
+    // array_buf_phi.add_incoming(&[
+    //     (&array_buf, current_bb),
+    //     (&cloned_array_buf, succ_of_shared_bb),
+    // ]);
+    // let array_buf = array_buf_phi.as_basic_value().into_pointer_value();
 
-    (array, array_size, array_buf)
+    array
 }
 
 // Implementation of Array.set/Array.set! built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
-fn write_array_lit(
+fn set_array_lit(
     a: &str,
     array: &str,
     idx: &str,
@@ -905,11 +935,13 @@ fn write_array_lit(
         gc.release(gc.get_var(&idx_str).ptr.get(gc));
         let value = gc.get_var(&value_str).ptr.get(gc);
 
-        // Make array unique
-        let (array, array_size, array_buf) = make_array_unique(gc, array, is_unique_version);
+        // Force array to be unique
+        let array = make_array_unique(gc, array, is_unique_version);
 
         // Perform write and return.
-        ObjectFieldType::write_to_array_buf(gc, array_size, array_buf, idx, value, true);
+        let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
+        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        ObjectFieldType::write_to_array_buf(gc, Some(array_len), array_buf, idx, value, true);
         array
     });
     expr_lit(
@@ -922,14 +954,14 @@ fn write_array_lit(
 }
 
 // Array.set built-in function.
-pub fn write_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn set_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx", None)],
         expr_abs(
             vec![var_local("value", None)],
             expr_abs(
                 vec![var_local("array", None)],
-                write_array_lit("a", "array", "idx", "value", is_unique_version),
+                set_array_lit("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
             None,
@@ -950,12 +982,12 @@ pub fn write_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
 
 // set built-in function.
 pub fn write_array() -> (Rc<ExprNode>, Rc<Scheme>) {
-    write_array_common(false)
+    set_array_common(false)
 }
 
 // set! built-in function.
 pub fn write_array_unique() -> (Rc<ExprNode>, Rc<Scheme>) {
-    write_array_common(true)
+    set_array_common(true)
 }
 
 pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
@@ -978,13 +1010,15 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
         let modifier = gc.get_var(&FullName::local(MODIFIER_NAME)).ptr.get(gc);
 
         // Make array unique
-        let (array, array_size, array_buf) = make_array_unique(gc, array, is_unique_version);
+        let array = make_array_unique(gc, array, is_unique_version);
 
         // Get old element without retain.
+        let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
+        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let elem = ObjectFieldType::read_from_array_buf_noretain(
             gc,
-            Some(array_size),
+            Some(array_len),
             array_buf,
             elem_ty,
             idx,
@@ -995,7 +1029,7 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
         let elem = gc.apply_lambda(modifier, vec![elem], None);
 
         // Perform write and return.
-        ObjectFieldType::write_to_array_buf(gc, array_size, array_buf, idx, elem, false);
+        ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, elem, false);
         array
     });
 
@@ -1056,7 +1090,7 @@ pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
         let array = gc.get_var(&FullName::local(ARRAY_NAME)).ptr.get(gc);
 
         // Make array unique
-        let (array, _, _) = make_array_unique(gc, array, is_unique_version);
+        let array = make_array_unique(gc, array, is_unique_version);
 
         array
     });
@@ -1088,15 +1122,15 @@ pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
 }
 
 // `get_length` built-in function for Array.
-pub fn length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
         let arr_name = FullName::local(ARR_NAME);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
-        let size = array_obj
-            .load_field_nocap(gc, ARRAY_SIZE_IDX)
+        let len = array_obj
+            .load_field_nocap(gc, ARRAY_LEN_IDX)
             .into_int_value();
         gc.release(array_obj);
         let int_obj = if rvo.is_none() {
@@ -1104,7 +1138,7 @@ pub fn length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         } else {
             rvo.unwrap()
         };
-        int_obj.store_field_nocap(gc, 0, size);
+        int_obj.store_field_nocap(gc, 0, len);
         int_obj
     });
 
@@ -1114,6 +1148,47 @@ pub fn length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             generator,
             vec![FullName::local(ARR_NAME)],
             "len arr".to_string(),
+            int_lit_ty(),
+            None,
+        ),
+        None,
+    );
+    let array_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
+    let scm = Scheme::generalize(
+        HashMap::from([("a".to_string(), kind_star())]),
+        vec![],
+        type_fun(array_ty, int_lit_ty()),
+    );
+    (expr, scm)
+}
+
+// `Array.get_capacity : Array a -> Int` built-in function.
+pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const ARR_NAME: &str = "arr";
+
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
+        let arr_name = FullName::local(ARR_NAME);
+        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        let array_obj = gc.get_var(&arr_name).ptr.get(gc);
+        let len = array_obj
+            .load_field_nocap(gc, ARRAY_CAP_IDX)
+            .into_int_value();
+        gc.release(array_obj);
+        let int_obj = if rvo.is_none() {
+            allocate_obj(int_lit_ty(), &vec![], None, gc, Some("cap_of_arr"))
+        } else {
+            rvo.unwrap()
+        };
+        int_obj.store_field_nocap(gc, 0, len);
+        int_obj
+    });
+
+    let expr = expr_abs(
+        vec![var_local(ARR_NAME, None)],
+        expr_lit(
+            generator,
+            vec![FullName::local(ARR_NAME)],
+            "arr.get_capacity".to_string(),
             int_lit_ty(),
             None,
         ),
@@ -1900,25 +1975,12 @@ fn extract_array_from_string<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     string: &Object<'c>,
 ) -> Object<'c> {
-    let vector = extract_vector_from_string(gc, string);
     let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
     let array = Object::new(
-        vector
-            .load_field_nocap(gc, VECTOR_DATA_IDX)
-            .into_pointer_value(),
+        string.load_field_nocap(gc, 0).into_pointer_value(),
         array_byte_ty,
     );
     array
-}
-
-// Get `Vector Byte` object from the given String (no retained)
-fn extract_vector_from_string<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
-    string: &Object<'c>,
-) -> Object<'c> {
-    let vector_byte_ty = type_tyapp(vector_lit_ty(), byte_lit_ty());
-    let vector = Object::new(string.ptr_to_field_nocap(gc, 0), vector_byte_ty);
-    vector
 }
 
 // print : String -> IOState -> ((), IOState).
