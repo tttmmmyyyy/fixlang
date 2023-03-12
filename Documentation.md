@@ -273,6 +273,9 @@ Methods:
     - Gets a value from an array, without bounds checking and retaining the returned value.
 - `__unsafe_set : Int -> a -> Array a -> Array a`
     - Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
+- `append : Array a -> Array a -> Array a`
+    - Append an array to an array.
+    - Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
 - `force_unique : Array a -> Array a`
     - Force the uniqueness of an array.
     - If the given array is shared, this function returns the cloned array.
@@ -300,6 +303,13 @@ Methods:
     - Creates an array filled with the initial value.
     - The capacity is set to the same value as the length.
     - `new(n, x) = [x, x, x, ..., x]` (of length `n`).
+- `pop_back : Array a -> Array a`
+    - Pop an element at the back of an array.
+    - If the array is empty, this function does nothing.
+- `push_back : a -> Array a -> Array a`
+    - Push an element to the back of an array.
+- `reduce_length : Int -> Array a -> Array a`
+    - Reduce the length of an array.
 - `reserve : Int -> Array a -> Array a`
     - Reserves the memory region for an array.
 - `set : Int -> a -> Array a -> Array a`
@@ -308,10 +318,19 @@ Methods:
 - `set! : Int -> a -> Array a -> Array a`
     - Updates a value of an element at an index of an array.
     - This function always update the given array. If the given array is shared between multiple references, this function panics.
+- `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
+    - Sort elements in a vector by "less than" comparator.
+- `_sort_range_by_using_buffer : Array a -> Int -> Int -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
+    - Sort elements in a range of a vector by "less than" comparator.
+    - This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
-You can create array by the syntax `[a0, a1, ..., an]`.
+You can create array by the array literal syntax `[a0, a1, ..., an]`.
 
 NOTE: In a future, we will add lens functions such as `act : [f: Functor] Int -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
+
+Implementing Traits:
+
+- `[a : Eq] Array a : Eq`
 
 ### Std.Bool
 
@@ -440,54 +459,6 @@ Implementing Traits:
 - `String : Add`
     - Add two strings by `String.concat`.
 - `String : Eq`
-
-### Std.Vector
-
-The type of variable-length array.
-
-```
-type Vector a = unbox struct { _len : Int, _data : Array a };
-```
-
-Methods:
-
-- `append : Vector a -> Vector a -> Vector a`
-    - Append a vector to a vector.
-    - Note: Since `v1.append(v2)` puts `v2` after `v1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
-- `get_length : Vector a -> Int`
-    - Returns the length of the vector.
-- `from_array : Array a -> Vector a`
-    - Create Vector from an array.
-- `get : Int -> Vector a -> a`
-    - Get the element at an index.
-- `get_length : Vector a -> Int`
-    - Get length of an vector.
-- `get_reserved_length : Vector a -> Int`
-    - Get reserved length.
-- `pop_back : Vector a -> Vector a`
-    - Pop an element at the back of a vector.
-    - If the vector is empty, this function does nothing.
-- `push_back : a -> Vector a -> Vector a`
-    - Push an element to the back of a vector.
-- `reduce_length : Int -> Vector a -> Vector a`
-    - Reduce the length of vector.
-- `reserve : Int -> Vector a -> Vector a`
-    - Reserve the internal array.
-- `set : Int -> a -> Vector a -> Vector a`
-    - Updates an elemnt at an index.
-    - This function clones the vector if it is shared.
-- `set! : Int -> a -> Vector a -> Vector a`
-    - Updates an elemnt at an index.
-    - This function asserts the Vector's internal array is unique.
-- `sort_by : ((a, a) -> Bool) -> Vector a -> Vector a`
-    - Sort elements in a vector by "less than" comparator.
-- `_sort_range_by_using_buffer : Vector a -> Int -> Int -> ((a, a) -> Bool) -> Vector a -> (Vector a, Vector a)`
-    - Sort elements in a range of a vector by "less than" comparator.
-    - This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
-
-Implementing Traits:
-
-- `[a : Eq] Vector a : Eq`
 
 ## Functions
 
