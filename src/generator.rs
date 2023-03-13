@@ -313,6 +313,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Store stack pointer.
+    #[allow(dead_code)]
     pub fn save_stack(&mut self) -> PointerValue<'c> {
         let intrinsic = Intrinsic::find("llvm.stacksave").unwrap();
         let func = intrinsic.get_declaration(&self.module, &[]).unwrap();
@@ -325,6 +326,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Restore stack pointer.
+    #[allow(dead_code)]
     pub fn restore_stack(&mut self, pos: PointerValue<'c>) {
         let intrinsic = Intrinsic::find("llvm.stackrestore").unwrap();
         assert!(!intrinsic.is_overloaded()); // So we don't need to specify type parameters in the next line.

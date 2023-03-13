@@ -107,7 +107,6 @@ impl ObjectFieldType {
 
         // Implement loop_body bb.
         gc.builder().position_at_end(loop_body_bb);
-        let stack_pos = gc.save_stack();
 
         // Generate code of loop body.
         loop_body(gc, Object::new(counter_ptr, int_lit_ty()), size, buffer);
@@ -122,7 +121,6 @@ impl ObjectFieldType {
             .build_store(counter_ptr, incremented_counter_val);
 
         // Jump back to loop_check bb.
-        gc.restore_stack(stack_pos);
         gc.builder().build_unconditional_branch(loop_check_bb);
 
         // Generate code after loop.
