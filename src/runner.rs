@@ -247,6 +247,9 @@ pub fn build_file(path: &Path, config: Configuration) {
 
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
+    module.set_triple(&tm.get_triple());
+    module.set_data_layout(&tm.get_target_data().get_data_layout());
+
     let tm = build_module(&ctx, &module, Either::Left(tm), fix_mod, config).unwrap_left();
     tm.write_to_file(&module, inkwell::targets::FileType::Object, &out_path)
         .map_err(|e| error_exit(&format!("failed to write to file: {}", e)))
