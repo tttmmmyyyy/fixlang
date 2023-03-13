@@ -157,7 +157,7 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
 
     // Increment refcnt.
     let one = context.i64_type().const_int(1, false);
-    let refcnt = gc.builder().build_int_add(refcnt, one, "refcnt");
+    let refcnt = gc.builder().build_int_nuw_add(refcnt, one, "refcnt");
     gc.builder().build_store(ptr_to_refcnt, refcnt);
     gc.builder().build_return(None);
     retain_func
@@ -200,7 +200,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
 
     // Decrement refcnt.
     let one = gc.context.i64_type().const_int(1, false);
-    let refcnt = gc.builder().build_int_sub(refcnt, one, "refcnt");
+    let refcnt = gc.builder().build_int_nuw_sub(refcnt, one, "refcnt");
     gc.builder().build_store(ptr_to_refcnt, refcnt);
     // TOOD: use atomic_rmw
 
