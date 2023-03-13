@@ -906,28 +906,29 @@ pub fn allocate_obj<'c, 'm>(
 ) -> Object<'c> {
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
+    assert!(array_cap.is_some() == ty.is_array());
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
     let struct_type = object_type.to_struct_type(gc);
 
     // Allocate object
-    let sizeof = object_type.size_of(gc, array_cap);
-    let ptr_to_obj = if object_type.is_unbox {
-        gc.builder().build_array_alloca(
-            gc.context.i8_type(),
-            sizeof,
-            &format!("alloca_{}", ty.to_string_normalize()),
-        )
+    let ptr_to_obj = if ty.is_array() {
+        let sizeof = object_type.size_of(gc, array_cap);
+        let ptr = gc
+            .builder()
+            .build_array_malloc(gc.context.i8_type(), sizeof, "malloc_array@allocate_obj")
+            .unwrap();
+        gc.cast_pointer(ptr, ptr_type(struct_type))
     } else {
-        gc.builder()
-            .build_array_malloc(
-                gc.context.i8_type(),
-                sizeof,
-                &format!("malloc_{}", ty.to_string_normalize()),
-            )
-            .unwrap()
+        if object_type.is_unbox {
+            gc.builder()
+                .build_alloca(struct_type, "alloca@allocate_obj")
+        } else {
+            gc.builder()
+                .build_malloc(struct_type, "malloc@allocate_obj")
+                .unwrap()
+        }
     };
-    let ptr_to_obj = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
 
     // If sanitize memory, create object id.
     let mut object_id = obj_id_type(gc.context).const_int(0, false);

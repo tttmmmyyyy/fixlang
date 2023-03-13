@@ -7,10 +7,8 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_scalar_repl_aggregates_pass();
     passmgr.add_tail_call_elimination_pass();
     passmgr.add_function_inlining_pass();
-    passmgr.add_new_gvn_pass();
     passmgr.add_global_optimizer_pass();
     passmgr.add_ipsccp_pass();
-    passmgr.add_licm_pass();
     passmgr.add_strip_dead_prototypes_pass();
     passmgr.add_ind_var_simplify_pass();
     passmgr.add_global_dce_pass();

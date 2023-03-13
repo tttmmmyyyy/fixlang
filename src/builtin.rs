@@ -60,7 +60,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     );
     // IO is defined in the source code of Std.
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], ARRAY_NAME)),
+        make_array_tycon(),
         TyConInfo {
             kind: kind_arrow(kind_star(), kind_star()),
             variant: TyConVariant::Array,
@@ -114,6 +114,10 @@ pub fn make_funptr_tycon(arity: u32) -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
 }
 
+pub fn make_array_tycon() -> TyCon {
+    TyCon::new(FullName::from_strs(&[STD_NAME], ARRAY_NAME))
+}
+
 // If given tycon is function pointer, returns it's arity
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
@@ -130,9 +134,14 @@ pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     Some(number.parse::<u32>().unwrap())
 }
 
-// Returns is if given tycon is dyanmic object
+// Returns whether given tycon is dyanmic object
 pub fn is_dynamic_object_tycon(tc: &TyCon) -> bool {
     tc.name == make_dynamic_object_name()
+}
+
+// Returns whether given tycon is array
+pub fn is_array_tycon(tc: &TyCon) -> bool {
+    *tc == make_array_tycon()
 }
 
 pub fn make_kind_fun(arity: u32) -> Rc<Kind> {

@@ -11,10 +11,8 @@ INITIAL_PASSES = '''
     add_scalar_repl_aggregates_pass
     add_tail_call_elimination_pass
     add_function_inlining_pass
-    add_new_gvn_pass
     add_global_optimizer_pass
     add_ipsccp_pass
-    add_licm_pass
     add_strip_dead_prototypes_pass
     add_ind_var_simplify_pass
     add_global_dce_pass
@@ -49,7 +47,13 @@ ADDED_PASSES_NUM = 10
 REQUIRED_IMPROVEMENT = 0.97
 
 # All passes
-# Exclude add_scalar_repl_aggregates_pass_with_threshold, add_internalize_pass, add_gvn_pass (segfaults), add_instruction_combining_pass (segfaults), add_memcpy_optimize_pass (segfaults)
+# Exclude:
+#  add_scalar_repl_aggregates_pass_with_threshold, 
+#  add_internalize_pass, add_gvn_pass (segfaults), 
+#  add_instruction_combining_pass (segfaults), 
+#  add_memcpy_optimize_pass (segfaults)
+#  add_new_gvn_pass (breaks progream)
+#  add_licm_pass (breaks progream)
 PASSES = '''
 add_aggressive_dce_pass
 add_aggressive_inst_combiner_pass
@@ -73,7 +77,6 @@ add_ind_var_simplify_pass
 add_instruction_simplify_pass
 add_ipsccp_pass
 add_jump_threading_pass
-add_licm_pass
 add_loop_deletion_pass
 add_loop_idiom_pass
 add_loop_reroll_pass
@@ -85,7 +88,6 @@ add_lower_expect_intrinsic_pass
 add_lower_switch_pass
 add_merge_functions_pass
 add_merged_load_store_motion_pass
-add_new_gvn_pass
 add_partially_inline_lib_calls_pass
 add_promote_memory_to_register_pass
 add_prune_eh_pass

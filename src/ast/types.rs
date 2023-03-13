@@ -48,7 +48,7 @@ pub enum TyConVariant {
     Struct,
     Union,
     // Dynamic object is nullble and has the destructor as the first field.
-    DynamicObject
+    DynamicObject,
 }
 
 #[derive(Clone, PartialEq, Hash, Eq)]
@@ -323,6 +323,15 @@ impl TypeNode {
         } else {
             return false;
         }
+    }
+
+    pub fn is_array(&self) -> bool {
+        let tc = self.toplevel_tycon();
+        if tc.is_none() {
+            return false;
+        }
+        let tc = tc.unwrap();
+        return is_array_tycon(tc.as_ref());
     }
 
     pub fn is_dynamic(&self) -> bool {
