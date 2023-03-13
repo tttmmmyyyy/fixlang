@@ -86,9 +86,7 @@ impl ObjectFieldType {
 
         // Allocate and initialize loop counter.
         let counter_type = gc.context.i64_type();
-        let counter_ptr = gc
-            .builder()
-            .build_alloca(counter_type, "release_loop_counter");
+        let counter_ptr = gc.build_alloca_at_entry(counter_type, "release_loop_counter");
         gc.builder()
             .build_store(counter_ptr, counter_type.const_zero());
 
@@ -921,8 +919,7 @@ pub fn allocate_obj<'c, 'm>(
         gc.cast_pointer(ptr, ptr_type(struct_type))
     } else {
         if object_type.is_unbox {
-            gc.builder()
-                .build_alloca(struct_type, "alloca@allocate_obj")
+            gc.build_alloca_at_entry(struct_type, "alloca@allocate_obj")
         } else {
             gc.builder()
                 .build_malloc(struct_type, "malloc@allocate_obj")

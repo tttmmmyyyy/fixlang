@@ -1911,11 +1911,9 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
 
         // If loop_state_ty is boxed, allocate a space to store loop state on stack to avoid alloca in loop body.
         let loop_state_buf = if loop_state_ty.is_unbox(gc.type_env()) {
+            let ty = loop_state_ty.get_embedded_type(gc, &vec![]);
             Some(Object::new(
-                gc.builder().build_alloca(
-                    loop_state_ty.get_embedded_type(gc, &vec![]),
-                    "loop_state_in_loop",
-                ),
+                gc.build_alloca_at_entry(ty, "loop_state_in_loop"),
                 loop_state_ty.clone(),
             ))
         } else {

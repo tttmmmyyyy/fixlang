@@ -10,7 +10,7 @@ use inkwell::{
     intrinsics::Intrinsic,
     module::Linkage,
     targets::{TargetData, TargetMachine},
-    types::AnyType,
+    types::{AnyType, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
 
@@ -73,7 +73,7 @@ impl<'c> Object<'c> {
             val.into_pointer_value()
         } else {
             let str = ty.get_struct_type(gc, &vec![]);
-            let ptr = gc.builder().build_alloca(str, "alloca_for_unboxed_obj");
+            let ptr = gc.build_alloca_at_entry(str, "alloca_for_unboxed_obj");
             gc.builder().build_store(ptr, val);
             ptr
         };
@@ -298,6 +298,20 @@ impl<'c> Drop for PopScopeGuard<'c> {
 }
 
 impl<'c, 'm> GenerationContext<'c, 'm> {
+    // Build alloca at current function's entry bb.
+    pub fn build_alloca_at_entry<T: BasicType<'c>>(&self, ty: T, name: &str) -> PointerValue<'c> {
+        let current_bb = self.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let first_bb = current_func.get_first_basic_block().unwrap();
+        match first_bb.get_first_instruction() {
+            Some(first_inst) => self.builder().position_before(&first_inst),
+            None => self.builder().position_at_end(first_bb),
+        }
+        let ptr = self.builder().build_alloca(ty, name);
+        self.builder().position_at_end(current_bb);
+        ptr
+    }
+
     // Store stack pointer.
     pub fn save_stack(&mut self) -> PointerValue<'c> {
         let intrinsic = Intrinsic::find("llvm.stacksave").unwrap();
