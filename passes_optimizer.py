@@ -1,3 +1,4 @@
+from math import ceil
 import subprocess
 import re
 import itertools
@@ -9,15 +10,23 @@ SOURCE_FILE = './src/llvm_passes.rs'
 
 INITIAL_PASSES = '''
     add_scalar_repl_aggregates_pass
-    add_tail_call_elimination_pass
     add_function_inlining_pass
-    add_global_optimizer_pass
-    add_ipsccp_pass
-    add_strip_dead_prototypes_pass
     add_ind_var_simplify_pass
+    add_cfg_simplification_pass
+    add_early_cse_pass
+    add_sccp_pass
+    add_loop_deletion_pass
+    add_scalar_repl_aggregates_pass_ssa
     add_global_dce_pass
-    add_promote_memory_to_register_pass
-    add_dead_store_elimination_pass
+    add_alignment_from_assumptions_pass
+    add_type_based_alias_analysis_pass
+    add_aggressive_dce_pass
+    add_strip_dead_prototypes_pass
+    add_scoped_no_alias_aa_pass
+    add_merge_functions_pass
+    add_global_optimizer_pass
+    add_scalarizer_pass
+    add_jump_threading_pass
 '''
 INITIAL_PASSES = INITIAL_PASSES.split('\n')
 INITIAL_PASSES = [line.strip() for line in INITIAL_PASSES]
@@ -123,7 +132,7 @@ def write_source_file(passes):
         f.write(FOOTER)
         f.write('\n')
 
-def run_benchmark(run_bench_iteration=RUN_BENCH_ITERATION):
+def run_benchmark(run_bench_iteration=RUN_BENCH_ITERATION, timeout=60):
     cp = subprocess.run(['cargo', 'run', '--', 'build', FIX_SOURCE_FILE + '.fix'], capture_output = True, text = True)
     if cp.returncode != 0:
         print('build failed.')
@@ -144,17 +153,21 @@ def run_benchmark(run_bench_iteration=RUN_BENCH_ITERATION):
 
     total_time = 0.0
     for _ in range(run_bench_iteration):
-        cp = subprocess.run(['time', '-f', '%e', './a.out'], capture_output = True, text = True)
-        if cp.returncode != 0:
-            print('run failed.')
-            print('stdout:')
-            print(cp.stdout)
-            print('stderr:')
-            print(cp.stderr)
-            total_time = 100000.0 * run_bench_iteration  # return a long time
+        try:
+            cp = subprocess.run(['time', '-f', '%e', './a.out'], capture_output = True, text = True, timeout=timeout)
+            if cp.returncode != 0:
+                print('run failed.')
+                print('stdout:')
+                print(cp.stdout)
+                print('stderr:')
+                print(cp.stderr)
+                total_time = 100000.0 * run_bench_iteration  # return a long time
+                break
+            else:
+                total_time += float(cp.stderr)
+        except subprocess.TimeoutExpired:
+            total_time += timeout
             break
-        else:
-            total_time += float(cp.stderr)
 
     # parse stdout and get read time.
     return total_time / run_bench_iteration
@@ -186,7 +199,7 @@ def optimize():
         for p in added_passes:
             passes.append(p)
         write_source_file(passes)
-        time = run_benchmark()
+        time = run_benchmark(int(ceil(optimum_time*2)))
         if time <= optimum_time * REQUIRED_IMPROVEMENT:
             optimum_passes = passes
             optimum_time = time
@@ -200,7 +213,7 @@ def optimize():
             if random.randint(0,1) == 0:
                 minimized.append(p)
         write_source_file(minimized)
-        minimized_time = run_benchmark()
+        minimized_time = run_benchmark(int(ceil(optimum_time*2)))
         if minimized_time <= optimum_time:
             optimum_passes = minimized
             print("Minimize success!")
@@ -208,7 +221,7 @@ def optimize():
         print('Current optimum passes:')
         print_passes(optimum_passes)
         write_source_file(optimum_passes)
-        optimum_time = run_benchmark()
+        optimum_time = run_benchmark(int(ceil(optimum_time*2)))
         print('Current optimum time: {}'.format(optimum_time))
 
 if __name__ == '__main__':
