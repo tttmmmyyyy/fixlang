@@ -419,15 +419,15 @@ fn replace_free_var(
         }
         Expr::Let(pat, bound, val) => {
             let bound = replace_free_var(bound, from, to, scope)?;
-            let val = if pat.vars().contains(from) {
+            let val = if pat.pattern.vars().contains(from) {
                 // then, the from-name is shadowed in val, so we should not replace val.
                 val.clone()
             } else {
-                for v in pat.vars() {
+                for v in pat.pattern.vars() {
                     scope.push(&v.name, &());
                 }
                 let res = replace_free_var(val, from, to, scope)?;
-                for v in pat.vars() {
+                for v in pat.pattern.vars() {
                     scope.pop(&v.name);
                 }
                 res

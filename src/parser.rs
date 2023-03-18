@@ -865,11 +865,11 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let pat = parse_pattern(pairs.next().unwrap(), src);
-    if pat.validate_duplicated_vars() {
-        error_exit(&format!(
-            "each name defined in pattern must appear exactly at once. pattern: {}",
-            pat.to_string()
-        ));
+    if pat.pattern.validate_duplicated_vars() {
+        error_exit_with_src(
+            &format!("Each name defined in a pattern must appear exactly at once. "),
+            &Some(span),
+        );
     }
     let _eq_of_let = pairs.next().unwrap();
     let bound = parse_expr(pairs.next().unwrap(), src);
@@ -1119,7 +1119,7 @@ fn parse_type_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
     .set_source(Some(span))
 }
 
-fn parse_pattern(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
+fn parse_pattern(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     assert_eq!(pair.as_rule(), Rule::pattern);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
@@ -1131,32 +1131,35 @@ fn parse_pattern(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
     }
 }
 
-fn parse_pattern_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
+fn parse_pattern_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     assert_eq!(pair.as_rule(), Rule::pattern_var);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
     let ty = pairs.next().map(|ty| parse_type(ty, src));
-    Rc::new(Pattern::Var(var_local(var_name, Some(span)), ty))
+    PatternNode::make_var(var_local(var_name, Some(span.clone())), ty).set_source(span)
 }
 
-fn parse_pattern_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
+fn parse_pattern_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     assert_eq!(pair.as_rule(), Rule::pattern_tuple);
+    let span = Span::from_pair(&src, &pair);
     let pairs = pair.into_inner();
     let pats = pairs
         .map(|pair| parse_pattern(pair, src))
         .collect::<Vec<_>>();
-    Rc::new(Pattern::Struct(
+    PatternNode::make_struct(
         tycon(make_tuple_name(pats.len() as u32)),
         pats.iter()
             .enumerate()
             .map(|(i, pat)| (i.to_string(), pat.clone()))
             .collect(),
-    ))
+    )
+    .set_source(span)
 }
 
-fn parse_pattern_struct(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
+fn parse_pattern_struct(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     assert_eq!(pair.as_rule(), Rule::pattern_struct);
+    let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.clone().into_inner();
     let tycon = parse_tycon(pairs.next().unwrap());
     let mut field_to_pats = Vec::default();
@@ -1178,16 +1181,17 @@ fn parse_pattern_struct(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
         let pat = parse_pattern(pairs.next().unwrap(), src);
         field_to_pats.push((field_name, pat));
     }
-    Rc::new(Pattern::Struct(tycon, field_to_pats))
+    PatternNode::make_struct(tycon, field_to_pats).set_source(span)
 }
 
-fn parse_pattern_union(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
+fn parse_pattern_union(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     assert_eq!(pair.as_rule(), Rule::pattern_union);
+    let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let tycon = parse_tycon(pairs.next().unwrap());
     let field_name = pairs.next().unwrap().as_str().to_string();
     let pat = parse_pattern(pairs.next().unwrap(), src);
-    Rc::new(Pattern::Union(tycon, field_name, pat))
+    PatternNode::make_union(tycon, field_name, pat).set_source(span)
 }
 
 fn rule_to_string(r: &Rule) -> String {

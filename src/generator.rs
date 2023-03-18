@@ -1182,12 +1182,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate let
     fn eval_let(
         &mut self,
-        pat: &Rc<Pattern>,
+        pat: &Rc<PatternNode>,
         bound: Rc<ExprNode>,
         val: Rc<ExprNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        let vars = pat.vars();
+        let vars = pat.pattern.vars();
         let mut used_in_val_except_pat = val.free_vars().clone();
         for v in vars {
             used_in_val_except_pat.remove(&v);
@@ -1215,11 +1215,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Destructure object by pattern
     fn destructure_object_by_pattern(
         &mut self,
-        pat: &Rc<Pattern>,
+        pat: &Rc<PatternNode>,
         obj: &Object<'c>,
     ) -> Vec<(FullName, Object<'c>)> {
         let mut ret = vec![];
-        match pat.as_ref() {
+        match &pat.pattern {
             Pattern::Var(v, _) => {
                 ret.push((v.name.clone(), obj.clone()));
             }

@@ -608,7 +608,7 @@ impl TypeCheckContext {
                 ei.set_lam_body(body)
             }
             Expr::Let(pat, val, body) => {
-                let (pat_ty, var_ty) = pat.get_type(self);
+                let (pat_ty, var_ty) = pat.pattern.get_type(self);
                 let val = self.unify_type_of_expr(val, pat_ty.clone());
                 let var_scm = var_ty.iter().map(|(name, ty)| {
                     (

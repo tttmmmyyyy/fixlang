@@ -10,7 +10,7 @@ pub struct TypeDefn {
 
 impl TypeDefn {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        assert!(self.name == ctx.resolve(&self.name, NameResolutionType::Type));
+        assert!(self.name == ctx.resolve(&self.name, NameResolutionType::Type).unwrap());
         self.value.resolve_namespace(ctx);
     }
 

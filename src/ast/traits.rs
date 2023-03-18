@@ -25,8 +25,9 @@ impl TraitId {
         self.name.clone()
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.name = ctx.resolve(&self.name, NameResolutionType::Trait);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
+        self.name = ctx.resolve(&self.name, NameResolutionType::Trait)?;
+        Ok(())
     }
 }
 
@@ -315,7 +316,12 @@ impl TraitEnv {
         // See into trait definition.
         for (trait_id, trait_info) in &mut self.traits {
             // Keys in self.traits should already be resolved.
-            assert!(trait_id.name == ctx.resolve(&trait_id.name, NameResolutionType::Trait));
+            assert!(
+                trait_id.name
+                    == ctx
+                        .resolve(&trait_id.name, NameResolutionType::Trait)
+                        .unwrap()
+            );
             trait_info.resolve_namespace(ctx);
         }
 

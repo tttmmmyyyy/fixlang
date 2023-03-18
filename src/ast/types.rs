@@ -65,8 +65,9 @@ impl TyCon {
         self.name.to_string()
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.name = ctx.resolve(&self.name, NameResolutionType::Type);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
+        self.name = ctx.resolve(&self.name, NameResolutionType::Type)?;
+        Ok(())
     }
 
     // Get the type of struct / union value.

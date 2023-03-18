@@ -141,7 +141,11 @@ pub enum NameResolutionType {
 }
 
 impl NameResolutionContext {
-    pub fn resolve(&self, ns: &FullName, type_or_trait: NameResolutionType) -> FullName {
+    pub fn resolve(
+        &self,
+        ns: &FullName,
+        type_or_trait: NameResolutionType,
+    ) -> Result<FullName, String> {
         let candidates = if type_or_trait == NameResolutionType::Type {
             &self.types
         } else {
@@ -158,23 +162,25 @@ impl NameResolutionContext {
             })
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
-            match type_or_trait {
+            let msg = match type_or_trait {
                 NameResolutionType::Type => {
-                    error_exit(&format!("Unknown type name: {}", ns.to_string()))
+                    format!("Unknown type name: {}", ns.to_string())
                 }
                 NameResolutionType::Trait => {
-                    error_exit(&format!("Unknown trait name: {}", ns.to_string()))
+                    format!("Unknown trait name: {}", ns.to_string())
                 }
-            }
+            };
+            Err(msg)
         } else if candidates.len() == 1 {
-            candidates[0].clone()
+            Ok(candidates[0].clone())
         } else {
             // candidates.len() >= 2
-            if type_or_trait == NameResolutionType::Type {
-                error_exit("Type name `{}` is ambiguous.")
+            let msg = if type_or_trait == NameResolutionType::Type {
+                format!("Type name `{}` is ambiguous.", ns.to_string())
             } else {
-                error_exit("Trait name `{}` is ambiguous.")
-            }
+                format!("Trait name `{}` is ambiguous.", ns.to_string())
+            };
+            Err(msg)
         }
     }
 }
