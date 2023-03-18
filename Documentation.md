@@ -319,9 +319,9 @@ Methods:
     - Updates a value of an element at an index of an array.
     - This function always update the given array. If the given array is shared between multiple references, this function panics.
 - `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
-    - Sort elements in a vector by "less than" comparator.
+    - Sort elements in an array by "less than" comparator.
 - `_sort_range_by_using_buffer : Array a -> Int -> Int -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
-    - Sort elements in a range of a vector by "less than" comparator.
+    - Sort elements in a range of an array by "less than" comparator.
     - This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
 You can create array by the array literal syntax `[a0, a1, ..., an]`.
