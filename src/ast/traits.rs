@@ -65,10 +65,10 @@ impl TraitInfo {
             error_exit("Type of trait method must contain bounded type.");
             // TODO: check this in more early stage.
         }
-        let mut preds = vec![Predicate {
-            trait_id: self.id.clone(),
-            ty: type_var_from_tyvar(self.type_var.clone()),
-        }];
+        let mut preds = vec![Predicate::make(
+            self.id.clone(),
+            type_var_from_tyvar(self.type_var.clone()),
+        )];
         preds.append(&mut ty.preds);
         Scheme::generalize(vars, preds, ty.ty)
     }
@@ -229,11 +229,32 @@ impl QualType {
 pub struct Predicate {
     pub trait_id: TraitId,
     pub ty: Rc<TypeNode>,
+    pub info: PredicateInfo,
+}
+
+#[derive(Clone)]
+pub struct PredicateInfo {
+    source: Option<Span>,
 }
 
 impl Predicate {
+    pub fn set_source(&mut self, source: Span) {
+        self.info.source = Some(source);
+    }
+
+    pub fn make(trait_id: TraitId, ty: Rc<TypeNode>) -> Self {
+        Predicate {
+            trait_id,
+            ty,
+            info: PredicateInfo { source: None },
+        }
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.trait_id.resolve_namespace(ctx);
+        let resolve_result = self.trait_id.resolve_namespace(ctx);
+        if resolve_result.is_err() {
+            error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
+        }
         self.ty = self.ty.resolve_namespace(ctx);
     }
 
@@ -330,7 +351,15 @@ impl TraitEnv {
         let mut instances_resolved: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
         for (mut trait_id, mut insts) in insntaces {
             // Resolve key's namespace.
-            trait_id.resolve_namespace(ctx);
+            let resolve_result = trait_id.resolve_namespace(ctx);
+            if resolve_result.is_err() {
+                let src = if insts.len() > 0 {
+                    insts[0].qual_pred.predicate.info.source.clone()
+                } else {
+                    None
+                };
+                error_exit_with_src(&resolve_result.unwrap_err(), &src)
+            }
             // Resolve value's namespace.
             for inst in &mut insts {
                 inst.resolve_namespace(ctx);

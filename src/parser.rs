@@ -342,13 +342,13 @@ fn parse_predicate_kind(pair: Pair<Rule>, src: &Rc<String>) -> KindPredicate {
 
 fn parse_predicate(pair: Pair<Rule>, src: &Rc<String>) -> Predicate {
     assert_eq!(pair.as_rule(), Rule::predicate);
+    let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let ty = parse_type(pairs.next().unwrap(), src);
     let trait_name = pairs.next().unwrap().as_str().to_string();
-    Predicate {
-        trait_id: TraitId::new_by_name(&trait_name),
-        ty,
-    }
+    let mut pred = Predicate::make(TraitId::new_by_name(&trait_name), ty);
+    pred.set_source(span);
+    pred
 }
 
 fn parse_kind(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Kind> {
@@ -1121,6 +1121,7 @@ fn parse_type_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
 
 fn parse_pattern(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     assert_eq!(pair.as_rule(), Rule::pattern);
+    let span = Span::from_pair(src, &pair);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::pattern_var => parse_pattern_var(pair, src),
@@ -1129,6 +1130,7 @@ fn parse_pattern(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
         Rule::pattern_union => parse_pattern_union(pair, src),
         _ => unreachable!(),
     }
+    .set_source(span)
 }
 
 fn parse_pattern_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {

@@ -264,7 +264,10 @@ impl TypeNode {
             Type::TyVar(_tv) => self.clone(),
             Type::TyCon(tc) => {
                 let mut tc = tc.as_ref().clone();
-                tc.resolve_namespace(ctx);
+                let resolve_result = tc.resolve_namespace(ctx);
+                if resolve_result.is_err() {
+                    error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
+                }
                 self.set_tycon_tc(Rc::new(tc))
             }
             Type::TyApp(fun, arg) => self

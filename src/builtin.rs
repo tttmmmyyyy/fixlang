@@ -2211,10 +2211,7 @@ pub fn unary_opeartor_instance(
         qual_pred: QualPredicate {
             context: vec![],
             kind_preds: vec![],
-            predicate: Predicate {
-                trait_id,
-                ty: operand_ty,
-            },
+            predicate: Predicate::make(trait_id, operand_ty),
         },
         methods: HashMap::from([(
             method_name.to_string(),
@@ -2286,10 +2283,7 @@ pub fn binary_opeartor_instance(
         qual_pred: QualPredicate {
             context: vec![],
             kind_preds: vec![],
-            predicate: Predicate {
-                trait_id,
-                ty: operand_ty,
-            },
+            predicate: Predicate::make(trait_id, operand_ty),
         },
         methods: HashMap::from([(
             method_name.to_string(),
