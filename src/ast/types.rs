@@ -132,6 +132,13 @@ impl std::fmt::Debug for TypeNode {
 }
 
 impl TypeNode {
+    // Set source.
+    pub fn set_source(&self, src: Option<Span>) -> Rc<Self> {
+        let mut ret = self.clone();
+        ret.info.source = src;
+        Rc::new(ret)
+    }
+
     // Set kinds to type variables.
     pub fn set_kinds(self: &Rc<TypeNode>, kinds: &HashMap<Name, Rc<Kind>>) -> Rc<TypeNode> {
         match &self.ty {

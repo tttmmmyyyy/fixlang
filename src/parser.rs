@@ -306,7 +306,7 @@ fn parse_type_qualified(pair: Pair<Rule>, src: &Rc<String>) -> QualType {
     } else {
         (vec![], vec![])
     };
-    let ty = parse_type(pairs.next().unwrap());
+    let ty = parse_type(pairs.next().unwrap(), src);
     let qt = QualType {
         preds,
         ty,
@@ -340,10 +340,10 @@ fn parse_predicate_kind(pair: Pair<Rule>, src: &Rc<String>) -> KindPredicate {
     KindPredicate { name, kind }
 }
 
-fn parse_predicate(pair: Pair<Rule>, _src: &Rc<String>) -> Predicate {
+fn parse_predicate(pair: Pair<Rule>, src: &Rc<String>) -> Predicate {
     assert_eq!(pair.as_rule(), Rule::predicate);
     let mut pairs = pair.into_inner();
-    let ty = parse_type(pairs.next().unwrap());
+    let ty = parse_type(pairs.next().unwrap(), src);
     let trait_name = pairs.next().unwrap().as_str().to_string();
     Predicate {
         trait_id: TraitId::new_by_name(&trait_name),
@@ -452,11 +452,11 @@ fn parse_box_unbox(pair: Pair<Rule>, _src: &Rc<String>) -> bool {
     unreachable!();
 }
 
-fn parse_type_field(pair: Pair<Rule>, _src: &Rc<String>) -> Field {
+fn parse_type_field(pair: Pair<Rule>, src: &Rc<String>) -> Field {
     assert_eq!(pair.as_rule(), Rule::type_field);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
-    let ty = parse_type(pairs.next().unwrap());
+    let ty = parse_type(pairs.next().unwrap(), src);
     Field {
         name: name.to_string(),
         ty,
@@ -477,7 +477,7 @@ fn parse_expr_type_annotation(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode
     match pairs.next() {
         None => {}
         Some(ty) => {
-            expr = expr_tyanno(expr, parse_type(ty), Some(span));
+            expr = expr_tyanno(expr, parse_type(ty, src), Some(span));
         }
     }
     expr
@@ -1030,60 +1030,69 @@ fn parse_expr_string_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     make_string_from_rust_string(string, Some(span))
 }
 
-fn parse_type(type_expr: Pair<Rule>) -> Rc<TypeNode> {
-    assert_eq!(type_expr.as_rule(), Rule::type_expr);
-    let mut pairs = type_expr.into_inner();
+fn parse_type(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_expr);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
-        Rule::type_fun => parse_type_fun(pair),
+        Rule::type_fun => parse_type_fun(pair, src),
         _ => unreachable!(),
     }
+    .set_source(Some(span))
 }
 
-fn parse_type_fun(type_expr: Pair<Rule>) -> Rc<TypeNode> {
-    assert_eq!(type_expr.as_rule(), Rule::type_fun);
-    let mut pairs = type_expr.into_inner();
-    let src_ty = parse_type_tyapp(pairs.next().unwrap());
+fn parse_type_fun(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_fun);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let src_ty = parse_type_tyapp(pairs.next().unwrap(), src);
     match pairs.next() {
         Some(pair) => {
-            let dst_ty = parse_type(pair);
+            let dst_ty = parse_type(pair, src);
             type_fun(src_ty, dst_ty)
         }
         None => src_ty,
     }
+    .set_source(Some(span))
 }
 
-fn parse_type_tyapp(type_expr: Pair<Rule>) -> Rc<TypeNode> {
-    assert_eq!(type_expr.as_rule(), Rule::type_tyapp);
-    let mut pairs = type_expr.into_inner();
+fn parse_type_tyapp(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_tyapp);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
     let pair = pairs.next().unwrap();
-    let mut ret = parse_type_nlr(pair);
+    let mut ret = parse_type_nlr(pair, src);
     for pair in pairs {
-        ret = type_tyapp(ret, parse_type_nlr(pair));
+        ret = type_tyapp(ret, parse_type_nlr(pair, src));
     }
-    ret
+    ret.set_source(Some(span))
 }
 
-fn parse_type_nlr(type_expr: Pair<Rule>) -> Rc<TypeNode> {
-    assert_eq!(type_expr.as_rule(), Rule::type_nlr);
-    let mut pairs = type_expr.into_inner();
+fn parse_type_nlr(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_nlr);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
-        Rule::type_tycon => parse_type_tycon(pair),
-        Rule::type_var => parse_type_var(pair),
-        Rule::type_tuple => parse_type_tuple(pair),
+        Rule::type_tycon => parse_type_tycon(pair, src),
+        Rule::type_var => parse_type_var(pair, src),
+        Rule::type_tuple => parse_type_tuple(pair, src),
         _ => unreachable!(),
     }
+    .set_source(Some(span))
 }
 
-fn parse_type_var(pair: Pair<Rule>) -> Rc<TypeNode> {
+fn parse_type_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_var);
-    type_tyvar(pair.as_str(), &kind_star())
+    let span = Span::from_pair(&src, &pair);
+    type_tyvar(pair.as_str(), &kind_star()).set_source(Some(span))
 }
 
-fn parse_type_tycon(type_expr: Pair<Rule>) -> Rc<TypeNode> {
-    assert_eq!(type_expr.as_rule(), Rule::type_tycon);
-    type_tycon(&parse_tycon(type_expr))
+fn parse_type_tycon(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_tycon);
+    let span = Span::from_pair(&src, &pair);
+    type_tycon(&parse_tycon(pair)).set_source(Some(span))
 }
 
 fn parse_tycon(pair: Pair<Rule>) -> Rc<TyCon> {
@@ -1091,9 +1100,13 @@ fn parse_tycon(pair: Pair<Rule>) -> Rc<TyCon> {
     tycon(FullName::from_strs(&[], pair.as_str()))
 }
 
-fn parse_type_tuple(pair: Pair<Rule>) -> Rc<TypeNode> {
+fn parse_type_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_tuple);
-    let types = pair.into_inner().map(|p| parse_type(p)).collect::<Vec<_>>();
+    let span = Span::from_pair(&src, &pair);
+    let types = pair
+        .into_inner()
+        .map(|p| parse_type(p, src))
+        .collect::<Vec<_>>();
     if types.len() == 1 {
         types[0].clone()
     } else {
@@ -1103,6 +1116,7 @@ fn parse_type_tuple(pair: Pair<Rule>) -> Rc<TypeNode> {
         }
         res
     }
+    .set_source(Some(span))
 }
 
 fn parse_pattern(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
@@ -1122,7 +1136,7 @@ fn parse_pattern_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Pattern> {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
-    let ty = pairs.next().map(|ty| parse_type(ty));
+    let ty = pairs.next().map(|ty| parse_type(ty, src));
     Rc::new(Pattern::Var(var_local(var_name, Some(span)), ty))
 }
 
