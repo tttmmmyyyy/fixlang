@@ -416,7 +416,10 @@ impl PatternNode {
             }
             Pattern::Struct(tc, field_to_pat) => {
                 let mut tc = tc.as_ref().clone();
-                tc.resolve_namespace(ctx);
+                let resolve_result = tc.resolve_namespace(ctx);
+                if resolve_result.is_err() {
+                    error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
+                }
                 let field_to_pat = field_to_pat
                     .iter()
                     .map(|(field_name, pat)| (field_name.clone(), pat.resolve_namespace(ctx)))
@@ -426,7 +429,10 @@ impl PatternNode {
             }
             Pattern::Union(tc, _, pat) => {
                 let mut tc = tc.as_ref().clone();
-                tc.resolve_namespace(ctx);
+                let resolve_result = tc.resolve_namespace(ctx);
+                if resolve_result.is_err() {
+                    error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
+                }
                 self.set_union_tycon(Rc::new(tc))
                     .set_union_pat(pat.resolve_namespace(ctx))
             }
