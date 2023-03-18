@@ -532,7 +532,7 @@ impl TypeCheckContext {
                             var.name.to_string(),
                             &self.substitute_type(&ty).to_string_normalize()
                         ),
-                        &var.source,
+                        &ei.source,
                     );
                 } else if candidates.len() >= 2 {
                     let candidates_str = candidates
@@ -549,7 +549,7 @@ impl TypeCheckContext {
                             var.name.to_string(),
                             candidates_str
                         ),
-                        &var.source,
+                        &ei.source,
                     );
                 } else {
                     // candidates.len() == 1

@@ -892,7 +892,7 @@ fn parse_expr_lam(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     }
     let mut expr = parse_expr(pairs.next().unwrap(), src);
     const ARG_NAME: &str = "%arg";
-    let var = var_local(ARG_NAME, None);
+    let var = var_local(ARG_NAME);
     for pat in pats.iter().rev() {
         expr = expr_abs(
             vec![var.clone()],
@@ -1137,7 +1137,7 @@ fn parse_pattern_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
     let ty = pairs.next().map(|ty| parse_type(ty, src));
-    PatternNode::make_var(var_local(var_name, Some(span.clone())), ty).set_source(span)
+    PatternNode::make_var(var_local(var_name), ty).set_source(span)
 }
 
 fn parse_pattern_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {

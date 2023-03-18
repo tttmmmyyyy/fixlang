@@ -372,8 +372,8 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
-        vec![var_local("f", None)],
-        expr_abs(vec![var_local("x", None)], fix_lit("b", "f", "x"), None),
+        vec![var_local("f")],
+        expr_abs(vec![var_local("x")], fix_lit("b", "f", "x"), None),
         None,
     );
     let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
@@ -442,7 +442,7 @@ pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         type_fun(int_lit_ty(), string_lit_ty()),
     );
     let expr = expr_abs(
-        vec![var_local(VAL_NAME, None)],
+        vec![var_local(VAL_NAME)],
         expr_lit(
             generator,
             vec![FullName::local(VAL_NAME)],
@@ -492,9 +492,9 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
 // Creates an array with same capacity.
 pub fn new_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
-        vec![var_local("size", None)],
+        vec![var_local("size")],
         expr_abs(
-            vec![var_local("value", None)],
+            vec![var_local("value")],
             new_array_lit("a", "size", "value"),
             None,
         ),
@@ -547,7 +547,7 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar);
 
     let expr = expr_abs(
-        vec![var_local(CAP_NAME, None)],
+        vec![var_local(CAP_NAME)],
         expr_lit(
             generator,
             vec![FullName::local(CAP_NAME)],
@@ -594,11 +594,11 @@ pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(IDX_NAME, None)],
+        vec![var_local(IDX_NAME)],
         expr_abs(
-            vec![var_local(VALUE_NAME, None)],
+            vec![var_local(VALUE_NAME)],
             expr_abs(
-                vec![var_local(ARR_NAME, None)],
+                vec![var_local(ARR_NAME)],
                 expr_lit(
                     generator,
                     vec![
@@ -658,9 +658,9 @@ pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(IDX_NAME, None)],
+        vec![var_local(IDX_NAME)],
         expr_abs(
-            vec![var_local(ARR_NAME, None)],
+            vec![var_local(ARR_NAME)],
             expr_lit(
                 generator,
                 vec![FullName::local(IDX_NAME), FullName::local(ARR_NAME)],
@@ -708,9 +708,9 @@ pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(LENGTH_NAME, None)],
+        vec![var_local(LENGTH_NAME)],
         expr_abs(
-            vec![var_local(ARR_NAME, None)],
+            vec![var_local(ARR_NAME)],
             expr_lit(
                 generator,
                 vec![FullName::local(LENGTH_NAME), FullName::local(ARR_NAME)],
@@ -798,9 +798,9 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
 // "Array.get : Array a -> Int -> a" built-in function.
 pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
-        vec![var_local("idx", None)],
+        vec![var_local("idx")],
         expr_abs(
-            vec![var_local("array", None)],
+            vec![var_local("array")],
             read_array_lit("a", "array", "idx"),
             None,
         ),
@@ -965,11 +965,11 @@ fn set_array_lit(
 // Array.set built-in function.
 pub fn set_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
-        vec![var_local("idx", None)],
+        vec![var_local("idx")],
         expr_abs(
-            vec![var_local("value", None)],
+            vec![var_local("value")],
             expr_abs(
-                vec![var_local("array", None)],
+                vec![var_local("array")],
                 set_array_lit("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
@@ -1046,11 +1046,11 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(INDEX_NAME, None)],
+        vec![var_local(INDEX_NAME)],
         expr_abs(
-            vec![var_local(MODIFIER_NAME, None)],
+            vec![var_local(MODIFIER_NAME)],
             expr_abs(
-                vec![var_local(MODIFIED_ARRAY_NAME, None)],
+                vec![var_local(MODIFIED_ARRAY_NAME)],
                 expr_lit(
                     generator,
                     vec![
@@ -1108,7 +1108,7 @@ pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(ARRAY_NAME, None)],
+        vec![var_local(ARRAY_NAME)],
         expr_lit(
             generator,
             vec![FullName::local(ARRAY_NAME)],
@@ -1152,7 +1152,7 @@ pub fn get_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     });
 
     let expr = expr_abs(
-        vec![var_local(ARR_NAME, None)],
+        vec![var_local(ARR_NAME)],
         expr_lit(
             generator,
             vec![FullName::local(ARR_NAME)],
@@ -1193,7 +1193,7 @@ pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     });
 
     let expr = expr_abs(
-        vec![var_local(ARR_NAME, None)],
+        vec![var_local(ARR_NAME)],
         expr_lit(
             generator,
             vec![FullName::local(ARR_NAME)],
@@ -1257,7 +1257,7 @@ pub fn struct_new(struct_name: &FullName, definition: &TypeDefn) -> (Rc<ExprNode
     );
     let mut ty = definition.ty();
     for field in definition.fields().iter().rev() {
-        expr = expr_abs(vec![var_local(&field.name, None)], expr, None);
+        expr = expr_abs(vec![var_local(&field.name)], expr, None);
         ty = type_fun(field.ty.clone(), ty);
     }
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
@@ -1326,7 +1326,7 @@ pub fn struct_get(
     let str_ty = definition.ty();
     const VAR_NAME: &str = "str_obj";
     let expr = expr_abs(
-        vec![var_local(VAR_NAME, None)],
+        vec![var_local(VAR_NAME)],
         struct_get_lit(
             VAR_NAME,
             field_idx as usize,
@@ -1412,9 +1412,9 @@ pub fn struct_mod(
     let field_count = definition.fields().len();
     let str_ty = definition.ty();
     let expr = expr_abs(
-        vec![var_local("f", None)],
+        vec![var_local("f")],
         expr_abs(
-            vec![var_local("x", None)],
+            vec![var_local("x")],
             struct_mod_lit(
                 "f",
                 "x",
@@ -1567,9 +1567,9 @@ pub fn struct_set(
 
     let str_ty = definition.ty();
     let expr = expr_abs(
-        vec![var_local(VALUE_NAME, None)],
+        vec![var_local(VALUE_NAME)],
         expr_abs(
-            vec![var_local(STRUCT_NAME, None)],
+            vec![var_local(STRUCT_NAME)],
             expr_lit(
                 generator,
                 vec![FullName::local(VALUE_NAME), FullName::local(STRUCT_NAME)],
@@ -1615,7 +1615,7 @@ pub fn union_new(
         ));
     }
     let expr = expr_abs(
-        vec![var_local(field_name, None)],
+        vec![var_local(field_name)],
         union_new_lit(union_name, union, field_name, field_idx),
         None,
     );
@@ -1690,7 +1690,7 @@ pub fn union_as(
     }
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
-        vec![var_local(&union_arg_name, None)],
+        vec![var_local(&union_arg_name)],
         union_as_lit(
             union_name,
             &union_arg_name,
@@ -1762,7 +1762,7 @@ pub fn union_is(
     }
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
-        vec![var_local(&union_arg_name, None)],
+        vec![var_local(&union_arg_name)],
         union_is_lit(union_name, &union_arg_name, field_name, field_idx),
         None,
     );
@@ -1960,9 +1960,9 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
     let initial_state_name = FullName::local(INITIAL_STATE_NAME);
     let loop_body_name = FullName::local(LOOP_BODY_NAME);
     let expr = expr_abs(
-        vec![var_var(initial_state_name.clone(), None)],
+        vec![var_var(initial_state_name.clone())],
         expr_abs(
-            vec![var_var(loop_body_name.clone(), None)],
+            vec![var_var(loop_body_name.clone())],
             expr_lit(
                 generator,
                 vec![initial_state_name, loop_body_name],
@@ -2039,9 +2039,9 @@ pub fn print_io_func() -> (Rc<ExprNode>, Rc<Scheme>) {
     );
 
     let expr = expr_abs(
-        vec![var_local(STRING_NAME, None)],
+        vec![var_local(STRING_NAME)],
         expr_abs(
-            vec![var_local(IOSTATE_NAME, None)],
+            vec![var_local(IOSTATE_NAME)],
             expr_lit(
                 generator,
                 vec![FullName::local(STRING_NAME), FullName::local(IOSTATE_NAME)],
@@ -2098,7 +2098,7 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         }
     });
     let expr = expr_abs(
-        vec![var_local(MSG_NAME, None)],
+        vec![var_local(MSG_NAME)],
         expr_lit(
             generator,
             vec![FullName::local(MSG_NAME)],
@@ -2133,7 +2133,7 @@ pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         }
     });
     let expr = expr_abs(
-        vec![var_local(UNIT_NAME, None)],
+        vec![var_local(UNIT_NAME)],
         expr_lit(
             generator,
             vec![],
@@ -2219,7 +2219,7 @@ pub fn unary_opeartor_instance(
         methods: HashMap::from([(
             method_name.to_string(),
             expr_abs(
-                vec![var_local(RHS_NAME, None)],
+                vec![var_local(RHS_NAME)],
                 expr_lit(
                     generator,
                     vec![FullName::local(RHS_NAME)],
@@ -2294,9 +2294,9 @@ pub fn binary_opeartor_instance(
         methods: HashMap::from([(
             method_name.to_string(),
             expr_abs(
-                vec![var_local(LHS_NAME, None)],
+                vec![var_local(LHS_NAME)],
                 expr_abs(
-                    vec![var_local(RHS_NAME, None)],
+                    vec![var_local(RHS_NAME)],
                     expr_lit(
                         generator,
                         vec![FullName::local(LHS_NAME), FullName::local(RHS_NAME)],

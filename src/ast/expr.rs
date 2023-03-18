@@ -853,7 +853,6 @@ impl NameSpace {
 #[derive(Clone)]
 pub struct Var {
     pub name: FullName,
-    pub source: Option<Span>,
 }
 
 #[derive(Eq, Hash, PartialEq, Clone)]
@@ -925,12 +924,12 @@ impl Var {
     }
 }
 
-pub fn var_var(name: FullName, src: Option<Span>) -> Rc<Var> {
-    Rc::new(Var { name, source: src })
+pub fn var_var(name: FullName) -> Rc<Var> {
+    Rc::new(Var { name })
 }
 
-pub fn var_local(var_name: &str, src: Option<Span>) -> Rc<Var> {
-    var_var(FullName::local(var_name), src)
+pub fn var_local(var_name: &str) -> Rc<Var> {
+    var_var(FullName::local(var_name))
 }
 
 pub fn expr_lit(
@@ -968,7 +967,7 @@ pub fn expr_app(lam: Rc<ExprNode>, args: Vec<Rc<ExprNode>>, src: Option<Span>) -
 
 // Make variable expression.
 pub fn expr_var(name: FullName, src: Option<Span>) -> Rc<ExprNode> {
-    Rc::new(Expr::Var(var_var(name, src.clone()))).into_expr_info(src)
+    Rc::new(Expr::Var(var_var(name))).into_expr_info(src)
 }
 
 pub fn expr_if(
