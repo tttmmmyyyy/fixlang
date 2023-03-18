@@ -509,7 +509,7 @@ main = (
 
 ### Std.Debug.abort : () -> a
 
-### Std.Debug.assert_eq : String -> Bool -> ()
+### Std.Debug.assert : String -> Bool -> ()
 
 ### Std.Debug.assert_eq : [a: Eq] String -> a -> a -> ()
 

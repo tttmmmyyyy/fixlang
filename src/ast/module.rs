@@ -577,6 +577,17 @@ impl FixModule {
                 expr
             }
         };
+        // If the type of an expression contains undetermied type variable after instantiation, raise an error.
+        if !tc
+            .substitute_type(ret.inferred_ty.as_ref().unwrap())
+            .free_vars()
+            .is_empty()
+        {
+            error_exit_with_src(
+                "The type of an expression cannot be determined. You need to add type annotation to help type inference.",
+                &expr.source,
+            );
+        }
         calculate_free_vars(ret)
     }
 
