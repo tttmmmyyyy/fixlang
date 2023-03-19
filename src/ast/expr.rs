@@ -527,7 +527,7 @@ impl PatternNode {
 
 #[derive(Clone)]
 pub struct PatternInfo {
-    source: Option<Span>,
+    pub source: Option<Span>,
 }
 
 #[derive(Clone)]

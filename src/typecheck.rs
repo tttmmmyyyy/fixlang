@@ -514,7 +514,7 @@ impl TypeCheckContext {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the required type.",
                                 fullname.to_string(),
-                                scm.to_string(),
+                                scm.substitute(&self.substitution).to_string(),
                             );
                             Err(msg)
                         } else {
@@ -522,11 +522,12 @@ impl TypeCheckContext {
                             if reduce_result.is_ok() {
                                 Ok((tc, ns.clone()))
                             } else {
-                                let fail_predicate = reduce_result.err().unwrap();
+                                let mut fail_predicate = reduce_result.err().unwrap();
+                                self.substitute_predicate(&mut fail_predicate);
                                 let msg = format!(
                                     "- `{}` of type `{}` does not match since the constraint `{}` is not satisifed.",
                                     fullname.to_string(),
-                                    scm.to_string(),
+                                    scm.substitute(&self.substitution).to_string(),
                                     fail_predicate.to_string()
                                 );
                                 Err(msg)

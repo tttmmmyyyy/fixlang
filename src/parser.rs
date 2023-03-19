@@ -893,7 +893,7 @@ fn parse_expr_lam(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
             vec![var.clone()],
             expr_let(
                 pat.clone(),
-                expr_var(FullName::local(ARG_NAME), None),
+                expr_var(FullName::local(ARG_NAME), pat.info.source.clone()),
                 expr,
                 None,
             ),
