@@ -878,11 +878,6 @@ fn parse_expr_let(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     expr_let(pat, bound, val, Some(span))
 }
 
-// fn parse_var(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Var> {
-//     assert_eq!(pair.as_rule(), Rule::var);
-//     var_local(pair.as_str(), Some(Span::from_pair(&src, &pair)))
-// }
-
 fn parse_expr_lam(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
