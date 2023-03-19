@@ -215,6 +215,22 @@ pub fn make_tuple_name(size: u32) -> FullName {
     FullName::from_strs(&[STD_NAME], &name)
 }
 
+// Check if given name has form `TupleN` and returns N.
+pub fn get_tuple_n(name: &FullName) -> Option<u32> {
+    if name.namespace != NameSpace::new_str(&[STD_NAME]) {
+        return None;
+    }
+    if name.name.len() < TUPLE_NAME.len() {
+        return None;
+    }
+    let prefix = &name.name[..TUPLE_NAME.len()];
+    if prefix != TUPLE_NAME {
+        return None;
+    }
+    let number_str = &name.name[TUPLE_NAME.len()..];
+    number_str.parse::<u32>().ok()
+}
+
 // Get Unit type.
 pub fn unit_ty() -> Rc<TypeNode> {
     make_tuple_ty(vec![])

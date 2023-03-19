@@ -72,10 +72,6 @@ where
     }
 
     // Get candidates list for overload resolution.
-    // If `namespace` is unspecified (None) and a local variable `name` is found, then that local variable is returned.
-    // If `namespace` is unspecified and no local variable `name` is found, then all global variables are returned.
-    // If `namespace` is specified and non-empty, then returns all global variables whose namespaces have `namespace` as suffix.
-    // If `namespace` is specified and empty, then returns local variable `name`.
     fn overloaded_candidates(&self, name: &FullName) -> Vec<(NameSpace, T)> {
         if !self.var.contains_key(&name.name) {
             return vec![];
@@ -508,44 +504,66 @@ impl TypeCheckContext {
         match &*ei.expr {
             Expr::Var(var) => {
                 let candidates = self.scope.overloaded_candidates(&var.name);
-                let candidates: Vec<(TypeCheckContext, NameSpace)> = candidates
+                if candidates.is_empty() {
+                    error_exit_with_src(
+                        &format!("No value `{}` is found.", var.name.to_string()),
+                        &ei.source,
+                    );
+                }
+                let candidates: Vec<_> = candidates
                     .iter()
-                    .filter_map(|(ns, scm)| {
+                    .map(|(ns, scm)| {
+                        let fullname = FullName::new(ns, &var.name.name);
                         let mut tc = self.clone();
                         let (_, var_ty) = tc.instantiate_scheme(&scm, true);
-                        // if var_ty is unifiable to the required type and predicates are satisfiable, then thie candidate is ok.
-                        if tc.unify(&var_ty, &ty) {
-                            if tc.reduce_predicates() {
-                                Some((tc, ns.clone()))
-                            } else {
-                                None
-                            }
+                        // if var_ty is unifiable to the required type and predicates are satisfiable, then this candidate is ok.
+                        if !tc.unify(&var_ty, &ty) {
+                            let msg = format!(
+                                "- `{}` has type `{}`, which doesn't match the required type.",
+                                fullname.to_string(),
+                                scm.to_string(),
+                            );
+                            Err(msg)
+                        } else if tc.reduce_predicates() {
+                            Ok((tc, ns.clone()))
                         } else {
-                            None
+                            let msg = format!(
+                                "- `{}` has type `{}`, whose constraint is not satisfiable.",
+                                fullname.to_string(),
+                                scm.to_string(),
+                            );
+                            Err(msg)
                         }
                     })
                     .collect();
-                if candidates.is_empty() {
+                let ok_count = candidates.iter().filter(|cand| cand.is_ok()).count();
+                if ok_count == 0 {
                     error_exit_with_src(
                         &format!(
-                            "No name `{}` with required type `{}` is found.",
+                            "No value named `{}` matches the required type `{}`.\n{}",
                             var.name.to_string(),
-                            &self.substitute_type(&ty).to_string_normalize()
+                            &self.substitute_type(&ty).to_string_normalize(),
+                            candidates
+                                .iter()
+                                .map(|cand| cand.as_ref().err().unwrap().clone())
+                                .collect::<Vec<_>>()
+                                .join("\n")
                         ),
                         &ei.source,
                     );
-                } else if candidates.len() >= 2 {
+                } else if ok_count >= 2 {
                     let candidates_str = candidates
                         .iter()
+                        .filter_map(|cand| cand.as_ref().ok())
                         .map(|(_, ns)| {
-                            let nsn = FullName::new(ns, &var.name.name);
-                            "`".to_string() + &nsn.to_string() + "`"
+                            let fullname = FullName::new(&ns, &var.name.name);
+                            "`".to_string() + &fullname.to_string() + "`"
                         })
                         .collect::<Vec<_>>()
                         .join(", ");
                     error_exit_with_src(
                         &format!(
-                            "Name `{}` is ambiguous: there are {}. Maybe you need to add type annotation which helps overload resolution.",
+                            "Name `{}` is ambiguous: there are {}. Maybe you need to add type annotation to help overloading resolution.",
                             var.name.to_string(),
                             candidates_str
                         ),
@@ -553,9 +571,12 @@ impl TypeCheckContext {
                     );
                 } else {
                     // candidates.len() == 1
-                    let (tc, ns) = candidates[0].clone();
-                    *self = tc;
-                    ei.set_var_namespace(ns)
+                    let (tc, ns) = candidates
+                        .iter()
+                        .find_map(|cand| cand.as_ref().ok())
+                        .unwrap();
+                    *self = tc.clone();
+                    ei.set_var_namespace(ns.clone())
                 }
             }
             Expr::Lit(lit) => {

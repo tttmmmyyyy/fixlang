@@ -62,6 +62,14 @@ impl TyCon {
     }
 
     pub fn to_string(&self) -> String {
+        match get_tuple_n(&self.name) {
+            Some(n) => {
+                if n == 0 {
+                    return "()".to_string();
+                }
+            }
+            None => {}
+        }
         self.name.to_string()
     }
 
@@ -492,26 +500,10 @@ impl TypeNode {
         self.to_string_inner(&mut None)
     }
 
-    // Stringify. Name of type variables are normalized to names such as "a0", "a1", etc.
+    // Stringify. Name of type variables are normalized to names such as "t0", "t1", etc.
     pub fn to_string_normalize(&self) -> String {
         let mut id: u32 = 0;
         self.to_string_inner(&mut Some(&mut id))
-    }
-
-    // Get hash value.
-    pub fn hash(&self) -> String {
-        let type_string = self.to_string_normalize();
-        format!("{:x}", md5::compute(type_string))
-    }
-
-    // Get dtor name.
-    pub fn dtor_name(&self, capture: &Vec<Rc<TypeNode>>) -> String {
-        let mut str = "".to_string();
-        str += &self.to_string_normalize();
-        for ty in capture {
-            str += &ty.to_string_normalize();
-        }
-        "dtor_".to_string() + &format!("{:x}", md5::compute(str))
     }
 
     // Stringify.
@@ -526,19 +518,43 @@ impl TypeNode {
                 }
                 None => v.name.clone(),
             },
-            Type::TyApp(tyfun, arg) => {
-                let arg_brace_needed = match arg.ty {
-                    Type::TyVar(_) => false,
-                    Type::TyCon(_) => false,
-                    Type::TyApp(_, _) => true,
-                    Type::FunTy(_, _) => true,
-                };
-                let tyfun = tyfun.to_string_inner(tyvar_id);
-                let arg = arg.to_string_inner(tyvar_id);
-                if arg_brace_needed {
-                    format!("{} ({})", tyfun, arg)
-                } else {
-                    format!("{} {}", tyfun, arg)
+            Type::TyApp(_, _) => {
+                let tycon = self.toplevel_tycon().unwrap();
+                match get_tuple_n(&tycon.name) {
+                    Some(n) => {
+                        let args = self.collect_type_argments();
+                        assert_eq!(args.len(), n as usize);
+                        let arg_strs = args
+                            .iter()
+                            .map(|arg| arg.to_string_inner(tyvar_id))
+                            .collect::<Vec<_>>();
+                        format!("({})", arg_strs.join(", "))
+                    }
+                    None => {
+                        let args = self.collect_type_argments();
+                        let arg_strs = args
+                            .iter()
+                            .map(|arg| {
+                                let arg_brace_needed = match &arg.ty {
+                                    Type::TyVar(_) => false,
+                                    Type::TyCon(_) => false,
+                                    Type::TyApp(fun, _) => {
+                                        let tycon = fun.toplevel_tycon();
+                                        let is_tuple = tycon.is_some()
+                                            && get_tuple_n(&tycon.unwrap().name).is_some();
+                                        !is_tuple
+                                    }
+                                    Type::FunTy(_, _) => true,
+                                };
+                                if arg_brace_needed {
+                                    format!("({})", arg.to_string_inner(tyvar_id))
+                                } else {
+                                    arg.to_string_inner(tyvar_id)
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        format!("{} {}", tycon.to_string(), arg_strs.join(" "))
+                    }
                 }
             }
             Type::FunTy(src, dst) => {
@@ -562,6 +578,22 @@ impl TypeNode {
             }
             Type::TyCon(tc) => tc.to_string(),
         }
+    }
+
+    // Get dtor name.
+    pub fn dtor_name(&self, capture: &Vec<Rc<TypeNode>>) -> String {
+        let mut str = "".to_string();
+        str += &self.to_string_normalize();
+        for ty in capture {
+            str += &ty.to_string_normalize();
+        }
+        "dtor_".to_string() + &format!("{:x}", md5::compute(str))
+    }
+
+    // Get hash value.
+    pub fn hash(&self) -> String {
+        let type_string = self.to_string_normalize();
+        format!("{:x}", md5::compute(type_string))
     }
 }
 
@@ -655,6 +687,50 @@ pub struct Scheme {
 }
 
 impl Scheme {
+    pub fn to_string(&self) -> String {
+        // Change name of type variables to t0, t1, ...
+        let free_vars = self.free_vars();
+        let mut s = Substitution::default();
+        let mut tyvar_num = -1;
+
+        for (tyvar, kind) in &self.vars {
+            let new_name = loop {
+                tyvar_num += 1;
+                let new_name = format!("t{}", tyvar_num);
+                if free_vars.contains_key(&new_name) {
+                    continue;
+                }
+                break new_name;
+            };
+            s.add_substitution(&Substitution::single(tyvar, type_tyvar(&new_name, kind)))
+        }
+        let preds = self
+            .preds
+            .clone()
+            .iter()
+            .map(|p| {
+                let mut p = p.clone();
+                s.substitute_predicate(&mut p);
+                p
+            })
+            .collect::<Vec<_>>();
+        let ty = s.substitute_type(&self.ty);
+
+        let preds_str = if preds.is_empty() {
+            "".to_string()
+        } else {
+            format!(
+                "[{}] ",
+                preds
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        preds_str + &ty.to_string()
+    }
+
     #[allow(dead_code)]
     pub fn set_ty(&self, ty: Rc<TypeNode>) -> Rc<Scheme> {
         let mut ret = self.clone();
