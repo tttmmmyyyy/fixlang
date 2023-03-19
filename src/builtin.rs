@@ -471,11 +471,11 @@ pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Implementation of Array.new built-in function.
-fn new_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
+// Implementation of Array.fill built-in function.
+fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     let size_str = FullName::local(size);
     let value_str = FullName::local(value);
-    let name = format!("Array.new {} {}", size, value);
+    let name = format!("Array.fill({}, {})", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
@@ -504,14 +504,14 @@ fn new_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     )
 }
 
-// "Array.new : Int -> a -> Array a" built-in function.
+// "Array.fill : Int -> a -> Array a" built-in function.
 // Creates an array with same capacity.
-pub fn new_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn fill_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("size")],
         expr_abs(
             vec![var_local("value")],
-            new_array_lit("a", "size", "value"),
+            fill_array_lit("a", "size", "value"),
             None,
         ),
         None,

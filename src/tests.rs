@@ -471,12 +471,12 @@ pub fn test22_7() {
 #[test]
 #[serial]
 pub fn test23() {
-    // Test Array.new of size 0.
+    // Test Array.fill of size 0.
     let source = r#"
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new(0, 42);
+            let arr = Array.fill(0, 42);
             pure()
         );
         "#;
@@ -486,12 +486,12 @@ pub fn test23() {
 #[test]
 #[serial]
 pub fn test24() {
-    // Test Array.new of size > 0.
+    // Test Array.fill of size > 0.
     let source = r#"
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new(100, 42);
+            let arr = Array.fill(100, 42);
             let u = assert_eq("", arr.get_length, 100);
             pure()
         );
@@ -507,7 +507,7 @@ pub fn test25() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new(100, 42);
+            let arr = Array.fill(100, 42);
             let elem = arr.get(50);
             let u = assert_eq("", elem, 42);
             pure()
@@ -524,7 +524,7 @@ pub fn test26() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new(100, 42);
+            let arr = Array.fill(100, 42);
             let arr = arr.set(50, 21);
             let u = assert_eq("", arr.get(50), 21);
             pure()
@@ -541,7 +541,7 @@ pub fn test27() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr0 = Array.new(100, 42);
+            let arr0 = Array.fill(100, 42);
             let arr1 = arr0.set(50, 21);
             let u = assert_eq("", arr0.get(50) + arr1.get(50), 63);
             pure()
@@ -575,7 +575,7 @@ pub fn test28() {
         module Main;
         main : IOState -> ((), IOState);
         main = (
-            let arr = Array.new(31, 0);
+            let arr = Array.fill(31, 0);
             let arr = arr.set!(0, 0);
             let arr = arr.set!(1, 1);
             let loop = fix $ |f, arr: Array Int, n| (
@@ -996,11 +996,11 @@ pub fn test44() {
 
         main : IOState -> ((), IOState);
         main = (
-            let arr0 = Array.new(2, false);
+            let arr0 = Array.fill(2, false);
             let arr0 = arr0.set!(0, true);
             let x = add_head_and_next(arr0);
 
-            let arr1 = Array.new(2, 3);
+            let arr1 = Array.fill(2, 3);
             let arr1 = arr1.set!(1, 5);
             let z = add_head_and_next(arr1);
 
@@ -1179,7 +1179,7 @@ pub fn test48() {
 
         main : IOState -> ((), IOState);
         main = (
-            let int_vec = Vec.new $ Array.new(2, 5);
+            let int_vec = Vec.new $ Array.fill(2, 5);
             let int_vec = int_vec.mod_data!(|arr| arr.set(0, 3));
             let head = int_vec.@data.get(0);
             let next = int_vec.@data.get(1);
@@ -1277,7 +1277,7 @@ pub fn test51() {
     
     main : IOState -> ((), IOState);
     main = (
-        let arr = Array.new(4, (0, false));
+        let arr = Array.fill(4, (0, false));
         let arr = arr.set(0, (0, false));
         let arr = arr.set(1, (0, true));
         let arr = arr.set(2, (1, false));
@@ -1302,7 +1302,7 @@ pub fn test52() {
     // Calculate a Bool array whose element is true iff idx is prime.
     is_prime : Int -> Array Bool;
     is_prime = |n| (
-        let arr = Array.new(n, true);
+        let arr = Array.fill(n, true);
         let arr = arr.set!(0, false);
         let arr = arr.set!(1, false);
         loop(SieveState.new(2, arr)) $ |state| (
@@ -1357,7 +1357,7 @@ pub fn test53() {
     
     main : IOState -> ((), IOState);
     main = (
-        let pair = (13, Array.new(1, 0));
+        let pair = (13, Array.fill(1, 0));
         let pair = pair.mod_0!(|x| x + 3);
         let pair = pair.mod_1!(|arr| arr.set!(0, 5));
         let x = pair.@0;
@@ -1379,7 +1379,7 @@ pub fn test54() {
     
     main : IOState -> ((), IOState);
     main = (
-        let pair0 = (13, Array.new(1, 0));
+        let pair0 = (13, Array.fill(1, 0));
         let pair1 = pair0.mod_1(|arr| arr.set(0, 5));
         let pair2 = pair0.mod_0!(|x| x + 3);
         let x = pair1.@1.get(0);

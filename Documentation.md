@@ -299,10 +299,10 @@ Methods:
 - `mod! : Int -> (a -> a) -> Array a -> Array a`
     - This function clones the array if it is shared between multiple references.
     - This function always update the array. If the array is shared between multiple references, this function panics.  
-- `new : Int -> a -> Array a`
+- `fill : Int -> a -> Array a`
     - Creates an array filled with the initial value.
     - The capacity is set to the same value as the length.
-    - `new(n, x) = [x, x, x, ..., x]` (of length `n`).
+    - `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 - `pop_back : Array a -> Array a`
     - Pop an element at the back of an array.
     - If the array is empty, this function does nothing.

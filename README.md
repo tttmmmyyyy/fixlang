@@ -31,7 +31,7 @@ module Main;
 
 main : IOState -> ((), IOState);
 main = (
-    let arr = Array.new(31, 0);
+    let arr = Array.fill(31, 0);
     let arr = arr.set!(0, 0);
     let arr = arr.set!(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
@@ -49,7 +49,7 @@ main = (
 ```
 In a source file, you need to declare the module name for the source file as `Main` and define `main` object of type `IOState -> ((), IOState)`. The runtime generates a value of `IOState` and pass it to `Main.main` function.
 
-`Array.new` in the first line of `main` is the constructor function for `Array`. It takes the length and the initial value and returns a new Array. The `Array` here is not a type, but a namespace: the name of the constructor function is `new`, and it is defined in the namespace `Std.Array`, where `Std` is a namspace for standard libraries / built-in functions. So the full-name of the constructor function is `Std.Array.new`, but you can omit some prefix of the full namespace when the compiler can infer it.
+`Array.fill` in the first line of `main` is the constructor function for `Array`. It takes the length and the initial value and returns a new Array. The `Array` here is not a type, but a namespace: the name of the constructor function is `new`, and it is defined in the namespace `Std.Array`, where `Std` is a namspace for standard libraries / built-in functions. So the full-name of the constructor function is `Std.Array.fill`, but you can omit some prefix of the full namespace when the compiler can infer it.
 
 Semantically, all functions in Fix has a single parameter. To create a function which has a parameter `param` and returns the value of an expression `body`, write `|param| body`. You can also write `|param0, param1| body` (or more if necessary), which is just interpreted as `|param0| (|param1| body)` i.e., a function that takes `param0` and returns an function `|param1| body`. Such a function can be roughly called a "two-parameter function". The type of (N+1)-parameter function is written as `Param0 -> Param1 -> ... -> ParamN -> Result`.
 

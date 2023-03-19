@@ -71,8 +71,8 @@ pub fn make_std_mod() -> FixModule {
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "loop"), state_loop());
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "new"),
-        new_array(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "fill"),
+        fill_array(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set"),

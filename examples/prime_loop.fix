@@ -3,7 +3,7 @@ module Main;
 // Calculate a Bool array whose element is true iff idx is prime.
 is_prime : Int -> Array Bool;
 is_prime = |n| (
-    let arr = Array.new(n, true);
+    let arr = Array.fill(n, true);
     let arr = arr.set!(0, false);
     let arr = arr.set!(1, false);
     // For usual loop, use `loop`, `continue` and `break`.
