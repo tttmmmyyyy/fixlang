@@ -478,22 +478,15 @@ impl TypeCheckContext {
     }
 
     // Reduce predicates.
-    // If predicates are unsatisfiable, do nothing and return false.
-    pub fn reduce_predicates(&mut self) -> bool {
+    // Returns Err(p) if predicates are unsatisfiable due to predicate p.
+    pub fn reduce_predicates(&mut self) -> Result<(), Predicate> {
         let mut preds = std::mem::replace(&mut self.predicates, vec![]);
         for p in &mut preds {
             self.substitute_predicate(p);
         }
         self.predicates.append(&mut preds);
-        match self.trait_env.reduce(&self.predicates, &self.type_env) {
-            Some(ps) => {
-                self.predicates = ps;
-                return true;
-            }
-            None => {
-                return false;
-            }
-        }
+        self.predicates = self.trait_env.reduce(&self.predicates, &self.type_env)?;
+        Ok(())
     }
 
     // Perform typechecking.
@@ -519,20 +512,25 @@ impl TypeCheckContext {
                         // if var_ty is unifiable to the required type and predicates are satisfiable, then this candidate is ok.
                         if !tc.unify(&var_ty, &ty) {
                             let msg = format!(
-                                "- `{}` has type `{}`, which doesn't match the required type.",
+                                "- `{}` of type `{}` does not match the required type.",
                                 fullname.to_string(),
                                 scm.to_string(),
                             );
                             Err(msg)
-                        } else if tc.reduce_predicates() {
-                            Ok((tc, ns.clone()))
                         } else {
-                            let msg = format!(
-                                "- `{}` has type `{}`, whose constraint is not satisfiable.",
-                                fullname.to_string(),
-                                scm.to_string(),
-                            );
-                            Err(msg)
+                            let reduce_result = tc.reduce_predicates();
+                            if reduce_result.is_ok() {
+                                Ok((tc, ns.clone()))
+                            } else {
+                                let fail_predicate = reduce_result.err().unwrap();
+                                let msg = format!(
+                                    "- `{}` of type `{}` does not match since the constraint `{}` is not satisifed.",
+                                    fullname.to_string(),
+                                    scm.to_string(),
+                                    fail_predicate.to_string()
+                                );
+                                Err(msg)
+                            }
                         }
                     })
                     .collect();
@@ -766,7 +764,8 @@ impl TypeCheckContext {
         let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone());
         let deduced_ty = self.substitute_type(&specified_ty);
-        self.reduce_predicates();
+        let red_res = self.reduce_predicates();
+        assert!(red_res.is_ok());
         let required_preds = std::mem::replace(&mut self.predicates, Default::default());
 
         let s = Substitution::matching(&self.type_env, &deduced_ty, &specified_ty);

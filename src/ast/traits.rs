@@ -462,29 +462,33 @@ impl TraitEnv {
     }
 
     // Reduce a predicate to head normal form.
-    pub fn reduce_to_hnf(&self, p: &Predicate, type_env: &TypeEnv) -> Option<Vec<Predicate>> {
+    // Returns Err(p) if reduction failed due to predicate p.
+    pub fn reduce_to_hnf(
+        &self,
+        p: &Predicate,
+        type_env: &TypeEnv,
+    ) -> Result<Vec<Predicate>, Predicate> {
         if p.ty.is_hnf() {
-            return Some(vec![p.clone()]);
+            return Ok(vec![p.clone()]);
         }
-        self.reduce_to_instance_contexts_one(p, type_env)
-            .map(|ctxs| self.reduce_to_hnfs(&ctxs, type_env))
-            .flatten()
+        match self.reduce_to_instance_contexts_one(p, type_env) {
+            Some(ps) => self.reduce_to_hnfs(&ps, type_env),
+            None => Err(p.clone()),
+        }
     }
 
     // Reduce predicates to head normal form.
+    // Returns Err(p) if reduction failed due to predicate p.
     pub fn reduce_to_hnfs(
         &self,
         ps: &Vec<Predicate>,
         type_env: &TypeEnv,
-    ) -> Option<Vec<Predicate>> {
+    ) -> Result<Vec<Predicate>, Predicate> {
         let mut ret: Vec<Predicate> = Default::default();
         for p in ps {
-            match self.reduce_to_hnf(p, type_env) {
-                Some(mut v) => ret.append(&mut v),
-                None => return None,
-            }
+            ret.append(&mut self.reduce_to_hnf(p, type_env)?)
         }
-        Some(ret)
+        Ok(ret)
     }
 
     // Simplify a set of predicates by entail.
@@ -510,15 +514,17 @@ impl TraitEnv {
     // Context reduction.
     // Returns qs when satisfaction of ps are reduced to qs.
     // In particular, returns empty when ps are satisfied.
-    // Returns None when p cannot be satisfied.
-    pub fn reduce(&self, ps: &Vec<Predicate>, type_env: &TypeEnv) -> Option<Vec<Predicate>> {
-        let ret = self
-            .reduce_to_hnfs(ps, type_env)
-            .map(|ps| self.simplify_predicates(&ps, type_env));
-
+    // Returns Err(p) if reduction failed due to predicate p.
+    pub fn reduce(
+        &self,
+        ps: &Vec<Predicate>,
+        type_env: &TypeEnv,
+    ) -> Result<Vec<Predicate>, Predicate> {
+        let ret = self.reduce_to_hnfs(ps, type_env)?;
+        let ret = self.simplify_predicates(&ret, type_env);
         // Every predicate has to be hnf.
-        assert!(ret.is_none() || ret.as_ref().unwrap().iter().all(|p| p.ty.is_hnf()));
-        ret
+        assert!(ret.iter().all(|p| p.ty.is_hnf()));
+        Ok(ret)
     }
 
     // Set each TraitInfo's kind.
