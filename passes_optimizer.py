@@ -4,29 +4,14 @@ import re
 import itertools
 import sys
 import random
+from statsmodels.stats.weightstats import ttest_ind
+import numpy as np
 
 # Optimizes llvm optimization passes by updating llvm_passes.rs.
 SOURCE_FILE = './src/llvm_passes.rs'
 
 INITIAL_PASSES = '''
-    add_scalar_repl_aggregates_pass
-    add_function_inlining_pass
-    add_ind_var_simplify_pass
-    add_cfg_simplification_pass
-    add_early_cse_pass
-    add_sccp_pass
-    add_loop_deletion_pass
-    add_scalar_repl_aggregates_pass_ssa
-    add_global_dce_pass
-    add_alignment_from_assumptions_pass
-    add_type_based_alias_analysis_pass
-    add_aggressive_dce_pass
-    add_strip_dead_prototypes_pass
-    add_scoped_no_alias_aa_pass
-    add_merge_functions_pass
-    add_global_optimizer_pass
-    add_scalarizer_pass
-    add_jump_threading_pass
+
 '''
 INITIAL_PASSES = INITIAL_PASSES.split('\n')
 INITIAL_PASSES = [line.strip() for line in INITIAL_PASSES]
@@ -53,7 +38,9 @@ RUN_BENCH_ITERATION = 10
 
 ADDED_PASSES_NUM = 10
 
-REQUIRED_IMPROVEMENT = 0.97
+SIGNIFICANCE_LEVEL = 0.05
+
+ALLOWED_DEGRATION_ON_MINIMIZE = 0.99
 
 # All passes
 # Exclude:
@@ -151,7 +138,7 @@ def run_benchmark(run_bench_iteration=RUN_BENCH_ITERATION, timeout=60):
         print(cp.stderr)
         sys.exit(1)
 
-    total_time = 0.0
+    times = []
     for _ in range(run_bench_iteration):
         try:
             cp = subprocess.run(['time', '-f', '%e', './a.out'], capture_output = True, text = True, timeout=timeout)
@@ -161,20 +148,19 @@ def run_benchmark(run_bench_iteration=RUN_BENCH_ITERATION, timeout=60):
                 print(cp.stdout)
                 print('stderr:')
                 print(cp.stderr)
-                total_time = 100000.0 * run_bench_iteration  # return a long time
+                times = [1.0 * timeout]
                 break
             else:
-                total_time += float(cp.stderr)
+                times.append(float(cp.stderr))
         except subprocess.TimeoutExpired:
-            total_time += timeout
+            times = [1.0 * timeout]
             break
 
-    # parse stdout and get read time.
-    return total_time / run_bench_iteration
+    print('times: {}'.format(times))
+    return np.array(times)
 
 def print_passes(passes):
-    for p in passes:
-        print('  ' + p)
+    print('  ' + ', '.join(passes))
 
 def optimize():
     all_passes = get_all_passes()
@@ -185,7 +171,7 @@ def optimize():
     
     write_source_file(optimum_passes)
     optimum_time = run_benchmark()
-    print('Time with initial passes: {}'.format(optimum_time))
+    print('Time with initial passes: {}'.format(sum(optimum_time) / len(optimum_time)))
 
     while True:
         added_passes_count = random.randint(1, ADDED_PASSES_NUM)
@@ -199,30 +185,43 @@ def optimize():
         for p in added_passes:
             passes.append(p)
         write_source_file(passes)
-        time = run_benchmark(int(ceil(optimum_time*2)))
-        if time <= optimum_time * REQUIRED_IMPROVEMENT:
+        timeout = int(ceil(np.average(optimum_time) * 2.0))
+        time = run_benchmark(timeout=timeout)
+        (t_val, p_val, free) = ttest_ind(time, optimum_time, alternative="smaller", usevar="unequal")
+        if p_val <= SIGNIFICANCE_LEVEL:
             optimum_passes = passes
             optimum_time = time
-            print('New optimum passes found!')
+            print('New optimum passes found! (means=({}, {}), t={}, p={})'.format(np.average(time), np.average(optimum_time), t_val, p_val))
         else:
-            print('No improvement found. Time: {}'.format(time))
+            print('No improvement found. (means=({}, {}), t={}, p={})'.format(np.average(time), np.average(optimum_time), t_val, p_val))
 
         # minimize passes
-        minimized = []
+        passes = []
+        removed_passes = []
         for p in optimum_passes:
-            if random.randint(0,1) == 0:
-                minimized.append(p)
-        write_source_file(minimized)
-        minimized_time = run_benchmark(int(ceil(optimum_time*2)))
-        if minimized_time <= optimum_time:
-            optimum_passes = minimized
-            print("Minimize success!")
+            if random.randint(0, int(ceil(len(optimum_passes) / ADDED_PASSES_NUM))) != 0:
+                passes.append(p)
+            else:
+                removed_passes.append(p)
+        print('Try removing passes:')
+        print_passes(removed_passes)
+        write_source_file(passes)
+        timeout = int(ceil(np.average(optimum_time) * 2.0))
+        time = run_benchmark(timeout=timeout)
+        (t_val, p_val, free) = ttest_ind(time * ALLOWED_DEGRATION_ON_MINIMIZE, optimum_time, alternative="smaller", usevar="unequal")
+        if p_val <= SIGNIFICANCE_LEVEL:
+            optimum_passes = passes
+            optimum_time = time
+            print("Minimize success! (means=({}, {}), t={}, p={})".format(np.average(time), np.average(optimum_time), t_val, p_val))
+        else:
+            print("Minimize failed (means=({}, {}), t={}, p={})".format(np.average(time), np.average(optimum_time), t_val, p_val))
 
         print('Current optimum passes:')
         print_passes(optimum_passes)
         write_source_file(optimum_passes)
-        optimum_time = run_benchmark(int(ceil(optimum_time*2)))
-        print('Current optimum time: {}'.format(optimum_time))
+        timeout = int(ceil(np.average(optimum_time) * 2.0))
+        optimum_time = np.concatenate([optimum_time, run_benchmark(timeout=timeout)])
+        print('Current optimum time: {} ({} samples)'.format(np.average(optimum_time), optimum_time.size))
 
 if __name__ == '__main__':
     optimize()
