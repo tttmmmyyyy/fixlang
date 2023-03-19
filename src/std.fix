@@ -218,7 +218,7 @@ namespace Iterator {
     append : Iterator a -> Iterator a -> Iterator a;
     append = |rhs, lhs| (
         if lhs.is_empty { rhs };
-        let Option.some((e, lhs)) = lhs.next;
+        let Option.some((e, lhs)) = lhs.advance;
         Iterator.push_front(e) $ lhs.append(rhs)
     );
 
@@ -244,7 +244,7 @@ namespace Iterator {
     intersperse : a -> Iterator a -> Iterator a;
     intersperse = |sep, iter| (
         if iter.is_empty { Iterator.make_empty };
-        let Option.some((e, tail)) = iter.next;
+        let Option.some((e, tail)) = iter.advance;
         if tail.is_empty { iter };
         Iterator.push_front(e) $ Iterator.push_front(sep) $ tail.intersperse(sep)
     );
@@ -261,7 +261,7 @@ namespace Iterator {
     filter = |cond, iter| (
         let data = |_| (
             loop(iter, |iter| (
-                let next = iter.next;
+                let next = iter.advance;
                 if next.is_none { break $ none() };
                 let (v, iter) = next.unwrap;
                 if !cond(v) { continue $ iter };
@@ -281,7 +281,7 @@ namespace Iterator {
     fold : b -> (b -> a -> b) -> Iterator a -> b;
     fold = |init, op, iter| (
         loop((init, iter), |(accum, iter)|
-            let next = iter.next;
+            let next = iter.advance;
             if next.is_none {
                 break $ accum
             } else {
@@ -304,7 +304,7 @@ namespace Iterator {
     take_last : Iterator a -> Option a;
     take_last = |iter| (
         if iter.is_empty { none() };
-        let (elem, iter) = iter.next.unwrap;
+        let (elem, iter) = iter.advance.unwrap;
         if iter.is_empty { 
             some(elem)
         } else {
@@ -314,14 +314,14 @@ namespace Iterator {
 
     // Checks if an iterator is empty.
     is_empty : Iterator a -> Bool;
-    is_empty = |iter| iter.next.is_none;
+    is_empty = |iter| iter.advance.is_none;
 
     // Apply a function to each value of iterator.
     // map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]
     map : (a -> b) -> Iterator a -> Iterator b;
     map = |f, a_iter| (
         let data = |_| (
-            a_iter.next.map(
+            a_iter.advance.map(
                 |(a_val, a_iter)| (f(a_val), a_iter.map(f))
             )
         );
@@ -329,8 +329,8 @@ namespace Iterator {
     );
 
     // Get next value and next iterator.
-    next : Iterator a -> Option (a, Iterator a);
-    next = |iter| (iter.@_data)();
+    advance : Iterator a -> Option (a, Iterator a);
+    advance = |iter| (iter.@_data)();
 
     // Push an elemnt to an iterator.
     push_front : a -> Iterator a -> Iterator a;
@@ -348,7 +348,7 @@ namespace Iterator {
             if in_iter.is_empty {
                 break $ out_iter
             } else {
-                let (elem, in_iter) = in_iter.next.unwrap;
+                let (elem, in_iter) = in_iter.advance.unwrap;
                 let out_iter = out_iter.push_front(elem);
                 continue $ (out_iter, in_iter)
             }
@@ -360,7 +360,7 @@ namespace Iterator {
     take = |n, iter| (
         let data = |_| (
             if n == 0 { none() };
-            let iter_next = iter.next;
+            let iter_next = iter.advance;
             if iter_next.is_none { none() };
             let (v, iter) = iter_next.unwrap;
             some $ (v, iter.take(n-1))
@@ -372,9 +372,9 @@ namespace Iterator {
     zip : Iterator a -> Iterator b -> Iterator (a, b);
     zip = |iter0, iter1| (
         let data = |_| (
-            let iter0_next = iter0.next;
+            let iter0_next = iter0.advance;
             if iter0_next.is_none { none() };
-            let iter1_next = iter1.next;
+            let iter1_next = iter1.advance;
             if iter1_next.is_none { none() };
             let (v0, iter0) = iter0_next.unwrap;
             let (v1, iter1) = iter1_next.unwrap;
@@ -392,8 +392,8 @@ impl [a : Eq] Iterator a : Eq {
     eq = |lhs, rhs| (
         if lhs.is_empty { rhs.is_empty };
         if rhs.is_empty { false };
-        let Option.some((e, lhs)) = lhs.next;
-        let Option.some((f, rhs)) = rhs.next;
+        let Option.some((e, lhs)) = lhs.advance;
+        let Option.some((f, rhs)) = rhs.advance;
         if e != f { false };
         lhs == rhs
     );

@@ -276,6 +276,10 @@ Methods:
 - `append : Array a -> Array a -> Array a`
     - Append an array to an array.
     - Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
+- `fill : Int -> a -> Array a`
+    - Creates an array filled with the initial value.
+    - The capacity is set to the same value as the length.
+    - `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 - `force_unique : Array a -> Array a`
     - Force the uniqueness of an array.
     - If the given array is shared, this function returns the cloned array.
@@ -299,10 +303,6 @@ Methods:
 - `mod! : Int -> (a -> a) -> Array a -> Array a`
     - This function clones the array if it is shared between multiple references.
     - This function always update the array. If the array is shared between multiple references, this function panics.  
-- `fill : Int -> a -> Array a`
-    - Creates an array filled with the initial value.
-    - The capacity is set to the same value as the length.
-    - `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 - `pop_back : Array a -> Array a`
     - Pop an element at the back of an array.
     - If the array is empty, this function does nothing.
@@ -377,6 +377,8 @@ Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
 Methods:
 
+- `advance : Iterator a -> Option (a, Iterator a)`
+    - Get next value and next iterator.
 - `append : Iterator a -> Iterator a -> Iterator a`
     - Append an iterator to a iterator.
     - Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
@@ -405,8 +407,6 @@ Methods:
 - `map : map : (a -> b) -> Iterator a -> Iterator b`
     - Apply a function to each value of iterator.
     - `map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]`
-- `next : Iterator a -> Option (a, Iterator a)`
-    - Get next value and next iterator.
 - `push_front : a -> Iterator a -> Iterator a`
     - Append an element to an iterator.
 - `reverse : Iterator a -> Iterator a`

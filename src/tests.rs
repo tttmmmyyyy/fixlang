@@ -1844,15 +1844,15 @@ pub fn test75() {
     main : IOState -> ((), IOState);
     main = (
         let iter = Iterator.from_map(|i| i*i );
-        let Option.some((n, iter)) = iter.next;
+        let Option.some((n, iter)) = iter.advance;
         let _ = assert_eq("", n, 0*0);
-        let Option.some((n, iter)) = iter.next;
+        let Option.some((n, iter)) = iter.advance;
         let _ = assert_eq("", n, 1*1);
-        let Option.some((n, iter)) = iter.next;
+        let Option.some((n, iter)) = iter.advance;
         let _ = assert_eq("", n, 2*2);
-        let Option.some((n, iter)) = iter.next;
+        let Option.some((n, iter)) = iter.advance;
         let _ = assert_eq("", n, 3*3);
-        let Option.some((n, iter)) = iter.next;
+        let Option.some((n, iter)) = iter.advance;
         let _ = assert_eq("", n, 4*4);
         pure()
     );
@@ -1929,9 +1929,9 @@ pub fn test79() {
     main = (
         let ls = Iterator.make_empty;
         let ls = ls.push_front(1).push_front(2);
-        let (e, ls) = ls.next.unwrap;
+        let (e, ls) = ls.advance.unwrap;
         let _ = assert_eq("", 2, e);
-        let (e, ls) = ls.next.unwrap;
+        let (e, ls) = ls.advance.unwrap;
         let _ = assert_eq("", 1, e);
         pure()
     );
