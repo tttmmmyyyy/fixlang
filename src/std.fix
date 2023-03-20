@@ -209,7 +209,7 @@ namespace IOState {
 }
 
 // Iterator (a.k.a lazy list)
-type Iterator a = unbox struct { _data: () -> Option (a, Iterator a) };
+type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };
 
 namespace Iterator {
 
@@ -226,10 +226,10 @@ namespace Iterator {
     // count_up(n) = [n, n+1, n+2, ...]
     count_up : Int -> Iterator Int;
     count_up = |i| (
-        let data = |_| (
+        let next = |_| (
             some $ (i, Iterator.count_up(i+1))
         );
-        Iterator { _data: data }
+        Iterator { next: next }
     );
 
     // Counts the length of an iterator.
@@ -252,14 +252,14 @@ namespace Iterator {
     // Create an empty iterator.
     make_empty : Iterator a;
     make_empty = (
-        let data = |_| (none());
-        Iterator { _data: data }
+        let next = |_| (none());
+        Iterator { next: next }
     );
 
     // Filter elements by a condition function
     filter : (a -> Bool) -> Iterator a -> Iterator a;
     filter = |cond, iter| (
-        let data = |_| (
+        let next = |_| (
             loop(iter, |iter| (
                 let next = iter.advance;
                 if next.is_none { break $ none() };
@@ -269,7 +269,7 @@ namespace Iterator {
                 break $ some((v, iter))
             ))
         );
-        Iterator { _data: data }
+        Iterator { next: next }
     );
 
     // Flatten an iterator of iterators.
@@ -320,25 +320,25 @@ namespace Iterator {
     // map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]
     map : (a -> b) -> Iterator a -> Iterator b;
     map = |f, a_iter| (
-        let data = |_| (
+        let next = |_| (
             a_iter.advance.map(
                 |(a_val, a_iter)| (f(a_val), a_iter.map(f))
             )
         );
-        Iterator { _data: data }
+        Iterator { next: next }
     );
 
     // Get next value and next iterator.
     advance : Iterator a -> Option (a, Iterator a);
-    advance = |iter| (iter.@_data)();
+    advance = |iter| (iter.@next)();
 
     // Push an elemnt to an iterator.
     push_front : a -> Iterator a -> Iterator a;
     push_front = |elem, iter| (
-        let data = |_| (
+        let next = |_| (
             some $ (elem, iter)
         );
-        Iterator { _data: data }     
+        Iterator { next: next }     
     );
 
     // Reverse an iterator.
@@ -358,20 +358,20 @@ namespace Iterator {
     // Take at most n elements from an iterator.
     take : Int -> Iterator a -> Iterator a;
     take = |n, iter| (
-        let data = |_| (
+        let next = |_| (
             if n == 0 { none() };
             let iter_next = iter.advance;
             if iter_next.is_none { none() };
             let (v, iter) = iter_next.unwrap;
             some $ (v, iter.take(n-1))
         );
-        Iterator { _data: data }
+        Iterator { next: next }
     );
 
     // Zip two iterators.
     zip : Iterator a -> Iterator b -> Iterator (a, b);
     zip = |iter0, iter1| (
-        let data = |_| (
+        let next = |_| (
             let iter0_next = iter0.advance;
             if iter0_next.is_none { none() };
             let iter1_next = iter1.advance;
@@ -380,7 +380,7 @@ namespace Iterator {
             let (v1, iter1) = iter1_next.unwrap;
             some $ ((v0, v1), zip(iter0, iter1))
         );
-        Iterator { _data: data }
+        Iterator { next: next }
     );
 }
 
