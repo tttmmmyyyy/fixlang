@@ -104,6 +104,8 @@ pub struct TraitInstance {
     pub qual_pred: QualPredicate,
     // Method implementation.
     pub methods: HashMap<Name, Rc<ExprNode>>,
+    // Module where this instance is defined.
+    pub define_module: Name,
 }
 
 impl TraitInstance {
@@ -333,9 +335,14 @@ impl TraitEnv {
         }
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        // See into trait definition.
+    pub fn resolve_namespace(
+        &mut self,
+        ctx: &mut NameResolutionContext,
+        imported_modules: &HashMap<Name, HashSet<Name>>,
+    ) {
+        // Resolve names in trait definitions.
         for (trait_id, trait_info) in &mut self.traits {
+            ctx.imported_modules = imported_modules[&trait_id.name.module()].clone();
             // Keys in self.traits should already be resolved.
             assert!(
                 trait_id.name
@@ -346,31 +353,30 @@ impl TraitEnv {
             trait_info.resolve_namespace(ctx);
         }
 
-        // See into trait implementation.
+        // Resolve names in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
         let mut instances_resolved: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
-        for (mut trait_id, mut insts) in insntaces {
-            // Resolve key's namespace.
-            let resolve_result = trait_id.resolve_namespace(ctx);
-            if resolve_result.is_err() {
-                let src = if insts.len() > 0 {
-                    insts[0].qual_pred.predicate.info.source.clone()
-                } else {
-                    None
-                };
-                error_exit_with_src(&resolve_result.unwrap_err(), &src)
-            }
-            // Resolve value's namespace.
-            for inst in &mut insts {
+        for (trait_id, insts) in insntaces {
+            for mut inst in insts {
+                // Set up NameResolutionContext.
+                ctx.imported_modules = imported_modules[&inst.define_module].clone();
+
+                // Resolve trait_id's namespace.
+                let mut trait_id = trait_id.clone();
+                let resolve_result = trait_id.resolve_namespace(ctx);
+                if resolve_result.is_err() {
+                    let src = inst.qual_pred.predicate.info.source.clone();
+                    error_exit_with_src(&resolve_result.unwrap_err(), &src)
+                }
+
+                // Resolve names in TrantInstance.
                 inst.resolve_namespace(ctx);
-            }
-            match instances_resolved.get_mut(&trait_id) {
-                Some(v) => {
-                    v.append(&mut insts);
+
+                // Insert to instances_resolved
+                if !instances_resolved.contains_key(&trait_id) {
+                    instances_resolved.insert(trait_id.clone(), vec![]);
                 }
-                None => {
-                    instances_resolved.insert(trait_id, insts);
-                }
+                instances_resolved.get_mut(&trait_id).unwrap().push(inst);
             }
         }
         self.instances = instances_resolved;

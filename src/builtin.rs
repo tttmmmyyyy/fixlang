@@ -2243,6 +2243,7 @@ pub fn unary_opeartor_instance(
                 None,
             ),
         )]),
+        define_module: STD_NAME.to_string(),
     }
 }
 
@@ -2319,6 +2320,7 @@ pub fn binary_opeartor_instance(
                 None,
             ),
         )]),
+        define_module: STD_NAME.to_string(),
     }
 }
 

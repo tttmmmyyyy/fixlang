@@ -72,7 +72,11 @@ where
     }
 
     // Get candidates list for overload resolution.
-    fn overloaded_candidates(&self, name: &FullName) -> Vec<(NameSpace, T)> {
+    fn overloaded_candidates(
+        &self,
+        name: &FullName,
+        imported_modules: &HashSet<Name>,
+    ) -> Vec<(NameSpace, T)> {
         if !self.var.contains_key(&name.name) {
             return vec![];
         }
@@ -82,6 +86,7 @@ where
         } else {
             sv.global
                 .iter()
+                .filter(|(ns, _)| imported_modules.contains(&ns.module()))
                 .filter(|(ns, _)| name.namespace.is_suffix(ns))
                 .map(|(ns, v)| (ns.clone(), v.clone()))
                 .collect()
@@ -339,19 +344,29 @@ pub struct TypeCheckContext {
     tyvar_id: u32,
     // Scoped map of variable name -> scheme. (Assamptions of type inference.)
     pub scope: Scope<Rc<Scheme>>,
-    // Substitution.
+    // Collected substitution.
     substitution: Substitution,
-    // Predicates
+    // Collected predicates.
     pub predicates: Vec<Predicate>,
     // Trait environment.
     trait_env: TraitEnv,
     // List of type constructors.
     pub type_env: TypeEnv,
+    // A map to represent modules imported by each submodule.
+    // To decrease clone-cost, use Rc.
+    pub imported_modules: Rc<HashMap<Name, HashSet<Name>>>,
+    // In which module is the current expression defined?
+    // This is used as a state variable for typechecking.
+    pub current_module: Option<Name>,
 }
 
 impl TypeCheckContext {
     // Creaate instance.
-    pub fn new(trait_env: TraitEnv, type_env: TypeEnv) -> Self {
+    pub fn new(
+        trait_env: TraitEnv,
+        type_env: TypeEnv,
+        imported_module: HashMap<Name, HashSet<Name>>,
+    ) -> Self {
         Self {
             tyvar_id: Default::default(),
             scope: Default::default(),
@@ -359,7 +374,16 @@ impl TypeCheckContext {
             predicates: Default::default(),
             type_env,
             trait_env,
+            imported_modules: Rc::new(imported_module),
+            current_module: None,
         }
+    }
+
+    // Get modules imported by current module.
+    pub fn imported_modules(&self) -> &HashSet<Name> {
+        self.imported_modules
+            .get(self.current_module.as_ref().unwrap())
+            .unwrap()
     }
 
     // Generate new type variable.
@@ -401,66 +425,6 @@ impl TypeCheckContext {
         (preds, sub.substitute_type(&scheme.ty))
     }
 
-    // // Make a scheme from a type by generalizing type variable that does not appear in fixed_vars.
-    // fn generalize_to_scheme(
-    //     &mut self,
-    //     ty: &Rc<TypeNode>,
-    //     fixed_vars: &HashSet<Name>,
-    // ) -> Rc<Scheme> {
-    //     // Get generalized type and predicates.
-    //     let ty = self.substitute_type(ty);
-    //     let mut preds = std::mem::replace(&mut self.predicates, vec![]);
-
-    //     // Reduce predicates.
-    //     for p in &mut preds {
-    //         self.substitute_predicate(p);
-    //     }
-    //     let preds = match self.trait_env.reduce(&preds, &self.type_env) {
-    //         Some(ps) => ps,
-    //         None => self.error_exit_on_predicates(),
-    //     };
-
-    //     // Collect variables that appear in scope.
-    //     // let mut vars_in_scope: HashSet<String> = Default::default();
-    //     // for (_var, scp) in &self.scope.var {
-    //     //     for scm in &scp.local {
-    //     //         for (var_in_scope, _) in self.substitute_scheme(&scm).free_vars() {
-    //     //             vars_in_scope.insert(var_in_scope);
-    //     //         }
-    //     //     }
-    //     // }
-
-    //     // Calculate genealized variables.
-    //     let mut gen_vars = ty.free_vars();
-    //     for v in fixed_vars {
-    //         gen_vars.remove(v);
-    //     }
-
-    //     // Split predicates to generalized and deferred.
-    //     let mut gen_preds: Vec<Predicate> = Default::default(); // Generalized predicates.
-    //     let mut def_preds: Vec<Predicate> = Default::default(); // Deferred predicates.
-    //     for p in preds {
-    //         if p.ty.free_vars().iter().all(|(v, _)| fixed_vars.contains(v)) {
-    //             // All free variables of p appears in fixed_vars.
-    //             def_preds.push(p);
-    //         } else if p
-    //             .ty
-    //             .free_vars()
-    //             .iter()
-    //             .any(|(v, _)| !fixed_vars.contains(v) && gen_vars.contains_key(v))
-    //         {
-    //             // A free variable of p appears neither in fixed_vars and generalized variables.
-    //             error_exit(&format!("ambiguous type variable in `{}`", p.to_string()))
-    //         } else {
-    //             // A free variable of p appears in generalized variables.
-    //             gen_preds.push(p);
-    //         }
-    //     }
-
-    //     self.predicates = def_preds;
-    //     Scheme::generalize(gen_vars, gen_preds, ty)
-    // }
-
     // Update substitution to unify two types.
     // When substitution fails, it has no side effect to self.
     pub fn unify(&mut self, ty1: &Rc<TypeNode>, ty2: &Rc<TypeNode>) -> bool {
@@ -496,7 +460,9 @@ impl TypeCheckContext {
         let ei = ei.set_inferred_type(ty.clone());
         match &*ei.expr {
             Expr::Var(var) => {
-                let candidates = self.scope.overloaded_candidates(&var.name);
+                let candidates = self
+                    .scope
+                    .overloaded_candidates(&var.name, self.imported_modules());
                 if candidates.is_empty() {
                     error_exit_with_src(
                         &format!("No value `{}` is found.", var.name.to_string()),

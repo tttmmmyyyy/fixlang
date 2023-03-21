@@ -53,7 +53,11 @@ fn build_module<'c>(
     fix_mod.set_kinds();
 
     // Create typeckecker.
-    let mut typechecker = TypeCheckContext::new(fix_mod.trait_env.clone(), fix_mod.type_env());
+    let mut typechecker = TypeCheckContext::new(
+        fix_mod.trait_env.clone(),
+        fix_mod.type_env(),
+        fix_mod.imported_modules.clone(),
+    );
 
     // Register type declarations of global symbols to typechecker.
     for (name, defn) in &fix_mod.global_values {
@@ -63,16 +67,18 @@ fn build_module<'c>(
     }
 
     // Check types.
-    for (_name, sym) in &mut fix_mod.global_values {
+    for (name, sym) in &mut fix_mod.global_values {
         let mut tc = typechecker.clone();
         match &sym.expr {
             SymbolExpr::Simple(e) => {
+                tc.current_module = Some(name.module());
                 let e = tc.check_type(e.clone(), sym.ty.clone());
                 sym.expr = SymbolExpr::Simple(e);
             }
             SymbolExpr::Method(methods) => {
                 let mut methods = methods.clone();
                 for m in &mut methods {
+                    tc.current_module = Some(m.define_module.clone());
                     m.expr = tc.check_type(m.expr.clone(), m.ty.clone());
                 }
                 sym.expr = SymbolExpr::Method(methods);
@@ -152,9 +158,6 @@ fn build_module<'c>(
 
     // Run optimization
     let passmgr = PassManager::create(());
-    // let passmgr_builder = PassManagerBuilder::create();
-    // passmgr_builder.set_optimization_level(OptimizationLevel::Aggressive);
-    // passmgr_builder.populate_module_pass_manager(&passmgr);
 
     passmgr.add_verifier_pass();
     add_passes(&passmgr);
@@ -179,8 +182,8 @@ fn build_module<'c>(
 }
 
 pub fn run_source(source: &str, config: Configuration) -> i32 {
-    let mut fix_mod = make_std_mod();
-    fix_mod.import(parse_source(source));
+    let mut fix_mod = parse_source(source);
+    fix_mod.import(make_std_mod());
 
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
@@ -242,8 +245,8 @@ pub fn build_file(path: &Path, config: Configuration) {
     out_path.set_extension("o");
     let tm = get_target_machine(config.llvm_opt_level);
 
-    let mut fix_mod = make_std_mod();
-    fix_mod.import(parse_source(&read_file(path)));
+    let mut fix_mod = parse_source(&read_file(path));
+    fix_mod.import(make_std_mod());
 
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);

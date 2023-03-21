@@ -101,7 +101,7 @@ fn parse_module(pair: Pair<Rule>, src: &Rc<String>) -> FixModule {
     let mut pairs = pair.into_inner();
     let module_name = parse_module_defn(pairs.next().unwrap(), src);
     let namespace = NameSpace::new(vec![module_name.clone()]);
-    let mut fix_mod = FixModule::new(module_name);
+    let mut fix_mod = FixModule::new(module_name.clone());
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
     let mut global_name_type_signs: Vec<(FullName, Rc<Scheme>)> = vec![];
@@ -121,7 +121,7 @@ fn parse_module(pair: Pair<Rule>, src: &Rc<String>) -> FixModule {
                 &mut trait_infos,
             ),
             Rule::trait_impl => {
-                trait_impls.push(parse_trait_impl(pair, src));
+                trait_impls.push(parse_trait_impl(pair, src, &module_name));
             }
             _ => unreachable!(),
         }
@@ -234,14 +234,18 @@ fn parse_trait_member_defn(pair: Pair<Rule>, src: &Rc<String>) -> (Name, QualTyp
     (method_name, qual_type)
 }
 
-fn parse_trait_impl(pair: Pair<Rule>, src: &Rc<String>) -> TraitInstance {
+fn parse_trait_impl(pair: Pair<Rule>, src: &Rc<String>, module_name: &Name) -> TraitInstance {
     assert_eq!(pair.as_rule(), Rule::trait_impl);
     let mut pairs = pair.into_inner();
     let qual_pred = parse_predicate_qualified(pairs.next().unwrap(), src);
     let methods: HashMap<Name, Rc<ExprNode>> = pairs
         .map(|pair| parse_trait_member_impl(pair, src))
         .collect();
-    TraitInstance { qual_pred, methods }
+    TraitInstance {
+        qual_pred,
+        methods,
+        define_module: module_name.clone(),
+    }
 }
 
 fn parse_trait_member_impl(pair: Pair<Rule>, src: &Rc<String>) -> (Name, Rc<ExprNode>) {

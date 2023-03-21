@@ -12,16 +12,6 @@ pub const GETTER_SYMBOL: &str = "@";
 pub const SETTER_SYMBOL: &str = "=";
 pub const STRUCT_NEW_NAME: &str = "new";
 
-pub struct FixModule {
-    pub name: Name,
-    pub type_defns: Vec<TypeDefn>,
-    pub global_values: HashMap<FullName, GlobalValue>,
-    pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
-    pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
-    pub trait_env: TraitEnv,
-    pub type_env: TypeEnv,
-}
-
 #[derive(Clone)]
 pub struct TypeEnv {
     // List of type constructors including user-defined types.
@@ -120,6 +110,12 @@ pub struct MethodImpl {
     pub ty: Rc<Scheme>,
     // Expression of this implementation
     pub expr: Rc<ExprNode>,
+    // Module where this implmentation is given.
+    // NOTE:
+    // For trait method, `define_module` may not differ to the first component of namespace of the function.
+    // For example, if `Main` module implements `Eq : SomeType`, then implementation of `eq` for `SomeType` is defined in `Main` module,
+    // but it's name as a function is still `Std.Eq.eq`.
+    pub define_module: Name,
 }
 
 impl MethodImpl {
@@ -132,6 +128,7 @@ impl MethodImpl {
 pub struct NameResolutionContext {
     pub types: HashSet<FullName>,
     pub traits: HashSet<FullName>,
+    pub imported_modules: HashSet<Name>,
 }
 
 #[derive(PartialEq)]
@@ -140,7 +137,23 @@ pub enum NameResolutionType {
     Trait,
 }
 
-impl NameResolutionContext {
+impl<'a> NameResolutionContext {
+    // pub fn filter_by_imported_modules(&self, imported_modules: &HashSet<Name>) -> Self {
+    //     fn filter(source: &HashSet<FullName>, modules: &HashSet<Name>) -> HashSet<FullName> {
+    //         HashSet::from_iter(
+    //             source
+    //                 .iter()
+    //                 .filter(|name| modules.contains(&name.module()))
+    //                 .cloned(),
+    //         )
+    //     }
+
+    //     NameResolutionContext {
+    //         types: filter(&self.types, imported_modules),
+    //         traits: filter(&self.traits, imported_modules),
+    //     }
+    // }
+
     pub fn resolve(
         &self,
         ns: &FullName,
@@ -153,6 +166,7 @@ impl NameResolutionContext {
         };
         let candidates = candidates
             .iter()
+            .filter(|name| self.imported_modules.contains(&name.module()))
             .filter_map(|id| {
                 if ns.is_suffix(id) {
                     Some(id.clone())
@@ -185,11 +199,26 @@ impl NameResolutionContext {
     }
 }
 
+pub struct FixModule {
+    pub name: Name,
+    // A map to represent modules imported by each submodule.
+    // Each module imports itself.
+    // This is used to name-resolution and overloading resolution,
+    pub imported_modules: HashMap<Name, HashSet<Name>>,
+    pub type_defns: Vec<TypeDefn>,
+    pub global_values: HashMap<FullName, GlobalValue>,
+    pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
+    pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
+    pub trait_env: TraitEnv,
+    pub type_env: TypeEnv,
+}
+
 impl FixModule {
     // Create empty module.
     pub fn new(name: Name) -> FixModule {
         FixModule {
-            name,
+            name: name.clone(),
+            imported_modules: HashMap::from([(name.clone(), HashSet::from([name]))]),
             type_defns: Default::default(),
             global_values: Default::default(),
             instantiated_global_symbols: Default::default(),
@@ -640,7 +669,11 @@ impl FixModule {
                 for trait_impl in self.trait_env.instances.get(trait_id).unwrap() {
                     let ty = trait_impl.method_scheme(method_name, trait_info);
                     let expr = trait_impl.method_expr(method_name);
-                    method_impls.push(MethodImpl { ty, expr });
+                    method_impls.push(MethodImpl {
+                        ty,
+                        expr,
+                        define_module: trait_impl.define_module.clone(),
+                    });
                 }
                 let method_name = FullName::new(&trait_id.name.to_namespace(), &method_name);
                 self.global_values.insert(
@@ -665,25 +698,30 @@ impl FixModule {
     }
 
     // Resolve namespaces of types and traits that appear in this module.
-    // NOTE: names in types/traits defined in this module have to be full-names already when this function called.
+    // NOTE: names of in the definition of types/traits/global_values have to be full-named already when this function called.
     pub fn resolve_namespace(&mut self) {
-        let ctx = NameResolutionContext {
+        let mut ctx = NameResolutionContext {
             types: self.tycon_names(),
             traits: self.trait_names(),
+            imported_modules: HashSet::default(),
         };
         {
             let mut tycons = (*self.type_env.tycons).clone();
-            for (_, ti) in &mut tycons {
+            for (tc, ti) in &mut tycons {
+                ctx.imported_modules = self.imported_modules[&tc.name.module()].clone();
                 ti.resolve_namespace(&ctx);
             }
             self.type_env.tycons = Rc::new(tycons);
         }
 
-        self.trait_env.resolve_namespace(&ctx);
+        self.trait_env
+            .resolve_namespace(&mut ctx, &self.imported_modules);
         for decl in &mut self.type_defns {
+            ctx.imported_modules = self.imported_modules[&decl.name.module()].clone();
             decl.resolve_namespace(&ctx);
         }
-        for (_, sym) in &mut self.global_values {
+        for (name, sym) in &mut self.global_values {
+            ctx.imported_modules = self.imported_modules[&name.module()].clone();
             sym.resolve_namespace(&ctx);
         }
     }
@@ -697,7 +735,7 @@ impl FixModule {
                 TypeDeclValue::Struct(str) => match Field::check_duplication(&str.fields) {
                     Some(field_name) => {
                         error_exit(&format!(
-                            "duplicate field `{}` for struct `{}`",
+                            "Duplicate field `{}` for struct `{}`",
                             field_name,
                             type_name.to_string()
                         ));
@@ -707,7 +745,7 @@ impl FixModule {
                 TypeDeclValue::Union(union) => match Field::check_duplication(&union.fields) {
                     Some(field_name) => {
                         error_exit(&format!(
-                            "duplicate field `{}` for union `{}`",
+                            "Duplicate field `{}` for union `{}`",
                             field_name,
                             type_name.to_string()
                         ));
@@ -789,6 +827,25 @@ impl FixModule {
 
     // Import other module
     pub fn import(&mut self, other: FixModule) {
+        // TODO: check if a module defined by a single source file.
+        // Add import list.
+        if !self.imported_modules.contains_key(&self.name) {
+            self.imported_modules
+                .insert(self.name.clone(), HashSet::default());
+        }
+        self.imported_modules
+            .get_mut(&self.name)
+            .unwrap()
+            .insert(other.name.clone());
+        for (importer, importee) in &other.imported_modules {
+            if let Some(known_importee) = self.imported_modules.get(importer) {
+                assert_eq!(known_importee, importee);
+            } else {
+                self.imported_modules
+                    .insert(importer.clone(), importee.clone());
+            }
+        }
+
         // Import types
         self.add_type_defns(other.type_defns);
 
