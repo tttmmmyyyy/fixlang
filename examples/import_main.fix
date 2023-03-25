@@ -1,0 +1,25 @@
+module Main;
+
+import import_example/lib0.fix; // Import by path relative to the main file.
+import ./import_example/lib1.fix; // Import by path relative to the current file (= the main file).
+import import_example/directory/lib2.fix;  // Import by path relative to the main file.
+
+name : String;
+name = "Main";
+
+imports : Array String;
+imports = [Lib0.name, Lib1.name, Lib2.name];
+
+print_imports : String -> Array String -> IOState -> ((), IOState);
+print_imports = |name, imports| (
+    print!("Library " + name + " imports " + Iterator.from_array(imports).join(", ") + ".")
+);
+
+main : IOState -> ((), IOState);
+main = |io| (
+    let (_, io) = io.print_imports(Main.name, Main.imports);
+    let (_, io) = io.print_imports(Lib0.name, Lib0.imports);
+    let (_, io) = io.print_imports(Lib1.name, Lib1.imports);
+    let (_, io) = io.print_imports(Lib2.name, Lib2.imports);
+    pure()
+);

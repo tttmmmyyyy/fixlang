@@ -2317,19 +2317,8 @@ pub fn test_run_examples() {
         }
         println!("[run_examples] {}:", display);
 
-        let mut file = match File::open(&path) {
-            Err(why) => panic!("couldn't open {}: {}", display, why),
-            Ok(file) => file,
-        };
-
-        let mut s = String::new();
-        match file.read_to_string(&mut s) {
-            Err(why) => panic!("couldn't read {}: {}", display, why),
-            Ok(_) => {}
-        }
-
         // Since examples may include heavy computation, perform optimization.
-        run_source(&s, Configuration::release());
+        run_file(&path, Configuration::release());
     }
 }
 

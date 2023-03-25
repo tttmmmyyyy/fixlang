@@ -1,0 +1,7 @@
+module Lib1;
+
+name : String;
+name = "Lib1";
+
+imports : Array String;
+imports = [];

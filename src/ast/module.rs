@@ -871,7 +871,7 @@ impl FixModule {
     }
 
     // Import modules specified by import statements.
-    pub fn resolve_imports(&mut self, root_path: &Path) {
+    pub fn resolve_imports(&mut self, main_file: &Path) {
         fn resolve_imports_inner(
             fix_mod: &mut FixModule,
             import_statements: &Vec<ImportStatement>,
@@ -900,14 +900,16 @@ impl FixModule {
             }
         }
         let mut imported_modules = HashSet::default();
-        imported_modules.insert(root_path.to_path_buf());
+        imported_modules.insert(main_file.to_path_buf());
+        let mut root_path = main_file.to_path_buf();
+        root_path.pop();
         let import_statements = self.import_statements.clone();
         resolve_imports_inner(
             self,
             &import_statements,
             &mut imported_modules,
-            root_path,
-            root_path,
+            &root_path,
+            &root_path,
         )
     }
 }

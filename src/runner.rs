@@ -218,9 +218,7 @@ pub fn read_file(path: &Path) -> String {
 pub fn load_file(file_path: &Path) -> FixModule {
     let mut fix_mod = parse_source(&read_file(file_path));
     fix_mod.import(make_std_mod());
-    let mut dir_path = file_path.to_path_buf();
-    dir_path.pop();
-    fix_mod.resolve_imports(&dir_path);
+    fix_mod.resolve_imports(file_path);
     fix_mod
 }
 

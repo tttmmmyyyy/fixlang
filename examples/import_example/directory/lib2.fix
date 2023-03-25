@@ -1,0 +1,10 @@
+module Lib2;
+
+import import_example/lib0.fix; // Import by path relative to the main file.
+import ../../import_main.fix; // Import by path relative to the current file.
+
+name : String;
+name = "Lib2";
+
+imports : Array String;
+imports = [Lib0.name, Main.name];
