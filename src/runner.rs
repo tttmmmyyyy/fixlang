@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, process::Command};
 
 use either::Either;
 use inkwell::{
@@ -247,13 +247,16 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
     );
     match target_machine {
         Some(tm) => tm,
-        None => error_exit("failed to creeate target machine"),
+        None => error_exit("Failed to creeate target machine."),
     }
 }
 
 pub fn build_file(path: &Path, config: Configuration) {
-    let mut out_path = PathBuf::from(path);
-    out_path.set_extension("o");
+    let mut obj_path = PathBuf::from(path);
+    obj_path.set_extension("o");
+    let mut exec_path = PathBuf::from(path);
+    exec_path.set_extension("");
+
     let tm = get_target_machine(config.llvm_opt_level);
 
     let fix_mod = load_file(path);
@@ -264,7 +267,14 @@ pub fn build_file(path: &Path, config: Configuration) {
     module.set_data_layout(&tm.get_target_data().get_data_layout());
 
     let tm = build_module(&ctx, &module, Either::Left(tm), fix_mod, config).unwrap_left();
-    tm.write_to_file(&module, inkwell::targets::FileType::Object, &out_path)
-        .map_err(|e| error_exit(&format!("failed to write to file: {}", e)))
+    tm.write_to_file(&module, inkwell::targets::FileType::Object, &obj_path)
+        .map_err(|e| error_exit(&format!("Failed to write to file: {}", e)))
         .unwrap();
+
+    let _link_res = Command::new("gcc")
+        .arg("-o")
+        .arg(exec_path.to_str().unwrap())
+        .arg(obj_path.to_str().unwrap())
+        .output()
+        .expect("Failed to run gcc.");
 }
