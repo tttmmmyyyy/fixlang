@@ -15,7 +15,7 @@ You can try it in [Google Colaboratory](https://colab.research.google.com/github
     - In macOS, llvmenv installs llvm to "~/Library/Application Support/llvmenv/12.0.1", but llvm-sys currently doesn't understand path with a whitespace correctly, so you need to copy/move "12.0.1" directory to another path.
 - Set LLVM_SYS_120_PREFIX variable to the directory to which llvm installed.
 - `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
-- `cargo build --release`. Then the compiler binary will be generated at "fixlang/target/release/fix". 
+- `cargo build --release`. Then the compiler program will be generated at "fixlang/target/release/fix". 
 - You can run the source file of fix-lang by `fix run source-file.fix`, or build object file `source-file.o` by `fix build source-file.fix`. In the latter case, by passing the object file to gcc (`gcc source-file.o`) will generate executable binary.
 
 ## Documentation

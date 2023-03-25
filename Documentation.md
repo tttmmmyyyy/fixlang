@@ -5,13 +5,17 @@ Documentation
 
 ## Module definition
 
-Each source file needs a module definition at the first.
+Each source file of fix-lang defines a module. To specify the name of a module defined by a source file, write `module {module_name};` at the head of the file. 
 
 ```
 module Main;
 ```
 
 Module name is used as the namespace of global names, types and traits defined in the source file.
+
+## Import statements
+
+You can import modules defined in other source files by writing `import {path_to_source_file};`. If `{path_to_source_file}` starts by `./` or `../`, then it is treated as a relative path to the source file in which that import statement is written. In other cases, `{path_to_source_file}` is treated as a relative path to the root source file, that is, the file passed to the compiler.
 
 ## Global values and `main`
 
