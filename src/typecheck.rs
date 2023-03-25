@@ -475,10 +475,10 @@ impl TypeCheckContext {
                         let fullname = FullName::new(ns, &var.name.name);
                         let mut tc = self.clone();
                         let (_, var_ty) = tc.instantiate_scheme(&scm, true);
-                        // if var_ty is unifiable to the required type and predicates are satisfiable, then this candidate is ok.
+                        // if var_ty is unifiable to the expected type and predicates are satisfiable, then this candidate is ok.
                         if !tc.unify(&var_ty, &ty) {
                             let msg = format!(
-                                "- `{}` of type `{}` does not match the required type.",
+                                "- `{}` of type `{}` does not match the expected type.",
                                 fullname.to_string(),
                                 scm.substitute(&self.substitution).to_string(),
                             );
@@ -505,7 +505,7 @@ impl TypeCheckContext {
                 if ok_count == 0 {
                     error_exit_with_src(
                         &format!(
-                            "No value named `{}` matches the required type `{}`.\n{}",
+                            "No value named `{}` matches the expected type `{}`.\n{}",
                             var.name.to_string(),
                             &self.substitute_type(&ty).to_string_normalize(),
                             candidates
