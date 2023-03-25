@@ -2312,7 +2312,7 @@ pub fn test_run_examples() {
     for path in paths {
         let path = path.unwrap().path();
         let display = path.display();
-        if path.extension().unwrap() != "fix" {
+        if path.extension().is_none() || path.extension().unwrap() != "fix" {
             continue;
         }
         println!("[run_examples] {}:", display);

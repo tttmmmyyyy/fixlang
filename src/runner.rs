@@ -56,7 +56,7 @@ fn build_module<'c>(
     let mut typechecker = TypeCheckContext::new(
         fix_mod.trait_env.clone(),
         fix_mod.type_env(),
-        fix_mod.imported_modules.clone(),
+        fix_mod.linked_mod_to_visible_mods.clone(),
     );
 
     // Register type declarations of global symbols to typechecker.
@@ -184,7 +184,7 @@ fn build_module<'c>(
 #[allow(dead_code)]
 pub fn run_source(source: &str, config: Configuration) -> i32 {
     let mut fix_mod = parse_source(source);
-    fix_mod.import(make_std_mod());
+    fix_mod.link(make_std_mod());
     run_module(fix_mod, config)
 }
 
@@ -217,7 +217,7 @@ pub fn read_file(path: &Path) -> String {
 
 pub fn load_file(file_path: &Path) -> FixModule {
     let mut fix_mod = parse_source(&read_file(file_path));
-    fix_mod.import(make_std_mod());
+    fix_mod.link(make_std_mod());
     fix_mod.resolve_imports(file_path);
     fix_mod
 }

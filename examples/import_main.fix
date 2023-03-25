@@ -12,7 +12,7 @@ imports = [Lib0.name, Lib1.name, Lib2.name];
 
 print_imports : String -> Array String -> IOState -> ((), IOState);
 print_imports = |name, imports| (
-    print!("Library " + name + " imports " + Iterator.from_array(imports).join(", ") + ".")
+    println!("Library " + name + " imports [" + Iterator.from_array(imports).join(", ") + "].")
 );
 
 main : IOState -> ((), IOState);
@@ -21,5 +21,5 @@ main = |io| (
     let (_, io) = io.print_imports(Lib0.name, Lib0.imports);
     let (_, io) = io.print_imports(Lib1.name, Lib1.imports);
     let (_, io) = io.print_imports(Lib2.name, Lib2.imports);
-    pure()
+    io.pure()
 );

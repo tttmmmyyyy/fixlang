@@ -207,7 +207,7 @@ pub struct FixModule {
     // A map to represent modules imported by each submodule.
     // Each module imports itself.
     // This is used to name-resolution and overloading resolution,
-    pub imported_modules: HashMap<Name, HashSet<Name>>,
+    pub linked_mod_to_visible_mods: HashMap<Name, HashSet<Name>>,
     pub type_defns: Vec<TypeDefn>,
     pub global_values: HashMap<FullName, GlobalValue>,
     pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
@@ -219,17 +219,20 @@ pub struct FixModule {
 impl FixModule {
     // Create empty module.
     pub fn new(name: Name) -> FixModule {
-        FixModule {
+        let mut fix_mod = FixModule {
             name: name.clone(),
             import_statements: vec![],
-            imported_modules: HashMap::from([(name.clone(), HashSet::from([name]))]),
+            linked_mod_to_visible_mods: Default::default(),
             type_defns: Default::default(),
             global_values: Default::default(),
             instantiated_global_symbols: Default::default(),
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
             type_env: Default::default(),
-        }
+        };
+        fix_mod.insert_linked_mod_to_visible_mods(&name, &name);
+        fix_mod.insert_linked_mod_to_visible_mods(&name, &STD_NAME.to_string());
+        fix_mod
     }
 
     // Add import statements.
@@ -717,20 +720,20 @@ impl FixModule {
         {
             let mut tycons = (*self.type_env.tycons).clone();
             for (tc, ti) in &mut tycons {
-                ctx.imported_modules = self.imported_modules[&tc.name.module()].clone();
+                ctx.imported_modules = self.linked_mod_to_visible_mods[&tc.name.module()].clone();
                 ti.resolve_namespace(&ctx);
             }
             self.type_env.tycons = Rc::new(tycons);
         }
 
         self.trait_env
-            .resolve_namespace(&mut ctx, &self.imported_modules);
+            .resolve_namespace(&mut ctx, &self.linked_mod_to_visible_mods);
         for decl in &mut self.type_defns {
-            ctx.imported_modules = self.imported_modules[&decl.name.module()].clone();
+            ctx.imported_modules = self.linked_mod_to_visible_mods[&decl.name.module()].clone();
             decl.resolve_namespace(&ctx);
         }
         for (name, sym) in &mut self.global_values {
-            ctx.imported_modules = self.imported_modules[&name.module()].clone();
+            ctx.imported_modules = self.linked_mod_to_visible_mods[&name.module()].clone();
             sym.resolve_namespace(&ctx);
         }
     }
@@ -834,34 +837,32 @@ impl FixModule {
         }
     }
 
-    // Import other module
-    pub fn import(&mut self, other: FixModule) {
+    // Link two modules.
+    pub fn link(&mut self, other: FixModule) {
         // TODO: check if a module defined by a single source file.
-        // Add import list.
-        if !self.imported_modules.contains_key(&self.name) {
-            self.imported_modules
-                .insert(self.name.clone(), HashSet::default());
+
+        // If already linked, do nothing.
+        if self.linked_mod_to_visible_mods.contains_key(&other.name) {
+            return;
         }
-        self.imported_modules
-            .get_mut(&self.name)
-            .unwrap()
-            .insert(other.name.clone());
-        for (importer, importee) in &other.imported_modules {
-            if let Some(known_importee) = self.imported_modules.get(importer) {
+
+        // Merge linked_mod_to_visible_mods.
+        for (importer, importee) in &other.linked_mod_to_visible_mods {
+            if let Some(known_importee) = self.linked_mod_to_visible_mods.get(importer) {
                 assert_eq!(known_importee, importee);
             } else {
-                self.imported_modules
+                self.linked_mod_to_visible_mods
                     .insert(importer.clone(), importee.clone());
             }
         }
 
-        // Import types
+        // Merge types.
         self.add_type_defns(other.type_defns);
 
-        // Import traits and instances
+        // Merge traits and instances.
         self.trait_env.import(other.trait_env);
 
-        // Import global values
+        // Merge global values.
         for (name, gv) in other.global_values {
             let ty = gv.ty;
             if let SymbolExpr::Simple(expr) = gv.expr {
@@ -870,46 +871,74 @@ impl FixModule {
         }
     }
 
+    pub fn insert_linked_mod_to_visible_mods(&mut self, importer: &Name, imported: &Name) {
+        if !self.linked_mod_to_visible_mods.contains_key(importer) {
+            self.linked_mod_to_visible_mods
+                .insert(importer.clone(), Default::default());
+        }
+        self.linked_mod_to_visible_mods
+            .get_mut(importer)
+            .unwrap()
+            .insert(imported.clone());
+    }
+
     // Import modules specified by import statements.
     pub fn resolve_imports(&mut self, main_file: &Path) {
         fn resolve_imports_inner(
-            fix_mod: &mut FixModule,
-            import_statements: &Vec<ImportStatement>,
-            imported_modules: &mut HashSet<PathBuf>,
-            current_path: &Path,
-            root_path: &Path,
+            target_mod: &mut FixModule,
+            current_mod: &Name,
+            current_mod_imports: &Vec<ImportStatement>,
+            current_file: &Path,
+            visited_file_to_mod: &mut HashMap<PathBuf, Name>,
+            root_dir: &Path,
         ) {
-            for import_statement in import_statements {
-                let file_path = import_statement.get_imported_file(current_path, root_path);
-                if imported_modules.contains(file_path.as_path()) {
+            // Insert to visited_file_to_mod.
+            visited_file_to_mod.insert(current_file.to_path_buf(), current_mod.clone());
+
+            // Get current directory.
+            let mut current_dir = current_file.to_path_buf();
+            current_dir.pop();
+
+            // Process import statements.
+            for import in current_mod_imports {
+                let file_path = import.get_imported_file(current_dir.as_path(), root_dir);
+                if let Some(imported_mod) = visited_file_to_mod.get(file_path.as_path()) {
+                    target_mod.insert_linked_mod_to_visible_mods(current_mod, &imported_mod);
                     continue;
-                }
-                let imported_mod = parse_source(&read_file(&file_path));
-                let import_statements = imported_mod.import_statements.clone();
-                fix_mod.import(imported_mod);
-                imported_modules.insert(file_path.clone());
-                let mut dir_path = file_path.clone();
-                dir_path.pop();
-                resolve_imports_inner(
-                    fix_mod,
-                    &import_statements,
-                    imported_modules,
-                    dir_path.as_path(),
-                    root_path,
-                )
+                } else {
+                    let imported_mod = parse_source(&read_file(&file_path));
+                    let imported_mod_name = imported_mod.name.clone();
+                    let imported_mod_imports = imported_mod.import_statements.clone();
+
+                    target_mod.link(imported_mod);
+                    target_mod.insert_linked_mod_to_visible_mods(current_mod, &imported_mod_name);
+
+                    let mut dir_path = file_path.clone();
+                    dir_path.pop();
+
+                    resolve_imports_inner(
+                        target_mod,
+                        &imported_mod_name,
+                        &imported_mod_imports,
+                        &file_path.to_path_buf(),
+                        visited_file_to_mod,
+                        root_dir,
+                    );
+                };
             }
         }
-        let mut imported_modules = HashSet::default();
-        imported_modules.insert(main_file.to_path_buf());
-        let mut root_path = main_file.to_path_buf();
-        root_path.pop();
+        let mut visited_files = HashMap::default();
+        let mut root_dir = main_file.to_path_buf();
+        root_dir.pop();
         let import_statements = self.import_statements.clone();
+        let main_mod_name = self.name.clone();
         resolve_imports_inner(
             self,
+            &main_mod_name,
             &import_statements,
-            &mut imported_modules,
-            &root_path,
-            &root_path,
+            main_file,
+            &mut visited_files,
+            &root_dir,
         )
     }
 }
