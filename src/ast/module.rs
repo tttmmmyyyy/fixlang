@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use inkwell::module::Linkage;
 
 use super::*;
@@ -201,6 +203,7 @@ impl<'a> NameResolutionContext {
 
 pub struct FixModule {
     pub name: Name,
+    pub import_statements: Vec<ImportStatement>,
     // A map to represent modules imported by each submodule.
     // Each module imports itself.
     // This is used to name-resolution and overloading resolution,
@@ -218,6 +221,7 @@ impl FixModule {
     pub fn new(name: Name) -> FixModule {
         FixModule {
             name: name.clone(),
+            import_statements: vec![],
             imported_modules: HashMap::from([(name.clone(), HashSet::from([name]))]),
             type_defns: Default::default(),
             global_values: Default::default(),
@@ -226,6 +230,11 @@ impl FixModule {
             trait_env: Default::default(),
             type_env: Default::default(),
         }
+    }
+
+    // Add import statements.
+    pub fn add_import_statements(&mut self, mut imports: Vec<ImportStatement>) {
+        self.import_statements.append(&mut imports);
     }
 
     // Add traits.
@@ -859,5 +868,46 @@ impl FixModule {
                 self.add_global_value(name, (expr, ty));
             }
         }
+    }
+
+    // Import modules specified by import statements.
+    pub fn resolve_imports(&mut self, root_path: &Path) {
+        fn resolve_imports_inner(
+            fix_mod: &mut FixModule,
+            import_statements: &Vec<ImportStatement>,
+            imported_modules: &mut HashSet<PathBuf>,
+            current_path: &Path,
+            root_path: &Path,
+        ) {
+            for import_statement in import_statements {
+                let file_path = import_statement.get_imported_file(current_path, root_path);
+                if imported_modules.contains(file_path.as_path()) {
+                    continue;
+                }
+                let imported_mod = parse_source(&read_file(&file_path));
+                let import_statements = imported_mod.import_statements.clone();
+                fix_mod.import(imported_mod);
+                imported_modules.insert(file_path.clone());
+                let mut dir_path = file_path.clone();
+                dir_path.pop();
+                resolve_imports_inner(
+                    fix_mod,
+                    &import_statements,
+                    imported_modules,
+                    dir_path.as_path(),
+                    root_path,
+                )
+            }
+        }
+        let mut imported_modules = HashSet::default();
+        imported_modules.insert(root_path.to_path_buf());
+        let import_statements = self.import_statements.clone();
+        resolve_imports_inner(
+            self,
+            &import_statements,
+            &mut imported_modules,
+            root_path,
+            root_path,
+        )
     }
 }

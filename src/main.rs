@@ -22,6 +22,7 @@ mod tests;
 mod typecheck;
 
 use ast::expr::*;
+use ast::import::*;
 use ast::module::*;
 use ast::traits::*;
 use ast::typedecl::*;

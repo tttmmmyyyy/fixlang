@@ -199,6 +199,25 @@ global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" 
 
 global_name_defn = { var ~ sep+ ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
+// === Import statements === 
+import_statement = { "import" ~ sep+ ~ (rel_import_path | abs_import_path) ~ sep* ~ ";" }
+
+rel_import_path = { current_directory_path | parent_directory_path }
+
+current_directory_path = { "./" ~ import_path }
+
+parent_directory_path = { dot_dot_slash+ ~ import_path }
+
+dot_dot_slash = { "../" }
+
+abs_import_path = { import_path }
+
+import_path = { (file_name ~ "/")* ~ file_name }
+
+forbidden_chars_in_path = _{ "/" | ";" }
+
+file_name = { (!forbidden_chars_in_path ~ ANY)+ }
+
 // === Module ===
 module_name_head = _{ ASCII_ALPHA_UPPER }
 module_name_char = _{ ASCII_ALPHA | ASCII_DIGIT }
@@ -210,7 +229,7 @@ global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign |
 
 global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep* ~ global_defns)* ~ sep* ~ "}" }
 
-module = { module_defn ~ (sep* ~ (global_defns | trait_impl))* }
+module = { module_defn ~ (sep* ~ (global_defns | trait_impl | import_statement))* }
 
 // === Comments ===
 block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }

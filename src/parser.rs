@@ -108,6 +108,7 @@ fn parse_module(pair: Pair<Rule>, src: &Rc<String>) -> FixModule {
     let mut global_value_defns: Vec<(FullName, Rc<ExprNode>)> = vec![];
     let mut trait_infos: Vec<TraitInfo> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
+    let mut import_statements: Vec<ImportStatement> = vec![];
 
     for pair in pairs {
         match pair.as_rule() {
@@ -123,6 +124,9 @@ fn parse_module(pair: Pair<Rule>, src: &Rc<String>) -> FixModule {
             Rule::trait_impl => {
                 trait_impls.push(parse_trait_impl(pair, src, &module_name));
             }
+            Rule::import_statement => {
+                import_statements.push(parse_import_statement(pair, src));
+            }
             _ => unreachable!(),
         }
     }
@@ -130,6 +134,7 @@ fn parse_module(pair: Pair<Rule>, src: &Rc<String>) -> FixModule {
     fix_mod.add_global_values(global_value_defns, global_name_type_signs);
     fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls);
+    fix_mod.add_import_statements(import_statements);
 
     fix_mod
 }
@@ -1193,6 +1198,59 @@ fn parse_pattern_union(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     let field_name = pairs.next().unwrap().as_str().to_string();
     let pat = parse_pattern(pairs.next().unwrap(), src);
     PatternNode::make_union(tycon, field_name, pat).set_source(span)
+}
+
+fn parse_import_statement(pair: Pair<Rule>, src: &Rc<String>) -> ImportStatement {
+    assert_eq!(pair.as_rule(), Rule::import_statement);
+    let span = Span::from_pair(&src, &pair);
+    let pair = pair.into_inner().next().unwrap();
+    let path = match pair.as_rule() {
+        Rule::rel_import_path => parse_rel_import_path(pair, src),
+        Rule::abs_import_path => parse_abs_import_path(pair, src),
+        _ => unreachable!(),
+    };
+    ImportStatement {
+        path,
+        source: Some(span),
+    }
+}
+
+fn parse_rel_import_path(pair: Pair<Rule>, src: &Rc<String>) -> ImportPath {
+    assert_eq!(pair.as_rule(), Rule::rel_import_path);
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::current_directory_path => parse_current_directory_path(pair, src),
+        Rule::parent_directory_path => parse_parent_directory_path(pair, src),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_abs_import_path(pair: Pair<Rule>, src: &Rc<String>) -> ImportPath {
+    assert_eq!(pair.as_rule(), Rule::abs_import_path);
+    let pair = pair.into_inner().next().unwrap();
+    ImportPath::Absolute(parse_import_path(pair, src))
+}
+
+fn parse_current_directory_path(pair: Pair<Rule>, src: &Rc<String>) -> ImportPath {
+    assert_eq!(pair.as_rule(), Rule::current_directory_path);
+    let pair = pair.into_inner().next().unwrap();
+    ImportPath::Relative(0, parse_import_path(pair, src))
+}
+
+fn parse_parent_directory_path(pair: Pair<Rule>, src: &Rc<String>) -> ImportPath {
+    assert_eq!(pair.as_rule(), Rule::parent_directory_path);
+    let mut pairs = pair.into_inner();
+    let mut count: u32 = 0;
+    while pairs.peek().unwrap().as_rule() == Rule::dot_dot_slash {
+        pairs.next();
+        count += 1;
+    }
+    ImportPath::Relative(count, parse_import_path(pairs.next().unwrap(), src))
+}
+
+fn parse_import_path(pair: Pair<Rule>, _src: &Rc<String>) -> Vec<Name> {
+    assert_eq!(pair.as_rule(), Rule::import_path);
+    pair.into_inner().map(|p| p.as_str().to_string()).collect()
 }
 
 fn rule_to_string(r: &Rule) -> String {

@@ -181,10 +181,14 @@ fn build_module<'c>(
     gc.target
 }
 
+#[allow(dead_code)]
 pub fn run_source(source: &str, config: Configuration) -> i32 {
     let mut fix_mod = parse_source(source);
     fix_mod.import(make_std_mod());
+    run_module(fix_mod, config)
+}
 
+pub fn run_module(fix_mod: FixModule, config: Configuration) -> i32 {
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
     let ee = module
@@ -211,8 +215,17 @@ pub fn read_file(path: &Path) -> String {
     s
 }
 
-pub fn run_file(path: &Path, config: Configuration) -> i32 {
-    run_source(read_file(path).as_str(), config)
+pub fn load_file(file_path: &Path) -> FixModule {
+    let mut fix_mod = parse_source(&read_file(file_path));
+    fix_mod.import(make_std_mod());
+    let mut dir_path = file_path.to_path_buf();
+    dir_path.pop();
+    fix_mod.resolve_imports(&dir_path);
+    fix_mod
+}
+
+pub fn run_file(file_path: &Path, config: Configuration) -> i32 {
+    run_module(load_file(file_path), config)
 }
 
 fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
@@ -245,8 +258,7 @@ pub fn build_file(path: &Path, config: Configuration) {
     out_path.set_extension("o");
     let tm = get_target_machine(config.llvm_opt_level);
 
-    let mut fix_mod = parse_source(&read_file(path));
-    fix_mod.import(make_std_mod());
+    let fix_mod = load_file(path);
 
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
