@@ -1,72 +1,180 @@
 Documentation
 ===
 
-# Syntax
+# Tutorial
 
-## Module definition
+## An example program
 
-Each source file of fix-lang defines a module. To specify the name of a module defined by a source file, write `module {module_name};` at the head of the file. 
+The following is a Fix program that calculates the first 30 numbers of Fibonacci sequence. 
+
+```
+module Main;
+
+calc_fib : Int -> Array Int;
+calc_fib = |n| (
+    let arr = Array::fill(n, 0);
+    let arr = arr.set!(0, 1);
+    let arr = arr.set!(1, 1);
+    let arr = loop((2, arr), |(idx, arr)|
+        if idx == arr.get_length {
+            break $ arr
+        } else {
+            let x = arr.get(idx-1);
+            let y = arr.get(idx-2);
+            let arr = arr.set!(idx, x+y);
+            continue $ (idx+1, arr)
+        }
+    );
+    arr
+);
+
+main : IOState -> ((), IOState);
+main = (
+    let fib = calc_fib(30);
+    println! $ Iterator::from_array(fib).map(to_string).join(", ")
+);
+```
+
+If you save the above program to a file "main.fix" and run `fix run main.fix`, it prints 
+
+```
+1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040
+```
+
+to the standard output.
+
+In the followings, I explain language specifications which is necessary to understand the above program.
+
+## Modules
+
+The first line is the module definition:
 
 ```
 module Main;
 ```
 
-Module name is used as the namespace of global names, types and traits defined in the source file.
+In Fix, values, functions, types and traits defined in a source file is collected to a module. Each source file has to declare the name of the module it defines by `module {module_name};`. The first letter of the module name must be capitalized.
 
-## Import statements
+When Fix program runs, it calls `main` function defined in the `Main` module.
 
-You can import modules defined in other source files by writing `import {path_to_source_file};`. If `{path_to_source_file}` starts by `./` or `../`, then it is treated as a relative path to the source file in which that import statement is written. In other cases, `{path_to_source_file}` is treated as a relative path to the root source file, that is, the file passed to the compiler.
+The usefulness of modules is hard to see in this example. They are useful when you construct a program from multiple source files.
 
-## Global values and `main`
+## Global values
 
-You can define a global value and it's type and name as follows.
+The following parts are definitions of two global values `calc_fib` and `main`.
 
 ```
-truth: Int;
-truth = 42;
+calc_fib : Int -> Array Int;
+calc_fib = ...; // call this expression A.
+
+main : IOState -> ((), IOState);
+main = ...; // call this expression B.
 ```
 
-The name of value has to start with a lower-case alphabet.
+These lines means that:
 
-`Main` module has to include a `main` global value of type `IOState -> ((), IOState)`. When fix program starts to run, the runtime generates an `IOState` value and pass it to `Main.main` function.
+- `calc_fib` global value has type `Int -> Array Int` and it's value is defined by expression A.
+- `main` global value has type `IOState -> ((), IOState)` and it's value is defined by expression B.
 
-## Let binding
+In Fix, you have to specify the type of a global value explicitly. 
 
-To define a local name and it's value, use `let`-binding. The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {expression_0}; {expression_1}`.
+## Namespaces
 
-For one-line expression, it is preferred to use `in`:
-```
-let x = 5 in 2 + x // 7
-```
+The `Array` in `Array::fill` or `Iterator` in `Iterator::from_array` are namespaces. Namespace is the "address" of a name and used to distinguish two symbols (values, types or traits) with the same name.
 
-On the other hand, if you want to `{epxression_0}` and `{expression_1}` in other lines, it is better to use semicolon:
+Namespaces of a name can be omitted if the symbol specified by the name is unique, or can be inferred from the context. In fact, you can write simply `fill(n, 0)` instead of `Array::fill(n, 0)` because there is only one function named `fill` at the current version of standard library. The reasons I wrote `Array::fill(n, 0)` here are:
+
+- `Array::fill(n, 0)` is more readable than `fill(n, 0)`, because it expresses that `fill` function is related to `Array` type. A reader may be able to infer that `Array::fill` will generate an array of specified length filled by a specified initial value.
+- In the future, another function named `fill` may be added to a namespace other than `Array`. After that, the named `fill` may become ambiguous and the compile of the example program may start to fail.
+
+Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `Std` is a module to put standard library symbols. Module is nothing but a top-level namespace. The namespace `Array` is defined as the sub-namespace of `Std` to put functions related to arrays. Similarly, full name of `calc_fib` function is `Main::calc_fib`. You need to specify (possibly empty) suffix of namespaces of a name so that the symbol referred to is unique, or can be inferred by compiler from the context.
+
+## Types
+
+Each value in fix has it's type. You can consider that a type is a set in mathematics, and value in Fix is an element of it's type. 
+
+The followings are examples of types:
+
+- `Int`: the type of 64-bit signed integers.
+- `Bool`: the type of boolean values (i.e., `true` and `false`).
+- `Array a`: the type of arrays whose elements have type `a`.
+- `String`: the type of strings.
+- `Int -> Array Int`: the type of functions that takes an integer and returns an array of integers.
+- `()`: the unit type. This type has a single value which is also written as `()`. 
+- `(a, b)`: the type of pairs of values of `a` and `b`.
+- `IOState`: the type whose value corresponds to a state of the world outside the Fix program. For example, printing a string to the standard output can be thought as an operation that changes the external state, and Fix expresses such an operation by a function that takes an `IOState` value and returns updated `IOState` value.
+- `IOState -> ((), IOState)`: the type of functions that update the external state and receive no data. This type is isomorphic to `IOState -> IOState`, but we put a redundant `()` for monadic composition (you don't need to understand this terminology).
+- `Int -> Bool -> Array Bool`: this is equivalent to `Int -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from it's length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
+
+## Expressions
+
+Expression is a sentence which describes how to calculate a value. The followings are examples of expressions:
+
+- `42`: a literal expression which means the number 42 represented as a signed 64-bit integer.
+- `false`, `true`: literal expressions which means boolean value (represented as a 8-bit integer `0` and `1` internally).
+- `[1, 2, 3]`: a literal expression which means an integer array with elements `1`, `2` and `3`.
+- `"Hello World!"`: a string literal.
+- `()`: the unit literal, whose type is also written as `()` and called "the unit type".
+- `(1, true)`: a tuple literal, which produces a value of the type `(Int, Bool)`.
+- `3 + 5`: an expression which means "the integer obtained by adding `3` and `5`".
+- `let x = 3 + 5 in x * x`: an expression which means "Compute `3 + 5` and call the result `x`. Then compute `x * x`."
+- `if c { x + y } else { x - y }`: an expression which means "If a boolean value `c` is `true`, then the value of this expression is `x + y`. Otherwise, the value of this expression is `x - y`".
+- `f(x)`: an expression which means "the value obtained by applying a function `f` to the value `x`".
+- `|x| x + 3`: an expression which means "the function which converts `x` to `x + 3`".
+
+## Let-expressions
+
+To define a local name by a value, use `let`-expression. The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {expression_0}; {expression_1}`.
+
+If you write the whole let-expression in one line, it is preferred to use `in`: For example, `let x = 5 in 2 + x`. Of course, you can also write it as `let x = 5; 2 + x`.
+
+On the other hand, if you want to put `{epxression_0}` and `{expression_1}` in other lines, it is better to use semicolon:
 ```
 let x = 3;
 let y = 5;
-x + y // 8
+x + y
 ```
 
-If `{expression_0}` ranges several lines, it is good to put parentheses around `{expression_0}`:
+If `{expression_0}` ranges several lines, it is preferred to indent `{expression_0}` with parenthes. For example, the following program is more readable
 ```
-let n_mod_2 = (
-    if n % 2 == 0 {
-        1
-    } else {
-        0
-    }
+let twice_of_three_plus_five = (
+    let n = 3 + 5;
+    n * n
 );
-...
+```
+than 
+```
+let twice_of_three_plus_five = 
+let n = 3 + 5;
+n * n;
 ```
 
-If the name of the lhs of `let`-binding is already in the scope, `let` evaluates `{expression_0}` in the old scope (i.e., with the old value of the name) and evaluates `{expression_1}` in the new scope (i.e., with the new value of the name).
+Fix's `let`-expression doesn't allow recursive definition. For example, a program
 
-Fix's `let`-binding doesn't allow making recursive definition. To define a recursive function locally, use `fix` built-in function.
+```
+use_rec_defn : Int;
+use_rec_defn = let x = x + 3 in x * x;
+```
 
-## If
+cannot be compiled. A program
 
-The syntax of `if` is the following:
-- `if cond { expr_0 } (else|;) { expr_1 }` where curly braces around `expr_1` is optional.
-The type of `cond` has to be `Bool`, and The types of `expr_0` and `expr_1` must coincide.
+```
+use_rec_defn : Int;
+use_rec_defn = (
+    let x = 5;
+    let x = x + 3;
+    x * x
+);
+```
+
+will be compiled, but the name `x` in the right hand side of `let x = x + 3` is considered as the name `x` defined in the previous line (i.e., it's value is `5`), not as the new one.
+
+This means that you cannot define a local recursive function by let-expression naively. To do this, use `fix` built-in function.
+
+## If-expressions
+
+The syntax of `if` is the following: `if cond { expr_0 } (else|;) { expr_1 }` where curly braces around `expr_1` is optional.
+The type of `cond` has to be `Bool`, and types of `expr_0` and `expr_1` must coincide.
 
 For usual case, use `if cond { expr_0 } else { expr_1 }`:
 ```
@@ -77,29 +185,341 @@ if cond {
 }
 ```
 
-To write "early return" pattern without introducing indent, it is good to omit curly braces around else-expression:
+To write "early return" pattern, it is useful to omit curly braces around `{expr_1}`:
 ```
-if edge_case { "a trivial value" };
-"a complicated calculation"
+if cache_is_available { "the cached value" };
+"a long program which calculates a value, store it into cache, and returns the value."
 ```
 
 ## Function application
 
-To apply a function `f` to a variable `x`, just write `f(x)`. `f(x, y)` is interpreted as `(f(x))(y)`.
+To apply a function `f` to a value `x`, write `f(x)`.
 
 ```
 neg(3) // -3 -- `neg` is a built-in function that takes a Int value and returns negative of it.
 ```
 
-## Function definition (Lambda abstraction)
+As I wrote before, there is no type of "two-variable functions" or "three-variable functions" in Fix. Instead, treat the value of type `a -> b -> c` (which is equal to `a -> (b -> c)`) as a thing like "two-variable function that takes a value of `a` and a value of `b`".　
 
-You can make a function value (which is similar to things called "lambda" or "closure" in other languages) by `|arg| body`. `|arg0, arg1| body` is intepreted as `|arg0| (|arg1| body)`.
+Let's consider a "two-variable function" `multiply : Int -> Int -> Int` that multiplies two integers. Then `multiply(3) : Int -> Int` is a function that multiplies 3 to the given integer. So `multiply(3)(5)` results in 15. Now, the last expression can be written as `multiply(3, 5)`, because we have a syntax sugar that `f(x, y)` is equivalent to `f(x)(y)`. 
+
+In the program of Fibonacci sequence, the expression `Array::fill(n, 0)` is an example of calling two-variable function `Array::fill` on two values `n` and `0`.
+
+As a special syntax, writing `f()` implies `f(())`, i.e., application of function `f` to the unit value `()`.
+
+## Functions
+
+You can make a function value (which is similar to things called "lambda" or "closure" in other languages) by `|{arg}| {body}`. To define a two-variable function, you can simply write `|{arg0}, {arg1}| {body}` which is a syntax sugar of `|{arg0}| |{arg1}| {body}`.
+
+Functions in fix can "capture" a value defined outside the function definition. As an example, consider the following program.
 
 ```
-let x = 3;
-let add_x = |n| n + x;
-add_x(4) + add_x(5) // (4 + 3) + (5 + 3) = 15
+fifteen : Int;
+fifteen = (
+    let x = 3;
+    let add_x = |n| n + x;
+    add_x(4) + add_x(5) // (4 + 3) + (5 + 3) = 15
+);
 ```
+
+In the expression `|n| n + x`, `n` is the argument of the function and `x` refers to the name defined in the previous line. The function `add_x` memorises the value `3` and uses it when called.
+
+Since all values (including functions) in Fix are immutable, the behavior of the function `add_x` will never change after you have defined it. For example, 
+
+```
+fifteen : Int;
+fifteen = (
+    let x = 3;
+    let add_x = |n| n + x;
+    let x = 0;
+    add_x(4) + add_x(5) // (4 + 3) + (5 + 3) = 15
+);
+```
+
+still evaluates to 15, because `add_x` is not affected by the change of the value that the name `x` refers to.
+
+If the `{body}` part of your function ranges multiple lines, it is preferred to indent `{body}` with parenthes. For example, the program
+
+```
+calc_fib = |n| (
+    let arr = Array::fill(n, 0);
+    let arr = arr.set!(0, 1);
+    let arr = arr.set!(1, 1);
+    let arr = loop((2, arr), |(idx, arr)|
+        if idx == arr.get_length {
+            break $ arr
+        } else {
+            let x = arr.get(idx-1);
+            let y = arr.get(idx-2);
+            let arr = arr.set!(idx, x+y);
+            continue $ (idx+1, arr)
+        }
+    );
+    arr
+);
+```
+
+is more readable than the following: 
+
+```
+calc_fib = |n| 
+let arr = Array::fill(n, 0);
+let arr = arr.set!(0, 1);
+let arr = arr.set!(1, 1);
+let arr = loop((2, arr), |(idx, arr)|
+    if idx == arr.get_length {
+        break $ arr
+    } else {
+        let x = arr.get(idx-1);
+        let y = arr.get(idx-2);
+        let arr = arr.set!(idx, x+y);
+        continue $ (idx+1, arr)
+    }
+);
+arr;
+```
+
+## Operator `.` and `$`
+
+The operator `.` is another way of applying function to a value. It is defined as `x.f == f(x)`.
+
+The precedence of the operator `.` is lower than function application by parenthes. So, if a function `method` has a type `Param -> Obj -> Result`, then `obj.method(arg)` is interpreted as `obj.(method(arg)) == method(arg)(obj) == method(arg, obj)`, not as `(obj.method)(arg)`.
+
+In the program of Fibonacci sequence, the followings are examples of use of operator `.`:
+
+- `arr.get_length`: `get_length` is a function of type `Array a -> Int`, which returns the length of an array. Note that you should not write `arr.get_length()` as if you call a method of a class on an instance in other languages. Remembering syntax sugars `f() == f(())` and `x.f == f(x)`, you can desugar the expression `arr.get_length()` to `get_length((), arr)`, which raises an error because `get_length` takes only one argument.
+- `arr.set!(0, 1)`: `set!` is a function of type `Int -> a -> Array a -> Array a`, which updates an element of an array to the specified value. 
+- `arr.get(idx-1)`: `get` is a function of type `Int -> Array a -> a`, which returns the element at the specified index.
+
+We sometimes call a function of type `Param0 -> ... -> ParamN -> Obj -> Result` as a "method" on the type `Obj` that has N+1 parameters and returns a value of type `Result`. A method can be called by `obj.method(arg0, ..., argN)` as if writing OOP languages.
+
+Another way of function application is operator `$`: `f $ x = f(x)`. This operator is right associative: `f $ g $ x = f(g(x))`. This operator is useful for reducing parenthes. In the program of Fibonacci sequence, the followings are examples of use of operator `$`:
+
+- `continue $ (idx+1, arr)`: the application of the `continue` function to the tuple value `(idx+1, arr)`. In Fix, `continue` and `break` are usual functions, not syntaxes. So you can write this expression as `continue((idx+1, arr))` or `(idx+1, arr).continue`, but I prefer to write `continue $ (idx+1, arr)`, because it looks special. More explanation of `continue` and `break` functions will be given later. 
+- `println! $ Iterator::from_array(fib).map(to_string).join(", ")`: the application of the `println!` function to the string value expressed by `Iterator::from_array(fib).map(to_string).join(", ")`. The `println!` function has type `String -> IOState -> ((), IOState)`, so applying to `println!` to a string produces a value of `IOState -> ((), IOState)`, which is equal to the type of `main` function. This expression can also be written as `println!(Iterator::from_array(fib).map(to_string).join(", "))`, but using operator `$` you can reduce parenthes around the long string expression.
+
+For more examples, consider following programs:
+
+```
+main : IOState -> ((), IOState);
+main = println! $ "Hello World!";
+```
+
+```
+main : IOState -> ((), IOState);
+main = |io| io.println!("Hello World!");
+```
+
+These two programs are equivalent. The first uses operator `$` to obtain the value of type `IOState -> ((), IOState)` by applying `println! : String -> IOState -> ((), IOState)` to the string `"Hello World!"`. On the other hand, `println!` can be considered as a method of `IOState` that takes a string as an argument. In the second program, the implementation of `main` takes an arugment `io` of `IOState` explicitly, and call `println!` method on the `io` value.
+
+The precedence between three ways of function application is `f(x)` > `x.f` > `f $ x`. By this, it is illegal to write `io.println! $ "Hello World!"`. It is equivalent to `println!(io) $ "Hello World!" == println!(io, "Hello World!")`, which is trying to apply `println!` on two arguments in the wrong ordering. It is ok to write `println!("Hello World!") $ io`, which can be read as "apply `println!` to a string to obtain a function of type `IOState -> ((), IOState)`, and apply it to `io: IOState`".
+
+## Patterns
+
+Both of let-expression and function expression introduces local names. If the type of the local name is tuple (or, more generally, structs), you can use patterns to destructure the passed value.
+
+For example, let's define a function that takes a value of tuple type `(Int, Bool)`, and returns a value of `(Bool, Int)` by swapping two components. Using built-in functions `@0 : (a, b) -> a` and `@1 : (a, b) -> b` to extract the component from a tuple, you can write:
+
+```
+swap : (Int, Bool) -> (Bool, Int);
+swap = |tuple| (
+    let fst = tuple.@0;
+    let snd = tuple.@1;
+    (snd, fst)
+);
+```
+
+Using pattern, this program can be written as:
+
+```
+swap : (Int, Bool) -> (Bool, Int);
+swap = |tuple| (
+    let (fst, snd) = tuple;
+    (snd, fst)
+);
+```
+
+or more shortly, 
+
+```
+swap : (Int, Bool) -> (Bool, Int);
+swap = |(fst, snd)| (snd, fst);
+```
+
+Don't confuse `|(x, y)| ...` with `|x, y| ...`. The former defines a function that receives a tuple, and the latter defines a two-variable function.
+
+## `loop`, `continue` and `break` function
+
+The `loop` built-in function has type `s -> (s -> LoopResult s b) -> b`. The value of `LoopResult` type can be constructed from `continue` or `break` function.
+
+- `continue : s -> LoopResult s b`
+- `break : b -> LoopResult s b`
+
+The `loop` function takes two arguments: the initial state of the loop `s0` and the loop body function `body`. It first calls `body` on `s0`. If `body` returns a value `break(r)`, then the `loop` function ends and returns `r` as the result. If `body` returns `continue(s)`, then the `loop` function calls again `body` on `s`.
+
+In the program of Fibonacci sequence, the `loop` function is used in the following expression:
+
+```
+loop((2, arr), |(idx, arr)|
+    if idx == arr.get_length {
+        break $ arr
+    } else {
+        let x = arr.get(idx-1);
+        let y = arr.get(idx-2);
+        let arr = arr.set!(idx, x+y);
+        continue $ (idx+1, arr)
+    }
+);
+```
+
+The initial value of this loop is `(2, arr)`. The loop body takes a tuple `(idx, arr)`, that is, the index of an array to be updated next, and an array to store the Fibonacci sequence whose values are already right at indices 0, ..., idx-1. If `idx` is less than `arr.get_length`, it calculates the value of Fibonacci sequence at `idx`, stores it to `arr`, and returns `continue $ (idx+1, arr)` to proceed to the next step. If `idx` has reached to `arr.get_length`, it returns `break $ arr` to end the loop. The return value of the `loop` function is an array.
+
+## Unions
+
+Then what is the type `LoopResult s b`? It is an instance of union and can be defined as follows:
+
+```
+type LoopResult s b = union { continue : s, break : b };
+```
+
+The above definition indicates that a `LoopResult s b` value contains either of a value of type `s` or a value of type `b`. If you write the set of values of a type as `|type|`, then `|LoopResult s b| = |s| ⨆ |b|`, where the symbol `⨆` is represents the disjoint union of sets.
+
+If you define `LoopResult` as above, the following functions are automatically defined in the namespace `LoopResult`.
+
+- `continue : s -> LoopResult s b`: converts an value of type `s` into a `LoopResult` value.
+- `break : b -> LoopResult s b`: converts an value of type `b` into a `LoopResult` value.
+- `is_continue : LoopResult s b -> Bool`: checks if the `LoopResult` value was created by `continue`.
+- `is_break : LoopResult s b -> Bool`: checks if the `LoopResult` value was created by `break`.
+- `as_continue : LoopResult s b -> s`: extracts a value of type `s` from a `LoopResult` value if it is created by `continue`. If not, this function panics (i.e., prints an error message and stops the execution of the program).
+- `as_break : LoopResult s b -> s`: extracts a value of type `b` from a `LoopResult` value if it is created by `break`. If not, this function panics (i.e., prints an error message and stops the execution of the program).
+
+Another example of union is `Option` which is used to represent a value "which may not contain a value". It can be defined as follows: 
+
+```
+type Option a = union { none : (), some : s };
+```
+
+Note that, if you want to create a none value of `Option`, you need to write `none()`, because `none` is a function of type `() -> Option a`. (Remember that the syntax sugar `f() == f(())`.)
+
+We define `unwrap` as another name of the function `as_some : Option a -> a`.
+
+## Structs
+
+Although it does not appear in the example Fibonacci program, here I explain how to define your own struct.
+
+(TBA: patterns. MakeStruct syntax. default methods.)
+
+## Iterators
+
+Now I explain about the expression `Iterator::from_array(fib).map(to_string).join(", ")`, where `fib : Array Int` is the array of Fibonacci sequence. This expression 
+- converts a Fibonacci array into an iterator of integers, 
+- apply `to_string : Int -> String` to each element to obtain the iterator of strings, and
+- concatenates these strings separated by `", "`,
+- results in a string "1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040".
+
+Like array, iterator (a.k.a. "lazy list") is a way to represent sequences. Whereas an array stores the values of all elements in memory at the same time, an iterator only has a function to compute the next element and the next iterator. In fact, iterator in Fix is defined as follows:
+
+```
+type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };
+```
+
+The above definition indicates that the `Iterator` is a struct with only one field `next` of type `() -> Option (a, Iterator a)`.
+
+The fundamental API (method) of `Iterator` is `advance` function, which just extract the `next` field from an iterator and calls it on `()`:
+```
+// Get next value and next iterator.
+advance : Iterator a -> Option (a, Iterator a);
+advance = |iter| (iter.@next)();
+```
+
+You can define an iterator that produces infinite sequence of zeros (0, 0, 0, ...) as follows: 
+```
+zeros : Iterator Int;
+zeros = Iterator { next: |_| some $ (0, zeros) };
+```
+
+That is, if `advance` is called on `zeros`, it always returns `some` value (because it is an infinite sequence). If the programmer unwraps the `some` value, he obtains `0` as the value and `zeros` again as the next iterator.
+
+```
+let iter = zeros;
+let (x, iter) = iter.advance.unwrap; // x == 0
+let (y, iter) = iter.advance.unwrap; // y == 0
+let (z, iter) = iter.advance.unwrap; // z == 0
+...
+```
+
+Since an iterator only has a function as a data, it consumes only a small memory. If we want to apply a function `f : a -> b` to each element of an array `arr : Array a` producing a new array of type `Array b`, we need to allocate an memory for the resulting array, which may be large. On the other hand, applying `f` to an iterator of `Iterator a` to produce an iterator of type `Iterator b` is faster and only needs small memory allocation, because any element of an iterator is not calculated until `advance` will be called. This operation is provided as `map` method of `Iterator`:
+
+- `map : (a -> b) -> Iterator a -> Iterator b`
+
+This can be defined as follows:
+
+```
+map : (a -> b) -> Iterator a -> Iterator b;
+map = |f, iter| (
+    let next = |_| (
+        let adv = iter.advance;
+        if adv.is_none { none() };
+        let (val, iter_next) = adv.unwrap;
+        some $ (f(val), iter_next.map(f))
+    );
+    Iterator { next: next }
+);
+```
+
+Going back to the Fibonacci program, there are more two functions related to `Iterator` used:
+
+- `from_array : Array a -> Iterator a`: converts an array into an iterator.
+- `join : String -> Iterator String -> String`: concatenates strings in an iterator separated by a specified string. NOTE: this is defined in `Std::String` namespace, not in `Std::Iterator`.
+
+For example, `Iterator::from_array(["Hello", "World!"]).join(" ") == "Hello World!"`.
+
+In the last, `to_string : Int -> String` is a function that converts an integer to a decimal string.
+
+## Reference counting
+
+(TBA)
+
+# Other topics on syntax
+
+## Module and imports 
+
+In Fix, values, functions, types and traits defined in a source file is collected to a module. Each source file has to declare the name of the module it defines by `module {module_name};`. The first letter of the module name must be capitalized.
+
+As in other languages, a single program can be constructed from multiple source files. As an example, consider a program consists of two source files:
+
+`lib.fix`:
+```
+module Lib;
+
+module_name : String;
+module_name = "Lib";
+```
+
+`main.fix`:
+```
+module Main;
+
+import lib.fix;
+
+module_name : String;
+module_name = "Main";
+
+main : IOState -> ((), IOState);
+main = (
+    println! $ "This program consists of two modules, `" + Lib::module_name + "` and `" + Main::module_name + "`."
+);
+```
+
+If you put these two files in a same directory and execute `fix run main.fix`, it prints: 
+
+```
+This program consists of two modules, `Lib` and `Main`.
+```
+
+Note that here two strings named `module_name` are defined and you can use these strings separately by writing `{module_name}::module_name`. Like this, module name is used as the top-level namespace of values, types and traits defined in a source file.
+
+You can import modules defined in other source files by writing `import {path_to_source_file};`. If `{path_to_source_file}` starts by `./` or `../`, then it is treated as a relative path to the source file in which the import statement is written. In other cases, `{path_to_source_file}` is treated as a relative path to the root source file, that is, the file passed to the `fix run` or `fix build` command.
 
 ## Recursion
 
@@ -125,13 +545,23 @@ main = print! $ fib(30).to_string; // 832040
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
 
+## Overloading
+
+(TBA)
+
+## Traits
+
+(TBA)
+
 ## Type annotation
+
+(TBA)
 
 ## Basic types
 
 ### Boxed and unboxed types
 
-Types in fix are divided into boxed types and unboxed types. Boxed types and unboxed types are similar to things called as "reference types" and "value types" in other languages, respectively.
+Types in Fix are divided into boxed types and unboxed types. Boxed types and unboxed types are similar to things called as "reference types" and "value types" in other languages, respectively.
 
 * Value of boxed types are allocated in heap memory. Local names and struct / union fields whose types are boxed are compiled as pointers to the values. 
 * Values of unboxed types are directly embedded into the stack memory, structs and unions. 
@@ -241,26 +671,6 @@ type Weight = box union (pound: Int, kilograms: Int);
 ### Trait bound
 
 ## Higher-kinded types
-
-## Namespaces
-
-Namespaces of global names (i.e., names of global values, types and traits) can be specified using the following syntax: `namespace {namespace} { ... }`.
-
-For example, in the following program,
-
-```
-module Main;
-
-namespace TheNameSpace {
-    truth : Int;
-    truth = 42;
-}
-
-truth : Bool;
-truth = true;
-```
-
-two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth : Bool`.
 
 # Built-in / library features
 
