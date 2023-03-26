@@ -42,7 +42,7 @@ impl ObjectFieldType {
                         &vec![], /* captured list desn't effect sizeof */
                         gc.type_env(),
                     )
-                    .to_struct_type(gc);
+                    .to_embedded_type(gc);
                     size = size.max(gc.sizeof(&struct_ty));
                 }
                 // Force align 8
@@ -700,8 +700,8 @@ impl ObjectType {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
     ) -> BasicTypeEnum<'c> {
-        let str_ty = self.to_struct_type(gc);
         if self.is_unbox {
+            let str_ty = self.to_struct_type(gc);
             str_ty.into()
         } else {
             ptr_to_object_type(gc.context).into()

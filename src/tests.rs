@@ -2306,6 +2306,27 @@ pub fn test92() {
 
 #[test]
 #[serial]
+pub fn test93() {
+    // Test try to make circular reference (and fail).
+    let source = r#"
+    module Main;
+
+    type SelfRef = box struct { data : Option SelfRef };
+
+    main : IOState -> ((), IOState);
+    main = |io| (
+        let ref = SelfRef { data : Option::none() };
+        // let ref = ref.=data!(Option::some(ref)); // fails
+        let ref = ref.=data(Option::some(ref)); // fails
+        io.pure()
+    );
+
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
