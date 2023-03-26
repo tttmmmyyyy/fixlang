@@ -2,7 +2,7 @@ module Main;
 
 main : IOState -> ((), IOState);
 main = (
-    let arr = Array.fill(31, 0);
+    let arr = Array::fill(31, 0);
     // arr.set! asserts that the given array is uniquely referenced and 
     // rewrites the given array insted of cloning because the old array value will be no longer accessed!
     let arr = arr.set!(0, 0);

@@ -9,7 +9,7 @@ module Main;
 
 my_reverse : Iterator a -> Iterator a;
 my_reverse = |iter| (
-    loop((Iterator.make_empty, iter), |(out_iter, in_iter)|(
+    loop((Iterator::make_empty, iter), |(out_iter, in_iter)|(
         if in_iter.is_empty {
             break $ out_iter
         } else {
@@ -22,6 +22,6 @@ my_reverse = |iter| (
 
 main : IOState -> ((), IOState);
 main = |io| (
-    let iter = Iterator.from_array([1,2,3,4]).my_reverse;
+    let iter = Iterator::from_array([1,2,3,4]).my_reverse;
     io.println!(iter.map(to_string).join(", "))
 );

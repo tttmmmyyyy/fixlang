@@ -471,11 +471,11 @@ pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Implementation of Array.fill built-in function.
+// Implementation of Array::fill built-in function.
 fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     let size_str = FullName::local(size);
     let value_str = FullName::local(value);
-    let name = format!("Array.fill({}, {})", size, value);
+    let name = format!("Array::fill({}, {})", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_str.clone(), value_str.clone()];
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
@@ -504,7 +504,7 @@ fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     )
 }
 
-// "Array.fill : Int -> a -> Array a" built-in function.
+// "Array::fill : Int -> a -> Array a" built-in function.
 // Creates an array with same capacity.
 pub fn fill_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
@@ -790,12 +790,12 @@ pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
 //     (expr, scm)
 // }
 
-// Implementation of Array.get built-in function.
+// Implementation of Array::get built-in function.
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
-    let name = format!("Array.get({}, {})", idx, array);
+    let name = format!("Array::get({}, {})", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
@@ -811,7 +811,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     expr_lit(generator, free_vars, name, elem_ty, None)
 }
 
-// "Array.get : Array a -> Int -> a" built-in function.
+// "Array::get : Array a -> Int -> a" built-in function.
 pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx")],
@@ -929,7 +929,7 @@ fn make_array_unique<'c, 'm>(
     array
 }
 
-// Implementation of Array.set/Array.set! built-in function.
+// Implementation of Array::set/Array::set! built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
 fn set_array_lit(
     a: &str,
@@ -978,7 +978,7 @@ fn set_array_lit(
     )
 }
 
-// Array.set built-in function.
+// Array::set built-in function.
 pub fn set_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx")],
@@ -1187,7 +1187,7 @@ pub fn get_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// `Array.get_capacity : Array a -> Int` built-in function.
+// `Array::get_capacity : Array a -> Int` built-in function.
 pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARR_NAME: &str = "arr";
 

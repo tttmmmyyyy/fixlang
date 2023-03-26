@@ -797,7 +797,7 @@ pub struct NameSpace {
     pub names: Vec<String>, // Empty implies it is local.
 }
 
-const NAMESPACE_SEPARATOR: &str = ".";
+const NAMESPACE_SEPARATOR: &str = "::";
 
 impl NameSpace {
     pub fn local() -> Self {

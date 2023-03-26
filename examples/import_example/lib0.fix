@@ -1,6 +1,6 @@
 module Lib0;
 
-import import_main.fix; // Import by path relative to the main file.
+import import_main.fix; // Import by path relative to the main file (= import_main.fix).
 import ./lib1.fix; // Import by path relative to the current file.
 import ./directory/lib2.fix; // Import by path to the current file.
 
@@ -8,4 +8,4 @@ name : String;
 name = "Lib0";
 
 imports : Array String;
-imports = [Main.name, Lib1.name, Lib2.name];
+imports = [Main::name, Lib1::name, Lib2::name];

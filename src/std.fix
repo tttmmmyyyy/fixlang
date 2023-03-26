@@ -32,7 +32,7 @@ namespace Array {
     // Creates an array by a mapping function.
     from_map : Int -> (Int -> a) -> Array a;
     from_map = |size, map| (
-        let arr = Array.make_empty(size).__unsafe_set_length(size);
+        let arr = Array::make_empty(size).__unsafe_set_length(size);
         loop((0, arr), |(idx, arr)|(
             if idx == size {
                 break $ arr
@@ -82,7 +82,7 @@ namespace Array {
     reserve = |cap, arr| (
         if cap <= arr.get_capacity { arr };
         let len = arr.get_length;
-        let new = Array.make_empty(cap).__unsafe_set_length(len);
+        let new = Array::make_empty(cap).__unsafe_set_length(len);
         loop((0, new), |(idx, new)|(
             if idx == len {
                 break $ new
@@ -96,7 +96,7 @@ namespace Array {
     // Sort elements in a vector by "less than" comparator.
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, vec| (
-        let buffer = Array.make_empty(vec.get_length);
+        let buffer = Array::make_empty(vec.get_length);
         let (vec, buffer) = vec._sort_range_by_using_buffer(buffer, 0, vec.get_length, less_than);
         vec
     );
@@ -192,7 +192,7 @@ namespace Debug {
 }
 
 impl Int : ToString {
-    to_string = Int._int_to_string;
+    to_string = Int::_int_to_string;
 }
 
 namespace IOState {
@@ -218,8 +218,8 @@ namespace Iterator {
     append : Iterator a -> Iterator a -> Iterator a;
     append = |rhs, lhs| (
         if lhs.is_empty { rhs };
-        let Option.some((e, lhs)) = lhs.advance;
-        Iterator.push_front(e) $ lhs.append(rhs)
+        let Option::some((e, lhs)) = lhs.advance;
+        Iterator::push_front(e) $ lhs.append(rhs)
     );
 
     // Creates an iterator that counts up from a number.
@@ -227,7 +227,7 @@ namespace Iterator {
     count_up : Int -> Iterator Int;
     count_up = |i| (
         let next = |_| (
-            some $ (i, Iterator.count_up(i+1))
+            some $ (i, Iterator::count_up(i+1))
         );
         Iterator { next: next }
     );
@@ -239,14 +239,14 @@ namespace Iterator {
     // Intersperse an elemnt between elements of an iterator.
     // Example: 
     // ```
-    // Iterator.from_array([1,2,3]).intersperse(0) == Iterator.from_array([1,0,2,0,3])
+    // Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])
     // ```
     intersperse : a -> Iterator a -> Iterator a;
     intersperse = |sep, iter| (
-        if iter.is_empty { Iterator.make_empty };
-        let Option.some((e, tail)) = iter.advance;
+        if iter.is_empty { Iterator::make_empty };
+        let Option::some((e, tail)) = iter.advance;
         if tail.is_empty { iter };
-        Iterator.push_front(e) $ Iterator.push_front(sep) $ tail.intersperse(sep)
+        Iterator::push_front(e) $ Iterator::push_front(sep) $ tail.intersperse(sep)
     );
 
     // Create an empty iterator.
@@ -274,7 +274,7 @@ namespace Iterator {
 
     // Flatten an iterator of iterators.
     flatten : Iterator (Iterator a) -> Iterator a;
-    flatten = |iter| iter.fold(Iterator.make_empty, Add.add);
+    flatten = |iter| iter.fold(Iterator::make_empty, Add::add);
 
     // Folds iterator from left.
     // fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...
@@ -344,7 +344,7 @@ namespace Iterator {
     // Reverse an iterator.
     reverse : Iterator a -> Iterator a;
     reverse = |iter| (
-        loop((Iterator.make_empty, iter), |(out_iter, in_iter)|(
+        loop((Iterator::make_empty, iter), |(out_iter, in_iter)|(
             if in_iter.is_empty {
                 break $ out_iter
             } else {
@@ -392,8 +392,8 @@ impl [a : Eq] Iterator a : Eq {
     eq = |lhs, rhs| (
         if lhs.is_empty { rhs.is_empty };
         if rhs.is_empty { false };
-        let Option.some((e, lhs)) = lhs.advance;
-        let Option.some((f, rhs)) = rhs.advance;
+        let Option::some((e, lhs)) = lhs.advance;
+        let Option::some((f, rhs)) = rhs.advance;
         if e != f { false };
         lhs == rhs
     );
@@ -414,7 +414,7 @@ namespace Option {
 
     unwrap : Option a -> a;
     unwrap = |opt| ( 
-        let Option.some(val) = opt;
+        let Option::some(val) = opt;
         val
     );
 

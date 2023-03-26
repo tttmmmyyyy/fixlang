@@ -24,7 +24,7 @@ namespace_head = _{ ASCII_ALPHA_UPPER }
 namespace_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 namespace_item = { namespace_head ~ namespace_char* }
 
-namespace = { namespace_item ~ ("." ~ namespace_item)* }
+namespace = { namespace_item ~ ("::" ~ namespace_item)* }
 
 expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
@@ -44,7 +44,7 @@ string_char = {
 
 expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit | expr_array_lit }
 
-expr_var = { (namespace ~ ".")? ~ var }
+expr_var = { (namespace ~ "::")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
@@ -120,7 +120,7 @@ pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~
 
 pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern)* ~ sep* ~ "}" }
 
-pattern_union = { type_tycon ~ sep* ~ "." ~ sep* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern ~ sep* ~ ")" }
+pattern_union = { type_tycon ~ sep* ~ "::" ~ sep* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern ~ sep* ~ ")" }
 
 // === Types ===
 type_expr = { type_fun }

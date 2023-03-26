@@ -9,7 +9,7 @@ module Main;
 
 main : IOState -> ((), IOState);
 main = |io| (
-    let iter = Iterator.from_array([1,2,3,4]);
+    let iter = Iterator::from_array([1,2,3,4]);
     let last = iter.take_last.unwrap;
     io.println!(last.to_string)
 );

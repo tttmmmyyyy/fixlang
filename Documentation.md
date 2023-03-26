@@ -157,7 +157,7 @@ Unit `()` is a type allows only one value, which is also written as `()`.
 
 ### Array
 
-`Std.Array` is the type of variable-length array. `Std.Array` is a boxed type.
+`Std::Array` is the type of variable-length array. `Std::Array` is a boxed type.
 
 ### Structs
 
@@ -266,9 +266,9 @@ two global values are defined: `Main.TheNameSpace.truth : Int` and `Main.truth :
 
 ## Types
 
-### Std.Array
+### Std::Array
 
-`Std.Array` is the type of variable-length arrays.
+`Std::Array` is the type of variable-length arrays.
 
 Methods:
 
@@ -337,19 +337,19 @@ Implementing Traits:
 
 - `[a : Eq] Array a : Eq`
 
-### Std.Bool
+### Std::Bool
 
-`Std.Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
+`Std::Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
 
-### Std.Byte
+### Std::Byte
 
-`Std.Byte` is the type of 8-bit unsigned integers.
+`Std::Byte` is the type of 8-bit unsigned integers.
 
-### Std.IOState
+### Std::IOState
 
 The virtual type that represents the state of world (=the outside of the Fix program). 
 
-For example, `Std.IOState.print!(msg) : Std.IOState -> ((), Std.IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std.IOState` and return the updated `Std.IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
+For example, `Std::IOState.print!(msg) : Std::IOState -> ((), Std::IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std::IOState` and return the updated `Std::IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
 
 All functions that perform I/O action by `IOState` assert that the given state is unique.
 
@@ -362,21 +362,21 @@ Methods:
 - `println! : String -> IOState -> ((), IOState)`
     - Prints a string and a newline to standard output.
 
-### Std.Int
+### Std::Int
 
-`Std.Int` is the type of 64-bit signed integers.
+`Std::Int` is the type of 64-bit signed integers.
 
 Methods:
 
-- `Std.Int._int_to_string : Int -> String`
+- `Std::Int._int_to_string : Int -> String`
     - Convert an integer to a decimal number string.
-    - Implementation of trait method `Std.ToString.to_string`.
+    - Implementation of trait method `Std::ToString.to_string`.
 
 Implementing traits:
 
-- `Std.ToString`
+- `Std::ToString`
 
-### Std.Iterator
+### Std::Iterator
 
 Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
@@ -394,7 +394,7 @@ Methods:
     - Counts the length of an iterator.
 - `intersperse : a -> Iterator a -> Iterator a`
     - Intersperse an elemnt between elements of an iterator.
-    - Example: `Iterator.from_array([1,2,3]).intersperse(0) == Iterator.from_array([1,0,2,0,3])`
+    - Example: `Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])`
 - `make_empty : Iterator a`
     - Creates an empty iterator.
 - `filter : (a -> Bool) -> Iterator a -> Iterator a`
@@ -424,10 +424,10 @@ Methods:
 Implementing Traits:
 
 - `Iterator a : Add`
-    - Adds two iterators by `Iterator.append`.
+    - Adds two iterators by `Iterator::append`.
 - `[a : Eq] Iterator a : Eq`
 
-### Std.Option
+### Std::Option
 
 `Option a` contains a value of type `a`, or contains nothing.
 
@@ -442,7 +442,7 @@ Methods:
 - `unwrap : Option a -> a`
     - Exctract the contained value. If the option is `none()`, this function panics.
 
-### Std.String
+### Std::String
 
 The type of strings.
 
@@ -453,7 +453,7 @@ Methods:
     - Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
 - `join : String -> Iterator String -> String`
     - Join strings by a separator.
-    - Example: `Iterator.from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
+    - Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
 - `concat_iter : Iterator String -> String`
     - Concatenate an iterator of strings.
 - `get_length : String -> Int`
@@ -467,7 +467,7 @@ Implementing Traits:
 
 ## Functions
 
-### Std.fix : ((a -> b) -> a -> b) -> a -> b
+### Std::fix : ((a -> b) -> a -> b) -> a -> b
 
 `fix` enables you to make a recursive function locally. The idiom is: `fix $ |loop, var| -> (expression calls loop)`.
 
@@ -481,7 +481,7 @@ main = (
 );
 ```
 
-### Std.loop : s -> (s -> LoopResult s r) -> r
+### Std::loop : s -> (s -> LoopResult s r) -> r
 
 `loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
 
@@ -508,19 +508,19 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
-### Std.Debug.debug_print : String -> ()
+### Std::Debug.debug_print : String -> ()
 
-### Std.Debug.debug_println : String -> ()
+### Std::Debug.debug_println : String -> ()
 
-### Std.Debug.abort : () -> a
+### Std::Debug.abort : () -> a
 
-### Std.Debug.assert : String -> Bool -> ()
+### Std::Debug.assert : String -> Bool -> ()
 
-### Std.Debug.assert_eq : [a: Eq] String -> a -> a -> ()
+### Std::Debug.assert_eq : [a: Eq] String -> a -> a -> ()
 
 ## Traits
 
-### Std.ToString
+### Std::ToString
 
 - `to_string : [a: ToString] a -> String`
 
@@ -532,21 +532,21 @@ The following is the table of operators sorted by it's precedence (operator of h
 | -------------- | ------------- | ---------------------------------- | ----------------------------------------------------------- | 
 | f(x)           | left          | -                                  | function application                                        | 
 | .              | left          | -                                  | right-to-left function application: x.f = f(x)              | 
-| - (minus sign) | -             | Std.Neg / neg                      | negative of number                                          | 
-| !              | -             | Std.Not / not                      | logical NOT                                                 | 
-| *              | left          | Std.Mul / mul                      | multiplication of numbers                                   | 
-| /              | left          | Std.Div / div                      | division of numbers                                         | 
-| %              | left          | Std.Rem / rem                      | reminder of division                                        | 
-| +              | left          | Std.Add / add                      | addition of numbers                                         | 
-| - (minus sign) | left          | Std.Sub / sub                      | subtraction of numbers                                      | 
-| ==             | left          | Std.Eq / eq                        | equality comparison                                         | 
+| - (minus sign) | -             | Std::Neg / neg                      | negative of number                                          | 
+| !              | -             | Std::Not / not                      | logical NOT                                                 | 
+| *              | left          | Std::Mul / mul                      | multiplication of numbers                                   | 
+| /              | left          | Std::Div / div                      | division of numbers                                         | 
+| %              | left          | Std::Rem / rem                      | reminder of division                                        | 
+| +              | left          | Std::Add / add                      | addition of numbers                                         | 
+| - (minus sign) | left          | Std::Sub / sub                      | subtraction of numbers                                      | 
+| ==             | left          | Std::Eq / eq                        | equality comparison                                         | 
 | !=             | left          | -                                  | `x != y` is interpreted as `!(x == y)`                      | 
-| <=             | left          | Std.LessThanOrEq / less_than_or_eq | less-than-or-equal-to comparison                            | 
+| <=             | left          | Std::LessThanOrEq / less_than_or_eq | less-than-or-equal-to comparison                            | 
 | >=             | left          | -                                  | `x >= y` is interpreted as `y <= x`                         | 
-| <              | left          | Std.LessThan / less_than           | less-than comparison                                        | 
+| <              | left          | Std::LessThan / less_than           | less-than comparison                                        | 
 | >              | left          | -                                  | `x > y` is interpreted as `y < x`                           | 
-| &&             | left          | Std.And / and                      | logical AND                                                 | 
-| &#124;&#124;   | left          | Std.Or / or                        | logical OR                                                  | 
+| &&             | left          | Std::And / and                      | logical AND                                                 | 
+| &#124;&#124;   | left          | Std::Or / or                        | logical OR                                                  | 
 | $              | right         | -                                  | right associative function application: f $ g $ x = f(g(x)) | 
 
 # Features of "fix" command

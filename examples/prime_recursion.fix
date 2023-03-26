@@ -2,7 +2,7 @@ module Main;
 
 is_prime : Int -> Array Bool;
 is_prime = |n| (
-    let arr = Array.fill(n, true);
+    let arr = Array::fill(n, true);
     let arr = arr.set!(0, false);
     let arr = arr.set!(1, false);
     is_prime_loop(n, 2, arr)
