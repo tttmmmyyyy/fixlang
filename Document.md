@@ -43,7 +43,7 @@ If you save the above program to a file "main.fix" and run `fix run main.fix`, i
 
 to the standard output.
 
-In the followings, I explain language specifications which is necessary to understand the above program.
+In the followings, I explain language specifications which are necessary to understand the above program.
 
 ## Modules
 
@@ -97,14 +97,17 @@ The followings are examples of types:
 
 - `Int`: the type of 64-bit signed integers.
 - `Bool`: the type of boolean values (i.e., `true` and `false`).
-- `Array a`: the type of arrays whose elements have type `a`. Here, `a` is called type parameter and will be instanciated to some specific type when the program is compiled.
+- `Array a`: the type of arrays whose elements have type `a`. `Array` is called a type constructor, because it generates types `Array Int` or `Array Bool` when applied to a type. `a` is called a type parameter.
 - `String`: the type of strings.
 - `Int -> Array Int`: the type of functions that takes an integer and returns an array of integers.
 - `()`: the unit type. This type has a single value which is also written as `()`. 
-- `(a, b)`: the type of pairs of values of `a` and `b`, where `a` and `b` is type parameters.
+- `(a, b)`: the type of pairs of values of `a` and `b`, where `a` and `b` are type parameters.
 - `IOState`: the type whose value corresponds to a state of the world outside the Fix program. For example, printing a string to the standard output can be thought as an operation that changes the external state, and Fix expresses such an operation by a function that takes an `IOState` value and returns updated `IOState` value.
 - `IOState -> ((), IOState)`: the type of functions that update the external state and receive no data. This type is isomorphic to `IOState -> IOState`, but we put a redundant `()` for monadic composition (you don't need to understand this terminology).
 - `Int -> Bool -> Array Bool`: this is equivalent to `Int -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from it's length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
+
+In Fix, the first letter of the name of a specific type (such as `Int` or `Bool`) or a type constructor (such as `Array`) has to be 
+capitalized. A type that starts with a lowercase letter is interpreted as a type parameter. Each type parameter will be instanciated to a specific type when the program is compiled.
 
 ## Expressions
 
