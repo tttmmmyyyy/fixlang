@@ -434,6 +434,23 @@ As in the case of unions, there are methods that are automatically defined for s
 
 NOTE: In a future, we will add lens functions such as `act_price : [f: Functor] (Int -> f Int) -> Product -> f Product`, which is a generalization of `mod_price` functions.
 
+I already explained that we can use patterns to destructure tuples. You can also use patterns to destructure a struct value. For example, field accessor function `@price : Product -> Int` can be re-defined as follows: 
+
+```
+get_price : Product -> Int;
+get_price = |product| (
+    let Product { price: price, sold: sold } = product;
+    price
+);
+```
+
+or 
+
+```
+get_price : Product -> Int;
+get_price = |Product { price: price, sold: sold }| price;
+```
+
 ## Iterators
 
 Now I explain about the expression `Iterator::from_array(fib).map(to_string).join(", ")`, where `fib : Array Int` is the array of Fibonacci sequence. This expression 
