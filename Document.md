@@ -80,14 +80,14 @@ In Fix, you have to specify the type of a global value explicitly.
 
 ## Namespaces
 
-The `Array` in `Array::fill` or `Iterator` in `Iterator::from_array` are namespaces. Namespace is the "address" of a name and used to distinguish two symbols (values, types or traits) with the same name.
+The `Array` in `Array::fill` or `Iterator` in `Iterator::from_array` are namespaces. Namespace is the "address" of a name and used to distinguish two values (or types or traits, anything you define globally) with the same name.
 
-Namespaces of a name can be omitted if the symbol specified by the name is unique, or can be inferred from the context. In fact, you can write simply `fill(n, 0)` instead of `Array::fill(n, 0)` because there is only one function named `fill` at the current version of standard library. The reasons I wrote `Array::fill(n, 0)` here are:
+Namespaces of a name can be omitted if the value specified by the name is unique, or can be inferred from the context. In fact, you can write simply `fill(n, 0)` instead of `Array::fill(n, 0)` because there is only one function named `fill` at the current version of standard library. The reasons I wrote `Array::fill(n, 0)` here are:
 
 - `Array::fill(n, 0)` is more readable than `fill(n, 0)`, because it expresses that `fill` function is related to `Array` type. A reader may be able to infer that `Array::fill` will generate an array of specified length filled by a specified initial value.
-- In the future, another function named `fill` may be added to a namespace other than `Array`. After that, the named `fill` may become ambiguous and the compile of the example program may start to fail.
+- In the future, another function named `fill` may be added to a namespace other than `Array`. After that, the name `fill` may become ambiguous and the compile of the example program may start to fail.
 
-Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `Std` is a module to put standard library symbols. Module is nothing but a top-level namespace. The namespace `Array` is defined as the sub-namespace of `Std` to put functions related to arrays. Similarly, full name of `calc_fib` function is `Main::calc_fib`. You need to specify (possibly empty) suffix of namespaces of a name so that the symbol referred to is unique, or can be inferred by compiler from the context.
+Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `Std` is a module to put values standard library provides. Module is nothing but a top-level namespace. The namespace `Array` is defined as the sub-namespace of `Std` and used to put functions related to arrays. Similarly, full name of `calc_fib` function is `Main::calc_fib`. You can omit (possibly full) prefix of namespaces of a name as long as the value referred to is uniquely inferred by compiler from the context.
 
 ## Types
 
