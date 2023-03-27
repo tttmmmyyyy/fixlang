@@ -91,7 +91,7 @@ Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `
 
 ## Types
 
-Each value in fix has it's type. You can consider that a type is a set in mathematics, and value in Fix is an element of it's type. 
+Each value in Fix has it's type. You can consider that a type is a set in mathematics, and value in Fix is an element of it's type. 
 
 The followings are examples of types:
 
