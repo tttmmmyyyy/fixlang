@@ -676,7 +676,7 @@ pub fn test33() {
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool::new(18, false);
+            let obj = IntBool { x: 18, y: false };
             let obj = IntBool::mod_x(|x| x + 42, obj);
             let u = assert_eq("", IntBool::@x(obj), 60);
             pure()
@@ -695,7 +695,7 @@ pub fn test34_5() {
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool::new(18, false);
+            let obj = IntBool { x: 18, y : false};
             let obj = IntBool::mod_x(|x| x + 42, obj);
             let u = assert_eq("", IntBool::@x(obj), 60);
             pure()
@@ -716,7 +716,7 @@ pub fn test34() {
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool::new(18, false);
+            let obj = IntBool {x: 18, y: false};
             let obj = obj.mod_x(|x| x + 42);
             let u = assert_eq("", obj.@x, 60);
             pure()
@@ -737,8 +737,8 @@ pub fn test35() {
             
         main : IOState -> ((), IOState);
         main = (
-            let a = A::new(3, true);
-            let b = B::new(true, 5);
+            let a = A {x: 3, y: true};
+            let b = B {x: true, y: 5};
             let ans = add(if a.@y { a.@x } else { 0 }, if b.@x { b.@y } else { 0 });
             let u = assert_eq("", ans, 8);
             pure()
@@ -759,7 +759,7 @@ pub fn test36() {
             
         main : IOState -> ((), IOState);
         main = (
-            let a = A::new(B::new(16));
+            let a = A{x: B{x: 16}};
             let a = a.(mod_x $ mod_x $ |x| x + 15);
             let ans = a . @x . @x;
             let u = assert_eq("", ans, 31);
@@ -781,7 +781,7 @@ pub fn test37() {
 
         main : IOState -> ((), IOState);
         main = (
-            let a = A::new (B::new $ 16);
+            let a = A {x: B {x: 16}};
             let b = a . (mod_x! $ mod_x! $ |x| x + 15);
             let ans = b . @x . @x;
             let u = assert_eq("", ans, 31);
@@ -803,7 +803,7 @@ pub fn test37_5() {
 
         main : IOState -> ((), IOState);
         main = (
-            let a = A::new (B::new $ 16);
+            let a = A {x: B {x: 16}};
             let b = a.(mod_x $ mod_x $ |x| x + 15);
             let ans = a.@x.@x + b.@x.@x;
             let u = assert_eq("", ans, (16 + 15) + 16);
@@ -825,7 +825,7 @@ pub fn test38() {
 
         main : IOState -> ((), IOState);
         main = (    
-            let a = A::new (B::new $ 16);
+            let a = A {x: B {x: 16}};
             let f = |a| (a : A) . (mod_x! $ mod_x! $ |x| x + 15);
             let a = a.f;
             let ans = a.@x.@x;
@@ -848,7 +848,7 @@ pub fn test39() {
         
         main : IOState -> ((), IOState);
         main = (
-            let a = A::new (B::new (16));
+            let a = A {x: B {x: 16}};
             let f = |a| a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ |x| x + 15);
             let a = a.f;
             let ans = a.@x.@x;
@@ -871,7 +871,7 @@ pub fn test40() {
         
         main : IOState -> ((), IOState);
         main = (
-            let a = A::new (B::new $ 16);
+            let a = A {x: B {x: 16}};
             let f: A -> A = |a| a.(mod_x! $ mod_x! $ |x| x + 15);
             let a = a .f;
             let ans = a .@x .@x;
@@ -1179,7 +1179,7 @@ pub fn test48() {
 
         main : IOState -> ((), IOState);
         main = (
-            let int_vec = Vec::new $ Array::fill(2, 5);
+            let int_vec = Vec {data: Array::fill(2, 5)};
             let int_vec = int_vec.mod_data!(|arr| arr.set(0, 3));
             let head = int_vec.@data.get(0);
             let next = int_vec.@data.get(1);
@@ -1305,24 +1305,24 @@ pub fn test52() {
         let arr = Array::fill(n, true);
         let arr = arr.set!(0, false);
         let arr = arr.set!(1, false);
-        loop(SieveState::new(2, arr)) $ |state| (
+        loop(SieveState {i: 2, arr: arr}, |state|
             let i = state.@i;
             let arr = state.@arr;
             if i*i > n { break $ arr };
             let next_arr = if arr.get(i) {
-                loop(SieveState::new(i+i, arr)) $ |state| (
+                loop(SieveState {i: i+i, arr: arr}, |state|
                     let q = state.@i;
                     let arr = state.@arr;
                     if n-1 < q { 
                         break $ arr
                     } else {
-                        continue $ SieveState::new (q + i) $ arr.set!(q, false)
+                        continue $ SieveState{ i: q + i, arr: arr.set!(q, false) }
                     }
                 )
             } else {
                 arr
             };
-            continue $ SieveState::new((i + 1), next_arr)
+            continue $ SieveState{i: i + 1, arr: next_arr}
         )
     );
 
@@ -1641,12 +1641,12 @@ pub fn test66() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop(State::new(0, 0), |state|
+        let sum = loop(State{idx:0, sum:0}, |state|
             let State {idx: i, sum: sum} = state;
             if i == 10 {
                 break $ sum
             } else {
-                continue $ State::new(i+1, sum+i)
+                continue $ State{idx: i+1, sum: sum+i}
             }
         );
         let u = assert_eq("", sum, 45);
@@ -1667,12 +1667,12 @@ pub fn test67() {
 
     main : IOState -> ((), IOState);
     main = (
-        let sum = loop(State::new(0, 0), |state|
+        let sum = loop(State{idx: 0, sum: 0}, |state|
             let State {idx: i, sum: sum} = state;
             if i == 10 {
                 break $ sum
             } else {
-                continue $ State::new(i+1, sum+i)
+                continue $ State{idx: i+1, sum: sum+i}
             }
         );
         let u = assert_eq("", sum, 45);
@@ -1754,7 +1754,7 @@ pub fn test71() {
 
     main : IOState -> ((), IOState);
     main = (
-        let u = Struct::new(Union::left((42, "truth")), 13);
+        let u = Struct {uni: Union::left((42, "truth")), value: 13};
         let Struct { uni: Union::left((truth, string)), value: val } = u;
         let u = assert_eq("", truth, 42);
         let u = assert_eq("", val, 13);

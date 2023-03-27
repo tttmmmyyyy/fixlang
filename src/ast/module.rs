@@ -12,7 +12,6 @@ const MAIN_MODULE_NAME: &str = "Main";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "%";
 pub const GETTER_SYMBOL: &str = "@";
 pub const SETTER_SYMBOL: &str = "=";
-pub const STRUCT_NEW_NAME: &str = "new";
 
 #[derive(Clone)]
 pub struct TypeEnv {
@@ -777,10 +776,6 @@ impl FixModule {
             match &decl.value {
                 TypeDeclValue::Struct(str) => {
                     let struct_name = decl.name.clone();
-                    self.add_global_value(
-                        FullName::new(&decl.name.to_namespace(), STRUCT_NEW_NAME),
-                        struct_new(&struct_name, decl),
-                    );
                     for field in &str.fields {
                         self.add_global_value(
                             FullName::new(

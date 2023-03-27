@@ -78,10 +78,6 @@ pub fn make_std_mod() -> FixModule {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set"),
         unsafe_set_array(),
     );
-    // fix_module.add_global_value(
-    //     FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set_capacity"),
-    //     unsafe_set_capacity_array(),
-    // );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set_length"),
         unsafe_set_length_array(),

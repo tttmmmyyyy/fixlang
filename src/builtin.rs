@@ -1228,58 +1228,6 @@ pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// `new` built-in function for a given struct.
-pub fn struct_new_lit(
-    struct_name: &FullName,
-    struct_defn: &TypeDefn,
-    field_names: Vec<String>,
-) -> Rc<ExprNode> {
-    let free_vars = field_names
-        .iter()
-        .map(|name| FullName::local(name))
-        .collect();
-    let name = format!("{}.new {}", struct_name.to_string(), field_names.join(" "));
-    let name_cloned = name.clone();
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        // Get field values.
-        let fields = field_names
-            .iter()
-            .map(|name| gc.get_var(&FullName::local(name)).ptr.get(gc))
-            .collect::<Vec<_>>();
-
-        // Create struct object.
-        let obj = if rvo.is_none() {
-            allocate_obj(ty.clone(), &vec![], None, gc, Some(&name_cloned))
-        } else {
-            rvo.unwrap()
-        };
-
-        // Set fields.
-        for (i, field) in fields.iter().enumerate() {
-            ObjectFieldType::set_struct_field_norelease(gc, &obj, i as u32, field);
-        }
-
-        obj
-    });
-    expr_lit(generator, free_vars, name, struct_defn.ty(), None)
-}
-
-// `new` built-in function for a given struct.
-pub fn struct_new(struct_name: &FullName, definition: &TypeDefn) -> (Rc<ExprNode>, Rc<Scheme>) {
-    let mut expr = struct_new_lit(
-        struct_name,
-        definition,
-        definition.fields().iter().map(|f| f.name.clone()).collect(),
-    );
-    let mut ty = definition.ty();
-    for field in definition.fields().iter().rev() {
-        expr = expr_abs(vec![var_local(&field.name)], expr, None);
-        ty = type_fun(field.ty.clone(), ty);
-    }
-    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
-    (expr, scm)
-}
-
 // `get` built-in function for a given struct.
 pub fn struct_get_lit(
     var_name: &str,
