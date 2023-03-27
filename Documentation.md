@@ -97,11 +97,11 @@ The followings are examples of types:
 
 - `Int`: the type of 64-bit signed integers.
 - `Bool`: the type of boolean values (i.e., `true` and `false`).
-- `Array a`: the type of arrays whose elements have type `a`.
+- `Array a`: the type of arrays whose elements have type `a`. Here, `a` is called type parameter and will be instanciated to some specific type when the program is compiled.
 - `String`: the type of strings.
 - `Int -> Array Int`: the type of functions that takes an integer and returns an array of integers.
 - `()`: the unit type. This type has a single value which is also written as `()`. 
-- `(a, b)`: the type of pairs of values of `a` and `b`.
+- `(a, b)`: the type of pairs of values of `a` and `b`, where `a` and `b` is type parameters.
 - `IOState`: the type whose value corresponds to a state of the world outside the Fix program. For example, printing a string to the standard output can be thought as an operation that changes the external state, and Fix expresses such an operation by a function that takes an `IOState` value and returns updated `IOState` value.
 - `IOState -> ((), IOState)`: the type of functions that update the external state and receive no data. This type is isomorphic to `IOState -> IOState`, but we put a redundant `()` for monadic composition (you don't need to understand this terminology).
 - `Int -> Bool -> Array Bool`: this is equivalent to `Int -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from it's length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
@@ -376,7 +376,7 @@ The initial value of this loop is `(2, arr)`. The loop body takes a tuple `(idx,
 
 ## Unions
 
-Then what is the type `LoopResult s b`? It is an instance of union and can be defined as follows:
+Then what is the type `LoopResult s b`? It is defined as an union with two type parameters `s` and `b`. It can be defined as follows:
 
 ```
 type LoopResult s b = union { continue : s, break : b };
@@ -384,7 +384,7 @@ type LoopResult s b = union { continue : s, break : b };
 
 The above definition indicates that a `LoopResult s b` value contains either of a value of type `s` or a value of type `b`. If you write the set of values of a type as `|type|`, then `|LoopResult s b| = |s| ⨆ |b|`, where the symbol `⨆` is represents the disjoint union of sets.
 
-If you define `LoopResult` as above, the following functions are automatically defined in the namespace `LoopResult`.
+For each union type, some basic methods are automatically defined. For example, for `LoopResult` as above, the following functions are defined in the namespace `LoopResult`.
 
 - `continue : s -> LoopResult s b`: converts an value of type `s` into a `LoopResult` value.
 - `break : b -> LoopResult s b`: converts an value of type `b` into a `LoopResult` value.
@@ -405,7 +405,34 @@ Note that, if you want to create a none value of `Option`, you need to write `no
 
 Although it does not appear in the example Fibonacci program, here I explain how to define your own struct.
 
-(TBA: patterns. MakeStruct syntax. default methods.)
+For example, you can define a struct called `Product` with two fields `price`  of type `Int` and `sold` of type `Bool` as follows.
+
+```
+type Product = struct { price: Int, sold: Bool };
+```
+
+You can construct a struct value by the syntax `{struct_name} { ({field_name}: {field_value}) } `:
+
+```
+let product = Product { price: 100, sold: false };
+```
+
+As in the case of unions, there are methods that are automatically defined for structs. For `Price` as above, the following functions are defined in the namespace `Price`.
+
+- `@price : Product -> Int` and `@sold : Product -> Bool`
+    - Extracts the value of a field from a `Product` value.
+- `=price : Int -> Product -> Product` and `=sold : Bool -> Product -> Product`
+    - Modify a `Product` value by updating a field.
+- `=price! : Int -> Product -> Product` and `=sold! : Bool -> Product -> Product`
+    - These functions are almost same as `=price` and `=sold`, but panic if the given `Product` value is not unique. 
+    - More explanation will be given in [Reference counting](#Reference-counting) section.
+- `mod_price : (Int -> Int) -> Product -> Product` and `mod_sold : (Bool -> Bool) -> Product -> Product`
+    - Modify a `Product` value by a function acting on a field.
+- `mod_price! : (Int -> Int) -> Product -> Product` and `mod_sold! : (Bool -> Bool) -> Product -> Product`
+    - Modify a `Product` value by a function acting on a field.
+    - More explanation will be given in [Reference counting](#Reference-counting) section.
+
+NOTE: In a future, we will add lens functions such as `act_price : [f: Functor] (Int -> f Int) -> Product -> f Product`, which is a generalization of `mod_price` functions.
 
 ## Iterators
 
@@ -420,6 +447,8 @@ Like array, iterator (a.k.a. "lazy list") is a way to represent sequences. Where
 ```
 type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };
 ```
+
+(You don't need to understand `unbox` specifier at now.)
 
 The above definition indicates that the `Iterator` is a struct with only one field `next` of type `() -> Option (a, Iterator a)`.
 
@@ -555,9 +584,7 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 (TBA)
 
-## Basic types
-
-### Boxed and unboxed types
+## Boxed and unboxed types
 
 Types in Fix are divided into boxed types and unboxed types. Boxed types and unboxed types are similar to things called as "reference types" and "value types" in other languages, respectively.
 
@@ -566,95 +593,29 @@ Types in Fix are divided into boxed types and unboxed types. Boxed types and unb
 
 In general, types that contain a lot of data (such as `Array`) are suited to be boxed because boxed types have lower copying costs. On the other hand, types containing small data (such as `Int`) can be unboxed to reduce the cost of increasing or decreasing the reference counter.
 
-### Functions
-
-Types of functions are represented as `a -> b`. For example, `Int -> Bool` is the type of functions which takes an `Int` value and returns a `Bool` value.
-
-The type constructor `->` is right-associative: `a -> b -> c` is interpreted as `a -> (b -> c)`.
-
-Functions are boxed, because it may contain many captured values.
-
 ### Tuples
 
 Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
-Tuples are special forms of [structs](#Structs) whose field names are `0`, `1`, `2`, etc. 
+Tuples are special forms of structs whose field names are `0`, `1`, `2`, etc. 
 
 ### Unit
 
-Unit `()` is a type allows only one value, which is also written as `()`.
+The unit type `()` is unboxed.
 
 ### Array
 
-`Std::Array` is the type of variable-length array. `Std::Array` is a boxed type.
+`Std::Array` is a boxed type.
 
 ### Structs
 
-You can define a new struct by `type {type_name} = struct ({field_name}: {field_type},...);`. The `{type_name}` must start with a uppercase alphabet. 
+Structs are boxed by default because they are assumed to have many fields. To define unboxed struct type, write `unbox` specifier before `struct`.
 
 Example:
 ```
-module Main;
-
-type Product = struct { price: Int, sold: Bool };
-```
-
-You can construct a struct value by the syntax `{struct_name} { ({field_name}: {field_value}) } `:
-
-```
-let product = Product { price: 100, sold: false };
-```
-
-For each struct, the following methods are defined in the namespace of {type_name} automatically: 
-- `new : {field_type}... -> {struct_type}`
-    - Construct a struct value.
-    - For the `Product` example above, `Main.Product.new : Int -> Bool -> Product`.
-- `@{field_name} : {struct_type} -> {field_type}`
-    - Get the field value of a struct value.
-    - For the `Product.price` example above, `Main.Product.@price : Product -> Int`.
-- `={field_name} : {struct_type} -> {field_type} -> {field_type}`
-    - Set the field value of a struct value.
-    - This function clones the struct value if it is shared between multiple references.
-    - For the `Product.price` example above, `Main.Product.=price : Int -> Product -> Product`.
-- `={field_name}! : {struct_type} -> {field_type} -> {field_type}`
-    - Set the field value of a struct value.
-    - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
-    - For the `Product.price` example above, `Main.Product.=price! : Int -> Product -> Product`.
-- `mod_{field_name} : ({field_type} -> {field_type}) -> {struct_type} -> {struct_type}`
-    - Modify the field value of a struct value by a function which acts to a field value.
-    - For the `Product.price` example above, `Main.Product.mod_price : (Int -> Int) -> Product -> Product`.
-    - This function clones the struct value if it is shared between multiple references.
-- `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct_type} -> {struct_type}`
-    - Modify the field value of a struct value by a function which acts to a field value.
-    - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
-    - For the `Product.price` example above, `Main.Product.mod_price! : (Int -> Int) -> Product -> Product`. 
-
-NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Functor] ({field_type} -> f {field_type}) -> {struct_type} -> f {struct_type} `, which are generalization of `mod` functions.
-
-Structs are boxed by default because they are assumed to have many fields. To define unboxed struct type, write `unbox` specifier before `struct`.
-
-```
-type Product = unbox struct (price: Int, sold: Bool);
+type Product = unbox struct { price: Int, sold: Bool };
 ```
 
 ### Unions
-
-You can define a new union by `type {type_name} = union ({field_name}: {field_type},...);`. The `{type_name}` must start with a uppercase alphabet. 
-
-Example:
-```
-module Main;
-
-type Weight = union (pound: Int, kilograms: Int);
-```
-
-For each struct, the following methods are defined in the namespace of {type_name} automatically: 
-- `{field_name} : {field_type} -> {type_name}`
-    - For the `Weight` example above, `Main.Weight.pound : Int -> Weight` and `Main.Weight.kilograms : Int -> Weight`.
-- `as_{field_name} : {type_name} -> {field_type}`
-    - For the `Weight` example above, `Main.Weight.as_pound : Weight -> Int` and `Main.Weight.as_kilograms : Weight -> Int`.
-    - If the given union value doesn't carry `{field_name}`, this function panics.
-- `is_{field_name} : {type_name} -> Bool`
-    - For the `Weight` example above, `Main.Weight.is_pound : Weight -> Bool` and `Main.Weight.is_kilograms : Weight -> Bool`.
 
 Unions are unboxed by default because they only contains a single value at a time. To define boxed union type, write `box` specifier before `struct`.
 
@@ -673,6 +634,14 @@ type Weight = box union (pound: Int, kilograms: Int);
 # Built-in / library features
 
 ## Types
+
+### Structs
+
+(TBA. Provide complete list of methods here.)
+
+### Unions
+
+(TBA. Provide complete list of methods here.)
 
 ### Std::Array
 
