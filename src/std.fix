@@ -263,7 +263,7 @@ namespace Iterator {
             loop(iter, |iter| (
                 let next = iter.advance;
                 if next.is_none { break $ none() };
-                let (v, iter) = next.unwrap;
+                let (v, iter) = next.as_some;
                 if !cond(v) { continue $ iter };
                 let iter = filter(cond, iter);
                 break $ some((v, iter))
@@ -285,7 +285,7 @@ namespace Iterator {
             if next.is_none {
                 break $ accum
             } else {
-                let (next, iter) = next.unwrap;
+                let (next, iter) = next.as_some;
                 continue $ (op(accum, next), iter)
             }
         )
@@ -304,7 +304,7 @@ namespace Iterator {
     take_last : Iterator a -> Option a;
     take_last = |iter| (
         if iter.is_empty { none() };
-        let (elem, iter) = iter.advance.unwrap;
+        let (elem, iter) = iter.advance.as_some;
         if iter.is_empty { 
             some(elem)
         } else {
@@ -348,7 +348,7 @@ namespace Iterator {
             if in_iter.is_empty {
                 break $ out_iter
             } else {
-                let (elem, in_iter) = in_iter.advance.unwrap;
+                let (elem, in_iter) = in_iter.advance.as_some;
                 let out_iter = out_iter.push_front(elem);
                 continue $ (out_iter, in_iter)
             }
@@ -362,7 +362,7 @@ namespace Iterator {
             if n == 0 { none() };
             let iter_next = iter.advance;
             if iter_next.is_none { none() };
-            let (v, iter) = iter_next.unwrap;
+            let (v, iter) = iter_next.as_some;
             some $ (v, iter.take(n-1))
         );
         Iterator { next: next }
@@ -376,8 +376,8 @@ namespace Iterator {
             if iter0_next.is_none { none() };
             let iter1_next = iter1.advance;
             if iter1_next.is_none { none() };
-            let (v0, iter0) = iter0_next.unwrap;
-            let (v1, iter1) = iter1_next.unwrap;
+            let (v0, iter0) = iter0_next.as_some;
+            let (v1, iter1) = iter1_next.as_some;
             some $ ((v0, v1), zip(iter0, iter1))
         );
         Iterator { next: next }
@@ -408,14 +408,8 @@ namespace Option {
         if opt.is_none {
             none()
         } else {
-            some $ f $ opt.unwrap
+            some $ f $ opt.as_some
         }
-    );
-
-    unwrap : Option a -> a;
-    unwrap = |opt| ( 
-        let Option::some(val) = opt;
-        val
     );
 
 }

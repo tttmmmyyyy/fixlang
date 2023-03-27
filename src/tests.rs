@@ -1929,9 +1929,9 @@ pub fn test79() {
     main = (
         let ls = Iterator::make_empty;
         let ls = ls.push_front(1).push_front(2);
-        let (e, ls) = ls.advance.unwrap;
+        let (e, ls) = ls.advance.as_some;
         let _ = assert_eq("", 2, e);
-        let (e, ls) = ls.advance.unwrap;
+        let (e, ls) = ls.advance.as_some;
         let _ = assert_eq("", 1, e);
         pure()
     );
@@ -1949,7 +1949,7 @@ pub fn test80() {
     main : IOState -> ((), IOState);
     main = (
         let iter = Iterator::make_empty.push_front(4).push_front(3).push_front(2).push_front(1);
-        let last = iter.take_last.unwrap;
+        let last = iter.take_last.as_some;
         let _ = assert_eq("", last, 4);
         let last: Option Bool = Iterator::make_empty.take_last;
         let _ = assert("", last.is_none);

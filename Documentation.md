@@ -401,8 +401,6 @@ type Option a = union { none : (), some : s };
 
 Note that, if you want to create a none value of `Option`, you need to write `none()`, because `none` is a function of type `() -> Option a`. (Remember that the syntax sugar `f() == f(())`.)
 
-We define `unwrap` as another name of the function `as_some : Option a -> a`.
-
 ## Structs
 
 Although it does not appear in the example Fibonacci program, here I explain how to define your own struct.
@@ -442,9 +440,9 @@ That is, if `advance` is called on `zeros`, it always returns `some` value (beca
 
 ```
 let iter = zeros;
-let (x, iter) = iter.advance.unwrap; // x == 0
-let (y, iter) = iter.advance.unwrap; // y == 0
-let (z, iter) = iter.advance.unwrap; // z == 0
+let (x, iter) = iter.advance.as_some; // x == 0
+let (y, iter) = iter.advance.as_some; // y == 0
+let (z, iter) = iter.advance.as_some; // z == 0
 ...
 ```
 
@@ -460,7 +458,7 @@ map = |f, iter| (
     let next = |_| (
         let adv = iter.advance;
         if adv.is_none { none() };
-        let (val, iter_next) = adv.unwrap;
+        let (val, iter_next) = adv.as_some;
         some $ (f(val), iter_next.map(f))
     );
     Iterator { next: next }
@@ -849,8 +847,6 @@ Methods:
 
 - `map : (a -> b) -> Option a -> Option b`
     - Apply a function to the contained value. If the option is `none()`, do nothing.
-- `unwrap : Option a -> a`
-    - Exctract the contained value. If the option is `none()`, this function panics.
 
 ### Std::String
 

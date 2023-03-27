@@ -18,5 +18,5 @@ main : IOState -> ((), IOState);
 main = |io| (
     let iter = Iterator::from_array([1,2,3,4]);
     let last_but = iter.take_last_but;
-    io.println!(last_but.unwrap.to_string)
+    io.println!(last_but.as_some.to_string)
 );
