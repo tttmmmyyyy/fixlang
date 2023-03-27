@@ -417,22 +417,14 @@ You can construct a struct value by the syntax `{struct_name} { ({field_name}: {
 let product = Product { price: 100, sold: false };
 ```
 
-As in the case of unions, there are methods that are automatically defined for structs. For `Price` as above, the following functions are defined in the namespace `Price`.
+As in the case of unions, there are methods that are automatically defined for structs. For `Price` as above, the following methods are defined in the namespace `Price`.
 
 - `@price : Product -> Int` and `@sold : Product -> Bool`
     - Extracts the value of a field from a `Product` value.
 - `=price : Int -> Product -> Product` and `=sold : Bool -> Product -> Product`
-    - Modify a `Product` value by updating a field.
-- `=price! : Int -> Product -> Product` and `=sold! : Bool -> Product -> Product`
-    - These functions are almost same as `=price` and `=sold`, but panic if the given `Product` value is not unique. 
-    - More explanation will be given in [Reference counting](#Reference-counting) section.
+    - Modify a `Product` value by setting a field.
 - `mod_price : (Int -> Int) -> Product -> Product` and `mod_sold : (Bool -> Bool) -> Product -> Product`
     - Modify a `Product` value by a function acting on a field.
-- `mod_price! : (Int -> Int) -> Product -> Product` and `mod_sold! : (Bool -> Bool) -> Product -> Product`
-    - Modify a `Product` value by a function acting on a field.
-    - More explanation will be given in [Reference counting](#Reference-counting) section.
-
-NOTE: In a future, we will add lens functions such as `act_price : [f: Functor] (Int -> f Int) -> Product -> f Product`, which is a generalization of `mod_price` functions.
 
 I already explained that we can use patterns to destructure tuples. You can also use patterns to destructure a struct value. For example, field accessor function `@price : Product -> Int` can be re-defined as follows: 
 
@@ -654,11 +646,35 @@ type Weight = box union (pound: Int, kilograms: Int);
 
 ### Structs
 
-(TBA. Provide complete list of methods here.)
+If you define a struct named `{struct}` with a field `{field_name}` of type `{field_type}`, the following methods are defined in the namespace named `{struct}`.
+
+- `@{field_name} : {struct} -> {field_type}`
+    - Extract the value of a field from a struct value.
+- `={field_name} : {field_type} -> {struct} -> {struct}`
+    - Modify a struct value by setting a field.
+    - This function clones the struct value if it is shared between multiple references.
+- `={field_name}! : {field_type} -> {struct} -> {struct}`
+    - Modify a struct value by setting a field.
+    - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+- `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
+    - Modify a struct value by a function acting on a field.
+    - This function clones the struct value if it is shared between multiple references.
+- `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
+    - Modify a struct value by a function acting on a field.
+    - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+
+NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Functor] ({field_type} -> f {field_type}) -> {struct} -> f {struct} `, which are generalization of `mod` functions.
 
 ### Unions
 
-(TBA. Provide complete list of methods here.)
+If you define a union named `{union}` with a variant `{variant_name}` of type `{variant_type}`, the following methods are defined in the namespace named `{union}`.
+
+- `{variant_name} : {variant_type} -> {union}`
+    - Constructs a union value from a variant value.
+- `is_{variant_name} : {union} -> Bool`
+    - Check if a union value is created as the specified variant.
+- `as_{variant_name} : {union} -> {variant_type}`
+    - Converts a union value into a variant value if it is created as the variant. If not so, this function panics.
 
 ### Std::Array
 
