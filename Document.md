@@ -560,7 +560,7 @@ As is the case with all languages, Fix stores all values on memory (or register)
 
 For unboxed types, the answer is simple: when THE name of a value disappears, Fix should release its memory region. Every local name introduced by `let` or function argument has a limited life. When the name of a value ends it's life, the value is no longer needed.
 
-For boxed types, the strategy Fix uses is called referencing counting. Since a value of boxed type may have multiple names, Fix is counting the number of names of a boxed value. For each boxed value an integer called "reference counter" is associated. When a name of a value is created, Fix increments the reference counter. When a name disappears, Fix decrements the reference counter. If refernce counter reached to zero, Fix releases the memory region of that value. 
+For boxed types, the strategy Fix uses is called referencing counting. Since a value of boxed type may have multiple names, Fix is counting the number of names of a boxed value. For each boxed value an integer called "reference counter" is associated. When a name of a value is created, Fix increments the reference counter. When a name disappears, Fix decrements the reference counter. If reference counter reached to zero, Fix releases the memory region of that value. 
 
 Managing reference counter (i.e., incrementing, decrementing and checking if the counter is zero) has no small negative impact on the performance of a program. This is one reson that I didn't make all values boxed. Since cloning cost of `Int` or `Bool` is so low, they are suited to be unboxed.
 
