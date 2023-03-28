@@ -567,7 +567,7 @@ Managing reference counter (i.e., incrementing, decrementing and checking if the
 Summary upto here:
 - Types in Fix are classified into two kinds: boxed and unboxed.
 - Unboxed value has unique name, and Fix simply releases the memory region for a boxed value when it's name disappears.
-- Boxed value may have multiple names, so Fix is counting the number of names using reference counting method.
+- Boxed value may have multiple names, so Fix is counting the number of names (reference counting method). This causes no small overhead.
 
 (TBA)
 
