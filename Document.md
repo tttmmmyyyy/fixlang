@@ -554,7 +554,7 @@ let x = Array::fill(100, 42);
 let y = x;
 ```
 
-In the above example, first an `Int` array of length `100` is created on a memory region, and a name `x` is assigned to it. In the next line, a second name `y` to the same array value is created without cloning the array value (i.e., one-hundred integers). This is good because cloning a large array is waste of time and memory. 
+In the above example, first an `Int` array of length `100` is created, and a name `x` is assigned to it. In the next line, a second name `y` to the same array value is created without cloning the array value (i.e., one-hundred integers). This is good because cloning a large array is waste of time and memory. 
 
 As is the case with all languages, Fix stores all values on memory (or register). Since memory space is a limited resource of a computer, Fix should release a memory region for a value if it will not be used later. Then, how can Fix judge that a value will no longer be used?
 
