@@ -515,7 +515,59 @@ For example, `Iterator::from_array(["Hello", "World!"]).join(" ") == "Hello Worl
 
 In the last, `to_string : Int -> String` is a function that converts an integer to a decimal string.
 
-## Reference counting
+## Boxed type and reference counting
+
+In the last of this tutorial, I explain the meaning of the exclamation mark of `set!` or `println!` function.
+
+In Fix, all types are boxed or unboxed. Roughly speaking, types which may contain much data are boxed. For example, `Array` or `String` is boxed. Structs are boxed by defalut, because there may be many fields. On the other hand, `Int`, `Bool` or tuples are unboxed.
+
+What is the difference between boxed type and unboxed type? In your program, you often give a "name" to an existing value. For example, in the following program,
+
+```
+let x = 42;
+let y = x;
+```
+
+you make a value `42`, name it as `x`, and again name it as `y`. If you define a function 
+
+```
+multiply : Int -> Int -> Int;
+multiply = |x, y| x*y;
+```
+
+and write `multiply(3, 5)`, then two integers `3` and `5` are named as `x` and `y`, and passed to `multiply` function. In the next example,
+
+```
+type Price = struct { value: Int };
+...
+let price_of_book = Price { value: 100 };
+```
+
+the value `100` is given a name "`value` of `price_of_book`". So, the "name" of a value in this explanation is not only a variable name, but should be understood as a way to reach the value.
+
+The difference between boxed and unboxed types is the behavior when its value is named. For unboxed types, the value is simply cloned when a new name is created, and the new name refers to the new cloned value. In other words, all values of unboxed type has a unique name. 
+
+On the other hand, a value of boxed type is not cloned, and therefore there may be many names that refer to a value. For example, consider
+
+```
+let x = Array::fill(100, 42);
+let y = x;
+```
+
+In the above example, first an `Int` array of length `100` is created on a memory region, and a name `x` is assigned to it. In the next line, a second name `y` to the same array value is created without cloning the array value (i.e., one-hundred integers). This is good because cloning a large array is waste of time and memory. 
+
+As is the case with all languages, Fix stores all values on memory (or register). Since memory space is a limited resource of a computer, Fix should release a memory region for a value if it will not be used later. Then, how can Fix judge that a value will no longer be used?
+
+For unboxed types, the answer is simple: when THE name of a value disappears, Fix should release its memory region. Every local name introduced by `let` or function argument has a limited life. When the name of a value ends it's life, the value is no longer needed.
+
+For boxed types, the strategy Fix uses is called referencing counting. Since a value of boxed type may have multiple names, Fix is counting the number of names of a boxed value. For each boxed value an integer called "reference counter" is associated. When a name of a value is created, Fix increments the reference counter. When a name disappears, Fix decrements the reference counter. If refernce counter reached to zero, Fix releases the memory region of that value. 
+
+Managing reference counter (i.e., incrementing, decrementing and checking if the counter is zero) has no small negative impact on the performance of a program. This is one reson that I didn't make all values boxed. Since cloning cost of `Int` or `Bool` is so low, they are suited to be unboxed.
+
+Summary upto here:
+- Types in Fix are classified into two kinds: boxed and unboxed.
+- Unboxed value has unique name, and Fix simply releases the memory region for a boxed value when it's name disappears.
+- Boxed value may have multiple names, so Fix is counting the number of names using reference counting method.
 
 (TBA)
 
@@ -604,6 +656,10 @@ Types in Fix are divided into boxed types and unboxed types. Boxed types and unb
 * Values of unboxed types are directly embedded into the stack memory, structs and unions. 
 
 In general, types that contain a lot of data (such as `Array`) are suited to be boxed because boxed types have lower copying costs. On the other hand, types containing small data (such as `Int`) can be unboxed to reduce the cost of increasing or decreasing the reference counter.
+
+### Functions
+
+Functions are unboxed, but captured values are stored to an unnamed boxed struct.
 
 ### Tuples
 
