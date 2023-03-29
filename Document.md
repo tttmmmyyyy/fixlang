@@ -531,7 +531,7 @@ main = (
 );
 ```
 
-The above prints `arr0.get(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` with the 0th element replaced by `2`", and it is NOT a command "update the 0th element of `arr0` to `2`". To implement this behavior, `set` function in the above program has to clone `arr0` and updates the 0th element of the cloned array.
+The above prints `arr0.get(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` but with the 0th element replaced by `2`", and it is NOT a command "update the 0th element of `arr0` to `2`". To realize this behavior, `set` function in the above program has to clone `arr0` before updating the 0th element of an array.
 
 More generally, all values of Fix are immutable. Immutability is good for reducing bugs caused by fails on state management, but it can be an obstacle for implementing an algorithm with its optimum time (or space) complexity. Consider the implementation of `calc_fib` function of the example program using `set` instead of `set!`:
 
@@ -567,7 +567,7 @@ main = (
 );
 ```
 
-In this program, the call of `set` is the last usage of `arr0`. In such a case, `set` can update the 0th element of the given array without violating immutability, because the mutation cannot be observed. 
+(Note that `println!` prints the 0th element of `arr1`, not of `arr0`.) In this program, the call of `set` is the last usage of `arr0`. In such a case, `set` can update the 0th element of the given array without violating immutability, because the mutation cannot be observed. 
 
 Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and points to the new array returned by `set` function. This ensures that the old array given to `set` function will be never referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
 
