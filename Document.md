@@ -515,7 +515,7 @@ For example, `Iterator::from_array(["Hello", "World!"]).join(" ") == "Hello Worl
 
 In the last, `to_string : Int -> String` is a function that converts an integer to a decimal string.
 
-## Boxed type and reference counting
+## Mutation in Fix
 
 In the last of this tutorial, I explain the meaning of the exclamation mark of `set!` or `println!` function.
 
