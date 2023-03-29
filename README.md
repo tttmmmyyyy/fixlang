@@ -4,7 +4,7 @@ Fix-lang
 ## Overview
 
 Fix is a programming language with the following features: 
-- Functional: All functions have no side effect and all values are immutable. This allows you to write a stateless program.
+- Functional: All functions have no side effect and all values are immutable. This reduces bugs caused by state management failures.
 - O(1) update of arrays and structures: Despite the 1st feature, Fix mutates a value if the mutation cannot be observed. For example, `let array1 = array0.set(10, 42);` defines a new array `array1` that is almost identical to `array0` but with the 10th element replaced by 42. If `array0` will not be referenced later, Fix will update the 10th element of `array0` and rename it as `array1`. On the other hand, if `array0` may be used later, Fix creates `array1` by cloning `array0` and setting the 10th element to 42, keeping immutability.
 - Familier syntax: The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
 
