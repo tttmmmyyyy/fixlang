@@ -571,7 +571,7 @@ main = (
 
 Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and set as pointing to the new array returned by `set` function. This ensures that the old array given to `set` function will be never referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
 
-As a summary, since values in Fix are immutable, the `set : Int -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning the given array if the array will not be used later.
+As a summary, since values in Fix are immutable, the `set : Int -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning an array if the array will not be used later.
 
 The `set!` function is almost same as the `set` function, but it panics (i.e., stop the execution of the program) if the given array will be used later. In other words, there is assurance that `set!` doesn't clone the array. This is useful to assure that a program is running at a expected time complexity. 
 
