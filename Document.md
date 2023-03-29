@@ -531,7 +531,7 @@ main = (
 );
 ```
 
-The above prints `arr0.get(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` with the 0th element replaced by `2`", and it is NOT a command "update the zeroth element of `arr0` to `2`". To implement this behavior, `set` function in the above program has to clone `arr0` and updates the 0th element of the cloned array.
+The above prints `arr0.get(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` with the 0th element replaced by `2`", and it is NOT a command "update the 0th element of `arr0` to `2`". To implement this behavior, `set` function in the above program has to clone `arr0` and updates the 0th element of the cloned array.
 
 More generally, all values of Fix are immutable. Immutability is good for reducing bugs caused by fails on state management, but it can be an obstacle for implementing an algorithm with its optimum time (or space) complexity. Consider the implementation of `calc_fib` function of the example program using `set` instead of `set!`:
 
