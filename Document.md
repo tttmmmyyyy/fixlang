@@ -569,7 +569,7 @@ main = (
 
 (Note that `println!` prints the 0th element of `arr1`, not of `arr0`.) In this program, the call of `set` is the last usage of `arr0`. In such a case, `set` can update the 0th element of the given array without violating immutability, because the mutation cannot be observed. 
 
-Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and points to the new array returned by `set` function. This ensures that the old array given to `set` function will be never referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
+Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and set as pointing to the new array returned by `set` function. This ensures that the old array given to `set` function will be never referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
 
 As a summary, since values in Fix are immutable, the `set : Int -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning the given array if the array will not be used later.
 
