@@ -111,7 +111,7 @@ capitalized. A type that starts with a lowercase letter is interpreted as a type
 
 ## Expressions
 
-Expression is a sentence which describes how to calculate a value. The followings are examples of expressions:
+Expression is a sentence which describes a value. The followings are examples of expressions:
 
 - `42`: a literal expression which means the number 42 represented as a signed 64-bit integer.
 - `false`, `true`: literal expressions which means boolean value (represented as a 8-bit integer `0` and `1` internally).
@@ -519,57 +519,73 @@ In the last, `to_string : Int -> String` is a function that converts an integer 
 
 In the last of this tutorial, I explain the meaning of the exclamation mark of `set!` or `println!` function.
 
-In Fix, all types are boxed or unboxed. Roughly speaking, types which may contain much data are boxed. For example, `Array` or `String` is boxed. Structs are boxed by defalut, because there may be many fields. On the other hand, `Int`, `Bool` or tuples are unboxed.
+There is also a function without exclamation mark: `set : Int -> a -> Array a -> Array a`. Semantically, both of `Array::set` and `Array::set!` return a new array with one element updated from the original array. 
 
-What is the difference between boxed type and unboxed type? In your program, you often give a "name" to an existing value. For example, in the following program,
-
-```
-let x = 42;
-let y = x;
-```
-
-you make a value `42`, name it as `x`, and again name it as `y`. If you define a function 
+Remember that an expression in Fix is only a sentence that describes a value. It is essentially the same as a mathematical expression such as "1 + cos(pi/5)^2". There is no concept of "changing the value of a variable" which is ubiquitous in usual languages. For example, consider
 
 ```
-multiply : Int -> Int -> Int;
-multiply = |x, y| x*y;
+main = (
+    let arr0 = Array::fill(100, 1);
+    let arr1 = arr0.set(0, 2);
+    println!("arr0.get(0): " + arr0.get(0).to_string + ".")
+);
 ```
 
-and write `multiply(3, 5)`, then two integers `3` and `5` are named as `x` and `y`, and passed to `multiply` function. In the next example,
+The above prints `arr0.get(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` with the 0th element replaced by `2`", and it is NOT a command "update the zeroth element of `arr0` to `2`". To implement this behavior, `set` function in the above program has to clone `arr0` and updates the 0th element of the cloned array.
+
+More generally, all values of Fix are immutable. Immutability is good for reducing bugs caused by fails on state management, but it can be an obstacle for implementing an algorithm with its optimum time (or space) complexity. Consider the implementation of `calc_fib` function of the example program using `set` instead of `set!`:
 
 ```
-type Price = struct { value: Int };
-...
-let price_of_book = Price { value: 100 };
+calc_fib : Int -> Array Int;
+calc_fib = |n| (
+    let arr = Array::fill(n, 0);
+    let arr = arr.set(0, 1);
+    let arr = arr.set(1, 1);
+    let arr = loop((2, arr), |(idx, arr)|
+        if idx == arr.get_length {
+            break $ arr
+        } else {
+            let x = arr.get(idx-1);
+            let y = arr.get(idx-2);
+            let arr = arr.set(idx, x+y);
+            continue $ (idx+1, arr)
+        }
+    );
+    arr
+);
 ```
 
-the value `100` is given a name "`value` of `price_of_book`". So, the "name" of a value in this explanation is not only a variable name, but should be understood as a way to reach the value.
+The optimum time complexity of calculating Fibonacci sequence of length N is O(N). But if Fix had cloned the array at `let arr = arr.set(idx, x+y);` in the loop, it takes O(N) time for each loop step and the total time complexity becomes O(N^2).
 
-The difference between boxed and unboxed types is the behavior when its value is named. For unboxed types, the value is simply cloned when a new name is created, and the new name refers to the new cloned value. In other words, all values of unboxed type has a unique name. 
-
-On the other hand, a value of boxed type is not cloned, and therefore there may be many names that refer to a value. For example, consider
+In fact, `set` in the above program doesn't clone the array and `calc_fib` works in O(N) time, as expected! This is because if the given array will no longer be used, `set` omits cloning and just updates the given array. Let's consider a simpler program: 
 
 ```
-let x = Array::fill(100, 42);
-let y = x;
+main = (
+    let arr0 = Array::fill(100, 1);
+    let arr1 = arr0.set(0, 2);
+    println!("arr1.get(0): " + arr1.get(0).to_string + ".")
+);
 ```
 
-In the above example, first an `Int` array of length `100` is created, and a name `x` is assigned to it. In the next line, a second name `y` to the same array value is created without cloning the array value (i.e., one-hundred integers). This is good because cloning a large array is waste of time and memory. 
+In this program, the call of `set` is the last usage of `arr0`. In such a case, `set` can update the 0th element of the given array without violating immutability, because the mutation cannot be observed. 
 
-As is the case with all languages, Fix stores all values on memory (or register). Since memory space is a limited resource of a computer, Fix should release a memory region for a value if it will not be used later. Then, how can Fix judge that a value will no longer be used?
+Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and points to the new array returned by `set` function. This ensures that the old array given to `set` function will be never referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
 
-For unboxed types, the answer is simple: when THE name of a value disappears, Fix should release its memory region. Every local name introduced by `let` or function argument has a limited life. When the name of a value ends it's life, the value is no longer needed.
+As a summary, since values in Fix are immutable, the `set : Int -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning the given array if the array will not be used later.
 
-For boxed types, the strategy Fix uses is called referencing counting. Since a value of boxed type may have multiple names, Fix is counting the number of names of a boxed value. For each boxed value an integer called "reference counter" is associated. When a name of a value is created, Fix increments the reference counter. When a name disappears, Fix decrements the reference counter. If reference counter reached to zero, Fix releases the memory region of that value. 
+The `set!` function is almost same as the `set` function, but it panics (i.e., stop the execution of the program) if the given array will be used later. In other words, there is assurance that `set!` doesn't clone the array. This is useful to assure that a program is running at a expected time complexity. 
 
-Managing reference counter (i.e., incrementing, decrementing and checking if the counter is zero) has no small negative impact on the performance of a program. This is one reson that I didn't make all values boxed. Since cloning cost of `Int` or `Bool` is so low, they are suited to be unboxed.
+Now I can explain the meaning of exclamation mark of `set!` and `println!`. I put the exclamation mark for functions that require the assurance that the given value will not be used later. For `println!`, remember that it's type is `String -> IOState -> ((), IOState)` and it mutates an `IOState` value. A value of `IOState` represents a state of the world outside the Fix program, and it cannot be cloned. For example, a program
 
-Summary upto here:
-- Types in Fix are classified into two kinds: boxed and unboxed.
-- Unboxed value has unique name, and Fix simply releases the memory region for a boxed value when it's name disappears.
-- Boxed value may have multiple names, so Fix is counting the number of names (reference counting method). This causes no small overhead.
+```
+main = |io| (
+    let (_, io_a) = io.println!("Hello World A!");
+    let (_, io_b) = io.println!("Hello World B!");
+    ...
+);
+```
 
-(TBA)
+should panic (and in fact it does), because it creates two worlds -- one is a world where "Hello World A!" is printed, and another is a world where "Hello World B!" is printed.
 
 # Other topics on syntax
 
