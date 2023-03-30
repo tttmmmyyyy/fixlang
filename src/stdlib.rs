@@ -24,8 +24,6 @@ pub fn make_std_mod() -> FixModule {
     fix_module.trait_env.add_trait(multiply_trait());
     fix_module.trait_env.add_trait(divide_trait());
     fix_module.trait_env.add_trait(remainder_trait());
-    fix_module.trait_env.add_trait(and_trait());
-    fix_module.trait_env.add_trait(or_trait());
     fix_module.trait_env.add_trait(less_than_trait());
     fix_module
         .trait_env
@@ -58,8 +56,6 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(remainder_trait_instance_int());
-    fix_module.trait_env.add_instance(and_trait_instance_bool());
-    fix_module.trait_env.add_instance(or_trait_instance_bool());
     fix_module
         .trait_env
         .add_instance(less_than_trait_instance_int());

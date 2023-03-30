@@ -94,12 +94,12 @@ expr_plus = { expr_mul ~ (sep* ~ operator_plus ~ sep* ~ expr_mul)* }
 operator_cmp = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
 expr_cmp = { expr_plus ~ (sep ~ operator_cmp ~ sep* ~ expr_plus)? }
 
-// operator && (left-associative)
-operator_and = { "&&" }
+// operator and (right-associative)
+operator_and = _{ "&&" }
 expr_and = { expr_cmp ~ (sep* ~ operator_and ~ sep* ~ expr_cmp)* }
 
-// operator && (left-associative)
-operator_or = { "||" }
+// operator or (right-associative)
+operator_or = _{ "||" }
 expr_or = { expr_and ~ (sep* ~ operator_or ~ sep* ~ expr_and)* }
 
 // right to left application sequence, e.g., `g $ f $ x`. (right-associative)

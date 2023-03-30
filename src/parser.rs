@@ -633,28 +633,44 @@ fn parse_expr_cmp(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     )
 }
 
-// Operator && (left-associative)
+// Operator && (right-associative)
 fn parse_expr_and(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_and);
-    parse_binary_operator_sequence(
-        pair,
-        src,
-        HashMap::from([("&&", BinaryOpInfo::new(AND_TRAIT_NAME, AND_TRAIT_AND_NAME))]),
-        Rule::operator_and,
-        parse_expr_cmp,
-    )
+    let exprs = pair
+        .into_inner()
+        .map(|p| parse_expr_cmp(p, src))
+        .collect::<Vec<_>>();
+
+    fn and_boolean_exprs(ps: &[Rc<ExprNode>]) -> Rc<ExprNode> {
+        if ps.len() == 1 {
+            ps[0].clone()
+        } else {
+            let sub = and_boolean_exprs(&ps[1..]);
+            expr_if(ps[0].clone(), sub, bool(false, None), None)
+        }
+    }
+
+    and_boolean_exprs(&exprs)
 }
 
-// Operator || (left-associative)
+// Operator || (right-associative)
 fn parse_expr_or(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_or);
-    parse_binary_operator_sequence(
-        pair,
-        src,
-        HashMap::from([("||", BinaryOpInfo::new(OR_TRAIT_NAME, OR_TRAIT_OR_NAME))]),
-        Rule::operator_or,
-        parse_expr_and,
-    )
+    let exprs = pair
+        .into_inner()
+        .map(|p| parse_expr_and(p, src))
+        .collect::<Vec<_>>();
+
+    fn or_boolean_exprs(ps: &[Rc<ExprNode>]) -> Rc<ExprNode> {
+        if ps.len() == 1 {
+            ps[0].clone()
+        } else {
+            let sub = or_boolean_exprs(&ps[1..]);
+            expr_if(ps[0].clone(), bool(true, None), sub, None)
+        }
+    }
+
+    or_boolean_exprs(&exprs)
 }
 
 // Operator +/- (left associative)
