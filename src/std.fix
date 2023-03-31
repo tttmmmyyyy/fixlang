@@ -414,7 +414,7 @@ namespace Option {
 
 }
 
-type String = unbox struct { _data : Array Byte };
+type String = unbox struct { _data : Array U8 };
 
 namespace String {
 

@@ -9,7 +9,7 @@ pub const IO_NAME: &str = "IO";
 // Primitive types.
 pub const INT_NAME: &str = "I64";
 pub const BOOL_NAME: &str = "Bool";
-pub const BYTE_NAME: &str = "Byte";
+pub const BYTE_NAME: &str = "U8";
 pub const IOSTATE_NAME: &str = "IOState";
 pub const ARRAY_NAME: &str = "Array";
 pub const STRING_NAME: &str = "String";
@@ -166,7 +166,7 @@ pub fn bool_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOOL_NAME)))
 }
 
-// Get Byte type.
+// Get U8 type.
 pub fn byte_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BYTE_NAME)))
 }
@@ -288,7 +288,7 @@ pub fn make_string_from_ptr<'c, 'm>(
     len_with_null_terminator: IntValue<'c>,
     rvo: Option<Object<'c>>,
 ) -> Object<'c> {
-    // Create `Array Byte` which contains null-terminated string.
+    // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
     let array = allocate_obj(
         array_ty,

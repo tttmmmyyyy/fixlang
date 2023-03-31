@@ -826,9 +826,9 @@ Implementing Traits:
 
 `Std::Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
 
-### Std::Byte
+### Std::U8
 
-`Std::Byte` is the type of 8-bit unsigned integers.
+`Std::U8` is the type of 8-bit unsigned integers.
 
 ### Std::IOState
 
