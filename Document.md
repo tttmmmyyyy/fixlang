@@ -10,7 +10,7 @@ The following is a Fix program that calculates the first 30 numbers of Fibonacci
 ```
 module Main;
 
-calc_fib : Int -> Array Int;
+calc_fib : I64 -> Array I64;
 calc_fib = |n| (
     let arr = Array::fill(n, 0);
     let arr = arr.set!(0, 1);
@@ -64,7 +64,7 @@ The usefulness of modules is hard to see in this example. They are useful when y
 The following parts are definitions of two global values `calc_fib` and `main`.
 
 ```
-calc_fib : Int -> Array Int;
+calc_fib : I64 -> Array I64;
 calc_fib = ...; // call this expression A.
 
 main : IOState -> ((), IOState);
@@ -73,7 +73,7 @@ main = ...; // call this expression B.
 
 These lines means that:
 
-- `calc_fib` global value has type `Int -> Array Int` and it's value is defined by expression A.
+- `calc_fib` global value has type `I64 -> Array I64` and it's value is defined by expression A.
 - `main` global value has type `IOState -> ((), IOState)` and it's value is defined by expression B.
 
 In Fix, you have to specify the type of a global value explicitly. 
@@ -95,18 +95,18 @@ Each value in Fix has it's type. You can consider that a type is a set in mathem
 
 The followings are examples of types:
 
-- `Int`: the type of 64-bit signed integers.
+- `I64`: the type of 64-bit signed integers.
 - `Bool`: the type of boolean values (i.e., `true` and `false`).
-- `Array a`: the type of arrays whose elements have type `a`. `Array` is called a type constructor, because it generates types `Array Int` or `Array Bool` when applied to a type. `a` is called a type parameter.
+- `Array a`: the type of arrays whose elements have type `a`. `Array` is called a type constructor, because it generates types `Array I64` or `Array Bool` when applied to a type. `a` is called a type parameter.
 - `String`: the type of strings.
-- `Int -> Array Int`: the type of functions that takes an integer and returns an array of integers.
+- `I64 -> Array I64`: the type of functions that takes an integer and returns an array of integers.
 - `()`: the unit type. This type has a single value which is also written as `()`. 
 - `(a, b)`: the type of pairs of values of `a` and `b`, where `a` and `b` are type parameters.
 - `IOState`: the type whose value corresponds to a state of the world outside the Fix program. For example, printing a string to the standard output can be thought as an operation that changes the external state, and Fix expresses such an operation by a function that takes an `IOState` value and returns updated `IOState` value.
 - `IOState -> ((), IOState)`: the type of functions that update the external state and receive no data. This type is isomorphic to `IOState -> IOState`, but we put a redundant `()` for monadic composition (you don't need to understand this terminology).
-- `Int -> Bool -> Array Bool`: this is equivalent to `Int -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from it's length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
+- `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from it's length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
 
-In Fix, the first letter of the name of a specific type (such as `Int` or `Bool`) or a type constructor (such as `Array`) has to be 
+In Fix, the first letter of the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) has to be 
 capitalized. A type that starts with a lowercase letter is interpreted as a type parameter. Each type parameter will be instanciated to a specific type when the program is compiled.
 
 ## Expressions
@@ -118,7 +118,7 @@ Expression is a sentence which describes a value. The followings are examples of
 - `[1, 2, 3]`: a literal expression which means an integer array with elements `1`, `2` and `3`.
 - `"Hello World!"`: a string literal.
 - `()`: the unit literal, whose type is also written as `()` and called "the unit type".
-- `(1, true)`: a tuple literal, which produces a value of the type `(Int, Bool)`.
+- `(1, true)`: a tuple literal, which produces a value of the type `(I64, Bool)`.
 - `3 + 5`: an expression which means "the integer obtained by adding `3` and `5`".
 - `let x = 3 + 5 in x * x`: an expression which means "Compute `3 + 5` and call the result `x`. Then compute `x * x`."
 - `if c { x + y } else { x - y }`: an expression which means "If a boolean value `c` is `true`, then the value of this expression is `x + y`. Otherwise, the value of this expression is `x - y`".
@@ -155,14 +155,14 @@ n * n;
 Fix's `let`-expression doesn't allow recursive definition. For example, a program
 
 ```
-use_rec_defn : Int;
+use_rec_defn : I64;
 use_rec_defn = let x = x + 3 in x * x;
 ```
 
 cannot be compiled. A program
 
 ```
-use_rec_defn : Int;
+use_rec_defn : I64;
 use_rec_defn = (
     let x = 5;
     let x = x + 3;
@@ -199,12 +199,12 @@ if cache_is_available { "the cached value" };
 To apply a function `f` to a value `x`, write `f(x)`.
 
 ```
-neg(3) // -3 -- `neg` is a built-in function that takes a Int value and returns negative of it.
+neg(3) // -3 -- `neg` is a built-in function that takes a I64 value and returns negative of it.
 ```
 
 As I wrote before, there is no type of "two-variable functions" or "three-variable functions" in Fix. Instead, treat the value of type `a -> b -> c` (which is equal to `a -> (b -> c)`) as a thing like "two-variable function that takes a value of `a` and a value of `b`".　
 
-Let's consider a "two-variable function" `multiply : Int -> Int -> Int` that multiplies two integers. Then `multiply(3) : Int -> Int` is a function that multiplies 3 to the given integer. So `multiply(3)(5)` results in 15. Now, the last expression can be written as `multiply(3, 5)`, because we have a syntax sugar that `f(x, y)` is equivalent to `f(x)(y)`. 
+Let's consider a "two-variable function" `multiply : I64 -> I64 -> I64` that multiplies two integers. Then `multiply(3) : I64 -> I64` is a function that multiplies 3 to the given integer. So `multiply(3)(5)` results in 15. Now, the last expression can be written as `multiply(3, 5)`, because we have a syntax sugar that `f(x, y)` is equivalent to `f(x)(y)`. 
 
 In the program of Fibonacci sequence, the expression `Array::fill(n, 0)` is an example of calling two-variable function `Array::fill` on two values `n` and `0`.
 
@@ -217,7 +217,7 @@ You can make a function value (which is similar to things called "lambda" or "cl
 Functions in fix can "capture" a value defined outside the function definition. As an example, consider the following program.
 
 ```
-fifteen : Int;
+fifteen : I64;
 fifteen = (
     let x = 3;
     let add_x = |n| n + x;
@@ -230,7 +230,7 @@ In the expression `|n| n + x`, `n` is the argument of the function and `x` refer
 Since all values (including functions) in Fix are immutable, the behavior of the function `add_x` will never change after you have defined it. For example, 
 
 ```
-fifteen : Int;
+fifteen : I64;
 fifteen = (
     let x = 3;
     let add_x = |n| n + x;
@@ -290,9 +290,9 @@ The precedence of the operator `.` is lower than function application by parenth
 
 In the program of Fibonacci sequence, the followings are examples of use of operator `.`:
 
-- `arr.get_length`: `get_length` is a function of type `Array a -> Int`, which returns the length of an array. Note that you should not write `arr.get_length()` as if you call a method of a class on an instance in other languages. Remembering syntax sugars `f() == f(())` and `x.f == f(x)`, you can desugar the expression `arr.get_length()` to `get_length((), arr)`, which raises an error because `get_length` takes only one argument.
-- `arr.set!(0, 1)`: `set!` is a function of type `Int -> a -> Array a -> Array a`, which updates an element of an array to the specified value. 
-- `arr.get(idx-1)`: `get` is a function of type `Int -> Array a -> a`, which returns the element at the specified index.
+- `arr.get_length`: `get_length` is a function of type `Array a -> I64`, which returns the length of an array. Note that you should not write `arr.get_length()` as if you call a method of a class on an instance in other languages. Remembering syntax sugars `f() == f(())` and `x.f == f(x)`, you can desugar the expression `arr.get_length()` to `get_length((), arr)`, which raises an error because `get_length` takes only one argument.
+- `arr.set!(0, 1)`: `set!` is a function of type `I64 -> a -> Array a -> Array a`, which updates an element of an array to the specified value. 
+- `arr.get(idx-1)`: `get` is a function of type `I64 -> Array a -> a`, which returns the element at the specified index.
 
 We sometimes call a function of type `Param0 -> ... -> ParamN -> Obj -> Result` as a "method" on the type `Obj` that has N+1 parameters and returns a value of type `Result`. A method can be called by `obj.method(arg0, ..., argN)` as if writing OOP languages.
 
@@ -321,10 +321,10 @@ The precedence between three ways of function application is `f(x)` > `x.f` > `f
 
 Both of let-expression and function expression introduces local names. If the type of the local name is tuple (or, more generally, structs), you can use patterns to destructure the passed value.
 
-For example, let's define a function that takes a value of tuple type `(Int, Bool)`, and returns a value of `(Bool, Int)` by swapping two components. Using built-in functions `@0 : (a, b) -> a` and `@1 : (a, b) -> b` to extract the component from a tuple, you can write:
+For example, let's define a function that takes a value of tuple type `(I64, Bool)`, and returns a value of `(Bool, I64)` by swapping two components. Using built-in functions `@0 : (a, b) -> a` and `@1 : (a, b) -> b` to extract the component from a tuple, you can write:
 
 ```
-swap : (Int, Bool) -> (Bool, Int);
+swap : (I64, Bool) -> (Bool, I64);
 swap = |tuple| (
     let fst = tuple.@0;
     let snd = tuple.@1;
@@ -335,7 +335,7 @@ swap = |tuple| (
 Using pattern, this program can be written as:
 
 ```
-swap : (Int, Bool) -> (Bool, Int);
+swap : (I64, Bool) -> (Bool, I64);
 swap = |tuple| (
     let (fst, snd) = tuple;
     (snd, fst)
@@ -345,7 +345,7 @@ swap = |tuple| (
 or more shortly, 
 
 ```
-swap : (Int, Bool) -> (Bool, Int);
+swap : (I64, Bool) -> (Bool, I64);
 swap = |(fst, snd)| (snd, fst);
 ```
 
@@ -408,10 +408,10 @@ Note that, if you want to create a none value of `Option`, you need to write `no
 
 Although it does not appear in the example Fibonacci program, here I explain how to define your own struct.
 
-For example, you can define a struct called `Product` with two fields `price`  of type `Int` and `sold` of type `Bool` as follows.
+For example, you can define a struct called `Product` with two fields `price`  of type `I64` and `sold` of type `Bool` as follows.
 
 ```
-type Product = struct { price: Int, sold: Bool };
+type Product = struct { price: I64, sold: Bool };
 ```
 
 You can construct a struct value by the syntax `{struct_name} { ({field_name}: {field_value}) } `:
@@ -422,17 +422,17 @@ let product = Product { price: 100, sold: false };
 
 As in the case of unions, there are methods that are automatically defined for structs. For `Price` as above, the following methods are defined in the namespace `Price`.
 
-- `@price : Product -> Int` and `@sold : Product -> Bool`
+- `@price : Product -> I64` and `@sold : Product -> Bool`
     - Extracts the value of a field from a `Product` value.
-- `=price : Int -> Product -> Product` and `=sold : Bool -> Product -> Product`
+- `=price : I64 -> Product -> Product` and `=sold : Bool -> Product -> Product`
     - Modify a `Product` value by setting a field.
-- `mod_price : (Int -> Int) -> Product -> Product` and `mod_sold : (Bool -> Bool) -> Product -> Product`
+- `mod_price : (I64 -> I64) -> Product -> Product` and `mod_sold : (Bool -> Bool) -> Product -> Product`
     - Modify a `Product` value by a function acting on a field.
 
-I already explained that we can use patterns to destructure tuples. You can also use patterns to destructure a struct value. For example, field accessor function `@price : Product -> Int` can be re-defined as follows: 
+I already explained that we can use patterns to destructure tuples. You can also use patterns to destructure a struct value. For example, field accessor function `@price : Product -> I64` can be re-defined as follows: 
 
 ```
-get_price : Product -> Int;
+get_price : Product -> I64;
 get_price = |product| (
     let Product { price: price, sold: sold } = product;
     price
@@ -442,15 +442,15 @@ get_price = |product| (
 or 
 
 ```
-get_price : Product -> Int;
+get_price : Product -> I64;
 get_price = |Product { price: price, sold: sold }| price;
 ```
 
 ## Iterators
 
-Now I explain about the expression `Iterator::from_array(fib).map(to_string).join(", ")`, where `fib : Array Int` is the array of Fibonacci sequence. This expression 
+Now I explain about the expression `Iterator::from_array(fib).map(to_string).join(", ")`, where `fib : Array I64` is the array of Fibonacci sequence. This expression 
 - converts a Fibonacci array into an iterator of integers, 
-- apply `to_string : Int -> String` to each element to obtain the iterator of strings, and
+- apply `to_string : I64 -> String` to each element to obtain the iterator of strings, and
 - concatenates these strings separated by `", "`,
 - results in a string "1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040".
 
@@ -473,7 +473,7 @@ advance = |iter| (iter.@next)();
 
 You can define an iterator that produces infinite sequence of zeros (0, 0, 0, ...) as follows: 
 ```
-zeros : Iterator Int;
+zeros : Iterator I64;
 zeros = Iterator { next: |_| some $ (0, zeros) };
 ```
 
@@ -513,13 +513,13 @@ Going back to the Fibonacci program, there are more two functions related to `It
 
 For example, `Iterator::from_array(["Hello", "World!"]).join(" ") == "Hello World!"`.
 
-In the last, `to_string : Int -> String` is a function that converts an integer to a decimal string.
+In the last, `to_string : I64 -> String` is a function that converts an integer to a decimal string.
 
 ## Mutation in Fix
 
 In the last of this tutorial, I explain the meaning of the exclamation mark of `set!` or `println!` function.
 
-There is also a function without exclamation mark: `set : Int -> a -> Array a -> Array a`. Semantically, both of `Array::set` and `Array::set!` return a new array with one element updated from the original array. 
+There is also a function without exclamation mark: `set : I64 -> a -> Array a -> Array a`. Semantically, both of `Array::set` and `Array::set!` return a new array with one element updated from the original array. 
 
 Remember that an expression in Fix is only a sentence that describes a value. It is essentially the same as a mathematical expression such as "1 + cos(pi/5)^2". There is no concept of "changing the value of a variable" which is ubiquitous in usual languages. For example, consider
 
@@ -536,7 +536,7 @@ The above prints `arr0.get(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is
 More generally, all values of Fix are immutable. Immutability is good for reducing bugs caused by fails on state management, but it can be an obstacle for implementing an algorithm with its optimum time (or space) complexity. Consider the implementation of `calc_fib` function of the example program using `set` instead of `set!`:
 
 ```
-calc_fib : Int -> Array Int;
+calc_fib : I64 -> Array I64;
 calc_fib = |n| (
     let arr = Array::fill(n, 0);
     let arr = arr.set(0, 1);
@@ -571,7 +571,7 @@ main = (
 
 Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and set as pointing to the new array returned by `set` function. This ensures that the old array given to `set` function will be never referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
 
-As a summary, since values in Fix are immutable, the `set : Int -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning an array if the array will not be used later.
+As a summary, since values in Fix are immutable, the `set : I64 -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning an array if the array will not be used later.
 
 The `set!` function is almost same as the `set` function, but it panics (i.e., stop the execution of the program) if the given array will be used later. In other words, there is assurance that `set!` doesn't clone the array. This is useful to assure that a program is running at a expected time complexity. 
 
@@ -635,7 +635,7 @@ You can make recursive global function as usual.
 ```
 module Main;
 
-fib : Int -> Int;
+fib : I64 -> I64;
 fib = |n| (
     if n == 0 {
         0
@@ -671,7 +671,7 @@ Types in Fix are divided into boxed types and unboxed types. Boxed types and unb
 * Value of boxed types are allocated in heap memory. Local names and struct / union fields whose types are boxed are compiled as pointers to the values. 
 * Values of unboxed types are directly embedded into the stack memory, structs and unions. 
 
-In general, types that contain a lot of data (such as `Array`) are suited to be boxed because boxed types have lower copying costs. On the other hand, types containing small data (such as `Int`) can be unboxed to reduce the cost of increasing or decreasing the reference counter.
+In general, types that contain a lot of data (such as `Array`) are suited to be boxed because boxed types have lower copying costs. On the other hand, types containing small data (such as `I64`) can be unboxed to reduce the cost of increasing or decreasing the reference counter.
 
 ### Functions
 
@@ -696,7 +696,7 @@ Structs are boxed by default because they are assumed to have many fields. To de
 
 Example:
 ```
-type Product = unbox struct { price: Int, sold: Bool };
+type Product = unbox struct { price: I64, sold: Bool };
 ```
 
 ### Unions
@@ -704,7 +704,7 @@ type Product = unbox struct { price: Int, sold: Bool };
 Unions are unboxed by default because they only contains a single value at a time. To define boxed union type, write `box` specifier before `struct`.
 
 ```
-type Weight = box union (pound: Int, kilograms: Int);
+type Weight = box union (pound: I64, kilograms: I64);
 ```
 
 ### Type parameters
@@ -757,16 +757,16 @@ If you define a union named `{union}` with a variant `{variant_name}` of type `{
 
 Methods:
 
-- `__unsafe_set_length : Int -> Array a -> Array a`
+- `__unsafe_set_length : I64 -> Array a -> Array a`
     - Updates the length of an array, without uniqueness checking or validation of the given length value.
-- `__unsafe_get : Int -> Array a -> a`
+- `__unsafe_get : I64 -> Array a -> a`
     - Gets a value from an array, without bounds checking and retaining the returned value.
-- `__unsafe_set : Int -> a -> Array a -> Array a`
+- `__unsafe_set : I64 -> a -> Array a -> Array a`
     - Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
 - `append : Array a -> Array a -> Array a`
     - Append an array to an array.
     - Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
-- `fill : Int -> a -> Array a`
+- `fill : I64 -> a -> Array a`
     - Creates an array filled with the initial value.
     - The capacity is set to the same value as the length.
     - `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
@@ -776,21 +776,21 @@ Methods:
 - `force_unique! : Array a -> Array a`
     - Force the uniqueness of an array.
     - If the given array is shared, this function panics.
-- `from_map : Int -> (Int -> a) -> Array a`
+- `from_map : I64 -> (I64 -> a) -> Array a`
     - Creates an array by a mapping function.
     - `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
-- `get : Int -> Array a -> a`
+- `get : I64 -> Array a -> a`
     - Returns an element of an array at an index.
-- `get_length : Array a -> Int`
+- `get_length : Array a -> I64`
     - Returns the length of an array.
-- `get_capacity : Array a -> Int`
+- `get_capacity : Array a -> I64`
     - Returns the capacity of an array.
-- `make_empty : Int -> Array a`
+- `make_empty : I64 -> Array a`
     - Creates an empty array with specified capacity.
-- `mod : Int -> (a -> a) -> Array a -> Array a`
+- `mod : I64 -> (a -> a) -> Array a -> Array a`
     - Modifies a value of an element at the specified index of an array by a function.
     - This function clones the array if it is shared between multiple references.
-- `mod! : Int -> (a -> a) -> Array a -> Array a`
+- `mod! : I64 -> (a -> a) -> Array a -> Array a`
     - This function clones the array if it is shared between multiple references.
     - This function always update the array. If the array is shared between multiple references, this function panics.  
 - `pop_back : Array a -> Array a`
@@ -798,25 +798,25 @@ Methods:
     - If the array is empty, this function does nothing.
 - `push_back : a -> Array a -> Array a`
     - Push an element to the back of an array.
-- `reduce_length : Int -> Array a -> Array a`
+- `reduce_length : I64 -> Array a -> Array a`
     - Reduce the length of an array.
-- `reserve : Int -> Array a -> Array a`
+- `reserve : I64 -> Array a -> Array a`
     - Reserves the memory region for an array.
-- `set : Int -> a -> Array a -> Array a`
+- `set : I64 -> a -> Array a -> Array a`
     - Updates a value of an element at an index of an array.
     - This function clones the given array if it is shared between multiple references.
-- `set! : Int -> a -> Array a -> Array a`
+- `set! : I64 -> a -> Array a -> Array a`
     - Updates a value of an element at an index of an array.
     - This function always update the given array. If the given array is shared between multiple references, this function panics.
 - `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
     - Sort elements in an array by "less than" comparator.
-- `_sort_range_by_using_buffer : Array a -> Int -> Int -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
+- `_sort_range_by_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
     - Sort elements in a range of an array by "less than" comparator.
     - This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
 You can create array by the array literal syntax `[a0, a1, ..., an]`.
 
-NOTE: In a future, we will add lens functions such as `act : [f: Functor] Int -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
+NOTE: In a future, we will add lens functions such as `act : [f: Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
 
 Implementing Traits:
 
@@ -847,13 +847,13 @@ Methods:
 - `println! : String -> IOState -> ((), IOState)`
     - Prints a string and a newline to standard output.
 
-### Std::Int
+### Std::I64
 
-`Std::Int` is the type of 64-bit signed integers.
+`Std::I64` is the type of 64-bit signed integers.
 
 Methods:
 
-- `Std::Int._int_to_string : Int -> String`
+- `Std::I64._int_to_string : I64 -> String`
     - Convert an integer to a decimal number string.
     - Implementation of trait method `Std::ToString.to_string`.
 
@@ -872,13 +872,13 @@ Methods:
 - `append : Iterator a -> Iterator a -> Iterator a`
     - Append an iterator to a iterator.
     - Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
-- `count_up : Int -> Iterator Int`
+- `count_up : I64 -> Iterator I64`
     - Create an iterator that counts up from a number.
     - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)
-- `get_length : Iterator a -> Int`
+- `get_length : Iterator a -> I64`
     - Counts the length of an iterator.
 - `intersperse : a -> Iterator a -> Iterator a`
-    - Intersperse an elemnt between elements of an iterator.
+    - I64ersperse an elemnt between elements of an iterator.
     - Example: `Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])`
 - `make_empty : Iterator a`
     - Creates an empty iterator.
@@ -891,7 +891,7 @@ Methods:
     - `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
 - `from_array : Array a -> Iterator a`
     - Create iterator from an array.
-- `from_map : (Int -> a) -> Iterator a`
+- `from_map : (I64 -> a) -> Iterator a`
     - Create iterator from mapping function.
     - `from_map(f) = [f(0), f(1), f(2), ...]`
 - `map : map : (a -> b) -> Iterator a -> Iterator b`
@@ -901,7 +901,7 @@ Methods:
     - Append an element to an iterator.
 - `reverse : Iterator a -> Iterator a`
     - Reverse an iterator.
-- `take : Int -> Iterator a -> Iterator a`
+- `take : I64 -> Iterator a -> Iterator a`
     - Take at most n elements from an iterator.
 - `zip : Iterator a -> Iterator b -> Iterator (a, b)`
     - Zip two iterators.
@@ -939,7 +939,7 @@ Methods:
     - Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
 - `concat_iter : Iterator String -> String`
     - Concatenate an iterator of strings.
-- `get_length : String -> Int`
+- `get_length : String -> I64`
     - Returns the length of the string.
 
 Implementing Traits:

@@ -7,7 +7,7 @@ pub const DEBUG_NAME: &str = "Debug";
 pub const IO_NAME: &str = "IO";
 
 // Primitive types.
-pub const INT_NAME: &str = "Int";
+pub const INT_NAME: &str = "I64";
 pub const BOOL_NAME: &str = "Bool";
 pub const BYTE_NAME: &str = "Byte";
 pub const IOSTATE_NAME: &str = "IOState";
@@ -156,7 +156,7 @@ pub fn make_kind_fun(arity: u32) -> Rc<Kind> {
 pub const LOOP_RESULT_NAME: &str = "LoopResult";
 pub const TUPLE_NAME: &str = "Tuple";
 
-// Get Int type.
+// Get I64 type.
 pub fn int_lit_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], INT_NAME)))
 }
@@ -404,7 +404,7 @@ pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// int_to_string : Int -> String
+// int_to_string : I64 -> String
 pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const VAL_NAME: &str = "val";
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
@@ -504,7 +504,7 @@ fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     )
 }
 
-// "Array::fill : Int -> a -> Array a" built-in function.
+// "Array::fill : I64 -> a -> Array a" built-in function.
 // Creates an array with same capacity.
 pub fn fill_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
@@ -811,7 +811,7 @@ fn read_array_lit(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     expr_lit(generator, free_vars, name, elem_ty, None)
 }
 
-// "Array::get : Array a -> Int -> a" built-in function.
+// "Array::get : Array a -> I64 -> a" built-in function.
 pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx")],
@@ -1187,7 +1187,7 @@ pub fn get_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// `Array::get_capacity : Array a -> Int` built-in function.
+// `Array::get_capacity : Array a -> I64` built-in function.
 pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARR_NAME: &str = "arr";
 

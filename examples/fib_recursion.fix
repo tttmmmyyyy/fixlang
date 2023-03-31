@@ -1,6 +1,6 @@
 module Main;
 
-fib : Int -> Int;
+fib : I64 -> I64;
 fib = |n| (
     if n == 0 {
         0

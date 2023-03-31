@@ -1,6 +1,6 @@
 module Main;
 
-count : Int -> Int;
+count : I64 -> I64;
 count = |n| (
     loop((0, 0, n), |(i, sum, n)|
         if i == n { break $ sum };

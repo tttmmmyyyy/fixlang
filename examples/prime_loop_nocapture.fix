@@ -1,6 +1,6 @@
 module Main;
 
-is_prime : Int -> Array Bool;
+is_prime : I64 -> Array Bool;
 is_prime = |n| (
     let arr = Array::fill(n, true);
     let arr = arr.set!(0, false);
@@ -19,7 +19,7 @@ is_prime = |n| (
 );
 
 // Count the appearance of a value in an array.
-count : [a: Eq] a -> Array a -> Int;
+count : [a: Eq] a -> Array a -> I64;
 count = |elem, arr| (
     loop((0, 0, arr, elem), |(i, sum, arr, elem)|
         if arr.get_length == i { break $ sum };

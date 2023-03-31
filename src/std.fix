@@ -30,7 +30,7 @@ namespace Array {
     );
 
     // Creates an array by a mapping function.
-    from_map : Int -> (Int -> a) -> Array a;
+    from_map : I64 -> (I64 -> a) -> Array a;
     from_map = |size, map| (
         let arr = Array::make_empty(size).__unsafe_set_length(size);
         loop((0, arr), |(idx, arr)|(
@@ -68,7 +68,7 @@ namespace Array {
     );
 
     // Reduce the length of an array.
-    reduce_length : Int -> Array a -> Array a;
+    reduce_length : I64 -> Array a -> Array a;
     reduce_length = |length, vec| (
         loop(vec, |vec|(
             if length >= vec.get_length { break $ vec };
@@ -78,7 +78,7 @@ namespace Array {
 
     // Reserves the memory region for an array.
     // TODO: change to more optimized implementation.
-    reserve : Int -> Array a -> Array a;
+    reserve : I64 -> Array a -> Array a;
     reserve = |cap, arr| (
         if cap <= arr.get_capacity { arr };
         let len = arr.get_length;
@@ -103,7 +103,7 @@ namespace Array {
 
     // Sort elements in a range of a vector by "less than" comparator.
     // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
-    _sort_range_by_using_buffer : Array a -> Int -> Int -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
+    _sort_range_by_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
     _sort_range_by_using_buffer = |buffer, begin, end, less_than, vec| (
         // Merge sorting.
         let len = end - begin;
@@ -191,8 +191,8 @@ namespace Debug {
     );
 }
 
-impl Int : ToString {
-    to_string = Int::_int_to_string;
+impl I64 : ToString {
+    to_string = I64::_int_to_string;
 }
 
 namespace IOState {
@@ -224,7 +224,7 @@ namespace Iterator {
 
     // Creates an iterator that counts up from a number.
     // count_up(n) = [n, n+1, n+2, ...]
-    count_up : Int -> Iterator Int;
+    count_up : I64 -> Iterator I64;
     count_up = |i| (
         let next = |_| (
             some $ (i, Iterator::count_up(i+1))
@@ -233,10 +233,10 @@ namespace Iterator {
     );
 
     // Counts the length of an iterator.
-    get_length : Iterator a -> Int;
+    get_length : Iterator a -> I64;
     get_length = fold(0, |acm, _| acm + 1);
 
-    // Intersperse an elemnt between elements of an iterator.
+    // I64ersperse an elemnt between elements of an iterator.
     // Example: 
     // ```
     // Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])
@@ -297,7 +297,7 @@ namespace Iterator {
 
     // Creates iterator from mapping function.
     // from_map(f) = [f(0), f(1), f(2), ...]
-    from_map : (Int -> a) -> Iterator a;
+    from_map : (I64 -> a) -> Iterator a;
     from_map = |f| count_up(0).map(f);
 
     // Takes the last element of an iterator.
@@ -356,7 +356,7 @@ namespace Iterator {
     );
 
     // Take at most n elements from an iterator.
-    take : Int -> Iterator a -> Iterator a;
+    take : I64 -> Iterator a -> Iterator a;
     take = |n, iter| (
         let next = |_| (
             if n == 0 { none() };
@@ -437,7 +437,7 @@ namespace String {
     );
 
     // Get the length of a string.
-    get_length : String -> Int;
+    get_length : String -> I64;
     get_length = |s| s.@_data.get_length - 1; // exclude null terminator
 
     // Join strings by a separator.

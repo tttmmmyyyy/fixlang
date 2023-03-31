@@ -448,7 +448,7 @@ pub fn test22_7() {
     let source = r#"
         module Main;
 
-        fib : Int -> Int;
+        fib : I64 -> I64;
         fib = |n| (
             if n == 0 {
                 0
@@ -578,7 +578,7 @@ pub fn test28() {
             let arr = Array::fill(31, 0);
             let arr = arr.set!(0, 0);
             let arr = arr.set!(1, 1);
-            let loop = fix $ |f, arr: Array Int, n| (
+            let loop = fix $ |f, arr: Array I64, n| (
                 if n == 31 {
                     arr
                 } else {
@@ -672,13 +672,13 @@ pub fn test33() {
     // Test struct declaration and new, mod.
     let source = r#"
         module Main;
-        type IntBool = struct {x: Int, y: Bool};
+        type I64Bool = struct {x: I64, y: Bool};
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool { x: 18, y: false };
-            let obj = IntBool::mod_x(|x| x + 42, obj);
-            let u = assert_eq("", IntBool::@x(obj), 60);
+            let obj = I64Bool { x: 18, y: false };
+            let obj = I64Bool::mod_x(|x| x + 42, obj);
+            let u = assert_eq("", I64Bool::@x(obj), 60);
             pure()
         );
         "#;
@@ -691,13 +691,13 @@ pub fn test34_5() {
     // Test unboxed struct declaration and new, mod.
     let source = r#"
         module Main;
-        type IntBool = unbox struct {x: Int, y: Bool};
+        type I64Bool = unbox struct {x: I64, y: Bool};
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool { x: 18, y : false};
-            let obj = IntBool::mod_x(|x| x + 42, obj);
-            let u = assert_eq("", IntBool::@x(obj), 60);
+            let obj = I64Bool { x: 18, y : false};
+            let obj = I64Bool::mod_x(|x| x + 42, obj);
+            let u = assert_eq("", I64Bool::@x(obj), 60);
             pure()
         );
         "#;
@@ -711,12 +711,12 @@ pub fn test34() {
     let source = r#"
         module Main;        
         
-        type OtherStruct = struct {y: Int, x: Bool};
-        type IntBool = struct {x: Int, y: Bool};
+        type OtherStruct = struct {y: I64, x: Bool};
+        type I64Bool = struct {x: I64, y: Bool};
 
         main : IOState -> ((), IOState);
         main = (
-            let obj = IntBool {x: 18, y: false};
+            let obj = I64Bool {x: 18, y: false};
             let obj = obj.mod_x(|x| x + 42);
             let u = assert_eq("", obj.@x, 60);
             pure()
@@ -732,8 +732,8 @@ pub fn test35() {
     let source = r#"
         module Main;
 
-        type A = struct {x: Int, y: Bool};
-        type B = struct {x: Bool, y: Int};
+        type A = struct {x: I64, y: Bool};
+        type B = struct {x: Bool, y: I64};
             
         main : IOState -> ((), IOState);
         main = (
@@ -755,7 +755,7 @@ pub fn test36() {
         module Main;
 
         type A = struct {x: B};
-        type B = struct {x: Int};
+        type B = struct {x: I64};
             
         main : IOState -> ((), IOState);
         main = (
@@ -777,7 +777,7 @@ pub fn test37() {
         module Main;
 
         type A = struct {x: B};
-        type B = struct {x: Int};
+        type B = struct {x: I64};
 
         main : IOState -> ((), IOState);
         main = (
@@ -799,7 +799,7 @@ pub fn test37_5() {
         module Main;
 
         type A = struct {x: B};
-        type B = struct {x: Int};
+        type B = struct {x: I64};
 
         main : IOState -> ((), IOState);
         main = (
@@ -821,7 +821,7 @@ pub fn test38() {
         module Main;
 
         type A = struct {x: B};
-        type B = struct {x: Int};
+        type B = struct {x: I64};
 
         main : IOState -> ((), IOState);
         main = (    
@@ -844,7 +844,7 @@ pub fn test39() {
         module Main;
 
         type A = struct {x: B};
-        type B = struct {x: Int};
+        type B = struct {x: I64};
         
         main : IOState -> ((), IOState);
         main = (
@@ -867,7 +867,7 @@ pub fn test40() {
         module Main;
 
         type A = struct {x: B};
-        type B = struct {x: Int};
+        type B = struct {x: I64};
         
         main : IOState -> ((), IOState);
         main = (
@@ -891,7 +891,7 @@ pub fn test41() {
         
         main : IOState -> ((), IOState);
         main = (
-            let x: Int -> Int = |x| x;
+            let x: I64 -> I64 = |x| x;
             let ans = x(42);
             let u = assert_eq("", ans, 42);
             pure()
@@ -909,7 +909,7 @@ pub fn test41_5() {
         
         main : IOState -> ((), IOState);
         main = (
-            let x = |x: Int| x;
+            let x = |x: I64| x;
             let ans = x(42);
             let u = assert_eq("", ans, 42);
             pure()
@@ -927,7 +927,7 @@ pub fn test42() {
         r#"
             module Main;
             
-            loop : Int -> Int;
+            loop : I64 -> I64;
             loop = |x| if x == 0 {{ 0 }} else {{ add(x) $ loop $ add(x, -1) }};
     
             main : IOState -> ((), IOState);
@@ -952,7 +952,7 @@ pub fn test43() {
         r#"
             module Main;
             
-            my_loop : Int -> Int -> Int;
+            my_loop : I64 -> I64 -> I64;
             my_loop = |x, acc| if x == 0 {{ acc }} else {{ my_loop(x + -1, acc + x) }};
     
             main : IOState -> ((), IOState);
@@ -975,22 +975,22 @@ pub fn test44() {
     let source = r#"
         module Main;
 
-        trait a : ToInt {
-            toInt : a -> Int;
+        trait a : ToI64 {
+            toI64 : a -> I64;
         }
 
-        impl Int : ToInt {
-            toInt = |x| x;
+        impl I64 : ToI64 {
+            toI64 = |x| x;
         }
 
-        impl Bool : ToInt {
-            toInt = |b| if b { 0 } else { -1 };
+        impl Bool : ToI64 {
+            toI64 = |b| if b { 0 } else { -1 };
         }
 
-        add_head_and_next : [a: ToInt] Array a -> Int; 
+        add_head_and_next : [a: ToI64] Array a -> I64; 
         add_head_and_next = |arr| (
-            let head = arr.get(0).toInt;
-            let next = arr.get(1).toInt;
+            let head = arr.get(0).toI64;
+            let next = arr.get(1).toI64;
             add(head, next)
         );
 
@@ -1004,7 +1004,7 @@ pub fn test44() {
             let arr1 = arr1.set!(1, 5);
             let z = add_head_and_next(arr1);
 
-            let y = toInt(5) + toInt(false);
+            let y = toI64(5) + toI64(false);
             let ans = x + y + z;
             let u = assert_eq("", ans, 11);
             pure()
@@ -1020,7 +1020,7 @@ pub fn test44_5() {
     let source = r#"
         module Main;
 
-        sum : Array Int -> Int;
+        sum : Array I64 -> I64;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
                 if idx == arr.get_length { sum };
@@ -1057,7 +1057,7 @@ pub fn test45() {
             );
         }
 
-        sum : Array Int -> Int;
+        sum : Array I64 -> I64;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
                 if idx == arr.get_length { sum };
@@ -1085,10 +1085,10 @@ pub fn test46() {
     let source = r#"
         module Main;
 
-        x : Int;
+        x : I64;
         x = 5;
 
-        y : Int;
+        y : I64;
         y = 7;
 
         main : IOState -> ((), IOState);
@@ -1108,7 +1108,7 @@ pub fn test47() {
     let source = r#"
         module Main;
 
-        type IntOrBool = union {int : Int, bool: Bool};
+        type I64OrBool = union {int : I64, bool: Bool};
 
         main : IOState -> ((), IOState);
         main = (
@@ -1131,7 +1131,7 @@ pub fn test47_2() {
     let source = r#"
         module Main;
 
-        type IntOrBool = box union {int : Int, bool: Bool};
+        type I64OrBool = box union {int : I64, bool: Bool};
 
         main : IOState -> ((), IOState);
         main = (
@@ -1154,7 +1154,7 @@ pub fn test47_5() {
     let source = r#"
         module Main;
 
-        type Union = union {val: Int, func: Int -> Int};
+        type Union = union {val: I64, func: I64 -> I64};
 
         main : IOState -> ((), IOState);
         main = (
@@ -1264,7 +1264,7 @@ pub fn test51() {
         );
     }
 
-    search : [a: Eq] a -> Array a -> Int;
+    search : [a: Eq] a -> Array a -> I64;
     search = |elem, arr| loop(0) $ |idx| (
         if idx == arr.get_length {
             break $ -1
@@ -1297,10 +1297,10 @@ pub fn test52() {
     let source = r#"
     module Main;
 
-    type SieveState = struct {i: Int, arr: Array Bool};
+    type SieveState = struct {i: I64, arr: Array Bool};
     
     // Calculate a Bool array whose element is true iff idx is prime.
-    is_prime : Int -> Array Bool;
+    is_prime : I64 -> Array Bool;
     is_prime = |n| (
         let arr = Array::fill(n, true);
         let arr = arr.set!(0, false);
@@ -1327,7 +1327,7 @@ pub fn test52() {
     );
 
     // Count the appearance of a value in an array.
-    count : [a: Eq] a -> Array a -> Int;
+    count : [a: Eq] a -> Array a -> I64;
     count = |elem, arr| (
         loop((0, 0)) $ |state| (
             let i = state.@0;
@@ -1494,15 +1494,15 @@ pub fn test59() {
     module Main;
     
     namespace A {
-        x : Int;
+        x : I64;
         x = 3;
 
-        y : Int;
+        y : I64;
         y = 1;
     }
 
     namespace B {
-        x : Int;
+        x : I64;
         x = 5;
 
         y : Bool;
@@ -1578,7 +1578,7 @@ pub fn test62() {
 #[test]
 #[serial]
 pub fn test63() {
-    // Test Int ToString.
+    // Test I64 ToString.
     let source = r#"
     module Main;
 
@@ -1637,7 +1637,7 @@ pub fn test66() {
     let source = r#"
     module Main;
 
-    type State = unbox struct {idx: Int, sum: Int};
+    type State = unbox struct {idx: I64, sum: I64};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1663,7 +1663,7 @@ pub fn test67() {
     let source = r#"
     module Main;
 
-    type State = box struct {idx: Int, sum: Int};
+    type State = box struct {idx: I64, sum: I64};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1689,12 +1689,12 @@ pub fn test68() {
     let source = r#"
     module Main;
 
-    type IntOrBool = unbox union {int: Int, bool: Bool};
+    type I64OrBool = unbox union {int: I64, bool: Bool};
 
     main : IOState -> ((), IOState);
     main = (
-        let u = IntOrBool::int(42);
-        let IntOrBool::int(x) = u;
+        let u = I64OrBool::int(42);
+        let I64OrBool::int(x) = u;
         let u = assert_eq("", x, 42);
         pure()
     );
@@ -1709,12 +1709,12 @@ pub fn test69() {
     let source = r#"
     module Main;
 
-    type IntOrBool = box union {int: Int, bool: Bool};
+    type I64OrBool = box union {int: I64, bool: Bool};
 
     main : IOState -> ((), IOState);
     main = (
-        let u = IntOrBool::bool(true);
-        let IntOrBool::bool(x) = u;
+        let u = I64OrBool::bool(true);
+        let I64OrBool::bool(x) = u;
         let u = assert_eq("", x, true);
         pure()
     );
@@ -1729,7 +1729,7 @@ pub fn test70() {
     let source = r#"
     module Main;
 
-    type Union = union {left: (Int, String), right: Bool};
+    type Union = union {left: (I64, String), right: Bool};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1749,8 +1749,8 @@ pub fn test71() {
     let source = r#"
     module Main;
 
-    type Struct = struct {uni: Union, value: Int};
-    type Union = union {left: (Int, String), right: Bool};
+    type Struct = struct {uni: Union, value: I64};
+    type Union = union {left: (I64, String), right: Bool};
 
     main : IOState -> ((), IOState);
     main = (
@@ -1794,11 +1794,11 @@ pub fn test73() {
     let source = r#"
     module Main;
 
-    type IntBool = struct {x: Int, y: Bool};
+    type I64Bool = struct {x: I64, y: Bool};
 
     main : IOState -> ((), IOState);
     main = (
-        let int_bool = IntBool { y: true, x: 42 };
+        let int_bool = I64Bool { y: true, x: 42 };
         let u = assert_eq("", int_bool.@x, 42);
         let u = assert_eq("", int_bool.@y, true);
         pure()
@@ -1814,11 +1814,11 @@ pub fn test74() {
     let source = r#"
     module Main;
 
-    type IntBool = struct {x: Int, y: Bool};
+    type I64Bool = struct {x: I64, y: Bool};
 
     main : IOState -> ((), IOState);
     main = (
-        let int_bool = IntBool { y: false, x: 0 };
+        let int_bool = I64Bool { y: false, x: 0 };
         let int_bool = int_bool.=x(3);
         let u = assert_eq("", int_bool.@x, 3);
         let int_bool = int_bool.=x!(5);
@@ -2007,7 +2007,7 @@ pub fn test82() {
         let _ = assert_eq("wrong element (2+0)", v.get(1), 2);
 
         // Test 0+0
-        let v1: Array (Int -> Bool) = [];
+        let v1: Array (I64 -> Bool) = [];
         let v2 = [];
         let v = v1.append(v2);
         let _ = assert_eq("wrong capacity (0+0)", v.get_capacity, 0);
@@ -2120,7 +2120,7 @@ pub fn test84() {
         let v2 = [0];
         let _ = assert("", v1 != v2);
     
-        let v1: Array Int = [];
+        let v1: Array I64 = [];
         let v2 = [];
         let _ = assert("", v1 == v2);
     
@@ -2246,7 +2246,7 @@ pub fn test89() {
         let rhs = Iterator::from_array([]);
         let _ = assert_eq("", lhs + rhs, Iterator::from_array([1,2,3]));
 
-        let lhs: Iterator Int = Iterator::from_array([]);
+        let lhs: Iterator I64 = Iterator::from_array([]);
         let rhs = Iterator::from_array([]);
         let _ = assert_eq("", lhs + rhs, Iterator::from_array([]));
     
@@ -2274,7 +2274,7 @@ pub fn test90() {
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
         let _ = assert_eq("wrong result 1", vec, [1]);
 
-        let vec: Array Int = [];
+        let vec: Array I64 = [];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
         let _ = assert_eq("wrong result 0", vec, []);
 

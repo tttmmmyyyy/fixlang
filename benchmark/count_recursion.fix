@@ -1,9 +1,9 @@
 module Main;
 
-count : Int -> Int;
+count : I64 -> I64;
 count = |n| count_loop(n, 0, 0);
 
-count_loop : Int -> Int -> Int -> Int;
+count_loop : I64 -> I64 -> I64 -> I64;
 count_loop = |n, i, sum| (
     if i == n { sum };
     let sum = sum + 1;

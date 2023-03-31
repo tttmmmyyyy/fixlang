@@ -40,7 +40,7 @@ main = |io| (
     let nl = mk_list([mk_elem(1), mk_list([mk_elem(2), mk_list([mk_elem(3), mk_elem(4)]), mk_elem(5)])]);
     let ((), io) = io.println!(nl.flatten.to_string);
     
-    let nl: NestedList Int  = mk_list([]);
+    let nl: NestedList I64  = mk_list([]);
     let ((), io) = io.println!(nl.flatten.to_string);
 
     io.pure()
