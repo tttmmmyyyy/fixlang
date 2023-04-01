@@ -7,9 +7,11 @@ pub const DEBUG_NAME: &str = "Debug";
 pub const IO_NAME: &str = "IO";
 
 // Primitive types.
+pub const PTR_NAME: &str = "Ptr";
+pub const U8_NAME: &str = "U8";
+pub const I32_NAME: &str = "I32";
 pub const I64_NAME: &str = "I64";
 pub const BOOL_NAME: &str = "Bool";
-pub const U8_NAME: &str = "U8";
 pub const IOSTATE_NAME: &str = "IOState";
 pub const ARRAY_NAME: &str = "Array";
 pub const STRING_NAME: &str = "String";
@@ -18,6 +20,36 @@ pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";
 
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], PTR_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], U8_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], I32_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+        },
+    );
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], I64_NAME)),
         TyConInfo {
@@ -30,16 +62,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     );
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], BOOL_NAME)),
-        TyConInfo {
-            kind: kind_star(),
-            variant: TyConVariant::Primitive,
-            is_unbox: true,
-            tyvars: vec![],
-            fields: vec![],
-        },
-    );
-    ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U8_NAME)),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::Primitive,
@@ -156,38 +178,48 @@ pub fn make_kind_fun(arity: u32) -> Rc<Kind> {
 pub const LOOP_RESULT_NAME: &str = "LoopResult";
 pub const TUPLE_NAME: &str = "Tuple";
 
+// Get Ptr type.
+pub fn make_ptr_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], PTR_NAME)))
+}
+
+// Get U8 type.
+pub fn make_u8_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U8_NAME)))
+}
+
+// Get I32 type.
+pub fn make_i32_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I32_NAME)))
+}
+
 // Get I64 type.
-pub fn int_lit_ty() -> Rc<TypeNode> {
+pub fn make_i64_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I64_NAME)))
 }
 
 // Get Bool type.
-pub fn bool_lit_ty() -> Rc<TypeNode> {
+pub fn make_bool_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOOL_NAME)))
 }
 
-// Get U8 type.
-pub fn byte_lit_ty() -> Rc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U8_NAME)))
-}
-
 // Get Array type.
-pub fn array_lit_ty() -> Rc<TypeNode> {
+pub fn make_array_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
 // Get IOState type.
-pub fn iostate_lit_ty() -> Rc<TypeNode> {
+pub fn make_iostate_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
 }
 
 // Get String type.
-pub fn string_lit_ty() -> Rc<TypeNode> {
+pub fn make_string_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
 }
 
 // Get LoopResult type.
-pub fn loop_result_ty() -> Rc<TypeNode> {
+pub fn make_loop_result_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
 }
 
@@ -238,8 +270,8 @@ pub fn unit_ty() -> Rc<TypeNode> {
 
 // Get type IOState -> (output_ty, IOState).
 pub fn io_runner_ty(output_ty: Rc<TypeNode>) -> Rc<TypeNode> {
-    let result_ty = make_tuple_ty(vec![output_ty, iostate_lit_ty()]);
-    type_fun(iostate_lit_ty(), result_ty.clone())
+    let result_ty = make_tuple_ty(vec![output_ty, make_iostate_ty()]);
+    type_fun(make_iostate_ty(), result_ty.clone())
 }
 
 pub fn int(val: i64, source: Option<Span>) -> Rc<ExprNode> {
@@ -259,7 +291,7 @@ pub fn int(val: i64, source: Option<Span>) -> Rc<ExprNode> {
         obj.store_field_nocap(gc, 0, value);
         obj
     });
-    expr_lit(generator, vec![], val.to_string(), int_lit_ty(), source)
+    expr_lit(generator, vec![], val.to_string(), make_i64_ty(), source)
 }
 
 pub fn bool(val: bool, source: Option<Span>) -> Rc<ExprNode> {
@@ -279,7 +311,7 @@ pub fn bool(val: bool, source: Option<Span>) -> Rc<ExprNode> {
         obj.store_field_nocap(gc, 0, value);
         obj
     });
-    expr_lit(generator, vec![], val.to_string(), bool_lit_ty(), source)
+    expr_lit(generator, vec![], val.to_string(), make_bool_ty(), source)
 }
 
 pub fn make_string_from_ptr<'c, 'm>(
@@ -289,7 +321,7 @@ pub fn make_string_from_ptr<'c, 'm>(
     rvo: Option<Object<'c>>,
 ) -> Object<'c> {
     // Create `Array U8` which contains null-terminated string.
-    let array_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+    let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
     let array = allocate_obj(
         array_ty,
         &vec![],
@@ -312,7 +344,7 @@ pub fn make_string_from_ptr<'c, 'm>(
     // Allocate String and store the array into it.
     let string = if rvo.is_none() {
         allocate_obj(
-            string_lit_ty(),
+            make_string_ty(),
             &vec![],
             None,
             gc,
@@ -347,7 +379,7 @@ pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<
         generator,
         vec![],
         "string_literal".to_string(),
-        string_lit_ty(),
+        make_string_ty(),
         source,
     )
 }
@@ -455,7 +487,7 @@ pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
-        type_fun(int_lit_ty(), string_lit_ty()),
+        type_fun(make_i64_ty(), make_string_ty()),
     );
     let expr = expr_abs(
         vec![var_local(VAL_NAME)],
@@ -463,7 +495,7 @@ pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
             generator,
             vec![FullName::local(VAL_NAME)],
             format!("int_to_string {}", VAL_NAME),
-            string_lit_ty(),
+            make_string_ty(),
             None,
         ),
         None,
@@ -499,7 +531,7 @@ fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
         generator,
         free_vars,
         name,
-        type_tyapp(array_lit_ty(), type_tyvar_star(a)),
+        type_tyapp(make_array_ty(), type_tyvar_star(a)),
         None,
     )
 }
@@ -520,10 +552,10 @@ pub fn fill_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         HashMap::from([("a".to_string(), kind_star())]),
         vec![],
         type_fun(
-            int_lit_ty(),
+            make_i64_ty(),
             type_fun(
                 type_tyvar_star("a"),
-                type_tyapp(array_lit_ty(), type_tyvar_star("a")),
+                type_tyapp(make_array_ty(), type_tyvar_star("a")),
             ),
         ),
     );
@@ -560,7 +592,7 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
     });
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar);
 
     let expr = expr_abs(
         vec![var_local(CAP_NAME)],
@@ -576,7 +608,7 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
         vec![],
-        type_fun(int_lit_ty(), array_ty),
+        type_fun(make_i64_ty(), array_ty),
     );
     (expr, scm)
 }
@@ -607,7 +639,7 @@ pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     });
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
         vec![var_local(IDX_NAME)],
@@ -637,7 +669,7 @@ pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
         vec![],
         type_fun(
-            int_lit_ty(),
+            make_i64_ty(),
             type_fun(elem_tyvar.clone(), type_fun(array_ty.clone(), array_ty)),
         ),
     );
@@ -671,7 +703,7 @@ pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     });
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
         vec![var_local(IDX_NAME)],
@@ -692,7 +724,7 @@ pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
         vec![],
-        type_fun(int_lit_ty(), type_fun(array_ty, elem_tyvar.clone())),
+        type_fun(make_i64_ty(), type_fun(array_ty, elem_tyvar.clone())),
     );
     (expr, scm)
 }
@@ -721,7 +753,7 @@ pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     });
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
         vec![var_local(LENGTH_NAME)],
@@ -742,7 +774,7 @@ pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
         vec![],
-        type_fun(int_lit_ty(), type_fun(array_ty.clone(), array_ty)),
+        type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
     );
     (expr, scm)
 }
@@ -826,9 +858,9 @@ pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         HashMap::from([("a".to_string(), kind_star())]),
         vec![],
         type_fun(
-            int_lit_ty(),
+            make_i64_ty(),
             type_fun(
-                type_tyapp(array_lit_ty(), type_tyvar_star("a")),
+                type_tyapp(make_array_ty(), type_tyvar_star("a")),
                 type_tyvar_star("a"),
             ),
         ),
@@ -973,7 +1005,7 @@ fn set_array_lit(
         generator,
         free_vars,
         name,
-        type_tyapp(array_lit_ty(), elem_ty),
+        type_tyapp(make_array_ty(), elem_ty),
         None,
     )
 }
@@ -993,12 +1025,12 @@ pub fn set_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
         ),
         None,
     );
-    let array_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
+    let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
     let scm = Scheme::generalize(
         HashMap::from([("a".to_string(), kind_star())]),
         vec![],
         type_fun(
-            int_lit_ty(),
+            make_i64_ty(),
             type_fun(type_tyvar_star("a"), type_fun(array_ty.clone(), array_ty)),
         ),
     );
@@ -1059,7 +1091,7 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     });
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
         vec![var_local(INDEX_NAME)],
@@ -1094,7 +1126,7 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
         HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
         vec![],
         type_fun(
-            int_lit_ty(),
+            make_i64_ty(),
             type_fun(
                 type_fun(elem_tyvar.clone(), elem_tyvar),
                 type_fun(array_ty.clone(), array_ty),
@@ -1121,7 +1153,7 @@ pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
     });
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
         vec![var_local(ARRAY_NAME)],
@@ -1159,7 +1191,7 @@ pub fn get_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             .into_int_value();
         gc.release(array_obj);
         let int_obj = if rvo.is_none() {
-            allocate_obj(int_lit_ty(), &vec![], None, gc, Some("length_of_arr"))
+            allocate_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"))
         } else {
             rvo.unwrap()
         };
@@ -1173,16 +1205,16 @@ pub fn get_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             generator,
             vec![FullName::local(ARR_NAME)],
             "len arr".to_string(),
-            int_lit_ty(),
+            make_i64_ty(),
             None,
         ),
         None,
     );
-    let array_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
+    let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
     let scm = Scheme::generalize(
         HashMap::from([("a".to_string(), kind_star())]),
         vec![],
-        type_fun(array_ty, int_lit_ty()),
+        type_fun(array_ty, make_i64_ty()),
     );
     (expr, scm)
 }
@@ -1200,7 +1232,7 @@ pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             .into_int_value();
         gc.release(array_obj);
         let int_obj = if rvo.is_none() {
-            allocate_obj(int_lit_ty(), &vec![], None, gc, Some("cap_of_arr"))
+            allocate_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"))
         } else {
             rvo.unwrap()
         };
@@ -1214,16 +1246,16 @@ pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             generator,
             vec![FullName::local(ARR_NAME)],
             "arr.get_capacity".to_string(),
-            int_lit_ty(),
+            make_i64_ty(),
             None,
         ),
         None,
     );
-    let array_ty = type_tyapp(array_lit_ty(), type_tyvar_star("a"));
+    let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
     let scm = Scheme::generalize(
         HashMap::from([("a".to_string(), kind_star())]),
         vec![],
-        type_fun(array_ty, int_lit_ty()),
+        type_fun(array_ty, make_i64_ty()),
     );
     (expr, scm)
 }
@@ -1731,7 +1763,7 @@ pub fn union_is(
         None,
     );
     let union_ty = union.ty();
-    let ty = type_fun(union_ty, bool_lit_ty());
+    let ty = type_fun(union_ty, make_bool_ty());
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
 }
@@ -1765,7 +1797,7 @@ pub fn union_is_lit(
 
         // Create returned value.
         let ret = if rvo.is_none() {
-            allocate_obj(bool_lit_ty(), &vec![], None, gc, Some(&name_cloned))
+            allocate_obj(make_bool_ty(), &vec![], None, gc, Some(&name_cloned))
         } else {
             rvo.unwrap()
         };
@@ -1800,7 +1832,7 @@ pub fn union_is_lit(
         gc.release(obj);
         ret
     });
-    expr_lit(generator, free_vars, name, bool_lit_ty(), None)
+    expr_lit(generator, free_vars, name, make_bool_ty(), None)
 }
 
 const LOOP_RESULT_CONTINUE_IDX: usize = 0;
@@ -1844,7 +1876,7 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
             type_fun(
                 type_fun(
                     tyvar_s.clone(),
-                    type_tyapp(type_tyapp(loop_result_ty(), tyvar_s), tyvar_b.clone()),
+                    type_tyapp(type_tyapp(make_loop_result_ty(), tyvar_s), tyvar_b.clone()),
                 ),
                 tyvar_b,
             ),
@@ -1946,7 +1978,7 @@ fn extract_array_from_string<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     string: &Object<'c>,
 ) -> Object<'c> {
-    let array_byte_ty = type_tyapp(array_lit_ty(), byte_lit_ty());
+    let array_byte_ty = type_tyapp(make_array_ty(), make_u8_ty());
     let array = Object::new(
         string.load_field_nocap(gc, 0).into_pointer_value(),
         array_byte_ty,
@@ -1999,7 +2031,7 @@ pub fn print_io_func() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
-        type_fun(string_lit_ty(), io_runner_ty(unit_ty())),
+        type_fun(make_string_ty(), io_runner_ty(unit_ty())),
     );
 
     let expr = expr_abs(
@@ -2010,7 +2042,7 @@ pub fn print_io_func() -> (Rc<ExprNode>, Rc<Scheme>) {
                 generator,
                 vec![FullName::local(STRING_NAME), FullName::local(IOSTATE_NAME)],
                 format!("print {} {}", STRING_NAME, IOSTATE_NAME),
-                make_tuple_ty(vec![unit_ty(), iostate_lit_ty()]),
+                make_tuple_ty(vec![unit_ty(), make_iostate_ty()]),
                 None,
             ),
             None,
@@ -2076,7 +2108,7 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
-        type_fun(string_lit_ty(), unit_ty()),
+        type_fun(make_string_ty(), unit_ty()),
     );
     (expr, scm)
 }
@@ -2286,7 +2318,7 @@ pub fn eq_trait() -> TraitInfo {
     binary_operator_trait(
         eq_trait_id(),
         EQ_TRAIT_EQ_NAME.to_string(),
-        Some(bool_lit_ty()),
+        Some(make_bool_ty()),
     )
 }
 
@@ -2311,7 +2343,7 @@ pub fn eq_trait_instance_primitive(ty: Rc<TypeNode>) -> TraitInstance {
         );
         let obj = if rvo.is_none() {
             allocate_obj(
-                bool_lit_ty(),
+                make_bool_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2327,7 +2359,7 @@ pub fn eq_trait_instance_primitive(ty: Rc<TypeNode>) -> TraitInstance {
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
-        bool_lit_ty(),
+        make_bool_ty(),
         generate_eq_int,
     )
 }
@@ -2345,7 +2377,7 @@ pub fn less_than_trait() -> TraitInfo {
     binary_operator_trait(
         less_than_trait_id(),
         LESS_THAN_TRAIT_LT_NAME.to_string(),
-        Some(bool_lit_ty()),
+        Some(make_bool_ty()),
     )
 }
 
@@ -2373,7 +2405,7 @@ pub fn less_than_trait_instance_int() -> TraitInstance {
         );
         let obj = if rvo.is_none() {
             allocate_obj(
-                bool_lit_ty(),
+                make_bool_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2388,8 +2420,8 @@ pub fn less_than_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         less_than_trait_id(),
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
-        int_lit_ty(),
-        bool_lit_ty(),
+        make_i64_ty(),
+        make_bool_ty(),
         generate_less_than_int,
     )
 }
@@ -2407,7 +2439,7 @@ pub fn less_than_or_equal_to_trait() -> TraitInfo {
     binary_operator_trait(
         less_than_or_equal_to_trait_id(),
         LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
-        Some(bool_lit_ty()),
+        Some(make_bool_ty()),
     )
 }
 
@@ -2435,7 +2467,7 @@ pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
         );
         let obj = if rvo.is_none() {
             allocate_obj(
-                bool_lit_ty(),
+                make_bool_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2450,8 +2482,8 @@ pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         less_than_or_equal_to_trait_id(),
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
-        int_lit_ty(),
-        bool_lit_ty(),
+        make_i64_ty(),
+        make_bool_ty(),
         generate_less_than_or_equal_to_int,
     )
 }
@@ -2485,7 +2517,7 @@ pub fn add_trait_instance_int() -> TraitInstance {
             .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                int_lit_ty(),
+                make_i64_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2500,8 +2532,8 @@ pub fn add_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         add_trait_id(),
         &ADD_TRAIT_ADD_NAME.to_string(),
-        int_lit_ty(),
-        int_lit_ty(),
+        make_i64_ty(),
+        make_i64_ty(),
         generate_add_int,
     )
 }
@@ -2539,7 +2571,7 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
             .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                int_lit_ty(),
+                make_i64_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2554,8 +2586,8 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         subtract_trait_id(),
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
-        int_lit_ty(),
-        int_lit_ty(),
+        make_i64_ty(),
+        make_i64_ty(),
         generate_subtract_int,
     )
 }
@@ -2593,7 +2625,7 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
             .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                int_lit_ty(),
+                make_i64_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2608,8 +2640,8 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         multiply_trait_id(),
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
-        int_lit_ty(),
-        int_lit_ty(),
+        make_i64_ty(),
+        make_i64_ty(),
         generate_multiply_int,
     )
 }
@@ -2647,7 +2679,7 @@ pub fn divide_trait_instance_int() -> TraitInstance {
             .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                int_lit_ty(),
+                make_i64_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2662,8 +2694,8 @@ pub fn divide_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         divide_trait_id(),
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
-        int_lit_ty(),
-        int_lit_ty(),
+        make_i64_ty(),
+        make_i64_ty(),
         generate_divide_int,
     )
 }
@@ -2701,7 +2733,7 @@ pub fn remainder_trait_instance_int() -> TraitInstance {
                 .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                int_lit_ty(),
+                make_i64_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2716,8 +2748,8 @@ pub fn remainder_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         remainder_trait_id(),
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
-        int_lit_ty(),
-        int_lit_ty(),
+        make_i64_ty(),
+        make_i64_ty(),
         generate_remainder_int,
     )
 }
@@ -2748,7 +2780,7 @@ pub fn negate_trait_instance_int() -> TraitInstance {
             .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                int_lit_ty(),
+                make_i64_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2763,8 +2795,8 @@ pub fn negate_trait_instance_int() -> TraitInstance {
     unary_opeartor_instance(
         negate_trait_id(),
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
-        int_lit_ty(),
-        int_lit_ty(),
+        make_i64_ty(),
+        make_i64_ty(),
         generate_negate_int,
     )
 }
@@ -2800,7 +2832,7 @@ pub fn not_trait_instance_bool() -> TraitInstance {
             .build_int_z_extend(value, bool_ty, NOT_TRAIT_OP_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                bool_lit_ty(),
+                make_bool_ty(),
                 &vec![],
                 None,
                 gc,
@@ -2815,8 +2847,8 @@ pub fn not_trait_instance_bool() -> TraitInstance {
     unary_opeartor_instance(
         not_trait_id(),
         &NOT_TRAIT_OP_NAME.to_string(),
-        bool_lit_ty(),
-        bool_lit_ty(),
+        make_bool_ty(),
+        make_bool_ty(),
         generate_not_bool,
     )
 }

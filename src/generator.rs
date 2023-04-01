@@ -706,8 +706,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     ObjectFieldType::ControlBlock => unreachable!(),
                     ObjectFieldType::DtorFunction => unreachable!(),
                     ObjectFieldType::LambdaFunction(_) => {}
-                    ObjectFieldType::I64 => {}
+                    ObjectFieldType::Ptr => {}
                     ObjectFieldType::I8 => {}
+                    ObjectFieldType::I32 => {}
+                    ObjectFieldType::I64 => {}
                     ObjectFieldType::SubObject(ty) => {
                         let ptr = if ty.is_box(self.type_env()) {
                             self.load_obj_field(ptr, struct_type, i as u32)

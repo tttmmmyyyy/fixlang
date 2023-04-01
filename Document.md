@@ -850,6 +850,10 @@ Methods:
 - `println! : String -> IOState -> ((), IOState)`
     - Prints a string and a newline to standard output.
 
+### Std::I32
+
+`Std::I32` is the type of 32-bit signed integers.
+
 ### Std::I64
 
 `Std::I64` is the type of 64-bit signed integers.
@@ -935,6 +939,10 @@ Methods:
 
 - `map : (a -> b) -> Option a -> Option b`
     - Apply a function to the contained value. If the option is `none()`, do nothing.
+
+### Std::Ptr
+
+`Std::Ptr` is the type of pointers.
 
 ### Std::String
 

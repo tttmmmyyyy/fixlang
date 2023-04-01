@@ -613,7 +613,7 @@ impl TypeCheckContext {
                 ei.set_let_bound(val).set_let_value(body)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.unify_type_of_expr(cond, bool_lit_ty());
+                let cond = self.unify_type_of_expr(cond, make_bool_ty());
                 let then_expr = self.unify_type_of_expr(then_expr, ty.clone());
                 let else_expr = self.unify_type_of_expr(else_expr, ty);
                 ei.set_if_cond(cond)
@@ -704,7 +704,7 @@ impl TypeCheckContext {
             Expr::ArrayLit(elems) => {
                 // Prepare type of element.
                 let elem_ty = type_tyvar_star(&self.new_tyvar());
-                let array_ty = type_tyapp(array_lit_ty(), elem_ty.clone());
+                let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
                 if !self.unify(&array_ty, &ty) {
                     error_exit_with_src(
                         &format!(

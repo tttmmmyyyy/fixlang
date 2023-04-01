@@ -11,8 +11,10 @@ pub enum ObjectFieldType {
     ControlBlock,
     DtorFunction,
     LambdaFunction(Rc<TypeNode>), // Specify type of lambda
-    I64,
+    Ptr,
     I8,
+    I32,
+    I64,
     SubObject(Rc<TypeNode>),
     UnionBuf(Vec<Rc<TypeNode>>), // Embedded union.
     UnionTag,
@@ -30,8 +32,10 @@ impl ObjectFieldType {
             ObjectFieldType::SubObject(ty) => {
                 get_object_type(ty, &vec![], gc.type_env()).to_embedded_type(gc)
             }
-            ObjectFieldType::I64 => gc.context.i64_type().into(),
+            ObjectFieldType::Ptr => gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
+            ObjectFieldType::I32 => gc.context.i32_type().into(),
+            ObjectFieldType::I64 => gc.context.i64_type().into(),
             ObjectFieldType::Array(_) => gc.context.i64_type().into(),
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
@@ -109,7 +113,7 @@ impl ObjectFieldType {
         gc.builder().position_at_end(loop_body_bb);
 
         // Generate code of loop body.
-        loop_body(gc, Object::new(counter_ptr, int_lit_ty()), size, buffer);
+        loop_body(gc, Object::new(counter_ptr, make_i64_ty()), size, buffer);
 
         // Increment counter.
         let incremented_counter_val = gc.builder().build_int_add(
@@ -821,12 +825,16 @@ pub fn get_object_type(
                 assert!(capture.is_empty());
                 assert!(ti.is_unbox);
                 ret.is_unbox = ti.is_unbox;
-                if ty == &int_lit_ty() {
+                if ty == &make_ptr_ty() {
+                    ret.field_types.push(ObjectFieldType::Ptr);
+                } else if ty == &make_bool_ty() {
+                    ret.field_types.push(ObjectFieldType::I8);
+                } else if ty == &make_u8_ty() {
+                    ret.field_types.push(ObjectFieldType::I8);
+                } else if ty == &make_i32_ty() {
+                    ret.field_types.push(ObjectFieldType::I32);
+                } else if ty == &make_i64_ty() {
                     ret.field_types.push(ObjectFieldType::I64);
-                } else if ty == &bool_lit_ty() {
-                    ret.field_types.push(ObjectFieldType::I8);
-                } else if ty == &byte_lit_ty() {
-                    ret.field_types.push(ObjectFieldType::I8);
                 } else {
                     unreachable!()
                 }
@@ -972,10 +980,12 @@ pub fn allocate_obj<'c, 'm>(
                     gc.builder().build_store(ptr_to_obj_id, object_id);
                 }
             }
+            ObjectFieldType::Ptr => {}
+            ObjectFieldType::I8 => {}
+            ObjectFieldType::I32 => {}
             ObjectFieldType::I64 => {}
             ObjectFieldType::SubObject(_) => {}
             ObjectFieldType::LambdaFunction(_) => {}
-            ObjectFieldType::I8 => {}
             ObjectFieldType::Array(_) => {
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
                 // Set array size.
@@ -1074,9 +1084,11 @@ pub fn create_dtor<'c, 'm>(
                         gc.release(Object::new(ptr_to_subobj, ty.clone()));
                     }
                     ObjectFieldType::ControlBlock => {}
-                    ObjectFieldType::I64 => {}
                     ObjectFieldType::LambdaFunction(_) => {}
+                    ObjectFieldType::Ptr => {}
                     ObjectFieldType::I8 => {}
+                    ObjectFieldType::I32 => {}
+                    ObjectFieldType::I64 => {}
                     ObjectFieldType::Array(ty) => {
                         assert_eq!(i, ARRAY_CAP_IDX as usize);
                         let size = gc

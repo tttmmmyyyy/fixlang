@@ -128,7 +128,7 @@ fn build_module<'c>(
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
     let iostate = allocate_obj(
-        iostate_lit_ty(),
+        make_iostate_ty(),
         &vec![],
         None,
         &mut gc,
