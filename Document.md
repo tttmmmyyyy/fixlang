@@ -138,19 +138,22 @@ let y = 5;
 x + y
 ```
 
-If `{expression_0}` ranges several lines, it is preferred to indent `{expression_0}` with parenthes. For example, the following program is more readable
+If `{expression_0}` ranges several lines, it is preferred to indent `{expression_0}` with parenthes. For example, the following expression:
 ```
-let twice_of_three_plus_five = (
+let sixty_four = (
     let n = 3 + 5;
     n * n
 );
+sixty_four + sixty_four
 ```
-than 
+which is evaluated to 128, can also be written as 
 ```
-let twice_of_three_plus_five = 
+let sixty_four = 
 let n = 3 + 5;
 n * n;
+sixty_four + sixty_four
 ```
+because the indent and parenthes are not mandatory, but the latter is less readable and not recommended.
 
 Fix's `let`-expression doesn't allow recursive definition. For example, a program
 
