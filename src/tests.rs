@@ -2327,6 +2327,22 @@ pub fn test93() {
 
 #[test]
 #[serial]
+pub fn test94() {
+    // Test FFI
+    let source = r#"
+            module Main;
+    
+            main : IOState -> ((), IOState);
+            main = (
+                let _ = CALL_C[I32 printf(Ptr, ...), "Hello C function!"._get_ptr];
+                pure()
+            );
+        "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
