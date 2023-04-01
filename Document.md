@@ -718,6 +718,27 @@ type Weight = box union (pound: I64, kilograms: I64);
 
 ## Higher-kinded types
 
+## Calling C functions
+
+To call C functions, use the following expression:
+
+```
+CALL_C[{c_function_signature}, {arg_0}, {arg_1}, ...]
+```
+
+Example: 
+
+```
+CALL_C[I32 printf(Ptr, ...), "Hello C function!\n"._get_ptr]
+```
+
+In `{c_function_signature}`, you need to specify type of return value and arguments. 
+
+- Use `Ptr` for pointers.
+- Use `U8`, `I32`, `I64` for integral types. 
+- Use `...` for `var_arg`.
+- If return type is `void`, put `()` before the function name.
+
 # Built-in / library features
 
 ## Types
@@ -953,7 +974,8 @@ The type of strings.
 Methods:
 
 - `_get_ptr : String -> Ptr`
-    - Get the pointer to the memory region where characters are stored.
+    - Get the pointer to the memory region where characters are stored. 
+    - This function returns null-terminated C string.
 - `concat : String -> String -> String`
     - Concatenate two strings.
     - Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
