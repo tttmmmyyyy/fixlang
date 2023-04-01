@@ -156,6 +156,9 @@ fn build_module<'c>(
     gc.builder()
         .build_return(Some(&gc.context.i32_type().const_int(0, false)));
 
+    // Print LLVM bitcode to file
+    // module.print_to_file("main.ll").unwrap();
+
     // Run optimization
     let passmgr = PassManager::create(());
 
@@ -166,9 +169,6 @@ fn build_module<'c>(
     unsafe {
         module.run_in_pass_manager(&passmgr);
     }
-
-    // Print LLVM bitcode to file
-    module.print_to_file("main.ll").unwrap();
 
     // Verify LLVM module.
     // Now not needed?

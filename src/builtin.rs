@@ -1189,6 +1189,8 @@ pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
 
         // Get pointer
         let ptr = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let ptr_ty = ObjectFieldType::Ptr.to_basic_type(gc).into_pointer_type();
+        let ptr = gc.cast_pointer(ptr, ptr_ty);
 
         // Release array
         gc.release(array);
