@@ -862,6 +862,13 @@ Methods:
 
 Implementing traits:
 
+- `Std::Add`
+- `Std::Eq`
+- `Std::LessThan`
+- `Std::LessThanOrEq`
+- `Std::Mul`
+- `Std::Rem`
+- `Std::Sub`
 - `Std::ToString`
 
 ### Std::Iterator
