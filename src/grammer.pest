@@ -231,6 +231,9 @@ global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep
 
 module = { module_defn ~ (sep* ~ (global_defns | trait_impl | import_statement))* }
 
+// === FFI ===
+call_c_fun_symbol = _{ "CALL_C_FUN" }
+
 // === Comments ===
 block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }
 

@@ -2041,7 +2041,8 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         // Flush
         gc.call_runtime(
             RuntimeFunctions::Fflush,
-            &[get_c_file_type(gc)
+            &[gc.context
+                .i8_type()
                 .ptr_type(AddressSpace::from(0))
                 .const_null()
                 .into()],

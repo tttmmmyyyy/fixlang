@@ -59,22 +59,12 @@ fn build_fflush_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> Function
     let module = gc.module;
 
     let i32_type = context.i32_type();
-    let file_ptr_type = get_c_file_type(gc).ptr_type(AddressSpace::from(0));
+    let file_ptr_type = context.i8_type().ptr_type(AddressSpace::from(0));
 
     let fn_type = i32_type.fn_type(&[file_ptr_type.into()], false);
     let func = module.add_function("fflush", fn_type, None);
 
     func
-}
-
-// Get C's FILE struct
-pub fn get_c_file_type<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
-    const FILE_TYPE_NAME: &str = "FILE";
-    if let Some(file_type) = gc.context.get_struct_type(FILE_TYPE_NAME) {
-        file_type
-    } else {
-        gc.context.opaque_struct_type(FILE_TYPE_NAME)
-    }
 }
 
 fn build_report_malloc_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
