@@ -1178,6 +1178,60 @@ pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
     (expr, scm)
 }
 
+// `get_ptr` function for Array.
+pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const ARRAY_NAME: &str = "arr";
+    const ELEM_TYPE: &str = "a";
+
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+        // Get argment
+        let array = gc.get_var(&FullName::local(ARRAY_NAME)).ptr.get(gc);
+
+        // Get pointer
+        let ptr = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+
+        // Release array
+        gc.release(array);
+
+        // Make returned object
+        let obj = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                make_ptr_ty(),
+                &vec![],
+                None,
+                gc,
+                Some("alloca@get_ptr_array"),
+            )
+        };
+        obj.store_field_nocap(gc, 0, ptr);
+
+        obj
+    });
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(ARRAY_NAME)],
+        expr_lit(
+            generator,
+            vec![FullName::local(ARRAY_NAME)],
+            format!("{}.get_ptr", ARRAY_NAME,),
+            make_ptr_ty(),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![],
+        type_fun(array_ty.clone(), make_ptr_ty()),
+    );
+    (expr, scm)
+}
+
 // `get_length` built-in function for Array.
 pub fn get_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARR_NAME: &str = "arr";

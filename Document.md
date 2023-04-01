@@ -766,6 +766,8 @@ Methods:
     - Gets a value from an array, without bounds checking and retaining the returned value.
 - `__unsafe_set : I64 -> a -> Array a -> Array a`
     - Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
+- `_get_pointer : Array a -> Ptr`
+    - Get the pointer to the memory region to which elements are stored.
 - `append : Array a -> Array a -> Array a`
     - Append an array to an array.
     - Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
