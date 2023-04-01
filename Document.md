@@ -952,6 +952,8 @@ The type of strings.
 
 Methods:
 
+- `_get_ptr : String -> Ptr`
+    - Get the pointer to the memory region where characters are stored.
 - `concat : String -> String -> String`
     - Concatenate two strings.
     - Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.

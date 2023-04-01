@@ -417,6 +417,9 @@ namespace Option {
 type String = unbox struct { _data : Array U8 };
 
 namespace String {
+    // Get the pointer to the memory region where characters are stored.
+    _get_ptr : String -> Ptr;
+    _get_ptr = |s| s.@_data._get_ptr;
 
     // Concatenate two strings.
     // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
