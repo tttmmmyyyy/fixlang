@@ -2172,7 +2172,7 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
 // `abort` built-in function
 pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const A_NAME: &str = "a";
-    const UNIT_NAME: &str = "iostate";
+    const UNIT_NAME: &str = "unit";
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         // Abort
         gc.call_runtime(RuntimeFunctions::Abort, &[]);
