@@ -9,7 +9,7 @@ pub const IO_NAME: &str = "IO";
 // Primitive types.
 pub const I64_NAME: &str = "I64";
 pub const BOOL_NAME: &str = "Bool";
-pub const BYTE_NAME: &str = "U8";
+pub const U8_NAME: &str = "U8";
 pub const IOSTATE_NAME: &str = "IOState";
 pub const ARRAY_NAME: &str = "Array";
 pub const STRING_NAME: &str = "String";
@@ -39,7 +39,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], BYTE_NAME)),
+        TyCon::new(FullName::from_strs(&[STD_NAME], U8_NAME)),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::Primitive,
@@ -168,7 +168,7 @@ pub fn bool_lit_ty() -> Rc<TypeNode> {
 
 // Get U8 type.
 pub fn byte_lit_ty() -> Rc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BYTE_NAME)))
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U8_NAME)))
 }
 
 // Get Array type.

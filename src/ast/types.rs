@@ -113,7 +113,7 @@ impl TyCon {
         if self.name == make_tuple_name(0) {
             return None;
         }
-        if self.name.name == BYTE_NAME {
+        if self.name.name == U8_NAME {
             return Some(ctx.i8_type().as_basic_type_enum());
         }
         panic!("call get_c_type for {}", self.to_string())
