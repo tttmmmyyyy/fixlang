@@ -729,7 +729,13 @@ CALL_C[{c_function_signature}, {arg_0}, {arg_1}, ...]
 Example: 
 
 ```
-CALL_C[I32 printf(Ptr, ...), "Hello C function!\n"._get_ptr]
+main : IOState -> ((), IOState);
+main = (
+    let _ = "Hello C function!\n".call_with_valid_c_str(|ptr|
+        CALL_C[I32 printf(Ptr, ...), ptr]
+    );
+    pure()
+);
 ```
 
 In `{c_function_signature}`, you need to specify type of return value and arguments. 
@@ -788,10 +794,13 @@ Methods:
 - `__unsafe_set : I64 -> a -> Array a -> Array a`
     - Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
 - `_get_ptr : Array a -> Ptr`
-    - Get the pointer to the memory region to which elements are stored.
+    - Get the pointer to the memory region where elements are stored.
+    - Note that in case the array is not used after call of this function, the returned pointer will be already released.
 - `append : Array a -> Array a -> Array a`
     - Append an array to an array.
-    - Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
+    - Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`. 
+- `call_with_valid_ptr : (Ptr -> b) -> Array a -> b`
+    - Call a function with a valid pointer to the memory region where elements are stored.
 - `fill : I64 -> a -> Array a`
     - Creates an array filled with the initial value.
     - The capacity is set to the same value as the length.
@@ -973,9 +982,11 @@ The type of strings.
 
 Methods:
 
-- `_get_ptr : String -> Ptr`
-    - Get the pointer to the memory region where characters are stored. 
-    - This function returns null-terminated C string.
+- `_get_c_str : String -> Ptr`
+    - Get the null-terminated C string.
+    - Note that in case the string is not used after call of this function, the returned pointer will be already released.
+- `call_with_valid_c_str : (Ptr -> a) -> String -> a`
+    - Call a function with a valid null-terminated C string.
 - `concat : String -> String -> String`
     - Concatenate two strings.
     - Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
