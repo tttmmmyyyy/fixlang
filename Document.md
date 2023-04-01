@@ -745,6 +745,8 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 - Use `...` for `var_arg`.
 - If return type is `void`, put `()` before the function name.
 
+Note that calling C function may break abstraction of Fix such as immutability or memory safety. Use this feature carefully!
+
 # Built-in / library features
 
 ## Types
