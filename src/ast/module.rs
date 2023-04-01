@@ -622,6 +622,14 @@ impl FixModule {
                 }
                 expr
             }
+            Expr::CallC(_, _, _, args) => {
+                let mut expr = expr.clone();
+                for (i, e) in args.iter().enumerate() {
+                    let e = self.instantiate_expr(tc, e);
+                    expr = expr.set_call_c_arg(e, i);
+                }
+                expr
+            }
         };
         // If the type of an expression contains undetermied type variable after instantiation, raise an error.
         if !tc

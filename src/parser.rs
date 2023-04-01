@@ -844,6 +844,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
         Rule::expr_lam => parse_expr_lam(pair, src),
         Rule::expr_tuple => parse_expr_tuple(pair, src),
         Rule::expr_make_struct => parse_expr_make_struct(pair, src),
+        Rule::expr_call_c => parse_expr_call_c(pair, src),
         _ => unreachable!(),
     }
 }
@@ -977,6 +978,34 @@ fn parse_expr_make_struct(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
         fields.push((field_name, field_expr));
     }
     expr_make_struct(tycon, fields).set_source(Some(span))
+}
+
+fn parse_expr_call_c(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_call_c);
+    let span = Span::from_pair(src, &pair);
+    let mut pairs = pair.into_inner();
+    let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap());
+    let fun_name = pairs.next().unwrap().as_str().to_string();
+    let param_tys = parse_ffi_param_tys(pairs.next().unwrap());
+    let args = pairs.map(|pair| parse_expr(pair, src)).collect();
+    expr_call_c(fun_name, ret_ty, param_tys, args, Some(span))
+}
+
+fn parse_ffi_c_fun_ty(pair: Pair<Rule>) -> Rc<TyCon> {
+    assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
+    let name = if pair.as_str() == "()" {
+        make_tuple_name(0)
+    } else {
+        FullName::from_strs(&[STD_NAME], pair.as_str())
+    };
+    tycon(name)
+}
+
+fn parse_ffi_param_tys(pair: Pair<Rule>) -> Vec<Rc<TyCon>> {
+    assert_eq!(pair.as_rule(), Rule::ffi_param_tys);
+    pair.into_inner()
+        .map(|pair| parse_ffi_c_fun_ty(pair))
+        .collect()
 }
 
 fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {

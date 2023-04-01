@@ -1,5 +1,7 @@
 use core::panic;
 
+use inkwell::types::BasicType;
+
 use super::*;
 
 #[derive(Eq, PartialEq, Clone)]
@@ -100,6 +102,21 @@ impl TyCon {
             ty = type_tyapp(ty, tv);
         }
         ty
+    }
+
+    // Convert "()", "I8", "Ptr", etc to corresponding c_type.
+    // Returns none if it's VoidType.
+    pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
+        if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
+            panic!("call get_c_type for {}", self.to_string())
+        }
+        if self.name == make_tuple_name(0) {
+            return None;
+        }
+        if self.name.name == BYTE_NAME {
+            return Some(ctx.i8_type().as_basic_type_enum());
+        }
+        panic!("call get_c_type for {}", self.to_string())
     }
 }
 

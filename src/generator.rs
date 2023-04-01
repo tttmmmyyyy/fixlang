@@ -10,7 +10,7 @@ use inkwell::{
     intrinsics::Intrinsic,
     module::Linkage,
     targets::{TargetData, TargetMachine},
-    types::{AnyType, BasicType},
+    types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
 
@@ -908,6 +908,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::ArrayLit(elems) => {
                 self.eval_array_lit(elems, expr.inferred_ty.clone().unwrap(), rvo)
             }
+            Expr::CallC(fun_name, ret_ty, param_tys, args) => {
+                self.eval_call_c(&expr, fun_name, ret_ty, param_tys, args, rvo)
+            }
         };
         ret.ty = expr.inferred_ty.clone().unwrap();
         ret
@@ -1392,6 +1395,80 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         }
         pair
+    }
+
+    fn eval_call_c(
+        &mut self,
+        expr: &Rc<ExprNode>,
+        fun_name: &Name,
+        ret_ty: &Rc<TyCon>,
+        param_tys: &Vec<Rc<TyCon>>,
+        args: &Vec<Rc<ExprNode>>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Prepare return object.
+        let obj = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            let ret_ty = type_tycon(ret_ty);
+            allocate_obj(ret_ty.clone(), &vec![], None, self, Some("allocate_CallC"))
+        };
+
+        // Get c function
+        let c_fun = match self.module.get_function(&fun_name) {
+            Some(fun) => fun,
+            None => {
+                let ret_c_ty = ret_ty.get_c_type(self.context);
+                let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
+                    .iter()
+                    .map(|param_ty| {
+                        let c_type = param_ty.get_c_type(self.context);
+                        if c_type.is_none() {
+                            error_exit_with_src(
+                                "Cannot use `()` as a parameter type of c function.",
+                                &expr.source,
+                            )
+                        }
+                        c_type.unwrap().into()
+                    })
+                    .collect::<Vec<_>>();
+                let fn_ty = match ret_c_ty {
+                    None => {
+                        // Void case.
+                        self.context.void_type().fn_type(&parm_c_tys, false)
+                    }
+                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, false),
+                };
+                self.module.add_function(&fun_name, fn_ty, None)
+            }
+        };
+
+        // Evaluate arguments
+        let mut arg_objs = vec![];
+        for i in 0..args.len() {
+            self.scope_lock_as_used_later(args[i].free_vars());
+        }
+        for i in 0..args.len() {
+            self.scope_unlock_as_used_later(args[i].free_vars());
+            arg_objs.push(self.eval_expr(args[i].clone(), None));
+        }
+
+        // Get argment values
+        let args_vals = arg_objs
+            .iter()
+            .map(|obj| obj.load_field_nocap(self, 0).into())
+            .collect::<Vec<_>>();
+
+        // Call c function
+        let ret_c_val =
+            self.builder()
+                .build_call(c_fun, &args_vals, &format!("CALL_C({})", fun_name));
+        match ret_c_val.try_as_basic_value() {
+            Either::Left(ret_c_val) => obj.store_field_nocap(self, 0, ret_c_val),
+            Either::Right(_) => {}
+        }
+
+        obj
     }
 
     fn eval_array_lit(

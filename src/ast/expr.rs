@@ -327,6 +327,26 @@ impl ExprNode {
         Rc::new(ret)
     }
 
+    pub fn set_call_c_arg(&self, arg: Rc<ExprNode>, idx: usize) -> Rc<ExprNode> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::CallC(fun_name, ret_ty, param_tys, args) => {
+                let mut args = args.clone();
+                args[idx] = arg;
+                ret.expr = Rc::new(Expr::CallC(
+                    fun_name.clone(),
+                    ret_ty.clone(),
+                    param_tys.clone(),
+                    args,
+                ));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Rc::new(ret)
+    }
+
     pub fn resolve_namespace(self: &Rc<ExprNode>, ctx: &NameResolutionContext) -> Rc<ExprNode> {
         match &*self.expr {
             Expr::Var(_) => {
@@ -381,6 +401,13 @@ impl ExprNode {
                 }
                 expr
             }
+            Expr::CallC(_, _, _, args) => {
+                let expr = self.clone();
+                for (i, arg) in args.iter().enumerate() {
+                    expr.set_call_c_arg(arg.resolve_namespace(ctx), i);
+                }
+                expr
+            }
         }
     }
 }
@@ -400,6 +427,12 @@ pub enum Expr {
     // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakeStruct x y`.
     // `MakeStruct x y` is compiled to a more performant code than function call (currently).
     MakeStruct(Rc<TyCon>, Vec<(Name, Rc<ExprNode>)>),
+    CallC(
+        Name,              /* function name */
+        Rc<TyCon>,         /* Return type */
+        Vec<Rc<TyCon>>,    /* Parameter types */
+        Vec<Rc<ExprNode>>, /* Arguments */
+    ),
 }
 
 #[derive(Clone)]
@@ -772,6 +805,16 @@ impl Expr {
                         .join(", ")
                 )
             }
+            Expr::CallC(fun_name, _, _, args) => {
+                format!(
+                    "CALL_C[{}{}]",
+                    fun_name,
+                    args.iter()
+                        .map(|e| ", ".to_string() + &e.expr.to_string())
+                        .collect::<Vec<_>>()
+                        .join("")
+                )
+            }
         }
     }
 }
@@ -991,6 +1034,16 @@ pub fn expr_array_lit(elems: Vec<Rc<ExprNode>>, src: Option<Span>) -> Rc<ExprNod
     Rc::new(Expr::ArrayLit(elems)).into_expr_info(src)
 }
 
+pub fn expr_call_c(
+    fun_name: Name,
+    ret_ty: Rc<TyCon>,
+    param_tys: Vec<Rc<TyCon>>,
+    args: Vec<Rc<ExprNode>>,
+    src: Option<Span>,
+) -> Rc<ExprNode> {
+    Rc::new(Expr::CallC(fun_name, ret_ty, param_tys, args)).into_expr_info(src)
+}
+
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
 pub fn calculate_free_vars(ei: Rc<ExprNode>) -> Rc<ExprNode> {
     match &*ei.expr {
@@ -1073,6 +1126,16 @@ pub fn calculate_free_vars(ei: Rc<ExprNode>) -> Rc<ExprNode> {
             for (i, e) in elems.iter().enumerate() {
                 let e = calculate_free_vars(e.clone());
                 ei = ei.set_array_lit_elem(e.clone(), i);
+                free_vars.extend(e.free_vars.clone().unwrap());
+            }
+            ei.set_free_vars(free_vars)
+        }
+        Expr::CallC(_, _, _, args) => {
+            let mut free_vars: HashSet<FullName> = Default::default();
+            let mut ei = ei.clone();
+            for (i, e) in args.iter().enumerate() {
+                let e = calculate_free_vars(e.clone());
+                ei = ei.set_call_c_arg(e.clone(), i);
                 free_vars.extend(e.free_vars.clone().unwrap());
             }
             ei.set_free_vars(free_vars)
