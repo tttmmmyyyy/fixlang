@@ -29,6 +29,14 @@ namespace Array {
         ))
     );
 
+    // Call a function with a valid pointer to the memory region where elements are stored.
+    call_with_valid_ptr : (Ptr -> b) -> Array a -> b;
+    call_with_valid_ptr = |f, arr| (
+        let res = f(arr._get_ptr);
+        let _ = arr; // Use array after calling f
+        res
+    );
+
     // Creates an array by a mapping function.
     from_map : I64 -> (I64 -> a) -> Array a;
     from_map = |size, map| (
@@ -417,9 +425,14 @@ namespace Option {
 type String = unbox struct { _data : Array U8 };
 
 namespace String {
-    // Get the pointer to the memory region where characters are stored.
-    _get_ptr : String -> Ptr;
-    _get_ptr = |s| s.@_data._get_ptr;
+    // Get the null-terminated C string.
+    // Note that in case the string is not used after call of this function, the returned pointer will be already released.
+    _get_c_str : String -> Ptr;
+    _get_c_str = |s| s.@_data._get_ptr;
+
+    // Call a function with a valid null-terminated C string.
+    call_with_valid_c_str : (Ptr -> a) -> String -> a;
+    call_with_valid_c_str = |f, str| str.@_data.call_with_valid_ptr(f);
 
     // Concatenate two strings.
     // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.

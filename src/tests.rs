@@ -2334,7 +2334,9 @@ pub fn test94() {
     
             main : IOState -> ((), IOState);
             main = (
-                let _ = CALL_C[I32 printf(Ptr, ...), "Hello C function!\n"._get_ptr];
+                let _ = "Hello C function!\n".call_with_valid_c_str(|ptr|
+                    CALL_C[I32 printf(Ptr, ...), ptr]
+                );
                 pure()
             );
         "#;
