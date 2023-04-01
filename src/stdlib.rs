@@ -135,7 +135,7 @@ pub fn make_std_mod() -> FixModule {
         abort_function(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, INT_NAME], "_int_to_string"),
+        FullName::from_strs(&[STD_NAME, I64_NAME], "_int_to_string"),
         int_to_string_function(),
     );
 

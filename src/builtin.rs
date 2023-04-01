@@ -7,7 +7,7 @@ pub const DEBUG_NAME: &str = "Debug";
 pub const IO_NAME: &str = "IO";
 
 // Primitive types.
-pub const INT_NAME: &str = "I64";
+pub const I64_NAME: &str = "I64";
 pub const BOOL_NAME: &str = "Bool";
 pub const BYTE_NAME: &str = "U8";
 pub const IOSTATE_NAME: &str = "IOState";
@@ -19,7 +19,7 @@ pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], INT_NAME)),
+        TyCon::new(FullName::from_strs(&[STD_NAME], I64_NAME)),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::Primitive,
@@ -158,7 +158,7 @@ pub const TUPLE_NAME: &str = "Tuple";
 
 // Get I64 type.
 pub fn int_lit_ty() -> Rc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], INT_NAME)))
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I64_NAME)))
 }
 
 // Get Bool type.
