@@ -867,6 +867,7 @@ Implementing traits:
 - `Std::LessThan`
 - `Std::LessThanOrEq`
 - `Std::Mul`
+- `Std::Neg`
 - `Std::Rem`
 - `Std::Sub`
 - `Std::ToString`
