@@ -123,7 +123,7 @@ pub fn make_std_mod() -> FixModule {
         get_length_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_pointer"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
     );
     fix_module.add_global_value(
