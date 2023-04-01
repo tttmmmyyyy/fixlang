@@ -910,8 +910,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::ArrayLit(elems) => {
                 self.eval_array_lit(elems, expr.inferred_ty.clone().unwrap(), rvo)
             }
-            Expr::CallC(fun_name, ret_ty, param_tys, args) => {
-                self.eval_call_c(&expr, fun_name, ret_ty, param_tys, args, rvo)
+            Expr::CallC(fun_name, ret_ty, param_tys, is_var_args, args) => {
+                self.eval_call_c(&expr, fun_name, ret_ty, param_tys, *is_var_args, args, rvo)
             }
         };
         ret.ty = expr.inferred_ty.clone().unwrap();
@@ -1405,6 +1405,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         fun_name: &Name,
         ret_ty: &Rc<TyCon>,
         param_tys: &Vec<Rc<TyCon>>,
+        is_va_args: bool,
         args: &Vec<Rc<ExprNode>>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
@@ -1437,9 +1438,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let fn_ty = match ret_c_ty {
                     None => {
                         // Void case.
-                        self.context.void_type().fn_type(&parm_c_tys, false)
+                        self.context.void_type().fn_type(&parm_c_tys, is_va_args)
                     }
-                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, false),
+                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_va_args),
                 };
                 self.module.add_function(&fun_name, fn_ty, None)
             }

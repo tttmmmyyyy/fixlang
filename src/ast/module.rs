@@ -622,7 +622,7 @@ impl FixModule {
                 }
                 expr
             }
-            Expr::CallC(_, _, _, args) => {
+            Expr::CallC(_, _, _, _, args) => {
                 let mut expr = expr.clone();
                 for (i, e) in args.iter().enumerate() {
                     let e = self.instantiate_expr(tc, e);

@@ -278,7 +278,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
             }
             expr
         }
-        Expr::CallC(_, _, _, args) => {
+        Expr::CallC(_, _, _, _, args) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
                 expr = expr.set_call_c_arg(
@@ -470,7 +470,7 @@ fn replace_free_var(
             }
             Ok(expr)
         }
-        Expr::CallC(_, _, _, elems) => {
+        Expr::CallC(_, _, _, _, elems) => {
             let mut expr = expr.clone();
             for (i, e) in elems.iter().enumerate() {
                 let e = replace_free_var(e, from, to, scope)?;

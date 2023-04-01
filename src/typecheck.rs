@@ -721,7 +721,7 @@ impl TypeCheckContext {
                 }
                 ei
             }
-            Expr::CallC(_, ret_ty, param_tys, args) => {
+            Expr::CallC(_, ret_ty, param_tys, _, args) => {
                 let ret_ty = type_tycon(ret_ty);
                 if !self.unify(&ty, &ret_ty) {
                     error_exit_with_src(

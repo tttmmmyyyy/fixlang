@@ -330,13 +330,14 @@ impl ExprNode {
     pub fn set_call_c_arg(&self, arg: Rc<ExprNode>, idx: usize) -> Rc<ExprNode> {
         let mut ret = self.clone();
         match &*self.expr {
-            Expr::CallC(fun_name, ret_ty, param_tys, args) => {
+            Expr::CallC(fun_name, ret_ty, param_tys, is_var_args, args) => {
                 let mut args = args.clone();
                 args[idx] = arg;
                 ret.expr = Rc::new(Expr::CallC(
                     fun_name.clone(),
                     ret_ty.clone(),
                     param_tys.clone(),
+                    *is_var_args,
                     args,
                 ));
             }
@@ -401,7 +402,7 @@ impl ExprNode {
                 }
                 expr
             }
-            Expr::CallC(_, _, _, args) => {
+            Expr::CallC(_, _, _, _, args) => {
                 let expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {
                     expr.set_call_c_arg(arg.resolve_namespace(ctx), i);
@@ -431,6 +432,7 @@ pub enum Expr {
         Name,              /* function name */
         Rc<TyCon>,         /* Return type */
         Vec<Rc<TyCon>>,    /* Parameter types */
+        bool,              /* Is va_args? */
         Vec<Rc<ExprNode>>, /* Arguments */
     ),
 }
@@ -805,7 +807,7 @@ impl Expr {
                         .join(", ")
                 )
             }
-            Expr::CallC(fun_name, _, _, args) => {
+            Expr::CallC(fun_name, _, _, _, args) => {
                 format!(
                     "CALL_C[{}{}]",
                     fun_name,
@@ -1038,10 +1040,11 @@ pub fn expr_call_c(
     fun_name: Name,
     ret_ty: Rc<TyCon>,
     param_tys: Vec<Rc<TyCon>>,
+    is_va_args: bool,
     args: Vec<Rc<ExprNode>>,
     src: Option<Span>,
 ) -> Rc<ExprNode> {
-    Rc::new(Expr::CallC(fun_name, ret_ty, param_tys, args)).into_expr_info(src)
+    Rc::new(Expr::CallC(fun_name, ret_ty, param_tys, is_va_args, args)).into_expr_info(src)
 }
 
 // TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
@@ -1130,7 +1133,7 @@ pub fn calculate_free_vars(ei: Rc<ExprNode>) -> Rc<ExprNode> {
             }
             ei.set_free_vars(free_vars)
         }
-        Expr::CallC(_, _, _, args) => {
+        Expr::CallC(_, _, _, _, args) => {
             let mut free_vars: HashSet<FullName> = Default::default();
             let mut ei = ei.clone();
             for (i, e) in args.iter().enumerate() {
