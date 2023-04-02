@@ -1046,7 +1046,7 @@ Implementing Traits:
 
 ### Std::is_unique : a -> (Bool, a)
 
-This function checks if a value is uniquely refernced by a name, and returns the pair of the result and the given value. If `a` is unboxed, the 0th component of the returned value is `true`.
+This function checks if a value is uniquely refernced by a name, and returns the pair of the result and the given value. If `a` is unboxed, the 0th component of the returned value will be `true`.
 
 Example: 
 
@@ -1074,8 +1074,6 @@ main = (
     pure()
 );
 ```
-
-TODO: add how to use.
 
 ### Std::fix : ((a -> b) -> a -> b) -> a -> b
 
