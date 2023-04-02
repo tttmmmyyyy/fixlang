@@ -2910,10 +2910,10 @@ pub fn assert_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
             let current_func = current_bb.get_parent().unwrap();
             let shared_bb = gc
                 .context
-                .append_basic_block(current_func, "shared_bb@assert_unique");
+                .append_basic_block(current_func, "shared_bb@assert_unique!");
             let cont_bb = gc
                 .context
-                .append_basic_block(current_func, "cont_bb@assert_unique");
+                .append_basic_block(current_func, "cont_bb@assert_unique!");
 
             // Jump to shared_bb if refcnt > 1.
             let one = refcnt_type(gc.context).const_int(1, false);
@@ -2954,7 +2954,7 @@ pub fn assert_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_lit(
             generator,
-            vec![],
+            vec![FullName::local(VAR_NAME)],
             format!("assert_unique!({})", VAR_NAME),
             obj_type,
             None,
