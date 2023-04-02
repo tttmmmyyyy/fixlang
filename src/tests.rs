@@ -2378,6 +2378,22 @@ pub fn test95() {
 
 #[test]
 #[serial]
+pub fn test96() {
+    // Test U8 literal
+    let source = r#"
+            module Main;
+    
+            main : IOState -> ((), IOState);
+            main = (
+                let _ = assert_eq("", -1_U8, 255_U8);
+                pure()
+            );
+        "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

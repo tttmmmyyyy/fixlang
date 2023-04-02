@@ -646,7 +646,7 @@ fn parse_expr_and(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
             ps[0].clone()
         } else {
             let sub = and_boolean_exprs(&ps[1..]);
-            expr_if(ps[0].clone(), sub, bool(false, None), None)
+            expr_if(ps[0].clone(), sub, expr_bool_lit(false, None), None)
         }
     }
 
@@ -666,7 +666,7 @@ fn parse_expr_or(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
             ps[0].clone()
         } else {
             let sub = or_boolean_exprs(&ps[1..]);
-            expr_if(ps[0].clone(), bool(true, None), sub, None)
+            expr_if(ps[0].clone(), expr_bool_lit(true, None), sub, None)
         }
     }
 
@@ -1017,15 +1017,33 @@ fn parse_ffi_param_tys(pair: Pair<Rule>) -> Vec<Rc<TyCon>> {
 fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_int_lit);
     let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let pair = pairs.next().unwrap();
+    assert_eq!(pair.as_rule(), Rule::int_lit_body);
     let val = pair.as_str().parse::<i64>().unwrap();
-    int(val, Some(span))
+    let ty = match pairs.next() {
+        Some(pair) => {
+            assert_eq!(pair.as_rule(), Rule::int_lit_type);
+            if pair.as_str() == "U8" {
+                make_u8_ty()
+            } else if pair.as_str() == "I32" {
+                make_i32_ty()
+            } else if pair.as_str() == "I64" {
+                make_i64_ty()
+            } else {
+                unreachable!()
+            }
+        }
+        None => make_i64_ty(),
+    };
+    expr_int_lit(val, ty, Some(span))
 }
 
 fn parse_expr_bool_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_bool_lit);
     let val = pair.as_str().parse::<bool>().unwrap();
     let span = Span::from_pair(&src, &pair);
-    bool(val, Some(span))
+    expr_bool_lit(val, Some(span))
 }
 
 fn parse_expr_array_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {

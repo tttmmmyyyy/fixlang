@@ -274,7 +274,7 @@ pub fn io_runner_ty(output_ty: Rc<TypeNode>) -> Rc<TypeNode> {
     type_fun(make_iostate_ty(), result_ty.clone())
 }
 
-pub fn int(val: i64, source: Option<Span>) -> Rc<ExprNode> {
+pub fn expr_int_lit(val: i64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
             allocate_obj(
@@ -287,14 +287,19 @@ pub fn int(val: i64, source: Option<Span>) -> Rc<ExprNode> {
         } else {
             rvo.unwrap()
         };
-        let value = gc.context.i64_type().const_int(val as u64, false);
+        let int_ty = ty
+            .get_struct_type(gc, &vec![])
+            .get_field_type_at_index(0)
+            .unwrap()
+            .into_int_type();
+        let value = int_ty.const_int(val as u64, false);
         obj.store_field_nocap(gc, 0, value);
         obj
     });
-    expr_lit(generator, vec![], val.to_string(), make_i64_ty(), source)
+    expr_lit(generator, vec![], val.to_string(), ty, source)
 }
 
-pub fn bool(val: bool, source: Option<Span>) -> Rc<ExprNode> {
+pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Rc<ExprNode> {
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
             allocate_obj(

@@ -26,7 +26,11 @@ namespace_item = { namespace_head ~ namespace_char* }
 
 namespace = { namespace_item ~ ("::" ~ namespace_item)* }
 
-expr_int_lit = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
+expr_int_lit = { int_lit_body ~ ("_" ~ int_lit_type)? }
+
+int_lit_body = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
+
+int_lit_type = { "U8" | "I32" | "I64" }
 
 expr_bool_lit = { "true" | "false" }
 

@@ -787,6 +787,10 @@ If you define a union named `{union}` with a variant `{variant_name}` of type `{
 
 `Std::Array` is the type of variable-length arrays.
 
+Literals: 
+    - `[{elem_0}, {elem_1}, ...]`
+    - Example: `[1, 2, 3]` for integer array of length 3.
+
 Methods:
 
 - `__unsafe_set_length : I64 -> Array a -> Array a`
@@ -863,9 +867,17 @@ Implementing Traits:
 
 `Std::Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
 
+Litels:
+    - `true`
+    - `false`
+
 ### Std::U8
 
 `Std::U8` is the type of 8-bit unsigned integers.
+
+Literals:
+    - `{number}_U8`
+        - Example: `-1_U8 == 255_U8`
 
 ### Std::IOState
 
@@ -905,9 +917,19 @@ A handle type for read / write operations on files/stdin/stdout/stderr.
 
 `Std::I32` is the type of 32-bit signed integers.
 
+Literals:
+    - `{number}_I32`
+        - Example: `42_I32`
+
 ### Std::I64
 
 `Std::I64` is the type of 64-bit signed integers.
+
+Literals:
+    - `{number}`
+        - Example: `42`
+    - `{number}_I64`
+        - Example: `42_I64 == 42`
 
 Methods:
 
