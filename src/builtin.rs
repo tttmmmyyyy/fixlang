@@ -779,49 +779,6 @@ pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// // Set the capacity of an array, with no uniqueness checking, no validation of size argument.
-// pub fn unsafe_set_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
-//     const ARR_NAME: &str = "array";
-//     const CAP_NAME: &str = "cap";
-//     const ELEM_TYPE: &str = "a";
-
-//     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
-//         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
-//         let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
-//         let cap = gc
-//             .get_var_field(&FullName::local(CAP_NAME), 0)
-//             .into_int_value();
-//         array.store_field_nocap(gc, ARRAY_CAP_IDX, cap);
-//         array
-//     });
-
-//     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-//     let array_ty = type_tyapp(array_lit_ty(), elem_tyvar.clone());
-
-//     let expr = expr_abs(
-//         vec![var_local(CAP_NAME, None)],
-//         expr_abs(
-//             vec![var_local(ARR_NAME, None)],
-//             expr_lit(
-//                 generator,
-//                 vec![FullName::local(CAP_NAME), FullName::local(ARR_NAME)],
-//                 format!("{}.unsafe_set_capacity({})", ARR_NAME, CAP_NAME),
-//                 array_ty.clone(),
-//                 None,
-//             ),
-//             None,
-//         ),
-//         None,
-//     );
-
-//     let scm = Scheme::generalize(
-//         HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
-//         vec![],
-//         type_fun(int_lit_ty(), type_fun(array_ty.clone(), array_ty)),
-//     );
-//     (expr, scm)
-// }
-
 // Implementation of Array::get built-in function.
 fn read_array_lit(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
