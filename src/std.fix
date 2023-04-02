@@ -214,16 +214,68 @@ namespace IOState {
     pure : a -> IOState -> (a, IOState);
     pure = |val, io| (val, io);
 
+}
+
+namespace IOState {
+
+    // // Read a line from a input handle.
+    // read_line : IOHandle -> IOState -> (Result String IOError, IOState)
+    // read_line = |handle, io| (
+    //     // Check if io is unique.
+    //     let (is_io_unique, io) = io.is_unique;
+    //     let _ = assert("[Std::IOState::read_line] Cloned IOState value.", is_io_unique);
+
+    //     let strings_rev = loop(Iterator.make_empty, |strs|
+    //         let buf = Array::make_empty(1024);
+    //         buf.call_with_valid_ptr(|buf|
+    //             let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, 1024_I32, handle.@_file_ptr];
+    //             if fgets_res == Ptr::null {
+
+    //             }
+    //         )
+            
+    //     );
+    // );
+}
+
+namespace IOState {
     // A type for I/O error.
     type IOError = unbox struct { msg : String };
+}
 
+
+impl IOError : ToString {
+    to_string = |e| e.@msg;
+}
+
+namespace IOState {
     // A handle type for read / write operations on files/stdin/stdout/stderr.
     // TODO: add `close! : IOHandle -> IOState -> ((), IOState)`, which asserts that the given IOHandle is unique.
     type IOHandle = unbox struct { _file_ptr: Ptr };
 }
 
-impl IOError : ToString {
-    to_string = |e| e.@msg;
+namespace IOState::IOHandle {
+
+    // The handle for standard input.
+    stdin : IOHandle;
+    stdin = (
+        let ptr = "r".call_with_valid_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
+        IOHandle { _file_ptr: ptr } 
+    );
+
+    // The handle for standard output.
+    stdout : IOHandle;
+    stdout = (
+        let ptr = "a".call_with_valid_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
+        IOHandle { _file_ptr: ptr } 
+    );
+
+    // The handle for standard error.
+    stderr : IOHandle;
+    stderr = (
+        let ptr = "a".call_with_valid_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
+        IOHandle { _file_ptr: ptr } 
+    );
 }
 
 // Iterator (a.k.a lazy list)
