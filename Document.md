@@ -886,7 +886,7 @@ Implementing traits:
 
 The virtual type that represents the state of world (=the outside of the Fix program). 
 
-For example, `Std::IOState.print!(msg) : Std::IOState -> ((), Std::IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std::IOState` and return the updated `Std::IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
+For example, `Std::IOState::print!(msg) : Std::IOState -> ((), Std::IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std::IOState` and return the updated `Std::IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
 
 All functions that perform I/O action by `IOState` assert that the given state is unique.
 
