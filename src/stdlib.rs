@@ -32,13 +32,19 @@ pub fn make_std_mod() -> FixModule {
     // Trait instances
     fix_module
         .trait_env
-        .add_instance(eq_trait_instance_primitive(make_i64_ty()));
+        .add_instance(eq_trait_instance_ptr(make_ptr_ty()));
     fix_module
         .trait_env
-        .add_instance(eq_trait_instance_primitive(make_bool_ty()));
+        .add_instance(eq_trait_instance_int(make_u8_ty()));
     fix_module
         .trait_env
-        .add_instance(eq_trait_instance_primitive(make_u8_ty()));
+        .add_instance(eq_trait_instance_int(make_i32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(eq_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(eq_trait_instance_int(make_bool_ty()));
     fix_module.trait_env.add_instance(add_trait_instance_int());
     fix_module
         .trait_env

@@ -299,6 +299,27 @@ pub fn expr_int_lit(val: i64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<Expr
     expr_lit(generator, vec![], val.to_string(), ty, source)
 }
 
+pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+        let obj = if rvo.is_none() {
+            allocate_obj(ty.clone(), &vec![], None, gc, Some("nullptr"))
+        } else {
+            rvo.unwrap()
+        };
+        let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+        let value = ptr_ty.const_null();
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    });
+    expr_lit(
+        generator,
+        vec![],
+        "nullptr_literal".to_string(),
+        make_ptr_ty(),
+        source,
+    )
+}
+
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Rc<ExprNode> {
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
@@ -2340,7 +2361,7 @@ pub fn eq_trait() -> TraitInfo {
     )
 }
 
-pub fn eq_trait_instance_primitive(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn eq_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_eq_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
@@ -2379,6 +2400,54 @@ pub fn eq_trait_instance_primitive(ty: Rc<TypeNode>) -> TraitInstance {
         ty,
         make_bool_ty(),
         generate_eq_int,
+    )
+}
+
+pub fn eq_trait_instance_ptr(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_eq_ptr<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_pointer_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_pointer_value();
+        gc.release(rhs);
+        let diff = gc
+            .builder()
+            .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr");
+        let value = gc.builder().build_int_compare(
+            IntPredicate::EQ,
+            diff,
+            diff.get_type().const_zero(),
+            EQ_TRAIT_EQ_NAME,
+        );
+        let value = gc.builder().build_int_cast(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            "eq",
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        eq_trait_id(),
+        &EQ_TRAIT_EQ_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        generate_eq_ptr,
     )
 }
 

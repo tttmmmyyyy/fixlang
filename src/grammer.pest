@@ -32,6 +32,8 @@ int_lit_body = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
 int_lit_type = { "U8" | "I32" | "I64" }
 
+expr_nullptr_lit = { "nullptr" }
+
 expr_bool_lit = { "true" | "false" }
 
 expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
@@ -46,7 +48,7 @@ string_char = {
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
 
-expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit | expr_array_lit }
+expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit | expr_array_lit | expr_nullptr_lit }
 
 expr_var = { (namespace ~ "::")? ~ var }
 
@@ -244,7 +246,7 @@ ffi_c_fun_char = _{ !("(") ~ ANY }
 
 ffi_c_fun_name = { ffi_c_fun_char+ }
 
-ffi_c_fun_ty = { ffi_c_ty_unit | ffi_c_ty_ptr | ffi_c_ty_u8 | ffi_c_ty_i32 }
+ffi_c_fun_ty = { ffi_c_ty_unit | ffi_c_ty_ptr | ffi_c_ty_u8 | ffi_c_ty_i32 | ffi_c_ty_i64 }
 
 ffi_c_ty_unit = _{ "()" }
 
@@ -253,6 +255,8 @@ ffi_c_ty_ptr = _{ "Ptr" }
 ffi_c_ty_u8 = _{ "U8" }
 
 ffi_c_ty_i32 = _{ "I32" }
+
+ffi_c_ty_i64 = _{ "I64" }
 
 ffi_param_tys = { (ffi_c_fun_ty ~ (sep* ~ "," ~ sep* ~ ffi_c_fun_ty)*) | "" }
 

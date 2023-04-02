@@ -116,6 +116,19 @@ impl TyCon {
         if self.name.name == U8_NAME {
             return Some(ctx.i8_type().as_basic_type_enum());
         }
+        if self.name.name == I32_NAME {
+            return Some(ctx.i32_type().as_basic_type_enum());
+        }
+        if self.name.name == I64_NAME {
+            return Some(ctx.i64_type().as_basic_type_enum());
+        }
+        if self.name.name == PTR_NAME {
+            return Some(
+                ctx.i8_type()
+                    .ptr_type(AddressSpace::from(0))
+                    .as_basic_type_enum(),
+            );
+        }
         panic!("call get_c_type for {}", self.to_string())
     }
 }

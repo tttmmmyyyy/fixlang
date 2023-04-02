@@ -876,8 +876,11 @@ Litels:
 `Std::U8` is the type of 8-bit unsigned integers.
 
 Literals:
-    - `{number}_U8`
-        - Example: `-1_U8 == 255_U8`
+- `{number}_U8`
+    - Example: `-1_U8 == 255_U8`
+
+Implementing traits:
+- `U8 : Eq`
 
 ### Std::IOState
 
@@ -889,6 +892,9 @@ All functions that perform I/O action by `IOState` assert that the given state i
 
 Related values in namespace `Std::IOState`:
 
+- `read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`
+    - Read characters from a IOHandle upto newline/carriage return or EOF.
+    - The returned string may include newline/carriage return at it's end.
 - `pure : () -> IOState -> ((), IOState)`
     - Makes a "do nothing" I/O action.
 - `print! : String -> IOState -> ((), IOState)`
@@ -913,23 +919,36 @@ Implementing traits:
 
 A handle type for read / write operations on files/stdin/stdout/stderr.
 
+Related values in Std::IOState::IOHandle:
+
+- `stderr : IOHandle`
+    - The handle for standard error.
+- `stdin : IOHandle`
+    - The handle for standard input.    
+- `stdout : IOHandle`
+    - The handle for standard output.
+
 ### Std::I32
 
 `Std::I32` is the type of 32-bit signed integers.
 
 Literals:
-    - `{number}_I32`
-        - Example: `42_I32`
+- `{number}_I32`
+    - Example: `42_I32`
+
+Implementing traits:
+
+- `I32 : Eq`
 
 ### Std::I64
 
 `Std::I64` is the type of 64-bit signed integers.
 
 Literals:
-    - `{number}`
-        - Example: `42`
-    - `{number}_I64`
-        - Example: `42_I64 == 42`
+- `{number}`
+    - Example: `42`
+- `{number}_I64`
+    - Example: `42_I64 == 42`
 
 Methods:
 
@@ -1017,10 +1036,13 @@ Methods:
 
 `Std::Ptr` is the type of pointers.
 
-Related values in namaspce `Std::Ptr`:
+Literals:
+- `nullptr`
+    - The null pointer.
 
-- `null : Ptr`
-    - A null pointer. 
+Implementing traits:
+
+- `Ptr : Eq`
 
 ### Std::Result
 

@@ -883,6 +883,7 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
         Rule::expr_bool_lit => parse_expr_bool_lit(pair, src),
         Rule::expr_string_lit => parse_expr_string_lit(pair, src),
         Rule::expr_array_lit => parse_expr_array_lit(pair, src),
+        Rule::expr_nullptr_lit => parse_expr_nullptr_lit(pair, src),
         _ => unreachable!(),
     }
 }
@@ -1037,6 +1038,12 @@ fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
         None => make_i64_ty(),
     };
     expr_int_lit(val, ty, Some(span))
+}
+
+fn parse_expr_nullptr_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_nullptr_lit);
+    let span = Span::from_pair(&src, &pair);
+    expr_nullptr_lit(Some(span))
 }
 
 fn parse_expr_bool_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {

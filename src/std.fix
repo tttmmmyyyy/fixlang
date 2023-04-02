@@ -218,24 +218,54 @@ namespace IOState {
 
 namespace IOState {
 
-    // // Read a line from a input handle.
-    // read_line : IOHandle -> IOState -> (Result String IOError, IOState)
-    // read_line = |handle, io| (
-    //     // Check if io is unique.
-    //     let (is_io_unique, io) = io.is_unique;
-    //     let _ = assert("[Std::IOState::read_line] Cloned IOState value.", is_io_unique);
+    // Read characters from a IOHandle upto newline/carriage return or EOF.
+    // The returned string may include newline/carriage return at it's end.
+    read_line! : IOHandle -> IOState -> (Result String IOError, IOState);
+    read_line! = |handle, io| (
+        // Check if io is unique.
+        let (is_io_unique, io) = io.is_unique;
+        let _ = assert("[Std::IOState::read_line] Cloned IOState value.", is_io_unique);
 
-    //     let strings_rev = loop(Iterator.make_empty, |strs|
-    //         let buf = Array::make_empty(1024);
-    //         buf.call_with_valid_ptr(|buf|
-    //             let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, 1024_I32, handle.@_file_ptr];
-    //             if fgets_res == Ptr::null {
+        // Read strings and make iterators of strings (reversed).
+        let strings_rev = loop(Iterator::make_empty, |strs|
+            let buf = Array::make_empty(1024); // NOTE: this number also appears at CALL_C[fgets].
+            let strlen = buf.call_with_valid_ptr(|buf|
+                // Read characters to buf.
+                let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, 1024_I32, handle.@_file_ptr];
+                if fgets_res == nullptr { -1 };
 
-    //             }
-    //         )
-            
-    //     );
-    // );
+                // Return length.
+                let strlen = CALL_C[I64 strlen(Ptr), buf];
+                strlen
+            );
+            // If reached to EOF (or error), break.
+            if strlen == -1 { break $ strs };
+
+            // Create string.
+            let buf = buf.__unsafe_set_length(strlen + 1);
+            let str = String { _data : buf };
+            let strs = strs.push_front(str);
+
+            // If no character is read, break.
+            if strlen == 0 { break $ strs };
+
+            // If the last character is \n or \r, break.
+            let last_byte = buf.get(strlen-1);
+            if last_byte == 10_U8 || last_byte == 13_U8 { break $ strs };
+
+            continue $ strs
+        );
+
+        // Check if err occurred.
+        let err = CALL_C[I32 ferror(Ptr), handle.@_file_ptr];
+        if err != 0_I32 { 
+            let err = IOError { msg : "Std::IOState::read_line failed!: some error occurred in fgets." };
+            (Result::err(err), io)
+        };
+
+        let str = strings_rev.reverse.concat_iter;
+        (Result::ok(str), io)
+    );
 }
 
 namespace IOState {
@@ -256,6 +286,13 @@ namespace IOState {
 
 namespace IOState::IOHandle {
 
+    // The handle for standard error.
+    stderr : IOHandle;
+    stderr = (
+        let ptr = "a".call_with_valid_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
+        IOHandle { _file_ptr: ptr } 
+    );
+
     // The handle for standard input.
     stdin : IOHandle;
     stdin = (
@@ -267,13 +304,6 @@ namespace IOState::IOHandle {
     stdout : IOHandle;
     stdout = (
         let ptr = "a".call_with_valid_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
-        IOHandle { _file_ptr: ptr } 
-    );
-
-    // The handle for standard error.
-    stderr : IOHandle;
-    stderr = (
-        let ptr = "a".call_with_valid_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
         IOHandle { _file_ptr: ptr } 
     );
 }
