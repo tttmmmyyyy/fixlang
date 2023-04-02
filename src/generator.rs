@@ -610,7 +610,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Call function.
         if ret_ty.is_unbox(self.type_env()) {
-            // If return type is unboxed, preform return value optimization.
+            // If return type is unboxed, perform return value optimization.
             let rvo = if rvo.is_none() {
                 // Allocate memory region for rvo here.
                 allocate_obj(

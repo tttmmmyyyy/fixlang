@@ -1013,6 +1013,10 @@ Implementing Traits:
 
 ## Functions
 
+### Std::assert_unique! : a -> a
+
+This function asserts that a value is unique. If the given value is referenced by multiple names, this function panics. If `a` is unboxed, this function does nothing. 
+
 ### Std::fix : ((a -> b) -> a -> b) -> a -> b
 
 `fix` enables you to make a recursive function locally. The idiom is: `fix $ |loop, var| -> (expression calls loop)`.

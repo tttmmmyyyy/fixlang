@@ -865,7 +865,7 @@ fn make_array_unique<'c, 'm>(
     gc.builder().position_at_end(shared_bb);
     if panic_if_shared {
         // In case of unique version, panic in this case.
-        gc.panic("a struct object is asserted as unique but is shared!\n");
+        gc.panic("an array is asserted as unique but is shared!\n");
     }
     // Allocate cloned array.
     let array_cap = array.load_field_nocap(gc, ARRAY_CAP_IDX).into_int_value();
@@ -2884,6 +2884,81 @@ pub fn ptr_make_null_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         vec![],
         "make_null".to_string(),
         make_ptr_ty(),
+        None,
+    );
+    (expr, scm)
+}
+
+// Std::assert_unique! : a -> a
+pub fn assert_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const TYPE_NAME: &str = "a";
+    const VAR_NAME: &str = "x";
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+        // Get argument
+        let obj = gc.get_var(&FullName::local(VAR_NAME)).ptr.get(gc);
+
+        if obj.is_box(gc.type_env()) {
+            // Get refcnt.
+            let refcnt = {
+                let obj_ptr = obj.ptr(gc);
+                gc.load_obj_field(obj_ptr, control_block_type(gc), 0)
+                    .into_int_value()
+            };
+
+            // Add shared / cont bbs.
+            let current_bb = gc.builder().get_insert_block().unwrap();
+            let current_func = current_bb.get_parent().unwrap();
+            let shared_bb = gc
+                .context
+                .append_basic_block(current_func, "shared_bb@assert_unique");
+            let cont_bb = gc
+                .context
+                .append_basic_block(current_func, "cont_bb@assert_unique");
+
+            // Jump to shared_bb if refcnt > 1.
+            let one = refcnt_type(gc.context).const_int(1, false);
+            let is_unique =
+                gc.builder()
+                    .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+            gc.builder()
+                .build_conditional_branch(is_unique, cont_bb, shared_bb);
+
+            // In shared_bb, panic.
+            gc.builder().position_at_end(shared_bb);
+            gc.panic("a value is asserted as unique but is shared!\n");
+            gc.builder().build_unconditional_branch(cont_bb);
+
+            // Implement cont_bb.
+            gc.builder().position_at_end(cont_bb);
+            assert!(rvo.is_none());
+            obj
+        } else {
+            // unboxed case.
+            if rvo.is_some() {
+                let val = obj.value(gc);
+                let ret = rvo.unwrap();
+                ret.store_unbox(gc, val);
+                ret
+            } else {
+                obj
+            }
+        }
+    });
+    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let scm = Scheme::generalize(
+        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![],
+        type_fun(obj_type.clone(), obj_type.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(VAR_NAME)],
+        expr_lit(
+            generator,
+            vec![],
+            format!("assert_unique!({})", VAR_NAME),
+            obj_type,
+            None,
+        ),
         None,
     );
     (expr, scm)
