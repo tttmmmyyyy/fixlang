@@ -2908,3 +2908,26 @@ pub fn not_trait_instance_bool() -> TraitInstance {
         generate_not_bool,
     )
 }
+
+// Ptr::make_null : Ptr
+pub fn ptr_make_null_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+        let obj = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(make_ptr_ty(), &vec![], None, gc, Some("make_null"))
+        };
+        let val = ObjectFieldType::Ptr.to_basic_type(gc).const_zero();
+        obj.store_field_nocap(gc, 0, val);
+        obj
+    });
+    let scm = Scheme::generalize(Default::default(), vec![], make_ptr_ty());
+    let expr = expr_lit(
+        generator,
+        vec![],
+        "make_null".to_string(),
+        make_ptr_ty(),
+        None,
+    );
+    (expr, scm)
+}

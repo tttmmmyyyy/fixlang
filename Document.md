@@ -978,6 +978,11 @@ Methods:
 
 `Std::Ptr` is the type of pointers.
 
+Related values in namaspce `Std::Ptr`:
+
+- `null : Ptr`
+    - A null pointer. 
+
 ### Std::String
 
 The type of strings.
