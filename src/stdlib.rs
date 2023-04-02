@@ -147,8 +147,8 @@ pub fn make_std_mod() -> FixModule {
         ptr_make_null_function(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "assert_unique!"),
-        assert_unique_function(),
+        FullName::from_strs(&[STD_NAME], "is_unique"),
+        is_unique_function(),
     );
 
     fix_module

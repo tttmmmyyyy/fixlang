@@ -205,15 +205,25 @@ impl I64 : ToString {
 
 namespace IOState {
 
-    pure : a -> IOState -> (a, IOState);
-    pure = |val, io| (val, io);
-
     println! : String -> IOState -> ((), IOState);
     println! = |msg, io| (
         let (_, io) = io.print!(msg);
         io.print!("\n")
     );
 
+    pure : a -> IOState -> (a, IOState);
+    pure = |val, io| (val, io);
+
+    // A type for I/O error.
+    type IOError = unbox struct { msg : String };
+
+    // A handle type for read / write operations on files/stdin/stdout/stderr.
+    // TODO: add `close! : IOHandle -> IOState -> ((), IOState)`, which asserts that the given IOHandle is unique.
+    type IOHandle = unbox struct { _file_ptr: Ptr };
+}
+
+impl IOError : ToString {
+    to_string = |e| e.@msg;
 }
 
 // Iterator (a.k.a lazy list)
@@ -422,6 +432,22 @@ namespace Option {
 
 }
 
+// A type of result value for a computation that may fail.
+type Result o e = unbox union { ok : o, err: e };
+
+namespace Result {
+    // Returns the containing value if the value is ok, or otherwise panics after printing error value.
+    unwrap : [e : ToString] Result o e -> o;
+    unwrap = |res| (
+        if res.is_err {
+            let _ = debug_print(res.as_err.to_string);
+            abort()
+        } else {
+            res.as_ok
+        }
+    );
+}
+
 type String = unbox struct { _data : Array U8 };
 
 namespace String {
@@ -471,6 +497,10 @@ impl String : Add {
 impl String : Eq {
     // Compare two strings.
     eq = |lhs, rhs| (lhs.@_data == rhs.@_data);
+}
+
+impl String : ToString {
+    to_string = |s| s;
 }
 
 trait a : ToString {

@@ -2345,6 +2345,39 @@ pub fn test94() {
 
 #[test]
 #[serial]
+pub fn test95() {
+    // Test Std::is_unique
+    let source = r#"
+            module Main;
+    
+            main : IOState -> ((), IOState);
+            main = (
+                // For unboxed value, it returns true even if the value is used later.
+                let int_val = 42;
+                let (unique, _) = int_val.is_unique;
+                let use = int_val + 1;
+                let _ = assert_eq("fail: int_val is shared", unique, true);
+
+                // For boxed value, it returns true if the value isn't used later.
+                let arr = Array::fill(10, 10);
+                let (unique, arr) = arr.is_unique;
+                let use = arr.get(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+                let _ = assert_eq("fail: arr is shared", unique, true);
+
+                // Fox boxed value, it returns false if the value will be used later.
+                let arr = Array::fill(10, 10);
+                let (unique, _) = arr.is_unique;
+                let use = arr.get(0);
+                let _ = assert_eq("fail: arr is unique", unique, false);
+
+                pure()
+            );
+        "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

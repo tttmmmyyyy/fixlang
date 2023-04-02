@@ -875,7 +875,7 @@ For example, `Std::IOState.print!(msg) : Std::IOState -> ((), Std::IOState)` fun
 
 All functions that perform I/O action by `IOState` assert that the given state is unique.
 
-Methods:
+Related values in namespace `Std::IOState`:
 
 - `pure : () -> IOState -> ((), IOState)`
     - Makes a "do nothing" I/O action.
@@ -883,6 +883,23 @@ Methods:
     - Prints a string to standard output.
 - `println! : String -> IOState -> ((), IOState)`
     - Prints a string and a newline to standard output.
+
+### Std::IOState::IOError
+
+A type for I/O error.
+
+```
+type IOError = unbox struct { msg : String };
+```
+
+Implementing traits:
+
+- `Std::ToString`
+    - Returns the value of `msg` field.
+
+### Std::IOState::IOHandle
+
+A handle type for read / write operations on files/stdin/stdout/stderr.
 
 ### Std::I32
 
@@ -983,6 +1000,19 @@ Related values in namaspce `Std::Ptr`:
 - `null : Ptr`
     - A null pointer. 
 
+### Std::Result
+
+A type of result value for a computation that may fail.
+
+```
+type Result o e = unbox union { ok : o, err: e };
+```
+
+Related values in namespce `Std::Result`:
+
+- `unwrap : [e : ToString] Result o e -> o`
+    - Returns the containing value if the value is ok, or otherwise panics after printing error value.
+
 ### Std::String
 
 The type of strings.
@@ -1010,12 +1040,42 @@ Implementing Traits:
 - `String : Add`
     - Add two strings by `String.concat`.
 - `String : Eq`
+- `String : ToString`
 
 ## Functions
 
-### Std::assert_unique! : a -> a
+### Std::is_unique : a -> (Bool, a)
 
-This function asserts that a value is unique. If the given value is referenced by multiple names, this function panics. If `a` is unboxed, this function does nothing. 
+This function checks if a value is uniquely refernced by a name, and returns the pair of the result and the given value. If `a` is unboxed, the 0th component of the returned value is `true`.
+
+Example: 
+
+```
+main : IOState -> ((), IOState);
+main = (
+    // For unboxed value, it returns true even if the value is used later.
+    let int_val = 42;
+    let (unique, _) = int_val.is_unique;
+    let use = int_val + 1;
+    let _ = assert_eq("fail: int_val is shared", unique, true);
+
+    // For boxed value, it returns true if the value isn't used later.
+    let arr = Array::fill(10, 10);
+    let (unique, arr) = arr.is_unique;
+    let use = arr.get(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+    let _ = assert_eq("fail: arr is shared", unique, true);
+
+    // Fox boxed value, it returns false if the value will be used later.
+    let arr = Array::fill(10, 10);
+    let (unique, _) = arr.is_unique;
+    let use = arr.get(0);
+    let _ = assert_eq("fail: arr is unique", unique, false);
+
+    pure()
+);
+```
+
+TODO: add how to use.
 
 ### Std::fix : ((a -> b) -> a -> b) -> a -> b
 

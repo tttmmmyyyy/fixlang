@@ -2889,15 +2889,25 @@ pub fn ptr_make_null_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Std::assert_unique! : a -> a
-pub fn assert_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+// Std::is_unique : a -> (Bool, a)
+pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ret_ty, rvo| {
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+
         // Get argument
         let obj = gc.get_var(&FullName::local(VAR_NAME)).ptr.get(gc);
 
-        if obj.is_box(gc.type_env()) {
+        // Prepare returned object.
+        let ret = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"))
+        };
+
+        // Get whether argument is unique.
+        let is_unique = if obj.is_box(gc.type_env()) {
             // Get refcnt.
             let refcnt = {
                 let obj_ptr = obj.ptr(gc);
@@ -2905,58 +2915,47 @@ pub fn assert_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
                     .into_int_value()
             };
 
-            // Add shared / cont bbs.
-            let current_bb = gc.builder().get_insert_block().unwrap();
-            let current_func = current_bb.get_parent().unwrap();
-            let shared_bb = gc
-                .context
-                .append_basic_block(current_func, "shared_bb@assert_unique!");
-            let cont_bb = gc
-                .context
-                .append_basic_block(current_func, "cont_bb@assert_unique!");
-
-            // Jump to shared_bb if refcnt > 1.
+            // Check if obj is unique.
             let one = refcnt_type(gc.context).const_int(1, false);
-            let is_unique =
-                gc.builder()
-                    .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+            let is_unique = gc.builder().build_int_compare(
+                IntPredicate::EQ,
+                refcnt,
+                one,
+                "is_unique@is_unique",
+            );
+
             gc.builder()
-                .build_conditional_branch(is_unique, cont_bb, shared_bb);
-
-            // In shared_bb, panic.
-            gc.builder().position_at_end(shared_bb);
-            gc.panic("a value is asserted as unique but is shared!\n");
-            gc.builder().build_unconditional_branch(cont_bb);
-
-            // Implement cont_bb.
-            gc.builder().position_at_end(cont_bb);
-            assert!(rvo.is_none());
-            obj
+                .build_int_z_extend(is_unique, bool_ty, "int_z_extend@is_unique")
         } else {
-            // unboxed case.
-            if rvo.is_some() {
-                let val = obj.value(gc);
-                let ret = rvo.unwrap();
-                ret.store_unbox(gc, val);
-                ret
-            } else {
-                obj
-            }
-        }
+            bool_ty.const_int(1, false)
+        };
+        let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
+        let bool_val = gc
+            .builder()
+            .build_insert_value(bool_val, is_unique, 0, "insert@is_unique")
+            .unwrap();
+
+        // Store the result
+        ret.store_field_nocap(gc, 0, bool_val);
+        let obj_val = obj.value(gc);
+        ret.store_field_nocap(gc, 1, obj_val);
+
+        ret
     });
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let ret_type = make_tuple_ty(vec![make_bool_ty(), obj_type.clone()]);
     let scm = Scheme::generalize(
         HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
         vec![],
-        type_fun(obj_type.clone(), obj_type.clone()),
+        type_fun(obj_type.clone(), ret_type.clone()),
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_lit(
             generator,
             vec![FullName::local(VAR_NAME)],
-            format!("assert_unique!({})", VAR_NAME),
-            obj_type,
+            format!("is_unique({})", VAR_NAME),
+            ret_type,
             None,
         ),
         None,
