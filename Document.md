@@ -890,17 +890,32 @@ For example, `Std::IOState::print!(msg) : Std::IOState -> ((), Std::IOState)` fu
 
 All functions that perform I/O action by `IOState` assert that the given state is unique.
 
-Related values in namespace `Std::IOState`:
+#### `read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`
 
-- `read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`
-    - Read characters from a IOHandle upto newline/carriage return or EOF.
-    - The returned string may include newline/carriage return at it's end.
-- `pure : () -> IOState -> ((), IOState)`
-    - Makes a "do nothing" I/O action.
-- `print! : String -> IOState -> ((), IOState)`
-    - Prints a string to standard output.
-- `println! : String -> IOState -> ((), IOState)`
-    - Prints a string and a newline to standard output.
+Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at it's end.
+
+Example: 
+```
+module Main;
+
+main : IOState -> ((), IOState);
+main = |io| (
+    let (Result::ok(str), io) = io.read_line!(stdin);
+    io.println!(str)
+);
+```
+
+#### `pure : () -> IOState -> ((), IOState)`
+
+Makes a "do nothing" I/O action.
+
+#### `print! : String -> IOState -> ((), IOState)`
+
+Prints a string to standard output.
+
+#### `println! : String -> IOState -> ((), IOState)`
+
+Prints a string and a newline to standard output.
 
 ### Std::IOState::IOError
 
