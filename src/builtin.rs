@@ -2468,24 +2468,30 @@ pub fn less_than_trait() -> TraitInfo {
     )
 }
 
-pub fn less_than_trait_instance_int() -> TraitInstance {
+pub fn less_than_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_less_than_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
+        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc.builder().build_int_compare(
-            IntPredicate::SLT,
+            if is_singed {
+                IntPredicate::SLT
+            } else {
+                IntPredicate::ULT
+            },
             lhs_val,
             rhs_val,
             LESS_THAN_TRAIT_LT_NAME,
         );
-        let value = gc.builder().build_int_cast(
+        let value = gc.builder().build_int_z_extend(
             value,
             ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             LESS_THAN_TRAIT_LT_NAME,
@@ -2507,7 +2513,7 @@ pub fn less_than_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         less_than_trait_id(),
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
-        make_i64_ty(),
+        ty,
         make_bool_ty(),
         generate_less_than_int,
     )
@@ -2530,24 +2536,30 @@ pub fn less_than_or_equal_to_trait() -> TraitInfo {
     )
 }
 
-pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
+pub fn less_than_or_equal_to_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_less_than_or_equal_to_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
+        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(lhs);
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc.builder().build_int_compare(
-            IntPredicate::SLE,
+            if is_singed {
+                IntPredicate::SLE
+            } else {
+                IntPredicate::ULE
+            },
             lhs_val,
             rhs_val,
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
-        let value = gc.builder().build_int_cast(
+        let value = gc.builder().build_int_z_extend(
             value,
             ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
@@ -2569,7 +2581,7 @@ pub fn less_than_or_equal_to_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         less_than_or_equal_to_trait_id(),
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
-        make_i64_ty(),
+        ty,
         make_bool_ty(),
         generate_less_than_or_equal_to_int,
     )
@@ -2588,7 +2600,7 @@ pub fn add_trait() -> TraitInfo {
     binary_operator_trait(add_trait_id(), ADD_TRAIT_ADD_NAME.to_string(), None)
 }
 
-pub fn add_trait_instance_int() -> TraitInstance {
+pub fn add_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_add_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
@@ -2596,7 +2608,7 @@ pub fn add_trait_instance_int() -> TraitInstance {
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs);
+        gc.release(lhs.clone());
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc
@@ -2604,7 +2616,7 @@ pub fn add_trait_instance_int() -> TraitInstance {
             .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                make_i64_ty(),
+                lhs.ty.clone(),
                 &vec![],
                 None,
                 gc,
@@ -2619,8 +2631,8 @@ pub fn add_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         add_trait_id(),
         &ADD_TRAIT_ADD_NAME.to_string(),
-        make_i64_ty(),
-        make_i64_ty(),
+        ty.clone(),
+        ty,
         generate_add_int,
     )
 }
@@ -2642,7 +2654,7 @@ pub fn subtract_trait() -> TraitInfo {
     )
 }
 
-pub fn subtract_trait_instance_int() -> TraitInstance {
+pub fn subtract_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_subtract_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
@@ -2650,7 +2662,7 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs);
+        gc.release(lhs.clone());
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc
@@ -2658,7 +2670,7 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
             .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                make_i64_ty(),
+                lhs.ty.clone(),
                 &vec![],
                 None,
                 gc,
@@ -2673,8 +2685,8 @@ pub fn subtract_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         subtract_trait_id(),
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
-        make_i64_ty(),
-        make_i64_ty(),
+        ty.clone(),
+        ty,
         generate_subtract_int,
     )
 }
@@ -2696,7 +2708,7 @@ pub fn multiply_trait() -> TraitInfo {
     )
 }
 
-pub fn multiply_trait_instance_int() -> TraitInstance {
+pub fn multiply_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_multiply_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
@@ -2704,7 +2716,7 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs);
+        gc.release(lhs.clone());
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc
@@ -2712,7 +2724,7 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
             .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                make_i64_ty(),
+                lhs.ty.clone(),
                 &vec![],
                 None,
                 gc,
@@ -2727,8 +2739,8 @@ pub fn multiply_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         multiply_trait_id(),
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
-        make_i64_ty(),
-        make_i64_ty(),
+        ty.clone(),
+        ty,
         generate_multiply_int,
     )
 }
@@ -2750,23 +2762,29 @@ pub fn divide_trait() -> TraitInfo {
     )
 }
 
-pub fn divide_trait_instance_int() -> TraitInstance {
+pub fn divide_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_divide_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
+        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs);
+        gc.release(lhs.clone());
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
-        let value = gc
-            .builder()
-            .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
+        let value = if is_singed {
+            gc.builder()
+                .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
+        } else {
+            gc.builder()
+                .build_int_unsigned_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
+        };
         let obj = if rvo.is_none() {
             allocate_obj(
-                make_i64_ty(),
+                lhs.ty.clone(),
                 &vec![],
                 None,
                 gc,
@@ -2781,8 +2799,8 @@ pub fn divide_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         divide_trait_id(),
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
-        make_i64_ty(),
-        make_i64_ty(),
+        ty.clone(),
+        ty,
         generate_divide_int,
     )
 }
@@ -2804,23 +2822,29 @@ pub fn remainder_trait() -> TraitInfo {
     )
 }
 
-pub fn remainder_trait_instance_int() -> TraitInstance {
+pub fn remainder_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_remainder_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         lhs: Object<'c>,
         rhs: Object<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
+        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+
         let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs);
+        gc.release(lhs.clone());
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
-        let value =
+        let value = if is_singed {
             gc.builder()
-                .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME);
+                .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
+        } else {
+            gc.builder()
+                .build_int_unsigned_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
+        };
         let obj = if rvo.is_none() {
             allocate_obj(
-                make_i64_ty(),
+                lhs.ty.clone(),
                 &vec![],
                 None,
                 gc,
@@ -2835,8 +2859,8 @@ pub fn remainder_trait_instance_int() -> TraitInstance {
     binary_opeartor_instance(
         remainder_trait_id(),
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
-        make_i64_ty(),
-        make_i64_ty(),
+        ty.clone(),
+        ty,
         generate_remainder_int,
     )
 }
@@ -2854,20 +2878,20 @@ pub fn negate_trait() -> TraitInfo {
     unary_operator_trait(negate_trait_id(), NEGATE_TRAIT_NEGATE_NAME.to_string())
 }
 
-pub fn negate_trait_instance_int() -> TraitInstance {
+pub fn negate_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     fn generate_negate_int<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         rhs: Object<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
+        gc.release(rhs.clone());
         let value = gc
             .builder()
             .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
         let obj = if rvo.is_none() {
             allocate_obj(
-                make_i64_ty(),
+                rhs.ty.clone(),
                 &vec![],
                 None,
                 gc,
@@ -2882,8 +2906,8 @@ pub fn negate_trait_instance_int() -> TraitInstance {
     unary_opeartor_instance(
         negate_trait_id(),
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
-        make_i64_ty(),
-        make_i64_ty(),
+        ty.clone(),
+        ty,
         generate_negate_int,
     )
 }

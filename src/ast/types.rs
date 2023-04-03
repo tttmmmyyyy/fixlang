@@ -131,6 +131,18 @@ impl TyCon {
         }
         panic!("call get_c_type for {}", self.to_string())
     }
+
+    pub fn is_singned_intger(self: &TyCon) -> bool {
+        if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
+            panic!("call is_singned_intger for {}", self.to_string())
+        }
+        match self.name.name.as_str() {
+            U8_NAME => false,
+            I32_NAME => true,
+            I64_NAME => true,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Clone)]

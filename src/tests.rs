@@ -2394,6 +2394,37 @@ pub fn test96() {
 
 #[test]
 #[serial]
+pub fn test97() {
+    // Test arithmetic operation of U8, I32
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let _ = assert_eq("", -(1_U8), 255_U8);
+            let _ = assert_eq("", 255_U8 + 3_U8, 2_U8);
+            let _ = assert_eq("", 1_U8 - 3_U8, 254_U8);
+            let _ = assert_eq("", 20_U8 * 30_U8, 88_U8);
+            let _ = assert_eq("", 10_U8 / 3_U8, 3_U8);
+            let _ = assert_eq("", 10_U8 % 3_U8, 1_U8);
+            let _ = assert_eq("", -1_U8 > 0_U8, true);
+            let _ = assert_eq("", -1_U8 >= 0_U8, true);
+
+            let _ = assert_eq("", 2147483647_I32 + 2_I32, -2147483647_I32);
+            let _ = assert_eq("", -2147483647_I32 - 2_I32, 2147483647_I32);
+            let _ = assert_eq("", 2147483647_I32 * 2_I32, -2_I32);
+            let _ = assert_eq("", 10_I32 / -3_I32, -3_I32);
+            let _ = assert_eq("", 10_I32 % -3_I32, 1_I32);
+            let _ = assert_eq("", -1_I32 < 0_I32, true);
+            
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

@@ -876,11 +876,20 @@ Litels:
 `Std::U8` is the type of 8-bit unsigned integers.
 
 Literals:
+
 - `{number}_U8`
     - Example: `-1_U8 == 255_U8`
 
 Implementing traits:
-- `U8 : Eq`
+
+- `Std::Add`
+- `Std::Eq`
+- `Std::LessThan`
+- `Std::LessThanOrEq`
+- `Std::Mul`
+- `Std::Neg`
+- `Std::Rem`
+- `Std::Sub`
 
 ### Std::IOState
 
@@ -953,7 +962,14 @@ Literals:
 
 Implementing traits:
 
-- `I32 : Eq`
+- `Std::Add`
+- `Std::Eq`
+- `Std::LessThan`
+- `Std::LessThanOrEq`
+- `Std::Mul`
+- `Std::Neg`
+- `Std::Rem`
+- `Std::Sub`
 
 ### Std::I64
 
