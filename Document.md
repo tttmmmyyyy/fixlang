@@ -905,7 +905,7 @@ main = |io| (
 );
 ```
 
-#### `pure : () -> IOState -> ((), IOState)`
+#### `pure : a -> IOState -> (a, IOState)`
 
 Makes a "do nothing" I/O action.
 
