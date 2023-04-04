@@ -910,6 +910,9 @@ Implementing traits:
 - `Std::Neg`
 - `Std::Rem`
 - `Std::Sub`
+- `Std::ToString`
+
+#### _U32_to_string : U32 -> String
 
 ### Std::U64
 
@@ -930,6 +933,9 @@ Implementing traits:
 - `Std::Neg`
 - `Std::Rem`
 - `Std::Sub`
+- `Std::ToString`
+
+#### _U64_to_string : U64 -> String
 
 ### Std::IOState
 
@@ -1010,6 +1016,9 @@ Implementing traits:
 - `Std::Neg`
 - `Std::Rem`
 - `Std::Sub`
+- `Std::ToString`
+
+#### _I32_to_string : I32 -> String
 
 ### Std::I64
 
@@ -1020,12 +1029,6 @@ Literals:
     - Example: `42`
 - `{number}_I64`
     - Example: `42_I64 == 42`
-
-Methods:
-
-- `Std::I64._int_to_string : I64 -> String`
-    - Convert an integer to a decimal number string.
-    - Implementation of trait method `Std::ToString.to_string`.
 
 Implementing traits:
 
@@ -1038,6 +1041,8 @@ Implementing traits:
 - `Std::Rem`
 - `Std::Sub`
 - `Std::ToString`
+
+#### _I64_to_string : I64 -> String
 
 ### Std::Iterator
 

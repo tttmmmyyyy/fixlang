@@ -306,7 +306,7 @@ pub fn io_runner_ty(output_ty: Rc<TypeNode>) -> Rc<TypeNode> {
     type_fun(make_iostate_ty(), result_ty.clone())
 }
 
-pub fn expr_int_lit(val: i64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
+pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {
             allocate_obj(
@@ -494,9 +494,16 @@ pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// int_to_string : I64 -> String
-pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+// int_to_string function
+pub fn int_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
     const VAL_NAME: &str = "val";
+    let (buf_size, specifier) = match ty.toplevel_tycon().unwrap().name.name.as_str() {
+        I32_NAME => (12, C_I32_FORMATTER),
+        U32_NAME => (11, C_U32_FORMATTER),
+        I64_NAME => (21, C_I64_FORMATTER),
+        U64_NAME => (20, C_U64_FORMATTER),
+        _ => unreachable!(),
+    };
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         // Get value
         let val = gc
@@ -505,8 +512,7 @@ pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         gc.release(gc.get_var(&FullName::local(VAL_NAME)).ptr.get(gc));
 
         // Allocate buffer for sprintf.
-        const BUF_SIZE: i32 = 21;
-        let buf_size = gc.context.i32_type().const_int(BUF_SIZE as u64, false);
+        let buf_size = gc.context.i32_type().const_int(buf_size as u64, false);
         let buf = gc.builder().build_array_alloca(
             gc.context.i8_type(),
             buf_size,
@@ -516,7 +522,7 @@ pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         // Call sprintf.
         let format = gc
             .builder()
-            .build_global_string_ptr("%lld", "format@int_to_string")
+            .build_global_string_ptr(specifier, "format@int_to_string")
             .as_basic_value_enum()
             .into_pointer_value();
         let len = gc
@@ -545,14 +551,14 @@ pub fn int_to_string_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
-        type_fun(make_i64_ty(), make_string_ty()),
+        type_fun(ty.clone(), make_string_ty()),
     );
     let expr = expr_abs(
         vec![var_local(VAL_NAME)],
         expr_lit(
             generator,
             vec![FullName::local(VAL_NAME)],
-            format!("int_to_string {}", VAL_NAME),
+            format!("{}_to_string({})", ty.to_string(), VAL_NAME),
             make_string_ty(),
             None,
         ),

@@ -199,8 +199,12 @@ namespace Debug {
     );
 }
 
+impl I32 : ToString {
+    to_string = I32::_I32_to_string;
+}
+
 impl I64 : ToString {
-    to_string = I64::_int_to_string;
+    to_string = I64::_I64_to_string;
 }
 
 namespace IOState {
@@ -583,6 +587,14 @@ impl String : Eq {
 
 impl String : ToString {
     to_string = |s| s;
+}
+
+impl U32 : ToString {
+    to_string = U32::_U32_to_string;
+}
+
+impl U64 : ToString {
+    to_string = U64::_U64_to_string;
 }
 
 trait a : ToString {

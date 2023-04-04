@@ -1021,7 +1021,7 @@ fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     let mut pairs = pair.into_inner();
     let pair = pairs.next().unwrap();
     assert_eq!(pair.as_rule(), Rule::int_lit_body);
-    let val = pair.as_str().parse::<i64>().unwrap();
+    let val = pair.as_str().parse::<i128>().unwrap() as u64;
     let ty = match pairs.next() {
         Some(pair) => {
             assert_eq!(pair.as_rule(), Rule::int_lit_type);

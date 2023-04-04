@@ -2425,6 +2425,35 @@ pub fn test97() {
 
 #[test]
 #[serial]
+pub fn test98() {
+    // Test to_string for integrals
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            // I32
+            let _ = assert_eq("", -2147483648_I32.to_string, "-2147483648");
+            let _ = assert_eq("", 2147483647_I32.to_string, "2147483647");
+
+            // U32
+            let _ = assert_eq("", 4294967295_U32.to_string, "4294967295");
+
+            // I64
+            let _ = assert_eq("", -9223372036854775808_I64.to_string, "-9223372036854775808");
+            let _ = assert_eq("", 9223372036854775807_I64.to_string, "9223372036854775807");
+
+            // U64
+            let _ = assert_eq("", 18446744073709551615_U64.to_string, "18446744073709551615");
+            
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

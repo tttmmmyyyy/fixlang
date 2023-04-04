@@ -269,8 +269,20 @@ pub fn make_std_mod() -> FixModule {
         abort_function(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, I64_NAME], "_int_to_string"),
-        int_to_string_function(),
+        FullName::from_strs(&[STD_NAME, I32_NAME], "_I32_to_string"),
+        int_to_string_function(make_i32_ty()),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, U32_NAME], "_U32_to_string"),
+        int_to_string_function(make_u32_ty()),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, I64_NAME], "_I64_to_string"),
+        int_to_string_function(make_i64_ty()),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, U64_NAME], "_U64_to_string"),
+        int_to_string_function(make_u64_ty()),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, PTR_NAME], "make_null"),
