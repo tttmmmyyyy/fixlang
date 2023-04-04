@@ -246,17 +246,15 @@ ffi_c_fun_char = _{ !("(") ~ ANY }
 
 ffi_c_fun_name = { ffi_c_fun_char+ }
 
-ffi_c_fun_ty = { ffi_c_ty_unit | ffi_c_ty_ptr | ffi_c_ty_u8 | ffi_c_ty_i32 | ffi_c_ty_i64 }
+ffi_c_fun_ty = { ffi_c_ty_unit | ffi_c_ty_ptr | ffi_c_ty_u8 | ffi_c_ty_i32 | ffi_c_ty_u32 | ffi_c_ty_i64 | ffi_c_ty_u64 }
 
 ffi_c_ty_unit = _{ "()" }
-
 ffi_c_ty_ptr = _{ "Ptr" }
-
 ffi_c_ty_u8 = _{ "U8" }
-
 ffi_c_ty_i32 = _{ "I32" }
-
+ffi_c_ty_u32 = _{ "U32" }
 ffi_c_ty_i64 = _{ "I64" }
+ffi_c_ty_u64 = _{ "U64" }
 
 ffi_param_tys = { (ffi_c_fun_ty ~ (sep* ~ "," ~ sep* ~ ffi_c_fun_ty)*) | "" }
 
