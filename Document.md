@@ -891,6 +891,46 @@ Implementing traits:
 - `Std::Rem`
 - `Std::Sub`
 
+### Std::U32
+
+`Std::U32` is the type of 32-bit unsigned integers.
+
+Literals:
+
+- `{number}_U32`
+    - Example: `-1_U32 == 4294967295_U32`
+
+Implementing traits:
+
+- `Std::Add`
+- `Std::Eq`
+- `Std::LessThan`
+- `Std::LessThanOrEq`
+- `Std::Mul`
+- `Std::Neg`
+- `Std::Rem`
+- `Std::Sub`
+
+### Std::U64
+
+`Std::U64` is the type of 64-bit unsigned integers.
+
+Literals:
+
+- `{number}_U64`
+    - Example: `-1_U64 == 18446744073709551615_U64`
+
+Implementing traits:
+
+- `Std::Add`
+- `Std::Eq`
+- `Std::LessThan`
+- `Std::LessThanOrEq`
+- `Std::Mul`
+- `Std::Neg`
+- `Std::Rem`
+- `Std::Sub`
+
 ### Std::IOState
 
 The virtual type that represents the state of world (=the outside of the Fix program). 

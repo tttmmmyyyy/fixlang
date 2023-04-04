@@ -119,7 +119,13 @@ impl TyCon {
         if self.name.name == I32_NAME {
             return Some(ctx.i32_type().as_basic_type_enum());
         }
+        if self.name.name == U32_NAME {
+            return Some(ctx.i32_type().as_basic_type_enum());
+        }
         if self.name.name == I64_NAME {
+            return Some(ctx.i64_type().as_basic_type_enum());
+        }
+        if self.name.name == U64_NAME {
             return Some(ctx.i64_type().as_basic_type_enum());
         }
         if self.name.name == PTR_NAME {
@@ -138,6 +144,8 @@ impl TyCon {
         }
         match self.name.name.as_str() {
             U8_NAME => false,
+            U32_NAME => false,
+            U64_NAME => false,
             I32_NAME => true,
             I64_NAME => true,
             _ => unreachable!(),

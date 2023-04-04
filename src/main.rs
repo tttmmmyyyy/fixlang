@@ -8,6 +8,7 @@ extern crate serial_test;
 
 mod ast;
 mod builtin;
+mod c_config;
 mod funptr_optimization;
 mod generator;
 mod llvm_passes;

@@ -1029,8 +1029,12 @@ fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
                 make_u8_ty()
             } else if pair.as_str() == "I32" {
                 make_i32_ty()
+            } else if pair.as_str() == "U32" {
+                make_u32_ty()
             } else if pair.as_str() == "I64" {
                 make_i64_ty()
+            } else if pair.as_str() == "U64" {
+                make_u64_ty()
             } else {
                 unreachable!()
             }

@@ -10,7 +10,9 @@ pub const IO_NAME: &str = "IO";
 pub const PTR_NAME: &str = "Ptr";
 pub const U8_NAME: &str = "U8";
 pub const I32_NAME: &str = "I32";
+pub const U32_NAME: &str = "U32";
 pub const I64_NAME: &str = "I64";
+pub const U64_NAME: &str = "U64";
 pub const BOOL_NAME: &str = "Bool";
 pub const IOSTATE_NAME: &str = "IOState";
 pub const ARRAY_NAME: &str = "Array";
@@ -51,7 +53,27 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
         },
     );
     ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], U32_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+        },
+    );
+    ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], I64_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], U64_NAME)),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::Primitive,
@@ -193,9 +215,19 @@ pub fn make_i32_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I32_NAME)))
 }
 
+// Get U32 type.
+pub fn make_u32_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U32_NAME)))
+}
+
 // Get I64 type.
 pub fn make_i64_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I64_NAME)))
+}
+
+// Get U32 type.
+pub fn make_u64_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U64_NAME)))
 }
 
 // Get Bool type.

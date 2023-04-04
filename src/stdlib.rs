@@ -43,7 +43,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(eq_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(eq_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(eq_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(eq_trait_instance_int(make_u64_ty()));
     fix_module
         .trait_env
         .add_instance(eq_trait_instance_int(make_bool_ty()));
@@ -57,7 +63,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(add_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(add_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(add_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(add_trait_instance_int(make_u64_ty()));
 
     // Sub
     fix_module
@@ -68,7 +80,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(subtract_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(subtract_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(subtract_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(subtract_trait_instance_int(make_u64_ty()));
 
     // Neg
     fix_module
@@ -79,7 +97,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(negate_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(negate_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(negate_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(negate_trait_instance_int(make_u64_ty()));
 
     // Mul
     fix_module
@@ -90,7 +114,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(multiply_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(multiply_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(multiply_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(multiply_trait_instance_int(make_u64_ty()));
 
     // Div
     fix_module
@@ -101,7 +131,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(divide_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(divide_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(divide_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(divide_trait_instance_int(make_u64_ty()));
 
     // Rem
     fix_module
@@ -112,7 +148,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(remainder_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(remainder_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(remainder_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(remainder_trait_instance_int(make_u64_ty()));
 
     // LessThan
     fix_module
@@ -123,7 +165,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(less_than_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(less_than_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(less_than_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(less_than_trait_instance_int(make_u64_ty()));
 
     // LessThanOrEq
     fix_module
@@ -134,7 +182,13 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(less_than_or_equal_to_trait_instance_int(make_i32_ty()));
     fix_module
         .trait_env
+        .add_instance(less_than_or_equal_to_trait_instance_int(make_u32_ty()));
+    fix_module
+        .trait_env
         .add_instance(less_than_or_equal_to_trait_instance_int(make_i64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(less_than_or_equal_to_trait_instance_int(make_u64_ty()));
 
     // Not
     fix_module.trait_env.add_instance(not_trait_instance_bool());

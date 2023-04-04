@@ -30,7 +30,7 @@ expr_int_lit = { int_lit_body ~ ("_" ~ int_lit_type)? }
 
 int_lit_body = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
-int_lit_type = { "U8" | "I32" | "I64" }
+int_lit_type = { "U8" | "I32" | "U32" | "I64" | "U64" }
 
 expr_nullptr_lit = { "nullptr" }
 
