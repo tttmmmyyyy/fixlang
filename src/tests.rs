@@ -2460,6 +2460,25 @@ pub fn test98() {
 
 #[test]
 #[serial]
+pub fn test99() {
+    // Test cast between integral types.
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            // let _ = debug_println(-1_I32.to_I64.to_string);
+            // let _ = assert_eq("case 1", -1_I32.to_I64, -1_I64);
+            // let _ = assert_eq("case 2", -1_I64.to_I32, -1_I32);
+                    
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

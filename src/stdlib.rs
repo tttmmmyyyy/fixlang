@@ -225,11 +225,13 @@ pub fn make_std_mod() -> FixModule {
     ];
     for from in integral_tys {
         for to in integral_tys {
-            let from_namespace = from.toplevel_tycon().unwrap().name.namespace.clone();
+            let from_name = from.toplevel_tycon().unwrap().name.name.clone();
+            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             fix_module.add_global_value(
                 FullName::new(
                     &from_namespace,
-                    &format!("_cast_{}_to_{}", from.to_string(), to.to_string()),
+                    &format!("_cast_{}_to_{}", from_name, to_name),
                 ),
                 cast_between_integral_function(from.clone(), to.clone()),
             );
