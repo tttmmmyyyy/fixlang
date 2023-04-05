@@ -568,6 +568,74 @@ pub fn int_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
+// Cast function of integrals
+pub fn cast_between_integral_function(
+    from: Rc<TypeNode>,
+    to: Rc<TypeNode>,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const FROM_NAME: &str = "from";
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, to_ty, rvo| {
+        // Get value
+        let from_val = gc
+            .get_var_field(&FullName::local(FROM_NAME), 0)
+            .into_int_value();
+        gc.release(gc.get_var(&FullName::local(FROM_NAME)).ptr.get(gc));
+
+        // Get target type.
+        let to_int = to_ty
+            .get_struct_type(gc, &vec![])
+            .get_field_type_at_index(0)
+            .unwrap()
+            .into_int_type();
+        let to_is_signed = to_ty.toplevel_tycon().unwrap().is_singned_intger();
+
+        // Perform cast.
+        let to_val = gc.builder().build_int_cast_sign_flag(
+            from_val,
+            to_int,
+            to_is_signed,
+            "int_cast_sign_flag@cast_between_integral_function",
+        );
+
+        // Return result.
+        let obj = if rvo.is_none() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                to_ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some("alloca@cast_between_integral_function"),
+            )
+        };
+        obj.store_field_nocap(gc, 0, to_val);
+        obj
+    });
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(from.clone(), to.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(FROM_NAME)],
+        expr_lit(
+            generator,
+            vec![FullName::local(FROM_NAME)],
+            format!(
+                "cast_{}_to_{}({})",
+                from.to_string(),
+                to.to_string(),
+                FROM_NAME
+            ),
+            to,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
 // Implementation of Array::fill built-in function.
 fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     let size_str = FullName::local(size);

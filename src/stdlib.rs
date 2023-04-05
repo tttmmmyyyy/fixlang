@@ -193,7 +193,7 @@ pub fn make_std_mod() -> FixModule {
     // Not
     fix_module.trait_env.add_instance(not_trait_instance_bool());
 
-    // Internal function of ToString
+    // Internal function of ToString for integral types.
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, U8_NAME], "_U8_to_string"),
         int_to_string_function(make_u8_ty()),
@@ -214,6 +214,27 @@ pub fn make_std_mod() -> FixModule {
         FullName::from_strs(&[STD_NAME, U64_NAME], "_U64_to_string"),
         int_to_string_function(make_u64_ty()),
     );
+
+    // Cast function between integral types.
+    let integral_tys: &[Rc<TypeNode>] = &[
+        make_u8_ty(),
+        make_i32_ty(),
+        make_u32_ty(),
+        make_i64_ty(),
+        make_u64_ty(),
+    ];
+    for from in integral_tys {
+        for to in integral_tys {
+            let from_namespace = from.toplevel_tycon().unwrap().name.namespace.clone();
+            fix_module.add_global_value(
+                FullName::new(
+                    &from_namespace,
+                    &format!("_cast_{}_to_{}", from.to_string(), to.to_string()),
+                ),
+                cast_between_integral_function(from.clone(), to.clone()),
+            );
+        }
+    }
 
     // Basic functions
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], FIX_NAME), fix());

@@ -890,6 +890,12 @@ Implementing traits:
 - `Std::Neg`
 - `Std::Rem`
 - `Std::Sub`
+- `Std::ToString`
+- `Std::ToU8`
+- `Std::ToI32`
+- `Std::ToU32`
+- `Std::ToI64`
+- `Std::ToU64`
 
 ### Std::U32
 
@@ -911,6 +917,11 @@ Implementing traits:
 - `Std::Rem`
 - `Std::Sub`
 - `Std::ToString`
+- `Std::ToU8`
+- `Std::ToI32`
+- `Std::ToU32`
+- `Std::ToI64`
+- `Std::ToU64`
 
 #### _U32_to_string : U32 -> String
 
@@ -934,6 +945,11 @@ Implementing traits:
 - `Std::Rem`
 - `Std::Sub`
 - `Std::ToString`
+- `Std::ToU8`
+- `Std::ToI32`
+- `Std::ToU32`
+- `Std::ToI64`
+- `Std::ToU64`
 
 #### _U64_to_string : U64 -> String
 
@@ -1017,6 +1033,11 @@ Implementing traits:
 - `Std::Rem`
 - `Std::Sub`
 - `Std::ToString`
+- `Std::ToU8`
+- `Std::ToI32`
+- `Std::ToU32`
+- `Std::ToI64`
+- `Std::ToU64`
 
 #### _I32_to_string : I32 -> String
 
@@ -1041,6 +1062,11 @@ Implementing traits:
 - `Std::Rem`
 - `Std::Sub`
 - `Std::ToString`
+- `Std::ToU8`
+- `Std::ToI32`
+- `Std::ToU32`
+- `Std::ToI64`
+- `Std::ToU64`
 
 #### _I64_to_string : I64 -> String
 
@@ -1161,6 +1187,7 @@ Implementing Traits:
     - Add two strings by `String.concat`.
 - `String : Eq`
 - `String : ToString`
+    - Defined as an identity function.
 
 ## Functions
 
@@ -1236,21 +1263,41 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
-### Std::Debug.debug_print : String -> ()
+### Std::Debug::debug_print : String -> ()
 
-### Std::Debug.debug_println : String -> ()
+### Std::Debug::debug_println : String -> ()
 
-### Std::Debug.abort : () -> a
+### Std::Debug::abort : () -> a
 
-### Std::Debug.assert : String -> Bool -> ()
+### Std::Debug::assert : String -> Bool -> ()
 
-### Std::Debug.assert_eq : [a: Eq] String -> a -> a -> ()
+### Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()
 
 ## Traits
 
 ### Std::ToString
 
-- `to_string : [a: ToString] a -> String`
+#### `to_string : [a: ToString] a -> String`
+
+### Std::ToI32
+
+#### `to_I32 : [a: ToI32] a -> I32`
+
+### Std::ToI64
+
+#### `to_I64 : [a: ToI64] a -> I64`
+
+### Std::ToU8
+
+#### `to_U8 : [a: ToU8] a -> U8`
+
+### Std::ToU32
+
+#### `to_U32 : [a: ToU32] a -> U32`
+
+### Std::ToU64
+
+#### `to_U64 : [a: ToU64] a -> U64`
 
 ## Operators
 
