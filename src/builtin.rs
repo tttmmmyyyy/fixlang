@@ -498,6 +498,7 @@ pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
 pub fn int_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
     const VAL_NAME: &str = "val";
     let (buf_size, specifier) = match ty.toplevel_tycon().unwrap().name.name.as_str() {
+        U8_NAME => (4, C_U8_FORMATTER),
         I32_NAME => (12, C_I32_FORMATTER),
         U32_NAME => (11, C_U32_FORMATTER),
         I64_NAME => (21, C_I64_FORMATTER),
@@ -969,15 +970,6 @@ fn make_array_unique<'c, 'm>(
         array_phi.as_basic_value().into_pointer_value(),
         array.ty.clone(),
     );
-    // let array_buf_phi = gc
-    //     .builder()
-    //     .build_phi(array_buf.get_type(), "array_field_phi");
-    // assert_eq!(array_buf.get_type(), cloned_array_buf.get_type());
-    // array_buf_phi.add_incoming(&[
-    //     (&array_buf, current_bb),
-    //     (&cloned_array_buf, succ_of_shared_bb),
-    // ]);
-    // let array_buf = array_buf_phi.as_basic_value().into_pointer_value();
 
     array
 }
@@ -3000,29 +2992,6 @@ pub fn not_trait_instance_bool() -> TraitInstance {
         make_bool_ty(),
         generate_not_bool,
     )
-}
-
-// Ptr::make_null : Ptr
-pub fn ptr_make_null_function() -> (Rc<ExprNode>, Rc<Scheme>) {
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
-        let obj = if rvo.is_some() {
-            rvo.unwrap()
-        } else {
-            allocate_obj(make_ptr_ty(), &vec![], None, gc, Some("make_null"))
-        };
-        let val = ObjectFieldType::Ptr.to_basic_type(gc).const_zero();
-        obj.store_field_nocap(gc, 0, val);
-        obj
-    });
-    let scm = Scheme::generalize(Default::default(), vec![], make_ptr_ty());
-    let expr = expr_lit(
-        generator,
-        vec![],
-        "make_null".to_string(),
-        make_ptr_ty(),
-        None,
-    );
-    (expr, scm)
 }
 
 // Std::is_unique : a -> (Bool, a)

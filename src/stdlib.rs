@@ -193,9 +193,37 @@ pub fn make_std_mod() -> FixModule {
     // Not
     fix_module.trait_env.add_instance(not_trait_instance_bool());
 
-    // Functions and values
+    // Internal function of ToString
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, U8_NAME], "_U8_to_string"),
+        int_to_string_function(make_u8_ty()),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, I32_NAME], "_I32_to_string"),
+        int_to_string_function(make_i32_ty()),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, U32_NAME], "_U32_to_string"),
+        int_to_string_function(make_u32_ty()),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, I64_NAME], "_I64_to_string"),
+        int_to_string_function(make_i64_ty()),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, U64_NAME], "_U64_to_string"),
+        int_to_string_function(make_u64_ty()),
+    );
+
+    // Basic functions
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "loop"), state_loop());
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], "is_unique"),
+        is_unique_function(),
+    );
+
+    // Array
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "fill"),
         fill_array(),
@@ -256,10 +284,14 @@ pub fn make_std_mod() -> FixModule {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
     );
+
+    // IOState
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, IOSTATE_NAME], "print!"),
         print_io_func(),
     );
+
+    // Debug
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, DEBUG_NAME], "debug_print"),
         debug_print_function(),
@@ -267,30 +299,6 @@ pub fn make_std_mod() -> FixModule {
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, DEBUG_NAME], "abort"),
         abort_function(),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, I32_NAME], "_I32_to_string"),
-        int_to_string_function(make_i32_ty()),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, U32_NAME], "_U32_to_string"),
-        int_to_string_function(make_u32_ty()),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, I64_NAME], "_I64_to_string"),
-        int_to_string_function(make_i64_ty()),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, U64_NAME], "_U64_to_string"),
-        int_to_string_function(make_u64_ty()),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PTR_NAME], "make_null"),
-        ptr_make_null_function(),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "is_unique"),
-        is_unique_function(),
     );
 
     fix_module

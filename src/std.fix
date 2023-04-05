@@ -589,6 +589,10 @@ impl String : ToString {
     to_string = |s| s;
 }
 
+impl U8 : ToString {
+    to_string = U8::_U8_to_string;
+}
+
 impl U32 : ToString {
     to_string = U32::_U32_to_string;
 }

@@ -2432,11 +2432,16 @@ pub fn test98() {
 
         main : IOState -> ((), IOState);
         main = (
+            // U8
+            let _ = assert_eq("", 0_U8.to_string, "0");
+            let _ = assert_eq("", 255_U8.to_string, "255");
+            
             // I32
             let _ = assert_eq("", -2147483648_I32.to_string, "-2147483648");
             let _ = assert_eq("", 2147483647_I32.to_string, "2147483647");
 
             // U32
+            let _ = assert_eq("", 0_U32.to_string, "0");
             let _ = assert_eq("", 4294967295_U32.to_string, "4294967295");
 
             // I64
@@ -2444,6 +2449,7 @@ pub fn test98() {
             let _ = assert_eq("", 9223372036854775807_I64.to_string, "9223372036854775807");
 
             // U64
+            let _ = assert_eq("", 0_U64.to_string, "0");
             let _ = assert_eq("", 18446744073709551615_U64.to_string, "18446744073709551615");
             
             pure()
