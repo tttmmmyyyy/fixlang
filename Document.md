@@ -1,6 +1,95 @@
 Document
 ===
 
+- [Document](#document)
+- [Tutorial](#tutorial)
+  - [An example program](#an-example-program)
+  - [Modules](#modules)
+  - [Global values](#global-values)
+  - [Namespaces](#namespaces)
+  - [Types](#types)
+  - [Expressions](#expressions)
+  - [Let-expressions](#let-expressions)
+  - [If-expressions](#if-expressions)
+  - [Function application](#function-application)
+  - [Functions](#functions)
+  - [Operator `.` and `$`](#operator--and-)
+  - [Patterns](#patterns)
+  - [`loop`, `continue` and `break` function](#loop-continue-and-break-function)
+  - [Unions](#unions)
+  - [Structs](#structs)
+  - [Iterators](#iterators)
+  - [Mutation in Fix](#mutation-in-fix)
+- [Other topics on syntax](#other-topics-on-syntax)
+  - [Module and imports](#module-and-imports)
+  - [Recursion](#recursion)
+  - [Overloading](#overloading)
+  - [Traits](#traits)
+  - [Type annotation](#type-annotation)
+  - [Boxed and unboxed types](#boxed-and-unboxed-types)
+    - [Functions](#functions-1)
+    - [Tuples](#tuples)
+    - [Unit](#unit)
+    - [Array](#array)
+    - [Structs](#structs-1)
+    - [Unions](#unions-1)
+    - [Type parameters](#type-parameters)
+  - [Traits](#traits-1)
+    - [Trait bound](#trait-bound)
+  - [Higher-kinded types](#higher-kinded-types)
+  - [Calling C functions](#calling-c-functions)
+- [Built-in / library features](#built-in--library-features)
+  - [Types](#types-1)
+    - [Structs](#structs-2)
+    - [Unions](#unions-2)
+    - [Std::Array](#stdarray)
+    - [Std::Bool](#stdbool)
+    - [Std::U8](#stdu8)
+    - [Std::U32](#stdu32)
+      - [\_U32\_to\_string : U32 -\> String](#_u32_to_string--u32---string)
+    - [Std::U64](#stdu64)
+      - [\_U64\_to\_string : U64 -\> String](#_u64_to_string--u64---string)
+    - [Std::IOState](#stdiostate)
+      - [`read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line--iohandle---iostate---result-string-ioerror-iostate)
+      - [`pure : a -> IOState -> (a, IOState)`](#pure--a---iostate---a-iostate)
+      - [`print! : String -> IOState -> ((), IOState)`](#print--string---iostate----iostate)
+      - [`println! : String -> IOState -> ((), IOState)`](#println--string---iostate----iostate)
+    - [Std::IOState::IOError](#stdiostateioerror)
+    - [Std::IOState::IOHandle](#stdiostateiohandle)
+    - [Std::I32](#stdi32)
+      - [\_I32\_to\_string : I32 -\> String](#_i32_to_string--i32---string)
+    - [Std::I64](#stdi64)
+      - [\_I64\_to\_string : I64 -\> String](#_i64_to_string--i64---string)
+    - [Std::Iterator](#stditerator)
+    - [Std::Option](#stdoption)
+    - [Std::Ptr](#stdptr)
+    - [Std::Result](#stdresult)
+    - [Std::String](#stdstring)
+  - [Functions](#functions-2)
+    - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
+    - [Std::fix : ((a -\> b) -\> a -\> b) -\> a -\> b](#stdfix--a---b---a---b---a---b)
+    - [Std::loop : s -\> (s -\> LoopResult s r) -\> r](#stdloop--s---s---loopresult-s-r---r)
+    - [Std::Debug::debug\_print : String -\> ()](#stddebugdebug_print--string---)
+    - [Std::Debug::debug\_println : String -\> ()](#stddebugdebug_println--string---)
+    - [Std::Debug::abort : () -\> a](#stddebugabort-----a)
+    - [Std::Debug::assert : String -\> Bool -\> ()](#stddebugassert--string---bool---)
+    - [Std::Debug::assert\_eq : \[a: Eq\] String -\> a -\> a -\> ()](#stddebugassert_eq--a-eq-string---a---a---)
+  - [Traits](#traits-2)
+    - [Std::ToString](#stdtostring)
+      - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
+    - [Std::ToI32](#stdtoi32)
+      - [`to_I32 : [a: ToI32] a -> I32`](#to_i32--a-toi32-a---i32)
+    - [Std::ToI64](#stdtoi64)
+      - [`to_I64 : [a: ToI64] a -> I64`](#to_i64--a-toi64-a---i64)
+    - [Std::ToU8](#stdtou8)
+      - [`to_U8 : [a: ToU8] a -> U8`](#to_u8--a-tou8-a---u8)
+    - [Std::ToU32](#stdtou32)
+      - [`to_U32 : [a: ToU32] a -> U32`](#to_u32--a-tou32-a---u32)
+    - [Std::ToU64](#stdtou64)
+      - [`to_U64 : [a: ToU64] a -> U64`](#to_u64--a-tou64-a---u64)
+  - [Operators](#operators)
+
+
 # Tutorial
 
 ## An example program
@@ -1303,24 +1392,24 @@ main = (
 
 The following is the table of operators sorted by it's precedence (operator of higher precedence appears earlier).
 
-| Operator       | Associativity | Trait / method                      | Explanation                                                 | 
-| -------------- | ------------- | ----------------------------------- | ----------------------------------------------------------- | 
-| f(x)           | left          | -                                   | function application                                        | 
-| .              | left          | -                                   | right-to-left function application: x.f = f(x)              | 
-| - (minus sign) | -             | Std::Neg / neg                      | negative of number                                          | 
-| !              | -             | Std::Not / not                      | logical NOT                                                 | 
-| *              | left          | Std::Mul / mul                      | multiplication of numbers                                   | 
-| /              | left          | Std::Div / div                      | division of numbers                                         | 
-| %              | left          | Std::Rem / rem                      | reminder of division                                        | 
-| +              | left          | Std::Add / add                      | addition of numbers                                         | 
-| - (minus sign) | left          | Std::Sub / sub                      | subtraction of numbers                                      | 
-| ==             | left          | Std::Eq / eq                        | equality comparison                                         | 
-| !=             | left          | -                                   | `x != y` is interpreted as `!(x == y)`                      | 
-| <=             | left          | Std::LessThanOrEq / less_than_or_eq | less-than-or-equal-to comparison                            | 
-| >=             | left          | -                                   | `x >= y` is interpreted as `y <= x`                         | 
-| <              | left          | Std::LessThan / less_than           | less-than comparison                                        | 
-| >              | left          | -                                   | `x > y` is interpreted as `y < x`                           | 
-| &&             | right         | -                                   | short-circuit logical AND.                                  | 
-| &#124;&#124;   | right         | -                                   | short-circuit logical OR                                    | 
-| $              | right         | -                                   | right associative function application: f $ g $ x = f(g(x)) | 
+| Operator       | Associativity | Trait / method                      | Explanation                                                 |
+| -------------- | ------------- | ----------------------------------- | ----------------------------------------------------------- |
+| f(x)           | left          | -                                   | function application                                        |
+| .              | left          | -                                   | right-to-left function application: x.f = f(x)              |
+| - (minus sign) | -             | Std::Neg / neg                      | negative of number                                          |
+| !              | -             | Std::Not / not                      | logical NOT                                                 |
+| *              | left          | Std::Mul / mul                      | multiplication of numbers                                   |
+| /              | left          | Std::Div / div                      | division of numbers                                         |
+| %              | left          | Std::Rem / rem                      | reminder of division                                        |
+| +              | left          | Std::Add / add                      | addition of numbers                                         |
+| - (minus sign) | left          | Std::Sub / sub                      | subtraction of numbers                                      |
+| ==             | left          | Std::Eq / eq                        | equality comparison                                         |
+| !=             | left          | -                                   | `x != y` is interpreted as `!(x == y)`                      |
+| <=             | left          | Std::LessThanOrEq / less_than_or_eq | less-than-or-equal-to comparison                            |
+| >=             | left          | -                                   | `x >= y` is interpreted as `y <= x`                         |
+| <              | left          | Std::LessThan / less_than           | less-than comparison                                        |
+| >              | left          | -                                   | `x > y` is interpreted as `y < x`                           |
+| &&             | right         | -                                   | short-circuit logical AND.                                  |
+| &#124;&#124;   | right         | -                                   | short-circuit logical OR                                    |
+| $              | right         | -                                   | right associative function application: f $ g $ x = f(g(x)) |
 
