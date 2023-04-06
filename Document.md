@@ -1,7 +1,3 @@
-Document
-===
-
-- [Document](#document)
 - [Tutorial](#tutorial)
   - [An example program](#an-example-program)
   - [Modules](#modules)
@@ -45,6 +41,7 @@ Document
     - [Std::Array](#stdarray)
     - [Std::Bool](#stdbool)
     - [Std::U8](#stdu8)
+      - [\_U8\_to\_string : U8 -\> String](#_u8_to_string--u8---string)
     - [Std::U32](#stdu32)
       - [\_U32\_to\_string : U32 -\> String](#_u32_to_string--u32---string)
     - [Std::U64](#stdu64)
@@ -985,6 +982,8 @@ Implementing traits:
 - `Std::ToU32`
 - `Std::ToI64`
 - `Std::ToU64`
+
+#### _U8_to_string : U8 -> String
 
 ### Std::U32
 
