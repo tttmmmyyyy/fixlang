@@ -11,12 +11,6 @@ impl TraitId {
         TraitId { name }
     }
 
-    pub fn new_by_name(name: &Name) -> TraitId {
-        TraitId {
-            name: FullName::from_strs(&[], name),
-        }
-    }
-
     pub fn to_string(&self) -> String {
         self.namespaced_name().to_string()
     }

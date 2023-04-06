@@ -354,10 +354,26 @@ fn parse_predicate(pair: Pair<Rule>, src: &Rc<String>) -> Predicate {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let ty = parse_type(pairs.next().unwrap(), src);
-    let trait_name = pairs.next().unwrap().as_str().to_string();
-    let mut pred = Predicate::make(TraitId::new_by_name(&trait_name), ty);
+    let trait_id = parse_trait(pairs.next().unwrap(), src);
+    let mut pred = Predicate::make(trait_id, ty);
     pred.set_source(span);
     pred
+}
+
+fn parse_trait(pair: Pair<Rule>, _src: &Rc<String>) -> TraitId {
+    assert_eq!(pair.as_rule(), Rule::trait_name);
+    let mut pairs = pair.into_inner();
+    let mut fullname = FullName::from_strs(&[], "");
+    while pairs.peek().unwrap().as_rule() == Rule::namespace_item {
+        fullname
+            .namespace
+            .names
+            .push(pairs.next().unwrap().as_str().to_string());
+    }
+    let pair = pairs.next().unwrap();
+    assert_eq!(pair.as_rule(), Rule::trait_local_name);
+    fullname.name = pair.as_str().to_string();
+    TraitId { name: fullname }
 }
 
 fn parse_kind(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Kind> {

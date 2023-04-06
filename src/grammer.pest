@@ -187,7 +187,9 @@ struct_defn = { (box_or_unbox ~ sep+)? ~ "struct" ~ sep* ~ "{" ~ sep* ~ comma_se
 union_defn = { (box_or_unbox ~ sep+)? ~ "union" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
 
 // === Trait definitions ===
-trait_name = { tycon_head ~ tycon_char* }
+trait_local_name = { tycon_head ~ tycon_char* }
+
+trait_name = { (namespace_item ~ "::")* ~ trait_local_name }
 
 trait_defn = { "trait" ~ sep+ ~ predicates? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 

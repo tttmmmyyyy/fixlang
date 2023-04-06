@@ -979,15 +979,15 @@ pub fn test44() {
             toI64 : a -> I64;
         }
 
-        impl I64 : ToI64 {
+        impl I64 : Main::ToI64 {
             toI64 = |x| x;
         }
 
-        impl Bool : ToI64 {
+        impl Bool : Main::ToI64 {
             toI64 = |b| if b { 0 } else { -1 };
         }
 
-        add_head_and_next : [a: ToI64] Array a -> I64; 
+        add_head_and_next : [a: Main::ToI64] Array a -> I64; 
         add_head_and_next = |arr| (
             let head = arr.get(0).toI64;
             let next = arr.get(1).toI64;
