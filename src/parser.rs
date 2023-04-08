@@ -1160,6 +1160,13 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
                         byte = 13;
                     } else if c == 't' {
                         byte = 9;
+                    } else if c == 'x' {
+                        let mut code: u8 = 0;
+                        for i in 0..2 {
+                            let c = string.next().unwrap().to_digit(16).unwrap() as u8;
+                            code += c << 4 * (1 - i);
+                        }
+                        byte = code;
                     } else {
                         unreachable!()
                     }

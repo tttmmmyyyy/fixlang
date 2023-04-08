@@ -53,6 +53,7 @@ expr_u8_lit = { "'" ~ u8_lit_char ~ "'" }
 u8_lit_char = {
     !("\"" | "\\") ~ ASCII
     | "\\" ~ ("\"" | "\\" | "n" | "r" | "t")
+    | "\\" ~ ("x" ~ ASCII_HEX_DIGIT{2})
 }
 
 expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit | expr_array_lit | expr_nullptr_lit | expr_u8_lit }
