@@ -2467,10 +2467,13 @@ pub fn test99() {
 
         main : IOState -> ((), IOState);
         main = (
-            // let _ = debug_println(-1_I32.to_I64.to_string);
-            // let _ = assert_eq("case 1", -1_I32.to_I64, -1_I64);
-            // let _ = assert_eq("case 2", -1_I64.to_I32, -1_I32);
-                    
+            let _ = assert_eq("case 1", -2147483648_I32.to_I64, -2147483648_I64);
+            let _ = assert_eq("case 2", 2147483647_I32.to_I64, 2147483647_I64);
+            let _ = assert_eq("case 3", -10000000000_I64.to_I32, -10000000000_I32);
+            let _ = assert_eq("case 4", 10000000000_I64.to_I32, 10000000000_I32);
+            let _ = assert_eq("case 5", -10000000000_I32.to_U8, -10000000000_U8);
+            let _ = assert_eq("case 6", 255_U8.to_I32, 255_I32);
+            let _ = assert_eq("case 7", -1_I32.to_U8, -1_U8);
             pure()
         );
     "#;

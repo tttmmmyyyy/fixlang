@@ -574,6 +574,8 @@ pub fn cast_between_integral_function(
     to: Rc<TypeNode>,
 ) -> (Rc<ExprNode>, Rc<Scheme>) {
     const FROM_NAME: &str = "from";
+    let is_signed = from.toplevel_tycon().unwrap().is_singned_intger()
+        && to.toplevel_tycon().unwrap().is_singned_intger();
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, to_ty, rvo| {
         // Get value
         let from_val = gc
@@ -587,18 +589,17 @@ pub fn cast_between_integral_function(
             .get_field_type_at_index(0)
             .unwrap()
             .into_int_type();
-        let to_is_signed = to_ty.toplevel_tycon().unwrap().is_singned_intger();
 
         // Perform cast.
         let to_val = gc.builder().build_int_cast_sign_flag(
             from_val,
             to_int,
-            to_is_signed,
+            is_signed,
             "int_cast_sign_flag@cast_between_integral_function",
         );
 
         // Return result.
-        let obj = if rvo.is_none() {
+        let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
             allocate_obj(
