@@ -900,6 +900,7 @@ fn parse_expr_lit(expr: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
         Rule::expr_string_lit => parse_expr_string_lit(pair, src),
         Rule::expr_array_lit => parse_expr_array_lit(pair, src),
         Rule::expr_nullptr_lit => parse_expr_nullptr_lit(pair, src),
+        Rule::expr_u8_lit => parse_expr_u8_lit(pair, src),
         _ => unreachable!(),
     }
 }
@@ -1128,6 +1129,46 @@ fn parse_expr_string_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     }
     let string = String::from_iter(out_string.iter());
     make_string_from_rust_string(string, Some(span))
+}
+
+fn parse_expr_u8_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_u8_lit);
+    let span = Span::from_pair(&src, &pair);
+    let string = pair.into_inner().next().unwrap().as_str().to_string();
+    // Resolve escape sequences.
+    let mut string = string.chars();
+    let byte: u8;
+    loop {
+        match string.next() {
+            None => {
+                unreachable!()
+            }
+            Some(c) => {
+                if c != '\\' {
+                    let mut buf = [0 as u8];
+                    c.encode_utf8(&mut buf);
+                    byte = buf[0];
+                } else {
+                    let c = string.next().unwrap();
+                    if c == '\"' {
+                        byte = 34;
+                    } else if c == '\\' {
+                        byte = 92;
+                    } else if c == 'n' {
+                        byte = 10;
+                    } else if c == 'r' {
+                        byte = 13;
+                    } else if c == 't' {
+                        byte = 9;
+                    } else {
+                        unreachable!()
+                    }
+                }
+                break;
+            }
+        }
+    }
+    expr_int_lit(byte as u64, make_u8_ty(), Some(span))
 }
 
 fn parse_type(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {

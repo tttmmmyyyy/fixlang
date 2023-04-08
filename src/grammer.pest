@@ -36,9 +36,9 @@ expr_nullptr_lit = { "nullptr" }
 
 expr_bool_lit = { "true" | "false" }
 
-expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
-
 expr_array_lit = { "[" ~ (expr ~ sep* ~ ("," ~ sep* ~ expr)*)? ~ sep* ~ "]" }
+
+expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
 
 string_lit_inner = { string_char* }
 
@@ -48,7 +48,14 @@ string_char = {
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
 
-expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit | expr_array_lit | expr_nullptr_lit }
+expr_u8_lit = { "'" ~ u8_lit_char ~ "'" }
+
+u8_lit_char = {
+    !("\"" | "\\") ~ ASCII
+    | "\\" ~ ("\"" | "\\" | "n" | "r" | "t")
+}
+
+expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit | expr_array_lit | expr_nullptr_lit | expr_u8_lit }
 
 expr_var = { (namespace ~ "::")? ~ var }
 

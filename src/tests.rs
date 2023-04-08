@@ -2482,6 +2482,24 @@ pub fn test99() {
 
 #[test]
 #[serial]
+pub fn test100() {
+    // Test u8 literal
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let _ = assert_eq("case 1", 'A', 65_U8);
+            let _ = assert_eq("case 2", '0', 48_U8);
+            let _ = assert_eq("case 3", '\n', 10_U8);
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
