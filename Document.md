@@ -965,6 +965,8 @@ Literals:
 
 - `{number}_U8`
     - Example: `-1_U8 == 255_U8`
+- `'{character}'`
+  - Example: `'A' == 65_U8`, `'\n' == 10_U8`, `'\x7f' == 127_U8`
 
 Implementing traits:
 
