@@ -2502,7 +2502,7 @@ pub fn test100() {
 #[test]
 #[serial]
 pub fn test101() {
-    // Test Array.is_empty, get_first, get_last.
+    // Test Array::is_empty, get_first, get_last.
     let source = r#"
         module Main;
 
@@ -2520,6 +2520,25 @@ pub fn test101() {
             let _ = assert_eq("case 5", arr.get_first.as_some $ (), 42);
             let _ = assert_eq("case 6", arr.get_last.as_some $ (), 42);
 
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test102() {
+    // Test Bool : Eq
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let _ = assert_eq("case1", 0 == 0, true);
+            let _ = assert_eq("case2", 0 == 1, false);
+            let _ = assert_eq("case3", 0 != 0, false);
+            let _ = assert_eq("case4", 0 != 1, true);
             pure()
         );
     "#;
