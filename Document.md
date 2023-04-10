@@ -1013,8 +1013,7 @@ Implementing Traits:
 `Std::Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
 
 Litels:
-    - `true`
-    - `false`
+- `true`, `false`
 
 ### Std::U8
 
