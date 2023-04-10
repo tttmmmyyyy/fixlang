@@ -623,7 +623,7 @@ namespace String {
     pop_back_byte : String -> String;
     pop_back_byte = |s| (
         if s.is_empty { s };
-        s.mod__data(pop_back)
+        s.mod__data(|bytes| bytes.pop_back.pop_back.push_back(0_U8))
     );
 
     // Removes the last byte of a string while it satisifies the specified condition.
