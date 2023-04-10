@@ -89,6 +89,15 @@
     - [Std::Ptr](#stdptr)
     - [Std::Result](#stdresult)
     - [Std::String](#stdstring)
+      - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
+      - [`call_with_valid_c_str : (Ptr -> a) -> String -> a`](#call_with_valid_c_str--ptr---a---string---a)
+      - [`concat : String -> String -> String`](#concat--string---string---string)
+      - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
+      - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
+      - [`get_length : String -> I64`](#get_length--string---i64)
+      - [`is_empty : String -> Bool`](#is_empty--string---bool)
+      - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
+      - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
   - [Functions](#functions-2)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
     - [Std::fix : ((a -\> b) -\> a -\> b) -\> a -\> b](#stdfix--a---b---a---b---a---b)
@@ -959,7 +968,7 @@ Returns the length of an array.
 Returns the capacity of an array.
 
 #### `is_empty : Array a -> Bool`
-Returns if the array is empty
+Returns if the array is empty or not.
 
 #### `make_empty : I64 -> Array a`
 Creates an empty array with specified capacity.
@@ -1317,21 +1326,35 @@ The type of strings.
 
 Methods:
 
-- `_get_c_str : String -> Ptr`
-    - Get the null-terminated C string.
-    - Note that in case the string is not used after call of this function, the returned pointer will be already released.
-- `call_with_valid_c_str : (Ptr -> a) -> String -> a`
-    - Call a function with a valid null-terminated C string.
-- `concat : String -> String -> String`
-    - Concatenate two strings.
-    - Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
-- `join : String -> Iterator String -> String`
-    - Join strings by a separator.
-    - Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
-- `concat_iter : Iterator String -> String`
-    - Concatenate an iterator of strings.
-- `get_length : String -> I64`
-    - Returns the length of the string.
+#### `_get_c_str : String -> Ptr`
+Get the null-terminated C string.
+Note that in case the string is not used after call of this function, the returned pointer will be already released.
+
+#### `call_with_valid_c_str : (Ptr -> a) -> String -> a`
+Call a function with a valid null-terminated C string.
+
+#### `concat : String -> String -> String`
+Concatenate two strings.
+Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
+
+#### `get_first_byte : String -> Option Byte`
+Get the first byte of a string. Returns none if the string is empty.
+
+#### `get_last_byte : String -> Option Byte`
+Get the last byte of a string. Returns none if the string is empty.
+
+#### `get_length : String -> I64`
+Returns the length of the string.
+
+#### `is_empty : String -> Bool`
+Returns if the string is empty or not.
+
+#### `join : String -> Iterator String -> String`
+Join strings by a separator.
+Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
+
+#### `concat_iter : Iterator String -> String`
+Concatenate an iterator of strings.
 
 Implementing Traits:
 

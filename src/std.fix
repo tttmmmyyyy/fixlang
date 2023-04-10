@@ -589,9 +589,28 @@ namespace String {
         String { _data : data }
     );
 
+    // Get the first byte of a string. Returns none if the string is empty.
+    get_first_byte : String -> Option Byte;
+    get_first_byte = |s| (
+        if s.is_empty { Option::none() };
+        Option::some $ s.@data.get(0)
+    );
+
+    // Get the last byte of a string. Returns none if the string is empty.
+    get_last_byte : String -> Option Byte;
+    get_last_byte = |s| (
+        let len = s.get_length;
+        if len == 0 { Option::none() };
+        Option::some $ s.@data.get(len - 1)
+    );
+
     // Get the length of a string.
     get_length : String -> I64;
     get_length = |s| s.@_data.get_length - 1; // exclude null terminator
+
+    // Returns if the string is empty or not.
+    is_empty : String -> Bool;
+    is_empty = |s| s.get_length == 0;
 
     // Join strings by a separator.
     join : String -> Iterator String -> String;
