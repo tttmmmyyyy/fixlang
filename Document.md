@@ -874,7 +874,7 @@ If you define a union named `{union}` with a variant `{variant_name}` of type `{
 `Std::Array` is the type of variable-length arrays.
 
 Literals: 
-    - `[{elem_0}, {elem_1}, ...]`
+- `[{elem_0}, {elem_1}, ...]`
     - Example: `[1, 2, 3]` for integer array of length 3.
 
 Methods:
