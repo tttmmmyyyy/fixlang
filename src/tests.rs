@@ -2501,6 +2501,33 @@ pub fn test100() {
 
 #[test]
 #[serial]
+pub fn test101() {
+    // Test Array.is_empty, get_first, get_last.
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let cap = 42;
+            let arr: Array (() -> I64) = [];
+            let _ = assert_eq("case 1", arr.is_empty, true);
+            let _ = assert_eq("case 2", arr.get_first.is_none, true);
+            let _ = assert_eq("case 3", arr.get_last.is_none, true);
+
+            let cap = 42;
+            let arr: Array (() -> I64) = [|_|cap];
+            let _ = assert_eq("case 4", arr.is_empty, false);
+            let _ = assert_eq("case 5", arr.get_first.as_some $ (), 42);
+            let _ = assert_eq("case 6", arr.get_last.as_some $ (), 42);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

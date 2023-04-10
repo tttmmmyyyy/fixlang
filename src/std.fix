@@ -51,6 +51,25 @@ namespace Array {
         ))
     );
 
+    // Get the first element of an array. Returns none if the array is empty.
+    get_first : Array a -> Option a;
+    get_first = |arr| (
+        if arr.is_empty { Option::none() };
+        Option::some $ arr.get(0)
+    );
+
+    // Get the last element of an array. Returns none if the array is empty.
+    get_last : Array a -> Option a;
+    get_last = |arr| (
+        let len = arr.get_length;
+        if len == 0 { Option::none() };
+        Option::some $ arr.get(len - 1)
+    );
+
+    // Returns if the array is empty
+    is_empty : Array a -> Bool;
+    is_empty = |arr| ( arr.get_length == 0 );
+
     // Pop an element at the back of an array.
     // If the array is empty, this function does nothing.
     pop_back : Array a -> Array a;
