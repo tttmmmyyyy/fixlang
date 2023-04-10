@@ -2595,6 +2595,28 @@ pub fn test104() {
 
 #[test]
 #[serial]
+pub fn test105() {
+    // Test String::get_first_byte, get_last_byte, is_empty
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let _ = assert_eq("case 1", "".is_empty, true);
+            let _ = assert_eq("case 2", "".get_first_byte.is_none, true);
+            let _ = assert_eq("case 3", "".get_last_byte.is_none, true);
+            let _ = assert_eq("case 4", "abc".is_empty, false);
+            let _ = assert_eq("case 5", "abc".get_first_byte.as_some, 'a');
+            let _ = assert_eq("case 6", "abc".get_last_byte.as_some, 'c');
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

@@ -590,18 +590,18 @@ namespace String {
     );
 
     // Get the first byte of a string. Returns none if the string is empty.
-    get_first_byte : String -> Option Byte;
+    get_first_byte : String -> Option U8;
     get_first_byte = |s| (
         if s.is_empty { Option::none() };
-        Option::some $ s.@data.get(0)
+        Option::some $ s.@_data.get(0)
     );
 
     // Get the last byte of a string. Returns none if the string is empty.
-    get_last_byte : String -> Option Byte;
+    get_last_byte : String -> Option U8;
     get_last_byte = |s| (
         let len = s.get_length;
         if len == 0 { Option::none() };
-        Option::some $ s.@data.get(len - 1)
+        Option::some $ s.@_data.get(len - 1)
     );
 
     // Get the length of a string.
