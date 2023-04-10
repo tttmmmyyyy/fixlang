@@ -2529,16 +2529,26 @@ pub fn test101() {
 #[test]
 #[serial]
 pub fn test102() {
-    // Test Bool : Eq
+    // Test I64 : Eq, LessThan, LessThanEq
     let source = r#"
         module Main;
 
         main : IOState -> ((), IOState);
         main = (
-            let _ = assert_eq("case1", 0 == 0, true);
-            let _ = assert_eq("case2", 0 == 1, false);
-            let _ = assert_eq("case3", 0 != 0, false);
-            let _ = assert_eq("case4", 0 != 1, true);
+            let _ = assert_eq("case 1", 0 == 0, true);
+            let _ = assert_eq("case 2", 0 == 1, false);
+            let _ = assert_eq("case 3", 0 != 0, false);
+            let _ = assert_eq("case 4", 0 != 1, true);
+
+            let _ = assert_eq("case 5", 0 < 0, false);
+            let _ = assert_eq("case 6", 0 > 0, false);
+            let _ = assert_eq("case 7", 0 < 1, true);
+            let _ = assert_eq("case 8", 0 > 1, false);
+
+            let _ = assert_eq("case 9", 0 <= 0, true);
+            let _ = assert_eq("case 10", 0 >= 0, true);
+            let _ = assert_eq("case 11", 0 <= 1, true);
+            let _ = assert_eq("case 12", 0 >= 1, false);
             pure()
         );
     "#;

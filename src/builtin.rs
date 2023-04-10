@@ -2474,7 +2474,7 @@ pub fn eq_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         let value =
             gc.builder()
                 .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
-        let value = gc.builder().build_int_cast(
+        let value = gc.builder().build_int_z_extend(
             value,
             ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             "eq",
@@ -2522,7 +2522,7 @@ pub fn eq_trait_instance_ptr(ty: Rc<TypeNode>) -> TraitInstance {
             diff.get_type().const_zero(),
             EQ_TRAIT_EQ_NAME,
         );
-        let value = gc.builder().build_int_cast(
+        let value = gc.builder().build_int_z_extend(
             value,
             ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
             "eq",
