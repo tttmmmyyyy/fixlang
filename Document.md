@@ -907,98 +907,98 @@ Literals:
 Methods:
 
 #### `__unsafe_set_length : I64 -> Array a -> Array a`
-- Updates the length of an array, without uniqueness checking or validation of the given length value.
+Updates the length of an array, without uniqueness checking or validation of the given length value.
 
 #### `__unsafe_get : I64 -> Array a -> a`
-- Gets a value from an array, without bounds checking and retaining the returned value.
+Gets a value from an array, without bounds checking and retaining the returned value.
 
 #### `__unsafe_set : I64 -> a -> Array a -> Array a`
-- Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
+Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
 
 #### `_get_ptr : Array a -> Ptr`
-- Get the pointer to the memory region where elements are stored.
-- Note that in case the array is not used after call of this function, the returned pointer will be already released.
+Get the pointer to the memory region where elements are stored.
+Note that in case the array is not used after call of this function, the returned pointer will be already released.
 
 #### `append : Array a -> Array a -> Array a`
-- Append an array to an array.
-- Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`. 
+Append an array to an array.
+Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`. 
 
 #### `call_with_valid_ptr : (Ptr -> b) -> Array a -> b`
-- Call a function with a valid pointer to the memory region where elements are stored.
+Call a function with a valid pointer to the memory region where elements are stored.
 
 #### `fill : I64 -> a -> Array a`
-- Creates an array filled with the initial value.
-- The capacity is set to the same value as the length.
-- `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
+Creates an array filled with the initial value.
+The capacity is set to the same value as the length.
+Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
 #### `force_unique : Array a -> Array a`
-- Force the uniqueness of an array.
-- If the given array is shared, this function returns the cloned array.
+Force the uniqueness of an array.
+If the given array is shared, this function returns the cloned array.
 
 #### `force_unique! : Array a -> Array a`
-- Force the uniqueness of an array.
-- If the given array is shared, this function panics.
+Force the uniqueness of an array.
+If the given array is shared, this function panics.
 
 #### `from_map : I64 -> (I64 -> a) -> Array a`
-- Creates an array by a mapping function.
-- `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
+Creates an array by a mapping function.
+Example: `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
 
 #### `get : I64 -> Array a -> a`
-- Returns an element of an array at an index.
+Returns an element of an array at an index.
 
 #### `get_first : Array a -> Option a`
-- Get the first element of an array. Returns none if the array is empty.
+Get the first element of an array. Returns none if the array is empty.
 
 #### `get_last : Array a -> Option a`
-- Get the last element of an array. Returns none if the array is empty.
+Get the last element of an array. Returns none if the array is empty.
 
 #### `get_length : Array a -> I64`
-- Returns the length of an array.
+Returns the length of an array.
 
 #### `get_capacity : Array a -> I64`
-- Returns the capacity of an array.
+Returns the capacity of an array.
 
 #### `is_empty : Array a -> Bool`
-- Returns if the array is empty
+Returns if the array is empty
 
 #### `make_empty : I64 -> Array a`
-- Creates an empty array with specified capacity.
+Creates an empty array with specified capacity.
 
 #### `mod : I64 -> (a -> a) -> Array a -> Array a`
-- Modifies a value of an element at the specified index of an array by a function.
-- This function clones the array if it is shared between multiple references.
+Modifies a value of an element at the specified index of an array by a function.
+This function clones the array if it is shared between multiple references.
 
 #### `mod! : I64 -> (a -> a) -> Array a -> Array a`
-- This function clones the array if it is shared between multiple references.
-- This function always update the array. If the array is shared between multiple references, this function panics.  
+This function clones the array if it is shared between multiple references.
+This function always update the array. If the array is shared between multiple references, this function panics.  
 
 #### `pop_back : Array a -> Array a`
-- Pop an element at the back of an array.
-- If the array is empty, this function does nothing.
+Pop an element at the back of an array.
+If the array is empty, this function does nothing.
 
 #### `push_back : a -> Array a -> Array a`
-- Push an element to the back of an array.
+Push an element to the back of an array.
 
 #### `reduce_length : I64 -> Array a -> Array a`
-- Reduce the length of an array.
+Reduce the length of an array.
 
 #### `reserve : I64 -> Array a -> Array a`
-- Reserves the memory region for an array.
+Reserves the memory region for an array.
 
 #### `set : I64 -> a -> Array a -> Array a`
-- Updates a value of an element at an index of an array.
-- This function clones the given array if it is shared between multiple references.
+Updates a value of an element at an index of an array.
+This function clones the given array if it is shared between multiple references.
 
 #### `set! : I64 -> a -> Array a -> Array a`
-- Updates a value of an element at an index of an array.
-- This function always update the given array. If the given array is shared between multiple references, this function panics.
+Updates a value of an element at an index of an array.
+This function always update the given array. If the given array is shared between multiple references, this function panics.
 
 #### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
-- Sort elements in an array by "less than" comparator.
+Sort elements in an array by "less than" comparator.
 
 #### `_sort_range_by_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
-- Sort elements in a range of an array by "less than" comparator.
-- This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
+Sort elements in a range of an array by "less than" comparator.
+This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
 You can create array by the array literal syntax `[a0, a1, ..., an]`.
 
