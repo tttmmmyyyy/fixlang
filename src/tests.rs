@@ -2617,6 +2617,34 @@ pub fn test105() {
 
 #[test]
 #[serial]
+pub fn test107() {
+    // Test String::pop_back_byte, strip_last_bytes, strip_last_newlines.
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let _ = assert_eq("case 1", "".pop_back_byte, "");
+            let _ = assert_eq("case 2", "a".pop_back_byte, "");
+
+            let _ = assert_eq("case 3", "".strip_last_bytes(|c|c == 'x'), "");
+            let _ = assert_eq("case 4", "abc".strip_last_bytes(|_|true), "");
+            let _ = assert_eq("case 5", "".strip_last_bytes(|_|true), "");
+            let _ = assert_eq("case 6", "x".strip_last_bytes(|c|c == 'x'), "");
+            let _ = assert_eq("case 7", "y".strip_last_bytes(|c|c == 'x'), "y");
+            let _ = assert_eq("case 8", "yx".strip_last_bytes(|c|c == 'x'), "y");
+            let _ = assert_eq("case 9", "yxz".strip_last_bytes(|c|c == 'x'), "yxz");
+
+            let _ = assert_eq("case 10", "abc\n\r".strip_last_newlines, "abc");
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test106() {
     // Test String::get_first_byte, get_last_byte, is_empty
     let source = r#"

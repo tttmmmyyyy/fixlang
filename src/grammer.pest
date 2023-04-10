@@ -104,9 +104,9 @@ operator_plus = { "+" | "-" }
 expr_plus = { expr_mul ~ (sep* ~ operator_plus ~ sep* ~ expr_mul)* }
 
 // comparison operators
-// NOTE: "<=" and ">=" has to put in from of "<" and ">".
+// NOTE: in operator_cmp, "<=" and ">=" has to be put before of "<" and ">".
 operator_cmp = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
-expr_cmp = { expr_plus ~ (sep ~ operator_cmp ~ sep* ~ expr_plus)? }
+expr_cmp = { expr_plus ~ (sep* ~ operator_cmp ~ sep* ~ expr_plus)? }
 
 // operator and (right-associative)
 operator_and = _{ "&&" }

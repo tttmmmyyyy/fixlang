@@ -627,7 +627,7 @@ namespace String {
     );
 
     // Removes the last byte of a string while it satisifies the specified condition.
-    strip_last_bytes : (Byte -> Bool) -> String -> String;
+    strip_last_bytes : (U8 -> Bool) -> String -> String;
     strip_last_bytes = |cond, s| (
         loop(s, |s|
             if s.is_empty { break $ s };
