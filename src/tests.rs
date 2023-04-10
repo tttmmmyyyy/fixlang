@@ -2617,6 +2617,22 @@ pub fn test105() {
 
 #[test]
 #[serial]
+pub fn test106() {
+    // Test String::get_first_byte, get_last_byte, is_empty
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

@@ -92,12 +92,15 @@
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
       - [`call_with_valid_c_str : (Ptr -> a) -> String -> a`](#call_with_valid_c_str--ptr---a---string---a)
       - [`concat : String -> String -> String`](#concat--string---string---string)
+      - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
       - [`get_length : String -> I64`](#get_length--string---i64)
       - [`is_empty : String -> Bool`](#is_empty--string---bool)
       - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
-      - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
+      - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
+      - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
+      - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
   - [Functions](#functions-2)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
     - [Std::fix : ((a -\> b) -\> a -\> b) -\> a -\> b](#stdfix--a---b---a---b---a---b)
@@ -1337,6 +1340,9 @@ Call a function with a valid null-terminated C string.
 Concatenate two strings.
 Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
 
+#### `concat_iter : Iterator String -> String`
+Concatenate an iterator of strings.
+
 #### `get_first_byte : String -> Option Byte`
 Get the first byte of a string. Returns none if the string is empty.
 
@@ -1353,8 +1359,15 @@ Returns if the string is empty or not.
 Join strings by a separator.
 Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
 
-#### `concat_iter : Iterator String -> String`
-Concatenate an iterator of strings.
+#### `pop_back_byte : String -> String`
+Removes the last byte.
+If the string is empty, this function does nothing.
+
+#### `strip_last_bytes : (Byte -> Bool) -> String -> String`
+Removes newlines and carriage returns at the end of the string.
+
+#### `strip_last_newlines : String -> String`
+Removes the last byte of a string while it satisifies the specified condition.
 
 Implementing Traits:
 

@@ -617,6 +617,32 @@ namespace String {
     join = |sep, strs| (
         strs.intersperse(sep).concat_iter
     );
+
+    // Removes the last byte.
+    // If the string is empty, this function does nothing.
+    pop_back_byte : String -> String;
+    pop_back_byte = |s| (
+        if s.is_empty { s };
+        s.mod__data(pop_back)
+    );
+
+    // Removes the last byte of a string while it satisifies the specified condition.
+    strip_last_bytes : (Byte -> Bool) -> String -> String;
+    strip_last_bytes = |cond, s| (
+        loop(s, |s|
+            if s.is_empty { break $ s };
+            if cond(s.get_last_byte.as_some) { 
+                continue $ s.pop_back_byte
+            } else {
+                break $ s
+            }
+        )
+    );
+
+    // Removes newlines and carriage returns at the end of the string.
+    strip_last_newlines : String -> String;
+    strip_last_newlines = strip_last_bytes(|c| c == '\n' || c == '\r');
+
 }
 
 impl String : Add {
