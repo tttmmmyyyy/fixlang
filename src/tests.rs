@@ -2557,6 +2557,44 @@ pub fn test102() {
 
 #[test]
 #[serial]
+pub fn test103() {
+    // Test Bool : Eq
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let _ = assert_eq("case 1", false == false, true);
+            let _ = assert_eq("case 2", false == true, false);
+            let _ = assert_eq("case 3", true == false, false);
+            let _ = assert_eq("case 4", true == true, true);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test104() {
+    // Test Bool : ToString
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let _ = assert_eq("case 1", true.to_string, "true");
+            let _ = assert_eq("case 2", false.to_string, "false");
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

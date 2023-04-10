@@ -1015,6 +1015,10 @@ Implementing Traits:
 Litels:
 - `true`, `false`
 
+Implementing traits:
+- `Bool : Eq`
+- `Bool : ToString`
+
 ### Std::U8
 
 `Std::U8` is the type of 8-bit unsigned integers.

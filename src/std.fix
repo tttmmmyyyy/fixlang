@@ -195,6 +195,12 @@ impl [a: Eq] Array a : Eq {
     );
 }
 
+impl Bool : ToString {
+    to_string = |lhs| (
+        if lhs { "true" } else { "false" }
+    );
+}
+
 namespace Debug {
 
     assert_eq : [a: Eq] String -> a -> a -> ();
