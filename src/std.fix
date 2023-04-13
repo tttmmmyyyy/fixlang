@@ -543,6 +543,13 @@ namespace Option {
 
 }
 
+impl [a : Eq] Option a : Eq {
+    eq = |lhs, rhs| (
+        if lhs.is_some && rhs.is_some { lhs.as_some == rhs.as_some };
+        lhs.is_none && rhs.is_none
+    );
+}
+
 // A type of result value for a computation that may fail.
 type Result o e = unbox union { ok : o, err: e };
 

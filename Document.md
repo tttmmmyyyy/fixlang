@@ -86,6 +86,7 @@
       - [\_I64\_to\_string : I64 -\> String](#_i64_to_string--i64---string)
     - [Std::Iterator](#stditerator)
     - [Std::Option](#stdoption)
+      - [`map : (a -> b) -> Option a -> Option b`](#map--a---b---option-a---option-b)
     - [Std::Ptr](#stdptr)
     - [Std::Result](#stdresult)
     - [Std::String](#stdstring)
@@ -1293,10 +1294,13 @@ Implementing Traits:
 type Option a = union { none: (), some: a };
 ```
 
+Implementing traits:
+- `[a : Eq] Option a : Eq`
+
 Methods:
 
-- `map : (a -> b) -> Option a -> Option b`
-    - Apply a function to the contained value. If the option is `none()`, do nothing.
+#### `map : (a -> b) -> Option a -> Option b`
+Apply a function to the contained value. If the option is `none()`, do nothing.
 
 ### Std::Ptr
 

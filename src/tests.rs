@@ -2646,12 +2646,27 @@ pub fn test107() {
 #[test]
 #[serial]
 pub fn test106() {
-    // Test String::get_first_byte, get_last_byte, is_empty
+    // Test [a : Eq] Option a : Eq
     let source = r#"
         module Main;
 
         main : IOState -> ((), IOState);
         main = (
+            let lhs: Option I64 = Option::none();
+            let rhs: Option I64 = Option::none();
+            let _ = assert("case 1", lhs == rhs);
+
+            let lhs: Option I64 = Option::none();
+            let rhs: Option I64 = Option::some(42);
+            let _ = assert("case 2", lhs != rhs);
+
+            let lhs: Option I64 = Option::some(84);
+            let rhs: Option I64 = Option::some(42);
+            let _ = assert("case 3", lhs != rhs);
+
+            let lhs: Option I64 = Option::some(42);
+            let rhs: Option I64 = Option::some(42);
+            let _ = assert("case 4", lhs == rhs);
 
             pure()
         );
