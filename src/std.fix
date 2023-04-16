@@ -363,14 +363,14 @@ namespace IOState {
 
     // Write a string into an IOHandle.
     write_content! : IOHandle -> String -> IOState -> (Result () IOError, IOState);
-    write_content! = |content, handle, io| (
+    write_content! = |handle, content, io| (
         // Check if io is unique.
         let (is_io_unique, io) = io.is_unique;
         let _ = assert("[Std::IOState::write_content!] Cloned IOState value.", is_io_unique);
 
         let res = content.call_with_valid_c_str(|c_str| (
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle.@_file_ptr];
-            if res < 0 { Result::err $ IOState { msg : "Std::IOState::write_content! failed!: some error occurred in fputs." } }
+            if res < 0_I32 { Result::err $ IOError { msg : "Std::IOState::write_content! failed!: some error occurred in fputs." } };
             Result::ok()
         ));
         (res, io)
@@ -379,7 +379,7 @@ namespace IOState {
     // Write a string into a file.
     write_file! : Path -> String -> IOState -> (Result () IOError, IOState);
     write_file! = |path, content, io| (
-        let (res, io) = io.with_file!(path, "w", write_content!(content));
+        let (res, io) = io.with_file!(path, "w", |handle| write_content!(handle, content));
         (res.flatten, io)
     );
 }
