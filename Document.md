@@ -84,6 +84,8 @@
       - [`read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line--iohandle---iostate---result-string-ioerror-iostate)
       - [`read_line_inner! : Bool -> IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line_inner--bool---iohandle---iostate---result-string-ioerror-iostate)
       - [`with_file! : Path -> String -> (IOHandle -> IOState -> (a, IOState)) -> IOState -> (Result a IOError, IOState)`](#with_file--path---string---iohandle---iostate---a-iostate---iostate---result-a-ioerror-iostate)
+      - [`write_file! : Path -> String -> IOState -> (Result () IOError, IOState)`](#write_file--path---string---iostate---result--ioerror-iostate)
+      - [`write_content! : String -> IOHandle -> IOState -> (Result () IOError, IOState)`](#write_content--string---iohandle---iostate---result--ioerror-iostate)
     - [Std::IOState::IOError](#stdiostateioerror)
     - [Std::IOState::IOHandle](#stdiostateiohandle)
     - [Std::I32](#stdi32)
@@ -1188,6 +1190,14 @@ if the first argument `upto_newline` is true, this function reads a file upto ne
 
 Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
 The file handle will be closed automatically.
+
+#### `write_file! : Path -> String -> IOState -> (Result () IOError, IOState)`
+
+Write a string into a file.
+
+#### `write_content! : String -> IOHandle -> IOState -> (Result () IOError, IOState)`
+
+Write a string into an IOHandle.
 
 ### Std::IOState::IOError
 
