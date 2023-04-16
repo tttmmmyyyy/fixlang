@@ -350,15 +350,12 @@ namespace IOState {
     // The file handle will be closed automatically.
     with_file! : Path -> String -> (IOHandle -> IOState -> (a, IOState)) -> IOState -> (Result a IOError, IOState);
     with_file! = |path, mode, action, io| (
-        let res = (
-            let (res, io) = io.open_file!(path, mode);
-            if res.is_err { Result::err $ res.as_err };
-            let handle = res.as_ok;
-            let (res, io) = action(handle, io);
-            let _ = io.close_file!(handle);
-            Result::ok $ res
-        );
-        (res, io)
+        let (res, io) = io.open_file!(path, mode);
+        if res.is_err { (Result::err $ res.as_err, io) };
+        let handle = res.as_ok;
+        let (res, io) = action(handle, io);
+        let (_, io) = io.close_file!(handle);
+        (Result::ok $ res, io)
     );
 
     // Write a string into an IOHandle.
