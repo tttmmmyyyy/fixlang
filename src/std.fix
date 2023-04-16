@@ -253,7 +253,7 @@ namespace IOState {
         // Check if io is unique.
         let (is_io_unique, io) = io.is_unique;
         let _ = assert("[Std::IOState::close_file!] Cloned IOState value.", is_io_unique);
-        let _ = CALL_C(I32 fclose(Ptr), handle._file_ptr);
+        let _ = CALL_C[I32 fclose(Ptr), handle.@_file_ptr];
         ((), io)
     );
 
@@ -284,7 +284,10 @@ namespace IOState {
 
     // Raad all characters from a file.
     read_file! : Path -> IOState -> (Result String IOError, IOState);
-    read_file! = |path| with_file!(path, "r", read_content!);
+    read_file! = |path, io| (
+        let (res, io) = io.with_file!(path, "r", read_content!);
+        (res.flatten, io)
+    );
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
     // The returned string may include newline/carriage return at it's end.
@@ -348,12 +351,12 @@ namespace IOState {
     with_file! : Path -> String -> (IOHandle -> IOState -> (a, IOState)) -> IOState -> (Result a IOError, IOState);
     with_file! = |path, mode, action, io| (
         let res = (
-            let handle = open_file!(path, mode);
-            if handle.is_err { Result::err $ handle.as_err };
-            let handle = handle.as_ok;
+            let (res, io) = io.open_file!(path, mode);
+            if res.is_err { Result::err $ res.as_err };
+            let handle = res.as_ok;
             let (res, io) = action(handle, io);
             let _ = io.close_file!(handle);
-            Result::ok $ res;
+            Result::ok $ res
         );
         (res, io)
     );
@@ -632,6 +635,16 @@ impl Path : ToString {
 type Result o e = unbox union { ok : o, err: e };
 
 namespace Result {
+
+    // Flatten a nested result.
+    flatten : Result (Result o e) e -> Result o e;
+    flatten = |res| (
+        if res.is_err { Result::err $ res.as_err };
+        let res = res.as_ok;
+        if res.is_err { Result::err $ res.as_err };
+        Result::ok $ res.as_ok
+    );
+
     // Returns the containing value if the value is ok, or otherwise panics after printing error value.
     unwrap : [e : ToString] Result o e -> o;
     unwrap = |res| (
