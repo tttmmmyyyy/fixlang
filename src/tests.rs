@@ -1,4 +1,4 @@
-use std::fs;
+use std::fs::{self, remove_file};
 
 use super::*;
 
@@ -2683,7 +2683,7 @@ pub fn test108() {
 
         main : IOState -> ((), IOState);
         main = |io| (
-            let file_path = Path::parse("test107.txt").as_some;
+            let file_path = Path::parse("test.txt").as_some;
             let written = "Hello\n World!";
             let (_, io) = io.write_file!(file_path, written);
             let (Result::ok(read), io) = io.read_file!(file_path);
@@ -2692,6 +2692,7 @@ pub fn test108() {
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
+    remove_file("test.txt").unwrap();
 }
 
 #[test]
