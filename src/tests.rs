@@ -2617,6 +2617,37 @@ pub fn test105() {
 
 #[test]
 #[serial]
+pub fn test106() {
+    // Test [a : Eq] Option a : Eq
+    let source = r#"
+        module Main;
+
+        main : IOState -> ((), IOState);
+        main = (
+            let lhs: Option I64 = Option::none();
+            let rhs: Option I64 = Option::none();
+            let _ = assert("case 1", lhs == rhs);
+
+            let lhs: Option I64 = Option::none();
+            let rhs: Option I64 = Option::some(42);
+            let _ = assert("case 2", lhs != rhs);
+
+            let lhs: Option I64 = Option::some(84);
+            let rhs: Option I64 = Option::some(42);
+            let _ = assert("case 3", lhs != rhs);
+
+            let lhs: Option I64 = Option::some(42);
+            let rhs: Option I64 = Option::some(42);
+            let _ = assert("case 4", lhs == rhs);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test107() {
     // Test String::pop_back_byte, strip_last_bytes, strip_last_newlines.
     let source = r#"
@@ -2645,30 +2676,19 @@ pub fn test107() {
 
 #[test]
 #[serial]
-pub fn test106() {
-    // Test [a : Eq] Option a : Eq
+pub fn test108() {
+    // Test write_file!, read_file!;
     let source = r#"
         module Main;
 
         main : IOState -> ((), IOState);
-        main = (
-            let lhs: Option I64 = Option::none();
-            let rhs: Option I64 = Option::none();
-            let _ = assert("case 1", lhs == rhs);
-
-            let lhs: Option I64 = Option::none();
-            let rhs: Option I64 = Option::some(42);
-            let _ = assert("case 2", lhs != rhs);
-
-            let lhs: Option I64 = Option::some(84);
-            let rhs: Option I64 = Option::some(42);
-            let _ = assert("case 3", lhs != rhs);
-
-            let lhs: Option I64 = Option::some(42);
-            let rhs: Option I64 = Option::some(42);
-            let _ = assert("case 4", lhs == rhs);
-
-            pure()
+        main = |io| (
+            let file_path = Path::parse("test107.txt").as_some;
+            let written = "Hello\n World!";
+            let (_, io) = io.write_file!(file_path, written);
+            let (Result::ok(read), io) = io.read_file!(file_path);
+            let _ = assert_eq("", written, read);
+            io.pure()
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
