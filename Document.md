@@ -74,10 +74,16 @@
     - [Std::U64](#stdu64)
       - [\_U64\_to\_string : U64 -\> String](#_u64_to_string--u64---string)
     - [Std::IOState](#stdiostate)
-      - [`read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line--iohandle---iostate---result-string-ioerror-iostate)
+      - [`close_file! : IOHandle -> IOState -> ((), IOState)`](#close_file--iohandle---iostate----iostate)
+      - [`open_file! : Path -> String -> IOState -> (Result IOHandle IOError, IOState)`](#open_file--path---string---iostate---result-iohandle-ioerror-iostate)
       - [`pure : a -> IOState -> (a, IOState)`](#pure--a---iostate---a-iostate)
       - [`print! : String -> IOState -> ((), IOState)`](#print--string---iostate----iostate)
       - [`println! : String -> IOState -> ((), IOState)`](#println--string---iostate----iostate)
+      - [`read_content! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_content--iohandle---iostate---result-string-ioerror-iostate)
+      - [`read_file! : Path -> IOState -> (Result String IOError, IOState)`](#read_file--path---iostate---result-string-ioerror-iostate)
+      - [`read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line--iohandle---iostate---result-string-ioerror-iostate)
+      - [`read_line_inner! : Bool -> IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line_inner--bool---iohandle---iostate---result-string-ioerror-iostate)
+      - [`with_file! : Path -> String -> (IOHandle -> IOState -> (a, IOState)) -> IOState -> (Result a IOError, IOState)`](#with_file--path---string---iohandle---iostate---a-iostate---iostate---result-a-ioerror-iostate)
     - [Std::IOState::IOError](#stdiostateioerror)
     - [Std::IOState::IOHandle](#stdiostateiohandle)
     - [Std::I32](#stdi32)
@@ -87,6 +93,8 @@
     - [Std::Iterator](#stditerator)
     - [Std::Option](#stdoption)
       - [`map : (a -> b) -> Option a -> Option b`](#map--a---b---option-a---option-b)
+    - [Std::Path](#stdpath)
+      - [`parse : String -> Option Path`](#parse--string---option-path)
     - [Std::Ptr](#stdptr)
     - [Std::Result](#stdresult)
     - [Std::String](#stdstring)
@@ -1126,6 +1134,34 @@ For example, `Std::IOState::print!(msg) : Std::IOState -> ((), Std::IOState)` fu
 
 All functions that perform I/O action by `IOState` assert that the given state is unique.
 
+#### `close_file! : IOHandle -> IOState -> ((), IOState)`
+
+Close a file.
+
+#### `open_file! : Path -> String -> IOState -> (Result IOHandle IOError, IOState)`
+
+Open a file. The second argument is a mode string for `fopen` C function. 
+
+#### `pure : a -> IOState -> (a, IOState)`
+
+Makes a "do nothing" I/O action.
+
+#### `print! : String -> IOState -> ((), IOState)`
+
+Prints a string to standard output.
+
+#### `println! : String -> IOState -> ((), IOState)`
+
+Prints a string and a newline to standard output.
+
+#### `read_content! : IOHandle -> IOState -> (Result String IOError, IOState)`
+
+Read all characters from a IOHandle.
+
+#### `read_file! : Path -> IOState -> (Result String IOError, IOState)`
+
+Raad all characters from a file.
+
 #### `read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`
 
 Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at it's end.
@@ -1141,17 +1177,15 @@ main = |io| (
 );
 ```
 
-#### `pure : a -> IOState -> (a, IOState)`
+#### `read_line_inner! : Bool -> IOHandle -> IOState -> (Result String IOError, IOState)`
 
-Makes a "do nothing" I/O action.
+Read characters from an IOHandle.
+if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
 
-#### `print! : String -> IOState -> ((), IOState)`
+#### `with_file! : Path -> String -> (IOHandle -> IOState -> (a, IOState)) -> IOState -> (Result a IOError, IOState)`
 
-Prints a string to standard output.
-
-#### `println! : String -> IOState -> ((), IOState)`
-
-Prints a string and a newline to standard output.
+Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
+The file handle will be closed automatically.
 
 ### Std::IOState::IOError
 
@@ -1301,6 +1335,18 @@ Methods:
 
 #### `map : (a -> b) -> Option a -> Option b`
 Apply a function to the contained value. If the option is `none()`, do nothing.
+
+### Std::Path
+
+The type for file path.
+
+Implementing traits:
+
+- `Path : ToString`
+
+#### `parse : String -> Option Path`
+
+Parse a string.
 
 ### Std::Ptr
 

@@ -247,10 +247,54 @@ namespace IOState {
 
 namespace IOState {
 
+    // Close a file.
+    close_file! : IOHandle -> IOState -> ((), IOState);
+    close_file! = |handle, io| (
+        // Check if io is unique.
+        let (is_io_unique, io) = io.is_unique;
+        let _ = assert("[Std::IOState::close_file!] Cloned IOState value.", is_io_unique);
+        let _ = CALL_C(I32 fclose(Ptr), handle._file_ptr);
+        ((), io)
+    );
+
+    // Open a file. The second argument is a mode string for `fopen` C function. 
+    open_file! : Path -> String -> IOState -> (Result IOHandle IOError, IOState);
+    open_file! = |path, mode, io| (
+        // Check if io is unique.
+        let (is_io_unique, io) = io.is_unique;
+        let _ = assert("[Std::IOState::open_file!] Cloned IOState value.", is_io_unique);
+
+        let path_str = path.to_string;
+        let res = path_str.call_with_valid_c_str(|path_ptr|
+            mode.call_with_valid_c_str(|mode_str|
+                let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
+                if file_ptr == nullptr { 
+                    Result::err $ IOError { msg : "failed to open a file: " + path_str }
+                } else {
+                    Result::ok $ IOHandle { _file_ptr : file_ptr }
+                }
+            )
+        );
+        (res, io)
+    );
+
+    // Read all characters from a IOHandle.
+    read_content! : IOHandle -> IOState -> (Result String IOError, IOState);
+    read_content! = read_line_inner!(false);
+
+    // Raad all characters from a file.
+    read_file! : Path -> IOState -> (Result String IOError, IOState);
+    read_file! = |path| with_file!(path, "r", read_content!);
+
     // Read characters from a IOHandle upto newline/carriage return or EOF.
     // The returned string may include newline/carriage return at it's end.
     read_line! : IOHandle -> IOState -> (Result String IOError, IOState);
-    read_line! = |handle, io| (
+    read_line! = read_line_inner!(true);
+
+    // Read characters from an IOHandle.
+    // if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
+    read_line_inner! : Bool -> IOHandle -> IOState -> (Result String IOError, IOState);
+    read_line_inner! = |upto_newline, handle, io| (
         // Check if io is unique.
         let (is_io_unique, io) = io.is_unique;
         let _ = assert("[Std::IOState::read_line] Cloned IOState value.", is_io_unique);
@@ -278,11 +322,14 @@ namespace IOState {
             // If no character is read, break.
             if strlen == 0 { break $ strs };
 
-            // If the last character is \n or \r, break.
-            let last_byte = buf.get(strlen-1);
-            if last_byte == 10_U8 || last_byte == 13_U8 { break $ strs };
-
-            continue $ strs
+            if upto_newline {
+                // If the last character is \n or \r, break.
+                let last_byte = buf.get(strlen-1);
+                if last_byte == '\n' || last_byte == '\r' { break $ strs };
+                continue $ strs
+            } else {
+                continue $ strs
+            }
         );
 
         // Check if err occurred.
@@ -295,6 +342,22 @@ namespace IOState {
         let str = strings_rev.reverse.concat_iter;
         (Result::ok(str), io)
     );
+
+    // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
+    // The file handle will be closed automatically.
+    with_file! : Path -> String -> (IOHandle -> IOState -> (a, IOState)) -> IOState -> (Result a IOError, IOState);
+    with_file! = |path, mode, action, io| (
+        let res = (
+            let handle = open_file!(path, mode);
+            if handle.is_err { Result::err $ handle.as_err };
+            let handle = handle.as_ok;
+            let (res, io) = action(handle, io);
+            let _ = io.close_file!(handle);
+            Result::ok $ res;
+        );
+        (res, io)
+    );
+
 }
 
 namespace IOState {
@@ -309,7 +372,6 @@ impl IOError : ToString {
 
 namespace IOState {
     // A handle type for read / write operations on files/stdin/stdout/stderr.
-    // TODO: add `close! : IOHandle -> IOState -> ((), IOState)`, which asserts that the given IOHandle is unique.
     type IOHandle = unbox struct { _file_ptr: Ptr };
 }
 
@@ -548,6 +610,22 @@ impl [a : Eq] Option a : Eq {
         if lhs.is_some && rhs.is_some { lhs.as_some == rhs.as_some };
         lhs.is_none && rhs.is_none
     );
+}
+
+// The type for file path.
+// TODO: give right implementation.
+type Path = unbox struct { _data: String };
+
+namespace Path {
+
+    // Parse a string.
+    parse : String -> Option Path;
+    parse = |s| Option::some $ Path { _data: s };
+
+}
+
+impl Path : ToString {
+    to_string = @_data;
 }
 
 // A type of result value for a computation that may fail.
