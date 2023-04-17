@@ -807,7 +807,7 @@ fn parse_expr_rtl_app(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     ret
 }
 
-// Parse left to right application sequence, e.g., `x & f & g`. (left-associative)
+// Parse left to right application sequence, e.g., `x.f.g`. (left-associative)
 fn parse_expr_ltr_app(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_ltr_app);
     let exprs = parse_combinator_sequence(pair, src, parse_expr_app);
