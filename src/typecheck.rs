@@ -260,14 +260,10 @@ impl Substitution {
             // For example, this error occurs when
             // the user is making `f c` in the implementation of
             // `map: [f: Functor] (a -> b) -> f a -> f b; map = |f, c| (...)`;
-            error_exit(&format!(
-                "cannot identify type `{}` and `{}`.",
-                tyvar1.name,
-                ty2.to_string_normalize()
-            ));
+            return None;
         }
         if tyvar1.kind != ty2.kind(type_env) {
-            error_exit("Kinds do not match.");
+            return None;
         }
         Some(Self::single(&tyvar1.name, ty2.clone()))
     }
