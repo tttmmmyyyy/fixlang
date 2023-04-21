@@ -124,6 +124,11 @@
     - [Std::Debug::assert : String -\> Bool -\> ()](#stddebugassert--string---bool---)
     - [Std::Debug::assert\_eq : \[a: Eq\] String -\> a -\> a -\> ()](#stddebugassert_eq--a-eq-string---a---a---)
   - [Traits](#traits-2)
+    - [Std::Functor](#stdfunctor)
+      - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
+    - [Std::Monad](#stdmonad)
+      - [`flatten : [m : Monad] m (m a) -> a`](#flatten--m--monad-m-m-a---a)
+      - [`pure : a -> m a`](#pure--a---m-a)
     - [Std::ToString](#stdtostring)
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
     - [Std::ToI32](#stdtoi32)
@@ -1526,6 +1531,20 @@ main = (
 ### Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()
 
 ## Traits
+
+### Std::Functor
+
+Kind : `* -> *`
+
+#### `map : [f : Functor] (a -> b) -> f a -> f b`
+
+### Std::Monad
+
+Kind : `* -> *`
+
+#### `flatten : [m : Monad] m (m a) -> a`
+
+#### `pure : a -> m a`
 
 ### Std::ToString
 
