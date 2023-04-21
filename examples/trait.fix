@@ -30,12 +30,12 @@ search = |elem, arr| loop(0, |idx|
 
 // An example of higher-kinded trait.
 // All type variable has kind `*` by default, and any kind of higher-kinded type variable need to be annoted explicitly.
-trait [f:*->*] f : Functor {
-    map : (a -> b) -> f a -> f b;
+trait [f:*->*] f : MyFunctor {
+    mymap : (a -> b) -> f a -> f b;
 }
 
-impl Array : Functor {
-    map = |f, arr| (
+impl Array : MyFunctor {
+    mymap = |f, arr| (
         Array::from_map(arr.get_length, |idx| f(arr.get(idx)))
     );
 }
@@ -43,6 +43,6 @@ impl Array : Functor {
 main : IOState -> ((), IOState);
 main = (
     let arr = Array::from_map(6, |x| x); // arr = [0,1,2,...,9].
-    let arr = arr.map(|x| Pair { fst: x % 2, snd: x % 3 }); // arr = [(0, 0), (1, 1), (0, 2), ...].
+    let arr = arr.mymap(|x| Pair { fst: x % 2, snd: x % 3 }); // arr = [(0, 0), (1, 1), (0, 2), ...].
     println! $ arr.search(Pair { fst: 1, snd: 2}).to_string // 5, the first number x such that x % 2 == 1 and x % 3 == 2.
 );
