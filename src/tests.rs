@@ -1047,11 +1047,11 @@ pub fn test45() {
     let source = r#"
         module Main;
 
-        trait [f:*->*] f : Functor {
+        trait [f:*->*] f : MyFunctor {
             map : (a -> b) -> f a -> f b;
         }
 
-        impl Array : Functor {
+        impl Array : MyFunctor {
             map = |f, arr| (
                 Array::from_map(arr.get_length, |idx| f $ arr.get(idx))
             );

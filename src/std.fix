@@ -622,17 +622,14 @@ trait [m : *->*] m : Monad {
 
 type Option a = union { none: (), some: a };
 
-namespace Option {
-
-    map : (a -> b) -> Option a -> Option b;
+impl Option : Functor {
     map = |f, opt| (
         if opt.is_none {
-            none()
+            Option::none()
         } else {
-            some $ f $ opt.as_some
+            Option::some $ f $ opt.as_some
         }
     );
-
 }
 
 impl [a : Eq] Option a : Eq {
