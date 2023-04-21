@@ -414,22 +414,25 @@ impl TraitEnv {
         p: &Predicate,
         type_env: &TypeEnv,
     ) -> Option<Vec<Predicate>> {
-        for inst in &self.instances[&p.trait_id] {
-            match Substitution::matching(type_env, &inst.qual_pred.predicate.ty, &p.ty) {
-                Some(s) => {
-                    let ret = inst
-                        .qual_pred
-                        .context
-                        .iter()
-                        .map(|c| {
-                            let mut c = c.clone();
-                            s.substitute_predicate(&mut c);
-                            c
-                        })
-                        .collect();
-                    return Some(ret);
+        let insntances = self.instances.get(&p.trait_id);
+        if let Some(instances) = insntances {
+            for inst in instances {
+                match Substitution::matching(type_env, &inst.qual_pred.predicate.ty, &p.ty) {
+                    Some(s) => {
+                        let ret = inst
+                            .qual_pred
+                            .context
+                            .iter()
+                            .map(|c| {
+                                let mut c = c.clone();
+                                s.substitute_predicate(&mut c);
+                                c
+                            })
+                            .collect();
+                        return Some(ret);
+                    }
+                    None => {}
                 }
-                None => {}
             }
         }
         return None;

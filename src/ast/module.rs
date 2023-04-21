@@ -685,14 +685,17 @@ impl FixModule {
             for (method_name, _) in &trait_info.methods {
                 let method_ty = trait_info.method_scheme(method_name);
                 let mut method_impls: Vec<MethodImpl> = vec![];
-                for trait_impl in self.trait_env.instances.get(trait_id).unwrap() {
-                    let ty = trait_impl.method_scheme(method_name, trait_info);
-                    let expr = trait_impl.method_expr(method_name);
-                    method_impls.push(MethodImpl {
-                        ty,
-                        expr,
-                        define_module: trait_impl.define_module.clone(),
-                    });
+                let instances = self.trait_env.instances.get(trait_id);
+                if let Some(insntances) = instances {
+                    for trait_impl in insntances {
+                        let ty = trait_impl.method_scheme(method_name, trait_info);
+                        let expr = trait_impl.method_expr(method_name);
+                        method_impls.push(MethodImpl {
+                            ty,
+                            expr,
+                            define_module: trait_impl.define_module.clone(),
+                        });
+                    }
                 }
                 let method_name = FullName::new(&trait_id.name.to_namespace(), &method_name);
                 self.global_values.insert(

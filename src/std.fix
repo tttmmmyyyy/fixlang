@@ -224,6 +224,10 @@ namespace Debug {
     );
 }
 
+trait [f : *->*] f : Functor {
+    map : (a -> b) -> f a -> f b;
+}
+
 impl I32 : ToString {
     to_string = I32::_I32_to_string;
 }
@@ -609,6 +613,11 @@ impl [a : Eq] Iterator a : Eq {
         if e != f { false };
         lhs == rhs
     );
+}
+
+trait [m : *->*] m : Monad {
+    flatten : m (m a) -> a;
+    pure : a -> m a;
 }
 
 type Option a = union { none: (), some: a };
