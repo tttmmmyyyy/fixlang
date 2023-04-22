@@ -488,10 +488,6 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Flatten an iterator of iterators.
-    flatten : Iterator (Iterator a) -> Iterator a;
-    flatten = |iter| iter.fold(Iterator::make_empty, Add::add);
-
     // Folds iterator from left.
     // fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...
     fold : b -> (b -> a -> b) -> Iterator a -> b;
@@ -531,18 +527,6 @@ namespace Iterator {
     // Checks if an iterator is empty.
     is_empty : Iterator a -> Bool;
     is_empty = |iter| iter.advance.is_none;
-
-    // Apply a function to each value of iterator.
-    // map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]
-    map : (a -> b) -> Iterator a -> Iterator b;
-    map = |f, a_iter| (
-        let next = |_| (
-            a_iter.advance.map(
-                |(a_val, a_iter)| (f(a_val), a_iter.map(f))
-            )
-        );
-        Iterator { next: next }
-    );
 
     // Get next value and next iterator.
     advance : Iterator a -> Option (a, Iterator a);
@@ -613,6 +597,22 @@ impl [a : Eq] Iterator a : Eq {
         if e != f { false };
         lhs == rhs
     );
+}
+
+impl Iterator : Functor {
+    map = |f, a_iter| (
+        let next = |_| (
+            a_iter.advance.map(
+                |(a_val, a_iter)| (f(a_val), a_iter.map(f))
+            )
+        );
+        Iterator { next: next }
+    );
+}
+
+impl Iterator : Monad {
+    flatten = |iter| iter.fold(Iterator::make_empty, Add::add);
+    pure = |e| Iterator::make_empty.push_front(e);
 }
 
 trait [m : *->*] m : Monad {

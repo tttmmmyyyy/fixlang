@@ -93,6 +93,20 @@
     - [Std::I64](#stdi64)
       - [\_I64\_to\_string : I64 -\> String](#_i64_to_string--i64---string)
     - [Std::Iterator](#stditerator)
+      - [`advance : Iterator a -> Option (a, Iterator a)`](#advance--iterator-a---option-a-iterator-a)
+      - [`append : Iterator a -> Iterator a -> Iterator a`](#append--iterator-a---iterator-a---iterator-a)
+      - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
+      - [`get_length : Iterator a -> I64`](#get_length--iterator-a---i64)
+      - [`intersperse : a -> Iterator a -> Iterator a`](#intersperse--a---iterator-a---iterator-a)
+      - [`make_empty : Iterator a`](#make_empty--iterator-a)
+      - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
+      - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
+      - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
+      - [`from_map : (I64 -> a) -> Iterator a`](#from_map--i64---a---iterator-a)
+      - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
+      - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
+      - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
+      - [`zip : Iterator a -> Iterator b -> Iterator (a, b)`](#zip--iterator-a---iterator-b---iterator-a-b)
     - [Std::Option](#stdoption)
     - [Std::Path](#stdpath)
       - [`parse : String -> Option Path`](#parse--string---option-path)
@@ -1289,52 +1303,61 @@ Implementing traits:
 
 Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
-Methods:
-
-- `advance : Iterator a -> Option (a, Iterator a)`
-    - Get next value and next iterator.
-- `append : Iterator a -> Iterator a -> Iterator a`
-    - Append an iterator to a iterator.
-    - Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
-- `count_up : I64 -> Iterator I64`
-    - Create an iterator that counts up from a number.
-    - `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely)
-- `get_length : Iterator a -> I64`
-    - Counts the length of an iterator.
-- `intersperse : a -> Iterator a -> Iterator a`
-    - I64ersperse an elemnt between elements of an iterator.
-    - Example: `Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])`
-- `make_empty : Iterator a`
-    - Creates an empty iterator.
-- `filter : (a -> Bool) -> Iterator a -> Iterator a`
-    - Filter elements by a condition function.
-- `flatten : Iterator (Iterator a) -> Iterator a`
-    - Flatten an iterator of iterators.
-- `fold : b -> (b -> a -> b) -> Iterator a -> b`
-    - Folds iterator from left.
-    - `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
-- `from_array : Array a -> Iterator a`
-    - Create iterator from an array.
-- `from_map : (I64 -> a) -> Iterator a`
-    - Create iterator from mapping function.
-    - `from_map(f) = [f(0), f(1), f(2), ...]`
-- `map : map : (a -> b) -> Iterator a -> Iterator b`
-    - Apply a function to each value of iterator.
-    - `map(f, [a0, a1, a2, ...]) = [f(a0), f(a1), f(a2), ...]`
-- `push_front : a -> Iterator a -> Iterator a`
-    - Append an element to an iterator.
-- `reverse : Iterator a -> Iterator a`
-    - Reverse an iterator.
-- `take : I64 -> Iterator a -> Iterator a`
-    - Take at most n elements from an iterator.
-- `zip : Iterator a -> Iterator b -> Iterator (a, b)`
-    - Zip two iterators.
-
 Implementing Traits:
 
 - `Iterator a : Add`
     - Adds two iterators by `Iterator::append`.
 - `[a : Eq] Iterator a : Eq`
+- `Iterator : Functor`
+- `Iterator : Monad`
+
+#### `advance : Iterator a -> Option (a, Iterator a)`
+Get next value and next iterator.
+
+#### `append : Iterator a -> Iterator a -> Iterator a`
+Append an iterator to a iterator.
+Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
+
+#### `count_up : I64 -> Iterator I64`
+Create an iterator that counts up from a number.
+Example: `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely).
+
+#### `get_length : Iterator a -> I64`
+Counts the length of an iterator.
+
+#### `intersperse : a -> Iterator a -> Iterator a`
+
+Intersperse an elemnt between elements of an iterator.
+Example: `Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])`
+
+#### `make_empty : Iterator a`
+Creates an empty iterator.
+
+#### `filter : (a -> Bool) -> Iterator a -> Iterator a`
+Filter elements by a condition function.
+
+#### `fold : b -> (b -> a -> b) -> Iterator a -> b`
+Folds iterator from left.
+Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`.
+
+#### `from_array : Array a -> Iterator a`
+Create iterator from an array.
+
+#### `from_map : (I64 -> a) -> Iterator a`
+Create iterator from mapping function.
+Example: `from_map(f) = [f(0), f(1), f(2), ...]`.
+
+#### `push_front : a -> Iterator a -> Iterator a`
+Append an element to an iterator.
+
+#### `reverse : Iterator a -> Iterator a`
+Reverse an iterator.
+
+#### `take : I64 -> Iterator a -> Iterator a`
+Take at most n elements from an iterator.
+
+#### `zip : Iterator a -> Iterator b -> Iterator (a, b)`
+Zip two iterators.
 
 ### Std::Option
 
@@ -1347,7 +1370,7 @@ type Option a = union { none: (), some: a };
 Implementing traits:
 
 - `[a : Eq] Option a : Eq`
-- `Option a : Functor`
+- `Option : Functor`
 
 ### Std::Path
 
