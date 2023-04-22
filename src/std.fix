@@ -292,7 +292,7 @@ namespace IO {
 
     // Read all characters from a IOHandle.
     read_content : IOHandle -> IO (Result String IOError);
-    read_content = read_line_inner!(false);
+    read_content = read_line_inner(false);
 
     // Raad all characters from a file.
     read_file : Path -> IO (Result String IOError);
