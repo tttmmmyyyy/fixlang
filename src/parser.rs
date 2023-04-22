@@ -890,10 +890,14 @@ fn parse_expr_bind(
     src: &Rc<String>,
 ) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_bind);
+    let mut star_count: u32 = 0;
     let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), msc, src);
-    while pairs.peek().is_some() {
+    while pairs.peek().unwrap().as_rule() == Rule::operator_bind {
         pairs.next().unwrap();
+        star_count += 1;
+    }
+    let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), msc, src);
+    for _ in 0..star_count {
         expr = msc.push_bind(expr);
     }
     expr

@@ -88,8 +88,8 @@ expr_app = { expr_nlr ~ (sep* ~ arg_list)? }
 combinator_dot = _{ "." }
 expr_ltr_app = { expr_app ~ (sep* ~ combinator_dot ~ sep* ~ expr_app)* }
 
-operator_bind = { "?" }
-expr_bind = { expr_ltr_app ~ operator_bind* }
+operator_bind = { "*" }
+expr_bind = { operator_bind* ~ expr_ltr_app }
 
 // TODO: two composition operators "<<" and ">>"" will be added here.
 
