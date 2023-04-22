@@ -616,7 +616,7 @@ impl [a : Eq] Iterator a : Eq {
 }
 
 trait [m : *->*] m : Monad {
-    flatten : m (m a) -> a;
+    flatten : m (m a) -> m a;
     pure : a -> m a;
 }
 
