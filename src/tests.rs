@@ -1542,18 +1542,18 @@ pub fn test61() {
     let source = r#"
     module Main;
 
-    main : IO ();
-    main = |io| (
-        loop((0, io)) $ |(counter, io)| (
-            if counter == 3 {
-                break $ ((), io)
-            } else {
-                let ret = io.println!("Hello World! ");
-                let io = ret.@1;
-                continue $ (counter + 1, io)
-            }
-        )
+    main_loop : I64 -> IO ();
+    main_loop = |counter| (
+        if counter == 0 {
+            pure()
+        } else {
+            let _ = *print("Hello World! ");
+            main_loop(counter - 1)
+        }
     );
+
+    main : IO ();
+    main = main_loop(3);
     "#;
     run_source(source, Configuration::develop_compiler());
 }
@@ -2051,7 +2051,7 @@ pub fn test83() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         // Unboxed element
         let v = [];
         let v = loop((0, v), |(idx, v)|(
@@ -2093,7 +2093,7 @@ pub fn test83() {
         let _ = assert_eq("wrong length after pop (boxed)", 0, v.get_length);
         let _ = assert("wrong reserved length after pop (boxed)", v.get_capacity >= 100);
     
-        io.pure()
+        pure()
     );
     "#;
     run_source(source, Configuration::develop_compiler());
@@ -2107,7 +2107,7 @@ pub fn test84() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         let v1 = [1,2,3];
         let v2 = [1,2,3];
         let _ = assert("", v1 == v2);
@@ -2124,7 +2124,7 @@ pub fn test84() {
         let v2 = [];
         let _ = assert("", v1 == v2);
     
-        io.pure()
+        pure()
     );
     "#;
     run_source(source, Configuration::develop_compiler());
@@ -2138,13 +2138,13 @@ pub fn test85() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         let s1 = "Hello";
         let s2 = " ";
         let s3 = "World!";
         let _ = assert_eq("", s1.concat(s2).concat(s3) == "Hello World!");
     
-        io.pure()
+        pure()
     );
     
     "#;
@@ -2159,10 +2159,10 @@ pub fn test86() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         let iter = Iterator::from_array(["Hello", " ", "World", "!"]);
         let _ = assert_eq("", iter.concat_iter, "Hello World!");
-        io.pure()
+        pure()
     );
     
     "#;
@@ -2177,7 +2177,7 @@ pub fn test87() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         let lhs = Iterator::from_array([1,2,3]);
         let rhs = Iterator::from_array([1,2,3]);
         let _ = assert_eq("", lhs, rhs);
@@ -2190,7 +2190,7 @@ pub fn test87() {
         let rhs = Iterator::from_array([1,2]);
         let _ = assert("", lhs != rhs);
 
-        io.pure()
+        pure()
     );
     
     "#;
@@ -2205,7 +2205,7 @@ pub fn test88() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         let iter = Iterator::from_array([1,2,3]);
         let iter = iter.intersperse(0);
         let _ = assert_eq("", iter, Iterator::from_array([1,0,2,0,3]));
@@ -2218,7 +2218,7 @@ pub fn test88() {
         let iter = iter.intersperse(0);
         let _ = assert_eq("", iter, Iterator::from_array([]));
     
-        io.pure()
+        pure()
     );
     
     "#;
@@ -2233,7 +2233,7 @@ pub fn test89() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         let lhs = Iterator::from_array([1,2,3]);
         let rhs = Iterator::from_array([4,5,6]);
         let _ = assert_eq("", lhs + rhs, Iterator::from_array([1,2,3,4,5,6]));
@@ -2250,7 +2250,7 @@ pub fn test89() {
         let rhs = Iterator::from_array([]);
         let _ = assert_eq("", lhs + rhs, Iterator::from_array([]));
     
-        io.pure()
+        pure()
     );
     
     "#;
@@ -2265,7 +2265,7 @@ pub fn test90() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         let vec = [5,3,1,7,4,6,9,8,2];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
         let _ = assert_eq("wrong result 9", vec, [1,2,3,4,5,6,7,8,9]);
@@ -2278,7 +2278,7 @@ pub fn test90() {
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
         let _ = assert_eq("wrong result 0", vec, []);
 
-        io.pure()
+        pure()
     );
     
     "#;
@@ -2292,12 +2292,12 @@ pub fn test92() {
     module Main;
 
     main : IO ();
-    main = |io| (
+    main = (
         let buf = [].reserve(5);
         let vec = buf;
         let vec = vec.push_back(0);
         let buf = buf.push_back(1);
-        io.pure()
+        pure()
     );
 
     "#;
@@ -2314,11 +2314,11 @@ pub fn test93() {
     type SelfRef = box struct { data : Option SelfRef };
 
     main : IO ();
-    main = |io| (
+    main = (
         let ref = SelfRef { data : Option::none() };
         // let ref = ref.=data!(Option::some(ref)); // fails
         let ref = ref.=data(Option::some(ref)); // fails
-        io.pure()
+        pure()
     );
 
     "#;
@@ -2706,7 +2706,7 @@ pub fn test109() {
         add_opt_int = |lhs, rhs| Option::some $ lhs? + rhs?;
 
         main : IO ();
-        main = |io| (
+        main = (
             let one = Option::some(1);
             let two = Option::some(2);
             let three = Option::some(3);
@@ -2717,7 +2717,7 @@ pub fn test109() {
             let _ = assert_eq("case 3", add_opt_int(one, none), none);
             let _ = assert_eq("case 4", add_opt_int(none, none), none);
 
-            io.pure()
+            pure()
         );
     "#;
     run_source(&source, Configuration::develop_compiler());

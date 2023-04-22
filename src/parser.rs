@@ -1080,8 +1080,8 @@ fn parse_expr_if(expr: Pair<Rule>, msc: &mut MonadicBindContext, src: &Rc<String
     let else_val = pairs.next().unwrap();
     expr_if(
         parse_expr(cond, msc, src),
-        parse_expr(then_val, msc, src),
-        parse_expr(else_val, msc, src),
+        parse_expr_root(then_val, src),
+        parse_expr_root(else_val, src),
         Some(span),
     )
 }
