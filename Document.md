@@ -126,8 +126,8 @@
       - [`parse : String -> Option Path`](#parse--string---option-path)
     - [Std::Ptr](#stdptr)
     - [Std::Result](#stdresult)
-      - [`Result e (Result e o) -> Result e o`](#result-e-result-e-o---result-e-o)
       - [`unwrap : [e : ToString] Result e o -> o`](#unwrap--e--tostring-result-e-o---o)
+      - [`impl Result e : Monad`](#impl-result-e--monad)
     - [Std::String](#stdstring)
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
       - [`call_with_valid_c_str : (Ptr -> a) -> String -> a`](#call_with_valid_c_str--ptr---a---string---a)
@@ -1396,12 +1396,11 @@ A type of result value for a computation that may fail.
 type Result o e = unbox union { ok : o, err: e };
 ```
 
-#### `Result e (Result e o) -> Result e o`
-
-Flatten a nested result.
-
 #### `unwrap : [e : ToString] Result e o -> o`
+
 Returns the containing value if the value is ok, or otherwise panics after printing error value.
+
+#### `impl Result e : Monad`
 
 ### Std::String
 

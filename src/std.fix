@@ -705,15 +705,6 @@ type Result e o = unbox union { ok : o, err: e };
 
 namespace Result {
 
-    // Flatten a nested result.
-    flatten : Result e (Result e o) -> Result e o;
-    flatten = |res| (
-        if res.is_err { Result::err $ res.as_err };
-        let res = res.as_ok;
-        if res.is_err { Result::err $ res.as_err };
-        Result::ok $ res.as_ok
-    );
-
     // Returns the containing value if the value is ok, or otherwise panics after printing the error value.
     unwrap : [e : ToString] Result e o -> o;
     unwrap = |res| (
@@ -724,6 +715,17 @@ namespace Result {
             res.as_ok
         }
     );
+}
+
+impl Result e : Monad {
+
+    pure = Result::ok;
+
+    flatten = |res| (
+        if res.is_err { Result::err $ res.as_err };
+        res.as_ok
+    );
+    
 }
 
 type String = unbox struct { _data : Array U8 };
