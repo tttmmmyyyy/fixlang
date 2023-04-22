@@ -75,20 +75,20 @@
       - [\_U64\_to\_string : U64 -\> String](#_u64_to_string--u64---string)
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
+      - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
+      - [`open_file : Path -> String -> IO (Result IOHandle IOError)`](#open_file--path---string---io-result-iohandle-ioerror)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
+      - [`read_content : IOHandle -> IO (Result String IOError)`](#read_content--iohandle---io-result-string-ioerror)
+      - [`read_file : Path -> IO (Result String IOError)`](#read_file--path---io-result-string-ioerror)
+      - [`read_line : IOHandle -> IO (Result String IOError)`](#read_line--iohandle---io-result-string-ioerror)
+      - [`read_line_inner : Bool -> IOHandle -> IO (Result String IOError)`](#read_line_inner--bool---iohandle---io-result-string-ioerror)
+      - [`with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result a IOError)`](#with_file--path---string---iohandle---io-a---io-result-a-ioerror)
+      - [`write_content : IOHandle -> String -> IO (Result () IOError)`](#write_content--iohandle---string---io-result--ioerror)
+      - [`write_file : Path -> String -> IO (Result () IOError)`](#write_file--path---string---io-result--ioerror)
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
     - [Std::IOState](#stdiostate)
-      - [`close_file! : IOHandle -> IOState -> ((), IOState)`](#close_file--iohandle---iostate----iostate)
-      - [`open_file! : Path -> String -> IOState -> (Result IOHandle IOError, IOState)`](#open_file--path---string---iostate---result-iohandle-ioerror-iostate)
-      - [`read_content! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_content--iohandle---iostate---result-string-ioerror-iostate)
-      - [`read_file! : Path -> IOState -> (Result String IOError, IOState)`](#read_file--path---iostate---result-string-ioerror-iostate)
-      - [`read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line--iohandle---iostate---result-string-ioerror-iostate)
-      - [`read_line_inner! : Bool -> IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line_inner--bool---iohandle---iostate---result-string-ioerror-iostate)
-      - [`with_file! : Path -> String -> (IOHandle -> IOState -> (a, IOState)) -> IOState -> (Result a IOError, IOState)`](#with_file--path---string---iohandle---iostate---a-iostate---iostate---result-a-ioerror-iostate)
-      - [`write_file! : Path -> String -> IOState -> (Result () IOError, IOState)`](#write_file--path---string---iostate---result--ioerror-iostate)
-      - [`write_content! : String -> IOHandle -> IOState -> (Result () IOError, IOState)`](#write_content--string---iohandle---iostate---result--ioerror-iostate)
     - [Std::IOState::IOError](#stdiostateioerror)
     - [Std::IOState::IOHandle](#stdiostateiohandle)
     - [Std::I32](#stdi32)
@@ -1167,6 +1167,14 @@ Implementing traits:
 
 Perform the I/O action. This may violate purity of Fix.
 
+#### `close_file : IOHandle -> IO ()`
+
+Close a file.
+
+#### `open_file : Path -> String -> IO (Result IOHandle IOError)`
+
+Open a file. The second argument is a mode string for `fopen` C function. 
+
 #### `print : String -> IO ()`
 
 Print a string to the standard output.
@@ -1175,35 +1183,15 @@ Print a string to the standard output.
 
 Print a string followed by a newline to the standard output.
 
-#### `impl IO : Functor`
-
-#### `impl IO : Monad`
-
-### Std::IOState
-
-The virtual type that represents the state of world (=the outside of the Fix program). 
-
-For example, `Std::IOState::print!(msg) : Std::IOState -> ((), Std::IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std::IOState` and return the updated `Std::IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
-
-All functions that perform I/O action by `IOState` assert that the given state is unique.
-
-#### `close_file! : IOHandle -> IOState -> ((), IOState)`
-
-Close a file.
-
-#### `open_file! : Path -> String -> IOState -> (Result IOHandle IOError, IOState)`
-
-Open a file. The second argument is a mode string for `fopen` C function. 
-
-#### `read_content! : IOHandle -> IOState -> (Result String IOError, IOState)`
+#### `read_content : IOHandle -> IO (Result String IOError)`
 
 Read all characters from a IOHandle.
 
-#### `read_file! : Path -> IOState -> (Result String IOError, IOState)`
+#### `read_file : Path -> IO (Result String IOError)`
 
 Raad all characters from a file.
 
-#### `read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`
+#### `read_line : IOHandle -> IO (Result String IOError)`
 
 Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at it's end.
 
@@ -1218,23 +1206,35 @@ main = |io| (
 );
 ```
 
-#### `read_line_inner! : Bool -> IOHandle -> IOState -> (Result String IOError, IOState)`
+#### `read_line_inner : Bool -> IOHandle -> IO (Result String IOError)`
 
 Read characters from an IOHandle.
 if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
 
-#### `with_file! : Path -> String -> (IOHandle -> IOState -> (a, IOState)) -> IOState -> (Result a IOError, IOState)`
+#### `with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result a IOError)`
 
 Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
 The file handle will be closed automatically.
 
-#### `write_file! : Path -> String -> IOState -> (Result () IOError, IOState)`
+#### `write_content : IOHandle -> String -> IO (Result () IOError)`
+
+Write a string into an IOHandle.
+
+#### `write_file : Path -> String -> IO (Result () IOError)`
 
 Write a string into a file.
 
-#### `write_content! : String -> IOHandle -> IOState -> (Result () IOError, IOState)`
+#### `impl IO : Functor`
 
-Write a string into an IOHandle.
+#### `impl IO : Monad`
+
+### Std::IOState
+
+The virtual type that represents the state of world (=the outside of the Fix program). 
+
+For example, `Std::IOState::print!(msg) : Std::IOState -> ((), Std::IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std::IOState` and return the updated `Std::IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
+
+All functions that perform I/O action by `IOState` assert that the given state is unique.
 
 ### Std::IOState::IOError
 
