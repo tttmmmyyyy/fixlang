@@ -73,16 +73,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             fields: vec![],
         },
     );
-    ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)),
-        TyConInfo {
-            kind: kind_star(),
-            variant: TyConVariant::Struct,
-            is_unbox: false,
-            tyvars: vec![],
-            fields: vec![],
-        },
-    );
     // IO is defined in the source code of Std.
     ret.insert(
         make_array_tycon(),
