@@ -1176,7 +1176,7 @@ Print a string to the standard output.
 
 #### `println : String -> IO ()`
 
-Print a string followed by a newline.
+Print a string followed by a newline to the standard output.
 
 #### `impl IO : Functor`
 
