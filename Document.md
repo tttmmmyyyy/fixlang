@@ -58,6 +58,7 @@
       - [`get_length : Array a -> I64`](#get_length--array-a---i64)
       - [`get_capacity : Array a -> I64`](#get_capacity--array-a---i64)
       - [`is_empty : Array a -> Bool`](#is_empty--array-a---bool)
+      - [`make_range : I64 -> I64 -> Iterator I64`](#make_range--i64---i64---iterator-i64)
       - [`make_empty : I64 -> Array a`](#make_empty--i64---array-a)
       - [`mod : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a)
       - [`mod! : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a-1)
@@ -994,6 +995,9 @@ Returns the capacity of an array.
 
 #### `is_empty : Array a -> Bool`
 Returns if the array is empty or not.
+
+#### `make_range : I64 -> I64 -> Iterator I64`
+Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
 
 #### `make_empty : I64 -> Array a`
 Creates an empty array with specified capacity.

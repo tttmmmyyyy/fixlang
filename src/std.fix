@@ -468,7 +468,7 @@ namespace Iterator {
     get_length : Iterator a -> I64;
     get_length = fold(0, |acm, _| acm + 1);
 
-    // I64ersperse an elemnt between elements of an iterator.
+    // Intersperse an elemnt between elements of an iterator.
     // Example: 
     // ```
     // Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])
@@ -485,6 +485,19 @@ namespace Iterator {
     make_empty : Iterator a;
     make_empty = (
         let next = |_| (none());
+        Iterator { next: next }
+    );
+
+    // Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
+    make_range : I64 -> I64 -> Iterator I64;
+    make_range = |a, b| (
+        let next = |_| (
+            if a == b {
+                Option::none()
+            } else {
+                Option::some $ (a, make_range(a+1, b))
+            }
+        );
         Iterator { next: next }
     );
 
