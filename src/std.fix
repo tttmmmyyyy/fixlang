@@ -627,6 +627,13 @@ trait [m : *->*] m : Monad {
 
 type Option a = union { none: (), some: a };
 
+impl [a : Eq] Option a : Eq {
+    eq = |lhs, rhs| (
+        if lhs.is_some && rhs.is_some { lhs.as_some == rhs.as_some };
+        lhs.is_none && rhs.is_none
+    );
+}
+
 impl Option : Functor {
     map = |f, opt| (
         if opt.is_none {
@@ -637,11 +644,15 @@ impl Option : Functor {
     );
 }
 
-impl [a : Eq] Option a : Eq {
-    eq = |lhs, rhs| (
-        if lhs.is_some && rhs.is_some { lhs.as_some == rhs.as_some };
-        lhs.is_none && rhs.is_none
+impl Option : Monad {
+    flatten = |opt_opt| (
+        if opt_opt.is_none { 
+            Option::none()
+        } else {
+            opt_opt.as_some
+        }
     );
+    pure = Option::some;
 }
 
 // The type for file path.

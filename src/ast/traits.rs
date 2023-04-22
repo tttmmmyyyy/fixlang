@@ -308,6 +308,33 @@ impl TraitEnv {
                         // TODO: better message?
                     }
                 }
+
+                // Check whether all trait methods are implemented.
+                let trait_methods = &self.traits[trait_id]
+                    .methods
+                    .iter()
+                    .map(|s| s.0)
+                    .collect::<HashSet<_>>();
+                let impl_methods = inst.methods.iter().map(|s| s.0).collect::<HashSet<_>>();
+                for trait_method in trait_methods {
+                    if !impl_methods.contains(trait_method) {
+                        let pred = inst.qual_pred.predicate.to_string();
+                        error_exit(&format!(
+                            "An implementation of a method `{}` of trait `{}` is given for `{}`.",
+                            trait_method,
+                            trait_id.to_string(),
+                            pred
+                        ))
+                    }
+                }
+                for impl_method in impl_methods {
+                    if !trait_methods.contains(impl_method) {
+                        let pred = inst.qual_pred.predicate.to_string();
+                        error_exit(
+                            &format!("Unknown method `{}` of trait `{}` is given in the implementation for `{}`.", impl_method, trait_id.to_string(), pred),
+                        )
+                    }
+                }
             }
 
             // Check overlapping instance.

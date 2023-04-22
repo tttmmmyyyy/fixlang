@@ -112,6 +112,9 @@
       - [`impl Iterator : Functor`](#impl-iterator--functor)
       - [`impl Iterator : Monad`](#impl-iterator--monad)
     - [Std::Option](#stdoption)
+      - [`impl [a : Eq] Option a : Eq`](#impl-a--eq-option-a--eq)
+      - [`impl Option : Functor`](#impl-option--functor)
+      - [`impl Option : Monad`](#impl-option--monad)
     - [Std::Path](#stdpath)
       - [`parse : String -> Option Path`](#parse--string---option-path)
     - [Std::Ptr](#stdptr)
@@ -140,13 +143,13 @@
     - [Std::Debug::abort : () -\> a](#stddebugabort-----a)
     - [Std::Debug::assert : String -\> Bool -\> ()](#stddebugassert--string---bool---)
     - [Std::Debug::assert\_eq : \[a: Eq\] String -\> a -\> a -\> ()](#stddebugassert_eq--a-eq-string---a---a---)
-    - [Std::Monad::bind : \[m : Monad, m : Functor\] m a -\> (a -\> m b) -\> m b](#stdmonadbind--m--monad-m--functor-m-a---a---m-b---m-b)
   - [Traits](#traits-2)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
     - [Std::Monad (\* -\> \*)](#stdmonad----)
-      - [`flatten : [m : Monad] m (m a) -> a`](#flatten--m--monad-m-m-a---a)
-      - [`pure : [m : Monad] a -> m a`](#pure--m--monad-a---m-a)
+      - [`bind : [m : Monad, m : Functor] m a -> (a -> m b) -> m b`](#bind--m--monad-m--functor-m-a---a---m-b---m-b)
+      - [(required) `flatten : [m : Monad] m (m a) -> a`](#required-flatten--m--monad-m-m-a---a)
+      - [(required) `pure : [m : Monad] a -> m a`](#required-pure--m--monad-a---m-a)
     - [Std::ToString](#stdtostring)
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
     - [Std::ToI32](#stdtoi32)
@@ -1373,10 +1376,11 @@ Adds two iterators by `Iterator::append`.
 type Option a = union { none: (), some: a };
 ```
 
-Implementing traits:
+#### `impl [a : Eq] Option a : Eq`
 
-- `[a : Eq] Option a : Eq`
-- `Option : Functor`
+#### `impl Option : Functor`
+
+#### `impl Option : Monad`
 
 ### Std::Path
 
@@ -1555,8 +1559,6 @@ main = (
 
 ### Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()
 
-### Std::Monad::bind : [m : Monad, m : Functor] m a -> (a -> m b) -> m b
-
 ## Traits
 
 ### Std::Functor (* -> *)
@@ -1565,9 +1567,11 @@ main = (
 
 ### Std::Monad (* -> *)
 
-#### `flatten : [m : Monad] m (m a) -> a`
+#### `bind : [m : Monad, m : Functor] m a -> (a -> m b) -> m b`
 
-#### `pure : [m : Monad] a -> m a`
+#### (required) `flatten : [m : Monad] m (m a) -> a`
+
+#### (required) `pure : [m : Monad] a -> m a`
 
 ### Std::ToString
 
