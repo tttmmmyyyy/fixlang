@@ -253,7 +253,7 @@ namespace IO {
     );
 
     // Open a file. The second argument is a mode string for `fopen` C function. 
-    open_file : Path -> String -> IO (Result IOHandle IOError);
+    open_file : Path -> String -> IO (Result IOError IOHandle);
     open_file = |path, mode| (
         IO { _data : |_|(
             let path_str = path.to_string;
@@ -291,11 +291,11 @@ namespace IO {
     );
 
     // Read all characters from a IOHandle.
-    read_content : IOHandle -> IO (Result String IOError);
+    read_content : IOHandle -> IO (Result IOError String);
     read_content = read_line_inner(false);
 
     // Raad all characters from a file.
-    read_file : Path -> IO (Result String IOError);
+    read_file : Path -> IO (Result IOError String);
     read_file = |path| (
         let res = *with_file(path, "r", read_content);
         pure $ res.flatten
@@ -303,12 +303,12 @@ namespace IO {
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
     // The returned string may include newline/carriage return at it's end.
-    read_line : IOHandle -> IO (Result String IOError);
+    read_line : IOHandle -> IO (Result IOError String);
     read_line = read_line_inner(true);
 
     // Read characters from an IOHandle.
     // if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
-    read_line_inner : Bool -> IOHandle -> IO (Result String IOError);
+    read_line_inner : Bool -> IOHandle -> IO (Result IOError String);
     read_line_inner = |upto_newline, handle| (
         IO { _data : |_| (
             // Read strings and make iterators of strings (reversed).
@@ -358,7 +358,7 @@ namespace IO {
 
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
-    with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result a IOError);
+    with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result IOError a);
     with_file = |path, mode, action| (
         let res = *open_file(path, mode);
         if res.is_err { pure $ Result::err $ res.as_err };
@@ -369,7 +369,7 @@ namespace IO {
     );
 
     // Write a string into an IOHandle.
-    write_content : IOHandle -> String -> IO (Result () IOError);
+    write_content : IOHandle -> String -> IO (Result IOError ());
     write_content = |handle, content| (
         let res = content.call_with_valid_c_str(|c_str| (
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle.@_file_ptr];
@@ -380,7 +380,7 @@ namespace IO {
     );
 
     // Write a string into a file.
-    write_file : Path -> String -> IO (Result () IOError);
+    write_file : Path -> String -> IO (Result IOError ());
     write_file = |path, content| (
         let res = *with_file(path, "w", |handle| write_content(handle, content));
         pure $ res.flatten
@@ -688,12 +688,12 @@ impl Path : ToString {
 }
 
 // A type of result value for a computation that may fail.
-type Result o e = unbox union { ok : o, err: e };
+type Result e o = unbox union { ok : o, err: e };
 
 namespace Result {
 
     // Flatten a nested result.
-    flatten : Result (Result o e) e -> Result o e;
+    flatten : Result e (Result e o) -> Result e o;
     flatten = |res| (
         if res.is_err { Result::err $ res.as_err };
         let res = res.as_ok;
@@ -701,8 +701,8 @@ namespace Result {
         Result::ok $ res.as_ok
     );
 
-    // Returns the containing value if the value is ok, or otherwise panics after printing error value.
-    unwrap : [e : ToString] Result o e -> o;
+    // Returns the containing value if the value is ok, or otherwise panics after printing the error value.
+    unwrap : [e : ToString] Result e o -> o;
     unwrap = |res| (
         if res.is_err {
             let _ = debug_print(res.as_err.to_string);

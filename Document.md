@@ -24,6 +24,7 @@
   - [Recursion](#recursion)
   - [Overloading](#overloading)
   - [Traits](#traits)
+  - [Monads](#monads)
   - [Type annotation](#type-annotation)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions-1)
@@ -32,10 +33,6 @@
     - [Array](#array)
     - [Structs](#structs-1)
     - [Unions](#unions-1)
-    - [Type parameters](#type-parameters)
-  - [Traits](#traits-1)
-    - [Trait bound](#trait-bound)
-  - [Higher-kinded types](#higher-kinded-types)
   - [Calling C functions](#calling-c-functions)
 - [Built-in / library features](#built-in--library-features)
   - [Types](#types-1)
@@ -79,16 +76,16 @@
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
-      - [`open_file : Path -> String -> IO (Result IOHandle IOError)`](#open_file--path---string---io-result-iohandle-ioerror)
+      - [`open_file : Path -> String -> IO (Result IOError IOHandle)`](#open_file--path---string---io-result-ioerror-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
-      - [`read_content : IOHandle -> IO (Result String IOError)`](#read_content--iohandle---io-result-string-ioerror)
-      - [`read_file : Path -> IO (Result String IOError)`](#read_file--path---io-result-string-ioerror)
-      - [`read_line : IOHandle -> IO (Result String IOError)`](#read_line--iohandle---io-result-string-ioerror)
+      - [`read_content : IOHandle -> IO (Result IOError String)`](#read_content--iohandle---io-result-ioerror-string)
+      - [`read_file : Path -> IO (Result IOError String)`](#read_file--path---io-result-ioerror-string)
+      - [`read_line : IOHandle -> IO (Result IOError String)`](#read_line--iohandle---io-result-ioerror-string)
       - [`read_line_inner : Bool -> IOHandle -> IO (Result String IOError)`](#read_line_inner--bool---iohandle---io-result-string-ioerror)
-      - [`with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result a IOError)`](#with_file--path---string---iohandle---io-a---io-result-a-ioerror)
-      - [`write_content : IOHandle -> String -> IO (Result () IOError)`](#write_content--iohandle---string---io-result--ioerror)
-      - [`write_file : Path -> String -> IO (Result () IOError)`](#write_file--path---string---io-result--ioerror)
+      - [`with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result IOError a)`](#with_file--path---string---iohandle---io-a---io-result-ioerror-a)
+      - [`write_content : IOHandle -> String -> IO (Result IOError ())`](#write_content--iohandle---string---io-result-ioerror-)
+      - [`write_file : Path -> String -> IO (Result IOError ())`](#write_file--path---string---io-result-ioerror-)
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
     - [Std::IO::IOError](#stdioioerror)
@@ -128,8 +125,8 @@
       - [`parse : String -> Option Path`](#parse--string---option-path)
     - [Std::Ptr](#stdptr)
     - [Std::Result](#stdresult)
-      - [`flatten : Result (Result o e) e -> Result o e`](#flatten--result-result-o-e-e---result-o-e)
-      - [`unwrap : [e : ToString] Result o e -> o`](#unwrap--e--tostring-result-o-e---o)
+      - [`Result e (Result e o) -> Result e o`](#result-e-result-e-o---result-e-o)
+      - [`unwrap : [e : ToString] Result e o -> o`](#unwrap--e--tostring-result-e-o---o)
     - [Std::String](#stdstring)
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
       - [`call_with_valid_c_str : (Ptr -> a) -> String -> a`](#call_with_valid_c_str--ptr---a---string---a)
@@ -152,7 +149,7 @@
     - [Std::Debug::abort : () -\> a](#stddebugabort-----a)
     - [Std::Debug::assert : String -\> Bool -\> ()](#stddebugassert--string---bool---)
     - [Std::Debug::assert\_eq : \[a: Eq\] String -\> a -\> a -\> ()](#stddebugassert_eq--a-eq-string---a---a---)
-  - [Traits](#traits-2)
+  - [Traits](#traits-1)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
     - [Std::Monad (\* -\> \*)](#stdmonad----)
@@ -780,7 +777,7 @@ You can import modules defined in other source files by writing `import {path_to
 
 ## Recursion
 
-You can make recursive global function as usual.
+You can make recursive global function as in usual programming languages.
 
 ```
 module Main;
@@ -807,6 +804,10 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 (TBA)
 
 ## Traits
+
+(TBA)
+
+## Monads
 
 (TBA)
 
@@ -856,14 +857,6 @@ Unions are unboxed by default because they only contains a single value at a tim
 ```
 type Weight = box union (pound: I64, kilograms: I64);
 ```
-
-### Type parameters
-
-## Traits
-
-### Trait bound
-
-## Higher-kinded types
 
 ## Calling C functions
 
@@ -1151,7 +1144,7 @@ Perform the I/O action. This may violate purity of Fix.
 
 Close a file.
 
-#### `open_file : Path -> String -> IO (Result IOHandle IOError)`
+#### `open_file : Path -> String -> IO (Result IOError IOHandle)`
 
 Open a file. The second argument is a mode string for `fopen` C function. 
 
@@ -1163,15 +1156,15 @@ Print a string to the standard output.
 
 Print a string followed by a newline to the standard output.
 
-#### `read_content : IOHandle -> IO (Result String IOError)`
+#### `read_content : IOHandle -> IO (Result IOError String)`
 
 Read all characters from a IOHandle.
 
-#### `read_file : Path -> IO (Result String IOError)`
+#### `read_file : Path -> IO (Result IOError String)`
 
 Raad all characters from a file.
 
-#### `read_line : IOHandle -> IO (Result String IOError)`
+#### `read_line : IOHandle -> IO (Result IOError String)`
 
 Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at it's end.
 
@@ -1191,16 +1184,16 @@ main = (
 Read characters from an IOHandle.
 if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
 
-#### `with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result a IOError)`
+#### `with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result IOError a)`
 
 Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
 The file handle will be closed automatically.
 
-#### `write_content : IOHandle -> String -> IO (Result () IOError)`
+#### `write_content : IOHandle -> String -> IO (Result IOError ())`
 
 Write a string into an IOHandle.
 
-#### `write_file : Path -> String -> IO (Result () IOError)`
+#### `write_file : Path -> String -> IO (Result IOError ())`
 
 Write a string into a file.
 
@@ -1399,11 +1392,11 @@ A type of result value for a computation that may fail.
 type Result o e = unbox union { ok : o, err: e };
 ```
 
-#### `flatten : Result (Result o e) e -> Result o e`
+#### `Result e (Result e o) -> Result e o`
 
 Flatten a nested result.
 
-#### `unwrap : [e : ToString] Result o e -> o`
+#### `unwrap : [e : ToString] Result e o -> o`
 Returns the containing value if the value is ok, or otherwise panics after printing error value.
 
 ### Std::String
