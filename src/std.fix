@@ -401,7 +401,7 @@ impl IO : Monad {
     );
 }
 
-namespace IOState {
+namespace IO {
     // A type for I/O error.
     type IOError = unbox struct { msg : String };
 }
@@ -411,12 +411,12 @@ impl IOError : ToString {
     to_string = |e| e.@msg;
 }
 
-namespace IOState {
+namespace IO {
     // A handle type for read / write operations on files/stdin/stdout/stderr.
     type IOHandle = unbox struct { _file_ptr: Ptr };
 }
 
-namespace IOState::IOHandle {
+namespace IO::IOHandle {
 
     // The handle for standard error.
     stderr : IOHandle;

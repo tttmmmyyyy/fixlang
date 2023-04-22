@@ -11,7 +11,6 @@ pub const U32_NAME: &str = "U32";
 pub const I64_NAME: &str = "I64";
 pub const U64_NAME: &str = "U64";
 pub const BOOL_NAME: &str = "Bool";
-pub const IOSTATE_NAME: &str = "IOState";
 pub const ARRAY_NAME: &str = "Array";
 pub const STRING_NAME: &str = "String";
 pub const FUNPTR_NAME: &str = "%FunPtr"; // Users cannot access this type constructor.

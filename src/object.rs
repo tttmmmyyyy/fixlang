@@ -869,7 +869,7 @@ pub fn get_object_type(
                 assert_eq!(ret.field_types.len(), struct_field_idx(is_unbox) as usize);
                 let field_types = ty.field_types(type_env);
                 if field_types.is_empty() {
-                    // if this struct has no field, then this is unit `()` or IOState.
+                    // if this struct has no field, then this is unit `()`.
                     if is_unbox {
                         ret.field_types.push(ObjectFieldType::I8); // Avoid empty struct.
                     }

@@ -88,9 +88,12 @@
       - [`write_file : Path -> String -> IO (Result () IOError)`](#write_file--path---string---io-result--ioerror)
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
-    - [Std::IOState](#stdiostate)
-    - [Std::IOState::IOError](#stdiostateioerror)
-    - [Std::IOState::IOHandle](#stdiostateiohandle)
+    - [Std::IO::IOError](#stdioioerror)
+      - [`impl IOError : ToString`](#impl-ioerror--tostring)
+    - [Std::IO::IOHandle](#stdioiohandle)
+      - [`stderr : IOHandle`](#stderr--iohandle)
+      - [`stdin : IOHandle`](#stdin--iohandle)
+      - [`stdout : IOHandle`](#stdout--iohandle)
     - [Std::I32](#stdi32)
       - [\_I32\_to\_string : I32 -\> String](#_i32_to_string--i32---string)
     - [Std::I64](#stdi64)
@@ -195,10 +198,10 @@ calc_fib = |n| (
     arr
 );
 
-main : IOState -> ((), IOState);
+main : IO ();
 main = (
     let fib = calc_fib(30);
-    println! $ Iterator::from_array(fib).map(to_string).join(", ")
+    println $ Iterator::from_array(fib).map(to_string).join(", ")
 );
 ```
 
@@ -232,16 +235,16 @@ The following parts are definitions of two global values `calc_fib` and `main`.
 
 ```
 calc_fib : I64 -> Array I64;
-calc_fib = ...; // call this expression A.
+calc_fib = ...{expression A}...;
 
-main : IOState -> ((), IOState);
-main = ...; // call this expression B.
+main : IO ();
+main = ...{expression B}...;
 ```
 
 These lines means that:
 
 - `calc_fib` global value has type `I64 -> Array I64` and it's value is defined by expression A.
-- `main` global value has type `IOState -> ((), IOState)` and it's value is defined by expression B.
+- `main` global value has type `IO ()` and it's value is defined by expression B.
 
 In Fix, you have to specify the type of a global value explicitly. 
 
@@ -269,8 +272,8 @@ The followings are examples of types:
 - `I64 -> Array I64`: the type of functions that takes an integer and returns an array of integers.
 - `()`: the unit type. This type has a single value which is also written as `()`. 
 - `(a, b)`: the type of pairs of values of `a` and `b`, where `a` and `b` are type parameters.
-- `IOState`: the type whose value corresponds to a state of the world outside the Fix program. For example, printing a string to the standard output can be thought as an operation that changes the external state, and Fix expresses such an operation by a function that takes an `IOState` value and returns updated `IOState` value.
-- `IOState -> ((), IOState)`: the type of functions that update the external state and receive no data. This type is isomorphic to `IOState -> IOState`, but we put a redundant `()` for monadic composition (you don't need to understand this terminology).
+- `IO a`: the type whose value corresponds to an I/O action such as printing a string, opening a file and reading it's content, etc. The type variable `a` is for the type of values returned by the I/O action. For example, if an I/O action reads the standard input as a `String` (and if we assume it never fails), it should have type `IO String`.
+- `IO ()`: the type of I/O actions which returns no value. It is the type of `main` function of Fix program.
 - `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from it's length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
 
 In Fix, the first letter of the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) has to be 
@@ -469,23 +472,9 @@ We sometimes call a function of type `Param0 -> ... -> ParamN -> Obj -> Result` 
 Another way of function application is operator `$`: `f $ x = f(x)`. This operator is right associative: `f $ g $ x = f(g(x))`. This operator is useful for reducing parenthes. In the program of Fibonacci sequence, the followings are examples of use of operator `$`:
 
 - `continue $ (idx+1, arr)`: the application of the `continue` function to the tuple value `(idx+1, arr)`. In Fix, `continue` and `break` are usual functions, not syntaxes. So you can write this expression as `continue((idx+1, arr))` or `(idx+1, arr).continue`, but I prefer to write `continue $ (idx+1, arr)`, because it looks special. More explanation of `continue` and `break` functions will be given later. 
-- `println! $ Iterator::from_array(fib).map(to_string).join(", ")`: the application of the `println!` function to the string value expressed by `Iterator::from_array(fib).map(to_string).join(", ")`. The `println!` function has type `String -> IOState -> ((), IOState)`, so applying to `println!` to a string produces a value of `IOState -> ((), IOState)`, which is equal to the type of `main` function. This expression can also be written as `println!(Iterator::from_array(fib).map(to_string).join(", "))`, but using operator `$` you can reduce parenthes around the long string expression.
+- `println $ Iterator::from_array(fib).map(to_string).join(", ")`: the application of the `println` function to the string expressed by `Iterator::from_array(fib).map(to_string).join(", ")`. The `println` function has type `String -> IO ()`, so applying to `println` to a string produces a value of `IO ()`, which is equal to the type of `main` function. This expression can also be written as `println(Iterator::from_array(fib).map(to_string).join(", "))`, but using operator `$` you can reduce parenthes around the long string expression.
 
-For more examples, consider following programs:
-
-```
-main : IOState -> ((), IOState);
-main = println! $ "Hello World!";
-```
-
-```
-main : IOState -> ((), IOState);
-main = |io| io.println!("Hello World!");
-```
-
-These two programs are equivalent. The first uses operator `$` to obtain the value of type `IOState -> ((), IOState)` by applying `println! : String -> IOState -> ((), IOState)` to the string `"Hello World!"`. On the other hand, `println!` can be considered as a method of `IOState` that takes a string as an argument. In the second program, the implementation of `main` takes an arugment `io` of `IOState` explicitly, and call `println!` method on the `io` value.
-
-The precedence between three ways of function application is `f(x)` > `x.f` > `f $ x`. By this, it is illegal to write `io.println! $ "Hello World!"`. It is equivalent to `println!(io) $ "Hello World!" == println!(io, "Hello World!")`, which is trying to apply `println!` on two arguments in the wrong ordering. It is ok to write `println!("Hello World!") $ io`, which can be read as "apply `println!` to a string to obtain a function of type `IOState -> ((), IOState)`, and apply it to `io: IOState`".
+The precedence between three ways of function application is `f(x)` > `x.f` > `f $ x`. By this, it is illegal to write `obj.method $ arg`. It is equivalent to `method(obj) $ arg" == method(obj, arg)`, which is trying to call `method` on two arguments in the wrong ordering. It is ok to write `method(arg) $ obj`, which can be read as "apply `method` to `arg` to obtain a function of type `Obj -> Result`, and apply it to `obj`" to get a result.
 
 ## Patterns
 
@@ -687,7 +676,7 @@ In the last, `to_string : I64 -> String` is a function that converts an integer 
 
 ## Mutation in Fix
 
-In the last of this tutorial, I explain the meaning of the exclamation mark of `set!` or `println!` function.
+In the last of this tutorial, I explain the meaning of the exclamation mark of `set!` function.
 
 There is also a function without exclamation mark: `set : I64 -> a -> Array a -> Array a`. Semantically, both of `Array::set` and `Array::set!` return a new array with one element updated from the original array. 
 
@@ -743,19 +732,7 @@ Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, 
 
 As a summary, since values in Fix are immutable, the `set : I64 -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning an array if the array will not be used later.
 
-The `set!` function is almost same as the `set` function, but it panics (i.e., stop the execution of the program) if the given array will be used later. In other words, there is assurance that `set!` doesn't clone the array. This is useful to assure that a program is running at a expected time complexity. 
-
-Now I can explain the meaning of exclamation mark of `set!` and `println!`. I put the exclamation mark for functions that require the assurance that the given value will not be used later. For `println!`, remember that it's type is `String -> IOState -> ((), IOState)` and it mutates an `IOState` value. A value of `IOState` represents a state of the world outside the Fix program, and it cannot be cloned. For example, a program
-
-```
-main = |io| (
-    let (_, io_a) = io.println!("Hello World A!");
-    let (_, io_b) = io.println!("Hello World B!");
-    ...
-);
-```
-
-should panic (and in fact it does), because it creates two worlds -- one is a world where "Hello World A!" is printed, and another is a world where "Hello World B!" is printed.
+The `set!` function is almost same as the `set` function, but it panics (i.e., stop the execution of the program) if the given array will be used later. In other words, there is assurance that `set!` doesn't clone the array. This is useful to assure that a program is running at a expected time complexity. We put the exclamation mark for a function that requires the assurance that the given value will not be used later.
 
 # Other topics on syntax
 
@@ -782,9 +759,9 @@ import lib.fix;
 module_name : String;
 module_name = "Main";
 
-main : IOState -> ((), IOState);
+main : IO ();
 main = (
-    println! $ "This program consists of two modules, `" + Lib::module_name + "` and `" + Main::module_name + "`."
+    println $ "This program consists of two modules, `" + Lib::module_name + "` and `" + Main::module_name + "`."
 );
 ```
 
@@ -816,8 +793,8 @@ fib = |n| (
     }
 );
 
-main : IOState -> ((), IOState);
-main = print! $ fib(30).to_string; // 832040
+main : IO ();
+main = print $ fib(30).to_string; // 832040
 ```
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
@@ -896,7 +873,7 @@ CALL_C[{c_function_signature}, {arg_0}, {arg_1}, ...]
 Example: 
 
 ```
-main : IOState -> ((), IOState);
+main : IO ();
 main = (
     let _ = "Hello C function!\n".call_with_valid_c_str(|ptr|
         CALL_C[I32 printf(Ptr, ...), ptr]
@@ -1199,10 +1176,10 @@ Example:
 ```
 module Main;
 
-main : IOState -> ((), IOState);
-main = |io| (
-    let (Result::ok(str), io) = io.read_line!(stdin);
-    io.println!(str)
+main : IO ();
+main = (
+    let (Result::ok(str), io) = *read_line(stdin);
+    println!(str)
 );
 ```
 
@@ -1228,15 +1205,7 @@ Write a string into a file.
 
 #### `impl IO : Monad`
 
-### Std::IOState
-
-The virtual type that represents the state of world (=the outside of the Fix program). 
-
-For example, `Std::IOState::print!(msg) : Std::IOState -> ((), Std::IOState)` function can be considered that it changes the state of the world by printing the message to the display. So it should receive `Std::IOState` and return the updated `Std::IOState` value paired with the result of the action (in this case, it is `()`, because printing message returns no result).
-
-All functions that perform I/O action by `IOState` assert that the given state is unique.
-
-### Std::IOState::IOError
+### Std::IO::IOError
 
 A type for I/O error.
 
@@ -1244,23 +1213,25 @@ A type for I/O error.
 type IOError = unbox struct { msg : String };
 ```
 
-Implementing traits:
+#### `impl IOError : ToString`
 
-- `Std::ToString`
-    - Returns the value of `msg` field.
+Returns the value of `msg` field.
 
-### Std::IOState::IOHandle
+### Std::IO::IOHandle
 
 A handle type for read / write operations on files/stdin/stdout/stderr.
 
-Related values in Std::IOState::IOHandle:
+#### `stderr : IOHandle`
 
-- `stderr : IOHandle`
-    - The handle for standard error.
-- `stdin : IOHandle`
-    - The handle for standard input.    
-- `stdout : IOHandle`
-    - The handle for standard output.
+The handle for standard error.
+
+#### `stdin : IOHandle`
+
+The handle for standard input.    
+
+#### `stdout : IOHandle`
+
+The handle for standard output.
 
 ### Std::I32
 
@@ -1495,7 +1466,7 @@ This function checks if a value is uniquely refernced by a name, and returns the
 Example: 
 
 ```
-main : IOState -> ((), IOState);
+main : IO ();
 main = (
     // For unboxed value, it returns true even if the value is used later.
     let int_val = 42;
@@ -1526,10 +1497,10 @@ main = (
 ```
 module Main;
 
-main : IOState -> ((), IOState);
+main : IO ();
 main = (
     let fact = fix $ |loop, n| if n == 0 then 1 else n * loop (n-1);
-    print! $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
+    print $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
 );
 ```
 
@@ -1546,7 +1517,7 @@ type LoopResult s r = union (s: continue, r: break);
 ```
 module Main;
     
-main : IOState -> ((), IOState);
+main : IO ();
 main = (
     let sum = (
         loop((0, 0), |(i, sum)|
@@ -1556,7 +1527,7 @@ main = (
                 continue $ (i+1, sum+i)
         )
     );
-    print! $ sum.to_string
+    print $ sum.to_string
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
