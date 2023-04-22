@@ -107,6 +107,10 @@
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
       - [`zip : Iterator a -> Iterator b -> Iterator (a, b)`](#zip--iterator-a---iterator-b---iterator-a-b)
+      - [`impl Iterator a : Add`](#impl-iterator-a--add)
+      - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
+      - [`impl Iterator : Functor`](#impl-iterator--functor)
+      - [`impl Iterator : Monad`](#impl-iterator--monad)
     - [Std::Option](#stdoption)
     - [Std::Path](#stdpath)
       - [`parse : String -> Option Path`](#parse--string---option-path)
@@ -136,12 +140,13 @@
     - [Std::Debug::abort : () -\> a](#stddebugabort-----a)
     - [Std::Debug::assert : String -\> Bool -\> ()](#stddebugassert--string---bool---)
     - [Std::Debug::assert\_eq : \[a: Eq\] String -\> a -\> a -\> ()](#stddebugassert_eq--a-eq-string---a---a---)
+    - [Std::Monad::bind : \[m : Monad, m : Functor\] m a -\> (a -\> m b) -\> m b](#stdmonadbind--m--monad-m--functor-m-a---a---m-b---m-b)
   - [Traits](#traits-2)
-    - [Std::Functor](#stdfunctor)
+    - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
-    - [Std::Monad](#stdmonad)
+    - [Std::Monad (\* -\> \*)](#stdmonad----)
       - [`flatten : [m : Monad] m (m a) -> a`](#flatten--m--monad-m-m-a---a)
-      - [`pure : a -> m a`](#pure--a---m-a)
+      - [`pure : [m : Monad] a -> m a`](#pure--m--monad-a---m-a)
     - [Std::ToString](#stdtostring)
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
     - [Std::ToI32](#stdtoi32)
@@ -1303,14 +1308,6 @@ Implementing traits:
 
 Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
-Implementing Traits:
-
-- `Iterator a : Add`
-    - Adds two iterators by `Iterator::append`.
-- `[a : Eq] Iterator a : Eq`
-- `Iterator : Functor`
-- `Iterator : Monad`
-
 #### `advance : Iterator a -> Option (a, Iterator a)`
 Get next value and next iterator.
 
@@ -1358,6 +1355,15 @@ Take at most n elements from an iterator.
 
 #### `zip : Iterator a -> Iterator b -> Iterator (a, b)`
 Zip two iterators.
+
+#### `impl Iterator a : Add`
+Adds two iterators by `Iterator::append`.
+
+#### `impl [a : Eq] Iterator a : Eq`
+
+#### `impl Iterator : Functor`
+
+#### `impl Iterator : Monad`
 
 ### Std::Option
 
@@ -1549,21 +1555,19 @@ main = (
 
 ### Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()
 
+### Std::Monad::bind : [m : Monad, m : Functor] m a -> (a -> m b) -> m b
+
 ## Traits
 
-### Std::Functor
-
-Kind : `* -> *`
+### Std::Functor (* -> *)
 
 #### `map : [f : Functor] (a -> b) -> f a -> f b`
 
-### Std::Monad
-
-Kind : `* -> *`
+### Std::Monad (* -> *)
 
 #### `flatten : [m : Monad] m (m a) -> a`
 
-#### `pure : a -> m a`
+#### `pure : [m : Monad] a -> m a`
 
 ### Std::ToString
 

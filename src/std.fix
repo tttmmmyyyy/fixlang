@@ -615,6 +615,11 @@ impl Iterator : Monad {
     pure = |e| Iterator::make_empty.push_front(e);
 }
 
+namespace Monad {
+    bind : [m : Monad, m : Functor] m a -> (a -> m b) -> m b;
+    bind = |a, f| a.map(f).flatten;
+}
+
 trait [m : *->*] m : Monad {
     flatten : m (m a) -> m a;
     pure : a -> m a;
