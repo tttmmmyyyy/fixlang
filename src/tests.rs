@@ -2682,13 +2682,13 @@ pub fn test108() {
         module Main;
 
         main : IO ();
-        main = |io| (
+        main = (
             let file_path = Path::parse("test.txt").as_some;
             let written = "Hello\n World!";
-            let (_, io) = io.write_file!(file_path, written);
-            let (Result::ok(read), io) = io.read_file!(file_path);
-            let _ = assert_eq("", written, read);
-            io.pure()
+            let _ = write_file(file_path, written)?;
+            let Result::ok(read) = read_file(file_path)?;
+            let _ = assert_eq("case 1", written, read);
+            pure()
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
