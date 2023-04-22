@@ -14,9 +14,9 @@ take_last_but = |iter| (
     iter.take(len-1).take_last
 );
 
-main : IOState -> ((), IOState);
-main = |io| (
+main : IO ();
+main = (
     let iter = Iterator::from_array([1,2,3,4]);
     let last_but = iter.take_last_but;
-    io.println!(last_but.as_some.to_string)
+    println(last_but.as_some.to_string)
 );

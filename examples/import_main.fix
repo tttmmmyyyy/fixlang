@@ -10,16 +10,16 @@ name = "Main";
 imports : Array String;
 imports = [Lib0::name, Lib1::name, Lib2::name];
 
-print_imports : String -> Array String -> IOState -> ((), IOState);
+print_imports : String -> Array String -> IO ();
 print_imports = |name, imports| (
-    println!("Module `" + name + "` imports [" + Iterator::from_array(imports).map(|s| "`" + s + "`").join(", ") + "].")
+    println $ "Module `" + name + "` imports [" + Iterator::from_array(imports).map(|s| "`" + s + "`").join(", ") + "]."
 );
 
-main : IOState -> ((), IOState);
-main = |io| (
-    let (_, io) = io.print_imports(Main::name, Main::imports);
-    let (_, io) = io.print_imports(Lib0::name, Lib0::imports);
-    let (_, io) = io.print_imports(Lib1::name, Lib1::imports);
-    let (_, io) = io.print_imports(Lib2::name, Lib2::imports);
-    io.pure()
+main : IO ();
+main =  (
+    let _ = print_imports(Main::name, Main::imports);
+    let _ = print_imports(Lib0::name, Lib0::imports);
+    let _ = print_imports(Lib1::name, Lib1::imports);
+    let _ = print_imports(Lib2::name, Lib2::imports);
+    pure()
 );

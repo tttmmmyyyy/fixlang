@@ -40,9 +40,9 @@ impl Array : MyFunctor {
     );
 }
 
-main : IOState -> ((), IOState);
+main : IO ();
 main = (
     let arr = Array::from_map(6, |x| x); // arr = [0,1,2,...,9].
     let arr = arr.mymap(|x| Pair { fst: x % 2, snd: x % 3 }); // arr = [(0, 0), (1, 1), (0, 2), ...].
-    println! $ arr.search(Pair { fst: 1, snd: 2}).to_string // 5, the first number x such that x % 2 == 1 and x % 3 == 2.
+    println $ arr.search(Pair { fst: 1, snd: 2}).to_string // 5, the first number x such that x % 2 == 1 and x % 3 == 2.
 );

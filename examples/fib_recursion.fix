@@ -11,5 +11,5 @@ fib = |n| (
     }
 );
 
-main : IOState -> ((), IOState);
-main = println! $ fib(30).to_string; // 832040
+main : IO ();
+main = println $ fib(30).to_string; // 832040

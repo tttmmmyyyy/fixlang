@@ -32,16 +32,16 @@ mk_elem = NestedList::elem;
 mk_list : Array (NestedList a) -> NestedList a;
 mk_list = |arr| NestedList::list(Iterator::from_array(arr));
 
-main : IOState -> ((), IOState);
-main = |io| (
+main : IO ();
+main =  (
     let nl = NestedList::elem(5);
-    let ((), io) = io.println!(nl.flatten.to_string);
+    let _ = *println(nl.flatten.to_string);
 
     let nl = mk_list([mk_elem(1), mk_list([mk_elem(2), mk_list([mk_elem(3), mk_elem(4)]), mk_elem(5)])]);
-    let ((), io) = io.println!(nl.flatten.to_string);
+    let _ = println(nl.flatten.to_string);
     
     let nl: NestedList I64  = mk_list([]);
-    let ((), io) = io.println!(nl.flatten.to_string);
+    let _ = println(nl.flatten.to_string);
 
-    io.pure()
+    pure()
 );

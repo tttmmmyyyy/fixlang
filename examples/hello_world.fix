@@ -1,6 +1,4 @@
 module Main;
 
-main : IOState -> ((), IOState);
-main = |io| (
-    io.println!("Hello World!")
-);
+main : IO ();
+main = println("Hello World!");

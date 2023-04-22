@@ -1585,7 +1585,7 @@ pub fn test63() {
     main : IO ();
     main = (
         let min = -9223372036854775808;
-        println! $ min.to_string
+        println $ min.to_string
     );
     "#;
     run_source(source, Configuration::develop_compiler());
@@ -1600,7 +1600,7 @@ pub fn test64() {
 
     main : IO ();
     main = (
-        println! $ "\u2764"
+        println $ "\u2764"
     );
     "#;
     run_source(source, Configuration::develop_compiler());
@@ -2685,8 +2685,8 @@ pub fn test108() {
         main = (
             let file_path = Path::parse("test.txt").as_some;
             let written = "Hello\n World!";
-            let _ = write_file(file_path, written)?;
-            let Result::ok(read) = read_file(file_path)?;
+            let _ = *write_file(file_path, written);
+            let Result::ok(read) = *read_file(file_path);
             let _ = assert_eq("case 1", written, read);
             pure()
         );
@@ -2703,7 +2703,7 @@ pub fn test109() {
         module Main;
 
         add_opt_int : Option I64 -> Option I64 -> Option I64;
-        add_opt_int = |lhs, rhs| Option::some $ lhs? + rhs?;
+        add_opt_int = |lhs, rhs| Option::some $ *lhs + *rhs;
 
         main : IO ();
         main = (

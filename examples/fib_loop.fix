@@ -1,6 +1,6 @@
 module Main;
 
-main : IOState -> ((), IOState);
+main : IO ();
 main = (
     let arr = Array::fill(31, 0);
     let arr = arr.set!(0, 0);
@@ -15,5 +15,5 @@ main = (
             continue $ (idx+1, arr)
         }
     );
-    println! $ arr.get(30).to_string // 832040
+    println $ arr.get(30).to_string // 832040
 );

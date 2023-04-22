@@ -20,8 +20,8 @@ my_reverse = |iter| (
     ))
 );
 
-main : IOState -> ((), IOState);
-main = |io| (
+main : IO ();
+main = (
     let iter = Iterator::from_array([1,2,3,4]).my_reverse;
-    io.println!(iter.map(to_string).join(", "))
+    println(iter.map(to_string).join(", "))
 );
