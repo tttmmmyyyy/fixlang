@@ -347,7 +347,7 @@ namespace IO {
             // Check if err occurred.
             let err = CALL_C[I32 ferror(Ptr), handle.@_file_ptr];
             if err != 0_I32 { 
-                let err = IOError { msg : "Std::IOState::read_line failed!: some error occurred in fgets." };
+                let err = IOError { msg : "Std::IO::read_line failed!: some error occurred in fgets." };
                 Result::err(err)
             };
 
@@ -373,7 +373,7 @@ namespace IO {
     write_content = |handle, content| (
         let res = content.call_with_valid_c_str(|c_str| (
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle.@_file_ptr];
-            if res < 0_I32 { Result::err $ IOError { msg : "Std::IOState::write_content! failed!: some error occurred in fputs." } };
+            if res < 0_I32 { Result::err $ IOError { msg : "Std::IO::write_content! failed!: some error occurred in fputs." } };
             Result::ok()
         ));
         pure $ res

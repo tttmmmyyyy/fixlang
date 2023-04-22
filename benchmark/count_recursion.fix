@@ -10,5 +10,5 @@ count_loop = |n, i, sum| (
     count_loop(n, i+1, sum)
 );
 
-main : IOState -> ((), IOState);
-main = println! $ count(1000000000).to_string; // 664579
+main : IO ();
+main = println $ count(1000000000).to_string; // 664579

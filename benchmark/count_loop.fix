@@ -9,5 +9,5 @@ count = |n| (
     )
 );
 
-main : IOState -> ((), IOState);
-main = println! $ count(1000000000).to_string; // 664579
+main : IO ();
+main = println $ count(1000000000).to_string; // 664579

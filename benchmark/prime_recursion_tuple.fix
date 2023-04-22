@@ -35,5 +35,5 @@ count_loop = |(i, sum, elem, arr)| (
     count_loop((i+1, sum, elem, arr))
 );
 
-main : IOState -> ((), IOState);
-main = println! $ is_prime(10000000).count(true).to_string; // 664579
+main : IO ();
+main = println $ is_prime(10000000).count(true).to_string; // 664579
