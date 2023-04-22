@@ -73,6 +73,12 @@
       - [\_U32\_to\_string : U32 -\> String](#_u32_to_string--u32---string)
     - [Std::U64](#stdu64)
       - [\_U64\_to\_string : U64 -\> String](#_u64_to_string--u64---string)
+    - [Std::IO](#stdio)
+      - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
+      - [`print : String -> IO ()`](#print--string---io-)
+      - [`println : String -> IO ()`](#println--string---io-)
+      - [`impl IO : Functor`](#impl-io--functor)
+      - [`impl IO : Monad`](#impl-io--monad)
     - [Std::IOState](#stdiostate)
       - [`close_file! : IOHandle -> IOState -> ((), IOState)`](#close_file--iohandle---iostate----iostate)
       - [`open_file! : Path -> String -> IOState -> (Result IOHandle IOError, IOState)`](#open_file--path---string---iostate---result-iohandle-ioerror-iostate)
@@ -1155,6 +1161,26 @@ Implementing traits:
 - `Std::ToU64`
 
 #### _U64_to_string : U64 -> String
+
+### Std::IO
+
+`IO a` is the type whose value represents an I/O action which returns a value of type `a`.
+
+#### `__unsafe_perform : IO a -> a`
+
+Perform the I/O action. This may violate purity of Fix.
+
+#### `print : String -> IO ()`
+
+Print a string to the standard output.
+
+#### `println : String -> IO ()`
+
+Print a string followed by a newline.
+
+#### `impl IO : Functor`
+
+#### `impl IO : Monad`
 
 ### Std::IOState
 

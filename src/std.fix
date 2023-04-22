@@ -236,6 +236,47 @@ impl I64 : ToString {
     to_string = I64::_I64_to_string;
 }
 
+type IO a = unbox struct { _data : () -> a };
+
+namespace IO {
+    // Perform the I/O action. This may violate purity of Fix.
+    __unsafe_perform : IO a -> a;
+    __unsafe_perform = |io| (io.@_data)();
+
+    // Print a string to the standard output.
+    print : String -> IO ();
+    print = |str| (
+        IO { _data : |_| (
+            let _ = str.call_with_valid_c_str(|c_ptr|
+                CALL_C[I32 printf(Ptr, ...), c_ptr]
+            );
+            ()
+        )}
+    );
+
+    // Print a string followed by a newline.
+    println : String -> IO ();
+    println = |str| (
+        let _ = print(str)?;
+        let _ = print("\n")?;
+        pure()
+    );
+}
+
+impl IO : Functor {
+    map = |f, io| IO { _data : |_| f(io.__unsafe_perform) };
+}
+
+impl IO : Monad {
+    pure = |val| IO { _data : |_| val };
+    flatten = |io_io| (
+        IO { _data : |_| (
+            let io = io_io.__unsafe_perform;
+            io.__unsafe_perform
+        )}
+    );
+}
+
 namespace IOState {
 
     println! : String -> IOState -> ((), IOState);
