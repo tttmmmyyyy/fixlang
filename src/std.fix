@@ -297,10 +297,8 @@ namespace IO {
     // Raad all characters from a file.
     read_file : Path -> IO (Result String IOError);
     read_file = |path| (
-        IO { _data : |_|(
-            let res = with_file(path, "r", read_content)?;
-            res.flatten
-        ) }
+        let res = with_file(path, "r", read_content)?;
+        pure $ res.flatten
     );
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
@@ -362,14 +360,12 @@ namespace IO {
     // The file handle will be closed automatically.
     with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result a IOError);
     with_file = |path, mode, action| (
-        IO { _data : |_| (
-            let res = open_file(path, mode)?;
-            if res.is_err { pure $ Result::err $ res.as_err };
-            let handle = res.as_ok;
-            let res = action(handle)?;
-            let _ = close_file(handle)?;
-            pure $ Result::ok $ res
-        ) }
+        let res = open_file(path, mode)?;
+        if res.is_err { pure $ Result::err $ res.as_err };
+        let handle = res.as_ok;
+        let res = action(handle)?;
+        let _ = close_file(handle)?;
+        pure $ Result::ok $ res
     );
 
     // Write a string into an IOHandle.
