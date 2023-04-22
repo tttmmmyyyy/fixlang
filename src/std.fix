@@ -279,19 +279,6 @@ impl IO : Monad {
 
 namespace IOState {
 
-    println! : String -> IOState -> ((), IOState);
-    println! = |msg, io| (
-        let (_, io) = io.print!(msg);
-        io.print!("\n")
-    );
-
-    pure : a -> IOState -> (a, IOState);
-    pure = |val, io| (val, io);
-
-}
-
-namespace IOState {
-
     // Close a file.
     close_file! : IOHandle -> IOState -> ((), IOState);
     close_file! = |handle, io| (

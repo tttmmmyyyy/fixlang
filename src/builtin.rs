@@ -221,11 +221,6 @@ pub fn make_array_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
-// Get IOState type.
-pub fn make_iostate_ty() -> Rc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
-}
-
 // Get String type.
 pub fn make_string_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
@@ -260,6 +255,19 @@ pub fn make_tuple_name(size: u32) -> FullName {
     FullName::from_strs(&[STD_NAME], &name)
 }
 
+// Get Unit type.
+pub fn make_unit_ty() -> Rc<TypeNode> {
+    make_tuple_ty(vec![])
+}
+
+// Make type `IO ()`
+pub fn make_io_unit_ty() -> Rc<TypeNode> {
+    type_tyapp(
+        type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME))),
+        make_unit_ty(),
+    )
+}
+
 // Check if given name has form `TupleN` and returns N.
 pub fn get_tuple_n(name: &FullName) -> Option<u32> {
     if name.namespace != NameSpace::new_str(&[STD_NAME]) {
@@ -274,17 +282,6 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
     }
     let number_str = &name.name[TUPLE_NAME.len()..];
     number_str.parse::<u32>().ok()
-}
-
-// Get Unit type.
-pub fn unit_ty() -> Rc<TypeNode> {
-    make_tuple_ty(vec![])
-}
-
-// Get type IOState -> (output_ty, IOState).
-pub fn io_runner_ty(output_ty: Rc<TypeNode>) -> Rc<TypeNode> {
-    let result_ty = make_tuple_ty(vec![output_ty, make_iostate_ty()]);
-    type_fun(make_iostate_ty(), result_ty.clone())
 }
 
 pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
@@ -2105,72 +2102,6 @@ fn extract_array_from_string<'c, 'm>(
     array
 }
 
-// print : String -> IOState -> ((), IOState).
-pub fn print_io_func() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const STRING_NAME: &str = "str";
-    const IOSTATE_NAME: &str = "iostate";
-
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        let string_name = FullName::local(STRING_NAME);
-        let iostate_name = FullName::local(IOSTATE_NAME);
-
-        // Get argments.
-        let iostate = gc.get_var(&iostate_name).ptr.get(gc);
-        gc.panic_if_shared(&iostate, "panic: IOState value is shared!");
-        let string = gc.get_var(&string_name).ptr.get(gc);
-
-        // Get ptr to string buffer.
-        let array = extract_array_from_string(gc, &string);
-        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-        let buf = gc.cast_pointer(buf, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
-
-        // Print string.
-        gc.call_runtime(RuntimeFunctions::Printf, &[buf.into()]);
-
-        gc.release(string);
-
-        // Make return value
-        let ret = if rvo.is_some() {
-            assert!(ty.is_unbox(gc.type_env()));
-            rvo.unwrap()
-        } else {
-            allocate_obj(ty.clone(), &vec![], None, gc, Some("allocate_ret_print"))
-        };
-        // let unit_val = unit_ty()
-        //     .get_object_type(&vec![], gc.type_env())
-        //     .to_struct_type(gc)
-        //     .const_zero();
-        // ret.store_field_nocap(gc, 0, unit_val);
-        let iostate_ptr = iostate.ptr(gc);
-        ret.store_field_nocap(gc, 1, iostate_ptr);
-
-        ret
-    });
-
-    let scm = Scheme::generalize(
-        Default::default(),
-        vec![],
-        type_fun(make_string_ty(), io_runner_ty(unit_ty())),
-    );
-
-    let expr = expr_abs(
-        vec![var_local(STRING_NAME)],
-        expr_abs(
-            vec![var_local(IOSTATE_NAME)],
-            expr_lit(
-                generator,
-                vec![FullName::local(STRING_NAME), FullName::local(IOSTATE_NAME)],
-                format!("print {} {}", STRING_NAME, IOSTATE_NAME),
-                make_tuple_ty(vec![unit_ty(), make_iostate_ty()]),
-                None,
-            ),
-            None,
-        ),
-        None,
-    );
-    (expr, scm)
-}
-
 // `debug_print` built-in function
 pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const MSG_NAME: &str = "msg";
@@ -2219,7 +2150,7 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
             generator,
             vec![FullName::local(MSG_NAME)],
             format!("debug_print {}", MSG_NAME),
-            unit_ty(),
+            make_unit_ty(),
             None,
         ),
         None,
@@ -2227,7 +2158,7 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
-        type_fun(make_string_ty(), unit_ty()),
+        type_fun(make_string_ty(), make_unit_ty()),
     );
     (expr, scm)
 }
@@ -2262,7 +2193,7 @@ pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         HashMap::from([(A_NAME.to_string(), kind_star())]),
         vec![],
-        type_fun(unit_ty(), type_tyvar_star(A_NAME)),
+        type_fun(make_unit_ty(), type_tyvar_star(A_NAME)),
     );
     (expr, scm)
 }

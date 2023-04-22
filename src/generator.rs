@@ -839,6 +839,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Panics if the given object is shared.
+    #[allow(dead_code)]
     pub fn panic_if_shared(&mut self, obj: &Object<'c>, msg: &str) {
         // If object is unboxed, it is always unique; do nothing.
         if obj.is_unbox(self.type_env()) {

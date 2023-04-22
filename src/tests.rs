@@ -9,7 +9,7 @@ pub fn test0() {
     let source = r#"
             module Main;
     
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let _ = assert_eq("", 5 + 3 * 8 / 5 + 7 % 3, 10);
                 pure()

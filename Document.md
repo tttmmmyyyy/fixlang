@@ -82,9 +82,6 @@
     - [Std::IOState](#stdiostate)
       - [`close_file! : IOHandle -> IOState -> ((), IOState)`](#close_file--iohandle---iostate----iostate)
       - [`open_file! : Path -> String -> IOState -> (Result IOHandle IOError, IOState)`](#open_file--path---string---iostate---result-iohandle-ioerror-iostate)
-      - [`pure : a -> IOState -> (a, IOState)`](#pure--a---iostate---a-iostate)
-      - [`print! : String -> IOState -> ((), IOState)`](#print--string---iostate----iostate)
-      - [`println! : String -> IOState -> ((), IOState)`](#println--string---iostate----iostate)
       - [`read_content! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_content--iohandle---iostate---result-string-ioerror-iostate)
       - [`read_file! : Path -> IOState -> (Result String IOError, IOState)`](#read_file--path---iostate---result-string-ioerror-iostate)
       - [`read_line! : IOHandle -> IOState -> (Result String IOError, IOState)`](#read_line--iohandle---iostate---result-string-ioerror-iostate)
@@ -1197,18 +1194,6 @@ Close a file.
 #### `open_file! : Path -> String -> IOState -> (Result IOHandle IOError, IOState)`
 
 Open a file. The second argument is a mode string for `fopen` C function. 
-
-#### `pure : a -> IOState -> (a, IOState)`
-
-Makes a "do nothing" I/O action.
-
-#### `print! : String -> IOState -> ((), IOState)`
-
-Prints a string to standard output.
-
-#### `println! : String -> IOState -> ((), IOState)`
-
-Prints a string and a newline to standard output.
 
 #### `read_content! : IOHandle -> IOState -> (Result String IOError, IOState)`
 

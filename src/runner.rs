@@ -127,14 +127,17 @@ fn build_module<'c>(
 
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
-    let iostate = allocate_obj(
-        make_iostate_ty(),
+    let main_lambda_val = main_obj.load_field_nocap(&mut gc, 0);
+    let main_lambda_ty = type_fun(make_tuple_ty(vec![]), make_tuple_ty(vec![]));
+    let main_lambda = Object::create_from_value(main_lambda_val, main_lambda_ty, &mut gc);
+    let unit = allocate_obj(
+        make_tuple_ty(vec![]),
         &vec![],
         None,
         &mut gc,
-        Some("iostate_for_main"),
+        Some("unit_for_main_io"),
     );
-    let ret = gc.apply_lambda(main_obj, vec![iostate], None);
+    let ret = gc.apply_lambda(main_lambda, vec![unit], None);
     gc.release(ret);
 
     // Perform leak check
