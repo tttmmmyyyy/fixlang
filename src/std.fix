@@ -385,7 +385,7 @@ namespace IO {
 
     // Write a string into a file.
     write_file : Path -> String -> IO (Result () IOError);
-    write_file = |path, content, io| (
+    write_file = |path, content| (
         let res = with_file(path, "w", |handle| write_content(handle, content))?;
         pure $ res.flatten
     );
