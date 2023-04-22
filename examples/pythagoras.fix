@@ -1,0 +1,20 @@
+module Main;
+
+pythagoras_triplets : I64 -> Iterator (I64, I64, I64);
+pythagoras_triplets = |limit| (
+    let a = *Iterator::make_range(1, limit+1);
+    let b = *Iterator::make_range(a, limit+1);
+    let c = *Iterator::make_range(b, limit+1);
+    if a*a + b*b != c*c { Iterator::make_empty };
+    pure $ (a, b, c)
+);
+
+impl (I64, I64, I64) : ToString {
+    to_string = |(a,b,c)| "(" + a.to_string + ", " + b.to_string + ", " + c.to_string + ")";
+}
+
+main : IO ();
+main = (
+    let triplets = pythagoras_triplets(100);
+    println $ triplets.map(to_string).intersperse(", ").concat_iter
+);
