@@ -2710,7 +2710,12 @@ pub fn test109() {
             let one = Option::some(1);
             let two = Option::some(2);
             let three = Option::some(3);
+            let none = Option::none();
+
             let _ = assert_eq("case 1", add_opt_int(one, two), three);
+            let _ = assert_eq("case 2", add_opt_int(none, two), none);
+            let _ = assert_eq("case 3", add_opt_int(one, none), none);
+            let _ = assert_eq("case 4", add_opt_int(none, none), none);
 
             io.pure()
         );
