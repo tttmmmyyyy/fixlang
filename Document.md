@@ -147,7 +147,7 @@
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
     - [Std::Monad (\* -\> \*)](#stdmonad----)
-      - [`bind : [m : Monad, m : Functor] m a -> (a -> m b) -> m b`](#bind--m--monad-m--functor-m-a---a---m-b---m-b)
+      - [`bind : [m : Monad, m : Functor] (a -> m b) -> m a -> m b`](#bind--m--monad-m--functor-a---m-b---m-a---m-b)
       - [(required) `flatten : [m : Monad] m (m a) -> a`](#required-flatten--m--monad-m-m-a---a)
       - [(required) `pure : [m : Monad] a -> m a`](#required-pure--m--monad-a---m-a)
     - [Std::ToString](#stdtostring)
@@ -1567,7 +1567,7 @@ main = (
 
 ### Std::Monad (* -> *)
 
-#### `bind : [m : Monad, m : Functor] m a -> (a -> m b) -> m b`
+#### `bind : [m : Monad, m : Functor] (a -> m b) -> m a -> m b`
 
 #### (required) `flatten : [m : Monad] m (m a) -> a`
 

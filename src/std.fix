@@ -616,8 +616,8 @@ impl Iterator : Monad {
 }
 
 namespace Monad {
-    bind : [m : Monad, m : Functor] m a -> (a -> m b) -> m b;
-    bind = |a, f| a.map(f).flatten;
+    bind : [m : Monad, m : Functor] (a -> m b) -> m a -> m b;
+    bind = |f, a| a.map(f).flatten;
 }
 
 trait [m : *->*] m : Monad {
