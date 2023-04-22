@@ -350,11 +350,11 @@ namespace IO {
             let err = CALL_C[I32 ferror(Ptr), handle.@_file_ptr];
             if err != 0_I32 { 
                 let err = IOError { msg : "Std::IOState::read_line failed!: some error occurred in fgets." };
-                pure $ Result::err(err)
+                Result::err(err)
             };
 
             let str = strings_rev.reverse.concat_iter;
-            pure $ Result::ok(str)
+            Result::ok(str)
         ) }
     );
 
