@@ -2697,6 +2697,29 @@ pub fn test108() {
 
 #[test]
 #[serial]
+pub fn test109() {
+    // Test monad syntax.
+    let source = r#"
+        module Main;
+
+        add_opt_int : Option I64 -> Option I64 -> Option I64;
+        add_opt_int = |lhs, rhs| Option::some $ lhs? + rhs?;
+
+        main : IOState -> ((), IOState);
+        main = |io| (
+            let one = Option::some(1);
+            let two = Option::some(2);
+            let three = Option::some(3);
+            let _ = assert_eq("case 1", add_opt_int(one, two), three);
+
+            io.pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
