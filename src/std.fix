@@ -285,8 +285,8 @@ namespace IO {
     // Print a string followed by a newline to the standard output.
     println : String -> IO ();
     println = |str| (
-        let _ = print(str)?;
-        let _ = print("\n")?;
+        let _ = *print(str);
+        let _ = *print("\n");
         pure()
     );
 
@@ -297,7 +297,7 @@ namespace IO {
     // Raad all characters from a file.
     read_file : Path -> IO (Result String IOError);
     read_file = |path| (
-        let res = with_file(path, "r", read_content)?;
+        let res = *with_file(path, "r", read_content);
         pure $ res.flatten
     );
 
@@ -360,11 +360,11 @@ namespace IO {
     // The file handle will be closed automatically.
     with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result a IOError);
     with_file = |path, mode, action| (
-        let res = open_file(path, mode)?;
+        let res = *open_file(path, mode);
         if res.is_err { pure $ Result::err $ res.as_err };
         let handle = res.as_ok;
-        let res = action(handle)?;
-        let _ = close_file(handle)?;
+        let res = *action(handle);
+        let _ = *close_file(handle);
         pure $ Result::ok $ res
     );
 
@@ -382,7 +382,7 @@ namespace IO {
     // Write a string into a file.
     write_file : Path -> String -> IO (Result () IOError);
     write_file = |path, content| (
-        let res = with_file(path, "w", |handle| write_content(handle, content))?;
+        let res = *with_file(path, "w", |handle| write_content(handle, content));
         pure $ res.flatten
     );
 }
