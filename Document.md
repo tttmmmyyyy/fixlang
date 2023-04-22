@@ -1,6 +1,6 @@
-# Table of Contents
+# Table of contents
 
-- [Table of Contents](#table-of-contents)
+- [Table of contents](#table-of-contents)
 - [Tutorial](#tutorial)
   - [An example program](#an-example-program)
   - [Modules](#modules)
