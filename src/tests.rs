@@ -24,7 +24,7 @@ pub fn test1() {
     let source = r#"
             module Main;
             
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let u = assert_eq("", let x = 5 in -x, -5);
                 pure()
@@ -38,7 +38,7 @@ pub fn test1() {
 pub fn test2() {
     let source = r#"
             module Main;
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let u = assert_eq("", let x = 5 in 3, 3);
                 pure()
@@ -52,7 +52,7 @@ pub fn test2() {
 pub fn test3() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", let n = -5 in let p = 5 in n, -5);
             pure()
@@ -66,7 +66,7 @@ pub fn test3() {
 pub fn test4() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", let n = -5 in let p = 5 in p, 5);
             pure()
@@ -80,7 +80,7 @@ pub fn test4() {
 pub fn test5() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", let x = -5 in let x = 5 in x, 5);
             pure()
@@ -94,7 +94,7 @@ pub fn test5() {
 pub fn test6() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", let x = let y = 3 in y in x, 3);
             pure()
@@ -108,7 +108,7 @@ pub fn test6() {
 pub fn test7() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", (|x| 5)(10), 5);
             pure()
@@ -123,7 +123,7 @@ pub fn test8() {
     let source = r#"
         module Main; 
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", (|x| x) $ 6, 6);
             pure()
@@ -138,7 +138,7 @@ pub fn test9_5() {
     let source = r#"
         module Main;
         
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x = 3;
             let y = 5;
@@ -155,7 +155,7 @@ pub fn test10() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", let x = 5 in 2 + x, 7);
             pure()
@@ -170,7 +170,7 @@ pub fn test11() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x = 5 in 
             let y = -3 in
@@ -187,7 +187,7 @@ pub fn test12() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x = 5 in 
             let y = -3 in
@@ -205,7 +205,7 @@ pub fn test12() {
 pub fn test13() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let f = add(5) in
             let u = assert_eq("", f(3), 5+3);
@@ -220,7 +220,7 @@ pub fn test13() {
 pub fn test13_5() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let f = add(5) in
             let u = assert_eq("", f(-3) + f(12), 5 - 3 + 5 + 12);
@@ -235,7 +235,7 @@ pub fn test13_5() {
 pub fn test14() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x = 3 in 
             let y = 5 in
@@ -252,7 +252,7 @@ pub fn test14() {
 pub fn test15() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let f = |x| 3 + x in
             let u = assert_eq("", f(5), 3 + 5);
@@ -267,7 +267,7 @@ pub fn test15() {
 pub fn test15_5() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x = 3;
             let f = |y| x;
@@ -283,7 +283,7 @@ pub fn test15_5() {
 pub fn test16() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let f = |x| x + 3 in
             let u = assert_eq("", f(5), 3 + 5);
@@ -298,7 +298,7 @@ pub fn test16() {
 pub fn test17() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", if true { 3 } else { 5 }, 3);
             pure()
@@ -312,7 +312,7 @@ pub fn test17() {
 pub fn test18() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", if false { 3 } else { 5 }, 5);
             pure()
@@ -326,7 +326,7 @@ pub fn test18() {
 pub fn test19() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", if 3 == 3 { 1 } else { 0 }, 1);
             pure()
@@ -340,7 +340,7 @@ pub fn test19() {
 pub fn test20() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", if 3 == 5 { 1 } else { 0 }, 0);
             pure()
@@ -354,7 +354,7 @@ pub fn test20() {
 pub fn test20_5() {
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let ans = (
                 if 2 == 0 {
@@ -378,7 +378,7 @@ pub fn test21() {
     let source = r#"
             module Main;
 
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let fact = fix $ |loop, n| if n == 0 { 1 } else { n * loop(n-1) };
                 let u = assert_eq("", fact(5), 5 * 4 * 3 * 2 * 1);
@@ -396,7 +396,7 @@ pub fn test22() {
     let source = format!(
         r#"
             module Main;
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let g = fix $ |loop, a, x|
                             if x == 0 {{ 
@@ -423,7 +423,7 @@ pub fn test22_5() {
     // Test recursion function defined by fix that is not tail-call.
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let fib = fix $ |f, n|
                         if n == 0 {
@@ -459,7 +459,7 @@ pub fn test22_7() {
             }
         );
         
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", fib(30), 832040);
             pure()
@@ -474,7 +474,7 @@ pub fn test23() {
     // Test Array::fill of size 0.
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr = Array::fill(0, 42);
             pure()
@@ -489,7 +489,7 @@ pub fn test24() {
     // Test Array::fill of size > 0.
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr = Array::fill(100, 42);
             let u = assert_eq("", arr.get_length, 100);
@@ -505,7 +505,7 @@ pub fn test25() {
     // Test Array::get.
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr = Array::fill(100, 42);
             let elem = arr.get(50);
@@ -522,7 +522,7 @@ pub fn test26() {
     // Test Array::set (unique case).
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr = Array::fill(100, 42);
             let arr = arr.set(50, 21);
@@ -539,7 +539,7 @@ pub fn test27() {
     // Test Array::set (shared case).
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr0 = Array::fill(100, 42);
             let arr1 = arr0.set(50, 21);
@@ -556,7 +556,7 @@ pub fn test27_5() {
     // Test Array of boxed object.
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr = Array::from_map(100) $ |i| add(i);
             let arr = arr.set(99, |x| x - 100);
@@ -573,7 +573,7 @@ pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr = Array::fill(31, 0);
             let arr = arr.set!(0, 0);
@@ -605,7 +605,7 @@ pub fn test29() {
         id : a -> a;
         id = |x| x;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let u = assert_eq("", if id(true) { id(100) } else { 30 }, 100);
             pure()
@@ -620,7 +620,7 @@ pub fn test30() {
     // Test dollar combinator
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let f = |x| x + 3;
             let g = |x| x == 8;
@@ -638,7 +638,7 @@ pub fn test31() {
     // Test . combinator
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let f = |x| x + 3;
             let g = |x| x == 8;
@@ -656,7 +656,7 @@ pub fn test32() {
     // Test . and $ combinator
     let source = r#"
         module Main;
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let f = |x| x + 10;
             let u = assert_eq("", 5.add $ 3.f, 18);
@@ -674,7 +674,7 @@ pub fn test33() {
         module Main;
         type I64Bool = struct {x: I64, y: Bool};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let obj = I64Bool { x: 18, y: false };
             let obj = I64Bool::mod_x(|x| x + 42, obj);
@@ -693,7 +693,7 @@ pub fn test34_5() {
         module Main;
         type I64Bool = unbox struct {x: I64, y: Bool};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let obj = I64Bool { x: 18, y : false};
             let obj = I64Bool::mod_x(|x| x + 42, obj);
@@ -714,7 +714,7 @@ pub fn test34() {
         type OtherStruct = struct {y: I64, x: Bool};
         type I64Bool = struct {x: I64, y: Bool};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let obj = I64Bool {x: 18, y: false};
             let obj = obj.mod_x(|x| x + 42);
@@ -735,7 +735,7 @@ pub fn test35() {
         type A = struct {x: I64, y: Bool};
         type B = struct {x: Bool, y: I64};
             
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let a = A {x: 3, y: true};
             let b = B {x: true, y: 5};
@@ -757,7 +757,7 @@ pub fn test36() {
         type A = struct {x: B};
         type B = struct {x: I64};
             
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let a = A{x: B{x: 16}};
             let a = a.(mod_x $ mod_x $ |x| x + 15);
@@ -779,7 +779,7 @@ pub fn test37() {
         type A = struct {x: B};
         type B = struct {x: I64};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let a = A {x: B {x: 16}};
             let b = a . (mod_x! $ mod_x! $ |x| x + 15);
@@ -801,7 +801,7 @@ pub fn test37_5() {
         type A = struct {x: B};
         type B = struct {x: I64};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let a = A {x: B {x: 16}};
             let b = a.(mod_x $ mod_x $ |x| x + 15);
@@ -823,7 +823,7 @@ pub fn test38() {
         type A = struct {x: B};
         type B = struct {x: I64};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (    
             let a = A {x: B {x: 16}};
             let f = |a| (a : A) . (mod_x! $ mod_x! $ |x| x + 15);
@@ -846,7 +846,7 @@ pub fn test39() {
         type A = struct {x: B};
         type B = struct {x: I64};
         
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let a = A {x: B {x: 16}};
             let f = |a| a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ |x| x + 15);
@@ -869,7 +869,7 @@ pub fn test40() {
         type A = struct {x: B};
         type B = struct {x: I64};
         
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let a = A {x: B {x: 16}};
             let f: A -> A = |a| a.(mod_x! $ mod_x! $ |x| x + 15);
@@ -889,7 +889,7 @@ pub fn test41() {
     let source = r#"
         module Main;
         
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x: I64 -> I64 = |x| x;
             let ans = x(42);
@@ -907,7 +907,7 @@ pub fn test41_5() {
     let source = r#"
         module Main;
         
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x = |x: I64| x;
             let ans = x(42);
@@ -930,7 +930,7 @@ pub fn test42() {
             loop : I64 -> I64;
             loop = |x| if x == 0 {{ 0 }} else {{ add(x) $ loop $ add(x, -1) }};
     
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let ans = Main::loop({});
                 let u = assert_eq("", ans, {});
@@ -955,7 +955,7 @@ pub fn test43() {
             my_loop : I64 -> I64 -> I64;
             my_loop = |x, acc| if x == 0 {{ acc }} else {{ my_loop(x + -1, acc + x) }};
     
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let ans = my_loop({}, 0);
                 let u = assert_eq("", ans, {});
@@ -994,7 +994,7 @@ pub fn test44() {
             add(head, next)
         );
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr0 = Array::fill(2, false);
             let arr0 = arr0.set!(0, true);
@@ -1029,7 +1029,7 @@ pub fn test44_5() {
             loop(0, 0)
         );
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr = Array::from_map(10, |x| x * x);
             let ans = sum(arr);
@@ -1066,7 +1066,7 @@ pub fn test45() {
             loop(0, 0)
         );
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let arr = Array::from_map(10, |x| x);
             let arr = arr.map(|x| x * x);
@@ -1091,7 +1091,7 @@ pub fn test46() {
         y : I64;
         y = 7;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let ans = (let x = 3 in let y = 2 in add(x, Main::y)) + x;
             let u = assert_eq("", ans, 15);
@@ -1110,7 +1110,7 @@ pub fn test47() {
 
         type I64OrBool = union {int : I64, bool: Bool};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let int_union = int(3);
             let bool_union = bool(true);
@@ -1133,7 +1133,7 @@ pub fn test47_2() {
 
         type I64OrBool = box union {int : I64, bool: Bool};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let int_union = int(3);
             let bool_union = bool(true);
@@ -1156,7 +1156,7 @@ pub fn test47_5() {
 
         type Union = union {val: I64, func: I64 -> I64};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let val = Union::val(3);
             let func = Union::func(|x| x + 5);
@@ -1177,7 +1177,7 @@ pub fn test48() {
 
         type Vec a = struct {data: Array a};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let int_vec = Vec {data: Array::fill(2, 5)};
             let int_vec = int_vec.mod_data!(|arr| arr.set(0, 3));
@@ -1200,7 +1200,7 @@ pub fn test49() {
 
         type Either a b = union {left: a, right: b};
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let int_left = Either::left(5);
             let ans = (
@@ -1228,7 +1228,7 @@ pub fn test50() {
         r#"
             module Main;
     
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let ans = (
                     loop((0, 0), |state|
@@ -1275,7 +1275,7 @@ pub fn test51() {
         } 
     );
     
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let arr = Array::fill(4, (0, false));
         let arr = arr.set(0, (0, false));
@@ -1338,7 +1338,7 @@ pub fn test52() {
         )
     );
     
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let ans = (is_prime $ 100).count(true);
         let u = assert_eq("", ans, 25);
@@ -1355,7 +1355,7 @@ pub fn test53() {
     let source = r#"
     module Main;
     
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let pair = (13, Array::fill(1, 0));
         let pair = pair.mod_0!(|x| x + 3);
@@ -1377,7 +1377,7 @@ pub fn test54() {
     let source = r#"
     module Main;
     
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let pair0 = (13, Array::fill(1, 0));
         let pair1 = pair0.mod_1(|arr| arr.set(0, 5));
@@ -1399,7 +1399,7 @@ pub fn test55() {
     let source = r#"
     module Main;
     
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let ans = (
             if 0 <= -1 && -1 >= 0 {
@@ -1424,7 +1424,7 @@ pub fn test56() {
     let source = r#"
     module Main;
     
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let ans = (
             if false || false == false 
@@ -1447,7 +1447,7 @@ pub fn test57() {
     let source = r#"
     module Main;
     
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let ans = (
             if !false == true && !true == false {
@@ -1470,7 +1470,7 @@ pub fn test58() {
     let source = r#"
     module Main;
     
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let ans = (
             if false != true && true != false && !(true != true) && !(false != false) {
@@ -1509,7 +1509,7 @@ pub fn test59() {
         y = true;
     }
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let ans = (if y {A::x + B::x + A::y} else {0});
         let u = assert_eq("", ans, 9);
@@ -1529,7 +1529,7 @@ pub fn test60() {
     unit : ();
     unit = ();
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = let u = unit; pure ();
     ";
     run_source(source, Configuration::develop_compiler());
@@ -1542,7 +1542,7 @@ pub fn test61() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         loop((0, io)) $ |(counter, io)| (
             if counter == 3 {
@@ -1565,7 +1565,7 @@ pub fn test62() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let len = "Hello World!".get_length;
         let u = assert_eq("", len, 12);
@@ -1582,7 +1582,7 @@ pub fn test63() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let min = -9223372036854775808;
         println! $ min.to_string
@@ -1598,7 +1598,7 @@ pub fn test64() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         println! $ "\u2764"
     );
@@ -1613,7 +1613,7 @@ pub fn test65() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let sum = loop((0, 0), |state| 
             let (i, sum) = state;
@@ -1639,7 +1639,7 @@ pub fn test66() {
 
     type State = unbox struct {idx: I64, sum: I64};
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let sum = loop(State{idx:0, sum:0}, |state|
             let State {idx: i, sum: sum} = state;
@@ -1665,7 +1665,7 @@ pub fn test67() {
 
     type State = box struct {idx: I64, sum: I64};
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let sum = loop(State{idx: 0, sum: 0}, |state|
             let State {idx: i, sum: sum} = state;
@@ -1691,7 +1691,7 @@ pub fn test68() {
 
     type I64OrBool = unbox union {int: I64, bool: Bool};
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let u = I64OrBool::int(42);
         let I64OrBool::int(x) = u;
@@ -1711,7 +1711,7 @@ pub fn test69() {
 
     type I64OrBool = box union {int: I64, bool: Bool};
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let u = I64OrBool::bool(true);
         let I64OrBool::bool(x) = u;
@@ -1731,7 +1731,7 @@ pub fn test70() {
 
     type Union = union {left: (I64, String), right: Bool};
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let u = Union::left((42, "truth"));
         let Union::left((x, y)) = u;
@@ -1752,7 +1752,7 @@ pub fn test71() {
     type Struct = struct {uni: Union, value: I64};
     type Union = union {left: (I64, String), right: Bool};
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let u = Struct {uni: Union::left((42, "truth")), value: 13};
         let Struct { uni: Union::left((truth, string)), value: val } = u;
@@ -1771,7 +1771,7 @@ pub fn test72() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let sum = loop((0, 0), |(i, sum)|
             if i == 10 {
@@ -1796,7 +1796,7 @@ pub fn test73() {
 
     type I64Bool = struct {x: I64, y: Bool};
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let int_bool = I64Bool { y: true, x: 42 };
         let u = assert_eq("", int_bool.@x, 42);
@@ -1816,7 +1816,7 @@ pub fn test74() {
 
     type I64Bool = struct {x: I64, y: Bool};
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let int_bool = I64Bool { y: false, x: 0 };
         let int_bool = int_bool.=x(3);
@@ -1841,7 +1841,7 @@ pub fn test75() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let iter = Iterator::from_map(|i| i*i );
         let Option::some((n, iter)) = iter.advance;
@@ -1867,7 +1867,7 @@ pub fn test76() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let array = Array::from_map(3, |_i| Array::from_map(3, |_j| 0));
         let array = array.mod!(1, Array::set!(1, 9));
@@ -1885,7 +1885,7 @@ pub fn test77() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let iter0 = Iterator::count_up(5);
         let iter1 = Iterator::from_map(|i| 2*i);
@@ -1906,7 +1906,7 @@ pub fn test78() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let iter = Iterator::count_up(1).take(100);
         let iter = iter.filter(|n| n%3 == 0 || n%5 == 0);
@@ -1925,7 +1925,7 @@ pub fn test79() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let ls = Iterator::make_empty;
         let ls = ls.push_front(1).push_front(2);
@@ -1946,7 +1946,7 @@ pub fn test80() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let iter = Iterator::make_empty.push_front(4).push_front(3).push_front(2).push_front(1);
         let last = iter.take_last.as_some;
@@ -1966,7 +1966,7 @@ pub fn test81() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
         let arr = [1,2,3,4];
         let _ = assert_eq("", arr.get_length, 4);
@@ -1985,7 +1985,7 @@ pub fn test82() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = (
 
         // Test 0+2
@@ -2050,7 +2050,7 @@ pub fn test83() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         // Unboxed element
         let v = [];
@@ -2106,7 +2106,7 @@ pub fn test84() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let v1 = [1,2,3];
         let v2 = [1,2,3];
@@ -2137,7 +2137,7 @@ pub fn test85() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let s1 = "Hello";
         let s2 = " ";
@@ -2158,7 +2158,7 @@ pub fn test86() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let iter = Iterator::from_array(["Hello", " ", "World", "!"]);
         let _ = assert_eq("", iter.concat_iter, "Hello World!");
@@ -2176,7 +2176,7 @@ pub fn test87() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let lhs = Iterator::from_array([1,2,3]);
         let rhs = Iterator::from_array([1,2,3]);
@@ -2204,7 +2204,7 @@ pub fn test88() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let iter = Iterator::from_array([1,2,3]);
         let iter = iter.intersperse(0);
@@ -2232,7 +2232,7 @@ pub fn test89() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let lhs = Iterator::from_array([1,2,3]);
         let rhs = Iterator::from_array([4,5,6]);
@@ -2264,7 +2264,7 @@ pub fn test90() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let vec = [5,3,1,7,4,6,9,8,2];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
@@ -2291,7 +2291,7 @@ pub fn test92() {
     let source = r#"
     module Main;
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let buf = [].reserve(5);
         let vec = buf;
@@ -2313,7 +2313,7 @@ pub fn test93() {
 
     type SelfRef = box struct { data : Option SelfRef };
 
-    main : IOState -> ((), IOState);
+    main : IO ();
     main = |io| (
         let ref = SelfRef { data : Option::none() };
         // let ref = ref.=data!(Option::some(ref)); // fails
@@ -2332,7 +2332,7 @@ pub fn test94() {
     let source = r#"
             module Main;
     
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let _ = "Hello C function!\n".call_with_valid_c_str(|ptr|
                     CALL_C[I32 printf(Ptr, ...), ptr]
@@ -2350,7 +2350,7 @@ pub fn test95() {
     let source = r#"
             module Main;
     
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 // For unboxed value, it returns true even if the value is used later.
                 let int_val = 42;
@@ -2383,7 +2383,7 @@ pub fn test96() {
     let source = r#"
             module Main;
     
-            main : IOState -> ((), IOState);
+            main : IO ();
             main = (
                 let _ = assert_eq("", -1_U8, 255_U8);
                 pure()
@@ -2399,7 +2399,7 @@ pub fn test97() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let _ = assert_eq("", -(1_U8), 255_U8);
             let _ = assert_eq("", 255_U8 + 3_U8, 2_U8);
@@ -2430,7 +2430,7 @@ pub fn test98() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             // U8
             let _ = assert_eq("", 0_U8.to_string, "0");
@@ -2465,7 +2465,7 @@ pub fn test99() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let _ = assert_eq("case 1", -2147483648_I32.to_I64, -2147483648_I64);
             let _ = assert_eq("case 2", 2147483647_I32.to_I64, 2147483647_I64);
@@ -2487,7 +2487,7 @@ pub fn test100() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let _ = assert_eq("case 1", 'A', 65_U8);
             let _ = assert_eq("case 2", '0', 48_U8);
@@ -2506,7 +2506,7 @@ pub fn test101() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let cap = 42;
             let arr: Array (() -> I64) = [];
@@ -2533,7 +2533,7 @@ pub fn test102() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let _ = assert_eq("case 1", 0 == 0, true);
             let _ = assert_eq("case 2", 0 == 1, false);
@@ -2562,7 +2562,7 @@ pub fn test103() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let _ = assert_eq("case 1", false == false, true);
             let _ = assert_eq("case 2", false == true, false);
@@ -2582,7 +2582,7 @@ pub fn test104() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let _ = assert_eq("case 1", true.to_string, "true");
             let _ = assert_eq("case 2", false.to_string, "false");
@@ -2600,7 +2600,7 @@ pub fn test105() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let _ = assert_eq("case 1", "".is_empty, true);
             let _ = assert_eq("case 2", "".get_first_byte.is_none, true);
@@ -2622,7 +2622,7 @@ pub fn test106() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let lhs: Option I64 = Option::none();
             let rhs: Option I64 = Option::none();
@@ -2653,7 +2653,7 @@ pub fn test107() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let _ = assert_eq("case 1", "".pop_back_byte, "");
             let _ = assert_eq("case 2", "a".pop_back_byte, "");
@@ -2681,7 +2681,7 @@ pub fn test108() {
     let source = r#"
         module Main;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = |io| (
             let file_path = Path::parse("test.txt").as_some;
             let written = "Hello\n World!";
@@ -2705,7 +2705,7 @@ pub fn test109() {
         add_opt_int : Option I64 -> Option I64 -> Option I64;
         add_opt_int = |lhs, rhs| Option::some $ lhs? + rhs?;
 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = |io| (
             let one = Option::some(1);
             let two = Option::some(2);
@@ -2746,7 +2746,7 @@ pub fn test_run_examples() {
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; 
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x = 5 in 
             let y = -3 in
@@ -2772,7 +2772,7 @@ pub fn test_comment_1() {
     // ilne comment
     let source = r"
         module Main; //// /* */
-        main : IOState -> ((), IOState);
+        main : IO ();
         main = (
             let x = 5 in
             // let x = 3 in
