@@ -1150,7 +1150,7 @@ pub fn test47_2() {
 #[test]
 #[serial]
 pub fn test47_5() {
-    // Test union of boxed object
+    // Test union of closure object
     let source = r#"
         module Main;
 
@@ -1158,10 +1158,36 @@ pub fn test47_5() {
 
         main : IO ();
         main = (
+            let five = 5;
             let val = Union::val(3);
-            let func = Union::func(|x| x + 5);
+            let func = Union::func(|x| x + five).mod_func(|f||x|f(x)+2); // x -> x + 5 + 2
             let ans = func.as_func $ val.as_val;
-            let u = assert_eq("", ans, 5 + 3);
+            let u = assert_eq("", ans, 7 + 3);
+            pure()
+        );
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test47_6() {
+    // Test union of boxed object
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let arr = [1,2,3];
+            let uni = Option::some(arr).mod_some(|lhs|lhs.append(arr));
+            let arr2 = uni.as_some;
+            let _ = assert_eq("", arr2.get(0), 1);
+            let _ = assert_eq("", arr2.get(1), 2);
+            let _ = assert_eq("", arr2.get(2), 3);
+            let _ = assert_eq("", arr2.get(3), 1);
+            let _ = assert_eq("", arr2.get(4), 2);
+            let _ = assert_eq("", arr2.get(5), 3);
+            let _ = assert_eq("", arr2.get_length, 6);
             pure()
         );
     "#;
