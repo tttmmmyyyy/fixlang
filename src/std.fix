@@ -393,10 +393,10 @@ impl IO : Functor {
 
 impl IO : Monad {
     pure = |val| IO { _data : |_| val };
-    flatten = |io_io| (
+    bind = |f, io| (
         IO { _data : |_| (
-            let io = io_io.__unsafe_perform;
-            io.__unsafe_perform
+            let a = io.__unsafe_perform;
+            f(a).__unsafe_perform
         )}
     );
 }
@@ -640,18 +640,8 @@ impl Iterator : Functor {
 }
 
 impl Iterator : Monad {
-    flatten = |iter| iter.fold(Iterator::make_empty, Add::add);
     pure = |e| Iterator::make_empty.push_front(e);
-}
-
-namespace Monad {
-    bind : [m : Monad, m : Functor] (a -> m b) -> m a -> m b;
-    bind = |f, a| a.map(f).flatten;
-}
-
-trait [m : *->*] m : Monad {
-    flatten : m (m a) -> m a;
-    pure : a -> m a;
+    bind = |f, xs| xs.map(f).fold(Iterator::make_empty, Add::add);
 }
 
 type Option a = union { none: (), some: a };
@@ -674,14 +664,8 @@ impl Option : Functor {
 }
 
 impl Option : Monad {
-    flatten = |opt_opt| (
-        if opt_opt.is_none { 
-            Option::none()
-        } else {
-            opt_opt.as_some
-        }
-    );
     pure = Option::some;
+    bind = |f, opt| if opt.is_none { Option::none() } else { f(opt.as_some) };
 }
 
 // The type for file path.
@@ -728,14 +712,8 @@ impl Result e : Functor {
 }
 
 impl Result e : Monad {
-
     pure = Result::ok;
-
-    flatten = |res| (
-        if res.is_err { Result::err $ res.as_err };
-        res.as_ok
-    );
-    
+    bind = |f, res| if res.is_err { Result::err $ res.as_err } else { f(res.as_ok) };
 }
 
 type String = unbox struct { _data : Array U8 };
@@ -977,4 +955,14 @@ impl U32 : ToString {
 
 impl U64 : ToString {
     to_string = U64::_U64_to_string;
+}
+
+trait [m : *->*] m : Monad {
+    bind : (a -> m b) -> m a -> m b;
+    pure : a -> m a;
+}
+
+namespace Monad {
+    flatten : [m : Monad] m (m a) -> m a;
+    flatten = Monad::bind(|x|x);
 }

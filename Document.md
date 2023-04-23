@@ -164,8 +164,8 @@
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
     - [Std::Monad (\* -\> \*)](#stdmonad----)
-      - [`bind : [m : Monad, m : Functor] (a -> m b) -> m a -> m b`](#bind--m--monad-m--functor-a---m-b---m-a---m-b)
-      - [(required) `flatten : [m : Monad] m (m a) -> a`](#required-flatten--m--monad-m-m-a---a)
+      - [(required) `bind : [m : Monad] (a -> m b) -> m a -> m b`](#required-bind--m--monad-a---m-b---m-a---m-b)
+      - [`flatten : [m : Monad] m (m a) -> a`](#flatten--m--monad-m-m-a---a)
       - [(required) `pure : [m : Monad] a -> m a`](#required-pure--m--monad-a---m-a)
     - [Std::ToString](#stdtostring)
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
@@ -1581,9 +1581,11 @@ main = (
 
 ### Std::Monad (* -> *)
 
-#### `bind : [m : Monad, m : Functor] (a -> m b) -> m a -> m b`
+#### (required) `bind : [m : Monad] (a -> m b) -> m a -> m b`
 
-#### (required) `flatten : [m : Monad] m (m a) -> a`
+#### `flatten : [m : Monad] m (m a) -> a`
+
+This is equivalent to `Monad::bind(|x|x)`.
 
 #### (required) `pure : [m : Monad] a -> m a`
 
