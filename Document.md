@@ -37,6 +37,11 @@
 - [Built-in / library features](#built-in--library-features)
   - [Types](#types-1)
     - [Structs](#structs-2)
+      - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
+      - [`={field_name} : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct)
+      - [`={field_name}! : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct-1)
+      - [`mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct)
+      - [`mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct-1)
     - [Unions](#unions-2)
       - [`{variant_name} : {variant_type} -> {union}`](#variant_name--variant_type---union)
       - [`is_{variant_name} : {union} -> Bool`](#is_variant_name--union---bool)
@@ -900,22 +905,32 @@ Note that calling C function may break abstraction of Fix such as immutability o
 
 If you define a struct named `{struct}` with a field `{field_name}` of type `{field_type}`, the following methods are defined in the namespace named `{struct}`.
 
-- `@{field_name} : {struct} -> {field_type}`
-    - Extract the value of a field from a struct value.
-- `={field_name} : {field_type} -> {struct} -> {struct}`
-    - Modify a struct value by setting a field.
-    - This function clones the struct value if it is shared between multiple references.
-- `={field_name}! : {field_type} -> {struct} -> {struct}`
-    - Modify a struct value by setting a field.
-    - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
-- `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
-    - Modify a struct value by a function acting on a field.
-    - This function clones the struct value if it is shared between multiple references.
-- `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
-    - Modify a struct value by a function acting on a field.
-    - This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
-
 NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Functor] ({field_type} -> f {field_type}) -> {struct} -> f {struct} `, which are generalization of `mod` functions.
+
+#### `@{field_name} : {struct} -> {field_type}`
+
+Extract the value of a field from a struct value.
+
+#### `={field_name} : {field_type} -> {struct} -> {struct}`
+
+Modify a struct value by setting a field.
+This function clones the struct value if it is shared between multiple references.
+
+#### `={field_name}! : {field_type} -> {struct} -> {struct}`
+
+Modify a struct value by setting a field.
+This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+
+#### `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
+
+Modify a struct value by a function acting on a field.
+This function clones the struct value if it is shared between multiple references.
+It is assured that if you call `obj.mod_field(f)` when the reference counter of the field value in `obj` is one, then `f` receives the field value uniquely.
+
+#### `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
+
+This function is almost same as `mod_{field_name}` except that this function asserts uniqueness of given struct value.
+This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
 
 ### Unions
 
@@ -935,7 +950,7 @@ Converts a union value into a variant value if it is created as the variant. If 
 
 #### `mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`
 
-Modify a union value by a function acting on a variant.
+Modify a union value by a function acting on a variant. It is assured that if you call `obj.mod_variant(f)` when the reference counter of the variant value in `obj` is one, then `f` receives the variant value uniquely.
 
 ### Std::Array
 

@@ -1178,16 +1178,17 @@ pub fn test47_6() {
 
         main : IO ();
         main = (
-            let arr = [1,2,3];
-            let uni = Option::some(arr).mod_some(|lhs|lhs.append(arr));
-            let arr2 = uni.as_some;
-            let _ = assert_eq("", arr2.get(0), 1);
-            let _ = assert_eq("", arr2.get(1), 2);
-            let _ = assert_eq("", arr2.get(2), 3);
-            let _ = assert_eq("", arr2.get(3), 1);
-            let _ = assert_eq("", arr2.get(4), 2);
-            let _ = assert_eq("", arr2.get(5), 3);
-            let _ = assert_eq("", arr2.get_length, 6);
+            let uni = Option::some([1,2,3]).mod_some(
+                |lhs| lhs.force_unique!.append([4,5,6])
+            );
+            let arr = uni.as_some;
+            let _ = assert_eq("", arr.get(0), 1);
+            let _ = assert_eq("", arr.get(1), 2);
+            let _ = assert_eq("", arr.get(2), 3);
+            let _ = assert_eq("", arr.get(3), 4);
+            let _ = assert_eq("", arr.get(4), 5);
+            let _ = assert_eq("", arr.get(5), 6);
+            let _ = assert_eq("", arr.get_length, 6);
             pure()
         );
     "#;
