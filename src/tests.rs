@@ -2732,6 +2732,13 @@ pub fn test109() {
         add_opt_int : Option I64 -> Option I64 -> Option I64;
         add_opt_int = |lhs, rhs| Option::some $ *lhs + *rhs;
 
+        sequence : [m : Monad, m : Functor] Iterator (m a) -> m (Iterator a);
+        sequence = |iter| (
+            if iter.is_empty { pure $ Iterator::make_empty };
+            let (x, xs_iter) = iter.advance.as_some;
+            pure $ Iterator::push_front(*x) $ *sequence(xs_iter)
+        );
+
         main : IO ();
         main = (
             let one = Option::some(1);
@@ -2743,6 +2750,22 @@ pub fn test109() {
             let _ = assert_eq("case 2", add_opt_int(none, two), none);
             let _ = assert_eq("case 3", add_opt_int(one, none), none);
             let _ = assert_eq("case 4", add_opt_int(none, none), none);
+
+            let res0 = Result::ok(0) : Result String I64;
+            let res1 = Result::ok(1);
+            let res2 = Result::ok(2);
+            let res3 = Result::ok(3);
+            let res_iter = Iterator::from_array([res0, res1, res2, res3]).sequence;
+            let _ = assert_eq("case 5", res_iter.is_ok, true);
+            let _ = assert_eq("case 6", res_iter.as_ok, Iterator::from_array([0, 1, 2, 3]));
+
+            let res0 = Result::ok(0) : Result String I64;
+            let res1 = Result::ok(1);
+            let res2 = Result::err("Error 2");
+            let res3 = Result::err("Error 3");
+            let res_iter = Iterator::from_array([res0, res1, res2, res3]).sequence;
+            let _ = assert_eq("case 5", res_iter.is_err, true);
+            let _ = assert_eq("case 6", res_iter.as_err, "Error 2");
 
             pure()
         );

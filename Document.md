@@ -114,6 +114,7 @@
       - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
       - [`get_length : Iterator a -> I64`](#get_length--iterator-a---i64)
       - [`intersperse : a -> Iterator a -> Iterator a`](#intersperse--a---iterator-a---iterator-a)
+      - [`is_empty : Iterator a -> Bool`](#is_empty--iterator-a---bool)
       - [`make_empty : Iterator a`](#make_empty--iterator-a)
       - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
       - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
@@ -1339,6 +1340,10 @@ Counts the length of an iterator.
 
 Intersperse an elemnt between elements of an iterator.
 Example: `Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])`
+
+#### `is_empty : Iterator a -> Bool`
+
+Check if the iterator is empty.
 
 #### `make_empty : Iterator a`
 Creates an empty iterator.
