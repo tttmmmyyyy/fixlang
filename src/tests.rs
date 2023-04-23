@@ -1135,8 +1135,8 @@ pub fn test47_2() {
 
         main : IO ();
         main = (
-            let int_union = int(3);
-            let bool_union = bool(true);
+            let int_union = int(2).mod_bool(not).mod_int(add(1));
+            let bool_union = bool(false).mod_bool(not).mod_int(add(1));
             let int_val = if int_union.is_int { int_union.as_int } else { 0 };
             let bool_val = if bool_union.is_bool { bool_union.as_bool } else { false };
             let ans = if bool_val { int_val } else { 0 };
