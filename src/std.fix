@@ -717,6 +717,16 @@ namespace Result {
     );
 }
 
+impl Result e : Functor {
+    map = |f, res| (
+        if res.is_err {
+            Result::err $ res.as_err
+        } else {
+            Result::ok $ f $ res.as_ok
+        }
+    );
+}
+
 impl Result e : Monad {
 
     pure = Result::ok;
