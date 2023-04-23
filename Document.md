@@ -24,7 +24,7 @@
   - [Recursion](#recursion)
   - [Overloading](#overloading)
   - [Traits](#traits)
-  - [Monads](#monads)
+  - [Monadic bind syntax](#monadic-bind-syntax)
   - [Type annotation](#type-annotation)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions-1)
@@ -818,7 +818,16 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 (TBA)
 
-## Monads
+## Monadic bind syntax
+
+The trait `Monad` is defined as follows:
+
+```
+trait [m : *->*] m : Monad {
+    bind : (a -> m b) -> m a -> m b;
+    pure : a -> m a;
+}
+```
 
 (TBA)
 
