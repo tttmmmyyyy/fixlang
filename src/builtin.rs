@@ -1941,6 +1941,128 @@ pub fn union_is_lit(
     expr_lit(generator, free_vars, name, make_bool_ty(), None)
 }
 
+pub fn union_mod_function(
+    union_name: &FullName,
+    field_name: &Name,
+    union: &TypeDefn,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const UNION_NAME: &str = "union_value";
+    const MODIFIER_NAME: &str = "modifier";
+
+    let field_idx = if let Some((field_idx, _)) = union.get_field_by_name(&field_name) {
+        field_idx
+    } else {
+        error_exit(&format!(
+            "Unknown field `{}` for union `{}`",
+            field_name,
+            union_name.to_string()
+        ));
+    };
+
+    let union_ty = union.ty();
+    let field_ty = union.fields()[field_idx as usize].ty.clone();
+
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, union_ty, rvo| {
+        // Get arguments
+        let obj = gc.get_var(&FullName::local(&UNION_NAME)).ptr.get(gc);
+        let modifier = gc.get_var(&FullName::local(&MODIFIER_NAME)).ptr.get(gc);
+
+        let is_unbox = obj.is_unbox(gc.type_env());
+        let offset = if is_unbox { 0 } else { 1 };
+
+        // Create specified tag value.
+        let specified_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(field_idx as u64, false);
+
+        // Get tag value.
+        let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
+
+        // Branch and store result to ret_ptr.
+        let is_tag_match = gc.builder().build_int_compare(
+            IntPredicate::EQ,
+            specified_tag_value,
+            tag_value,
+            "is_tag_match@union_mod_function",
+        );
+        let current_bb = gc.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let match_bb = gc.context.append_basic_block(current_func, "match_bb");
+        let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
+        let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
+        gc.builder()
+            .build_conditional_branch(is_tag_match, match_bb, unmatch_bb);
+
+        // Implement match_bb
+        gc.builder().position_at_end(match_bb);
+        let field_ty = union_ty.field_types(gc.type_env())[field_idx as usize].clone();
+        let value = ObjectFieldType::get_union_field(gc, obj.clone(), &field_ty, None);
+        let value = gc.apply_lambda(modifier.clone(), vec![value], None);
+        let value = value.value(gc);
+        // Prepare space for returned union object.
+        let ret_obj = allocate_obj(
+            union_ty.clone(),
+            &vec![],
+            None,
+            gc,
+            Some("alloca@union_mod_function"),
+        );
+        // Set values of returned union object.
+        ret_obj.store_field_nocap(gc, 0 + offset, specified_tag_value);
+        ret_obj.store_field_nocap(gc, 1 + offset, value);
+        let match_ret_obj_ptr = ret_obj.ptr(gc);
+        gc.builder().build_unconditional_branch(cont_bb);
+
+        // Implement unmatch_bb
+        gc.builder().position_at_end(unmatch_bb);
+        gc.release(modifier);
+        let unmatch_ret_obj_ptr = obj.ptr(gc);
+        gc.builder().build_unconditional_branch(cont_bb);
+
+        // Return the value.
+        gc.builder().position_at_end(cont_bb);
+        let phi = gc
+            .builder()
+            .build_phi(match_ret_obj_ptr.get_type(), "phi@union_mod_function");
+        phi.add_incoming(&[
+            (&match_ret_obj_ptr, match_bb),
+            (&unmatch_ret_obj_ptr, unmatch_bb),
+        ]);
+        let ret_obj = Object::new(phi.as_basic_value().into_pointer_value(), union_ty.clone());
+        if rvo.is_some() {
+            assert!(union_ty.is_unbox(gc.type_env()));
+            let rvo = rvo.unwrap();
+            gc.builder().build_store(rvo.ptr(gc), ret_obj.value(gc));
+            rvo
+        } else {
+            ret_obj
+        }
+    });
+
+    let expr = expr_abs(
+        vec![var_local(MODIFIER_NAME)],
+        expr_abs(
+            vec![var_local(UNION_NAME)],
+            expr_lit(
+                generator,
+                vec![FullName::local(MODIFIER_NAME), FullName::local(UNION_NAME)],
+                format!("mod_{}({}, {})", field_name, MODIFIER_NAME, UNION_NAME),
+                union_ty.clone(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    let ty = type_fun(
+        type_fun(field_ty.clone(), field_ty),
+        type_fun(union_ty.clone(), union_ty),
+    );
+    let scm = Scheme::generalize(HashMap::default(), vec![], ty);
+    (expr, scm)
+}
+
 const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 pub fn loop_result_defn() -> TypeDefn {
     TypeDefn {

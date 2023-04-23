@@ -837,6 +837,13 @@ impl FixModule {
                             FullName::new(&decl.name.to_namespace(), &format!("is_{}", field.name)),
                             union_is(&union_name, &field.name, decl),
                         );
+                        self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("mod_{}", field.name),
+                            ),
+                            union_mod_function(&union_name, &field.name, decl),
+                        );
                     }
                 }
             }

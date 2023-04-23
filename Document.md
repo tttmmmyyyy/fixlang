@@ -38,6 +38,10 @@
   - [Types](#types-1)
     - [Structs](#structs-2)
     - [Unions](#unions-2)
+      - [`{variant_name} : {variant_type} -> {union}`](#variant_name--variant_type---union)
+      - [`is_{variant_name} : {union} -> Bool`](#is_variant_name--union---bool)
+      - [`as_{variant_name} : {union} -> {variant_type}`](#as_variant_name--union---variant_type)
+      - [`mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`](#mod_variant_name--variant_type---variant_type---union---union)
     - [Std::Array](#stdarray)
       - [`__unsafe_set_length : I64 -> Array a -> Array a`](#__unsafe_set_length--i64---array-a---array-a)
       - [`__unsafe_get : I64 -> Array a -> a`](#__unsafe_get--i64---array-a---a)
@@ -917,12 +921,21 @@ NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Fu
 
 If you define a union named `{union}` with a variant `{variant_name}` of type `{variant_type}`, the following methods are defined in the namespace named `{union}`.
 
-- `{variant_name} : {variant_type} -> {union}`
-    - Constructs a union value from a variant value.
-- `is_{variant_name} : {union} -> Bool`
-    - Check if a union value is created as the specified variant.
-- `as_{variant_name} : {union} -> {variant_type}`
-    - Converts a union value into a variant value if it is created as the variant. If not so, this function panics.
+#### `{variant_name} : {variant_type} -> {union}`
+
+Constructs a union value from a variant value.
+
+#### `is_{variant_name} : {union} -> Bool`
+
+Check if a union value is created as the specified variant.
+
+#### `as_{variant_name} : {union} -> {variant_type}`
+
+Converts a union value into a variant value if it is created as the variant. If not so, this function panics.
+
+#### `mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`
+
+Modify a union value by a function acting on a variant.
 
 ### Std::Array
 
