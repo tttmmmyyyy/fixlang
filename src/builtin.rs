@@ -1999,7 +1999,6 @@ pub fn union_mod_function(
         let field_ty = union_ty.field_types(gc.type_env())[field_idx as usize].clone();
         let value = ObjectFieldType::get_union_field(gc, obj.clone(), &field_ty, None);
         let value = gc.apply_lambda(modifier.clone(), vec![value], None);
-        let value = value.value(gc);
         // Prepare space for returned union object.
         let ret_obj = allocate_obj(
             union_ty.clone(),
@@ -2010,7 +2009,8 @@ pub fn union_mod_function(
         );
         // Set values of returned union object.
         ret_obj.store_field_nocap(gc, 0 + offset, specified_tag_value);
-        ret_obj.store_field_nocap(gc, 1 + offset, value);
+        let buf = ret_obj.ptr_to_field_nocap(gc, offset + 1);
+        ObjectFieldType::set_value_to_union_buf(gc, buf, value);
         let match_ret_obj_ptr = ret_obj.ptr(gc);
         gc.builder().build_unconditional_branch(cont_bb);
 
