@@ -519,7 +519,7 @@ swap : (I64, Bool) -> (Bool, I64);
 swap = |(fst, snd)| (snd, fst);
 ```
 
-Don't confuse `|(x, y)| ...` with `|x, y| ...`. The former defines a function that receives a tuple, and the latter defines a two-variable function.
+Don't confuse `|(x, y)| ...` with `|x, y| ...`. The former defines a function that receives a tuple, where the latter defines a two-variable function.
 
 ## `loop`, `continue` and `break` function
 
