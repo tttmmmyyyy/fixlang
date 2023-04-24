@@ -901,9 +901,9 @@ add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
 
 #### List-like monads
 
-In Fix's standard library, `Iterator` is an example of list-like monad. For list-like moads, `[x, y, z, ...].bind(f)` represents `f(x) + f(y) + f(z) + ...`, where `+` concatenates two list-like objects. `pure(x)` represents an singleton value `[x]`. 
+In Fix's standard library, `Iterator` is an example of list-like monad. For list-like moads, `[x, y, z, ...].bind(f)` represents `f(x) + f(y) + f(z) + ...`, where `+` concatenates two list-like values. `pure(x)` represents an singleton value `[x]`. 
 
-NOTE: In fact `[a,b,c,...]` is an array literal, but here we are writing it as an iterator literal.
+NOTE: In fact `[a,b,c,...]` is an array literal, but here we are writing it as literal for list-like values.
 
 For example, consider a function `product : Iterator a -> Iterator b -> Iterator (a, b)` that calculates a cartesian product. It can be implemented as:
 
