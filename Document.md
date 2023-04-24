@@ -11,7 +11,7 @@
   - [Let-expressions](#let-expressions)
   - [If-expressions](#if-expressions)
   - [Function application](#function-application)
-  - [Functions](#functions)
+  - [Function definition](#function-definition)
   - [Operator `.` and `$`](#operator--and-)
   - [Patterns](#patterns)
   - [`loop`, `continue` and `break` function](#loop-continue-and-break-function)
@@ -25,9 +25,11 @@
   - [Overloading](#overloading)
   - [Traits](#traits)
   - [Monadic bind syntax](#monadic-bind-syntax)
+    - [What is monad?](#what-is-monad)
+    - [Monadic bind syntax `*`.](#monadic-bind-syntax-)
   - [Type annotation](#type-annotation)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
-    - [Functions](#functions-1)
+    - [Functions](#functions)
     - [Tuples](#tuples)
     - [Unit](#unit)
     - [Array](#array)
@@ -151,7 +153,7 @@
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
       - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
-  - [Functions](#functions-2)
+  - [Functions](#functions-1)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
     - [Std::fix : ((a -\> b) -\> a -\> b) -\> a -\> b](#stdfix--a---b---a---b---a---b)
     - [Std::loop : s -\> (s -\> LoopResult s r) -\> r](#stdloop--s---s---loopresult-s-r---r)
@@ -394,7 +396,7 @@ In the program of Fibonacci sequence, the expression `Array::fill(n, 0)` is an e
 
 As a special syntax, writing `f()` implies `f(())`, i.e., application of function `f` to the unit value `()`.
 
-## Functions
+## Function definition
 
 You can make a function value (which is similar to things called "lambda" or "closure" in other languages) by `|{arg}| {body}`. To define a two-variable function, you can simply write `|{arg0}, {arg1}| {body}` which is a syntax sugar of `|{arg0}| |{arg1}| {body}`.
 
@@ -697,7 +699,7 @@ Remember that an expression in Fix is only a sentence that describes a value. It
 main = (
     let arr0 = Array::fill(100, 1);
     let arr1 = arr0.set(0, 2);
-    println!("arr0.get(0): " + arr0.get(0).to_string + ".")
+    println("arr0.get(0): " + arr0.get(0).to_string + ".")
 );
 ```
 
@@ -733,11 +735,11 @@ In fact, `set` in the above program doesn't clone the array and `calc_fib` works
 main = (
     let arr0 = Array::fill(100, 1);
     let arr1 = arr0.set(0, 2);
-    println!("arr1.get(0): " + arr1.get(0).to_string + ".")
+    println("arr1.get(0): " + arr1.get(0).to_string + ".")
 );
 ```
 
-(Note that `println!` prints the 0th element of `arr1`, not of `arr0`.) In this program, the call of `set` is the last usage of `arr0`. In such a case, `set` can update the 0th element of the given array without violating immutability, because the mutation cannot be observed. 
+(Note that `println` prints the 0th element of `arr1`, not of `arr0`.) In this program, the call of `set` is the last usage of `arr0`. In such a case, `set` can update the 0th element of the given array without violating immutability, because the mutation cannot be observed. 
 
 Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and set as pointing to the new array returned by `set` function. This ensures that the old array given to `set` function will be never referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
 
@@ -820,6 +822,8 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 ## Monadic bind syntax
 
+### What is monad?
+
 The trait `Monad` is defined as follows:
 
 ```
@@ -829,7 +833,124 @@ trait [m : *->*] m : Monad {
 }
 ```
 
-(TBA)
+There are 3 kinds of monads typically used:
+
+1. State-like monads
+
+This monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
+
+```
+type State s a = unbox struct { run : s -> (s, a) }
+```
+
+produces a monad `State s`. This monad represents a computation which reads and updates the "state", which ia a value of `s`.
+
+For state-like monads, `bind` provides a way to combine two actions. An action `x.bind(f)` represents the following action:
+- First, perform the action `x`. Call the returned value of action `x` as `r`.
+- Then, perform the action `f(r)`.
+ 
+An action `pure(v)` represents a computation that returns `v` with no interaction with the environment.
+
+For example, `print(str) : IO ()` is an I/O action that prints `str` to the standard output. Assume that `read : IO String` is an I/O action that reads a content of standard input as a string. Then, the I/O action `echo` that reads a line and just prints it can be written as:
+
+```
+echo : IO ();
+echo = read.bind(|s| print(s));
+```
+
+NOTE: Actually there is no value `read : IO String` in Fix's standard library, but it can be made as `read_content(stdin).map(as_ok)`.
+
+2. Result-like monads
+
+This monad represents a value that may fail to be calculated. In Fix's standard library, `Result e` is a monad with an error `e`:
+
+```
+type Result e o = unbox union { ok : o, err: e };
+```
+
+`Result e o` contains a successful value of type `o`, or an error value of type `e`. Another example is the `Option` monad:
+
+```
+type Option a = union { none: (), some: a };
+```
+
+For result-like monads, `bind` provides a way to do short-circuit evaluation. `x.bind(f)` should immediately return an error (or "none") value if `x` is an error. Only when `x` is an ok (or "some") value `o`, the function `f` is called and `x.bind(f)` should evaluates to `f(o)`. `pure(v)` represents an ok value.
+
+As an example, consider a function `add_opt : Option I64 -> Option I64 -> Option I64` which adds two integers only when both are some value. Naively, it can defined as follows:
+
+```
+add_opt : Option I64 -> Option I64 -> Option I64;
+add_opt = |x, y| (
+    if x.is_none { Option::none() };
+    let x = x.as_some;
+    if y.is_none { Option::none() };
+    let y = y.as_some;
+    Option::some(x+y)
+);
+```
+
+Using `bind`, the above program can be rewritten as:
+
+```
+add_opt : Option I64 -> Option I64 -> Option I64;
+add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
+```
+
+3. List-like monads
+
+In Fix's standard library, `Iterator` is an example of list-like monad. `[x, y, z, ...].bind(f)` represents `[x(0), ..., x(l), y(0), ..., y(m), z(0), ..., z(n)]` where `f(x) == [x(0), ..., x(l)]`, `f(y) == [y(0), ..., y(l)]` and `f(z) == [z(0), ..., z(n)]`. `pure(x)` represents an simgleton `[x]`. (In fact `[a,b,c,...]` is an array literal, but here we are writing it as an iterator literal.)
+
+For example, consider a function `product : Iterator a -> Iterator b -> Iterator (a, b)` that calculates a cartesian product. It can be implemented as:
+
+```
+product : Iterator a -> Iterator b -> Iterator (a, b);
+product = |xs, ys| xs.bind(|x| ys.map(|y| (x,y)));
+```
+
+### Monadic bind syntax `*`.
+
+A prefix unary operator `*` provides a way to use `bind` in more concise way. Basically, `B(*x)` is expanded to `x.bind(|v| B(v))`. Here, `B` is a minimal "code block" that contains the expression `*x`. Code blocks are defined as follows:
+
+- Lambda-expression `|{arg}| {body-block}` defines a code block `{body-block}`.
+- Let-definition `let {pat}={expr} in {body-block}` defines a code block `{body-block}`.
+- If-expression `if {cond} { {then-block} } else { {else-block} }` defines two code blocks `{then-expr}` and `{else-expr}`.
+
+Examples in the previous section can be written using `*` as follows:
+
+```
+echo : IO ();
+echo = print(*read);
+```
+
+```
+add_opt : Option I64 -> Option I64 -> Option I64;
+add_opt = Option::some(*x + *y);
+```
+
+```
+product : Iterator a -> Iterator b -> Iterator (a, b);
+product = |xs, ys| let x = *xs in ys.map(|y| (x, y));
+```
+
+Note that `product` cannot be implemented as follows.
+
+```
+product = |xs, ys| ys.map(|y| (*xs, y));
+```
+
+The body of lambda-expression `(*xs, y)` creates a code block, so the above program is expanded to 
+
+```
+product = |xs, ys| ys.map(|y| xs.bind(|x| (x, y)));
+```
+
+which includes a type error.
+
+The `product` function can also be implemented as follows:
+
+```
+product = |xs, ys| pure((*xs, *ys));
+```
 
 ## Type annotation
 
@@ -1216,8 +1337,8 @@ module Main;
 
 main : IO ();
 main = (
-    let (Result::ok(str), io) = *read_line(stdin);
-    println!(str)
+    let Result::ok(str) = *read_line(stdin);
+    println(str)
 );
 ```
 
