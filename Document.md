@@ -26,6 +26,9 @@
   - [Trait](#trait)
   - [Monad](#monad)
     - [What is monad?](#what-is-monad)
+      - [State-like monads](#state-like-monads)
+      - [Result-like monads](#result-like-monads)
+      - [List-like monads](#list-like-monads)
     - [Monadic bind syntax `*`.](#monadic-bind-syntax-)
   - [Type annotation](#type-annotation)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
@@ -833,9 +836,9 @@ trait [m : *->*] m : Monad {
 }
 ```
 
-There are 3 kinds of monads typically used:
+In the following sections, we introduce 3 typical types of monads used practically.
 
-1. State-like monads
+#### State-like monads
 
 This type of monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is a state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
 
@@ -860,7 +863,7 @@ echo = read.bind(|s| print(s));
 
 NOTE: Actually there is no `read : IO String` defined in Fix's standard library. It can be defined as `read_content(stdin).map(as_ok)`.
 
-2. Result-like monads
+#### Result-like monads
 
 This type of monad represents a value that may fail to be calculated. In Fix's standard library, `Result e` is a monad with an error `e`:
 
@@ -896,7 +899,7 @@ add_opt : Option I64 -> Option I64 -> Option I64;
 add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
 ```
 
-3. List-like monads
+#### List-like monads
 
 In Fix's standard library, `Iterator` is an example of list-like monad. For list-like moads, `[x, y, z, ...].bind(f)` represents `f(x) + f(y) + f(z) + ...`, where `+` appends two iterators. `pure(x)` represents an singleton value `[x]`. 
 
