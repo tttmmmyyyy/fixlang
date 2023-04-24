@@ -837,7 +837,7 @@ There are 3 kinds of monads typically used:
 
 1. State-like monads
 
-This type of monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
+This type of monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is a state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
 
 ```
 type State s a = unbox struct { run : s -> (s, a) }
@@ -851,14 +851,14 @@ For state-like monads, `bind` provides a way to combine two actions. An action `
  
 An action `pure(v)` represents a computation that returns `v` with no interaction with the environment.
 
-For example, `print(str) : IO ()` is an I/O action that prints `str` to the standard output. Assume that `read : IO String` is an I/O action that reads a content of standard input as a string. Then, the I/O action `echo` that reads a line and just prints it can be written as:
+For example, `print(str) : IO ()` is an I/O action that prints `str` to the standard output. Assume that `read : IO String` is an I/O action that reads a content of standard input as a string. Then, the I/O action `echo` that reads standard input and just prints it can be written as:
 
 ```
 echo : IO ();
 echo = read.bind(|s| print(s));
 ```
 
-NOTE: Actually there is no value `read : IO String` in Fix's standard library, but it can be made as `read_content(stdin).map(as_ok)`.
+NOTE: Actually there is no `read : IO String` defined in Fix's standard library. It can be defined as `read_content(stdin).map(as_ok)`.
 
 2. Result-like monads
 
@@ -874,9 +874,9 @@ type Result e o = unbox union { ok : o, err: e };
 type Option a = union { none: (), some: a };
 ```
 
-For result-like monads, `bind` provides a way to do short-circuit evaluation. `x.bind(f)` should immediately return an error (or "none") value if `x` is an error. Only when `x` is an ok (or "some") value `o`, the function `f` is called and `x.bind(f)` should evaluates to `f(o)`. `pure(v)` represents an ok value.
+For result-like monads, `bind` provides a way to do short-circuit evaluation. `x.bind(f)` should immediately return an error (or "none") value if `x` is an error. Only when `x` is an ok (or "some") value `v`, the function `f` is called and `x.bind(f)` should evaluates to `f(v)`. `pure(v)` represents an ok value `v`.
 
-As an example, consider a function `add_opt : Option I64 -> Option I64 -> Option I64` which adds two integers only when both are some value. Naively, it can defined as follows:
+As an example, consider a function `add_opt : Option I64 -> Option I64 -> Option I64` which adds two integers only when both are "some" values. Naively, it can defined as follows:
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
@@ -898,7 +898,17 @@ add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
 
 3. List-like monads
 
-In Fix's standard library, `Iterator` is an example of list-like monad. `[x, y, z, ...].bind(f)` represents `[x(0), ..., x(l), y(0), ..., y(m), z(0), ..., z(n)]` where `f(x) == [x(0), ..., x(l)]`, `f(y) == [y(0), ..., y(l)]` and `f(z) == [z(0), ..., z(n)]`. `pure(x)` represents an simgleton `[x]`. (In fact `[a,b,c,...]` is an array literal, but here we are writing it as an iterator literal.)
+In Fix's standard library, `Iterator` is an example of list-like monad. For list-like moads, `[x, y, z, ...].bind(f)` represents 
+
+```
+[x(0), ..., x(l), y(0), ..., y(m), z(0), ..., z(n)]
+```
+
+where `f(x) == [x(0), ..., x(l)]`, `f(y) == [y(0), ..., y(l)]` and `f(z) == [z(0), ..., z(n)]`. 
+
+`pure(x)` represents an singleton value `[x]`. 
+
+NOTE: In fact `[a,b,c,...]` is an array literal, but here we are writing it as an iterator literal.
 
 For example, consider a function `product : Iterator a -> Iterator b -> Iterator (a, b)` that calculates a cartesian product. It can be implemented as:
 
