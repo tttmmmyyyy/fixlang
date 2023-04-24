@@ -898,15 +898,7 @@ add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
 
 3. List-like monads
 
-In Fix's standard library, `Iterator` is an example of list-like monad. For list-like moads, `[x, y, z, ...].bind(f)` represents 
-
-```
-[x(0), ..., x(l), y(0), ..., y(m), z(0), ..., z(n)]
-```
-
-where `f(x) == [x(0), ..., x(l)]`, `f(y) == [y(0), ..., y(l)]` and `f(z) == [z(0), ..., z(n)]`. 
-
-`pure(x)` represents an singleton value `[x]`. 
+In Fix's standard library, `Iterator` is an example of list-like monad. For list-like moads, `[x, y, z, ...].bind(f)` represents `f(x) + f(y) + f(z) + ...`, where `+` appends two iterators. `pure(x)` represents an singleton value `[x]`. 
 
 NOTE: In fact `[a,b,c,...]` is an array literal, but here we are writing it as an iterator literal.
 
@@ -914,12 +906,22 @@ For example, consider a function `product : Iterator a -> Iterator b -> Iterator
 
 ```
 product : Iterator a -> Iterator b -> Iterator (a, b);
-product = |xs, ys| xs.bind(|x| ys.map(|y| (x,y)));
+product = |xs, ys| xs.bind(|x| ys.bind(|y| pure $ (x, y)));
+```
+
+because, if `xs == [x0, x1, ...]` and `ys == [y0, y1, ...]`, then 
+
+```
+xs.bind(|x| ys.bind(|y| pure $ (x, y)))
+== ys.bind(|y| pure $ (x0, y)) + ys.bind(|y| pure $ (x1, y)) + ...
+== (pure $ (x0, y0)) + (pure $ (x0, y1)) + ... + (pure $ (x1, y0)) + (pure $ (x1, y1)) + ... + ...
+== [(x0, y0)] + [(x0, y1)] + ... + [(x1, y0)] + [(x1, y1)] + ... + ...
+== [(x0, y0), (x0, y1), ..., (x1, y0), (x1, y1), ..., ...]
 ```
 
 ### Monadic bind syntax `*`.
 
-A prefix unary operator `*` provides a way to use `bind` in more concise way. Basically, `B(*x)` is expanded to `x.bind(|v| B(v))`. Here, `B` is a minimal "code block" that contains the expression `*x`. Code blocks are defined as follows:
+A prefix unary operator `*` provides a way to use `bind` in more concise way. Basically, `B(*x)` is expanded to `x.bind(|v| B(v))`. Here, `B(*x)` is a minimal code block that contains the expression `*x`. Code blocks are defined as follows:
 
 - Lambda-expression `|{arg}| {body-block}` defines a code block `{body-block}`.
 - Let-definition `let {pat}={expr} in {body-block}` defines a code block `{body-block}`.
@@ -939,27 +941,7 @@ add_opt = Option::some(*x + *y);
 
 ```
 product : Iterator a -> Iterator b -> Iterator (a, b);
-product = |xs, ys| let x = *xs in ys.map(|y| (x, y));
-```
-
-Note that `product` cannot be implemented as follows.
-
-```
-product = |xs, ys| ys.map(|y| (*xs, y));
-```
-
-The body of lambda-expression `(*xs, y)` creates a code block, so the above program is expanded to 
-
-```
-product = |xs, ys| ys.map(|y| xs.bind(|x| (x, y)));
-```
-
-which includes a type error.
-
-The `product` function can also be implemented as follows:
-
-```
-product = |xs, ys| pure((*xs, *ys));
+product = |xs, ys| pure $ (*xs, *ys);
 ```
 
 ## Type annotation
