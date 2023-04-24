@@ -837,7 +837,7 @@ There are 3 kinds of monads typically used:
 
 1. State-like monads
 
-This monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
+This type of monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
 
 ```
 type State s a = unbox struct { run : s -> (s, a) }
@@ -862,7 +862,7 @@ NOTE: Actually there is no value `read : IO String` in Fix's standard library, b
 
 2. Result-like monads
 
-This monad represents a value that may fail to be calculated. In Fix's standard library, `Result e` is a monad with an error `e`:
+This type of monad represents a value that may fail to be calculated. In Fix's standard library, `Result e` is a monad with an error `e`:
 
 ```
 type Result e o = unbox union { ok : o, err: e };
