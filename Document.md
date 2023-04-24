@@ -75,7 +75,7 @@
       - [`set : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a)
       - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
-      - [`_sort_range_by_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_by_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
+      - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
     - [Std::Bool](#stdbool)
     - [Std::U8](#stdu8)
       - [\_U8\_to\_string : U8 -\> String](#_u8_to_string--u8---string)
@@ -1065,7 +1065,7 @@ This function always update the given array. If the given array is shared betwee
 #### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
 Sort elements in an array by "less than" comparator.
 
-#### `_sort_range_by_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
+#### `_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
 Sort elements in a range of an array by "less than" comparator.
 This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 

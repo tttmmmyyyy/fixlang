@@ -124,14 +124,14 @@ namespace Array {
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, vec| (
         let buffer = Array::empty(vec.get_length);
-        let (vec, buffer) = vec._sort_range_by_using_buffer(buffer, 0, vec.get_length, less_than);
+        let (vec, buffer) = vec._sort_range_using_buffer(buffer, 0, vec.get_length, less_than);
         vec
     );
 
     // Sort elements in a range of a vector by "less than" comparator.
     // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
-    _sort_range_by_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
-    _sort_range_by_using_buffer = |buffer, begin, end, less_than, vec| (
+    _sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
+    _sort_range_using_buffer = |buffer, begin, end, less_than, vec| (
         // Merge sorting.
         let len = end - begin;
         if len <= 1 { (vec, buffer) };
@@ -142,8 +142,8 @@ namespace Array {
         let latter_len = len - former_len;
         let latter_begin = former_end;
         let latter_end = end;
-        let (vec, buffer) = vec._sort_range_by_using_buffer(buffer, former_begin, former_end, less_than);
-        let (vec, buffer) = vec._sort_range_by_using_buffer(buffer, latter_begin, latter_end, less_than);
+        let (vec, buffer) = vec._sort_range_using_buffer(buffer, former_begin, former_end, less_than);
+        let (vec, buffer) = vec._sort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
         // Merge former and latter to buffer.
         let buffer = buffer.reduce_length(0);
         let former_pos = former_begin;
