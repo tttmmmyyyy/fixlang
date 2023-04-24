@@ -23,8 +23,8 @@
   - [Module and imports](#module-and-imports)
   - [Recursion](#recursion)
   - [Overloading](#overloading)
-  - [Traits](#traits)
-  - [Monadic bind syntax](#monadic-bind-syntax)
+  - [Trait](#trait)
+  - [Monad](#monad)
     - [What is monad?](#what-is-monad)
     - [Monadic bind syntax `*`.](#monadic-bind-syntax-)
   - [Type annotation](#type-annotation)
@@ -162,7 +162,7 @@
     - [Std::Debug::abort : () -\> a](#stddebugabort-----a)
     - [Std::Debug::assert : String -\> Bool -\> ()](#stddebugassert--string---bool---)
     - [Std::Debug::assert\_eq : \[a: Eq\] String -\> a -\> a -\> ()](#stddebugassert_eq--a-eq-string---a---a---)
-  - [Traits](#traits-1)
+  - [Traits](#traits)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
     - [Std::Monad (\* -\> \*)](#stdmonad----)
@@ -816,11 +816,11 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 (TBA)
 
-## Traits
+## Trait
 
 (TBA)
 
-## Monadic bind syntax
+## Monad
 
 ### What is monad?
 
