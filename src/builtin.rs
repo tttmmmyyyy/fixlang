@@ -683,7 +683,7 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
             &vec![],
             Some(cap),
             gc,
-            Some(&format!("make_empty({})", CAP_NAME)),
+            Some(&format!("Array::empty({})", CAP_NAME)),
         );
 
         // Set size to zero.

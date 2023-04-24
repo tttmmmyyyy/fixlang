@@ -19,7 +19,7 @@ flatten : NestedList a -> Iterator a;
 flatten = |nl| (
     if nl.is_elem {
         let e = nl.as_elem;
-        Iterator::make_empty.push_front(e)
+        Iterator::empty.push_front(e)
     } else {
         let list = nl.as_list;
         list.map(flatten).flatten

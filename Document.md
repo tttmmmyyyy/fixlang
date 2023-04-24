@@ -54,6 +54,7 @@
       - [`_get_ptr : Array a -> Ptr`](#_get_ptr--array-a---ptr)
       - [`append : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a)
       - [`call_with_valid_ptr : (Ptr -> b) -> Array a -> b`](#call_with_valid_ptr--ptr---b---array-a---b)
+      - [`empty : I64 -> Array a`](#empty--i64---array-a)
       - [`fill : I64 -> a -> Array a`](#fill--i64---a---array-a)
       - [`force_unique : Array a -> Array a`](#force_unique--array-a---array-a)
       - [`force_unique! : Array a -> Array a`](#force_unique--array-a---array-a-1)
@@ -64,12 +65,11 @@
       - [`get_length : Array a -> I64`](#get_length--array-a---i64)
       - [`get_capacity : Array a -> I64`](#get_capacity--array-a---i64)
       - [`is_empty : Array a -> Bool`](#is_empty--array-a---bool)
-      - [`make_range : I64 -> I64 -> Iterator I64`](#make_range--i64---i64---iterator-i64)
-      - [`make_empty : I64 -> Array a`](#make_empty--i64---array-a)
       - [`mod : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a)
       - [`mod! : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a-1)
       - [`pop_back : Array a -> Array a`](#pop_back--array-a---array-a)
       - [`push_back : a -> Array a -> Array a`](#push_back--a---array-a---array-a)
+      - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
       - [`reduce_length : I64 -> Array a -> Array a`](#reduce_length--i64---array-a---array-a)
       - [`reserve : I64 -> Array a -> Array a`](#reserve--i64---array-a---array-a)
       - [`set : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a)
@@ -112,10 +112,10 @@
       - [`advance : Iterator a -> Option (a, Iterator a)`](#advance--iterator-a---option-a-iterator-a)
       - [`append : Iterator a -> Iterator a -> Iterator a`](#append--iterator-a---iterator-a---iterator-a)
       - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
+      - [`empty : Iterator a`](#empty--iterator-a)
       - [`get_length : Iterator a -> I64`](#get_length--iterator-a---i64)
       - [`intersperse : a -> Iterator a -> Iterator a`](#intersperse--a---iterator-a---iterator-a)
       - [`is_empty : Iterator a -> Bool`](#is_empty--iterator-a---bool)
-      - [`make_empty : Iterator a`](#make_empty--iterator-a)
       - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
       - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
       - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
@@ -992,6 +992,9 @@ Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` 
 #### `call_with_valid_ptr : (Ptr -> b) -> Array a -> b`
 Call a function with a valid pointer to the memory region where elements are stored.
 
+#### `empty : I64 -> Array a`
+Creates an empty array with specified capacity.
+
 #### `fill : I64 -> a -> Array a`
 Creates an array filled with the initial value.
 The capacity is set to the same value as the length.
@@ -1027,12 +1030,6 @@ Returns the capacity of an array.
 #### `is_empty : Array a -> Bool`
 Returns if the array is empty or not.
 
-#### `make_range : I64 -> I64 -> Iterator I64`
-Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
-
-#### `make_empty : I64 -> Array a`
-Creates an empty array with specified capacity.
-
 #### `mod : I64 -> (a -> a) -> Array a -> Array a`
 Modifies a value of an element at the specified index of an array by a function.
 This function clones the array if it is shared between multiple references.
@@ -1047,6 +1044,9 @@ If the array is empty, this function does nothing.
 
 #### `push_back : a -> Array a -> Array a`
 Push an element to the back of an array.
+
+#### `range : I64 -> I64 -> Iterator I64`
+Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
 
 #### `reduce_length : I64 -> Array a -> Array a`
 Reduce the length of an array.
@@ -1342,6 +1342,9 @@ Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)`
 Create an iterator that counts up from a number.
 Example: `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely).
 
+#### `empty : Iterator a`
+Create an empty iterator.
+
 #### `get_length : Iterator a -> I64`
 Counts the length of an iterator.
 
@@ -1353,9 +1356,6 @@ Example: `Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([
 #### `is_empty : Iterator a -> Bool`
 
 Check if the iterator is empty.
-
-#### `make_empty : Iterator a`
-Creates an empty iterator.
 
 #### `filter : (a -> Bool) -> Iterator a -> Iterator a`
 Filter elements by a condition function.

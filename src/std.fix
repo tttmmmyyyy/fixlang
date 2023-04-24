@@ -40,7 +40,7 @@ namespace Array {
     // Creates an array by a mapping function.
     from_map : I64 -> (I64 -> a) -> Array a;
     from_map = |size, map| (
-        let arr = Array::make_empty(size).__unsafe_set_length(size);
+        let arr = Array::empty(size).__unsafe_set_length(size);
         loop((0, arr), |(idx, arr)|(
             if idx == size {
                 break $ arr
@@ -109,7 +109,7 @@ namespace Array {
     reserve = |cap, arr| (
         if cap <= arr.get_capacity { arr };
         let len = arr.get_length;
-        let new = Array::make_empty(cap).__unsafe_set_length(len);
+        let new = Array::empty(cap).__unsafe_set_length(len);
         loop((0, new), |(idx, new)|(
             if idx == len {
                 break $ new
@@ -123,7 +123,7 @@ namespace Array {
     // Sort elements in a vector by "less than" comparator.
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, vec| (
-        let buffer = Array::make_empty(vec.get_length);
+        let buffer = Array::empty(vec.get_length);
         let (vec, buffer) = vec._sort_range_by_using_buffer(buffer, 0, vec.get_length, less_than);
         vec
     );
@@ -312,8 +312,8 @@ namespace IO {
     read_line_inner = |upto_newline, handle| (
         IO { _data : |_| (
             // Read strings and make iterators of strings (reversed).
-            let strings_rev = loop(Iterator::make_empty, |strs|
-                let buf = Array::make_empty(1024); // NOTE: this number also appears at CALL_C[fgets].
+            let strings_rev = loop(Iterator::empty, |strs|
+                let buf = Array::empty(1024); // NOTE: this number also appears at CALL_C[fgets].
                 let strlen = buf.call_with_valid_ptr(|buf|
                     // Read characters to buf.
                     let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, 1024_I32, handle.@_file_ptr];
@@ -468,6 +468,13 @@ namespace Iterator {
         Iterator { next: next }
     );
 
+    // Create an empty iterator.
+    empty : Iterator a;
+    empty = (
+        let next = |_| (none());
+        Iterator { next: next }
+    );
+
     // Counts the length of an iterator.
     get_length : Iterator a -> I64;
     get_length = fold(0, |acm, _| acm + 1);
@@ -479,7 +486,7 @@ namespace Iterator {
     // ```
     intersperse : a -> Iterator a -> Iterator a;
     intersperse = |sep, iter| (
-        if iter.is_empty { Iterator::make_empty };
+        if iter.is_empty { Iterator::empty };
         let Option::some((e, tail)) = iter.advance;
         if tail.is_empty { iter };
         Iterator::push_front(e) $ Iterator::push_front(sep) $ tail.intersperse(sep)
@@ -489,21 +496,14 @@ namespace Iterator {
     is_empty : Iterator a -> Bool;
     is_empty = |iter| iter.advance.is_none;
 
-    // Create an empty iterator.
-    make_empty : Iterator a;
-    make_empty = (
-        let next = |_| (none());
-        Iterator { next: next }
-    );
-
     // Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
-    make_range : I64 -> I64 -> Iterator I64;
-    make_range = |a, b| (
+    range : I64 -> I64 -> Iterator I64;
+    range = |a, b| (
         let next = |_| (
             if a == b {
                 Option::none()
             } else {
-                Option::some $ (a, make_range(a+1, b))
+                Option::some $ (a, Iterator::range(a+1, b))
             }
         );
         Iterator { next: next }
@@ -573,7 +573,7 @@ namespace Iterator {
     // Reverse an iterator.
     reverse : Iterator a -> Iterator a;
     reverse = |iter| (
-        loop((Iterator::make_empty, iter), |(out_iter, in_iter)|(
+        loop((Iterator::empty, iter), |(out_iter, in_iter)|(
             if in_iter.is_empty {
                 break $ out_iter
             } else {
@@ -640,8 +640,8 @@ impl Iterator : Functor {
 }
 
 impl Iterator : Monad {
-    pure = |e| Iterator::make_empty.push_front(e);
-    bind = |f, xs| xs.map(f).fold(Iterator::make_empty, Add::add);
+    pure = |e| Iterator::empty.push_front(e);
+    bind = |f, xs| xs.map(f).fold(Iterator::empty, Add::add);
 }
 
 type Option a = union { none: (), some: a };

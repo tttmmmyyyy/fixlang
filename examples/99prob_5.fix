@@ -9,7 +9,7 @@ module Main;
 
 my_reverse : Iterator a -> Iterator a;
 my_reverse = |iter| (
-    loop((Iterator::make_empty, iter), |(out_iter, in_iter)|(
+    loop((Iterator::empty, iter), |(out_iter, in_iter)|(
         if in_iter.is_empty {
             break $ out_iter
         } else {

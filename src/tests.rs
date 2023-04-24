@@ -1954,7 +1954,7 @@ pub fn test79() {
 
     main : IO ();
     main = (
-        let ls = Iterator::make_empty;
+        let ls = Iterator::empty;
         let ls = ls.push_front(1).push_front(2);
         let (e, ls) = ls.advance.as_some;
         let _ = assert_eq("", 2, e);
@@ -1975,10 +1975,10 @@ pub fn test80() {
 
     main : IO ();
     main = (
-        let iter = Iterator::make_empty.push_front(4).push_front(3).push_front(2).push_front(1);
+        let iter = Iterator::empty.push_front(4).push_front(3).push_front(2).push_front(1);
         let last = iter.take_last.as_some;
         let _ = assert_eq("", last, 4);
-        let last: Option Bool = Iterator::make_empty.take_last;
+        let last: Option Bool = Iterator::empty.take_last;
         let _ = assert("", last.is_none);
         pure()
     );
@@ -2734,7 +2734,7 @@ pub fn test109() {
 
         sequence : [m : Monad, m : Functor] Iterator (m a) -> m (Iterator a);
         sequence = |iter| (
-            if iter.is_empty { pure $ Iterator::make_empty };
+            if iter.is_empty { pure $ Iterator::empty };
             let (x, xs_iter) = iter.advance.as_some;
             pure $ Iterator::push_front(*x) $ *sequence(xs_iter)
         );

@@ -284,7 +284,7 @@ pub fn make_std_mod() -> FixModule {
         write_array_unique(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "make_empty"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "empty"),
         make_empty(),
     );
     fix_module.add_global_value(
