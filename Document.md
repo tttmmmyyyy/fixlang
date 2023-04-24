@@ -930,7 +930,7 @@ A prefix unary operator `*` provides a way to use `bind` in more concise way. Ba
 - Let-definition `let {pat}={expr} in {body-block}` defines a code block `{body-block}`.
 - If-expression `if {cond} { {then-block} } else { {else-block} }` defines two code blocks `{then-expr}` and `{else-expr}`.
 
-Examples in the previous section can be written using `*` as follows:
+Examples in previous sections can be written using `*` as follows:
 
 ```
 echo : IO ();
