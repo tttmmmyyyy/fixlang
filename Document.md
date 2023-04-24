@@ -836,11 +836,11 @@ trait [m : *->*] m : Monad {
 }
 ```
 
-In the following sections, we introduce 3 typical types of monads used practically.
+In the following sections, we introduce 3 typical kinds of monads used practically.
 
 #### State-like monads
 
-This type of monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is a state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
+This kind of monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is a state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
 
 ```
 type State s a = unbox struct { run : s -> (s, a) }
@@ -865,7 +865,7 @@ NOTE: Actually there is no `read : IO String` defined in Fix's standard library.
 
 #### Result-like monads
 
-This type of monad represents a value that may fail to be calculated. In Fix's standard library, `Result e` is a monad with an error `e`:
+This kind of monad represents a value that may fail to be calculated. In Fix's standard library, `Result e` is a monad with an error `e`:
 
 ```
 type Result e o = unbox union { ok : o, err: e };
