@@ -993,7 +993,7 @@ type Product = unbox struct { price: I64, sold: Bool };
 Unions are unboxed by default because they only contains a single value at a time. To define boxed union type, write `box` specifier before `struct`.
 
 ```
-type Weight = box union (pound: I64, kilograms: I64);
+type Weight = box union { pound: I64, kilograms: I64 };
 ```
 
 ## Calling C functions
@@ -1676,7 +1676,7 @@ main = (
 `loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
 
 ```
-type LoopResult s r = union (s: continue, r: break);
+type LoopResult s r = union { s: continue, r: break };
 ```
 
 `loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`. It first calls `body` on `s0`. If `body` returns `break r`, then the loop ends and returns `r` as the result. If `body` returns `continue s`, then the loop calls again `body` on `s`.
