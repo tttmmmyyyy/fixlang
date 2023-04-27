@@ -849,7 +849,7 @@ type State s a = unbox struct { run : s -> (s, a) }
 produces a monad `State s`. This monad represents a computation which reads and updates the "state", which ia a value of `s`.
 
 For state-like monads, `bind` provides a way to combine two actions. An action `x.bind(f)` represents the following action:
-- First, perform the action `x`. Call the returned value of action `x` as `r`.
+- First, perform the action `x`. Let `r` denote the result of the action `x`.
 - Then, perform the action `f(r)`.
  
 An action `pure(v)` represents a computation that returns `v` with no interaction with the environment.
