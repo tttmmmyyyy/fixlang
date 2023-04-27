@@ -424,15 +424,14 @@ impl IOResult e : Functor {
     map = |f, ior| ior.mod__data(map(map(f)));
 }
 
-// TODO
-// impl IOResult e : Monad {
-//     pure = |v| IOResult { _data : pure(pure(v)) };
-//     bind = |f, ior| IOResult { _data : (
-//         let res = *ior.@_data;
-//         if res.is_err { pure $ Result::err $ res.as_err };
-//         f(res.as_ok).@_data
-//     )};
-// }
+impl IOResult e : Monad {
+    pure = |v| IOResult { _data : pure(pure(v)) };
+    bind = |f, ior| IOResult { _data : do {
+        let res = *ior.@_data;
+        if res.is_err { pure $ Result::err $ res.as_err };
+        f(res.as_ok).@_data
+    }};
+}
 
 namespace IO::IOHandle {
 
