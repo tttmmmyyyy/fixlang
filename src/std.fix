@@ -2,6 +2,58 @@ module Std;
 
 namespace Array {
 
+    // Sort elements in a range of a vector by "less than" comparator.
+    // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
+    _sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
+    _sort_range_using_buffer = |buffer, begin, end, less_than, vec| (
+        // Merge sorting.
+        let len = end - begin;
+        if len <= 1 { (vec, buffer) };
+        // Divide into intervals.
+        let former_len = len / 2;
+        let former_begin = begin;
+        let former_end = begin + former_len;
+        let latter_len = len - former_len;
+        let latter_begin = former_end;
+        let latter_end = end;
+        let (vec, buffer) = vec._sort_range_using_buffer(buffer, former_begin, former_end, less_than);
+        let (vec, buffer) = vec._sort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
+        // Merge former and latter to buffer.
+        let buffer = buffer.reduce_length(0);
+        let former_pos = former_begin;
+        let latter_pos = latter_begin;
+        let buffer = loop((former_pos, latter_pos, buffer), |(former_pos, latter_pos, buffer)|(
+            if former_pos == former_end { // If former_pos reached to the end,
+                if latter_pos == latter_end { break $ buffer };
+                // Copy elements in latter to buffer.
+                let buffer = buffer.push_back(vec.get(latter_pos));
+                continue $ (former_pos, latter_pos + 1, buffer)
+            };
+            if latter_pos == latter_end { // If latter_pos reached to the end,
+                // Copy elements in former to buffer.
+                let buffer = buffer.push_back(vec.get(former_pos));
+                continue $ (former_pos + 1, latter_pos, buffer)
+            };
+            let former_elem = vec.get(former_pos);
+            let latter_elem = vec.get(latter_pos);
+            if less_than((former_elem, latter_elem)) {
+                // Copy elements in former to buffer.
+                let buffer = buffer.push_back(former_elem);
+                continue $ (former_pos + 1, latter_pos, buffer)
+            } else {
+                // Copy elements in latter to buffer.
+                let buffer = buffer.push_back(latter_elem);
+                continue $ (former_pos, latter_pos + 1, buffer)
+            }
+        ));
+        // Copy buffer to vec.
+        loop((0, vec), |(idx, vec)|(
+            if idx == len { break $ (vec, buffer) };
+            let vec = vec.set(begin + idx, buffer.get(idx));
+            continue $ (idx + 1, vec)
+        ))
+    );
+
     // Append an array to an array.
     // Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
     append : Array a -> Array a -> Array a;
@@ -126,58 +178,6 @@ namespace Array {
         let buffer = Array::empty(vec.get_length);
         let (vec, buffer) = vec._sort_range_using_buffer(buffer, 0, vec.get_length, less_than);
         vec
-    );
-
-    // Sort elements in a range of a vector by "less than" comparator.
-    // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
-    _sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
-    _sort_range_using_buffer = |buffer, begin, end, less_than, vec| (
-        // Merge sorting.
-        let len = end - begin;
-        if len <= 1 { (vec, buffer) };
-        // Divide into intervals.
-        let former_len = len / 2;
-        let former_begin = begin;
-        let former_end = begin + former_len;
-        let latter_len = len - former_len;
-        let latter_begin = former_end;
-        let latter_end = end;
-        let (vec, buffer) = vec._sort_range_using_buffer(buffer, former_begin, former_end, less_than);
-        let (vec, buffer) = vec._sort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
-        // Merge former and latter to buffer.
-        let buffer = buffer.reduce_length(0);
-        let former_pos = former_begin;
-        let latter_pos = latter_begin;
-        let buffer = loop((former_pos, latter_pos, buffer), |(former_pos, latter_pos, buffer)|(
-            if former_pos == former_end { // If former_pos reached to the end,
-                if latter_pos == latter_end { break $ buffer };
-                // Copy elements in latter to buffer.
-                let buffer = buffer.push_back(vec.get(latter_pos));
-                continue $ (former_pos, latter_pos + 1, buffer)
-            };
-            if latter_pos == latter_end { // If latter_pos reached to the end,
-                // Copy elements in former to buffer.
-                let buffer = buffer.push_back(vec.get(former_pos));
-                continue $ (former_pos + 1, latter_pos, buffer)
-            };
-            let former_elem = vec.get(former_pos);
-            let latter_elem = vec.get(latter_pos);
-            if less_than((former_elem, latter_elem)) {
-                // Copy elements in former to buffer.
-                let buffer = buffer.push_back(former_elem);
-                continue $ (former_pos + 1, latter_pos, buffer)
-            } else {
-                // Copy elements in latter to buffer.
-                let buffer = buffer.push_back(latter_elem);
-                continue $ (former_pos, latter_pos + 1, buffer)
-            }
-        ));
-        // Copy buffer to vec.
-        loop((0, vec), |(idx, vec)|(
-            if idx == len { break $ (vec, buffer) };
-            let vec = vec.set(begin + idx, buffer.get(idx));
-            continue $ (idx + 1, vec)
-        ))
     );
 
 }

@@ -57,6 +57,7 @@
       - [`__unsafe_get : I64 -> Array a -> a`](#__unsafe_get--i64---array-a---a)
       - [`__unsafe_set : I64 -> a -> Array a -> Array a`](#__unsafe_set--i64---a---array-a---array-a)
       - [`_get_ptr : Array a -> Ptr`](#_get_ptr--array-a---ptr)
+      - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
       - [`append : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a)
       - [`call_with_valid_ptr : (Ptr -> b) -> Array a -> b`](#call_with_valid_ptr--ptr---b---array-a---b)
       - [`empty : I64 -> Array a`](#empty--i64---array-a)
@@ -80,7 +81,6 @@
       - [`set : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a)
       - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
-      - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
     - [Std::Bool](#stdbool)
     - [Std::U8](#stdu8)
       - [\_U8\_to\_string : U8 -\> String](#_u8_to_string--u8---string)
@@ -1108,6 +1108,10 @@ Sets a value into an array, without uniqueness checking, bounds checking and rel
 Get the pointer to the memory region where elements are stored.
 Note that in case the array is not used after call of this function, the returned pointer will be already released.
 
+#### `_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
+Sort elements in a range of an array by "less than" comparator.
+This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
+
 #### `append : Array a -> Array a -> Array a`
 Append an array to an array.
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`. 
@@ -1187,10 +1191,6 @@ This function always update the given array. If the given array is shared betwee
 
 #### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
 Sort elements in an array by "less than" comparator.
-
-#### `_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
-Sort elements in a range of an array by "less than" comparator.
-This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
 You can create array by the array literal syntax `[a0, a1, ..., an]`.
 
