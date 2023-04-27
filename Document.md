@@ -946,7 +946,7 @@ echo = do { print(*read) };
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
-add_opt = { pure $ *x + *y };
+add_opt = do { pure $ *x + *y };
 ```
 
 ```
