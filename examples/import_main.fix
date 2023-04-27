@@ -16,10 +16,10 @@ print_imports = |name, imports| (
 );
 
 main : IO ();
-main =  (
-    let _ = print_imports(Main::name, Main::imports);
-    let _ = print_imports(Lib0::name, Lib0::imports);
-    let _ = print_imports(Lib1::name, Lib1::imports);
-    let _ = print_imports(Lib2::name, Lib2::imports);
+main =  do {
+    let _ = *print_imports(Main::name, Main::imports);
+    let _ = *print_imports(Lib0::name, Lib0::imports);
+    let _ = *print_imports(Lib1::name, Lib1::imports);
+    let _ = *print_imports(Lib2::name, Lib2::imports);
     pure()
-);
+};
