@@ -29,7 +29,7 @@
       - [State-like monads](#state-like-monads)
       - [Result-like monads](#result-like-monads)
       - [List-like monads](#list-like-monads)
-    - [Monadic bind syntax `*`.](#monadic-bind-syntax-)
+    - [`do` syntax and monadic bind operator `*`.](#do-syntax-and-monadic-bind-operator-)
   - [Type annotation](#type-annotation)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
@@ -923,29 +923,30 @@ xs.bind(|x| ys.bind(|y| pure $ (x, y)))
 == [(x0, y0), (x0, y1), ..., (x1, y0), (x1, y1), ..., ...]
 ```
 
-### Monadic bind syntax `*`.
+### `do` syntax and monadic bind operator `*`.
 
-A prefix unary operator `*` provides a way to use `bind` in more concise way. Basically, `B(*x)` is expanded to `x.bind(|v| B(v))`. Here, `B(*x)` is a minimal code block that contains the expression `*x`. Code blocks are defined as follows:
+A prefix unary operator `*` provides a way to use `bind` in more concise way. This operator can only be used in `do { ... }`. In `do` block, a code `B(*x)` is expanded to `x.bind(|v| B(v))`. Here, `B(*x)` is the minimal block that encloses the expression `*x`. Here, blocks are defined as follows:
 
-- Lambda-expression `|{arg}| {body-block}` defines a code block `{body-block}`.
-- Let-definition `let {pat}={expr} in {body-block}` defines a code block `{body-block}`.
-- If-expression `if {cond} { {then-block} } else { {else-block} }` defines two code blocks `{then-expr}` and `{else-expr}`.
+- Lambda-expression `|arg| (body-block)` defines a block `body-block`.
+- Let-definition `let name = val in (body-block)` defines a block `body-block`.
+- If-expression `if cond { (then-block) } else { (else-block) }` defines two blocks `then-block` and `else-block`.
+- Do-syntax `do { (do-block) }` itself defines a block `do_block`.
 
 Examples in previous sections can be written using `*` as follows:
 
 ```
 echo : IO ();
-echo = print(*read);
+echo = do { print(*read) };
 ```
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
-add_opt = Option::some(*x + *y);
+add_opt = { pure $ *x + *y };
 ```
 
 ```
 product : Iterator a -> Iterator b -> Iterator (a, b);
-product = |xs, ys| pure $ (*xs, *ys);
+product = |xs, ys| do { pure $ (*xs, *ys) };
 ```
 
 ## Type annotation
