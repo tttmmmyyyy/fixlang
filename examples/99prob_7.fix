@@ -38,10 +38,10 @@ main =  do {
     let _ = *println(nl.flatten.to_string);
 
     let nl = mk_list([mk_elem(1), mk_list([mk_elem(2), mk_list([mk_elem(3), mk_elem(4)]), mk_elem(5)])]);
-    let _ = println(nl.flatten.to_string);
+    let _ = *println(nl.flatten.to_string);
     
     let nl: NestedList I64  = mk_list([]);
-    let _ = println(nl.flatten.to_string);
+    let _ = *println(nl.flatten.to_string);
 
     pure()
 };
