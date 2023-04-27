@@ -109,6 +109,7 @@
       - [`stderr : IOHandle`](#stderr--iohandle)
       - [`stdin : IOHandle`](#stdin--iohandle)
       - [`stdout : IOHandle`](#stdout--iohandle)
+    - [Std::IO::IOResult](#stdioioresult)
     - [Std::I32](#stdi32)
       - [\_I32\_to\_string : I32 -\> String](#_i32_to_string--i32---string)
     - [Std::I64](#stdi64)
@@ -1386,6 +1387,14 @@ The handle for standard input.
 #### `stdout : IOHandle`
 
 The handle for standard output.
+
+### Std::IO::IOResult
+
+The type of I/O actions which may fail.
+
+```
+type IOResult e a = unbox struct { _data : IO (Result e a) };
+```
 
 ### Std::I32
 

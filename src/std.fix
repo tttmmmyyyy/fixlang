@@ -392,18 +392,13 @@ impl IO : Functor {
 }
 
 impl IO : Monad {
-    pure = |val| IO { _data : |_| val };
+    pure = |v| IO { _data : |_| v };
     bind = |f, io| (
         IO { _data : |_| (
             let a = io.__unsafe_perform;
             f(a).__unsafe_perform
         )}
     );
-}
-
-namespace IO {
-    // A type for I/O error.
-    type IOError = unbox struct { msg : String };
 }
 
 
@@ -415,6 +410,29 @@ namespace IO {
     // A handle type for read / write operations on files/stdin/stdout/stderr.
     type IOHandle = unbox struct { _file_ptr: Ptr };
 }
+
+namespace IO {
+    // A type for I/O error.
+    type IOError = unbox struct { msg : String };
+}
+
+namespace IO {
+    type IOResult e a = unbox struct { _data : IO (Result e a) };
+}
+
+impl IOResult e : Functor {
+    map = |f, ior| ior.mod__data(map(map(f)));
+}
+
+// TODO
+// impl IOResult e : Monad {
+//     pure = |v| IOResult { _data : pure(pure(v)) };
+//     bind = |f, ior| IOResult { _data : (
+//         let res = *ior.@_data;
+//         if res.is_err { pure $ Result::err $ res.as_err };
+//         f(res.as_ok).@_data
+//     )};
+// }
 
 namespace IO::IOHandle {
 
