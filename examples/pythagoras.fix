@@ -1,13 +1,13 @@
 module Main;
 
 pythagoras_triplets : I64 -> Iterator (I64, I64, I64);
-pythagoras_triplets = |limit| (
+pythagoras_triplets = |limit| do {
     let a = *Iterator::range(1, limit+1);
     let b = *Iterator::range(a, limit+1);
     let c = *Iterator::range(b, limit+1);
     if a*a + b*b != c*c { Iterator::empty };
     pure $ (a, b, c)
-);
+};
 
 impl (I64, I64, I64) : ToString {
     to_string = |(a,b,c)| "(" + a.to_string + ", " + b.to_string + ", " + c.to_string + ")";

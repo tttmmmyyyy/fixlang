@@ -284,11 +284,11 @@ namespace IO {
 
     // Print a string followed by a newline to the standard output.
     println : String -> IO ();
-    println = |str| (
+    println = |str| do {
         let _ = *print(str);
         let _ = *print("\n");
         pure()
-    );
+    };
 
     // Read all characters from a IOHandle.
     read_content : IOHandle -> IO (Result IOError String);
@@ -296,10 +296,10 @@ namespace IO {
 
     // Raad all characters from a file.
     read_file : Path -> IO (Result IOError String);
-    read_file = |path| (
+    read_file = |path| do {
         let res = *with_file(path, "r", read_content);
         pure $ res.flatten
-    );
+    };
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
     // The returned string may include newline/carriage return at it's end.
@@ -359,14 +359,14 @@ namespace IO {
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
     with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result IOError a);
-    with_file = |path, mode, action| (
+    with_file = |path, mode, action| do {
         let res = *open_file(path, mode);
         if res.is_err { pure $ Result::err $ res.as_err };
         let handle = res.as_ok;
         let res = *action(handle);
         let _ = *close_file(handle);
         pure $ Result::ok $ res
-    );
+    };
 
     // Write a string into an IOHandle.
     write_content : IOHandle -> String -> IO (Result IOError ());
@@ -381,10 +381,10 @@ namespace IO {
 
     // Write a string into a file.
     write_file : Path -> String -> IO (Result IOError ());
-    write_file = |path, content| (
+    write_file = |path, content| do {
         let res = *with_file(path, "w", |handle| write_content(handle, content));
         pure $ res.flatten
-    );
+    };
 }
 
 impl IO : Functor {

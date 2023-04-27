@@ -1570,14 +1570,14 @@ pub fn test61() {
     module Main;
 
     main_loop : I64 -> IO ();
-    main_loop = |counter| (
+    main_loop = |counter| do {
         if counter == 0 {
             pure()
         } else {
             let _ = *print("Hello World! ");
             main_loop(counter - 1)
         }
-    );
+    };
 
     main : IO ();
     main = main_loop(3);
@@ -2712,10 +2712,12 @@ pub fn test108() {
         main = (
             let file_path = Path::parse("test.txt").as_some;
             let written = "Hello\n World!";
-            let _ = *write_file(file_path, written);
-            let Result::ok(read) = *read_file(file_path);
-            let _ = assert_eq("case 1", written, read);
-            pure()
+            do {
+                let _ = *write_file(file_path, written);
+                let Result::ok(read) = *read_file(file_path);
+                let _ = assert_eq("case 1", written, read);
+                pure()
+            }
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
@@ -2730,17 +2732,17 @@ pub fn test109() {
         module Main;
 
         add_opt_int : Option I64 -> Option I64 -> Option I64;
-        add_opt_int = |lhs, rhs| Option::some $ *lhs + *rhs;
+        add_opt_int = |lhs, rhs| do { pure $ *lhs + *rhs };
 
         sequence : [m : Monad, m : Functor] Iterator (m a) -> m (Iterator a);
         sequence = |iter| (
             if iter.is_empty { pure $ Iterator::empty };
             let (x, xs_iter) = iter.advance.as_some;
-            pure $ Iterator::push_front(*x) $ *sequence(xs_iter)
+            do { pure $ Iterator::push_front(*x) $ *sequence(xs_iter) }
         );
 
         main : IO ();
-        main = (
+        main = do {
             let one = Option::some(1);
             let two = Option::some(2);
             let three = Option::some(3);
@@ -2768,7 +2770,7 @@ pub fn test109() {
             let _ = assert_eq("case 6", res_iter.as_err, "Error 2");
 
             pure()
-        );
+        };
     "#;
     run_source(&source, Configuration::develop_compiler());
 }
