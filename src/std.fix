@@ -253,9 +253,9 @@ namespace IO {
     );
 
     // Open a file. The second argument is a mode string for `fopen` C function. 
-    open_file : Path -> String -> IO (Result IOError IOHandle);
+    open_file : Path -> String -> IOResult IOError IOHandle;
     open_file = |path, mode| (
-        IO { _data : |_|(
+        IOResult { _data  : IO { _data : |_|(
             let path_str = path.to_string;
             let res = path_str.call_with_valid_c_str(|path_ptr|
                 mode.call_with_valid_c_str(|mode_str|
@@ -268,7 +268,7 @@ namespace IO {
                 )
             );
             res
-        ) }
+        ) }}
     );
 
     // Print a string to the standard output.
@@ -291,26 +291,23 @@ namespace IO {
     };
 
     // Read all characters from a IOHandle.
-    read_content : IOHandle -> IO (Result IOError String);
+    read_content : IOHandle -> IOResult IOError String;
     read_content = read_line_inner(false);
 
     // Raad all characters from a file.
-    read_file : Path -> IO (Result IOError String);
-    read_file = |path| do {
-        let res = *with_file(path, "r", read_content);
-        pure $ res.flatten
-    };
+    read_file : Path -> IOResult IOError String;
+    read_file = |path| with_file(path, "r", read_content);
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
     // The returned string may include newline/carriage return at it's end.
-    read_line : IOHandle -> IO (Result IOError String);
+    read_line : IOHandle -> IOResult IOError String;
     read_line = read_line_inner(true);
 
     // Read characters from an IOHandle.
     // if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
-    read_line_inner : Bool -> IOHandle -> IO (Result IOError String);
+    read_line_inner : Bool -> IOHandle -> IOResult IOError String;
     read_line_inner = |upto_newline, handle| (
-        IO { _data : |_| (
+        IOResult { _data : IO { _data : |_| (
             // Read strings and make iterators of strings (reversed).
             let strings_rev = loop(Iterator::empty, |strs|
                 let buf = Array::empty(1024); // NOTE: this number also appears at CALL_C[fgets].
@@ -353,38 +350,33 @@ namespace IO {
 
             let str = strings_rev.reverse.concat_iter;
             Result::ok(str)
-        ) }
+        ) }}
     );
 
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
-    with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result IOError a);
+    with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a;
     with_file = |path, mode, action| do {
-        let res = *open_file(path, mode);
-        if res.is_err { pure $ Result::err $ res.as_err };
-        let handle = res.as_ok;
+        let handle = *open_file(path, mode);
         let res = *action(handle);
-        let _ = *close_file(handle);
-        pure $ Result::ok $ res
-    };
+        let _ = *IOResult::lift(close_file(handle));
+        pure $ res
+    };  
 
     // Write a string into an IOHandle.
-    write_content : IOHandle -> String -> IO (Result IOError ());
+    write_content : IOHandle -> String -> IOResult IOError ();
     write_content = |handle, content| (
         let res = content.call_with_valid_c_str(|c_str| (
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle.@_file_ptr];
             if res < 0_I32 { Result::err $ IOError { msg : "Std::IO::write_content! failed!: some error occurred in fputs." } };
             Result::ok()
         ));
-        pure $ res
+        IOResult::from_result $ res
     );
 
     // Write a string into a file.
-    write_file : Path -> String -> IO (Result IOError ());
-    write_file = |path, content| do {
-        let res = *with_file(path, "w", |handle| write_content(handle, content));
-        pure $ res.flatten
-    };
+    write_file : Path -> String -> IOResult IOError ();
+    write_file = |path, content| with_file(path, "w", |handle| write_content(handle, content));
 }
 
 impl IO : Functor {
@@ -418,6 +410,20 @@ namespace IO {
 
 namespace IO {
     type IOResult e a = unbox struct { _data : IO (Result e a) };
+}
+
+namespace IO::IOResult {
+    // Create a constant IOResult from a Result value.
+    from_result : Result e a -> IOResult e a;
+    from_result = |res| IOResult { _data : pure(res) };
+
+    // Lift an IO action to a successful IOResult.
+    lift : IO a -> IOResult e a;
+    lift = |io| IOResult { _data : io.map(pure) };
+
+    // Convert to an IO value.
+    to_io : IOResult e a -> IO (Result e a);
+    to_io = @_data;
 }
 
 impl IOResult e : Functor {

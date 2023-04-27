@@ -2714,10 +2714,10 @@ pub fn test108() {
             let written = "Hello\n World!";
             do {
                 let _ = *write_file(file_path, written);
-                let Result::ok(read) = *read_file(file_path);
+                let read = *read_file(file_path);
                 let _ = assert_eq("case 1", written, read);
                 pure()
-            }
+            }.to_io.map(as_ok)
         );
     "#;
     run_source(&source, Configuration::develop_compiler());

@@ -91,16 +91,16 @@
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
-      - [`open_file : Path -> String -> IO (Result IOError IOHandle)`](#open_file--path---string---io-result-ioerror-iohandle)
+      - [`open_file : Path -> String -> IOResult IOError IOHandle`](#open_file--path---string---ioresult-ioerror-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
-      - [`read_content : IOHandle -> IO (Result IOError String)`](#read_content--iohandle---io-result-ioerror-string)
-      - [`read_file : Path -> IO (Result IOError String)`](#read_file--path---io-result-ioerror-string)
-      - [`read_line : IOHandle -> IO (Result IOError String)`](#read_line--iohandle---io-result-ioerror-string)
-      - [`read_line_inner : Bool -> IOHandle -> IO (Result String IOError)`](#read_line_inner--bool---iohandle---io-result-string-ioerror)
-      - [`with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result IOError a)`](#with_file--path---string---iohandle---io-a---io-result-ioerror-a)
-      - [`write_content : IOHandle -> String -> IO (Result IOError ())`](#write_content--iohandle---string---io-result-ioerror-)
-      - [`write_file : Path -> String -> IO (Result IOError ())`](#write_file--path---string---io-result-ioerror-)
+      - [`read_content : IOHandle -> IOResult IOError String`](#read_content--iohandle---ioresult-ioerror-string)
+      - [`read_file : Path -> IOResult IOError String`](#read_file--path---ioresult-ioerror-string)
+      - [`read_line : IOHandle -> IOResult IOError String`](#read_line--iohandle---ioresult-ioerror-string)
+      - [`read_line_inner : Bool -> IOHandle -> IOResult IOError String`](#read_line_inner--bool---iohandle---ioresult-ioerror-string)
+      - [`with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a`](#with_file--path---string---iohandle---ioresult-ioerror-a---ioresult-ioerror-a)
+      - [`write_content : IOHandle -> String -> IOResult IOError ()`](#write_content--iohandle---string---ioresult-ioerror-)
+      - [`write_file : Path -> String -> IOResult IOError ()`](#write_file--path---string---ioresult-ioerror-)
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
     - [Std::IO::IOError](#stdioioerror)
@@ -110,6 +110,11 @@
       - [`stdin : IOHandle`](#stdin--iohandle)
       - [`stdout : IOHandle`](#stdout--iohandle)
     - [Std::IO::IOResult](#stdioioresult)
+      - [`from_result : Result e a -> IOResult e a`](#from_result--result-e-a---ioresult-e-a)
+      - [`lift : IO a -> IOResult e a`](#lift--io-a---ioresult-e-a)
+      - [`to_io : IOResult e a -> IO (Result e a)`](#to_io--ioresult-e-a---io-result-e-a)
+      - [`impl IOResult e : Functor`](#impl-ioresult-e--functor)
+      - [`impl IOResult e : Monad`](#impl-ioresult-e--monad)
     - [Std::I32](#stdi32)
       - [\_I32\_to\_string : I32 -\> String](#_i32_to_string--i32---string)
     - [Std::I64](#stdi64)
@@ -1304,7 +1309,7 @@ Perform the I/O action. This may violate purity of Fix.
 
 Close a file.
 
-#### `open_file : Path -> String -> IO (Result IOError IOHandle)`
+#### `open_file : Path -> String -> IOResult IOError IOHandle`
 
 Open a file. The second argument is a mode string for `fopen` C function. 
 
@@ -1316,15 +1321,15 @@ Print a string to the standard output.
 
 Print a string followed by a newline to the standard output.
 
-#### `read_content : IOHandle -> IO (Result IOError String)`
+#### `read_content : IOHandle -> IOResult IOError String`
 
 Read all characters from a IOHandle.
 
-#### `read_file : Path -> IO (Result IOError String)`
+#### `read_file : Path -> IOResult IOError String`
 
 Raad all characters from a file.
 
-#### `read_line : IOHandle -> IO (Result IOError String)`
+#### `read_line : IOHandle -> IOResult IOError String`
 
 Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at it's end.
 
@@ -1339,21 +1344,21 @@ main = (
 );
 ```
 
-#### `read_line_inner : Bool -> IOHandle -> IO (Result String IOError)`
+#### `read_line_inner : Bool -> IOHandle -> IOResult IOError String`
 
 Read characters from an IOHandle.
 if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
 
-#### `with_file : Path -> String -> (IOHandle -> IO a) -> IO (Result IOError a)`
+#### `with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a`
 
 Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
 The file handle will be closed automatically.
 
-#### `write_content : IOHandle -> String -> IO (Result IOError ())`
+#### `write_content : IOHandle -> String -> IOResult IOError ()`
 
 Write a string into an IOHandle.
 
-#### `write_file : Path -> String -> IO (Result IOError ())`
+#### `write_file : Path -> String -> IOResult IOError ()`
 
 Write a string into a file.
 
@@ -1396,6 +1401,22 @@ The type of I/O actions which may fail.
 ```
 type IOResult e a = unbox struct { _data : IO (Result e a) };
 ```
+
+#### `from_result : Result e a -> IOResult e a`
+
+Create a constant IOResult from a Result value.
+
+#### `lift : IO a -> IOResult e a`
+
+Lift an IO action to a successful IOResult.
+
+#### `to_io : IOResult e a -> IO (Result e a)`
+
+Convert an IOResult to an IO action.
+
+#### `impl IOResult e : Functor`
+
+#### `impl IOResult e : Monad`
 
 ### Std::I32
 
