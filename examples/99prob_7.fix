@@ -33,7 +33,7 @@ mk_list : Array (NestedList a) -> NestedList a;
 mk_list = |arr| NestedList::list(Iterator::from_array(arr));
 
 main : IO ();
-main =  do {
+main =  (
     let nl = NestedList::elem(5);
     let _ = *println(nl.flatten.to_string);
 
@@ -44,4 +44,4 @@ main =  do {
     let _ = *println(nl.flatten.to_string);
 
     pure()
-};
+);

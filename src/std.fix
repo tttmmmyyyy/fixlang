@@ -284,11 +284,11 @@ namespace IO {
 
     // Print a string followed by a newline to the standard output.
     println : String -> IO ();
-    println = |str| do {
+    println = |str| (
         let _ = *print(str);
         let _ = *print("\n");
         pure()
-    };
+    );
 
     // Read all characters from a IOHandle.
     read_content : IOHandle -> IOResult IOError String;
@@ -356,12 +356,12 @@ namespace IO {
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
     with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a;
-    with_file = |path, mode, action| do {
+    with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
         let res = *action(handle);
         let _ = *IOResult::lift(close_file(handle));
         pure $ res
-    };  
+    );  
 
     // Write a string into an IOHandle.
     write_content : IOHandle -> String -> IOResult IOError ();
