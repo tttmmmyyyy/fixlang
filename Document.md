@@ -29,7 +29,7 @@
       - [State-like monads](#state-like-monads)
       - [Result-like monads](#result-like-monads)
       - [List-like monads](#list-like-monads)
-    - [`do` syntax and monadic bind operator `*`.](#do-syntax-and-monadic-bind-operator-)
+    - [`do` block and monadic bind operator `*`](#do-block-and-monadic-bind-operator-)
   - [Type annotation](#type-annotation)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
@@ -738,7 +738,7 @@ calc_fib = |n| (
 
 The optimum time complexity of calculating Fibonacci sequence of length N is O(N). But if Fix had cloned the array at `let arr = arr.set(idx, x+y);` in the loop, it takes O(N) time for each loop step and the total time complexity becomes O(N^2).
 
-In fact, `set` in the above program doesn't clone the array and `calc_fib` works in O(N) time, as expected! This is because if the given array will no longer be used, `set` omits cloning and just updates the given array. Let's consider a simpler program: 
+In fact, `set` in the above program doesn't clone the array and `calc_fib` works in O(N) time, as expected. This is because if the given array will no longer be used, `set` omits cloning and just updates the given array. Let's consider a simpler program: 
 
 ```
 main = (
@@ -928,31 +928,59 @@ xs.bind(|x| ys.bind(|y| pure $ (x, y)))
 == [(x0, y0), (x0, y1), ..., (x1, y0), (x1, y1), ..., ...]
 ```
 
-### `do` syntax and monadic bind operator `*`.
+### `do` block and monadic bind operator `*`
 
-A prefix unary operator `*` provides a way to use `bind` in more concise way. This operator can only be used in `do { ... }`. In `do` block, a code `B(*x)` is expanded to `x.bind(|v| B(v))`. Here, `B(*x)` is the minimal block that encloses the expression `*x`. Here, blocks are defined as follows:
+A prefix unary operator `*` provides a way to use `bind` in more concise way. A code `B(*x)` is expanded to `x.bind(|v| B(v))`. Here, `B(*x)` is the minimal `do` block that encloses the expression `*x`. Here, `do` blocks are defined as follows:
 
-- Lambda-expression `|arg| (body-block)` defines a block `body-block`.
-- Let-definition `let name = val in (body-block)` defines a block `body-block`.
-- If-expression `if cond { (then-block) } else { (else-block) }` defines two blocks `then-block` and `else-block`.
-- Do-syntax `do { (do-block) }` itself defines a block `do_block`.
+- You can make `do` block explicitly by `do { ... }`.
+- Lambda-expression `|arg| ...` defines a `do` block `...` implicitly.
+- Let-definition `let name = val in ...` defines a `do` block `...` implicitly.
+- If-expression `if cond { ... } else { ... }` defines two blocks  `...` implicitly.
+- Global definition `name = ...` defines a `do` block `...` implicitly.
 
 Examples in previous sections can be written using `*` as follows:
 
 ```
 echo : IO ();
-echo = do { print(*read) };
+echo = print(*read);
 ```
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
-add_opt = do { pure $ *x + *y };
+add_opt = |x, y| pure $ *x + *y;
 ```
 
 ```
 product : Iterator a -> Iterator b -> Iterator (a, b);
-product = |xs, ys| do { pure $ (*xs, *ys) };
+product = |xs, ys| pure $ (*xs, *ys);
 ```
+
+The following is an example where you need to make `do` block explicitly.
+
+```
+add_opt_unwrap : Option I64 -> Option I64 -> I64;
+add_opt_unwrap = |x, y| do { pure $ *x + *y }.as_some;
+```
+
+In the above, the definition of `add_opt_unwrap` will be appropriately expanded to 
+
+```
+add_opt_unwrap = x.bind(|x| y.bind(|y| pure $ x + y)).as_some;
+```
+
+On the other hand, if you write 
+
+```
+add_opt_unwrap = |x, y| (pure $ *x + *y).as_some;
+```
+
+it will be expanded to 
+
+```
+add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
+```
+
+which won't be compiled, because the inner `bind` requires a function that returns `Option I64` but the function `|y| (pure $ x + y).as_some` returns `I64`.
 
 ## Type annotation
 
