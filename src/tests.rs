@@ -1574,7 +1574,7 @@ pub fn test61() {
         if counter == 0 {
             pure()
         } else {
-            let _ = *print("Hello World! ");
+            let _ = *println("Hello World!");
             main_loop(counter - 1)
         }
     };

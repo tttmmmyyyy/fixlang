@@ -314,7 +314,7 @@ fn parse_trait_member_impl(pair: Pair<Rule>, src: &Rc<String>) -> (Name, Rc<Expr
     assert_eq!(pair.as_rule(), Rule::trait_member_impl);
     let mut pairs = pair.into_inner();
     let method_name = pairs.next().unwrap().as_str().to_string();
-    let expr = parse_expr(pairs.next().unwrap(), &mut None, src);
+    let expr = parse_expr_with_new_do(pairs.next().unwrap(), src);
     (method_name, expr)
 }
 
@@ -360,7 +360,7 @@ fn parse_global_name_defn(
     assert_eq!(pair.as_rule(), Rule::global_name_defn);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
-    let expr = parse_expr(pairs.next().unwrap(), &mut None, src);
+    let expr = parse_expr_with_new_do(pairs.next().unwrap(), src);
     (FullName::new(namespace, &name), expr)
 }
 
@@ -545,34 +545,22 @@ fn parse_type_field(pair: Pair<Rule>, src: &Rc<String>) -> Field {
     }
 }
 
-fn parse_expr(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr);
     let pair = pair.into_inner().next().unwrap();
     parse_expr_type_annotation(pair, msc, src)
 }
 
-fn parse_expr_with_new_do(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_with_new_do(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr);
-    if msc.is_some() {
-        let mut msc = DoContext::default();
-        let expr = parse_expr(pair, &mut Some(&mut msc), src);
-        msc.expand_binds(expr)
-    } else {
-        parse_expr(pair, &mut None, src)
-    }
+    let mut msc = DoContext::default();
+    let expr = parse_expr(pair, &mut msc, src);
+    msc.expand_binds(expr)
 }
 
 fn parse_expr_type_annotation(
     pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
+    msc: &mut DoContext,
     src: &Rc<String>,
 ) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_type_annotation);
@@ -592,8 +580,8 @@ fn parse_expr_type_annotation(
 fn parse_combinator_sequence(
     pair: Pair<Rule>,
     src: &Rc<String>,
-    inner_parser: fn(Pair<Rule>, &mut Option<&mut DoContext>, &Rc<String>) -> Rc<ExprNode>,
-    msc: &mut Option<&mut DoContext>,
+    inner_parser: fn(Pair<Rule>, &mut DoContext, &Rc<String>) -> Rc<ExprNode>,
+    msc: &mut DoContext,
 ) -> Vec<Rc<ExprNode>> {
     pair.into_inner()
         .map(|pair| inner_parser(pair, msc, src))
@@ -635,8 +623,8 @@ fn parse_binary_operator_sequence(
     src: &Rc<String>,
     ops: HashMap<&str, BinaryOpInfo>,
     operator_rule: Rule,
-    inner_parser: fn(Pair<Rule>, &mut Option<&mut DoContext>, &Rc<String>) -> Rc<ExprNode>,
-    msc: &mut Option<&mut DoContext>,
+    inner_parser: fn(Pair<Rule>, &mut DoContext, &Rc<String>) -> Rc<ExprNode>,
+    msc: &mut DoContext,
 ) -> Rc<ExprNode> {
     let mut pairs = pair.into_inner();
     let mut expr = inner_parser(pairs.next().unwrap(), msc, src);
@@ -687,11 +675,7 @@ fn parse_binary_operator_sequence(
 }
 
 // comparison operators (left-associative)
-fn parse_expr_cmp(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_cmp(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_cmp);
     parse_binary_operator_sequence(
         pair,
@@ -737,11 +721,7 @@ fn parse_expr_cmp(
 }
 
 // Operator && (right-associative)
-fn parse_expr_and(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_and(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_and);
     let exprs = pair
         .into_inner()
@@ -761,11 +741,7 @@ fn parse_expr_and(
 }
 
 // Operator || (right-associative)
-fn parse_expr_or(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_or(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_or);
     let exprs = pair
         .into_inner()
@@ -785,11 +761,7 @@ fn parse_expr_or(
 }
 
 // Operator +/- (left associative)
-fn parse_expr_plus(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_plus(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_plus);
     parse_binary_operator_sequence(
         pair,
@@ -808,11 +780,7 @@ fn parse_expr_plus(
 }
 
 // Operator *,/,% (left associative)
-fn parse_expr_mul(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_mul(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_mul);
     parse_binary_operator_sequence(
         pair,
@@ -853,11 +821,7 @@ impl UnaryOpInfo {
 }
 
 // Unary opeartors
-fn parse_expr_unary(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_unary(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     if pairs.peek().unwrap().as_rule() == Rule::expr_int_lit {
@@ -904,11 +868,7 @@ fn parse_expr_unary(
 }
 
 // Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
-fn parse_expr_rtl_app(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_rtl_app(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
     let exprs = parse_combinator_sequence(pair, src, parse_expr_or, msc);
     let mut exprs_iter = exprs.iter().rev();
@@ -921,11 +881,7 @@ fn parse_expr_rtl_app(
 }
 
 // Parse monadic bind syntax `x?`.
-fn parse_expr_bind(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_bind(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_bind);
     let mut stars = vec![];
     let mut pairs = pair.into_inner();
@@ -933,27 +889,15 @@ fn parse_expr_bind(
         let star_pair = pairs.next().unwrap();
         stars.push(Span::from_pair(src, &star_pair));
     }
-    if !stars.is_empty() {
-        if msc.is_none() {
-            error_exit_with_src(
-                "cannot use monadic bind operator `*` outside `do` block.",
-                &Some(stars.pop().unwrap()),
-            )
-        }
-    }
     let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), msc, src);
     while !stars.is_empty() {
-        expr = msc.as_mut().unwrap().push_monad(expr, stars.pop().unwrap());
+        expr = msc.push_monad(expr, stars.pop().unwrap());
     }
     expr
 }
 
 // Parse left to right application sequence, e.g., `x.f.g`. (left-associative)
-fn parse_expr_ltr_app(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_ltr_app(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_ltr_app);
     let exprs = parse_combinator_sequence(pair, src, parse_expr_app, msc);
     let mut exprs_iter = exprs.iter();
@@ -967,11 +911,7 @@ fn parse_expr_ltr_app(
 }
 
 // Parse application sequence, e.g., `f(x, y)`. (left-associative)
-fn parse_expr_app(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_app(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_app);
     let mut pairs = pair.into_inner();
     let head = parse_expr_nlr(pairs.next().unwrap(), msc, src);
@@ -992,20 +932,12 @@ fn parse_expr_app(
     ret
 }
 
-fn parse_arg_list(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Vec<Rc<ExprNode>> {
+fn parse_arg_list(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Vec<Rc<ExprNode>> {
     assert_eq!(pair.as_rule(), Rule::arg_list);
     parse_combinator_sequence(pair, src, parse_expr, msc)
 }
 
-fn parse_expr_nlr(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_nlr(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_nlr);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
@@ -1049,11 +981,7 @@ fn parse_namespace(pair: Pair<Rule>, _src: &Rc<String>) -> NameSpace {
     NameSpace::new(ret)
 }
 
-fn parse_expr_lit(
-    expr: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_lit(expr: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_int_lit => parse_expr_int_lit(pair, src),
@@ -1066,11 +994,7 @@ fn parse_expr_lit(
     }
 }
 
-fn parse_expr_let(
-    expr: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_let(expr: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let pat = parse_pattern(pairs.next().unwrap(), src);
@@ -1083,22 +1007,18 @@ fn parse_expr_let(
     let _eq_of_let = pairs.next().unwrap();
     let bound = parse_expr(pairs.next().unwrap(), msc, src);
     let _in_of_let = pairs.next().unwrap();
-    let val = parse_expr_with_new_do(pairs.next().unwrap(), msc, src);
+    let val = parse_expr_with_new_do(pairs.next().unwrap(), src);
     expr_let(pat, bound, val, Some(span))
 }
 
-fn parse_expr_lam(
-    expr: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_lam(expr: Pair<Rule>, _msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let mut pats = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::pattern {
         pats.push(parse_pattern(pairs.next().unwrap(), src));
     }
-    let mut expr = parse_expr_with_new_do(pairs.next().unwrap(), msc, src);
+    let mut expr = parse_expr_with_new_do(pairs.next().unwrap(), src);
     const ARG_NAME: &str = "%arg";
     let var = var_local(ARG_NAME);
     for pat in pats.iter().rev() {
@@ -1116,11 +1036,7 @@ fn parse_expr_lam(
     expr.set_source(Some(span))
 }
 
-fn parse_expr_if(
-    expr: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_if(expr: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(expr.as_rule(), Rule::expr_if);
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
@@ -1129,30 +1045,22 @@ fn parse_expr_if(
     let else_val = pairs.next().unwrap();
     expr_if(
         parse_expr(cond, msc, src),
-        parse_expr_with_new_do(then_val, msc, src),
-        parse_expr_with_new_do(else_val, msc, src),
+        parse_expr_with_new_do(then_val, src),
+        parse_expr_with_new_do(else_val, src),
         Some(span),
     )
 }
 
-fn parse_expr_do(
-    pair: Pair<Rule>,
-    _msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_do(pair: Pair<Rule>, _msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert!(pair.as_rule() == Rule::expr_do);
     let pair = pair.into_inner().next().unwrap();
     let mut msc = DoContext::default();
-    let expr = parse_expr(pair, &mut Some(&mut msc), src);
+    let expr = parse_expr(pair, &mut msc, src);
     let expr = msc.expand_binds(expr);
     expr
 }
 
-fn parse_expr_tuple(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_tuple(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_tuple);
     let span = Span::from_pair(&src, &pair);
     let exprs = pair
@@ -1174,11 +1082,7 @@ fn parse_expr_tuple(
     }
 }
 
-fn parse_expr_make_struct(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_make_struct(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_make_struct);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
@@ -1192,11 +1096,7 @@ fn parse_expr_make_struct(
     expr_make_struct(tycon, fields).set_source(Some(span))
 }
 
-fn parse_expr_call_c(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_call_c(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_call_c);
     let span = Span::from_pair(src, &pair);
     let mut pairs = pair.into_inner();
@@ -1272,11 +1172,7 @@ fn parse_expr_bool_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
     expr_bool_lit(val, Some(span))
 }
 
-fn parse_expr_array_lit(
-    pair: Pair<Rule>,
-    msc: &mut Option<&mut DoContext>,
-    src: &Rc<String>,
-) -> Rc<ExprNode> {
+fn parse_expr_array_lit(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_array_lit);
     let span = Span::from_pair(&src, &pair);
     let elems = pair
