@@ -2704,18 +2704,27 @@ pub fn test107() {
 #[test]
 #[serial]
 pub fn test108() {
-    // Test write_file!, read_file!;
+    // Test write_file!, read_file!, read_line.
     let source = r#"
         module Main;
 
         main : IO ();
         main = (
             let file_path = Path::parse("test.txt").as_some;
-            let written = "Hello\n World!";
+            let lines = ["Hello", "World!"];
+            let content = Iterator::from_array(lines).intersperse("\n").concat_iter;
             do {
-                let _ = *write_file(file_path, written);
-                let read = *read_file(file_path);
-                let _ = assert_eq("case 1", written, read);
+                let _ = *write_file(file_path, content);
+
+                let read_content = *read_file(file_path);
+                let _ = assert_eq("case 1", content, read_content);
+
+                let read_lines = *with_file(file_path, "r", |file| (
+                    pure $ [*read_line(file), *read_line(file)]
+                ));
+                let _ = assert_eq("case 2", read_lines.get(0), lines.get(0) + "\n");
+                let _ = assert_eq("case 3", read_lines.get(1), lines.get(1));
+
                 pure()
             }.to_io.map(as_ok)
         );
