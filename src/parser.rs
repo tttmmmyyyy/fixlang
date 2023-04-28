@@ -17,6 +17,7 @@ pub struct Span {
 }
 
 impl Span {
+    #[allow(dead_code)]
     pub fn empty(src: &Rc<String>) -> Self {
         Self {
             input: src.clone(),
@@ -82,28 +83,42 @@ impl Span {
 #[derive(Default)]
 struct DoContext {
     counter: u32,
-    monads: Vec<(Rc<ExprNode>, Rc<Var>)>, // (Monadic action, the result of action).
+    monads: Vec<BindOperatorInfo>, // (Monadic action, the result of action).
+}
+
+struct BindOperatorInfo {
+    operator_src: Span,
+    operand: Rc<ExprNode>,
+    result_var: Rc<Var>,
 }
 
 impl DoContext {
     // Pushes monadic value, and returns expression that represents the result of monadic action.
-    fn push_bind(&mut self, monad: Rc<ExprNode>) -> Rc<ExprNode> {
+    fn push_monad(&mut self, monad: Rc<ExprNode>, operator_src: Span) -> Rc<ExprNode> {
         let src = monad.source.clone();
         let var_name = FullName::local(&format!("%monadic_arg{}", self.counter));
         let var_var = var_var(var_name.clone());
         let var_expr = expr_var(var_name, src);
         self.counter += 1;
-        self.monads.push((monad, var_var));
+        self.monads.push(BindOperatorInfo {
+            operator_src,
+            operand: monad,
+            result_var: var_var,
+        });
         var_expr
     }
 
-    fn add_binds(&mut self, mut expr: Rc<ExprNode>) -> Rc<ExprNode> {
+    fn expand_binds(&mut self, mut expr: Rc<ExprNode>) -> Rc<ExprNode> {
         while !self.monads.is_empty() {
-            let (monad, var) = self.monads.pop().unwrap();
+            let BindOperatorInfo {
+                operator_src,
+                operand: monad,
+                result_var: var,
+            } = self.monads.pop().unwrap();
             expr = expr_abs(vec![var], expr, None);
             let bind_function = expr_var(
                 FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME),
-                None,
+                Some(operator_src),
             );
             expr = expr_app(bind_function, vec![expr], None);
             expr = expr_app(expr, vec![monad], None)
@@ -549,7 +564,7 @@ fn parse_expr_with_new_do(
     if msc.is_some() {
         let mut msc = DoContext::default();
         let expr = parse_expr(pair, &mut Some(&mut msc), src);
-        msc.add_binds(expr)
+        msc.expand_binds(expr)
     } else {
         parse_expr(pair, &mut None, src)
     }
@@ -912,25 +927,23 @@ fn parse_expr_bind(
     src: &Rc<String>,
 ) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_bind);
-    let mut star_count: u32 = 0;
+    let mut stars = vec![];
     let mut pairs = pair.into_inner();
-    let mut star_span = Span::empty(src);
     while pairs.peek().unwrap().as_rule() == Rule::operator_bind {
         let star_pair = pairs.next().unwrap();
-        star_count += 1;
-        star_span = star_span.unite(&Span::from_pair(src, &star_pair));
+        stars.push(Span::from_pair(src, &star_pair));
     }
-    if star_count > 0 {
+    if !stars.is_empty() {
         if msc.is_none() {
             error_exit_with_src(
                 "cannot use monadic bind operator `*` outside `do` block.",
-                &Some(star_span),
+                &Some(stars.pop().unwrap()),
             )
         }
     }
     let mut expr = parse_expr_ltr_app(pairs.next().unwrap(), msc, src);
-    for _ in 0..star_count {
-        expr = msc.as_mut().unwrap().push_bind(expr);
+    while !stars.is_empty() {
+        expr = msc.as_mut().unwrap().push_monad(expr, stars.pop().unwrap());
     }
     expr
 }
@@ -1131,7 +1144,7 @@ fn parse_expr_do(
     let pair = pair.into_inner().next().unwrap();
     let mut msc = DoContext::default();
     let expr = parse_expr(pair, &mut Some(&mut msc), src);
-    let expr = msc.add_binds(expr);
+    let expr = msc.expand_binds(expr);
     expr
 }
 
