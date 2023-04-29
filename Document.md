@@ -20,6 +20,17 @@
   - [Iterators](#iterators)
   - [Mutation in Fix](#mutation-in-fix)
 - [Other topics on syntax](#other-topics-on-syntax)
+  - [Structs](#structs-1)
+    - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
+    - [`={field_name} : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct)
+    - [`={field_name}! : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct-1)
+    - [`mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct)
+    - [`mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct-1)
+  - [Unions](#unions-1)
+    - [`{variant_name} : {variant_type} -> {union}`](#variant_name--variant_type---union)
+    - [`is_{variant_name} : {union} -> Bool`](#is_variant_name--union---bool)
+    - [`as_{variant_name} : {union} -> {variant_type}`](#as_variant_name--union---variant_type)
+    - [`mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`](#mod_variant_name--variant_type---variant_type---union---union)
   - [Module and imports](#module-and-imports)
   - [Recursion](#recursion)
   - [Overloading](#overloading)
@@ -36,8 +47,8 @@
     - [Tuples](#tuples)
     - [Unit](#unit)
     - [Array](#array)
-    - [Structs](#structs-1)
-    - [Unions](#unions-1)
+    - [Structs](#structs-2)
+    - [Unions](#unions-2)
   - [Calling C functions](#calling-c-functions)
 - [Built-in / library features](#built-in--library-features)
   - [Types](#types-1)
@@ -150,17 +161,6 @@
       - [`impl F64 : Mul`](#impl-f64--mul)
       - [`impl F64 : Sub`](#impl-f64--sub)
       - [`impl F64 : ToString`](#impl-f64--tostring)
-    - [Structs](#structs-2)
-      - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
-      - [`={field_name} : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct)
-      - [`={field_name}! : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct-1)
-      - [`mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct)
-      - [`mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct-1)
-    - [Unions](#unions-2)
-      - [`{variant_name} : {variant_type} -> {union}`](#variant_name--variant_type---union)
-      - [`is_{variant_name} : {union} -> Bool`](#is_variant_name--union---bool)
-      - [`as_{variant_name} : {union} -> {variant_type}`](#as_variant_name--union---variant_type)
-      - [`mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`](#mod_variant_name--variant_type---variant_type---union---union)
     - [Std::Array](#stdarray)
       - [`__unsafe_set_length : I64 -> Array a -> Array a`](#__unsafe_set_length--i64---array-a---array-a)
       - [`__unsafe_get : I64 -> Array a -> a`](#__unsafe_get--i64---array-a---a)
@@ -856,6 +856,57 @@ The `set!` function is almost same as the `set` function, but it panics (i.e., s
 
 # Other topics on syntax
 
+## Structs
+
+If you define a struct named `{struct}` with a field `{field_name}` of type `{field_type}`, the following methods are defined in the namespace named `{struct}`.
+
+NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Functor] ({field_type} -> f {field_type}) -> {struct} -> f {struct} `, which are generalization of `mod` functions.
+
+### `@{field_name} : {struct} -> {field_type}`
+
+Extract the value of a field from a struct value.
+
+### `={field_name} : {field_type} -> {struct} -> {struct}`
+
+Modify a struct value by setting a field.
+This function clones the struct value if it is shared between multiple references.
+
+### `={field_name}! : {field_type} -> {struct} -> {struct}`
+
+Modify a struct value by setting a field.
+This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+
+### `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
+
+Modify a struct value by a function acting on a field.
+This function clones the struct value if it is shared between multiple references.
+It is assured that if you call `obj.mod_field(f)` when the reference counter of the field value in `obj` is one, then `f` receives the field value uniquely.
+
+### `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
+
+This function is almost same as `mod_{field_name}` except that this function asserts uniqueness of given struct value.
+This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+
+## Unions
+
+If you define a union named `{union}` with a variant `{variant_name}` of type `{variant_type}`, the following methods are defined in the namespace named `{union}`.
+
+### `{variant_name} : {variant_type} -> {union}`
+
+Constructs a union value from a variant value.
+
+### `is_{variant_name} : {union} -> Bool`
+
+Check if a union value is created as the specified variant.
+
+### `as_{variant_name} : {union} -> {variant_type}`
+
+Converts a union value into a variant value if it is created as the variant. If not so, this function panics.
+
+### `mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`
+
+Modify a union value by a function acting on a variant. It is assured that if you call `obj.mod_variant(f)` when the reference counter of the variant value in `obj` is one, then `f` receives the variant value uniquely.
+
 ## Module and imports 
 
 In Fix, values, functions, types and traits defined in a source file is collected to a module. Each source file has to declare the name of the module it defines by `module {module_name};`. The first letter of the module name must be capitalized.
@@ -1333,57 +1384,6 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 #### `impl F64 : Mul`
 #### `impl F64 : Sub`
 #### `impl F64 : ToString`
-
-### Structs
-
-If you define a struct named `{struct}` with a field `{field_name}` of type `{field_type}`, the following methods are defined in the namespace named `{struct}`.
-
-NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Functor] ({field_type} -> f {field_type}) -> {struct} -> f {struct} `, which are generalization of `mod` functions.
-
-#### `@{field_name} : {struct} -> {field_type}`
-
-Extract the value of a field from a struct value.
-
-#### `={field_name} : {field_type} -> {struct} -> {struct}`
-
-Modify a struct value by setting a field.
-This function clones the struct value if it is shared between multiple references.
-
-#### `={field_name}! : {field_type} -> {struct} -> {struct}`
-
-Modify a struct value by setting a field.
-This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
-
-#### `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
-
-Modify a struct value by a function acting on a field.
-This function clones the struct value if it is shared between multiple references.
-It is assured that if you call `obj.mod_field(f)` when the reference counter of the field value in `obj` is one, then `f` receives the field value uniquely.
-
-#### `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
-
-This function is almost same as `mod_{field_name}` except that this function asserts uniqueness of given struct value.
-This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
-
-### Unions
-
-If you define a union named `{union}` with a variant `{variant_name}` of type `{variant_type}`, the following methods are defined in the namespace named `{union}`.
-
-#### `{variant_name} : {variant_type} -> {union}`
-
-Constructs a union value from a variant value.
-
-#### `is_{variant_name} : {union} -> Bool`
-
-Check if a union value is created as the specified variant.
-
-#### `as_{variant_name} : {union} -> {variant_type}`
-
-Converts a union value into a variant value if it is created as the variant. If not so, this function panics.
-
-#### `mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`
-
-Modify a union value by a function acting on a variant. It is assured that if you call `obj.mod_variant(f)` when the reference counter of the variant value in `obj` is one, then `f` receives the variant value uniquely.
 
 ### Std::Array
 
