@@ -329,6 +329,31 @@ pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<Expr
     expr_lit(generator, vec![], val.to_string(), ty, source)
 }
 
+pub fn expr_float_lit(val: f64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("float_lit_{}", val)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        let float_ty = ty
+            .get_struct_type(gc, &vec![])
+            .get_field_type_at_index(0)
+            .unwrap()
+            .into_float_type();
+        let value = float_ty.const_float(val);
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    });
+    expr_lit(generator, vec![], val.to_string(), ty, source)
+}
+
 pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
         let obj = if rvo.is_none() {

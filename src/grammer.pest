@@ -32,6 +32,12 @@ int_lit_body = { "-"? ~ ASCII_DIGIT ~ ASCII_DIGIT* }
 
 int_lit_type = { "U8" | "I32" | "U32" | "I64" | "U64" }
 
+expr_float_lit = { float_lit_body ~ ("_" ~ float_lit_type)? }
+
+float_lit_body = { "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )? }
+
+float_lit_type = { "F32" | "F64" }
+
 expr_nullptr_lit = { "nullptr" }
 
 expr_bool_lit = { "true" | "false" }
@@ -56,7 +62,7 @@ u8_lit_char = {
     | "\\" ~ ("x" ~ ASCII_HEX_DIGIT{2})
 }
 
-expr_lit = { expr_int_lit | expr_bool_lit | expr_string_lit | expr_array_lit | expr_nullptr_lit | expr_u8_lit }
+expr_lit = { expr_int_lit | expr_float_lit | expr_bool_lit | expr_string_lit | expr_array_lit | expr_nullptr_lit | expr_u8_lit }
 
 expr_var = { (namespace ~ "::")? ~ var }
 

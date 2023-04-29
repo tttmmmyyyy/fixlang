@@ -985,6 +985,7 @@ fn parse_expr_lit(expr: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::expr_int_lit => parse_expr_int_lit(pair, src),
+        Rule::expr_float_lit => parse_expr_float_lit(pair, src),
         Rule::expr_bool_lit => parse_expr_bool_lit(pair, src),
         Rule::expr_string_lit => parse_expr_string_lit(pair, src),
         Rule::expr_array_lit => parse_expr_array_lit(pair, msc, src),
@@ -1157,6 +1158,29 @@ fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
         None => make_i64_ty(),
     };
     expr_int_lit(val, ty, Some(span))
+}
+
+fn parse_expr_float_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_float_lit);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let pair = pairs.next().unwrap();
+    assert_eq!(pair.as_rule(), Rule::float_lit_body);
+    let val = pair.as_str().parse::<f64>().unwrap();
+    let ty = match pairs.next() {
+        Some(pair) => {
+            assert_eq!(pair.as_rule(), Rule::int_lit_type);
+            if pair.as_str() == "F32" {
+                make_f32_ty()
+            } else if pair.as_str() == "F64" {
+                make_i32_ty()
+            } else {
+                unreachable!()
+            }
+        }
+        None => make_f64_ty(),
+    };
+    expr_float_lit(val, ty, Some(span))
 }
 
 fn parse_expr_nullptr_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
