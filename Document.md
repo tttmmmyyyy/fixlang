@@ -50,7 +50,7 @@
     - [Structs](#structs-2)
     - [Unions](#unions-2)
   - [Calling C functions](#calling-c-functions)
-- [Built-in / library features](#built-in--library-features)
+- [Built-in and standard library features](#built-in-and-standard-library-features)
   - [Types](#types-1)
     - [Std::Bool](#stdbool)
       - [`impl Bool : Eq`](#impl-bool--eq)
@@ -1207,7 +1207,7 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 
 Note that calling C function may break abstraction of Fix such as immutability or memory safety. Use this feature carefully!
 
-# Built-in / library features
+# Built-in and standard library features
 
 ## Types
 
