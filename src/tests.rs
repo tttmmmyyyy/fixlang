@@ -2875,6 +2875,14 @@ pub fn test110() {
             let y = 3.1415_F32;
             let _ = assert("case 19", (x.to_F32 - y) < 1.0e-4_F32);
 
+            let x = 3141;
+            let y = 3141.0;
+            let _ = assert("case 20", x.to_F64 == y);
+
+            let x = 3141.0;
+            let y = 3141;            
+            let _ = assert("case 21", x.to_I64 == y);
+
             pure()
         );
     "#;
