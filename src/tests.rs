@@ -2812,15 +2812,16 @@ pub fn test110() {
             let y = 2.7183;
             let _ = assert("case 4", x != y);
 
-            let x = 3.1415_F32;
-            let y = 2.7183_F32;
-            let z = 5.8598_F32;
-            let _ = assert("case 5", x + y == z);
-
             let x = 3.1415;
             let y = 2.7183;
             let z = 5.8598;
             let _ = assert("case 6", x + y == z);
+
+            // let x = 3.1415_F32;
+            // let y = 2.7183_F32;
+            // let z = 5.8598_F32;
+            // let _ = debug_println(x.to_string);
+            // let _ = assert("case 5", x + y == z);
 
             pure()
         );

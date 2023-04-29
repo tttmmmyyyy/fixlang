@@ -517,22 +517,22 @@ pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// int_to_string function
-pub fn int_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const VAL_NAME: &str = "val";
+// number_to_string function
+pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const VAL_NAME: &str = "number";
     let (buf_size, specifier) = match ty.toplevel_tycon().unwrap().name.name.as_str() {
         U8_NAME => (4, C_U8_FORMATTER),
         I32_NAME => (12, C_I32_FORMATTER),
         U32_NAME => (11, C_U32_FORMATTER),
         I64_NAME => (21, C_I64_FORMATTER),
         U64_NAME => (20, C_U64_FORMATTER),
+        F32_NAME => (50, C_F32_FORMATTER),
+        F64_NAME => (500, C_F64_FORMATTER),
         _ => unreachable!(),
     };
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
         // Get value
-        let val = gc
-            .get_var_field(&FullName::local(VAL_NAME), 0)
-            .into_int_value();
+        let val = gc.get_var_field(&FullName::local(VAL_NAME), 0);
         gc.release(gc.get_var(&FullName::local(VAL_NAME)).ptr.get(gc));
 
         // Allocate buffer for sprintf.
@@ -540,13 +540,13 @@ pub fn int_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
         let buf = gc.builder().build_array_alloca(
             gc.context.i8_type(),
             buf_size,
-            "buf_for_sprintf@int_to_string",
+            "buf_for_sprintf@number_to_string",
         );
 
         // Call sprintf.
         let format = gc
             .builder()
-            .build_global_string_ptr(specifier, "format@int_to_string")
+            .build_global_string_ptr(specifier, "format@number_to_string")
             .as_basic_value_enum()
             .into_pointer_value();
         let len = gc
@@ -562,12 +562,12 @@ pub fn int_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
         let len_with_null_terminator_i32 = gc.builder().build_int_add(
             len,
             gc.context.i32_type().const_int(1, false),
-            "len_with_null_terminator_i32@int_to_string",
+            "len_with_null_terminator_i32@number_to_string",
         );
         let len_with_null_terminator = gc.builder().build_int_cast(
             len_with_null_terminator_i32,
             gc.context.i64_type(),
-            "len_with_null_terminator@int_to_string",
+            "len_with_null_terminator@number_to_string",
         );
 
         make_string_from_ptr(gc, buf, len_with_null_terminator, rvo)
