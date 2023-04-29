@@ -823,48 +823,43 @@ impl UnaryOpInfo {
 // Unary opeartors
 fn parse_expr_unary(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     let span = Span::from_pair(&src, &pair);
-    let mut pairs = pair.into_inner();
-    if pairs.peek().unwrap().as_rule() == Rule::expr_int_lit {
-        parse_expr_int_lit(pairs.next().unwrap(), src);
-        panic!("maybe this is dead code?")
-    } else {
-        let mut ops: Vec<UnaryOpInfo> = vec![];
-        let mut spans: Vec<Span> = vec![];
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::operator_unary => {
-                    spans.push(Span::from_pair(&src, &pair));
-                    if pair.as_str() == "-" {
-                        ops.push(UnaryOpInfo::new(
-                            NEGATE_TRAIT_NAME,
-                            NEGATE_TRAIT_NEGATE_NAME,
-                        ))
-                    } else if pair.as_str() == "!" {
-                        ops.push(UnaryOpInfo::new(NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME))
-                    } else {
-                        panic!("unknown unary operator: `{}`", pair.as_str());
-                    }
-                }
-                _ => {
-                    let mut expr = parse_expr_bind(pair, msc, src);
-                    for (i, op) in ops.iter().enumerate().rev() {
-                        let op_span = spans[i].clone();
-                        expr = expr_app(
-                            expr_var(
-                                FullName::from_strs(&[STD_NAME, &op.trait_name], &op.method_name),
-                                Some(op_span.clone()),
-                            ),
-                            vec![expr.clone()],
-                            expr.source.as_ref().map(|s0| s0.unite(&op_span)),
-                        );
-                    }
-                    let expr = expr.set_source(Some(span));
-                    return expr;
+    let pairs = pair.into_inner();
+    let mut ops: Vec<UnaryOpInfo> = vec![];
+    let mut spans: Vec<Span> = vec![];
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::operator_unary => {
+                spans.push(Span::from_pair(&src, &pair));
+                if pair.as_str() == "-" {
+                    ops.push(UnaryOpInfo::new(
+                        NEGATE_TRAIT_NAME,
+                        NEGATE_TRAIT_NEGATE_NAME,
+                    ))
+                } else if pair.as_str() == "!" {
+                    ops.push(UnaryOpInfo::new(NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME))
+                } else {
+                    panic!("unknown unary operator: `{}`", pair.as_str());
                 }
             }
+            _ => {
+                let mut expr = parse_expr_bind(pair, msc, src);
+                for (i, op) in ops.iter().enumerate().rev() {
+                    let op_span = spans[i].clone();
+                    expr = expr_app(
+                        expr_var(
+                            FullName::from_strs(&[STD_NAME, &op.trait_name], &op.method_name),
+                            Some(op_span.clone()),
+                        ),
+                        vec![expr.clone()],
+                        expr.source.as_ref().map(|s0| s0.unite(&op_span)),
+                    );
+                }
+                let expr = expr.set_source(Some(span));
+                return expr;
+            }
         }
-        unreachable!()
     }
+    unreachable!()
 }
 
 // Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
@@ -984,8 +979,7 @@ fn parse_namespace(pair: Pair<Rule>, _src: &Rc<String>) -> NameSpace {
 fn parse_expr_lit(expr: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     let pair = expr.into_inner().next().unwrap();
     match pair.as_rule() {
-        Rule::expr_int_lit => parse_expr_int_lit(pair, src),
-        Rule::expr_float_lit => parse_expr_float_lit(pair, src),
+        Rule::expr_number_lit => parse_expr_number_lit(pair, src),
         Rule::expr_bool_lit => parse_expr_bool_lit(pair, src),
         Rule::expr_string_lit => parse_expr_string_lit(pair, src),
         Rule::expr_array_lit => parse_expr_array_lit(pair, msc, src),
@@ -1131,16 +1125,17 @@ fn parse_ffi_param_tys(pair: Pair<Rule>) -> Vec<Rc<TyCon>> {
         .collect()
 }
 
-fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_int_lit);
+fn parse_expr_number_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_number_lit);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let pair = pairs.next().unwrap();
-    assert_eq!(pair.as_rule(), Rule::int_lit_body);
-    let val = pair.as_str().parse::<i128>().unwrap() as u64;
+    assert_eq!(pair.as_rule(), Rule::number_lit_body);
+    let val_str = pair.as_str();
+    let is_float = val_str.contains(".");
     let ty = match pairs.next() {
         Some(pair) => {
-            assert_eq!(pair.as_rule(), Rule::int_lit_type);
+            assert_eq!(pair.as_rule(), Rule::number_lit_type);
             if pair.as_str() == "U8" {
                 make_u8_ty()
             } else if pair.as_str() == "I32" {
@@ -1151,36 +1146,43 @@ fn parse_expr_int_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
                 make_i64_ty()
             } else if pair.as_str() == "U64" {
                 make_u64_ty()
-            } else {
-                unreachable!()
-            }
-        }
-        None => make_i64_ty(),
-    };
-    expr_int_lit(val, ty, Some(span))
-}
-
-fn parse_expr_float_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
-    assert_eq!(pair.as_rule(), Rule::expr_float_lit);
-    let span = Span::from_pair(&src, &pair);
-    let mut pairs = pair.into_inner();
-    let pair = pairs.next().unwrap();
-    assert_eq!(pair.as_rule(), Rule::float_lit_body);
-    let val = pair.as_str().parse::<f64>().unwrap();
-    let ty = match pairs.next() {
-        Some(pair) => {
-            assert_eq!(pair.as_rule(), Rule::int_lit_type);
-            if pair.as_str() == "F32" {
+            } else if pair.as_str() == "F32" {
                 make_f32_ty()
             } else if pair.as_str() == "F64" {
-                make_i32_ty()
+                make_f64_ty()
             } else {
                 unreachable!()
             }
         }
-        None => make_f64_ty(),
+        None => {
+            if is_float {
+                make_f64_ty()
+            } else {
+                make_i64_ty()
+            }
+        }
     };
-    expr_float_lit(val, ty, Some(span))
+    if is_float {
+        let val = val_str.parse::<f64>();
+        if val.is_err() {
+            error_exit_with_src(
+                "a literal string `{}` cannot be parsed as an floating number.",
+                &Some(span),
+            )
+        }
+        let val = val.unwrap();
+        expr_float_lit(val, ty, Some(span))
+    } else {
+        let val = val_str.parse::<i128>();
+        if val.is_err() {
+            error_exit_with_src(
+                "a literal string `{}` cannot be parsed as an integer.",
+                &Some(span),
+            )
+        }
+        let val = val.unwrap();
+        expr_int_lit(val as u64, ty, Some(span))
+    }
 }
 
 fn parse_expr_nullptr_lit(pair: Pair<Rule>, src: &Rc<String>) -> Rc<ExprNode> {
@@ -1522,7 +1524,7 @@ fn parse_import_path(pair: Pair<Rule>, _src: &Rc<String>) -> Vec<Name> {
 fn rule_to_string(r: &Rule) -> String {
     match r {
         Rule::EOI => "end-of-input".to_string(),
-        Rule::expr_int_lit => "integer".to_string(),
+        Rule::expr_number_lit => "integer or floating number".to_string(),
         Rule::expr_bool_lit => "boolean".to_string(),
         Rule::expr_nlr => "expression".to_string(),
         Rule::var => "variable".to_string(),

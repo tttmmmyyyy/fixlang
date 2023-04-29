@@ -2604,7 +2604,7 @@ pub fn eq_trait_instance_ptr(ty: Rc<TypeNode>) -> TraitInstance {
         let value = gc.builder().build_int_z_extend(
             value,
             ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-            "eq",
+            "eq_of_int",
         );
         let obj = if rvo.is_none() {
             allocate_obj(
@@ -2626,6 +2626,51 @@ pub fn eq_trait_instance_ptr(ty: Rc<TypeNode>) -> TraitInstance {
         ty,
         make_bool_ty(),
         generate_eq_ptr,
+    )
+}
+
+pub fn eq_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_eq_float<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc.builder().build_float_compare(
+            inkwell::FloatPredicate::OEQ,
+            lhs_val,
+            rhs_val,
+            EQ_TRAIT_EQ_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            "eq_of_float",
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        eq_trait_id(),
+        &EQ_TRAIT_EQ_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        generate_eq_float,
     )
 }
 

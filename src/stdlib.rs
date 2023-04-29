@@ -52,6 +52,12 @@ pub fn make_std_mod() -> FixModule {
         .add_instance(eq_trait_instance_int(make_u64_ty()));
     fix_module
         .trait_env
+        .add_instance(eq_trait_instance_float(make_f32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(eq_trait_instance_float(make_f64_ty()));
+    fix_module
+        .trait_env
         .add_instance(eq_trait_instance_int(make_bool_ty()));
 
     // Add

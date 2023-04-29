@@ -82,8 +82,12 @@
       - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
     - [Std::Bool](#stdbool)
+      - [`impl Bool : Eq`](#impl-bool--eq)
+      - [`impl Bool : ToString`](#impl-bool--tostring)
     - [Std::F32](#stdf32)
+      - [`impl F32 : Eq`](#impl-f32--eq)
     - [Std::F64](#stdf64)
+      - [`impl F64 : Eq`](#impl-f64--eq)
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
@@ -1234,12 +1238,10 @@ Implementing Traits:
 
 `Std::Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
 
-Litels:
-- `true`, `false`
+Boolean literals are `true` and `false`.
 
-Implementing traits:
-- `Bool : Eq`
-- `Bool : ToString`
+#### `impl Bool : Eq`
+#### `impl Bool : ToString`
 
 ### Std::F32
 
@@ -1247,11 +1249,15 @@ Implementing traits:
 
 For `F32` literals, you need to add a suffix "_F32" to explicitly specify the type. Example: `3.1416_F32`.
 
+#### `impl F32 : Eq`
+
 ### Std::F64
 
 `F64` is the type of 64-bit floating numbers.
 
 For `F64` literals, you can write or omit explicit type specifier suffix "_F64". Example `3.1416_F64 == 3.1416`.
+
+#### `impl F64 : Eq`
 
 ### Std::IO
 

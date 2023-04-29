@@ -659,7 +659,9 @@ pub fn test32() {
         main : IO ();
         main = (
             let f = |x| x + 10;
-            let u = assert_eq("", 5.add $ 3.f, 18);
+            let five = 5;
+            let three = 3;
+            let u = assert_eq("", five.add $ three.f, 18);
             pure()
         );
         "#;
@@ -2777,6 +2779,30 @@ pub fn test109() {
             let res_iter = Iterator::from_array([res0, res1, res2, res3]).sequence;
             let _ = assert_eq("case 5", res_iter.is_err, true);
             let _ = assert_eq("case 6", res_iter.as_err, "Error 2");
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test110() {
+    // Test float operations
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+
+            let x = 3.1415_F32;
+            let y = 3.1415_F32;
+            let _ = assert("case 1", x == y);
+
+            let x = 3.1415_F64;
+            let y = 3.1415_F64;
+            let _ = assert("case 2", x == y);
 
             pure()
         );
