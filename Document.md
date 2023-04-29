@@ -1542,7 +1542,7 @@ module Main;
 
 main : IO ();
 main = (
-    let Result::ok(str) = *read_line(stdin);
+    let Result::ok(str) = *read_line(stdin).to_io;
     println(str)
 );
 ```
