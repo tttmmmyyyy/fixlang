@@ -236,6 +236,16 @@ impl I64 : ToString {
     to_string = I64::_I64_to_string;
 }
 
+namespace F32 {
+    abs : F32 -> F32;
+    abs = |f| if f < 0.0_F32 { -f } else { f };
+}
+
+namespace F64 {
+    abs : F64 -> F64;
+    abs = |f| if f < 0.0 { -f } else { f };
+}
+
 type IO a = unbox struct { _data : () -> a };
 
 namespace IO {

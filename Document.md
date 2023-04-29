@@ -86,6 +86,7 @@
       - [`impl Bool : ToString`](#impl-bool--tostring)
     - [Std::F32](#stdf32)
       - [`_F32_to_string : F32 -> String`](#_f32_to_string--f32---string)
+      - [`abs : F32 -> F32`](#abs--f32---f32)
       - [`impl F32 : Add`](#impl-f32--add)
       - [`impl F32 : Div`](#impl-f32--div)
       - [`impl F32 : Eq`](#impl-f32--eq)
@@ -96,6 +97,7 @@
       - [`impl F32 : ToString`](#impl-f32--tostring)
     - [Std::F64](#stdf64)
       - [`_F64_to_string : F64 -> String`](#_f64_to_string--f64---string)
+      - [`abs : F64 -> F64`](#abs--f64---f64)
       - [`impl F64 : Add`](#impl-f64--add)
       - [`impl F64 : Div`](#impl-f64--div)
       - [`impl F64 : Eq`](#impl-f64--eq)
@@ -1266,6 +1268,7 @@ Boolean literals are `true` and `false`.
 For `F32` literals, you need to add a suffix "_F32" to explicitly specify the type. Example: `3.1416_F32`.
 
 #### `_F32_to_string : F32 -> String`
+#### `abs : F32 -> F32`
 #### `impl F32 : Add`
 #### `impl F32 : Div`
 #### `impl F32 : Eq`
@@ -1282,6 +1285,7 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 For `F64` literals, you can write or omit explicit type specifier suffix "_F64". Example `3.1416_F64 == 3.1416`.
 
 #### `_F64_to_string : F64 -> String`
+#### `abs : F64 -> F64`
 #### `impl F64 : Add`
 #### `impl F64 : Div`
 #### `impl F64 : Eq`

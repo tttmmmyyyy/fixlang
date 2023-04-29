@@ -2789,43 +2789,83 @@ pub fn test109() {
 #[test]
 #[serial]
 pub fn test110() {
-    // Test float operations
+    // Test basic float operations
     let source = r#"
         module Main;
 
         main : IO ();
         main = (
+            let x = -3.1415_F32;
+            let y = 3.1415_F32;
+            let _ = assert("case 1", x.abs == y);
+            let _ = assert("case 2", y.abs == y);
+
+            let x = -3.1415;
+            let y = 3.1415;
+            let _ = assert("case 3", x.abs == y);
+            let _ = assert("case 4", y.abs == y);
 
             let x = 3.1415_F32;
             let y = 3.1415_F32;
-            let _ = assert("case 1", x == y);
-
-            let x = 3.1415_F32;
-            let y = 2.7183_F32;
-            let _ = assert("case 2", x != y);
+            let _ = assert("case 5", x == y);
 
             let x = 3.1415;
             let y = 3.1415;
-            let _ = assert("case 3", x == y);
+            let _ = assert("case 6", x == y);
+
+            let x = 3.1415_F32;
+            let y = 2.7183_F32;
+            let _ = assert("case 7", x != y);
 
             let x = 3.1415;
             let y = 2.7183;
-            let _ = assert("case 4", x != y);
+            let _ = assert("case 8", x != y);
+
+            let x = 3.1415_F32;
+            let y = 2.7183_F32;
+            let z = 5.8598_F32;
+            let _ = assert("case 9", (x + y - z).abs < 1.0e-4_F32);
 
             let x = 3.1415;
             let y = 2.7183;
             let z = 5.8598;
-            let _ = assert("case 6", x + y == z);
+            let _ = assert("case 10", (x + y - z).abs < 1.0e-4);
 
-            let x = 1.0_F32;
-            let y = 2.0_F32;
-            let z = 3.0_F32;
-            let _ = assert("case 5", x + y == z);
+            let x = 3.1415_F32;
+            let y = 2.7183_F32;
+            let z = 8.5395_F32;
+            let _ = assert("case 11", (x * y - z).abs < 1.0e-4_F32);
 
             let x = 3.1415;
             let y = 2.7183;
-            let z = 0.4232;
-            let _ = assert("case 6", x - y == z);
+            let z = 8.5395;
+            let _ = assert("case 12", (x * y - z).abs < 1.0e-4);
+
+            let x = 3.1415_F32;
+            let y = 2.7183_F32;
+            let z = 1.1557_F32;
+            let _ = assert("case 13", (x / y - z).abs < 1.0e-4_F32);
+
+            let x = 3.1415;
+            let y = 2.7183;
+            let z = 1.1557;
+            let _ = assert("case 14", (x / y - z).abs < 1.0e-4);
+
+            let x = 3.1415_F32;
+            let y = 2.7183_F32;
+            let _ = assert("case 15", x > y);
+
+            let x = 3.1415;
+            let y = 2.7183;
+            let _ = assert("case 16", x > y);
+
+            let x = 3.1415_F32;
+            let y = 3.1415_F32;
+            let _ = assert("case 17", x >= y);
+
+            let x = 3.1415;
+            let y = 3.1415;
+            let _ = assert("case 18", x >= y);
 
             pure()
         );
