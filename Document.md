@@ -87,12 +87,22 @@
     - [Std::F32](#stdf32)
       - [`_F32_to_string : F32 -> String`](#_f32_to_string--f32---string)
       - [`impl F32 : Add`](#impl-f32--add)
+      - [`impl F32 : Div`](#impl-f32--div)
       - [`impl F32 : Eq`](#impl-f32--eq)
+      - [`impl F32 : LessThan`](#impl-f32--lessthan)
+      - [`impl F32 : LessThanOrEq`](#impl-f32--lessthanoreq)
+      - [`impl F32 : Mul`](#impl-f32--mul)
+      - [`impl F32 : Sub`](#impl-f32--sub)
       - [`impl F32 : ToString`](#impl-f32--tostring)
     - [Std::F64](#stdf64)
       - [`_F64_to_string : F64 -> String`](#_f64_to_string--f64---string)
       - [`impl F64 : Add`](#impl-f64--add)
+      - [`impl F64 : Div`](#impl-f64--div)
       - [`impl F64 : Eq`](#impl-f64--eq)
+      - [`impl F64 : LessThan`](#impl-f64--lessthan)
+      - [`impl F64 : LessThanOrEq`](#impl-f64--lessthanoreq)
+      - [`impl F64 : Mul`](#impl-f64--mul)
+      - [`impl F64 : Sub`](#impl-f64--sub)
       - [`impl F64 : ToString`](#impl-f64--tostring)
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
@@ -1257,7 +1267,12 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 
 #### `_F32_to_string : F32 -> String`
 #### `impl F32 : Add`
+#### `impl F32 : Div`
 #### `impl F32 : Eq`
+#### `impl F32 : LessThan`
+#### `impl F32 : LessThanOrEq`
+#### `impl F32 : Mul`
+#### `impl F32 : Sub`
 #### `impl F32 : ToString`
 
 ### Std::F64
@@ -1268,7 +1283,12 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 
 #### `_F64_to_string : F64 -> String`
 #### `impl F64 : Add`
+#### `impl F64 : Div`
 #### `impl F64 : Eq`
+#### `impl F64 : LessThan`
+#### `impl F64 : LessThanOrEq`
+#### `impl F64 : Mul`
+#### `impl F64 : Sub`
 #### `impl F64 : ToString`
 
 ### Std::IO

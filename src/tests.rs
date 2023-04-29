@@ -2822,6 +2822,11 @@ pub fn test110() {
             let z = 3.0_F32;
             let _ = assert("case 5", x + y == z);
 
+            let x = 3.1415;
+            let y = 2.7183;
+            let z = 0.4232;
+            let _ = assert("case 6", x - y == z);
+
             pure()
         );
     "#;

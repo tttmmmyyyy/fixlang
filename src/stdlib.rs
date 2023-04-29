@@ -99,6 +99,12 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(subtract_trait_instance_int(make_u64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(subtract_trait_instance_float(make_f32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(subtract_trait_instance_float(make_f64_ty()));
 
     // Neg
     fix_module
@@ -116,6 +122,12 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(negate_trait_instance_int(make_u64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(negate_trait_instance_float(make_f32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(negate_trait_instance_float(make_f64_ty()));
 
     // Mul
     fix_module
@@ -133,6 +145,12 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(multiply_trait_instance_int(make_u64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(multiply_trait_instance_float(make_f32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(multiply_trait_instance_float(make_f64_ty()));
 
     // Div
     fix_module
@@ -150,6 +168,12 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(divide_trait_instance_int(make_u64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(divide_trait_instance_float(make_f32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(divide_trait_instance_float(make_f64_ty()));
 
     // Rem
     fix_module
@@ -184,6 +208,12 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(less_than_trait_instance_int(make_u64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(less_than_trait_instance_float(make_f32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(less_than_trait_instance_float(make_f64_ty()));
 
     // LessThanOrEq
     fix_module
@@ -201,6 +231,12 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(less_than_or_equal_to_trait_instance_int(make_u64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(less_than_or_equal_to_trait_instance_float(make_f32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(less_than_or_equal_to_trait_instance_float(make_f64_ty()));
 
     // Not
     fix_module.trait_env.add_instance(not_trait_instance_bool());

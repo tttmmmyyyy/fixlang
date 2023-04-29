@@ -2742,6 +2742,51 @@ pub fn less_than_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     )
 }
 
+pub fn less_than_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_less_than_float<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc.builder().build_float_compare(
+            inkwell::FloatPredicate::OLT,
+            lhs_val,
+            rhs_val,
+            LESS_THAN_TRAIT_LT_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            LESS_THAN_TRAIT_LT_NAME,
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        less_than_trait_id(),
+        &LESS_THAN_TRAIT_LT_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        generate_less_than_float,
+    )
+}
+
 pub const LESS_THAN_OR_EQUAL_TO_TRAIT_NAME: &str = "LessThanOrEq";
 pub const LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME: &str = "less_than_or_eq";
 
@@ -2807,6 +2852,51 @@ pub fn less_than_or_equal_to_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstan
         ty,
         make_bool_ty(),
         generate_less_than_or_equal_to_int,
+    )
+}
+
+pub fn less_than_or_equal_to_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_less_than_or_equal_to_float<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc.builder().build_float_compare(
+            inkwell::FloatPredicate::OLE,
+            lhs_val,
+            rhs_val,
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        less_than_or_equal_to_trait_id(),
+        &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        generate_less_than_or_equal_to_float,
     )
 }
 
@@ -2951,6 +3041,43 @@ pub fn subtract_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     )
 }
 
+pub fn subtract_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_subtract_float<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_float_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        subtract_trait_id(),
+        &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
+        ty.clone(),
+        ty,
+        generate_subtract_float,
+    )
+}
+
 pub const MULTIPLY_TRAIT_NAME: &str = "Mul";
 pub const MULTIPLY_TRAIT_MULTIPLY_NAME: &str = "mul";
 
@@ -3002,6 +3129,43 @@ pub fn multiply_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         ty.clone(),
         ty,
         generate_multiply_int,
+    )
+}
+
+pub fn multiply_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_multiply_float<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_float_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        multiply_trait_id(),
+        &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
+        ty.clone(),
+        ty,
+        generate_multiply_float,
     )
 }
 
@@ -3062,6 +3226,43 @@ pub fn divide_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         ty.clone(),
         ty,
         generate_divide_int,
+    )
+}
+
+pub fn divide_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_divide_float<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_float_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        divide_trait_id(),
+        &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
+        ty.clone(),
+        ty,
+        generate_divide_float,
     )
 }
 
@@ -3169,6 +3370,40 @@ pub fn negate_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         ty.clone(),
         ty,
         generate_negate_int,
+    )
+}
+
+pub fn negate_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_negate_float<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs.clone());
+        let value = gc
+            .builder()
+            .build_float_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                rhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    unary_opeartor_instance(
+        negate_trait_id(),
+        &NEGATE_TRAIT_NEGATE_NAME.to_string(),
+        ty.clone(),
+        ty,
+        generate_negate_float,
     )
 }
 
