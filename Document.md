@@ -82,12 +82,6 @@
       - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
     - [Std::Bool](#stdbool)
-    - [Std::U8](#stdu8)
-      - [\_U8\_to\_string : U8 -\> String](#_u8_to_string--u8---string)
-    - [Std::U32](#stdu32)
-      - [\_U32\_to\_string : U32 -\> String](#_u32_to_string--u32---string)
-    - [Std::U64](#stdu64)
-      - [\_U64\_to\_string : U64 -\> String](#_u64_to_string--u64---string)
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
@@ -162,6 +156,12 @@
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
       - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
+    - [Std::U8](#stdu8)
+      - [\_U8\_to\_string : U8 -\> String](#_u8_to_string--u8---string)
+    - [Std::U32](#stdu32)
+      - [\_U32\_to\_string : U32 -\> String](#_u32_to_string--u32---string)
+    - [Std::U64](#stdu64)
+      - [\_U64\_to\_string : U64 -\> String](#_u64_to_string--u64---string)
   - [Functions](#functions-1)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
     - [Std::fix : ((a -\> b) -\> a -\> b) -\> a -\> b](#stdfix--a---b---a---b---a---b)
@@ -1239,92 +1239,6 @@ Implementing traits:
 - `Bool : Eq`
 - `Bool : ToString`
 
-### Std::U8
-
-`Std::U8` is the type of 8-bit unsigned integers.
-
-Literals:
-
-- `{number}_U8`
-    - Example: `-1_U8 == 255_U8`
-- `'{character}'`
-  - Example: `'A' == 65_U8`, `'\n' == 10_U8`, `'\x7f' == 127_U8`
-
-Implementing traits:
-
-- `Std::Add`
-- `Std::Eq`
-- `Std::LessThan`
-- `Std::LessThanOrEq`
-- `Std::Mul`
-- `Std::Neg`
-- `Std::Rem`
-- `Std::Sub`
-- `Std::ToString`
-- `Std::ToU8`
-- `Std::ToI32`
-- `Std::ToU32`
-- `Std::ToI64`
-- `Std::ToU64`
-
-#### _U8_to_string : U8 -> String
-
-### Std::U32
-
-`Std::U32` is the type of 32-bit unsigned integers.
-
-Literals:
-
-- `{number}_U32`
-    - Example: `-1_U32 == 4294967295_U32`
-
-Implementing traits:
-
-- `Std::Add`
-- `Std::Eq`
-- `Std::LessThan`
-- `Std::LessThanOrEq`
-- `Std::Mul`
-- `Std::Neg`
-- `Std::Rem`
-- `Std::Sub`
-- `Std::ToString`
-- `Std::ToU8`
-- `Std::ToI32`
-- `Std::ToU32`
-- `Std::ToI64`
-- `Std::ToU64`
-
-#### _U32_to_string : U32 -> String
-
-### Std::U64
-
-`Std::U64` is the type of 64-bit unsigned integers.
-
-Literals:
-
-- `{number}_U64`
-    - Example: `-1_U64 == 18446744073709551615_U64`
-
-Implementing traits:
-
-- `Std::Add`
-- `Std::Eq`
-- `Std::LessThan`
-- `Std::LessThanOrEq`
-- `Std::Mul`
-- `Std::Neg`
-- `Std::Rem`
-- `Std::Sub`
-- `Std::ToString`
-- `Std::ToU8`
-- `Std::ToI32`
-- `Std::ToU32`
-- `Std::ToI64`
-- `Std::ToU64`
-
-#### _U64_to_string : U64 -> String
-
 ### Std::IO
 
 `IO a` is the type whose value represents an I/O action which returns a value of type `a`.
@@ -1623,8 +1537,6 @@ Returns the containing value if the value is ok, or otherwise panics after print
 
 The type of strings.
 
-Methods:
-
 #### `_get_c_str : String -> Ptr`
 Get the null-terminated C string.
 Note that in case the string is not used after call of this function, the returned pointer will be already released.
@@ -1672,6 +1584,92 @@ Implementing Traits:
 - `String : Eq`
 - `String : ToString`
     - Defined as an identity function.
+
+### Std::U8
+
+`Std::U8` is the type of 8-bit unsigned integers.
+
+Literals:
+
+- `{number}_U8`
+    - Example: `-1_U8 == 255_U8`
+- `'{character}'`
+  - Example: `'A' == 65_U8`, `'\n' == 10_U8`, `'\x7f' == 127_U8`
+
+Implementing traits:
+
+- `Std::Add`
+- `Std::Eq`
+- `Std::LessThan`
+- `Std::LessThanOrEq`
+- `Std::Mul`
+- `Std::Neg`
+- `Std::Rem`
+- `Std::Sub`
+- `Std::ToString`
+- `Std::ToU8`
+- `Std::ToI32`
+- `Std::ToU32`
+- `Std::ToI64`
+- `Std::ToU64`
+
+#### _U8_to_string : U8 -> String
+
+### Std::U32
+
+`Std::U32` is the type of 32-bit unsigned integers.
+
+Literals:
+
+- `{number}_U32`
+    - Example: `-1_U32 == 4294967295_U32`
+
+Implementing traits:
+
+- `Std::Add`
+- `Std::Eq`
+- `Std::LessThan`
+- `Std::LessThanOrEq`
+- `Std::Mul`
+- `Std::Neg`
+- `Std::Rem`
+- `Std::Sub`
+- `Std::ToString`
+- `Std::ToU8`
+- `Std::ToI32`
+- `Std::ToU32`
+- `Std::ToI64`
+- `Std::ToU64`
+
+#### _U32_to_string : U32 -> String
+
+### Std::U64
+
+`Std::U64` is the type of 64-bit unsigned integers.
+
+Literals:
+
+- `{number}_U64`
+    - Example: `-1_U64 == 18446744073709551615_U64`
+
+Implementing traits:
+
+- `Std::Add`
+- `Std::Eq`
+- `Std::LessThan`
+- `Std::LessThanOrEq`
+- `Std::Mul`
+- `Std::Neg`
+- `Std::Rem`
+- `Std::Sub`
+- `Std::ToString`
+- `Std::ToU8`
+- `Std::ToI32`
+- `Std::ToU32`
+- `Std::ToI64`
+- `Std::ToU64`
+
+#### _U64_to_string : U64 -> String
 
 ## Functions
 
