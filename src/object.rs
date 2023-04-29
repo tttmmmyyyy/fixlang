@@ -17,6 +17,8 @@ pub enum ObjectFieldType {
     U32,
     I64,
     U64,
+    F32,
+    F64,
     SubObject(Rc<TypeNode>),
     UnionBuf(Vec<Rc<TypeNode>>), // Embedded union.
     UnionTag,
@@ -40,6 +42,8 @@ impl ObjectFieldType {
             ObjectFieldType::U32 => gc.context.i32_type().into(),
             ObjectFieldType::I64 => gc.context.i64_type().into(),
             ObjectFieldType::U64 => gc.context.i64_type().into(),
+            ObjectFieldType::F32 => gc.context.f32_type().into(),
+            ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::Array(_) => gc.context.i64_type().into(),
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
@@ -843,6 +847,10 @@ pub fn get_object_type(
                     ret.field_types.push(ObjectFieldType::I64);
                 } else if ty == &make_u64_ty() {
                     ret.field_types.push(ObjectFieldType::U64);
+                } else if ty == &make_f32_ty() {
+                    ret.field_types.push(ObjectFieldType::F32);
+                } else if ty == &make_f64_ty() {
+                    ret.field_types.push(ObjectFieldType::F64);
                 } else {
                     unreachable!()
                 }
@@ -994,6 +1002,8 @@ pub fn allocate_obj<'c, 'm>(
             ObjectFieldType::U32 => {}
             ObjectFieldType::I64 => {}
             ObjectFieldType::U64 => {}
+            ObjectFieldType::F32 => {}
+            ObjectFieldType::F64 => {}
             ObjectFieldType::SubObject(_) => {}
             ObjectFieldType::LambdaFunction(_) => {}
             ObjectFieldType::Array(_) => {
@@ -1101,6 +1111,8 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::U32 => {}
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::U64 => {}
+                    ObjectFieldType::F32 => {}
+                    ObjectFieldType::F64 => {}
                     ObjectFieldType::Array(ty) => {
                         assert_eq!(i, ARRAY_CAP_IDX as usize);
                         let size = gc

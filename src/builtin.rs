@@ -73,6 +73,26 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             fields: vec![],
         },
     );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], F32_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], F64_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+        },
+    );
     // IO is defined in the source code of Std.
     ret.insert(
         make_array_tycon(),
@@ -199,6 +219,16 @@ pub fn make_i64_ty() -> Rc<TypeNode> {
 // Get U32 type.
 pub fn make_u64_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U64_NAME)))
+}
+
+// Get F32 type.
+pub fn make_f32_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], F32_NAME)))
+}
+
+// Get F64 type.
+pub fn make_f64_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], F64_NAME)))
 }
 
 // Get Bool type.

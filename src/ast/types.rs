@@ -128,6 +128,12 @@ impl TyCon {
         if self.name.name == U64_NAME {
             return Some(ctx.i64_type().as_basic_type_enum());
         }
+        if self.name.name == F32_NAME {
+            return Some(ctx.f32_type().as_basic_type_enum());
+        }
+        if self.name.name == F64_NAME {
+            return Some(ctx.f64_type().as_basic_type_enum());
+        }
         if self.name.name == PTR_NAME {
             return Some(
                 ctx.i8_type()

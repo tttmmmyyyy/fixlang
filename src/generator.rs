@@ -712,6 +712,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     ObjectFieldType::U32 => {}
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::U64 => {}
+                    ObjectFieldType::F32 => {}
+                    ObjectFieldType::F64 => {}
                     ObjectFieldType::SubObject(ty) => {
                         let ptr = if ty.is_box(self.type_env()) {
                             self.load_obj_field(ptr, struct_type, i as u32)
