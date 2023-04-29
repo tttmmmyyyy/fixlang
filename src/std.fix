@@ -869,6 +869,14 @@ trait a : ToU64 {
     to_U64 : a -> U64;
 }
 
+trait a : ToF32 {
+    to_F32 : a -> F32;
+}
+
+trait a : ToF64 {
+    to_F64 : a -> F64;
+}
+
 trait a : ToString {
     to_string : a -> String;
 }
@@ -978,6 +986,25 @@ impl U64 : ToU64 {
     to_U64 = U64::_cast_U64_to_U64;
 }
 
+// F32 -> other float types
+impl F32 : ToF32 {
+    to_F32 = F32::_cast_F32_to_F32;
+}
+
+impl F32 : ToF64 {
+    to_F64 = F32::_cast_F32_to_F64;
+}
+
+// F64 -> other float types
+impl F64 : ToF32 {
+    to_F32 = F64::_cast_F64_to_F32;
+}
+
+impl F64 : ToF64 {
+    to_F64 = F64::_cast_F64_to_F64;
+}
+
+// ToString
 impl U8 : ToString {
     to_string = U8::_U8_to_string;
 }
@@ -991,7 +1018,7 @@ impl U64 : ToString {
 }
 
 impl F32 : ToString {
-    to_string = F32::_F32_to_string;
+    to_string = |f| f.to_F64.to_string;
 }
 
 impl F64 : ToString {

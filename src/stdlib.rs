@@ -262,10 +262,11 @@ pub fn make_std_mod() -> FixModule {
         FullName::from_strs(&[STD_NAME, U64_NAME], "_U64_to_string"),
         number_to_string_function(make_u64_ty()),
     );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, F32_NAME], "_F32_to_string"),
-        number_to_string_function(make_f32_ty()),
-    );
+    // The following does not work correctly for some reason.
+    // fix_module.add_global_value(
+    //     FullName::from_strs(&[STD_NAME, F32_NAME], "_F32_to_string"),
+    //     number_to_string_function(make_f32_ty()),
+    // );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, F64_NAME], "_F64_to_string"),
         number_to_string_function(make_f64_ty()),
@@ -290,6 +291,23 @@ pub fn make_std_mod() -> FixModule {
                     &format!("_cast_{}_to_{}", from_name, to_name),
                 ),
                 cast_between_integral_function(from.clone(), to.clone()),
+            );
+        }
+    }
+
+    // Cast function between float types.
+    let float_tys: &[Rc<TypeNode>] = &[make_f32_ty(), make_f64_ty()];
+    for from in float_tys {
+        for to in float_tys {
+            let from_name = from.toplevel_tycon().unwrap().name.name.clone();
+            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            fix_module.add_global_value(
+                FullName::new(
+                    &from_namespace,
+                    &format!("_cast_{}_to_{}", from_name, to_name),
+                ),
+                cast_between_float_function(from.clone(), to.clone()),
             );
         }
     }
