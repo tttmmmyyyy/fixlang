@@ -272,7 +272,7 @@ pub fn make_std_mod() -> FixModule {
         number_to_string_function(make_f64_ty()),
     );
 
-    // Cast function between integral types.
+    // Cast functions
     let integral_tys: &[Rc<TypeNode>] = &[
         make_u8_ty(),
         make_i32_ty(),
@@ -280,6 +280,8 @@ pub fn make_std_mod() -> FixModule {
         make_i64_ty(),
         make_u64_ty(),
     ];
+    let float_tys: &[Rc<TypeNode>] = &[make_f32_ty(), make_f64_ty()];
+    // Cast function between integral types.
     for from in integral_tys {
         for to in integral_tys {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
@@ -290,9 +292,7 @@ pub fn make_std_mod() -> FixModule {
             );
         }
     }
-
     // Cast function between float types.
-    let float_tys: &[Rc<TypeNode>] = &[make_f32_ty(), make_f64_ty()];
     for from in float_tys {
         for to in float_tys {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
@@ -300,6 +300,28 @@ pub fn make_std_mod() -> FixModule {
             fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to.clone()),
+            );
+        }
+    }
+    // Cast from integers to float types.
+    for from in integral_tys {
+        for to in float_tys {
+            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            fix_module.add_global_value(
+                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                cast_int_to_float_function(from.clone(), to.clone()),
+            );
+        }
+    }
+    // Cast from float types to integers.
+    for from in float_tys {
+        for to in integral_tys {
+            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            fix_module.add_global_value(
+                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                cast_float_to_int_function(from.clone(), to.clone()),
             );
         }
     }
