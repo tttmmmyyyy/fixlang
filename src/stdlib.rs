@@ -76,6 +76,12 @@ pub fn make_std_mod() -> FixModule {
     fix_module
         .trait_env
         .add_instance(add_trait_instance_int(make_u64_ty()));
+    fix_module
+        .trait_env
+        .add_instance(add_trait_instance_float(make_f32_ty()));
+    fix_module
+        .trait_env
+        .add_instance(add_trait_instance_float(make_f64_ty()));
 
     // Sub
     fix_module

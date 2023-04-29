@@ -2860,6 +2860,43 @@ pub fn add_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
     )
 }
 
+pub fn add_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    fn generate_add_float<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        lhs: Object<'c>,
+        rhs: Object<'c>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_float_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+    binary_opeartor_instance(
+        add_trait_id(),
+        &ADD_TRAIT_ADD_NAME.to_string(),
+        ty.clone(),
+        ty,
+        generate_add_float,
+    )
+}
+
 pub const SUBTRACT_TRAIT_NAME: &str = "Sub";
 pub const SUBTRACT_TRAIT_SUBTRACT_NAME: &str = "sub";
 
