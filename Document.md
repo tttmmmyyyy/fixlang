@@ -97,6 +97,8 @@
       - [`to_I32 : I64 -> I32`](#to_i32--i64---i32)
       - [`to_U32 : I64 -> U32`](#to_u32--i64---u32)
       - [`to_U64 : I64 -> U64`](#to_u64--i64---u64)
+      - [`to_F32 : I64 -> F32`](#to_f32--i64---f32)
+      - [`to_F64 : I64 -> F64`](#to_f64--i64---f64)
       - [`impl I64 : Add`](#impl-i64--add)
       - [`impl I64 : Eq`](#impl-i64--eq)
       - [`impl I64 : LessThan`](#impl-i64--lessthan)
@@ -1257,6 +1259,8 @@ Literals:
 #### `to_I32 : I64 -> I32`
 #### `to_U32 : I64 -> U32`
 #### `to_U64 : I64 -> U64`
+#### `to_F32 : I64 -> F32`
+#### `to_F64 : I64 -> F64`
 #### `impl I64 : Add`
 #### `impl I64 : Eq`
 #### `impl I64 : LessThan`
