@@ -282,14 +282,10 @@ pub fn make_std_mod() -> FixModule {
     ];
     for from in integral_tys {
         for to in integral_tys {
-            let from_name = from.toplevel_tycon().unwrap().name.name.clone();
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             fix_module.add_global_value(
-                FullName::new(
-                    &from_namespace,
-                    &format!("_cast_{}_to_{}", from_name, to_name),
-                ),
+                FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_integral_function(from.clone(), to.clone()),
             );
         }
@@ -299,14 +295,10 @@ pub fn make_std_mod() -> FixModule {
     let float_tys: &[Rc<TypeNode>] = &[make_f32_ty(), make_f64_ty()];
     for from in float_tys {
         for to in float_tys {
-            let from_name = from.toplevel_tycon().unwrap().name.name.clone();
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             fix_module.add_global_value(
-                FullName::new(
-                    &from_namespace,
-                    &format!("_cast_{}_to_{}", from_name, to_name),
-                ),
+                FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to.clone()),
             );
         }

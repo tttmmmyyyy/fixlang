@@ -86,6 +86,7 @@
       - [`impl Bool : ToString`](#impl-bool--tostring)
     - [Std::F32](#stdf32)
       - [`abs : F32 -> F32`](#abs--f32---f32)
+      - [`to_F64 : F32 -> F64`](#to_f64--f32---f64)
       - [`impl F32 : Add`](#impl-f32--add)
       - [`impl F32 : Div`](#impl-f32--div)
       - [`impl F32 : Eq`](#impl-f32--eq)
@@ -93,11 +94,10 @@
       - [`impl F32 : LessThanOrEq`](#impl-f32--lessthanoreq)
       - [`impl F32 : Mul`](#impl-f32--mul)
       - [`impl F32 : Sub`](#impl-f32--sub)
-      - [`impl F32 : ToF32`](#impl-f32--tof32)
-      - [`impl F32 : ToF64`](#impl-f32--tof64)
       - [`impl F32 : ToString`](#impl-f32--tostring)
     - [Std::F64](#stdf64)
       - [`abs : F64 -> F64`](#abs--f64---f64)
+      - [`to_F32 : F64 -> F32`](#to_f32--f64---f32)
       - [`impl F64 : Add`](#impl-f64--add)
       - [`impl F64 : Div`](#impl-f64--div)
       - [`impl F64 : Eq`](#impl-f64--eq)
@@ -105,8 +105,6 @@
       - [`impl F64 : LessThanOrEq`](#impl-f64--lessthanoreq)
       - [`impl F64 : Mul`](#impl-f64--mul)
       - [`impl F64 : Sub`](#impl-f64--sub)
-      - [`impl F64 : ToF32`](#impl-f64--tof32)
-      - [`impl F64 : ToF64`](#impl-f64--tof64)
       - [`impl F64 : ToString`](#impl-f64--tostring)
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
@@ -136,9 +134,33 @@
       - [`impl IOResult e : Functor`](#impl-ioresult-e--functor)
       - [`impl IOResult e : Monad`](#impl-ioresult-e--monad)
     - [Std::I32](#stdi32)
-      - [\_I32\_to\_string : I32 -\> String](#_i32_to_string--i32---string)
+      - [`to_U8 : I32 -> U8`](#to_u8--i32---u8)
+      - [`to_U32 : I32 -> U32`](#to_u32--i32---u32)
+      - [`to_I64 : I32 -> I64`](#to_i64--i32---i64)
+      - [`to_U64 : I32 -> U64`](#to_u64--i32---u64)
+      - [`impl I32 : Add`](#impl-i32--add)
+      - [`impl I32 : Eq`](#impl-i32--eq)
+      - [`impl I32 : LessThan`](#impl-i32--lessthan)
+      - [`impl I32 : LessThanOrEq`](#impl-i32--lessthanoreq)
+      - [`impl I32 : Mul`](#impl-i32--mul)
+      - [`impl I32 : Neg`](#impl-i32--neg)
+      - [`impl I32 : Rem`](#impl-i32--rem)
+      - [`impl I32 : Sub`](#impl-i32--sub)
+      - [`impl I32 : ToString`](#impl-i32--tostring)
     - [Std::I64](#stdi64)
-      - [\_I64\_to\_string : I64 -\> String](#_i64_to_string--i64---string)
+      - [`to_U8 : I64 -> U8`](#to_u8--i64---u8)
+      - [`to_I32 : I64 -> I32`](#to_i32--i64---i32)
+      - [`to_U32 : I64 -> U32`](#to_u32--i64---u32)
+      - [`to_U64 : I64 -> U64`](#to_u64--i64---u64)
+      - [`impl I64 : Add`](#impl-i64--add)
+      - [`impl I64 : Eq`](#impl-i64--eq)
+      - [`impl I64 : LessThan`](#impl-i64--lessthan)
+      - [`impl I64 : LessThanOrEq`](#impl-i64--lessthanoreq)
+      - [`impl I64 : Mul`](#impl-i64--mul)
+      - [`impl I64 : Neg`](#impl-i64--neg)
+      - [`impl I64 : Rem`](#impl-i64--rem)
+      - [`impl I64 : Sub`](#impl-i64--sub)
+      - [`impl I64 : ToString`](#impl-i64--tostring)
     - [Std::Iterator](#stditerator)
       - [`advance : Iterator a -> Option (a, Iterator a)`](#advance--iterator-a---option-a-iterator-a)
       - [`append : Iterator a -> Iterator a -> Iterator a`](#append--iterator-a---iterator-a---iterator-a)
@@ -183,11 +205,34 @@
       - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
     - [Std::U8](#stdu8)
-      - [\_U8\_to\_string : U8 -\> String](#_u8_to_string--u8---string)
+      - [`to_I32 : U8 -> I32`](#to_i32--u8---i32)
+      - [`to_U32 : U8 -> U32`](#to_u32--u8---u32)
+      - [`to_I64 : U8 -> I64`](#to_i64--u8---i64)
+      - [`to_U64 : U8 -> U64`](#to_u64--u8---u64)
+      - [`impl U8 : Add`](#impl-u8--add)
+      - [`impl U8 : Eq`](#impl-u8--eq)
+      - [`impl U8 : LessThan`](#impl-u8--lessthan)
+      - [`impl U8 : LessThanOrEq`](#impl-u8--lessthanoreq)
+      - [`impl U8 : Mul`](#impl-u8--mul)
+      - [`impl U8 : Neg`](#impl-u8--neg)
+      - [`impl U8 : Rem`](#impl-u8--rem)
+      - [`impl U8 : Sub`](#impl-u8--sub)
+      - [`impl U8 : ToString`](#impl-u8--tostring)
     - [Std::U32](#stdu32)
-      - [\_U32\_to\_string : U32 -\> String](#_u32_to_string--u32---string)
+      - [`to_U8 : U32 -> U8`](#to_u8--u32---u8)
+      - [`to_I32 : U32 -> I32`](#to_i32--u32---i32)
+      - [`to_I64 : U32 -> I64`](#to_i64--u32---i64)
+      - [`to_U64 : U32 -> U64`](#to_u64--u32---u64)
+      - [`impl U32 : Add`](#impl-u32--add)
+      - [`impl U32 : Eq`](#impl-u32--eq)
+      - [`impl U32 : LessThan`](#impl-u32--lessthan)
+      - [`impl U32 : LessThanOrEq`](#impl-u32--lessthanoreq)
+      - [`impl U32 : Mul`](#impl-u32--mul)
+      - [`impl U32 : Neg`](#impl-u32--neg)
+      - [`impl U32 : Rem`](#impl-u32--rem)
+      - [`impl U32 : Sub`](#impl-u32--sub)
+      - [`impl U32 : ToString`](#impl-u32--tostring)
     - [Std::U64](#stdu64)
-      - [\_U64\_to\_string : U64 -\> String](#_u64_to_string--u64---string)
   - [Functions](#functions-1)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
     - [Std::fix : ((a -\> b) -\> a -\> b) -\> a -\> b](#stdfix--a---b---a---b---a---b)
@@ -1270,6 +1315,7 @@ Boolean literals are `true` and `false`.
 For `F32` literals, you need to add a suffix "_F32" to explicitly specify the type. Example: `3.1416_F32`.
 
 #### `abs : F32 -> F32`
+#### `to_F64 : F32 -> F64`
 #### `impl F32 : Add`
 #### `impl F32 : Div`
 #### `impl F32 : Eq`
@@ -1277,8 +1323,6 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 #### `impl F32 : LessThanOrEq`
 #### `impl F32 : Mul`
 #### `impl F32 : Sub`
-#### `impl F32 : ToF32`
-#### `impl F32 : ToF64`
 #### `impl F32 : ToString`
 
 ### Std::F64
@@ -1288,6 +1332,7 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 For `F64` literals, you can write or omit explicit type specifier suffix "_F64". Example `3.1416_F64 == 3.1416`.
 
 #### `abs : F64 -> F64`
+#### `to_F32 : F64 -> F32`
 #### `impl F64 : Add`
 #### `impl F64 : Div`
 #### `impl F64 : Eq`
@@ -1295,8 +1340,6 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 #### `impl F64 : LessThanOrEq`
 #### `impl F64 : Mul`
 #### `impl F64 : Sub`
-#### `impl F64 : ToF32`
-#### `impl F64 : ToF64`
 #### `impl F64 : ToString`
 
 ### Std::IO
@@ -1428,24 +1471,19 @@ Literals:
 - `{number}_I32`
     - Example: `42_I32`
 
-Implementing traits:
-
-- `Std::Add`
-- `Std::Eq`
-- `Std::LessThan`
-- `Std::LessThanOrEq`
-- `Std::Mul`
-- `Std::Neg`
-- `Std::Rem`
-- `Std::Sub`
-- `Std::ToString`
-- `Std::ToU8`
-- `Std::ToI32`
-- `Std::ToU32`
-- `Std::ToI64`
-- `Std::ToU64`
-
-#### _I32_to_string : I32 -> String
+#### `to_U8 : I32 -> U8`
+#### `to_U32 : I32 -> U32`
+#### `to_I64 : I32 -> I64`
+#### `to_U64 : I32 -> U64`
+#### `impl I32 : Add`
+#### `impl I32 : Eq`
+#### `impl I32 : LessThan`
+#### `impl I32 : LessThanOrEq`
+#### `impl I32 : Mul`
+#### `impl I32 : Neg`
+#### `impl I32 : Rem`
+#### `impl I32 : Sub`
+#### `impl I32 : ToString`
 
 ### Std::I64
 
@@ -1457,24 +1495,19 @@ Literals:
 - `{number}_I64`
     - Example: `42_I64 == 42`
 
-Implementing traits:
-
-- `Std::Add`
-- `Std::Eq`
-- `Std::LessThan`
-- `Std::LessThanOrEq`
-- `Std::Mul`
-- `Std::Neg`
-- `Std::Rem`
-- `Std::Sub`
-- `Std::ToString`
-- `Std::ToU8`
-- `Std::ToI32`
-- `Std::ToU32`
-- `Std::ToI64`
-- `Std::ToU64`
-
-#### _I64_to_string : I64 -> String
+#### `to_U8 : I64 -> U8`
+#### `to_I32 : I64 -> I32`
+#### `to_U32 : I64 -> U32`
+#### `to_U64 : I64 -> U64`
+#### `impl I64 : Add`
+#### `impl I64 : Eq`
+#### `impl I64 : LessThan`
+#### `impl I64 : LessThanOrEq`
+#### `impl I64 : Mul`
+#### `impl I64 : Neg`
+#### `impl I64 : Rem`
+#### `impl I64 : Sub`
+#### `impl I64 : ToString`
 
 ### Std::Iterator
 
@@ -1656,24 +1689,19 @@ Literals:
 - `'{character}'`
   - Example: `'A' == 65_U8`, `'\n' == 10_U8`, `'\x7f' == 127_U8`
 
-Implementing traits:
-
-- `Std::Add`
-- `Std::Eq`
-- `Std::LessThan`
-- `Std::LessThanOrEq`
-- `Std::Mul`
-- `Std::Neg`
-- `Std::Rem`
-- `Std::Sub`
-- `Std::ToString`
-- `Std::ToU8`
-- `Std::ToI32`
-- `Std::ToU32`
-- `Std::ToI64`
-- `Std::ToU64`
-
-#### _U8_to_string : U8 -> String
+#### `to_I32 : U8 -> I32`
+#### `to_U32 : U8 -> U32`
+#### `to_I64 : U8 -> I64`
+#### `to_U64 : U8 -> U64`
+#### `impl U8 : Add`
+#### `impl U8 : Eq`
+#### `impl U8 : LessThan`
+#### `impl U8 : LessThanOrEq`
+#### `impl U8 : Mul`
+#### `impl U8 : Neg`
+#### `impl U8 : Rem`
+#### `impl U8 : Sub`
+#### `impl U8 : ToString`
 
 ### Std::U32
 
@@ -1686,22 +1714,19 @@ Literals:
 
 Implementing traits:
 
-- `Std::Add`
-- `Std::Eq`
-- `Std::LessThan`
-- `Std::LessThanOrEq`
-- `Std::Mul`
-- `Std::Neg`
-- `Std::Rem`
-- `Std::Sub`
-- `Std::ToString`
-- `Std::ToU8`
-- `Std::ToI32`
-- `Std::ToU32`
-- `Std::ToI64`
-- `Std::ToU64`
-
-#### _U32_to_string : U32 -> String
+#### `to_U8 : U32 -> U8`
+#### `to_I32 : U32 -> I32`
+#### `to_I64 : U32 -> I64`
+#### `to_U64 : U32 -> U64`
+#### `impl U32 : Add`
+#### `impl U32 : Eq`
+#### `impl U32 : LessThan`
+#### `impl U32 : LessThanOrEq`
+#### `impl U32 : Mul`
+#### `impl U32 : Neg`
+#### `impl U32 : Rem`
+#### `impl U32 : Sub`
+#### `impl U32 : ToString`
 
 ### Std::U64
 
@@ -1714,22 +1739,19 @@ Literals:
 
 Implementing traits:
 
-- `Std::Add`
-- `Std::Eq`
-- `Std::LessThan`
-- `Std::LessThanOrEq`
-- `Std::Mul`
-- `Std::Neg`
-- `Std::Rem`
-- `Std::Sub`
-- `Std::ToString`
-- `Std::ToU8`
-- `Std::ToI32`
-- `Std::ToU32`
-- `Std::ToI64`
-- `Std::ToU64`
-
-#### _U64_to_string : U64 -> String
+- `to_U8 : U64 -> U8`
+- `to_I32 : U64 -> I32`
+- `to_U32 : U64 -> U32`
+- `to_I64 : U64 -> I64`
+- `impl U64 : Add`
+- `impl U64 : Eq`
+- `impl U64 : LessThan`
+- `impl U64 : LessThanOrEq`
+- `impl U64 : Mul`
+- `impl U64 : Neg`
+- `impl U64 : Rem`
+- `impl U64 : Sub`
+- `impl U64 : ToString`
 
 ## Functions
 
