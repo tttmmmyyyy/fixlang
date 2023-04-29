@@ -85,8 +85,10 @@
       - [`impl Bool : Eq`](#impl-bool--eq)
       - [`impl Bool : ToString`](#impl-bool--tostring)
     - [Std::F32](#stdf32)
+      - [`impl F32 : Add`](#impl-f32--add)
       - [`impl F32 : Eq`](#impl-f32--eq)
     - [Std::F64](#stdf64)
+      - [`impl F64 : Add`](#impl-f64--add)
       - [`impl F64 : Eq`](#impl-f64--eq)
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
@@ -1249,6 +1251,7 @@ Boolean literals are `true` and `false`.
 
 For `F32` literals, you need to add a suffix "_F32" to explicitly specify the type. Example: `3.1416_F32`.
 
+#### `impl F32 : Add`
 #### `impl F32 : Eq`
 
 ### Std::F64
@@ -1257,6 +1260,7 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 
 For `F64` literals, you can write or omit explicit type specifier suffix "_F64". Example `3.1416_F64 == 3.1416`.
 
+#### `impl F64 : Add`
 #### `impl F64 : Eq`
 
 ### Std::IO
