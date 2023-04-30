@@ -2891,6 +2891,30 @@ pub fn test110() {
 
 #[test]
 #[serial]
+pub fn test111() {
+    // Test function composition operators
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let f = |x| x + 2;
+            let g = |x| 3*x + 4;
+
+            let f_g = f << g;
+            let g_f = f >> g;
+
+            let _ = assert_eq("case 1", f_g(0), 6);
+            let _ = assert_eq("case 2", g_f(0), 10);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
