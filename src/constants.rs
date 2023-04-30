@@ -15,8 +15,10 @@ pub const F64_NAME: &str = "F64";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 pub const STRING_NAME: &str = "String";
-pub const FUNPTR_NAME: &str = "%FunPtr"; // Users cannot access this type constructor.
-pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";
 pub const MONAD_NAME: &str = "Monad";
 pub const MONAD_BIND_NAME: &str = "bind";
 pub const COMPOSE_FUNCTION_NAME: &str = "compose";
+
+pub const ARG_NAME: &str = "%arg";
+pub const FUNPTR_NAME: &str = "%FunPtr";
+pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";

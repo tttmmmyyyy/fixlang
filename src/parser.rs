@@ -43,6 +43,16 @@ impl Span {
         }
     }
 
+    pub fn unite_opt(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
+        if lhs.is_none() {
+            return None;
+        }
+        if rhs.is_none() {
+            return None;
+        }
+        Some(lhs.clone().unwrap().unite(rhs.as_ref().unwrap()))
+    }
+
     // Show source codes around this span.
     pub fn to_string(&self) -> String {
         let span = pest::Span::new(self.input.as_str(), self.start, self.end).unwrap();
@@ -1068,18 +1078,19 @@ fn parse_expr_lam(expr: Pair<Rule>, _msc: &mut DoContext, src: &Rc<String>) -> R
         pats.push(parse_pattern(pairs.next().unwrap(), src));
     }
     let mut expr = parse_expr_with_new_do(pairs.next().unwrap(), src);
-    const ARG_NAME: &str = "%arg";
+    let mut pat_body_span = expr.source.clone();
     let var = var_local(ARG_NAME);
     for pat in pats.iter().rev() {
+        pat_body_span = Span::unite_opt(&pat_body_span, &pat.info.source);
         expr = expr_abs(
             vec![var.clone()],
             expr_let(
                 pat.clone(),
                 expr_var(FullName::local(ARG_NAME), pat.info.source.clone()),
                 expr,
-                None,
+                pat_body_span.clone(),
             ),
-            None,
+            pat_body_span.clone(),
         )
     }
     expr.set_source(Some(span))
