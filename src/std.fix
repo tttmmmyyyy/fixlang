@@ -849,14 +849,60 @@ impl String : ToString {
 compose : (a -> b) -> (b -> c) -> a -> c;
 compose = |f, g, a| g(f(a));
 
+// Constants
+
+namespace U8 {
+    maximum : U8;
+    maximum = 255_U8;
+
+    minimum : U8;
+    minimum = 0_U8;
+}
+
+namespace I32 {
+    maximum : I32;
+    maximum = 2147483647_I32;
+
+    minimum : I32;
+    minimum = -2147483648_I32;
+}
+
+namespace U32 {
+    maximum : U32;
+    maximum = 4294967295_U32;
+
+    minimum : U32;
+    minimum = 0_U32;
+}
+
+namespace I64 {
+    maximum : I64;
+    maximum = 9223372036854775807;
+
+    minimum : I64;
+    minimum = -9223372036854775808;
+}
+
+namespace U64 {
+    maximum : U64;
+    maximum = 18446744073709551615_U64;
+
+    minimum : U64;
+    minimum = 0_U64;
+}
+
 // Traits
 
 trait [f : *->*] f : Functor {
     map : (a -> b) -> f a -> f b;
 }
 
-trait a : ToString {
-    to_string : a -> String;
+namespace LessThan {
+    max : [a : LessThan] a -> a -> a;
+    max = |x, y| if x < y { y } else { x };
+
+    min : [a : LessThan] a -> a -> a;
+    min = |x, y| if x < y { x } else { y };
 }
 
 trait [m : *->*] m : Monad {
@@ -867,6 +913,10 @@ trait [m : *->*] m : Monad {
 namespace Monad {
     flatten : [m : Monad] m (m a) -> m a;
     flatten = Monad::bind(|x|x);
+}
+
+trait a : ToString {
+    to_string : a -> String;
 }
 
 // ToString implementations

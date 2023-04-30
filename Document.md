@@ -56,6 +56,8 @@
       - [`impl Bool : Eq`](#impl-bool--eq)
       - [`impl Bool : ToString`](#impl-bool--tostring)
     - [Std::U8](#stdu8)
+      - [`maximum : U8`](#maximum--u8)
+      - [`minimum : U8`](#minimum--u8)
       - [`to_I32 : U8 -> I32`](#to_i32--u8---i32)
       - [`to_U32 : U8 -> U32`](#to_u32--u8---u32)
       - [`to_I64 : U8 -> I64`](#to_i64--u8---i64)
@@ -72,6 +74,8 @@
       - [`impl U8 : Sub`](#impl-u8--sub)
       - [`impl U8 : ToString`](#impl-u8--tostring)
     - [Std::I32](#stdi32)
+      - [`maximum : I32`](#maximum--i32)
+      - [`minimum : I32`](#minimum--i32)
       - [`to_U8 : I32 -> U8`](#to_u8--i32---u8)
       - [`to_U32 : I32 -> U32`](#to_u32--i32---u32)
       - [`to_I64 : I32 -> I64`](#to_i64--i32---i64)
@@ -88,6 +92,8 @@
       - [`impl I32 : Sub`](#impl-i32--sub)
       - [`impl I32 : ToString`](#impl-i32--tostring)
     - [Std::U32](#stdu32)
+      - [`maximum : U32`](#maximum--u32)
+      - [`minimum : U32`](#minimum--u32)
       - [`to_U8 : U32 -> U8`](#to_u8--u32---u8)
       - [`to_I32 : U32 -> I32`](#to_i32--u32---i32)
       - [`to_I64 : U32 -> I64`](#to_i64--u32---i64)
@@ -104,6 +110,8 @@
       - [`impl U32 : Sub`](#impl-u32--sub)
       - [`impl U32 : ToString`](#impl-u32--tostring)
     - [Std::I64](#stdi64)
+      - [`maximum : I64`](#maximum--i64)
+      - [`minimum : I64`](#minimum--i64)
       - [`to_U8 : I64 -> U8`](#to_u8--i64---u8)
       - [`to_I32 : I64 -> I32`](#to_i32--i64---i32)
       - [`to_U32 : I64 -> U32`](#to_u32--i64---u32)
@@ -120,6 +128,8 @@
       - [`impl I64 : Sub`](#impl-i64--sub)
       - [`impl I64 : ToString`](#impl-i64--tostring)
     - [Std::U64](#stdu64)
+      - [`maximum : U64`](#maximum--u64)
+      - [`minimum : U64`](#minimum--u64)
       - [`to_U8 : U64 -> U8`](#to_u8--u64---u8)
       - [`to_I32 : U64 -> I32`](#to_i32--u64---i32)
       - [`to_U32 : U64 -> U32`](#to_u32--u64---u32)
@@ -272,7 +282,13 @@
     - [Std::Debug::assert\_eq : \[a: Eq\] String -\> a -\> a -\> ()](#stddebugassert_eq--a-eq-string---a---a---)
   - [Traits](#traits)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
-      - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
+      - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
+    - [Std::LessThan](#stdlessthan)
+      - [(required) `less_than : [a : LessThan] a -> a -> a`](#required-less_than--a--lessthan-a---a---a)
+      - [`max : [a : LessThan] a -> a -> a`](#max--a--lessthan-a---a---a)
+      - [`min : [a : LessThan] a -> a -> a`](#min--a--lessthan-a---a---a)
+    - [Std::LessThanOrEq](#stdlessthanoreq)
+      - [(required) `less_than_or_eq : [a : LessThanOrEq] a -> a -> a`](#required-less_than_or_eq--a--lessthanoreq-a---a---a)
     - [Std::Monad (\* -\> \*)](#stdmonad----)
       - [(required) `bind : [m : Monad] (a -> m b) -> m a -> m b`](#required-bind--m--monad-a---m-b---m-a---m-b)
       - [(required) `pure : [m : Monad] a -> m a`](#required-pure--m--monad-a---m-a)
@@ -1232,6 +1248,8 @@ Literals:
 - `'{character}'`
   - Example: `'A' == 65_U8`, `'\n' == 10_U8`, `'\x7f' == 127_U8`
 
+#### `maximum : U8`
+#### `minimum : U8`
 #### `to_I32 : U8 -> I32`
 #### `to_U32 : U8 -> U32`
 #### `to_I64 : U8 -> I64`
@@ -1256,6 +1274,8 @@ Literals:
 - `{number}_I32`
     - Example: `42_I32`
 
+#### `maximum : I32`
+#### `minimum : I32`
 #### `to_U8 : I32 -> U8`
 #### `to_U32 : I32 -> U32`
 #### `to_I64 : I32 -> I64`
@@ -1281,6 +1301,8 @@ Literals:
 - `{number}_U32`
     - Example: `-1_U32 == 4294967295_U32`
 
+#### `maximum : U32`
+#### `minimum : U32`
 #### `to_U8 : U32 -> U8`
 #### `to_I32 : U32 -> I32`
 #### `to_I64 : U32 -> I64`
@@ -1307,6 +1329,8 @@ Literals:
 - `{number}_I64`
     - Example: `42_I64 == 42`
 
+#### `maximum : I64`
+#### `minimum : I64`
 #### `to_U8 : I64 -> U8`
 #### `to_I32 : I64 -> I32`
 #### `to_U32 : I64 -> U32`
@@ -1332,6 +1356,8 @@ Literals:
 - `{number}_U64`
     - Example: `-1_U64 == 18446744073709551615_U64`
 
+#### `maximum : U64`
+#### `minimum : U64`
 #### `to_U8 : U64 -> U8`
 #### `to_I32 : U64 -> I32`
 #### `to_U32 : U64 -> U32`
@@ -1883,7 +1909,19 @@ main = (
 
 ### Std::Functor (* -> *)
 
-#### `map : [f : Functor] (a -> b) -> f a -> f b`
+#### (required) `map : [f : Functor] (a -> b) -> f a -> f b`
+
+### Std::LessThan
+
+#### (required) `less_than : [a : LessThan] a -> a -> a`
+
+#### `max : [a : LessThan] a -> a -> a`
+
+#### `min : [a : LessThan] a -> a -> a`
+
+### Std::LessThanOrEq
+
+#### (required) `less_than_or_eq : [a : LessThanOrEq] a -> a -> a`
 
 ### Std::Monad (* -> *)
 
