@@ -19,3 +19,4 @@ pub const FUNPTR_NAME: &str = "%FunPtr"; // Users cannot access this type constr
 pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";
 pub const MONAD_NAME: &str = "Monad";
 pub const MONAD_BIND_NAME: &str = "bind";
+pub const COMPOSE_FUNCTION_NAME: &str = "compose";

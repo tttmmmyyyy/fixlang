@@ -224,10 +224,6 @@ namespace Debug {
     );
 }
 
-trait [f : *->*] f : Functor {
-    map : (a -> b) -> f a -> f b;
-}
-
 impl I32 : ToString {
     to_string = I32::_I32_to_string;
 }
@@ -402,7 +398,6 @@ impl IO : Monad {
         )}
     );
 }
-
 
 impl IOError : ToString {
     to_string = |e| e.@msg;
@@ -849,11 +844,33 @@ impl String : ToString {
     to_string = |s| s;
 }
 
+// Functions
+
+compose : (a -> b) -> (b -> c) -> a -> c;
+compose = |f, g, a| g(f(a));
+
+// Traits
+
+trait [f : *->*] f : Functor {
+    map : (a -> b) -> f a -> f b;
+}
+
 trait a : ToString {
     to_string : a -> String;
 }
 
-// ToString
+trait [m : *->*] m : Monad {
+    bind : (a -> m b) -> m a -> m b;
+    pure : a -> m a;
+}
+
+namespace Monad {
+    flatten : [m : Monad] m (m a) -> m a;
+    flatten = Monad::bind(|x|x);
+}
+
+// ToString implementations
+
 impl U8 : ToString {
     to_string = U8::_U8_to_string;
 }
@@ -872,14 +889,4 @@ impl F32 : ToString {
 
 impl F64 : ToString {
     to_string = F64::_F64_to_string;
-}
-
-trait [m : *->*] m : Monad {
-    bind : (a -> m b) -> m a -> m b;
-    pure : a -> m a;
-}
-
-namespace Monad {
-    flatten : [m : Monad] m (m a) -> m a;
-    flatten = Monad::bind(|x|x);
 }

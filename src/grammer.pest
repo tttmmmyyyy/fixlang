@@ -93,12 +93,13 @@ expr_ltr_app = { expr_app ~ (sep* ~ combinator_dot ~ sep* ~ expr_app)* }
 operator_bind = { "*" }
 expr_bind = { operator_bind* ~ expr_ltr_app }
 
-// TODO: two composition operators "<<" and ">>"" will be added here.
+operator_composition = { "<<" | ">>" }
+expr_composition = { expr_bind ~ (sep* ~ operator_composition ~ sep* ~ expr_bind)* }
 
 // unary operators
 // NOTE: we should write this rule so that "-1" is parsed as expr_int_lit.
 operator_unary = { "-" | "!" }
-expr_unary = { expr_bind | operator_unary+ ~ expr_bind }
+expr_unary = { expr_composition | operator_unary+ ~ expr_composition }
 
 // operator*,/,% (left-associative)
 operator_mul = { "*" | "/" | "%" }

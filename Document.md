@@ -261,6 +261,7 @@
       - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
   - [Functions](#functions-1)
+    - [Std::compose : (a -\> b) -\> (b -\> c) -\> a -\> c](#stdcompose--a---b---b---c---a---c)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
     - [Std::fix : ((a -\> b) -\> a -\> b) -\> a -\> b](#stdfix--a---b---a---b---a---b)
     - [Std::loop : s -\> (s -\> LoopResult s r) -\> r](#stdloop--s---s---loopresult-s-r---r)
@@ -1791,6 +1792,10 @@ Implementing Traits:
     - Defined as an identity function.
 
 ## Functions
+
+### Std::compose : (a -> b) -> (b -> c) -> a -> c
+
+Compose two functions. You can use this function by binary operators `<<` and `>>`.
 
 ### Std::is_unique : a -> (Bool, a)
 

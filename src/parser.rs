@@ -842,7 +842,7 @@ fn parse_expr_unary(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> 
                 }
             }
             _ => {
-                let mut expr = parse_expr_bind(pair, msc, src);
+                let mut expr = parse_expr_composition(pair, msc, src);
                 for (i, op) in ops.iter().enumerate().rev() {
                     let op_span = spans[i].clone();
                     expr = expr_app(
@@ -875,7 +875,61 @@ fn parse_expr_rtl_app(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -
     ret
 }
 
-// Parse monadic bind syntax `x?`.
+// Parse function composition operator >> and <<.
+fn parse_expr_composition(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
+    fn unite_src_from_expr(lhs: &Rc<ExprNode>, rhs: &Rc<ExprNode>) -> Option<Span> {
+        if lhs.source.is_none() {
+            return None;
+        }
+        if rhs.source.is_none() {
+            return None;
+        }
+        Some(
+            lhs.source
+                .as_ref()
+                .unwrap()
+                .unite(rhs.source.as_ref().clone().unwrap()),
+        )
+    }
+
+    assert_eq!(pair.as_rule(), Rule::expr_composition);
+    let mut pairs = pair.into_inner();
+    let mut expr = parse_expr_bind(pairs.next().unwrap(), msc, src);
+    while pairs.peek().is_some() {
+        let op = pairs.next().unwrap();
+        assert_eq!(op.as_rule(), Rule::operator_composition);
+        let op_span = Span::from_pair(src, &op);
+        let compose = expr_var(
+            FullName::from_strs(&[STD_NAME], COMPOSE_FUNCTION_NAME),
+            Some(op_span),
+        );
+        let rhs = parse_expr_bind(pairs.next().unwrap(), msc, src);
+        match op.as_str() {
+            ">>" => {
+                let span = unite_src_from_expr(&compose, &expr);
+                expr = expr_app(compose, vec![expr], span)
+                    .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
+                let span = unite_src_from_expr(&expr, &rhs);
+                expr = expr_app(expr, vec![rhs], span)
+                    .set_app_order(AppSourceCodeOrderType::FunctionIsFormer);
+            }
+            "<<" => {
+                let span = unite_src_from_expr(&compose, &rhs);
+                let right_expr = expr_app(compose, vec![rhs.clone()], span)
+                    .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
+                let span = unite_src_from_expr(&right_expr, &rhs);
+                expr = expr_app(right_expr, vec![expr], span)
+                    .set_app_order(AppSourceCodeOrderType::FunctionIsFormer);
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+    expr
+}
+
+// Parse monadic bind syntax `*x`.
 fn parse_expr_bind(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_bind);
     let mut stars = vec![];
