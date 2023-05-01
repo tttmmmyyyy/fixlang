@@ -20,6 +20,8 @@
   - [Iterators](#iterators)
   - [Mutation in Fix](#mutation-in-fix)
 - [Other topics on syntax](#other-topics-on-syntax)
+  - [Integer literals](#integer-literals)
+  - [Float literals](#float-literals)
   - [Structs](#structs-1)
     - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
     - [`={field_name} : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct)
@@ -888,6 +890,14 @@ As a summary, since values in Fix are immutable, the `set : I64 -> a -> Array a 
 The `set!` function is almost same as the `set` function, but it panics (i.e., stop the execution of the program) if the given array will be used later. In other words, there is assurance that `set!` doesn't clone the array. This is useful to assure that a program is running at a expected time complexity. We put the exclamation mark for a function that requires the assurance that the given value will not be used later.
 
 # Other topics on syntax
+
+## Integer literals
+
+(TBA)
+
+## Float literals
+
+Float literals requires at least one digit before and after the decimal point. For example, `1.` or `.1` is not valid float literal (where it is valid in C) and you need to write `1.0` or `0.1` instead.
 
 ## Structs
 

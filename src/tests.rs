@@ -659,9 +659,7 @@ pub fn test32() {
         main : IO ();
         main = (
             let f = |x| x + 10;
-            let five = 5;
-            let three = 3;
-            let u = assert_eq("", five.add $ three.f, 18);
+            let u = assert_eq("", 5.add $ 3.f, 18);
             pure()
         );
         "#;

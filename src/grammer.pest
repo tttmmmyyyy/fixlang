@@ -28,7 +28,7 @@ namespace = { namespace_item ~ ("::" ~ namespace_item)* }
 
 expr_number_lit = { number_lit_body ~ ("_" ~ number_lit_type)? }
 
-number_lit_body = { "-"? ~ ASCII_DIGIT+ ~ "."? ~ ASCII_DIGIT* ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )? }
+number_lit_body = { "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )? }
 
 number_lit_type = { "U8" | "I32" | "U32" | "I64" | "U64" | "F32" | "F64" }
 
