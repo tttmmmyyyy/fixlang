@@ -489,6 +489,21 @@ type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };
 
 namespace Iterator {
 
+    // Flatten an iterator of iterators.
+    // You should use `Monad::flatten` instead of this function.
+    // This function is used in the implementation of `Monad::bind` for `Iterator`.
+    _flatten : Iterator (Iterator a) -> Iterator a;
+    _flatten = |iter_iter| (
+        let next = |_| (
+            if iter_iter.is_empty { Option::none() };
+            let (iter, iter_iter) = iter_iter.advance.as_some;
+            if iter.is_empty { iter_iter._flatten.advance };
+            let (e, iter) = iter.advance.as_some;
+            Option::some $ (e, iter_iter.push_front(iter)._flatten)
+        );
+        Iterator { next : next }
+    );
+
     // Get next value and next iterator.
     advance : Iterator a -> Option (a, Iterator a);
     advance = |iter| (iter.@next)();
@@ -498,8 +513,10 @@ namespace Iterator {
     append : Iterator a -> Iterator a -> Iterator a;
     append = |rhs, lhs| (
         if lhs.is_empty { rhs };
-        let Option::some((e, lhs)) = lhs.advance;
-        Iterator::push_front(e) $ lhs.append(rhs)
+        let next = |_| (
+            lhs.advance.map(|(e, lhs)| (e, lhs.append(rhs)))
+        );
+        Iterator { next : next }
     );
 
     // Creates an iterator that counts up from a number.
@@ -694,7 +711,7 @@ impl Iterator : Functor {
 
 impl Iterator : Monad {
     pure = |e| Iterator::empty.push_front(e);
-    bind = |f, xs| xs.map(f).fold(Iterator::empty, Add::add);
+    bind = |f, xs| xs.map(f)._flatten;
 }
 
 type Option a = union { none: (), some: a };

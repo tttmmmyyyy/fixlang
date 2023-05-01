@@ -1950,7 +1950,7 @@ pub fn test78() {
 #[test]
 #[serial]
 pub fn test79() {
-    // Test Iterator::append
+    // Test Iterator::push_front
     let source = r#"
     module Main;
 

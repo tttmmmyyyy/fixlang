@@ -231,6 +231,7 @@
       - [`impl IOResult e : Functor`](#impl-ioresult-e--functor)
       - [`impl IOResult e : Monad`](#impl-ioresult-e--monad)
     - [Std::Iterator](#stditerator)
+      - [`_flatten : Iterator (Iterator a) -> Iterator a`](#_flatten--iterator-iterator-a---iterator-a)
       - [`advance : Iterator a -> Option (a, Iterator a)`](#advance--iterator-a---option-a-iterator-a)
       - [`append : Iterator a -> Iterator a -> Iterator a`](#append--iterator-a---iterator-a---iterator-a)
       - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
@@ -1659,6 +1660,11 @@ Convert an IOResult to an IO action.
 
 Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
+#### `_flatten : Iterator (Iterator a) -> Iterator a`
+Flatten an iterator of iterators.
+You should use Monad::flatten instead of this function.
+This function is used in the implementation of Monad::bind for Iterator.
+
 #### `advance : Iterator a -> Option (a, Iterator a)`
 Get next value and next iterator.
 
@@ -1703,7 +1709,6 @@ Example: `from_map(f) = [f(0), f(1), f(2), ...]`.
 Generate an iterator from a state transition function.
 - if `f(s)` is none, `generate(s, f)` is empty.
 - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
-
 
 #### `take_last : Iterator a -> Option a`
 Takes the last element of an iterator.
