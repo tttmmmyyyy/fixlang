@@ -592,6 +592,15 @@ namespace Iterator {
     // from_map(f) = [f(0), f(1), f(2), ...]
     from_map : (I64 -> a) -> Iterator a;
     from_map = |f| count_up(0).map(f);
+    
+    // Generate an iterator from a state transition function.
+    // - if `f(s)` is none, `generate(s, f)` is empty.
+    // - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
+    generate : s -> (s -> Option (a, s)) -> Iterator a;
+    generate = |s, f| (
+        let next = |_| f(s).map(|(e, s)| (e, Iterator::generate(s, f)));
+        Iterator { next: next }
+    );
 
     // Takes the last element of an iterator.
     take_last : Iterator a -> Option a;

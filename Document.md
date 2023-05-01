@@ -242,6 +242,8 @@
       - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
       - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
       - [`from_map : (I64 -> a) -> Iterator a`](#from_map--i64---a---iterator-a)
+      - [`generate : s -> (s -> Option (a, s)) -> Iterator a`](#generate--s---s---option-a-s---iterator-a)
+      - [`take_last : Iterator a -> Option a`](#take_last--iterator-a---option-a)
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
@@ -1697,8 +1699,17 @@ Create iterator from an array.
 Create iterator from mapping function.
 Example: `from_map(f) = [f(0), f(1), f(2), ...]`.
 
+#### `generate : s -> (s -> Option (a, s)) -> Iterator a`
+Generate an iterator from a state transition function.
+- if `f(s)` is none, `generate(s, f)` is empty.
+- if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
+
+
+#### `take_last : Iterator a -> Option a`
+Takes the last element of an iterator.
+
 #### `push_front : a -> Iterator a -> Iterator a`
-Append an element to an iterator.
+Push an element to an iterator.
 
 #### `reverse : Iterator a -> Iterator a`
 Reverse an iterator.
