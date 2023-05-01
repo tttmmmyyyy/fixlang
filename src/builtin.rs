@@ -869,6 +869,68 @@ pub fn cast_float_to_int_function(
     (expr, scm)
 }
 
+// Shift functions
+pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const VALUE_NAME: &str = "val";
+    const N_NAME: &str = "n";
+
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+        // Get value
+        let val = gc
+            .get_var_field(&FullName::local(VALUE_NAME), 0)
+            .into_int_value();
+        let n = gc
+            .get_var_field(&FullName::local(N_NAME), 0)
+            .into_int_value();
+
+        let is_signed = ty.toplevel_tycon().unwrap().is_singned_intger();
+
+        // Perform cast.
+        let to_val = if is_left {
+            gc.builder()
+                .build_left_shift(val, n, "left_shift@shift_function")
+        } else {
+            gc.builder()
+                .build_right_shift(val, n, is_signed, "right_shift@shift_function")
+        };
+
+        // Return result.
+        let obj = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(ty.clone(), &vec![], None, gc, Some("alloca@shift_function"))
+        };
+        obj.store_field_nocap(gc, 0, to_val);
+        obj
+    });
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(ty.clone(), type_fun(ty.clone(), ty.clone())),
+    );
+    let expr = expr_abs(
+        vec![var_local(N_NAME)],
+        expr_abs(
+            vec![var_local(VALUE_NAME)],
+            expr_lit(
+                generator,
+                vec![FullName::local(VALUE_NAME), FullName::local(N_NAME)],
+                format!(
+                    "shift_{}({},{})",
+                    if is_left { "left" } else { "right" },
+                    N_NAME,
+                    VALUE_NAME
+                ),
+                ty,
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
 // Implementation of Array::fill built-in function.
 fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     let size_str = FullName::local(size);

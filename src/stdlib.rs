@@ -325,6 +325,18 @@ pub fn make_std_mod() -> FixModule {
             );
         }
     }
+    // Shift operations
+    for int_ty in integral_tys {
+        let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
+        fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "shift_left"),
+            shift_function(int_ty.clone(), true),
+        );
+        fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "shift_right"),
+            shift_function(int_ty.clone(), false),
+        );
+    }
 
     // Basic functions
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
