@@ -490,7 +490,7 @@ impl TypeCheckContext {
                                     "- `{}` of type `{}` does not match since the constraint `{}` is not satisifed.",
                                     fullname.to_string(),
                                     scm.substitute(&self.substitution).to_string(),
-                                    fail_predicate.to_string()
+                                    fail_predicate.to_string_normalize()
                                 );
                                 Err(msg)
                             }
@@ -769,7 +769,7 @@ impl TypeCheckContext {
             if !self.trait_env.entail(&given_preds, &p, &self.type_env) {
                 error_exit(&format!(
                     "Condition `{}` is necessary for this expression but not assumed in the specified type.",
-                    p.to_string()
+                    p.to_string_normalize()
                 ));
             }
         }

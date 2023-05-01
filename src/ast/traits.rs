@@ -254,8 +254,12 @@ impl Predicate {
         self.ty = self.ty.resolve_namespace(ctx);
     }
 
-    pub fn to_string(&self) -> String {
-        format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
+    pub fn to_string_normalize(&self) -> String {
+        format!(
+            "{} : {}",
+            self.ty.to_string_normalize(),
+            self.trait_id.to_string()
+        )
     }
 
     pub fn set_kinds(&mut self, scope: &HashMap<Name, Rc<Kind>>) {
@@ -318,7 +322,7 @@ impl TraitEnv {
                 let impl_methods = inst.methods.iter().map(|s| s.0).collect::<HashSet<_>>();
                 for trait_method in trait_methods {
                     if !impl_methods.contains(trait_method) {
-                        let pred = inst.qual_pred.predicate.to_string();
+                        let pred = inst.qual_pred.predicate.to_string_normalize();
                         error_exit(&format!(
                             "An implementation of a method `{}` of trait `{}` is given for `{}`.",
                             trait_method,
@@ -329,7 +333,7 @@ impl TraitEnv {
                 }
                 for impl_method in impl_methods {
                     if !trait_methods.contains(impl_method) {
-                        let pred = inst.qual_pred.predicate.to_string();
+                        let pred = inst.qual_pred.predicate.to_string_normalize();
                         error_exit(
                             &format!("Unknown method `{}` of trait `{}` is given in the implementation for `{}`.", impl_method, trait_id.to_string(), pred),
                         )
