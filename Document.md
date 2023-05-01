@@ -183,6 +183,7 @@
       - [`fill : I64 -> a -> Array a`](#fill--i64---a---array-a)
       - [`force_unique : Array a -> Array a`](#force_unique--array-a---array-a)
       - [`force_unique! : Array a -> Array a`](#force_unique--array-a---array-a-1)
+      - [`from_iter : Iterator a -> Array a`](#from_iter--iterator-a---array-a)
       - [`from_map : I64 -> (I64 -> a) -> Array a`](#from_map--i64---i64---a---array-a)
       - [`get : I64 -> Array a -> a`](#get--i64---array-a---a)
       - [`get_first : Array a -> Option a`](#get_first--array-a---option-a)
@@ -200,6 +201,8 @@
       - [`set : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a)
       - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
+      - [`to_iter : Array a -> Iterator a`](#to_iter--array-a---iterator-a)
+      - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
     - [Std::IO](#stdio)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
@@ -1420,6 +1423,8 @@ Literals:
 - `[{elem_0}, {elem_1}, ...]`
     - Example: `[1, 2, 3]` for integer array of length 3.
 
+NOTE: In a future, we will add lens functions such as `act : [f: Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
+
 Methods:
 
 #### `__unsafe_set_length : I64 -> Array a -> Array a`
@@ -1461,6 +1466,9 @@ If the given array is shared, this function returns the cloned array.
 #### `force_unique! : Array a -> Array a`
 Force the uniqueness of an array.
 If the given array is shared, this function panics.
+
+#### `from_iter : Iterator a -> Array a`
+Create an array from an iterator.
 
 #### `from_map : I64 -> (I64 -> a) -> Array a`
 Creates an array by a mapping function.
@@ -1519,13 +1527,10 @@ This function always update the given array. If the given array is shared betwee
 #### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
 Sort elements in an array by "less than" comparator.
 
-You can create array by the array literal syntax `[a0, a1, ..., an]`.
+#### `to_iter : Array a -> Iterator a`
+Convert an array to an iterator.
 
-NOTE: In a future, we will add lens functions such as `act : [f: Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
-
-Implementing Traits:
-
-- `[a : Eq] Array a : Eq`
+#### `impl [a : Eq] Array a : Eq`
 
 ### Std::IO
 

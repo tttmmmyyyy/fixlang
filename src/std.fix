@@ -89,6 +89,17 @@ namespace Array {
         res
     );
 
+    // Create an array from an iterator.
+    from_iter : Iterator a -> Array a;
+    from_iter = |iter| (
+        let len = iter.get_length;
+        let arr = Array::empty(len).__unsafe_set_length(len);
+        iter.fold((arr, 0), |(arr, idx), elem| (
+            let arr = arr.__unsafe_set(idx, elem);
+            (arr, idx+1)
+        )).@0
+    );
+
     // Creates an array by a mapping function.
     from_map : I64 -> (I64 -> a) -> Array a;
     from_map = |size, map| (
@@ -179,6 +190,11 @@ namespace Array {
         let (vec, buffer) = vec._sort_range_using_buffer(buffer, 0, vec.get_length, less_than);
         vec
     );
+
+
+    // Convert an array to an iterator.
+    to_iter : Array a -> Iterator a;
+    to_iter = Iterator::from_array;
 
 }
 
