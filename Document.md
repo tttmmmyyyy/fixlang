@@ -503,7 +503,7 @@ use_rec_defn = (
 );
 ```
 
-will be compiled, but the name `x` in the right hand side of `let x = x + 3` is considered as the name `x` defined in the previous line (i.e., it's value is `5`), not as the new one.
+will be compiled, but the name `x` in the right hand side of `let x = x + 3` is treated as the name `x` defined in the previous line (i.e., it's value is `5`), not as the new one.
 
 This means that you cannot define a local recursive function by let-expression naively. To do this, use `fix` built-in function.
 
