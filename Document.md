@@ -288,6 +288,9 @@
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
       - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
+    - [`impl String : Add`](#impl-string--add)
+    - [`impl String : Eq`](#impl-string--eq)
+    - [`impl String : ToString`](#impl-string--tostring)
   - [Functions](#functions-1)
     - [Std::compose : (a -\> b) -\> (b -\> c) -\> a -\> c](#stdcompose--a---b---b---c---a---c)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
@@ -1860,13 +1863,13 @@ Removes newlines and carriage returns at the end of the string.
 #### `strip_last_newlines : String -> String`
 Removes the last byte of a string while it satisifies the specified condition.
 
-Implementing Traits:
+### `impl String : Add`
+Add two strings by `String.concat`.
 
-- `String : Add`
-    - Add two strings by `String.concat`.
-- `String : Eq`
-- `String : ToString`
-    - Defined as an identity function.
+### `impl String : Eq`
+
+### `impl String : ToString`
+Defined as an identity function.
 
 ## Functions
 
