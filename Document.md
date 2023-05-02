@@ -271,7 +271,9 @@
       - [`impl Option : Monad`](#impl-option--monad)
     - [Std::Path](#stdpath)
       - [`parse : String -> Option Path`](#parse--string---option-path)
+      - [`impl Path : ToString`](#impl-path--tostring)
     - [Std::Ptr](#stdptr)
+      - [`impl Ptr : Eq`](#impl-ptr--eq)
     - [Std::Result](#stdresult)
       - [`unwrap : [e : ToString] Result e o -> o`](#unwrap--e--tostring-result-e-o---o)
       - [`impl Result e : Monad`](#impl-result-e--monad)
@@ -1785,13 +1787,13 @@ type Option a = union { none: (), some: a };
 
 The type for file path.
 
-Implementing traits:
-
-- `Path : ToString`
+NOTE: this type is prepared for future, and currently `Path` is only a wrapped `String`.
 
 #### `parse : String -> Option Path`
 
 Parse a string.
+
+#### `impl Path : ToString`
 
 ### Std::Ptr
 
@@ -1801,9 +1803,7 @@ Literals:
 - `nullptr`
     - The null pointer.
 
-Implementing traits:
-
-- `Ptr : Eq`
+#### `impl Ptr : Eq`
 
 ### Std::Result
 
