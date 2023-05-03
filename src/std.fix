@@ -209,7 +209,7 @@ namespace Array {
 
 }
 
-impl [a: Eq] Array a : Eq {
+impl [a : Eq] Array a : Eq {
     // Compare two vectors.
     eq = |lhs, rhs| (
         if lhs.get_length != rhs.get_length { false };
@@ -218,6 +218,17 @@ impl [a: Eq] Array a : Eq {
             if idx == len { break $ true };
             if lhs.get(idx) != rhs.get(idx) { break $ false };
             continue $ idx + 1
+        ))
+    );
+}
+
+impl [a : Hash] Array a : Hash {
+    hash = |arr| (
+        let len = arr.get_length;
+        loop((0, 5381_U64), |(i, h)| (
+            if i == len { break $ h };
+            let h = h.shift_left(5_U64) + h + arr.get(i).hash;
+            continue $ (i+1, h)
         ))
     );
 }
