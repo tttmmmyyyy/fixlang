@@ -2936,6 +2936,41 @@ pub fn test112() {
 
 #[test]
 #[serial]
+pub fn test113() {
+    // Test bit operations.
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            // Shift
+            let x = 10_U8.shift_right(2_U8);
+            let _ = assert_eq("case 1", x, 2_U8);
+
+            let x = -10_I32.shift_right(2_I32);
+            let _ = assert_eq("case 1", x, -3_I32);
+
+            let x = 10_U8.shift_left(2_U8);
+            let _ = assert_eq("case 1", x, 40_U8);
+
+            // Xor, Or, And
+            let x = 10.bit_xor(12);
+            let _ = assert_eq("case 1", 6);
+
+            let x = 10.bit_or(12);
+            let _ = assert_eq("case 1", 14);
+
+            let x = 10.bit_and(12);
+            let _ = assert_eq("case 1", 8);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
