@@ -208,6 +208,7 @@
       - [`call_with_ptr : (Ptr -> b) -> Array a -> b`](#call_with_ptr--ptr---b---array-a---b)
       - [`empty : I64 -> Array a`](#empty--i64---array-a)
       - [`fill : I64 -> a -> Array a`](#fill--i64---a---array-a)
+      - [`find_by : [a : Eq] (a -> Bool) -> Array a -> Option I64`](#find_by--a--eq-a---bool---array-a---option-i64)
       - [`force_unique : Array a -> Array a`](#force_unique--array-a---array-a)
       - [`force_unique! : Array a -> Array a`](#force_unique--array-a---array-a-1)
       - [`from_iter : Iterator a -> Array a`](#from_iter--iterator-a---array-a)
@@ -1527,6 +1528,9 @@ Creates an empty array with specified capacity.
 Creates an array filled with the initial value.
 The capacity is set to the same value as the length.
 Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
+
+#### `find_by : [a : Eq] (a -> Bool) -> Array a -> Option I64`
+Find the first index at which the element satisfies a condition.
 
 #### `force_unique : Array a -> Array a`
 Force the uniqueness of an array.
