@@ -90,7 +90,7 @@ namespace Array {
     );
 
     // Find the first index at which the element satisfies a condition.
-    find_by : [a : Eq] (a -> Bool) -> Array a -> Option I64;
+    find_by : (a -> Bool) -> Array a -> Option I64;
     find_by = |cond, arr| (
         let len = arr.get_length;
         loop(0, |idx| (
