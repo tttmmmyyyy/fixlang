@@ -1625,7 +1625,7 @@ Find the place where an element with a key is stored.
 Returns pair of (index in hash table, index in bucket).
 
 #### `_get_pot_geq : I64 -> I64`
-Get a POT (power-of-two) value which is less than or equal to given value.
+Get a POT (power-of-two) value which is less than or equal to the given value.
 This is used for calculating capacity value.
 
 #### `empty : I64 -> HashMap k v`

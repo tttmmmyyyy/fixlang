@@ -3008,7 +3008,9 @@ pub fn test115() {
                             .erase(2).insert(2, 2)
                             .insert(3, 3)
                             .insert(4, 4).erase(4)
-                            .erase(5);
+                            .erase(5)
+                            // Do nothing for 6
+                            .insert(7, -1).insert(7, 7);
         
             let _ = assert_eq("case 0", mp.find(0), Option::some(0));
             let _ = assert_eq("case 1", mp.find(1), Option::some(1));
@@ -3017,7 +3019,8 @@ pub fn test115() {
             let _ = assert_eq("case 4", mp.find(4), Option::none());
             let _ = assert_eq("case 5", mp.find(5), Option::none());
             let _ = assert_eq("case 6", mp.find(6), Option::none());
-            let _ = assert_eq("case size", mp.get_size, 4);
+            let _ = assert_eq("case 7", mp.find(7), Option::some(7));
+            let _ = assert_eq("case size", mp.get_size, 5);
 
             pure()
         );

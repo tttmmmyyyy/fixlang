@@ -284,17 +284,17 @@ namespace HashMap {
         (table_idx, opt_bucket_idx)
     );
 
-    // Get a POT (power-of-two) value which is less than or equal to given value.
+    // Get a POT (power-of-two) value which is less than or equal to the given value.
     // This is used for calculating capacity value.
     _get_pot_geq : I64 -> I64;
-    _get_pot_geq = |expect_cap| (
-        loop(1, |v| if v >= expect_cap { break $ v } else { continue $ 2 * v })
+    _get_pot_geq = |max_size| (
+        loop(1, |v| if v >= max_size { break $ v } else { continue $ 2 * v })
     );
 
     // Create an empty HashMap which is reserved so that it will not rehash until size exceeds the spacified value.
     empty : I64 -> HashMap k v;
-    empty = |cap| (
-        let cap = HashMap::_get_pot_geq(cap);
+    empty = |max_size| (
+        let cap = HashMap::_get_pot_geq(max_size);
         HashMap { _table : Array::fill(cap, Array::empty(0)), _size : 0 }
     );
 
@@ -339,19 +339,19 @@ namespace HashMap {
         let cap = mp.get_capacity;
         let mp = if size < cap { mp } else { mp.reserve(size+1) };
         let (table_idx, opt_bucket_idx) = mp._find_place(k);
-        let mp = if opt_bucket_idx.is_some {
+        if opt_bucket_idx.is_some {
             let bucket_idx = opt_bucket_idx.as_some;
             mp.mod__table(Array::mod(table_idx, Array::set(bucket_idx, Option::some $ (k, v))))
         } else {
             let open_idx = mp.@_table.get(table_idx).find_by(Option::is_none);
-            if open_idx.is_some {
+            let mp = if open_idx.is_some {
                 let open_idx = open_idx.as_some;
                 mp.mod__table(Array::mod(table_idx, Array::set(open_idx, Option::some $ (k, v))))
             } else {
                 mp.mod__table(Array::mod(table_idx, Array::push_back(Option::some $ (k, v))))
-            }
-        };
-        mp.mod__size(Add::add(1))
+            };
+            mp.mod__size(Add::add(1))
+        }
     );
 
     // Reserve a HashMap so that it will not rehash until size exceeds the spacified value.
