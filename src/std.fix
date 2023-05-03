@@ -619,18 +619,6 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Takes the last element of an iterator.
-    take_last : Iterator a -> Option a;
-    take_last = |iter| (
-        if iter.is_empty { none() };
-        let (elem, iter) = iter.advance.as_some;
-        if iter.is_empty { 
-            some(elem)
-        } else {
-            iter.take_last
-        }
-    );
-
     // Push an elemnt to an iterator.
     push_front : a -> Iterator a -> Iterator a;
     push_front = |elem, iter| (
@@ -666,6 +654,22 @@ namespace Iterator {
         );
         Iterator { next: next }
     );
+
+    // Takes the last element of an iterator.
+    take_last : Iterator a -> Option a;
+    take_last = |iter| (
+        if iter.is_empty { none() };
+        let (elem, iter) = iter.advance.as_some;
+        if iter.is_empty { 
+            some(elem)
+        } else {
+            iter.take_last
+        }
+    );
+
+    // Convert an iterator to an array.
+    to_array : Iterator a -> Array a;
+    to_array = Array::from_iter;
 
     // Zip two iterators.
     zip : Iterator a -> Iterator b -> Iterator (a, b);

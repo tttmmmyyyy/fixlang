@@ -2913,6 +2913,29 @@ pub fn test111() {
 
 #[test]
 #[serial]
+pub fn test112() {
+    // Test Iterator::generate
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let iter = Iterator::generate(0, |_| Option::none());
+            let ans = [] : Array I64;
+            let _ = assert_eq("case 1", iter.to_array, ans);
+
+            let iter = Iterator::generate(0, |i| if i == 3 { Option::none() } else { Option::some $ (i, i+1) });
+            let ans = [0, 1, 2];
+            let _ = assert_eq("case 1", iter.to_array, ans);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
