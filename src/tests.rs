@@ -2971,6 +2971,29 @@ pub fn test113() {
 
 #[test]
 #[serial]
+pub fn test114() {
+    // Test Array::find_by
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let arr = [0,1,2,3];
+
+            let res = arr.find_by(|x| x % 5 == 2);
+            let _ = assert_eq("case 1", res, Option::some(2));
+
+            let res = arr.find_by(|x| x % 5 == 4);
+            let _ = assert_eq("case 1", res, Option::none());
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

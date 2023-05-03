@@ -89,6 +89,17 @@ namespace Array {
         res
     );
 
+    // Find the first index at which the element satisfies a condition.
+    find_by : [a : Eq] (a -> Bool) -> Array a -> Option I64;
+    find_by = |cond, arr| (
+        let len = arr.get_length;
+        loop(0, |idx| (
+            if idx == len { break $ Option::none $ () };
+            if cond(arr.get(idx)) { break $ Option::some $ idx };
+            continue $ idx + 1
+        ))
+    );
+
     // Create an array from an iterator.
     from_iter : Iterator a -> Array a;
     from_iter = |iter| (
