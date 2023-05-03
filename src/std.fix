@@ -269,6 +269,110 @@ namespace F64 {
     abs = |f| if f < 0.0 { -f } else { f };
 }
 
+type HashMap k v = struct { _table : Array (Array (Option (k, v))), _size : I64 };
+
+namespace HashMap {
+
+    // Find the place where an element with a key is stored.
+    // Returns pair of (index in hash table, index in bucket).
+    _find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64);
+    _find_place = |k, mp| (
+        let cap = mp.get_capacity;
+        if cap == 0 { (-1, Option::none()) };
+        let table_idx = (k.hash % cap.to_U64).to_I64;
+        let opt_bucket_idx = mp.@_table.get(table_idx).find_by(|opt_kv| opt_kv.is_some && opt_kv.as_some.@0 == k);
+        (table_idx, opt_bucket_idx)
+    );
+
+    // Get a POT (power-of-two) value which is less than or equal to given value.
+    // This is used for calculating capacity value.
+    _get_pot_geq : I64 -> I64;
+    _get_pot_geq = |expect_cap| (
+        loop(1, |v| if v >= expect_cap { break $ v } else { continue $ 2 * v })
+    );
+
+    // Create an empty HashMap which is reserved so that it will not rehash until size exceeds the spacified value.
+    empty : I64 -> HashMap k v;
+    empty = |cap| (
+        let cap = HashMap::_get_pot_geq(cap);
+        HashMap { _table : Array::fill(cap, Array::empty(0)), _size : 0 }
+    );
+
+    // Erase an element from a HashMap.
+    erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v;
+    erase = |k, mp| (
+        let (table_idx, opt_bucket_idx) = mp._find_place(k);
+        if opt_bucket_idx.is_some {
+            let bucket_idx = opt_bucket_idx.as_some;
+            let mp = mp.mod__table(Array::mod(table_idx, Array::set(bucket_idx, Option::none())));
+            mp.mod__size(Add::add(-1))
+        } else {
+            mp
+        }
+    );
+
+    // Find an element from a HashMap.
+    find : [k : Eq, k : Hash] k -> HashMap k v -> Option v;
+    find = |k, mp| (
+        let (table_idx, opt_bucket_idx) = mp._find_place(k);
+        if opt_bucket_idx.is_none {
+            Option::none()
+        } else {
+            let bucket_idx = opt_bucket_idx.as_some;
+            let v = mp.@_table.get(table_idx).get(bucket_idx).as_some.@1;
+            Option::some(v)
+        }
+    );
+
+    // Get capacity of a HashMap. 
+    get_capacity : HashMap k v -> I64;
+    get_capacity = |mp| mp.@_table.get_length;
+
+    // Get size (number of elements) in a HashMap.
+    get_size : HashMap k v -> I64;
+    get_size = |mp| mp.@_size;
+
+    // Insert an element into a HashMap.
+    insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v;
+    insert = |k, v, mp| (
+        let size = mp.get_size;
+        let cap = mp.get_capacity;
+        let mp = if size < cap { mp } else { mp.reserve(size+1) };
+        let (table_idx, opt_bucket_idx) = mp._find_place(k);
+        let mp = if opt_bucket_idx.is_some {
+            let bucket_idx = opt_bucket_idx.as_some;
+            mp.mod__table(Array::mod(table_idx, Array::set(bucket_idx, Option::some $ (k, v))))
+        } else {
+            let open_idx = mp.@_table.get(table_idx).find_by(Option::is_none);
+            if open_idx.is_some {
+                let open_idx = open_idx.as_some;
+                mp.mod__table(Array::mod(table_idx, Array::set(open_idx, Option::some $ (k, v))))
+            } else {
+                mp.mod__table(Array::mod(table_idx, Array::push_back(Option::some $ (k, v))))
+            }
+        };
+        mp.mod__size(Add::add(1))
+    );
+
+    // Reserve a HashMap so that it will not rehash until size exceeds the spacified value.
+    reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v;
+    reserve = |max_size, mp| (
+        if max_size <= mp.get_capacity { mp };
+        let new_mp = HashMap::empty(max_size);
+        mp.to_iter.fold(new_mp, |new_mp, (k, v)| new_mp.insert(k, v))
+    );
+
+    // Convert a HashMap into an iterator.
+    to_iter : HashMap k v -> Iterator (k, v);
+    to_iter = |mp| (
+        let table_idx = *Iterator::range(0, mp.get_capacity);
+        let bucket_idx = *Iterator::range(0, mp.@_table.get(table_idx).get_length);
+        let opt_elem = mp.@_table.get(table_idx).get(bucket_idx);
+        if opt_elem.is_none { Iterator::empty };
+        pure $ opt_elem.as_some
+    );
+}
+
 type IO a = unbox struct { _data : () -> a };
 
 namespace IO {
@@ -954,6 +1058,10 @@ trait [f : *->*] f : Functor {
     map : (a -> b) -> f a -> f b;
 }
 
+trait a : Hash {
+    hash : a -> U64;
+}
+
 namespace LessThan {
     max : [a : LessThan] a -> a -> a;
     max = |x, y| if x < y { y } else { x };
@@ -976,7 +1084,7 @@ trait a : ToString {
     to_string : a -> String;
 }
 
-// ToString implementations
+// ToString implementations for primitives
 
 impl U8 : ToString {
     to_string = U8::_U8_to_string;
@@ -996,4 +1104,19 @@ impl F32 : ToString {
 
 impl F64 : ToString {
     to_string = F64::_F64_to_string;
+}
+
+// Hash Implementation for primitives
+
+impl U64 : Hash {
+    hash = |x| (
+        // https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
+        let x = x.bit_xor(x.shift_right(30_U64)) * 13787848793156543929_U64;
+        let x = x.bit_xor(x.shift_right(27_U64)) * 10723151780598845931_U64;
+        x.bit_xor(x.shift_right(31_U64))
+    );
+}
+
+impl I64 : Hash {
+    hash = I64::to_U64 >> hash;
 }

@@ -2994,6 +2994,39 @@ pub fn test114() {
 
 #[test]
 #[serial]
+pub fn test115() {
+    // Test HashMap
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let mp = HashMap::empty(0)
+                            .insert(0, 0)
+                            .insert(1, 1)
+                            .insert(2, 2)
+                            .erase(2).insert(2, 2)
+                            .insert(3, 3)
+                            .insert(4, 4).erase(4)
+                            .erase(5);
+        
+            let _ = assert_eq("case 0", mp.find(0), Option::some(0));
+            let _ = assert_eq("case 1", mp.find(1), Option::some(1));
+            let _ = assert_eq("case 2", mp.find(2), Option::some(2));
+            let _ = assert_eq("case 3", mp.find(3), Option::some(3));
+            let _ = assert_eq("case 4", mp.find(4), Option::none());
+            let _ = assert_eq("case 5", mp.find(5), Option::none());
+            let _ = assert_eq("case 6", mp.find(6), Option::none());
+            let _ = assert_eq("case size", mp.get_size, 4);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
