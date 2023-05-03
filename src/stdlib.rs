@@ -325,7 +325,7 @@ pub fn make_std_mod() -> FixModule {
             );
         }
     }
-    // Shift operations
+    // Bit operations
     for int_ty in integral_tys {
         let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
         fix_module.add_global_value(
@@ -335,6 +335,18 @@ pub fn make_std_mod() -> FixModule {
         fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_right"),
             shift_function(int_ty.clone(), false),
+        );
+        fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "bit_xor"),
+            bitwise_operation_function(int_ty.clone(), BitOperationType::Xor),
+        );
+        fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "bit_and"),
+            bitwise_operation_function(int_ty.clone(), BitOperationType::And),
+        );
+        fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "bit_or"),
+            bitwise_operation_function(int_ty.clone(), BitOperationType::Or),
         );
     }
 

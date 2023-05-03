@@ -931,6 +931,94 @@ pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Sche
     (expr, scm)
 }
 
+#[derive(Clone, Copy)]
+pub enum BitOperationType {
+    Xor,
+    Or,
+    And,
+}
+
+impl BitOperationType {
+    pub fn to_string(&self) -> String {
+        match self {
+            BitOperationType::Xor => "xor",
+            BitOperationType::Or => "or",
+            BitOperationType::And => "and",
+        }
+        .to_string()
+    }
+}
+
+pub fn bitwise_operation_function(
+    ty: Rc<TypeNode>,
+    op_type: BitOperationType,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const LHS_NAME: &str = "lhs";
+    const RHS_NAME: &str = "rhs";
+
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+        // Get value
+        let lhs = gc
+            .get_var_field(&FullName::local(LHS_NAME), 0)
+            .into_int_value();
+        let rhs = gc
+            .get_var_field(&FullName::local(RHS_NAME), 0)
+            .into_int_value();
+
+        // Perform cast.
+        let val = match op_type {
+            BitOperationType::Xor => {
+                gc.builder()
+                    .build_xor(lhs, rhs, "xor@bitwise_operation_function")
+            }
+            BitOperationType::Or => {
+                gc.builder()
+                    .build_or(lhs, rhs, "or@bitwise_operation_function")
+            }
+            BitOperationType::And => {
+                gc.builder()
+                    .build_and(lhs, rhs, "and@bitwise_operation_function")
+            }
+        };
+
+        // Return result.
+        let obj = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some("alloca@bitwise_operation_function"),
+            )
+        };
+        obj.store_field_nocap(gc, 0, val);
+        obj
+    });
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(ty.clone(), type_fun(ty.clone(), ty.clone())),
+    );
+    let expr = expr_abs(
+        vec![var_local(LHS_NAME)],
+        expr_abs(
+            vec![var_local(RHS_NAME)],
+            expr_lit(
+                generator,
+                vec![FullName::local(LHS_NAME), FullName::local(RHS_NAME)],
+                format!("bit_{}({},{})", op_type.to_string(), LHS_NAME, RHS_NAME),
+                ty,
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
 // Implementation of Array::fill built-in function.
 fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     let size_str = FullName::local(size);

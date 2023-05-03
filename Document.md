@@ -60,6 +60,9 @@
     - [Std::U8](#stdu8)
       - [`maximum : U8`](#maximum--u8)
       - [`minimum : U8`](#minimum--u8)
+      - [`bit_and : U8 -> U8 -> U8`](#bit_and--u8---u8---u8)
+      - [`bit_or : U8 -> U8 -> U8`](#bit_or--u8---u8---u8)
+      - [`bit_xor : U8 -> U8 -> U8`](#bit_xor--u8---u8---u8)
       - [`shift_left : U8 -> U8 -> U8`](#shift_left--u8---u8---u8)
       - [`shift_right : U8 -> U8 -> U8`](#shift_right--u8---u8---u8)
       - [`to_I32 : U8 -> I32`](#to_i32--u8---i32)
@@ -80,6 +83,9 @@
     - [Std::I32](#stdi32)
       - [`maximum : I32`](#maximum--i32)
       - [`minimum : I32`](#minimum--i32)
+      - [`bit_and : I32 -> I32 -> I32`](#bit_and--i32---i32---i32)
+      - [`bit_or : I32 -> I32 -> I32`](#bit_or--i32---i32---i32)
+      - [`bit_xor : I32 -> I32 -> I32`](#bit_xor--i32---i32---i32)
       - [`shift_left : I32 -> I32 -> I32`](#shift_left--i32---i32---i32)
       - [`shift_right : I32 -> I32 -> I32`](#shift_right--i32---i32---i32)
       - [`to_U8 : I32 -> U8`](#to_u8--i32---u8)
@@ -100,6 +106,9 @@
     - [Std::U32](#stdu32)
       - [`maximum : U32`](#maximum--u32)
       - [`minimum : U32`](#minimum--u32)
+      - [`bit_and : U32 -> U32 -> U32`](#bit_and--u32---u32---u32)
+      - [`bit_or : U32 -> U32 -> U32`](#bit_or--u32---u32---u32)
+      - [`bit_xor : U32 -> U32 -> U32`](#bit_xor--u32---u32---u32)
       - [`shift_left : U32 -> U32 -> U32`](#shift_left--u32---u32---u32)
       - [`shift_right : U32 -> U32 -> U32`](#shift_right--u32---u32---u32)
       - [`to_U8 : U32 -> U8`](#to_u8--u32---u8)
@@ -120,6 +129,9 @@
     - [Std::I64](#stdi64)
       - [`maximum : I64`](#maximum--i64)
       - [`minimum : I64`](#minimum--i64)
+      - [`bit_and : I64 -> I64 -> I64`](#bit_and--i64---i64---i64)
+      - [`bit_or : I64 -> I64 -> I64`](#bit_or--i64---i64---i64)
+      - [`bit_xor : I64 -> I64 -> I64`](#bit_xor--i64---i64---i64)
       - [`shift_left : I64 -> I64 -> I64`](#shift_left--i64---i64---i64)
       - [`shift_right : I64 -> I64 -> I64`](#shift_right--i64---i64---i64)
       - [`to_U8 : I64 -> U8`](#to_u8--i64---u8)
@@ -140,6 +152,9 @@
     - [Std::U64](#stdu64)
       - [`maximum : U64`](#maximum--u64)
       - [`minimum : U64`](#minimum--u64)
+      - [`bit_and : U64 -> U64 -> U64`](#bit_and--u64---u64---u64)
+      - [`bit_or : U64 -> U64 -> U64`](#bit_or--u64---u64---u64)
+      - [`bit_xor : U64 -> U64 -> U64`](#bit_xor--u64---u64---u64)
       - [`shift_left : U64 -> U64 -> U64`](#shift_left--u64---u64---u64)
       - [`shift_right : U64 -> U64 -> U64`](#shift_right--u64---u64---u64)
       - [`to_U8 : U64 -> U8`](#to_u8--u64---u8)
@@ -1281,6 +1296,9 @@ Literals:
 
 #### `maximum : U8`
 #### `minimum : U8`
+#### `bit_and : U8 -> U8 -> U8`
+#### `bit_or : U8 -> U8 -> U8`
+#### `bit_xor : U8 -> U8 -> U8`
 #### `shift_left : U8 -> U8 -> U8`
 #### `shift_right : U8 -> U8 -> U8`
 #### `to_I32 : U8 -> I32`
@@ -1309,6 +1327,9 @@ Literals:
 
 #### `maximum : I32`
 #### `minimum : I32`
+#### `bit_and : I32 -> I32 -> I32`
+#### `bit_or : I32 -> I32 -> I32`
+#### `bit_xor : I32 -> I32 -> I32`
 #### `shift_left : I32 -> I32 -> I32`
 #### `shift_right : I32 -> I32 -> I32`
 #### `to_U8 : I32 -> U8`
@@ -1338,6 +1359,9 @@ Literals:
 
 #### `maximum : U32`
 #### `minimum : U32`
+#### `bit_and : U32 -> U32 -> U32`
+#### `bit_or : U32 -> U32 -> U32`
+#### `bit_xor : U32 -> U32 -> U32`
 #### `shift_left : U32 -> U32 -> U32`
 #### `shift_right : U32 -> U32 -> U32`
 #### `to_U8 : U32 -> U8`
@@ -1368,6 +1392,9 @@ Literals:
 
 #### `maximum : I64`
 #### `minimum : I64`
+#### `bit_and : I64 -> I64 -> I64`
+#### `bit_or : I64 -> I64 -> I64`
+#### `bit_xor : I64 -> I64 -> I64`
 #### `shift_left : I64 -> I64 -> I64`
 #### `shift_right : I64 -> I64 -> I64`
 #### `to_U8 : I64 -> U8`
@@ -1397,6 +1424,9 @@ Literals:
 
 #### `maximum : U64`
 #### `minimum : U64`
+#### `bit_and : U64 -> U64 -> U64`
+#### `bit_or : U64 -> U64 -> U64`
+#### `bit_xor : U64 -> U64 -> U64`
 #### `shift_left : U64 -> U64 -> U64`
 #### `shift_right : U64 -> U64 -> U64`
 #### `to_U8 : U64 -> U8`
