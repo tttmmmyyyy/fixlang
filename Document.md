@@ -142,6 +142,7 @@
       - [`to_F64 : I64 -> F64`](#to_f64--i64---f64)
       - [`impl I64 : Add`](#impl-i64--add)
       - [`impl I64 : Eq`](#impl-i64--eq)
+      - [`impl I64 : Hash`](#impl-i64--hash)
       - [`impl I64 : LessThan`](#impl-i64--lessthan)
       - [`impl I64 : LessThanOrEq`](#impl-i64--lessthanoreq)
       - [`impl I64 : Mul`](#impl-i64--mul)
@@ -165,6 +166,7 @@
       - [`to_F64 : U64 -> F64`](#to_f64--u64---f64)
       - [`impl U64 : Add`](#impl-u64--add)
       - [`impl U64 : Eq`](#impl-u64--eq)
+      - [`impl U64 : Hash`](#impl-u64--hash)
       - [`impl U64 : LessThan`](#impl-u64--lessthan)
       - [`impl U64 : LessThanOrEq`](#impl-u64--lessthanoreq)
       - [`impl U64 : Mul`](#impl-u64--mul)
@@ -334,6 +336,8 @@
   - [Traits](#traits)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
+    - [Std::Hash](#stdhash)
+      - [(required) `hash : [a : Hash] a -> U64`](#required-hash--a--hash-a---u64)
     - [Std::LessThan](#stdlessthan)
       - [(required) `less_than : [a : LessThan] a -> a -> a`](#required-less_than--a--lessthan-a---a---a)
       - [`max : [a : LessThan] a -> a -> a`](#max--a--lessthan-a---a---a)
@@ -1418,6 +1422,7 @@ Literals:
 #### `to_F64 : I64 -> F64`
 #### `impl I64 : Add`
 #### `impl I64 : Eq`
+#### `impl I64 : Hash`
 #### `impl I64 : LessThan`
 #### `impl I64 : LessThanOrEq`
 #### `impl I64 : Mul`
@@ -1450,6 +1455,7 @@ Literals:
 #### `to_F64 : U64 -> F64`
 #### `impl U64 : Add`
 #### `impl U64 : Eq`
+#### `impl U64 : Hash`
 #### `impl U64 : LessThan`
 #### `impl U64 : LessThanOrEq`
 #### `impl U64 : Mul`
@@ -2049,6 +2055,10 @@ main = (
 ### Std::Functor (* -> *)
 
 #### (required) `map : [f : Functor] (a -> b) -> f a -> f b`
+
+### Std::Hash
+
+#### (required) `hash : [a : Hash] a -> U64`
 
 ### Std::LessThan
 
