@@ -540,7 +540,7 @@ impl ObjectFieldType {
         gc.builder()
             .build_conditional_branch(is_tag_unmatch, unmatch_bb, match_bb);
         gc.builder().position_at_end(unmatch_bb);
-        gc.panic("tag unmatch.");
+        gc.panic("tag unmatch.\n");
         gc.builder().build_unconditional_branch(match_bb);
         gc.builder().position_at_end(match_bb);
     }

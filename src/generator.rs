@@ -820,6 +820,16 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Panic with Rust's &str (i.e, print string and abort.)
     pub fn panic(&self, string: &str) {
         self.printf(string);
+        // Flush
+        self.call_runtime(
+            RuntimeFunctions::Fflush,
+            &[self
+                .context
+                .i8_type()
+                .ptr_type(AddressSpace::from(0))
+                .const_null()
+                .into()],
+        );
         self.call_runtime(RuntimeFunctions::Abort, &[]);
     }
 
