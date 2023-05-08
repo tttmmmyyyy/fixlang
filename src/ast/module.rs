@@ -648,7 +648,7 @@ impl FixModule {
     // Require instantiate generic symbol such that it has a specified type.
     pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
         if !ty.free_vars().is_empty() {
-            error_exit(&format!("cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", name.to_string(), ty.to_string_normalize()));
+            error_exit(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", name.to_string(), ty.to_string_normalize()));
         }
         let inst_name = self.determine_instantiated_symbol_name(name, ty);
         if !self.instantiated_global_symbols.contains_key(&inst_name)
