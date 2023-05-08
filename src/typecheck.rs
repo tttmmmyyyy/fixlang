@@ -754,21 +754,27 @@ impl TypeCheckContext {
 
         let s = Substitution::matching(&self.type_env, &deduced_ty, &specified_ty);
         if s.is_none() {
-            error_exit(&format!(
-                "Type mismatch. Expected `{}`, found `{}`",
-                specified_ty.to_string_normalize(),
-                deduced_ty.to_string_normalize()
-            ));
+            error_exit_with_src(
+                &format!(
+                    "Type mismatch. Expected `{}`, found `{}`",
+                    specified_ty.to_string_normalize(),
+                    deduced_ty.to_string_normalize()
+                ),
+                &expr.source,
+            );
         }
         let s = s.unwrap();
         for p in required_preds {
             let mut p = p.clone();
             s.substitute_predicate(&mut p);
             if !self.trait_env.entail(&given_preds, &p, &self.type_env) {
-                error_exit(&format!(
-                    "Condition `{}` is necessary for this expression but not assumed in the specified type.",
-                    p.to_string_normalize()
-                ));
+                error_exit_with_src(
+                    &format!(
+                        "Constraint `{}` is required for this expression but is not assumed in the type.",
+                        p.to_string_normalize()
+                    ),
+                    &expr.source,
+                );
             }
         }
 
