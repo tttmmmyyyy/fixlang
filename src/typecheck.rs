@@ -652,20 +652,18 @@ impl TypeCheckContext {
                     HashSet::from_iter(fields.iter().map(|(name, _)| name.clone()));
                 for f in &field_names_in_struct_defn {
                     if !field_names_in_expression.contains(f) {
-                        error_exit(&format!(
-                            "Missing field `{}` of struct `{}`.",
-                            f,
-                            tc.to_string()
-                        ))
+                        error_exit_with_src(
+                            &format!("Missing field `{}` of struct `{}`.", f, tc.to_string()),
+                            &ei.source,
+                        )
                     }
                 }
                 for f in &field_names_in_expression {
                     if !field_names_in_struct_defn.contains(f) {
-                        error_exit(&format!(
-                            "Unknown field `{}` for struct `{}`.",
-                            f,
-                            tc.to_string()
-                        ))
+                        error_exit_with_src(
+                            &format!("Unknown field `{}` for struct `{}`.", f, tc.to_string()),
+                            &ei.source,
+                        )
                     }
                 }
 
