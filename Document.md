@@ -289,7 +289,7 @@
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
-      - [`take_last : Iterator a -> Option a`](#take_last--iterator-a---option-a)
+      - [`find_last : Iterator a -> Option a`](#find_last--iterator-a---option-a)
       - [`to_array : Iterator a -> Array a`](#to_array--iterator-a---array-a)
       - [`zip : Iterator a -> Iterator b -> Iterator (a, b)`](#zip--iterator-a---iterator-b---iterator-a-b)
       - [`impl Iterator a : Add`](#impl-iterator-a--add)
@@ -1846,7 +1846,7 @@ Reverse an iterator.
 #### `take : I64 -> Iterator a -> Iterator a`
 Take at most n elements from an iterator.
 
-#### `take_last : Iterator a -> Option a`
+#### `find_last : Iterator a -> Option a`
 Takes the last element of an iterator.
 
 #### `to_array : Iterator a -> Array a`

@@ -1976,9 +1976,9 @@ pub fn test80() {
     main : IO ();
     main = (
         let iter = Iterator::empty.push_front(4).push_front(3).push_front(2).push_front(1);
-        let last = iter.take_last.as_some;
+        let last = iter.find_last.as_some;
         let _ = assert_eq("", last, 4);
-        let last: Option Bool = Iterator::empty.take_last;
+        let last: Option Bool = Iterator::empty.find_last;
         let _ = assert("", last.is_none);
         pure()
     );

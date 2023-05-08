@@ -781,15 +781,15 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Takes the last element of an iterator.
-    take_last : Iterator a -> Option a;
-    take_last = |iter| (
+    // Find the last element of an iterator.
+    find_last : Iterator a -> Option a;
+    find_last = |iter| (
         if iter.is_empty { none() };
         let (elem, iter) = iter.advance.as_some;
         if iter.is_empty { 
             some(elem)
         } else {
-            iter.take_last
+            iter.find_last
         }
     );
 

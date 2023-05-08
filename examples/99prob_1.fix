@@ -10,6 +10,6 @@ module Main;
 main : IO ();
 main = (
     let iter = Iterator::from_array([1,2,3,4]);
-    let last = iter.take_last.as_some;
+    let last = iter.find_last.as_some;
     println(last.to_string)
 );

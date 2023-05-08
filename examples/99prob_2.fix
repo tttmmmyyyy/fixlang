@@ -7,16 +7,16 @@ Problem 2
 
 module Main;
 
-take_last_but : Iterator a -> Option a;
-take_last_but = |iter| (
+find_last_but : Iterator a -> Option a;
+find_last_but = |iter| (
     let len = iter.get_length;
     if len <= 1 { none() };
-    iter.take(len-1).take_last
+    iter.take(len-1).find_last
 );
 
 main : IO ();
 main = (
     let iter = Iterator::from_array([1,2,3,4]);
-    let last_but = iter.take_last_but;
+    let last_but = iter.find_last_but;
     println(last_but.as_some.to_string)
 );
