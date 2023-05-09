@@ -3041,8 +3041,7 @@ pub fn test_run_examples() {
         }
         println!("[run_examples] {}:", display);
 
-        // Since examples may include heavy computation, perform optimization.
-        run_file(&path, Configuration::release());
+        run_file(&path, Configuration::develop_compiler());
     }
 }
 
