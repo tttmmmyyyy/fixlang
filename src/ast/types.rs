@@ -417,6 +417,15 @@ impl TypeNode {
         is_dynamic_object_tycon(tc.as_ref())
     }
 
+    pub fn is_destructor_object(&self) -> bool {
+        let tc = self.toplevel_tycon();
+        if tc.is_none() {
+            return false;
+        }
+        let tc = tc.unwrap();
+        is_destructor_object_tycon(tc.as_ref())
+    }
+
     pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
         assert!(!self.is_closure());
         type_env

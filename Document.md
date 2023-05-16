@@ -234,6 +234,7 @@
       - [`to_iter : Array a -> Iterator a`](#to_iter--array-a---iterator-a)
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
       - [`impl [a : Hash] Array a : Hash`](#impl-a--hash-array-a--hash)
+    - [Std::Destructor](#stddestructor)
     - [Std::HashMap](#stdhashmap)
       - [`_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`](#_find_place--k--eq-k--hash-k---hashmap-k-v---i64-option-i64)
       - [`_get_pot_geq : I64 -> I64`](#_get_pot_geq--i64---i64)
@@ -1625,6 +1626,17 @@ Convert an array to an iterator.
 
 #### `impl [a : Hash] Array a : Hash`
 This is implemented by djb2 algorithm, although I don't know whether it is effective for not only strings (i.e., `U8` array) but also `U64` (result type of hash function) array!
+
+### Std::Destructor
+
+`Destructor a` is a boxed type which has two fields of type `a` and `a -> ()`, where the latter field is called destructor.
+The destructor function will be called when a value of `Destructor a` is deallocated.
+Note that the inner value of type `a` may be still alive after the destructor function is called.
+This type is useful to manage resources allocated by C function.
+
+```
+type Destructor a = box struct { data : a, dtor : a -> () };
+```
 
 ### Std::HashMap
 

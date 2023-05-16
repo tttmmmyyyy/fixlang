@@ -262,6 +262,12 @@ namespace Debug {
     );
 }
 
+// `Destructor a` is a boxed type which has two fields of type `a` and `a -> ()`, where the latter field is called destructor.
+// The destructor function will be called when a value of `Destructor a` is deallocated.
+// Note that the inner value of type `a` may be still alive after the destructor function is called.
+// This type is useful to manage resources allocated by C function.
+type Destructor a = box struct { data : a, dtor : a -> () };
+
 impl I32 : ToString {
     to_string = I32::_I32_to_string;
 }

@@ -141,6 +141,10 @@ pub fn make_dynamic_object_name() -> FullName {
     FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)
 }
 
+pub fn make_destructor_object_name() -> FullName {
+    FullName::from_strs(&[STD_NAME], DESTRUCTOR_OBJECT_NAME)
+}
+
 pub fn make_funptr_name(arity: u32) -> Name {
     format!("{}{}", FUNPTR_NAME, arity)
 }
@@ -172,6 +176,11 @@ pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
 // Returns whether given tycon is dyanmic object
 pub fn is_dynamic_object_tycon(tc: &TyCon) -> bool {
     tc.name == make_dynamic_object_name()
+}
+
+// Returns whether given tycon is Std::Destructor
+pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
+    tc.name == make_destructor_object_name()
 }
 
 // Returns whether given tycon is array

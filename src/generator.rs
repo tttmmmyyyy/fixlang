@@ -104,6 +104,10 @@ impl<'c> Object<'c> {
         self.ty.is_dynamic()
     }
 
+    pub fn is_destructor_object(&self) -> bool {
+        self.ty.is_destructor_object()
+    }
+
     pub fn ptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
         if self.is_box(gc.type_env()) {
             gc.cast_pointer(self.ptr, ptr_to_object_type(gc.context))
@@ -748,6 +752,51 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Release nonnull boxed object.
     pub fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
+        // If the object's type is Std::Destructor and the refcnt is one, call destructor.
+        if obj.is_destructor_object() {
+            // Branch by whether or not the refcnt is one.
+            let ptr = obj.ptr(self);
+            let ptr_refcnt = self.get_refcnt_ptr(ptr);
+            let refcnt = self
+                .builder()
+                .build_load(ptr_refcnt, "refcnt_for_call_dtor")
+                .into_int_value();
+            let is_refcnt_one = self.builder().build_int_compare(
+                IntPredicate::EQ,
+                refcnt,
+                refcnt.get_type().const_int(1, false),
+                "is_refcnt_one_for_call_dtor",
+            );
+            let current_bb = self.builder().get_insert_block().unwrap();
+            let current_func = current_bb.get_parent().unwrap();
+            let call_dtor_bb = self
+                .context
+                .append_basic_block(current_func, "call_dtor_bb_for_call_dtor");
+            let cont_bb = self
+                .context
+                .append_basic_block(current_func, "cont_bb_for_call_dtor");
+            self.builder()
+                .build_conditional_branch(is_refcnt_one, call_dtor_bb, cont_bb);
+
+            // If refcnt is none, call dtor.
+            self.builder().position_at_end(call_dtor_bb);
+            self.retain(obj.clone());
+            let fields = ObjectFieldType::get_struct_fields(
+                self,
+                &obj,
+                vec![
+                    (DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, None),
+                    (DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, None),
+                ],
+            );
+            let value = fields[0].clone();
+            let dtor = fields[1].clone();
+            self.apply_lambda(dtor, vec![value], None);
+
+            self.builder().build_unconditional_branch(cont_bb);
+            self.builder().position_at_end(cont_bb);
+        }
+
         let ptr = obj.ptr(self);
         let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
         let dtor = obj.get_dtor_ptr_boxed(self);
