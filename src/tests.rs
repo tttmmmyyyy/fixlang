@@ -3037,14 +3037,38 @@ pub fn test116() {
 
         main : IO ();
         main = (
+
             // Boxed case
             let dtor0 = Destructor { 
                 value : [1,2,3], 
                 dtor : |arr| (
                     let arr_str = arr.to_iter.map(to_string).join(", ");
-                    debug_println("dtor0 destructed. arr: " + arr_str)
+                    debug_println("dtor0 destructed. val: " + arr_str)
                 )
             };
+
+            // Unboxed case
+            let dtor1 = Destructor { 
+                value : 42, 
+                dtor : |val| (
+                    debug_println("dtor1 destructed. val: " + val.to_string)
+                )
+            };
+
+            // Dtor in dtor
+            let dtor2 = Destructor { 
+                value : 2, 
+                dtor : |val| (
+                    debug_println("dtor2 destructed. val: " + val.to_string)
+                )
+            };
+            let dtor3 = Destructor { 
+                value : dtor2, 
+                dtor : |val| (
+                    debug_println("dtor3 destructed. val.@value: " + val.@value.to_string)
+                )
+            };
+
             pure()
         );
     "#;

@@ -780,17 +780,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // If refcnt is none, call dtor.
             self.builder().position_at_end(call_dtor_bb);
-            self.retain(obj.clone());
-            let fields = ObjectFieldType::get_struct_fields(
+            let value = ObjectFieldType::get_struct_field_noclone(
                 self,
-                &obj,
-                vec![
-                    (DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, None),
-                    (DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, None),
-                ],
+                obj,
+                DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
             );
-            let value = fields[0].clone();
-            let dtor = fields[1].clone();
+            self.retain(value.clone());
+            let dtor = ObjectFieldType::get_struct_field_noclone(
+                self,
+                obj,
+                DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
+            );
+            self.retain(dtor.clone());
             self.apply_lambda(dtor, vec![value], None);
 
             self.builder().build_unconditional_branch(cont_bb);
