@@ -3030,6 +3030,29 @@ pub fn test115() {
 
 #[test]
 #[serial]
+pub fn test116() {
+    // Test Std::Destructor
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            // Boxed case
+            let dtor0 = Destructor { 
+                value : [1,2,3], 
+                dtor : |arr| (
+                    let arr_str = arr.to_iter.map(to_string).join(", ");
+                    debug_println("dtor0 destructed. arr: " + arr_str)
+                )
+            };
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

@@ -1635,7 +1635,7 @@ Note that the inner value of type `a` may be still alive after the destructor fu
 This type is useful to manage resources allocated by C function.
 
 ```
-type Destructor a = box struct { data : a, dtor : a -> () };
+type Destructor a = box struct { value : a, dtor : a -> () };
 ```
 
 ### Std::HashMap
