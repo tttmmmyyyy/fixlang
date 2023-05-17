@@ -269,12 +269,22 @@ pub fn build_file(path: &Path, config: Configuration) {
     module.set_triple(&tm.get_triple());
     module.set_data_layout(&tm.get_target_data().get_data_layout());
 
-    let tm = build_module(&ctx, &module, Either::Left(tm), fix_mod, config).unwrap_left();
+    let tm = build_module(&ctx, &module, Either::Left(tm), fix_mod, config.clone()).unwrap_left();
     tm.write_to_file(&module, inkwell::targets::FileType::Object, &obj_path)
         .map_err(|e| error_exit(&format!("Failed to write to file: {}", e)))
         .unwrap();
 
+    let mut libs_opts = vec![];
+    for (lib_name, link_type) in &config.linked_libraries {
+        match link_type {
+            LinkType::Static => libs_opts.push("-Wl,-Bstatic".to_string()),
+            LinkType::Dynamic => libs_opts.push("-Wl,-Bdynamic".to_string()),
+        }
+        libs_opts.push(format!("-l{}", lib_name));
+    }
+
     let _link_res = Command::new("gcc")
+        .args(libs_opts)
         .arg("-o")
         .arg(exec_path.to_str().unwrap())
         .arg(obj_path.to_str().unwrap())
