@@ -235,6 +235,7 @@
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
       - [`impl [a : Hash] Array a : Hash`](#impl-a--hash-array-a--hash)
     - [Std::Destructor](#stddestructor)
+      - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [Std::HashMap](#stdhashmap)
       - [`_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`](#_find_place--k--eq-k--hash-k---hashmap-k-v---i64-option-i64)
       - [`_get_pot_geq : I64 -> I64`](#_get_pot_geq--i64---i64)
@@ -1637,6 +1638,9 @@ This type is useful to manage resources allocated by C function.
 ```
 type Destructor a = box struct { value : a, dtor : a -> () };
 ```
+
+#### `make : a -> (a -> ()) -> Destructor a`
+Make a destructor value.
 
 ### Std::HashMap
 
