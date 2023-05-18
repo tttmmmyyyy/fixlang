@@ -1163,12 +1163,13 @@ fn parse_expr_call_c(pair: Pair<Rule>, msc: &mut DoContext, src: &Rc<String>) ->
     let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap());
     let fun_name = pairs.next().unwrap().as_str().to_string();
     let param_tys = parse_ffi_param_tys(pairs.next().unwrap());
-    let is_var_args = if pairs.peek().unwrap().as_rule() == Rule::ffi_var_args {
-        pairs.next();
-        true
-    } else {
-        false
-    };
+    let is_var_args =
+        if pairs.peek().is_some() && pairs.peek().unwrap().as_rule() == Rule::ffi_var_args {
+            pairs.next();
+            true
+        } else {
+            false
+        };
     let args = pairs.map(|pair| parse_expr(pair, msc, src)).collect();
     expr_call_c(fun_name, ret_ty, param_tys, is_var_args, args, Some(span))
 }
