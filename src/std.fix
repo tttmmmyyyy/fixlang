@@ -931,6 +931,7 @@ impl Result e : Monad {
 type String = unbox struct { _data : Array U8 };
 
 namespace String {
+
     // Get the null-terminated C string.
     // Note that in case the string is not used after call of this function, the returned pointer will be already released.
     _get_c_str : String -> Ptr;
@@ -956,6 +957,15 @@ namespace String {
         let data = "".@_data.reserve(data_len);
         let data = iter.fold(data, |data, str| data.pop_back.append(str.@_data));
         String { _data : data }
+    );
+
+    // Create a string from C string (i.e., null-terminated byte array).
+    from_c_str : Array U8 -> String;
+    from_c_str = |buf| (
+        // Return length.
+        let len = buf.call_with_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
+        let buf = buf.__unsafe_set_length(len + 1);
+        String { _data : buf }
     );
 
     // Get the first byte of a string. Returns none if the string is empty.

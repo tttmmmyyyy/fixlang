@@ -315,6 +315,7 @@
       - [`call_with_c_str : (Ptr -> a) -> String -> a`](#call_with_c_str--ptr---a---string---a)
       - [`concat : String -> String -> String`](#concat--string---string---string)
       - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
+      - [`from_c_str : Vector U8 -> String`](#from_c_str--vector-u8---string)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
       - [`get_length : String -> I64`](#get_length--string---i64)
@@ -1947,6 +1948,9 @@ Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` 
 
 #### `concat_iter : Iterator String -> String`
 Concatenate an iterator of strings.
+
+#### `from_c_str : Vector U8 -> String`
+Create a string from C string (i.e., null-terminated byte array).
 
 #### `get_first_byte : String -> Option Byte`
 Get the first byte of a string. Returns none if the string is empty.

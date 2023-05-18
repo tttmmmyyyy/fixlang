@@ -3077,6 +3077,24 @@ pub fn test116() {
 
 #[test]
 #[serial]
+pub fn test117() {
+    // Test String::from_c_str
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let str = String::from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
+            let _ = assert_eq("case 1", str, "ABC");
+            let _ = assert_eq("case 2", str.get_length, 3);
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
