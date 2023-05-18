@@ -31,6 +31,7 @@ use ast::typedecl::*;
 use ast::types::*;
 use builtin::*;
 use c_config::*;
+use clap::ArgMatches;
 use clap::{App, AppSettings, Arg};
 use constants::*;
 use funptr_optimization::*;
@@ -70,7 +71,7 @@ pub const TUPLE_SIZE_MAX: u32 = 4;
 // Is tuple unboxed?
 pub const TUPLE_UNBOX: bool = true;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum LinkType {
     Static,
     Dynamic,
@@ -121,12 +122,14 @@ fn main() {
     let static_link_library = Arg::new("static-link-library")
         .long("static-link")
         .action(clap::ArgAction::Append)
-        .help("Add statically linked library.");
+        .help("Add statically linked library. For example, give \"abc\" to link \"libabc.so\".");
     let dynamic_link_library = Arg::new("dynamic-link-library")
         .long("dynamic-link")
         .action(clap::ArgAction::Append)
-        .help("Add dynamically linked library.");
-    let run_subc = App::new("run").arg(source_file.clone());
+        .help("Add dynamically linked library. For example, give \"abc\" to link \"libabc.so\".");
+    let run_subc = App::new("run")
+        .arg(source_file.clone())
+        .arg(dynamic_link_library.clone());
     let build_subc = App::new("build")
         .arg(source_file.clone())
         .arg(static_link_library.clone())
@@ -137,28 +140,34 @@ fn main() {
         .subcommand(run_subc)
         .subcommand(build_subc);
 
+    fn read_library_options(m: &ArgMatches) -> Vec<(String, LinkType)> {
+        let mut options = vec![];
+        for (opt_id, link_type) in [
+            ("static-link-library", LinkType::Static),
+            ("dynamic-link-library", LinkType::Dynamic),
+        ] {
+            options.append(
+                &mut m
+                    .get_many::<String>(opt_id)
+                    .unwrap_or_default()
+                    .map(|v| (v.clone(), link_type))
+                    .collect::<Vec<_>>(),
+            );
+        }
+        options
+    }
+
     match app.get_matches().subcommand() {
         Some(("run", m)) => {
             let path = m.value_of("source-file").unwrap();
-            run_file(Path::new(path), Configuration::release());
+            let mut config = Configuration::release();
+            config.linked_libraries = read_library_options(m);
+            run_file(Path::new(path), config);
         }
         Some(("build", m)) => {
-            let mut config = Configuration::release();
             let path = m.value_of("source-file").unwrap();
-            config.linked_libraries.append(
-                &mut m
-                    .get_many::<String>("static-link-library")
-                    .unwrap_or_default()
-                    .map(|v| (v.clone(), LinkType::Static))
-                    .collect::<Vec<_>>(),
-            );
-            config.linked_libraries.append(
-                &mut m
-                    .get_many::<String>("dynamic-link-library")
-                    .unwrap_or_default()
-                    .map(|v| (v.clone(), LinkType::Dynamic))
-                    .collect::<Vec<_>>(),
-            );
+            let mut config = Configuration::release();
+            config.linked_libraries = read_library_options(m);
             build_file(Path::new(path), config);
         }
         _ => eprintln!("Unknown command!"),

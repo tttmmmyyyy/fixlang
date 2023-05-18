@@ -11,10 +11,18 @@ use super::*;
 
 fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> i32 {
     if config.sanitize_memory {
-        assert_eq!(
-            load_library_permanently("sanitizer/libfixsanitizer.so"),
-            false
-        );
+        let path = "./sanitizer/libfixsanitizer.so";
+        let err = load_library_permanently(path);
+        if err {
+            error_exit(&format!("Failed to load \"{}\".", path));
+        }
+    }
+    for (lib_name, _) in &config.linked_libraries {
+        let lib_name = format!("lib{}.so", lib_name);
+        let err = load_library_permanently(&lib_name);
+        if err {
+            error_exit(&format!("Failed to load \"{}\".", lib_name));
+        }
     }
     unsafe {
         let func = ee
