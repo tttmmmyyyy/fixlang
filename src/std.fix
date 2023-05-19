@@ -1143,7 +1143,13 @@ impl F64 : ToString {
     to_string = F64::_F64_to_string;
 }
 
-// Hash Implementation for primitives
+// Eq Implementation for fundamental types
+
+impl [a : Eq, b : Eq] (a, b) : Eq {
+    eq = |(a, b), (c, d)| a == c && b == d;
+}
+
+// Hash Implementation for fundamental types
 
 impl U8 : Hash {
     hash = |x| x.to_U64.hash;
