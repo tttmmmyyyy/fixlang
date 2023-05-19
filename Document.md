@@ -73,6 +73,7 @@
       - [`to_F64 : U8 -> F64`](#to_f64--u8---f64)
       - [`impl U8 : Add`](#impl-u8--add)
       - [`impl U8 : Eq`](#impl-u8--eq)
+      - [`impl U8 : Hash`](#impl-u8--hash)
       - [`impl U8 : LessThan`](#impl-u8--lessthan)
       - [`impl U8 : LessThanOrEq`](#impl-u8--lessthanoreq)
       - [`impl U8 : Mul`](#impl-u8--mul)
@@ -326,6 +327,7 @@
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
     - [`impl String : Add`](#impl-string--add)
     - [`impl String : Eq`](#impl-string--eq)
+    - [`impl String : Hash`](#impl-string--hash)
     - [`impl String : ToString`](#impl-string--tostring)
     - [Std::Tuple{N}](#stdtuplen)
       - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
@@ -1332,6 +1334,7 @@ Literals:
 #### `to_F64 : U8 -> F64`
 #### `impl U8 : Add`
 #### `impl U8 : Eq`
+#### `impl U8 : Hash`
 #### `impl U8 : LessThan`
 #### `impl U8 : LessThanOrEq`
 #### `impl U8 : Mul`
@@ -1984,6 +1987,8 @@ Removes the last byte of a string while it satisifies the specified condition.
 Add two strings by `String.concat`.
 
 ### `impl String : Eq`
+
+### `impl String : Hash`
 
 ### `impl String : ToString`
 Defined as an identity function.

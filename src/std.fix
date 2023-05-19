@@ -1034,6 +1034,10 @@ impl String : Eq {
     eq = |lhs, rhs| (lhs.@_data == rhs.@_data);
 }
 
+impl String : Hash {
+    hash = |s| s.@_data.hash;
+}
+
 impl String : ToString {
     to_string = |s| s;
 }
@@ -1140,6 +1144,10 @@ impl F64 : ToString {
 }
 
 // Hash Implementation for primitives
+
+impl U8 : Hash {
+    hash = |x| x.to_U64.hash;
+}
 
 impl U64 : Hash {
     hash = |x| (
