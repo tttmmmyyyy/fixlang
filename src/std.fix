@@ -1153,3 +1153,7 @@ impl U64 : Hash {
 impl I64 : Hash {
     hash = I64::to_U64 >> hash;
 }
+
+impl [a : Hash, b : Hash] (a, b) : Hash {
+    hash = |(a, b)| [a.hash, b.hash].hash;
+}

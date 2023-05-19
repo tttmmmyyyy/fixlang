@@ -327,6 +327,8 @@
     - [`impl String : Add`](#impl-string--add)
     - [`impl String : Eq`](#impl-string--eq)
     - [`impl String : ToString`](#impl-string--tostring)
+    - [Std::Tuple{N}](#stdtuplen)
+      - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
   - [Functions](#functions-1)
     - [Std::compose : (a -\> b) -\> (b -\> c) -\> a -\> c](#stdcompose--a---b---b---c---a---c)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
@@ -1985,6 +1987,10 @@ Add two strings by `String.concat`.
 
 ### `impl String : ToString`
 Defined as an identity function.
+
+### Std::Tuple{N}
+
+#### `impl [a : Hash, b : Hash] (a, b) : Hash`
 
 ## Functions
 

@@ -15,11 +15,7 @@ pub fn test0() {
                 pure()
             );
         "#;
-    let mut config = Configuration::develop_compiler();
-    config
-        .linked_libraries
-        .push(("gmp".to_string(), LinkType::Dynamic));
-    run_source(&source, config);
+    run_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
