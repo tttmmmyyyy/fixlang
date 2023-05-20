@@ -806,6 +806,7 @@ namespace Iterator {
             let iter_next = iter.advance;
             if iter_next.is_none { none() };
             let (v, iter) = iter_next.as_some;
+            if !cond(v) { none() };
             some $ (v, iter.take_while(cond))
         );
         Iterator { next: next }        
