@@ -279,6 +279,7 @@
       - [`_flatten : Iterator (Iterator a) -> Iterator a`](#_flatten--iterator-iterator-a---iterator-a)
       - [`advance : Iterator a -> Option (a, Iterator a)`](#advance--iterator-a---option-a-iterator-a)
       - [`append : Iterator a -> Iterator a -> Iterator a`](#append--iterator-a---iterator-a---iterator-a)
+      - [`bang : Iterator a -> Iterator a`](#bang--iterator-a---iterator-a)
       - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
       - [`empty : Iterator a`](#empty--iterator-a)
       - [`get_length : Iterator a -> I64`](#get_length--iterator-a---i64)
@@ -292,6 +293,7 @@
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
+      - [`take_while : (a -> Bool) -> Iterator a -> Iterator a`](#take_while--a---bool---iterator-a---iterator-a)
       - [`find_last : Iterator a -> Option a`](#find_last--iterator-a---option-a)
       - [`to_array : Iterator a -> Array a`](#to_array--iterator-a---array-a)
       - [`zip : Iterator a -> Iterator b -> Iterator (a, b)`](#zip--iterator-a---iterator-b---iterator-a-b)
@@ -1823,6 +1825,9 @@ Get next value and next iterator.
 Append an iterator to a iterator.
 Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.    
 
+#### `bang : Iterator a -> Iterator a`
+Evaluate all elements of iterator.
+
 #### `count_up : I64 -> Iterator I64`
 Create an iterator that counts up from a number.
 Example: `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely).
@@ -1869,6 +1874,9 @@ Reverse an iterator.
 
 #### `take : I64 -> Iterator a -> Iterator a`
 Take at most n elements from an iterator.
+
+#### `take_while : (a -> Bool) -> Iterator a -> Iterator a`
+Take elements of an iterator while a condition is satisfied.
 
 #### `find_last : Iterator a -> Option a`
 Takes the last element of an iterator.

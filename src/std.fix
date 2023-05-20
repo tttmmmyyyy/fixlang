@@ -657,6 +657,11 @@ namespace Iterator {
         Iterator { next : next }
     );
 
+    // Evaluate all elements of iterator.
+    // TODO: add test
+    bang : Iterator a -> Iterator a;
+    bang = |iter| iter.to_array.to_iter;
+
     // Creates an iterator that counts up from a number.
     // count_up(n) = [n, n+1, n+2, ...]
     count_up : I64 -> Iterator I64;
@@ -791,6 +796,18 @@ namespace Iterator {
             some $ (v, iter.take(n-1))
         );
         Iterator { next: next }
+    );
+
+    // Take elements of an iterator while a condition is satisfied.
+    take_while : (a -> Bool) -> Iterator a -> Iterator a;
+    take_while = |cond, iter| (
+        let next = |_| (
+            let iter_next = iter.advance;
+            if iter_next.is_none { none() };
+            let (v, iter) = iter_next.as_some;
+            some $ (v, iter.take_while(cond))
+        );
+        Iterator { next: next }        
     );
 
     // Find the last element of an iterator.
