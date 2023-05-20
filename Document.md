@@ -332,6 +332,7 @@
     - [Std::Tuple{N}](#stdtuplen)
       - [`impl [a : Eq, b : Eq] (a, b) : Eq`](#impl-a--eq-b--eq-a-b--eq)
       - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
+      - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
   - [Functions](#functions-1)
     - [Std::compose : (a -\> b) -\> (b -\> c) -\> a -\> c](#stdcompose--a---b---b---c---a---c)
     - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
@@ -1999,6 +2000,8 @@ Defined as an identity function.
 #### `impl [a : Eq, b : Eq] (a, b) : Eq`
 
 #### `impl [a : Hash, b : Hash] (a, b) : Hash`
+
+#### `impl [a : ToString, b : ToString] (a, b) : ToString`
 
 ## Functions
 
