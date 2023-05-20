@@ -799,6 +799,7 @@ namespace Iterator {
     );
 
     // Take elements of an iterator while a condition is satisfied.
+    // TODO: add test
     take_while : (a -> Bool) -> Iterator a -> Iterator a;
     take_while = |cond, iter| (
         let next = |_| (
