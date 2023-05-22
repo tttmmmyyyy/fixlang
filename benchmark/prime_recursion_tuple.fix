@@ -30,7 +30,7 @@ count = |elem, arr| count_loop((0, 0, elem, arr));
 
 count_loop : [a: Eq] (I64, I64, a, Array a) -> I64;
 count_loop = |(i, sum, elem, arr)| (
-    if arr.get_length == i { sum };
+    if arr.get_size == i { sum };
     let sum = sum + (if arr.get(i) == elem {1} else {0});
     count_loop((i+1, sum, elem, arr))
 );

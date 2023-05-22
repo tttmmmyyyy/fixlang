@@ -9,7 +9,7 @@ module Main;
 
 find_last_but : Iterator a -> Option a;
 find_last_but = |iter| (
-    let len = iter.get_length;
+    let len = iter.get_size;
     if len <= 1 { none() };
     iter.take(len-1).find_last
 );

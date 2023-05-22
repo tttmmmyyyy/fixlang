@@ -217,10 +217,10 @@
       - [`from_iter : Iterator a -> Array a`](#from_iter--iterator-a---array-a)
       - [`from_map : I64 -> (I64 -> a) -> Array a`](#from_map--i64---i64---a---array-a)
       - [`get : I64 -> Array a -> a`](#get--i64---array-a---a)
+      - [`get_capacity : Array a -> I64`](#get_capacity--array-a---i64)
       - [`get_first : Array a -> Option a`](#get_first--array-a---option-a)
       - [`get_last : Array a -> Option a`](#get_last--array-a---option-a)
-      - [`get_length : Array a -> I64`](#get_length--array-a---i64)
-      - [`get_capacity : Array a -> I64`](#get_capacity--array-a---i64)
+      - [`get_size : Array a -> I64`](#get_size--array-a---i64)
       - [`is_empty : Array a -> Bool`](#is_empty--array-a---bool)
       - [`mod : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a)
       - [`mod! : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a-1)
@@ -323,7 +323,7 @@
       - [`from_c_str : Vector U8 -> String`](#from_c_str--vector-u8---string)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
-      - [`get_length : String -> I64`](#get_length--string---i64)
+      - [`get_size : String -> I64`](#get_size--string---i64)
       - [`is_empty : String -> Bool`](#is_empty--string---bool)
       - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
@@ -392,7 +392,7 @@ calc_fib = |n| (
     let arr = arr.set!(0, 1);
     let arr = arr.set!(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_length {
+        if idx == arr.get_size {
             break $ arr
         } else {
             let x = arr.get(idx-1);
@@ -628,7 +628,7 @@ calc_fib = |n| (
     let arr = arr.set!(0, 1);
     let arr = arr.set!(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_length {
+        if idx == arr.get_size {
             break $ arr
         } else {
             let x = arr.get(idx-1);
@@ -649,7 +649,7 @@ let arr = Array::fill(n, 0);
 let arr = arr.set!(0, 1);
 let arr = arr.set!(1, 1);
 let arr = loop((2, arr), |(idx, arr)|
-    if idx == arr.get_length {
+    if idx == arr.get_size {
         break $ arr
     } else {
         let x = arr.get(idx-1);
@@ -669,7 +669,7 @@ The precedence of the operator `.` is lower than function application by parenth
 
 In the program of Fibonacci sequence, the followings are examples of use of operator `.`:
 
-- `arr.get_length`: `get_length` is a function of type `Array a -> I64`, which returns the length of an array. Note that you should not write `arr.get_length()` as if you call a method of a class on an instance in other languages. Remembering syntax sugars `f() == f(())` and `x.f == f(x)`, you can desugar the expression `arr.get_length()` to `get_length((), arr)`, which raises an error because `get_length` takes only one argument.
+- `arr.get_size`: `get_size` is a function of type `Array a -> I64`, which returns the length of an array. Note that you should not write `arr.get_size()` as if you call a method of a class on an instance in other languages. Remembering syntax sugars `f() == f(())` and `x.f == f(x)`, you can desugar the expression `arr.get_size()` to `get_size((), arr)`, which raises an error because `get_size` takes only one argument.
 - `arr.set!(0, 1)`: `set!` is a function of type `I64 -> a -> Array a -> Array a`, which updates an element of an array to the specified value. 
 - `arr.get(idx-1)`: `get` is a function of type `I64 -> Array a -> a`, which returns the element at the specified index.
 
@@ -729,7 +729,7 @@ In the program of Fibonacci sequence, the `loop` function is used in the followi
 
 ```
 loop((2, arr), |(idx, arr)|
-    if idx == arr.get_length {
+    if idx == arr.get_size {
         break $ arr
     } else {
         let x = arr.get(idx-1);
@@ -740,7 +740,7 @@ loop((2, arr), |(idx, arr)|
 );
 ```
 
-The initial value of this loop is `(2, arr)`. The loop body takes a tuple `(idx, arr)`, that is, the index of an array to be updated next, and an array to store the Fibonacci sequence whose values are already right at indices 0, ..., idx-1. If `idx` is less than `arr.get_length`, it calculates the value of Fibonacci sequence at `idx`, stores it to `arr`, and returns `continue $ (idx+1, arr)` to proceed to the next step. If `idx` has reached to `arr.get_length`, it returns `break $ arr` to end the loop. The return value of the `loop` function is an array.
+The initial value of this loop is `(2, arr)`. The loop body takes a tuple `(idx, arr)`, that is, the index of an array to be updated next, and an array to store the Fibonacci sequence whose values are already right at indices 0, ..., idx-1. If `idx` is less than `arr.get_size`, it calculates the value of Fibonacci sequence at `idx`, stores it to `arr`, and returns `continue $ (idx+1, arr)` to proceed to the next step. If `idx` has reached to `arr.get_size`, it returns `break $ arr` to end the loop. The return value of the `loop` function is an array.
 
 ## Unions
 
@@ -907,7 +907,7 @@ calc_fib = |n| (
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_length {
+        if idx == arr.get_size {
             break $ arr
         } else {
             let x = arr.get(idx-1);
@@ -1582,17 +1582,17 @@ Example: `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
 #### `get : I64 -> Array a -> a`
 Returns an element of an array at an index.
 
+#### `get_capacity : Array a -> I64`
+Returns the capacity of an array.
+
 #### `get_first : Array a -> Option a`
 Get the first element of an array. Returns none if the array is empty.
 
 #### `get_last : Array a -> Option a`
 Get the last element of an array. Returns none if the array is empty.
 
-#### `get_length : Array a -> I64`
+#### `get_size : Array a -> I64`
 Returns the length of an array.
-
-#### `get_capacity : Array a -> I64`
-Returns the capacity of an array.
 
 #### `is_empty : Array a -> Bool`
 Returns if the array is empty or not.
@@ -1981,7 +1981,7 @@ Get the first byte of a string. Returns none if the string is empty.
 #### `get_last_byte : String -> Option Byte`
 Get the last byte of a string. Returns none if the string is empty.
 
-#### `get_length : String -> I64`
+#### `get_size : String -> I64`
 Returns the length of the string.
 
 #### `is_empty : String -> Bool`

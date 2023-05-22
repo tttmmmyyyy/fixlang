@@ -492,7 +492,7 @@ pub fn test24() {
         main : IO ();
         main = (
             let arr = Array::fill(100, 42);
-            let u = assert_eq("", arr.get_length, 100);
+            let u = assert_eq("", arr.get_size, 100);
             pure()
         );
         "#;
@@ -1023,7 +1023,7 @@ pub fn test44_5() {
         sum : Array I64 -> I64;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
-                if idx == arr.get_length { sum };
+                if idx == arr.get_size { sum };
                 loop(idx + 1, sum + arr.get(idx))
             );
             loop(0, 0)
@@ -1053,14 +1053,14 @@ pub fn test45() {
 
         impl Array : MyFunctor {
             map = |f, arr| (
-                Array::from_map(arr.get_length, |idx| f $ arr.get(idx))
+                Array::from_map(arr.get_size, |idx| f $ arr.get(idx))
             );
         }
 
         sum : Array I64 -> I64;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
-                if idx == arr.get_length { sum };
+                if idx == arr.get_size { sum };
                 loop(idx + 1, sum + arr.get(idx))
             );
             loop(0, 0)
@@ -1188,7 +1188,7 @@ pub fn test47_6() {
             let _ = assert_eq("", arr.get(3), 4);
             let _ = assert_eq("", arr.get(4), 5);
             let _ = assert_eq("", arr.get(5), 6);
-            let _ = assert_eq("", arr.get_length, 6);
+            let _ = assert_eq("", arr.get_size, 6);
             pure()
         );
     "#;
@@ -1293,7 +1293,7 @@ pub fn test51() {
 
     search : [a: Eq] a -> Array a -> I64;
     search = |elem, arr| loop(0) $ |idx| (
-        if idx == arr.get_length {
+        if idx == arr.get_size {
             break $ -1
         } else if arr.get(idx) == elem { 
             break $ idx
@@ -1359,7 +1359,7 @@ pub fn test52() {
         loop((0, 0)) $ |state| (
             let i = state.@0;
             let sum = state.@1;
-            if arr.get_length == i { break $ sum };
+            if arr.get_size == i { break $ sum };
             let sum = sum + (if arr.get(i) == elem {1} else {0});
             continue $ (i+1, sum)
         )
@@ -1594,7 +1594,7 @@ pub fn test62() {
 
     main : IO ();
     main = (
-        let len = "Hello World!".get_length;
+        let len = "Hello World!".get_size;
         let u = assert_eq("", len, 12);
         pure()
     );
@@ -1996,9 +1996,9 @@ pub fn test81() {
     main : IO ();
     main = (
         let arr = [1,2,3,4];
-        let _ = assert_eq("", arr.get_length, 4);
+        let _ = assert_eq("", arr.get_size, 4);
         let arr: Array Bool = [];
-        let _ = assert_eq("", arr.get_length, 0);
+        let _ = assert_eq("", arr.get_size, 0);
         pure()
     );
     "#;
@@ -2020,7 +2020,7 @@ pub fn test82() {
         let v2 = [3,4];
         let v = v1.append(v2);
         let _ = assert_eq("wrong reserved length (0+2)", v.get_capacity, 2);
-        let _ = assert_eq("wrong length (0+2)", v.get_length, 2);
+        let _ = assert_eq("wrong length (0+2)", v.get_size, 2);
         let _ = assert_eq("wrong element (0+2)", v.get(0), 3);
         let _ = assert_eq("wrong element (0+2)", v.get(1), 4);
 
@@ -2029,7 +2029,7 @@ pub fn test82() {
         let v2 = [];
         let v = v1.append(v2);
         let _ = assert_eq("wrong reserved length (2+0)", v.get_capacity, 2);
-        let _ = assert_eq("wrong length (2+0)", v.get_length, 2);
+        let _ = assert_eq("wrong length (2+0)", v.get_size, 2);
         let _ = assert_eq("wrong element (2+0)", v.get(0), 1);
         let _ = assert_eq("wrong element (2+0)", v.get(1), 2);
 
@@ -2038,7 +2038,7 @@ pub fn test82() {
         let v2 = [];
         let v = v1.append(v2);
         let _ = assert_eq("wrong capacity (0+0)", v.get_capacity, 0);
-        let _ = assert_eq("wrong length (0+0)", v.get_length, 0);
+        let _ = assert_eq("wrong length (0+0)", v.get_size, 0);
 
         // Test boxed elements.
         let v1 = [add(1), add(2)];
@@ -2096,7 +2096,7 @@ pub fn test83() {
             let v = v.pop_back;
             continue $ (idx+1, v)
         ));
-        let _ = assert_eq("wrong length after pop", 0, v.get_length);
+        let _ = assert_eq("wrong length after pop", 0, v.get_size);
         let _ = assert("wrong reserved length after pop", v.get_capacity >= 100);
     
         // Boxed element
@@ -2117,7 +2117,7 @@ pub fn test83() {
             let v = v.pop_back;
             continue $ (idx+1, v)
         ));
-        let _ = assert_eq("wrong length after pop (boxed)", 0, v.get_length);
+        let _ = assert_eq("wrong length after pop (boxed)", 0, v.get_size);
         let _ = assert("wrong reserved length after pop (boxed)", v.get_capacity >= 100);
     
         pure()
@@ -3086,7 +3086,7 @@ pub fn test117() {
         main = (
             let str = String::from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
             let _ = assert_eq("case 1", str, "ABC");
-            let _ = assert_eq("case 2", str.get_length, 3);
+            let _ = assert_eq("case 2", str.get_size, 3);
             pure()
         );
     "#;

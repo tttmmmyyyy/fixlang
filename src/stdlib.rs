@@ -412,8 +412,8 @@ pub fn make_std_mod() -> FixModule {
         get_capacity_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_length"),
-        get_length_array(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_size"),
+        get_size_array(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),

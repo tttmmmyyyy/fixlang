@@ -1707,8 +1707,8 @@ pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// `get_length` built-in function for Array.
-pub fn get_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+// `get_size` built-in function for Array.
+pub fn get_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
     let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {

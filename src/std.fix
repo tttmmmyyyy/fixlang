@@ -59,11 +59,11 @@ namespace Array {
     append : Array a -> Array a -> Array a;
     append = |v2, v1| (
         // if v2 is empty, return early to avoid unnecessary clone.
-        let v2_len = v2.get_length;
+        let v2_len = v2.get_size;
         if v2_len == 0 { v1 };
 
         // if v1 is empty, return early to avoid unnecessary clone.
-        let v1_len = v1.get_length;
+        let v1_len = v1.get_size;
         if v1_len == 0 { v2 };
 
         // Reserve v1's buffer and force uniqueness.
@@ -92,7 +92,7 @@ namespace Array {
     // Find the first index at which the element satisfies a condition.
     find_by : (a -> Bool) -> Array a -> Option I64;
     find_by = |cond, arr| (
-        let len = arr.get_length;
+        let len = arr.get_size;
         loop(0, |idx| (
             if idx == len { break $ Option::none $ () };
             if cond(arr.get(idx)) { break $ Option::some $ idx };
@@ -103,7 +103,7 @@ namespace Array {
     // Create an array from an iterator.
     from_iter : Iterator a -> Array a;
     from_iter = |iter| (
-        let len = iter.get_length;
+        let len = iter.get_size;
         let arr = Array::empty(len).__unsafe_set_length(len);
         iter.fold((arr, 0), |(arr, idx), elem| (
             let arr = arr.__unsafe_set(idx, elem);
@@ -135,20 +135,20 @@ namespace Array {
     // Get the last element of an array. Returns none if the array is empty.
     get_last : Array a -> Option a;
     get_last = |arr| (
-        let len = arr.get_length;
+        let len = arr.get_size;
         if len == 0 { Option::none() };
         Option::some $ arr.get(len - 1)
     );
 
     // Returns if the array is empty
     is_empty : Array a -> Bool;
-    is_empty = |arr| ( arr.get_length == 0 );
+    is_empty = |arr| ( arr.get_size == 0 );
 
     // Pop an element at the back of an array.
     // If the array is empty, this function does nothing.
     pop_back : Array a -> Array a;
     pop_back = |arr| (
-        let len = arr.get_length;
+        let len = arr.get_size;
         if len == 0 { arr };
         let arr = arr.force_unique;
         let released_elem = arr.__unsafe_get(len-1);
@@ -158,7 +158,7 @@ namespace Array {
     // Push an element to the back of an array.
     push_back : a -> Array a -> Array a;
     push_back = |e, arr| (
-        let len = arr.get_length;
+        let len = arr.get_size;
         let arr = if arr.get_capacity < len + 1 {
             arr.reserve(2*(len + 1))
         } else {
@@ -172,7 +172,7 @@ namespace Array {
     reduce_length : I64 -> Array a -> Array a;
     reduce_length = |length, vec| (
         loop(vec, |vec|(
-            if length >= vec.get_length { break $ vec };
+            if length >= vec.get_size { break $ vec };
             continue $ vec.pop_back
         ))
     );
@@ -182,7 +182,7 @@ namespace Array {
     reserve : I64 -> Array a -> Array a;
     reserve = |cap, arr| (
         if cap <= arr.get_capacity { arr };
-        let len = arr.get_length;
+        let len = arr.get_size;
         let new = Array::empty(cap).__unsafe_set_length(len);
         loop((0, new), |(idx, new)|(
             if idx == len {
@@ -197,8 +197,8 @@ namespace Array {
     // Sort elements in a vector by "less than" comparator.
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, vec| (
-        let buffer = Array::empty(vec.get_length);
-        let (vec, buffer) = vec._sort_range_using_buffer(buffer, 0, vec.get_length, less_than);
+        let buffer = Array::empty(vec.get_size);
+        let (vec, buffer) = vec._sort_range_using_buffer(buffer, 0, vec.get_size, less_than);
         vec
     );
 
@@ -212,8 +212,8 @@ namespace Array {
 impl [a : Eq] Array a : Eq {
     // Compare two vectors.
     eq = |lhs, rhs| (
-        if lhs.get_length != rhs.get_length { false };
-        let len = lhs.get_length;
+        if lhs.get_size != rhs.get_size { false };
+        let len = lhs.get_size;
         loop(0, |idx| (
             if idx == len { break $ true };
             if lhs.get(idx) != rhs.get(idx) { break $ false };
@@ -224,7 +224,7 @@ impl [a : Eq] Array a : Eq {
 
 impl [a : Hash] Array a : Hash {
     hash = |arr| (
-        let len = arr.get_length;
+        let len = arr.get_size;
         loop((0, 5381_U64), |(i, h)| (
             if i == len { break $ h };
             let h = h.shift_left(5_U64) + h + arr.get(i).hash;
@@ -349,7 +349,7 @@ namespace HashMap {
 
     // Get capacity of a HashMap. 
     get_capacity : HashMap k v -> I64;
-    get_capacity = |mp| mp.@_table.get_length;
+    get_capacity = |mp| mp.@_table.get_size;
 
     // Get size (number of elements) in a HashMap.
     get_size : HashMap k v -> I64;
@@ -389,7 +389,7 @@ namespace HashMap {
     to_iter : HashMap k v -> Iterator (k, v);
     to_iter = |mp| (
         let table_idx = *Iterator::range(0, mp.get_capacity);
-        let bucket_idx = *Iterator::range(0, mp.@_table.get(table_idx).get_length);
+        let bucket_idx = *Iterator::range(0, mp.@_table.get(table_idx).get_size);
         let opt_elem = mp.@_table.get(table_idx).get(bucket_idx);
         if opt_elem.is_none { Iterator::empty };
         pure $ opt_elem.as_some
@@ -756,7 +756,7 @@ namespace Iterator {
 
     // Create iterator from an array.
     from_array : Array a -> Iterator a;
-    from_array = |arr| count_up(0).take(arr.get_length).map(|i| arr.get(i));
+    from_array = |arr| count_up(0).take(arr.get_size).map(|i| arr.get(i));
 
     // Creates iterator from mapping function.
     // from_map(f) = [f(0), f(1), f(2), ...]
@@ -981,7 +981,7 @@ namespace String {
     // Concatenate an iterator of strings.
     concat_iter : Iterator String -> String;
     concat_iter = |iter| (
-        let len = iter.map(get_length).fold(0, add);
+        let len = iter.map(get_size).fold(0, add);
         let data_len = len + 1; // Add space for null terminator.
         let data = "".@_data.reserve(data_len);
         let data = iter.fold(data, |data, str| data.pop_back.append(str.@_data));
@@ -1007,18 +1007,18 @@ namespace String {
     // Get the last byte of a string. Returns none if the string is empty.
     get_last_byte : String -> Option U8;
     get_last_byte = |s| (
-        let len = s.get_length;
+        let len = s.get_size;
         if len == 0 { Option::none() };
         Option::some $ s.@_data.get(len - 1)
     );
 
     // Get the length of a string.
-    get_length : String -> I64;
-    get_length = |s| s.@_data.get_length - 1; // exclude null terminator
+    get_size : String -> I64;
+    get_size = |s| s.@_data.get_size - 1; // exclude null terminator
 
     // Returns if the string is empty or not.
     is_empty : String -> Bool;
-    is_empty = |s| s.get_length == 0;
+    is_empty = |s| s.get_size == 0;
 
     // Join strings by a separator.
     join : String -> Iterator String -> String;
