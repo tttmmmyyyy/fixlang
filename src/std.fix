@@ -679,9 +679,19 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Counts the length of an iterator.
-    get_length : Iterator a -> I64;
-    get_length = fold(0, |acm, _| acm + 1);
+    // Get the first element of an iterator. If the iterator is empty, this function returns `none`.
+    // TODO: add test
+    get_first : Iterator a -> Option a;
+    get_first = |iter| iter.advance.map(@0);
+
+    // Count the number of elements of an iterator.
+    get_size : Iterator a -> I64;
+    get_size = fold(0, |acm, _| acm + 1);
+
+    // Remove the first element from an iterator. If the iterator is empty, this function returns `none`.
+    // TODO: add test
+    get_tail : Iterator a -> Option (Iterator a);
+    get_tail = |iter| iter.advance.map(@1);
 
     // Intersperse an elemnt between elements of an iterator.
     // Example: 

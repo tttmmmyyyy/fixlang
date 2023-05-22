@@ -282,7 +282,9 @@
       - [`bang : Iterator a -> Iterator a`](#bang--iterator-a---iterator-a)
       - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
       - [`empty : Iterator a`](#empty--iterator-a)
-      - [`get_length : Iterator a -> I64`](#get_length--iterator-a---i64)
+      - [`get_first : Iterator a -> Option a`](#get_first--iterator-a---option-a)
+      - [`get_size : Iterator a -> I64`](#get_size--iterator-a---i64)
+      - [`get_tail : Iterator a -> Option (Iterator a)`](#get_tail--iterator-a---option-iterator-a)
       - [`intersperse : a -> Iterator a -> Iterator a`](#intersperse--a---iterator-a---iterator-a)
       - [`is_empty : Iterator a -> Bool`](#is_empty--iterator-a---bool)
       - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
@@ -1835,8 +1837,14 @@ Example: `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely).
 #### `empty : Iterator a`
 Create an empty iterator.
 
-#### `get_length : Iterator a -> I64`
-Counts the length of an iterator.
+#### `get_first : Iterator a -> Option a`
+Get the first element of an iterator. If the iterator is empty, this function returns `none`.
+
+#### `get_size : Iterator a -> I64`
+Count the number of elements of an iterator.
+
+#### `get_tail : Iterator a -> Option (Iterator a)`
+Remove the first element from an iterator. If the iterator is empty, this function returns `none`.
 
 #### `intersperse : a -> Iterator a -> Iterator a`
 
