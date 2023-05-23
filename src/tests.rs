@@ -1285,12 +1285,6 @@ pub fn test51() {
     let source = r#"
     module Main;
     
-    impl [a: Eq, b: Eq] (a, b) : Eq {
-        eq = |lhs, rhs| (
-            lhs.@0 == rhs.@0 && lhs.@1 == rhs.@1
-        );
-    }
-
     search : [a: Eq] a -> Array a -> I64;
     search = |elem, arr| loop(0) $ |idx| (
         if idx == arr.get_size {
