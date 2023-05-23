@@ -208,7 +208,7 @@
       - [`_get_ptr : Array a -> Ptr`](#_get_ptr--array-a---ptr)
       - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
       - [`append : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a)
-      - [`call_with_ptr : (Ptr -> b) -> Array a -> b`](#call_with_ptr--ptr---b---array-a---b)
+      - [`borrow_ptr : (Ptr -> b) -> Array a -> b`](#borrow_ptr--ptr---b---array-a---b)
       - [`empty : I64 -> Array a`](#empty--i64---array-a)
       - [`fill : I64 -> a -> Array a`](#fill--i64---a---array-a)
       - [`find_by : [a : Eq] (a -> Bool) -> Array a -> Option I64`](#find_by--a--eq-a---bool---array-a---option-i64)
@@ -317,7 +317,7 @@
       - [`impl Result e : Monad`](#impl-result-e--monad)
     - [Std::String](#stdstring)
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
-      - [`call_with_c_str : (Ptr -> a) -> String -> a`](#call_with_c_str--ptr---a---string---a)
+      - [`borrow_c_str : (Ptr -> a) -> String -> a`](#borrow_c_str--ptr---a---string---a)
       - [`concat : String -> String -> String`](#concat--string---string---string)
       - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
       - [`from_c_str : Vector U8 -> String`](#from_c_str--vector-u8---string)
@@ -1285,7 +1285,7 @@ Example:
 ```
 main : IO ();
 main = (
-    let _ = "Hello C function!\n".call_with_c_str(|ptr|
+    let _ = "Hello C function!\n".borrow_c_str(|ptr|
         CALL_C[I32 printf(Ptr, ...), ptr]
     );
     pure()
@@ -1550,7 +1550,7 @@ This function receives a working buffer as the first argument to reduce memory a
 Append an array to an array.
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`. 
 
-#### `call_with_ptr : (Ptr -> b) -> Array a -> b`
+#### `borrow_ptr : (Ptr -> b) -> Array a -> b`
 Call a function with a pointer to the memory region where elements are stored.
 
 #### `empty : I64 -> Array a`
@@ -1962,7 +1962,7 @@ The type of strings.
 Get the null-terminated C string.
 Note that in case the string is not used after call of this function, the returned pointer will be already released.
 
-#### `call_with_c_str : (Ptr -> a) -> String -> a`
+#### `borrow_c_str : (Ptr -> a) -> String -> a`
 Call a function with a valid null-terminated C string.
 
 #### `concat : String -> String -> String`

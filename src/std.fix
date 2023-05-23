@@ -82,8 +82,8 @@ namespace Array {
     );
 
     // Call a function with a pointer to the memory region where elements are stored.
-    call_with_ptr : (Ptr -> b) -> Array a -> b;
-    call_with_ptr = |f, arr| (
+    borrow_ptr : (Ptr -> b) -> Array a -> b;
+    borrow_ptr = |f, arr| (
         let res = f(arr._get_ptr);
         let _ = arr; // Use array after calling f
         res
@@ -417,8 +417,8 @@ namespace IO {
     open_file = |path, mode| (
         IOResult { _data  : IO { _data : |_|(
             let path_str = path.to_string;
-            let res = path_str.call_with_c_str(|path_ptr|
-                mode.call_with_c_str(|mode_str|
+            let res = path_str.borrow_c_str(|path_ptr|
+                mode.borrow_c_str(|mode_str|
                     let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
                     if file_ptr == nullptr { 
                         Result::err $ IOError { msg : "failed to open a file: " + path_str }
@@ -435,7 +435,7 @@ namespace IO {
     print : String -> IO ();
     print = |str| (
         IO { _data : |_| (
-            let _ = str.call_with_c_str(|c_ptr|
+            let _ = str.borrow_c_str(|c_ptr|
                 CALL_C[I32 printf(Ptr, ...), c_ptr]
             );
             ()
@@ -471,7 +471,7 @@ namespace IO {
             // Read strings and make iterators of strings (reversed).
             let strings_rev = loop(Iterator::empty, |strs|
                 let buf = Array::empty(1024); // NOTE: this number also appears at CALL_C[fgets].
-                let strlen = buf.call_with_ptr(|buf|
+                let strlen = buf.borrow_ptr(|buf|
                     // Read characters to buf.
                     let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, 1024_I32, handle.@_file_ptr];
                     if fgets_res == nullptr { -1 };
@@ -526,7 +526,7 @@ namespace IO {
     // Write a string into an IOHandle.
     write_content : IOHandle -> String -> IOResult IOError ();
     write_content = |handle, content| (
-        let res = content.call_with_c_str(|c_str| (
+        let res = content.borrow_c_str(|c_str| (
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle.@_file_ptr];
             if res < 0_I32 { Result::err $ IOError { msg : "Std::IO::write_content! failed!: some error occurred in fputs." } };
             Result::ok()
@@ -603,21 +603,21 @@ namespace IO::IOHandle {
     // The handle for standard error.
     stderr : IOHandle;
     stderr = (
-        let ptr = "a".call_with_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
+        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
         IOHandle { _file_ptr: ptr } 
     );
 
     // The handle for standard input.
     stdin : IOHandle;
     stdin = (
-        let ptr = "r".call_with_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
+        let ptr = "r".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
         IOHandle { _file_ptr: ptr } 
     );
 
     // The handle for standard output.
     stdout : IOHandle;
     stdout = (
-        let ptr = "a".call_with_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
+        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
         IOHandle { _file_ptr: ptr } 
     );
 }
@@ -967,8 +967,8 @@ namespace String {
     _get_c_str = |s| s.@_data._get_ptr;
 
     // Call a function with a null-terminated C string.
-    call_with_c_str : (Ptr -> a) -> String -> a;
-    call_with_c_str = |f, str| str.@_data.call_with_ptr(f);
+    borrow_c_str : (Ptr -> a) -> String -> a;
+    borrow_c_str = |f, str| str.@_data.borrow_ptr(f);
 
     // Concatenate two strings.
     // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
@@ -992,7 +992,7 @@ namespace String {
     from_c_str : Array U8 -> String;
     from_c_str = |buf| (
         // Return length.
-        let len = buf.call_with_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
+        let len = buf.borrow_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
         let buf = buf.__unsafe_set_length(len + 1);
         String { _data : buf }
     );

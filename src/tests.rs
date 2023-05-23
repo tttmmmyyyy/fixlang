@@ -2355,7 +2355,7 @@ pub fn test94() {
     
             main : IO ();
             main = (
-                let _ = "Hello C function!\n".call_with_c_str(|ptr|
+                let _ = "Hello C function!\n".borrow_c_str(|ptr|
                     CALL_C[I32 printf(Ptr, ...), ptr]
                 );
                 pure()
