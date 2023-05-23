@@ -885,6 +885,20 @@ impl Iterator : Monad {
     bind = |f, xs| xs.map(f)._flatten;
 }
 
+namespace LoopResult {
+
+    // Make a break value wrapped in a monad.
+    // This is used with `loop_m` function.
+    break_m : [m : Monad] r -> m (LoopResult s r);
+    break_m = break >> pure;
+
+    // Make a continue value wrapped in a monad.
+    // This is used with `loop_m` function.
+    continue_m : [m : Monad] s -> m (LoopResult s r);
+    continue_m = continue >> pure;
+
+}
+
 type Option a = union { none: (), some: a };
 
 impl [a : Eq] Option a : Eq {
@@ -1073,8 +1087,17 @@ impl String : ToString {
 
 // Functions
 
+// Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
 compose : (a -> b) -> (b -> c) -> a -> c;
 compose = |f, g, a| g(f(a));
+
+// Monadic loop function. This is similar to `loop` but each loop body performs monadic action.
+loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r;
+loop_m = |s, f| (
+    let res = *f(s);
+    if res.is_break { pure $ res.as_break };
+    loop_m(res.as_continue, f)
+);
 
 // Constants
 

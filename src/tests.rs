@@ -1568,13 +1568,32 @@ pub fn test61() {
         if counter == 0 {
             pure()
         } else {
-            let _ = *println("Hello World!");
+            let _ = *println("Hello World! (" + counter.to_string + ")");
             main_loop(counter - 1)
         }
     );
 
     main : IO ();
     main = main_loop(3);
+    "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test61_5() {
+    // Test Hello world.
+    let source = r#"
+    module Main;
+
+    main : IO ();
+    main = (
+        loop_m(0, |i| (
+            if i == 3 { break_m $ () };
+            let _ = *println("Hello World! (" + i.to_string + ")");
+            continue_m $ i + 1
+        ))
+    );
     "#;
     run_source(source, Configuration::develop_compiler());
 }

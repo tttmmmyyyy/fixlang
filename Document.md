@@ -303,6 +303,9 @@
       - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
       - [`impl Iterator : Functor`](#impl-iterator--functor)
       - [`impl Iterator : Monad`](#impl-iterator--monad)
+    - [Std::LoopResult](#stdloopresult)
+      - [`break_m : [m : Monad] r -> m (LoopResult s r)`](#break_m--m--monad-r---m-loopresult-s-r)
+      - [`continue_m : [m : Monad] s -> m (LoopResult s r)`](#continue_m--m--monad-s---m-loopresult-s-r)
     - [Std::Option](#stdoption)
       - [`impl [a : Eq] Option a : Eq`](#impl-a--eq-option-a--eq)
       - [`impl Option : Functor`](#impl-option--functor)
@@ -338,15 +341,16 @@
       - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
       - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
   - [Functions](#functions-1)
-    - [Std::compose : (a -\> b) -\> (b -\> c) -\> a -\> c](#stdcompose--a---b---b---c---a---c)
-    - [Std::is\_unique : a -\> (Bool, a)](#stdis_unique--a---bool-a)
-    - [Std::fix : ((a -\> b) -\> a -\> b) -\> a -\> b](#stdfix--a---b---a---b---a---b)
-    - [Std::loop : s -\> (s -\> LoopResult s r) -\> r](#stdloop--s---s---loopresult-s-r---r)
-    - [Std::Debug::debug\_print : String -\> ()](#stddebugdebug_print--string---)
-    - [Std::Debug::debug\_println : String -\> ()](#stddebugdebug_println--string---)
-    - [Std::Debug::abort : () -\> a](#stddebugabort-----a)
-    - [Std::Debug::assert : String -\> Bool -\> ()](#stddebugassert--string---bool---)
-    - [Std::Debug::assert\_eq : \[a: Eq\] String -\> a -\> a -\> ()](#stddebugassert_eq--a-eq-string---a---a---)
+    - [`Std::compose : (a -> b) -> (b -> c) -> a -> c`](#stdcompose--a---b---b---c---a---c)
+    - [`Std::is_unique : a -> (Bool, a)`](#stdis_unique--a---bool-a)
+    - [`Std::fix : ((a -> b) -> a -> b) -> a -> b`](#stdfix--a---b---a---b---a---b)
+    - [`Std::loop : s -> (s -> LoopResult s r) -> r`](#stdloop--s---s---loopresult-s-r---r)
+    - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
+    - [`Std::Debug::debug_print : String -> ()`](#stddebugdebug_print--string---)
+    - [`Std::Debug::debug_println : String -> ()`](#stddebugdebug_println--string---)
+    - [`Std::Debug::abort : () -> a`](#stddebugabort-----a)
+    - [`Std::Debug::assert : String -> Bool -> ()`](#stddebugassert--string---bool---)
+    - [`Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()`](#stddebugassert_eq--a-eq-string---a---a---)
   - [Traits](#traits)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
@@ -1904,6 +1908,22 @@ Adds two iterators by `Iterator::append`.
 
 #### `impl Iterator : Monad`
 
+### Std::LoopResult
+
+`LoopResult` represents the result of loop body function and used with `loop` function. For example of `LoopResult`, see the section for `loop` function.
+
+```
+type LoopResult s b = unbox union { continue : s, break : b };
+```
+
+#### `break_m : [m : Monad] r -> m (LoopResult s r)`
+Make a break value wrapped in a monad. 
+This is used with `loop_m` function.
+
+#### `continue_m : [m : Monad] s -> m (LoopResult s r)`
+Make a continue value wrapped in a monad.
+This is used with `loop_m` function.
+
 ### Std::Option
 
 `Option a` contains a value of type `a`, or contains nothing.
@@ -2021,11 +2041,11 @@ Defined as an identity function.
 
 ## Functions
 
-### Std::compose : (a -> b) -> (b -> c) -> a -> c
+### `Std::compose : (a -> b) -> (b -> c) -> a -> c`
 
-Compose two functions. You can use this function by binary operators `<<` and `>>`.
+Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
 
-### Std::is_unique : a -> (Bool, a)
+### `Std::is_unique : a -> (Bool, a)`
 
 This function checks if a value is uniquely refernced by a name, and returns the pair of the result and the given value. If `a` is unboxed, the 0th component of the returned value will be `true`.
 
@@ -2056,7 +2076,7 @@ main = (
 );
 ```
 
-### Std::fix : ((a -> b) -> a -> b) -> a -> b
+### `Std::fix : ((a -> b) -> a -> b) -> a -> b`
 
 `fix` enables you to make a recursive function locally. The idiom is: `fix $ |loop, var| -> (expression calls loop)`.
 
@@ -2070,12 +2090,12 @@ main = (
 );
 ```
 
-### Std::loop : s -> (s -> LoopResult s r) -> r
+### `Std::loop : s -> (s -> LoopResult s r) -> r`
 
 `loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
 
 ```
-type LoopResult s r = union { s: continue, r: break };
+type LoopResult s r = unbox union { s: continue, r: break };
 ```
 
 `loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`. It first calls `body` on `s0`. If `body` returns `break r`, then the loop ends and returns `r` as the result. If `body` returns `continue s`, then the loop calls again `body` on `s`.
@@ -2087,25 +2107,45 @@ main : IO ();
 main = (
     let sum = (
         loop((0, 0), |(i, sum)|
-            if i == 100 then 
+            if i == 100 {
                 break $ sum 
-            else
+            } else {
                 continue $ (i+1, sum+i)
+            }
         )
     );
-    print $ sum.to_string
+    println $ sum.to_string
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
-### Std::Debug::debug_print : String -> ()
+### `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
 
-### Std::Debug::debug_println : String -> ()
+Monadic loop function. This is similar to `loop` but each loop body performs monadic action. It is convenient to use `continue_m` and `break_m` to create monadic loop body function.
 
-### Std::Debug::abort : () -> a
+The following program prints "Hello World! (i)" for i = 0, 1, 2.
 
-### Std::Debug::assert : String -> Bool -> ()
+```
+module Main;
 
-### Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()
+main : IO ();
+main = (
+    loop_m(0, |i| (
+        if i == 3 { break_m $ () };
+        let _ = *println("Hello World! (" + i.to_string + ")");
+        continue_m $ i + 1
+    ))
+);
+```
+
+### `Std::Debug::debug_print : String -> ()`
+
+### `Std::Debug::debug_println : String -> ()`
+
+### `Std::Debug::abort : () -> a`
+
+### `Std::Debug::assert : String -> Bool -> ()`
+
+### `Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()`
 
 ## Traits
 
