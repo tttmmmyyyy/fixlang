@@ -289,6 +289,7 @@
       - [`is_empty : Iterator a -> Bool`](#is_empty--iterator-a---bool)
       - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
       - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
+      - [`fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`](#fold_m--m--monad-b---b---a---m-b---iterator-a---m-b)
       - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
       - [`from_map : (I64 -> a) -> Iterator a`](#from_map--i64---a---iterator-a)
       - [`generate : s -> (s -> Option (a, s)) -> Iterator a`](#generate--s---s---option-a-s---iterator-a)
@@ -1863,8 +1864,11 @@ Check if the iterator is empty.
 Filter elements by a condition function.
 
 #### `fold : b -> (b -> a -> b) -> Iterator a -> b`
-Folds iterator from left.
+Folds iterator from left to right.
 Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`.
+
+#### `fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`
+Folds iterator from left to right by monadic action.
 
 #### `from_array : Array a -> Iterator a`
 Create iterator from an array.
@@ -2120,7 +2124,9 @@ main = (
 
 ### `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
 
-Monadic loop function. This is similar to `loop` but each loop body performs monadic action. It is convenient to use `continue_m` and `break_m` to create monadic loop body function.
+Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
+
+It is convenient to use `continue_m` and `break_m` to create monadic loop body function.
 
 The following program prints "Hello World! (i)" for i = 0, 1, 2.
 

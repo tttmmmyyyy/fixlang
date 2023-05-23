@@ -3108,6 +3108,27 @@ pub fn test117() {
 
 #[test]
 #[serial]
+pub fn test118() {
+    // Test fold_m
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let _ = *count_up(0).take(10).fold_m(0, |s, i| (
+                let s = s + i;
+                let _ = *print("Sum upto " + i.to_string + " is " + s.to_string + ". ");
+                pure $ s
+            ));
+            let _ = *println("");
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 
