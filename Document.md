@@ -243,6 +243,7 @@
       - [`empty : I64 -> HashMap k v`](#empty--i64---hashmap-k-v)
       - [`erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v`](#erase--k--eq-k--hash-k---hashmap-k-v---hashmap-k-v)
       - [`find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`](#find--k--eq-k--hash-k---hashmap-k-v---option-v)
+      - [`find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> Option v`](#find_or--k--eq-k--hash-k---v---hashmap-k-v---option-v)
       - [`get_capacity : HashMap k v -> I64`](#get_capacity--hashmap-k-v---i64)
       - [`get_size : HashMap k v -> I64`](#get_size--hashmap-k-v---i64)
       - [`insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`](#insert--k--eq-k--hash-k---v---hashmap-k-v---hashmap-k-v)
@@ -308,6 +309,7 @@
       - [`break_m : [m : Monad] r -> m (LoopResult s r)`](#break_m--m--monad-r---m-loopresult-s-r)
       - [`continue_m : [m : Monad] s -> m (LoopResult s r)`](#continue_m--m--monad-s---m-loopresult-s-r)
     - [Std::Option](#stdoption)
+      - [`as_some_or : a -> Option a -> a`](#as_some_or--a---option-a---a)
       - [`impl [a : Eq] Option a : Eq`](#impl-a--eq-option-a--eq)
       - [`impl Option : Functor`](#impl-option--functor)
       - [`impl Option : Monad`](#impl-option--monad)
@@ -1680,6 +1682,9 @@ Erase an element from a HashMap.
 #### `find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`
 Find an element from a HashMap.
 
+#### `find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> Option v`
+Find an element from a HashMap. If the map doesn't contain the key, it returns the given default value.
+
 #### `get_capacity : HashMap k v -> I64`
 Get capacity of a HashMap. 
 
@@ -1935,6 +1940,9 @@ This is used with `loop_m` function.
 ```
 type Option a = union { none: (), some: a };
 ```
+
+#### `as_some_or : a -> Option a -> a`
+Unwrap an option value if it is `some`, or returns given default value if it is `none`.
 
 #### `impl [a : Eq] Option a : Eq`
 

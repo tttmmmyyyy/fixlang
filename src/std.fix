@@ -346,6 +346,10 @@ namespace HashMap {
             Option::some(v)
         }
     );
+    
+    // Find an element from a HashMap. If the map doesn't contain the key, it returns the given default value.
+    find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> v;
+    find_or = |key, def, mp| mp.find(key).as_some_or(def);
 
     // Get capacity of a HashMap. 
     get_capacity : HashMap k v -> I64;
@@ -912,6 +916,16 @@ namespace LoopResult {
 }
 
 type Option a = union { none: (), some: a };
+
+namespace Option {
+
+    // Unwrap an option value if it is `some`, or returns given default value if it is `none`.
+    as_some_or : a -> Option a -> a;
+    as_some_or = |def, opt| (
+        if opt.is_none { def } else { opt.as_some }
+    );
+
+}
 
 impl [a : Eq] Option a : Eq {
     eq = |lhs, rhs| (
