@@ -282,15 +282,6 @@ impl I64 : ToString {
     to_string = I64::_I64_to_string;
 }
 
-namespace F32 {
-    abs : F32 -> F32;
-    abs = |f| if f < 0.0_F32 { -f } else { f };
-}
-
-namespace F64 {
-    abs : F64 -> F64;
-    abs = |f| if f < 0.0 { -f } else { f };
-}
 
 type HashMap k v = struct { _table : Array (Array (Option (k, v))), _size : I64 };
 
@@ -1197,6 +1188,28 @@ namespace Monad {
 
 trait a : ToString {
     to_string : a -> String;
+}
+
+// Abs
+
+namespace I32 {
+    abs : I32 -> I32;
+    abs = |f| if f < 0_I32 { -f } else { f };
+}
+
+namespace I64 {
+    abs : I64 -> I64;
+    abs = |f| if f < 0 { -f } else { f };
+}
+
+namespace F32 {
+    abs : F32 -> F32;
+    abs = |f| if f < 0.0_F32 { -f } else { f };
+}
+
+namespace F64 {
+    abs : F64 -> F64;
+    abs = |f| if f < 0.0 { -f } else { f };
 }
 
 // ToString implementations for fundamental types

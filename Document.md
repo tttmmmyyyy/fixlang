@@ -82,6 +82,7 @@
       - [`impl U8 : Sub`](#impl-u8--sub)
       - [`impl U8 : ToString`](#impl-u8--tostring)
     - [Std::I32](#stdi32)
+      - [`abs : I32 -> I32`](#abs--i32---i32)
       - [`maximum : I32`](#maximum--i32)
       - [`minimum : I32`](#minimum--i32)
       - [`bit_and : I32 -> I32 -> I32`](#bit_and--i32---i32---i32)
@@ -128,6 +129,7 @@
       - [`impl U32 : Sub`](#impl-u32--sub)
       - [`impl U32 : ToString`](#impl-u32--tostring)
     - [Std::I64](#stdi64)
+      - [`abs : I64 -> I64`](#abs--i64---i64)
       - [`maximum : I64`](#maximum--i64)
       - [`minimum : I64`](#minimum--i64)
       - [`bit_and : I64 -> I64 -> I64`](#bit_and--i64---i64---i64)
@@ -1364,6 +1366,7 @@ Literals:
 - `{number}_I32`
     - Example: `42_I32`
 
+#### `abs : I32 -> I32`
 #### `maximum : I32`
 #### `minimum : I32`
 #### `bit_and : I32 -> I32 -> I32`
@@ -1429,6 +1432,7 @@ Literals:
 - `{number}_I64`
     - Example: `42_I64 == 42`
 
+#### `abs : I64 -> I64`
 #### `maximum : I64`
 #### `minimum : I64`
 #### `bit_and : I64 -> I64 -> I64`
