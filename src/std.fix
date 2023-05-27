@@ -695,10 +695,13 @@ namespace Iterator {
     // ```
     intersperse : a -> Iterator a -> Iterator a;
     intersperse = |sep, iter| (
-        if iter.is_empty { Iterator::empty };
-        let (e, tail) = iter.advance.as_some;
-        if tail.is_empty { iter };
-        Iterator::push_front(e) $ Iterator::push_front(sep) $ tail.intersperse(sep)
+        let next = |_| (
+            if iter.is_empty { Option::none() };
+            let (e, tail) = iter.advance.as_some;
+            if tail.is_empty { Option::some $ (e, Iterator::empty) };
+            Option::some $ (e, Iterator::push_front(sep) $ tail.intersperse(sep))
+        );
+        Iterator { next : next }
     );
 
     // Check if the iterator is empty.
