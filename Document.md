@@ -302,7 +302,7 @@
       - [`take_while : (a -> Bool) -> Iterator a -> Iterator a`](#take_while--a---bool---iterator-a---iterator-a)
       - [`find_last : Iterator a -> Option a`](#find_last--iterator-a---option-a)
       - [`to_array : Iterator a -> Array a`](#to_array--iterator-a---array-a)
-      - [`zip : Iterator a -> Iterator b -> Iterator (a, b)`](#zip--iterator-a---iterator-b---iterator-a-b)
+      - [`zip : Iterator b -> Iterator a -> Iterator (a, b)`](#zip--iterator-b---iterator-a---iterator-a-b)
       - [`impl Iterator a : Add`](#impl-iterator-a--add)
       - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
       - [`impl Iterator : Functor`](#impl-iterator--functor)
@@ -1909,7 +1909,7 @@ Takes the last element of an iterator.
 #### `to_array : Iterator a -> Array a`
 Convert an iterator to an array.
 
-#### `zip : Iterator a -> Iterator b -> Iterator (a, b)`
+#### `zip : Iterator b -> Iterator a -> Iterator (a, b)`
 Zip two iterators.
 
 #### `impl Iterator a : Add`

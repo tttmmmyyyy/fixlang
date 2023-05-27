@@ -846,7 +846,7 @@ namespace Iterator {
     to_array = Array::from_iter;
 
     // Zip two iterators.
-    zip : Iterator a -> Iterator b -> Iterator (a, b);
+    zip : Iterator b -> Iterator a -> Iterator (a, b);
     zip = |iter0, iter1| (
         let next = |_| (
             let iter0_next = iter0.advance;
@@ -855,7 +855,7 @@ namespace Iterator {
             if iter1_next.is_none { none() };
             let (v0, iter0) = iter0_next.as_some;
             let (v1, iter1) = iter1_next.as_some;
-            some $ ((v0, v1), zip(iter0, iter1))
+            some $ ((v1, v0), zip(iter0, iter1))
         );
         Iterator { next: next }
     );
