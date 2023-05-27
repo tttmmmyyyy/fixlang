@@ -286,6 +286,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &Rc<String>, namespace: &NameSpace) -
         vec![]
     };
     let tyvar = pairs.next().unwrap().as_str().to_string();
+    assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
     let trait_name = pairs.next().unwrap().as_str().to_string();
     let methods: HashMap<Name, QualType> = pairs
         .map(|pair| parse_trait_member_defn(pair, src))
@@ -421,16 +422,23 @@ fn parse_predicate(pair: Pair<Rule>, src: &Rc<String>) -> Predicate {
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let ty = parse_type(pairs.next().unwrap(), src);
-    let trait_id = parse_trait(pairs.next().unwrap(), src);
+    let trait_id = parse_trait_fullname(pairs.next().unwrap(), src);
     let mut pred = Predicate::make(trait_id, ty);
     pred.set_source(span);
     pred
 }
 
-fn parse_trait(pair: Pair<Rule>, _src: &Rc<String>) -> TraitId {
-    assert_eq!(pair.as_rule(), Rule::trait_name);
+fn parse_trait_fullname(pair: Pair<Rule>, _src: &Rc<String>) -> TraitId {
+    assert_eq!(pair.as_rule(), Rule::trait_fullname);
     let mut pairs = pair.into_inner();
-    let mut fullname = FullName::from_strs(&[], "");
+    let fullname = parse_capital_fullname(pairs.next().unwrap());
+    TraitId { name: fullname }
+}
+
+fn parse_capital_fullname(pair: Pair<Rule>) -> FullName {
+    assert_eq!(pair.as_rule(), Rule::capital_fullname);
+    let mut pairs = pair.into_inner();
+    let mut fullname = FullName::local("");
     while pairs.peek().unwrap().as_rule() == Rule::namespace_item {
         fullname
             .namespace
@@ -438,9 +446,9 @@ fn parse_trait(pair: Pair<Rule>, _src: &Rc<String>) -> TraitId {
             .push(pairs.next().unwrap().as_str().to_string());
     }
     let pair = pairs.next().unwrap();
-    assert_eq!(pair.as_rule(), Rule::trait_local_name);
+    assert_eq!(pair.as_rule(), Rule::capital_name);
     fullname.name = pair.as_str().to_string();
-    TraitId { name: fullname }
+    fullname
 }
 
 fn parse_kind(pair: Pair<Rule>, src: &Rc<String>) -> Rc<Kind> {
@@ -485,6 +493,7 @@ fn parse_module_defn(pair: Pair<Rule>, _src: &Rc<String>) -> String {
 fn parse_type_defn(pair: Pair<Rule>, src: &Rc<String>, namespace: &NameSpace) -> TypeDefn {
     assert_eq!(pair.as_rule(), Rule::type_defn);
     let mut pairs = pair.into_inner();
+    assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_name);
     let name = pairs.next().unwrap().as_str();
     let mut tyvars: Vec<Name> = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::type_var {
@@ -1435,7 +1444,7 @@ fn parse_type_tycon(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
 
 fn parse_tycon(pair: Pair<Rule>) -> Rc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::type_tycon);
-    tycon(FullName::from_strs(&[], pair.as_str()))
+    tycon(parse_capital_fullname(pair.into_inner().next().unwrap()))
 }
 
 fn parse_type_tuple(pair: Pair<Rule>, src: &Rc<String>) -> Rc<TypeNode> {
@@ -1528,10 +1537,17 @@ fn parse_pattern_union(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
     assert_eq!(pair.as_rule(), Rule::pattern_union);
     let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
-    let tycon = parse_tycon(pairs.next().unwrap());
+    let mut names = vec![];
+    while pairs.peek().unwrap().as_rule() == Rule::capital_name {
+        names.push(pairs.next().unwrap().as_str().to_string());
+    }
+    let union_name = names.pop().unwrap();
+    let union_namespace = NameSpace::new(names);
+    let union_tycon = tycon(FullName::new(&union_namespace, &union_name));
+    assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_field_name);
     let field_name = pairs.next().unwrap().as_str().to_string();
     let pat = parse_pattern(pairs.next().unwrap(), src);
-    PatternNode::make_union(tycon, field_name, pat).set_source(span)
+    PatternNode::make_union(union_tycon, field_name, pat).set_source(span)
 }
 
 fn parse_import_statement(pair: Pair<Rule>, src: &Rc<String>) -> ImportStatement {

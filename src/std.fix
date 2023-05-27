@@ -696,7 +696,7 @@ namespace Iterator {
     intersperse : a -> Iterator a -> Iterator a;
     intersperse = |sep, iter| (
         if iter.is_empty { Iterator::empty };
-        let Option::some((e, tail)) = iter.advance;
+        let (e, tail) = iter.advance.as_some;
         if tail.is_empty { iter };
         Iterator::push_front(e) $ Iterator::push_front(sep) $ tail.intersperse(sep)
     );
@@ -869,8 +869,8 @@ impl [a : Eq] Iterator a : Eq {
     eq = |lhs, rhs| (
         if lhs.is_empty { rhs.is_empty };
         if rhs.is_empty { false };
-        let Option::some((e, lhs)) = lhs.advance;
-        let Option::some((f, rhs)) = rhs.advance;
+        let (e, lhs) = lhs.advance.as_some;
+        let (f, rhs) = rhs.advance.as_some;
         if e != f { false };
         lhs == rhs
     );

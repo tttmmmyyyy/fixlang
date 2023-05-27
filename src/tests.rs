@@ -3129,6 +3129,39 @@ pub fn test118() {
 
 #[test]
 #[serial]
+pub fn test119() {
+    // Test namespace and MakeStruct, Pattern.
+    let source = r#"
+        module Main;
+
+        namespace A {
+            type S = struct { data : () };
+            type U = union { data : () };
+        }
+
+        namespace B {
+            type S = struct { data : () };
+            type U = union { data : () };
+        }
+
+        main : IO ();
+        main = (
+            let s = A::S { data : () };
+            let A::S { data : _ } = s;
+            let s = B::S { data : () };
+            let B::S { data : _ } = s;
+            let u = A::U::data();
+            let A::U::data(_) = u;
+            let u = B::U::data();
+            let B::U::data(_) = u;
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     let paths = fs::read_dir("./examples").unwrap();
 

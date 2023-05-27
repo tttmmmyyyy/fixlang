@@ -18,13 +18,14 @@ var_head = _{ ASCII_ALPHA_LOWER | "_" | "@" | "=" }
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" | "@" | "=" | "!" }
 var = { !keywords ~ (var_head ~ var_char*) }
 
-// === Expressions ===
+capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
+capital_fullname = { (namespace_item ~ "::")* ~ capital_name }
 
-namespace_head = _{ ASCII_ALPHA_UPPER }
-namespace_char = _{ ASCII_ALPHA | ASCII_DIGIT }
-namespace_item = { namespace_head ~ namespace_char* }
+namespace_item = { capital_name }
 
 namespace = { namespace_item ~ ("::" ~ namespace_item)* }
+
+// === Expressions ===
 
 expr_number_lit = { number_lit_body ~ ("_" ~ number_lit_type)? }
 
@@ -140,7 +141,7 @@ pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~
 
 pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern)* ~ sep* ~ "}" }
 
-pattern_union = { type_tycon ~ sep* ~ "::" ~ sep* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern ~ sep* ~ ")" }
+pattern_union = { (capital_name ~ "::")+ ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern ~ sep* ~ ")" }
 
 // === Types ===
 type_expr = { type_fun }
@@ -154,9 +155,7 @@ type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)* }
 
 type_fun = { type_tyapp ~ (sep* ~ "->" ~ sep* ~ type_expr)? }
 
-tycon_head = _{ ASCII_ALPHA_UPPER }
-tycon_char = _{ ASCII_ALPHA | ASCII_DIGIT }
-type_tycon = { tycon_head ~ tycon_char* }
+type_tycon = { capital_fullname }
 
 tyvar_head = _{ ASCII_ALPHA_LOWER }
 tyvar_char = _{ ASCII_ALPHA | ASCII_DIGIT }
@@ -164,7 +163,7 @@ type_var = { !keywords ~ tyvar_head ~ tyvar_char* }
 
 type_qualified = { predicates? ~ sep* ~ type_expr }
 
-predicate = { type_expr ~ sep* ~ ":" ~ sep* ~ trait_name }
+predicate = { type_expr ~ sep* ~ ":" ~ sep* ~ trait_fullname }
 
 predicate_kind = { type_var ~ sep* ~ ":" ~ sep* ~ kind }
 
@@ -182,7 +181,7 @@ kind_nlr = { kind_star | kind_braced }
 kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 
 // === Type definitions ===
-type_name = { tycon_head ~ tycon_char* }
+type_name = { capital_name }
 
 type_field_name = { !keywords ~ var_head ~ var_char* }
 
@@ -201,9 +200,9 @@ struct_defn = { (box_or_unbox ~ sep+)? ~ "struct" ~ sep* ~ "{" ~ sep* ~ comma_se
 union_defn = { (box_or_unbox ~ sep+)? ~ "union" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
 
 // === Trait definitions ===
-trait_local_name = { tycon_head ~ tycon_char* }
+trait_name = { capital_name }
 
-trait_name = { (namespace_item ~ "::")* ~ trait_local_name }
+trait_fullname = { capital_fullname }
 
 trait_defn = { "trait" ~ sep+ ~ predicates? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 
