@@ -472,7 +472,7 @@ Namespaces of a name can be omitted if the value specified by the name is unique
 - `Array::fill(n, 0)` is more readable than `fill(n, 0)`, because it expresses that `fill` function is related to `Array` type. A reader may be able to infer that `Array::fill` will generate an array of specified length filled by a specified initial value.
 - In the future, another function named `fill` may be added to a namespace other than `Array`. After that, the name `fill` may become ambiguous and the compile of the example program may start to fail.
 
-Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `Std` is a module to put values standard library provides. Module is nothing but a top-level namespace. The namespace `Array` is defined as the sub-namespace of `Std` and used to put functions related to arrays. Similarly, full name of `calc_fib` function is `Main::calc_fib`. You can omit (possibly full) prefix of namespaces of a name as long as the value referred to is uniquely inferred by compiler from the context.
+Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `Std` is a module to put entities provided by standard library. Module is nothing but a top-level namespace. The namespace `Array` is defined as the sub-namespace of `Std` and used to put functions related to arrays. Similarly, full name of `calc_fib` function is `Main::calc_fib`. You can omit (possibly full) prefix of namespaces of a name as long as the value referred to is uniquely inferred by compiler from the context.
 
 ## Types
 
@@ -1028,7 +1028,7 @@ module_name = "Lib";
 ```
 module Main;
 
-import lib.fix;
+import Lib;
 
 module_name : String;
 module_name = "Main";
@@ -1039,15 +1039,13 @@ main = (
 );
 ```
 
-If you put these two files in a same directory and execute `fix run main.fix`, it prints: 
+If you put these two files in a same directory and execute `fix run -f main.fix lib.fix`, it prints: 
 
 ```
 This program consists of two modules, `Lib` and `Main`.
 ```
 
-Note that here two strings named `module_name` are defined and you can use these strings separately by writing `{module_name}::module_name`. Like this, module name is used as the top-level namespace of values, types and traits defined in a source file.
-
-You can import modules defined in other source files by writing `import {path_to_source_file};`. If `{path_to_source_file}` starts by `./` or `../`, then it is treated as a relative path to the source file in which the import statement is written. In other cases, `{path_to_source_file}` is treated as a relative path to the root source file, that is, the file passed to the `fix run` or `fix build` command.
+Note that here two strings named `module_name` are defined and you can use these strings separately by writing `{module_name}::module_name`. Like this, module name is used as the top-level item of the namespace of values, types and traits defined in a source file.
 
 ## Recursion
 
