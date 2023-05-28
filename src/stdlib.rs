@@ -419,6 +419,7 @@ pub fn make_std_mod() -> FixModule {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
     );
+
     // Debug
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, DEBUG_NAME], "debug_print"),

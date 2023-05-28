@@ -182,7 +182,7 @@ fn build_module<'c>(
     }
 
     // Verify LLVM module.
-    // Now not needed?
+    // Maybe not needed at now?
     let verify = module.verify();
     if verify.is_err() {
         print!("{}", verify.unwrap_err().to_str().unwrap());
