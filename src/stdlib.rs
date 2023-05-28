@@ -2,7 +2,7 @@ use super::*;
 
 pub const FIX_NAME: &str = "fix";
 
-const STD_SOURCE: &str = include_str!("libstd.fix");
+const STD_SOURCE: &str = include_str!("std.fix");
 
 pub fn make_std_mod() -> FixModule {
     let mut fix_module = parse_source(STD_SOURCE);
@@ -418,6 +418,16 @@ pub fn make_std_mod() -> FixModule {
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
+    );
+
+    // Debug
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, DEBUG_NAME], "debug_print"),
+        debug_print_function(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, DEBUG_NAME], "abort"),
+        abort_function(),
     );
 
     fix_module

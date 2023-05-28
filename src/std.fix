@@ -1,7 +1,5 @@
 module Std;
 
-import Debug;
-
 namespace Array {
 
     // Sort elements in a range of a vector by "less than" comparator.
@@ -238,6 +236,29 @@ impl [a : Hash] Array a : Hash {
 impl Bool : ToString {
     to_string = |lhs| (
         if lhs { "true" } else { "false" }
+    );
+}
+
+namespace Debug {
+
+    assert_eq : [a: Eq] String -> a -> a -> ();
+    assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
+
+    assert : String -> Bool -> ();
+    assert = |msg, b| (
+        if !b {
+            let u = debug_println("assertion failed!: ");
+            let u = debug_println(msg);
+            abort()
+        } else {
+            ()
+        }
+    );
+
+    debug_println : String -> ();
+    debug_println = |str| (
+        let _ = debug_print(str);
+        debug_print("\n")
     );
 }
 

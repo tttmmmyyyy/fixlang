@@ -12,14 +12,13 @@ mod c_config;
 mod constants;
 mod funptr_optimization;
 mod generator;
-mod libdebug;
-mod libstd;
 mod llvm_passes;
 mod misc;
 mod object;
 mod parser;
 mod runner;
 mod runtime;
+mod stdlib;
 #[cfg(test)]
 mod tests;
 mod typecheck;
@@ -47,8 +46,6 @@ use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
-use libdebug::*;
-use libstd::*;
 use llvm_passes::*;
 use misc::*;
 use object::*;
@@ -64,6 +61,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::vec::Vec;
+use stdlib::*;
 use typecheck::*;
 
 // Max number of arguments if function pointer lambda.

@@ -2624,6 +2624,80 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
+// Get Array object from the given String (no retained)
+fn extract_array_from_string<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    string: &Object<'c>,
+) -> Object<'c> {
+    let array_byte_ty = type_tyapp(make_array_ty(), make_u8_ty());
+    let array = Object::new(
+        string.load_field_nocap(gc, 0).into_pointer_value(),
+        array_byte_ty,
+    );
+    array
+}
+
+// `debug_print` built-in function
+pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const MSG_NAME: &str = "msg";
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+        let msg_name = FullName::local(MSG_NAME);
+        let string = gc.get_var(&msg_name).ptr.get(gc);
+
+        // Get ptr to string buffer.
+        let array = extract_array_from_string(gc, &string);
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let buf = gc.cast_pointer(buf, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
+
+        // Print string.
+        gc.call_runtime(RuntimeFunctions::Printf, &[buf.into()]);
+
+        // Release argument
+        gc.release(string);
+
+        // Flush
+        gc.call_runtime(
+            RuntimeFunctions::Fflush,
+            &[gc.context
+                .i8_type()
+                .ptr_type(AddressSpace::from(0))
+                .const_null()
+                .into()],
+        );
+
+        // Return
+        if rvo.is_some() {
+            assert!(ty.is_unbox(gc.type_env()));
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("debug_print {}", MSG_NAME)),
+            )
+        }
+    });
+    let expr = expr_abs(
+        vec![var_local(MSG_NAME)],
+        expr_lit(
+            generator,
+            vec![FullName::local(MSG_NAME)],
+            format!("debug_print {}", MSG_NAME),
+            make_unit_ty(),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        type_fun(make_string_ty(), make_unit_ty()),
+    );
+    (expr, scm)
+}
+
 // `abort` built-in function
 pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const A_NAME: &str = "a";
