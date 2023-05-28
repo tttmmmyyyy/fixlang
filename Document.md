@@ -300,8 +300,8 @@
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
       - [`take_while : (a -> Bool) -> Iterator a -> Iterator a`](#take_while--a---bool---iterator-a---iterator-a)
-      - [`find_last : Iterator a -> Option a`](#find_last--iterator-a---option-a)
       - [`to_array : Iterator a -> Array a`](#to_array--iterator-a---array-a)
+      - [`find_last : Iterator a -> Option a`](#find_last--iterator-a---option-a)
       - [`zip : Iterator b -> Iterator a -> Iterator (a, b)`](#zip--iterator-b---iterator-a---iterator-a-b)
       - [`impl Iterator a : Add`](#impl-iterator-a--add)
       - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
@@ -1903,11 +1903,11 @@ Take at most n elements from an iterator.
 #### `take_while : (a -> Bool) -> Iterator a -> Iterator a`
 Take elements of an iterator while a condition is satisfied.
 
-#### `find_last : Iterator a -> Option a`
-Takes the last element of an iterator.
-
 #### `to_array : Iterator a -> Array a`
 Convert an iterator to an array.
+
+#### `find_last : Iterator a -> Option a`
+Takes the last element of an iterator.
 
 #### `zip : Iterator b -> Iterator a -> Iterator (a, b)`
 Zip two iterators.
