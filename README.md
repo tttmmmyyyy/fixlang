@@ -25,8 +25,8 @@ You can try Fix in [Google Colaboratory](https://colab.research.google.com/githu
 
 ## Usage
 
-- You can run the source file (with extension ".fix") by `fix run {source-file}`.
-- If you want to build executable binary, run `fix build {source-file}.`.
+- You can run the source file (with extension ".fix") by `fix run -f {source-file}`.
+- If you want to build executable binary, run `fix build -f {source-file}.`.
 
 ## Tutorial / references
 
