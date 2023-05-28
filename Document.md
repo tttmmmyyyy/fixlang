@@ -52,7 +52,7 @@
     - [Structs](#structs-2)
     - [Unions](#unions-2)
   - [Calling C functions](#calling-c-functions)
-- [Built-in and standard library features](#built-in-and-standard-library-features)
+- [`Std` module](#std-module)
   - [Types](#types-1)
     - [Std::Bool](#stdbool)
       - [`impl Bool : Eq`](#impl-bool--eq)
@@ -351,11 +351,6 @@
     - [`Std::fix : ((a -> b) -> a -> b) -> a -> b`](#stdfix--a---b---a---b---a---b)
     - [`Std::loop : s -> (s -> LoopResult s r) -> r`](#stdloop--s---s---loopresult-s-r---r)
     - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
-    - [`Std::Debug::debug_print : String -> ()`](#stddebugdebug_print--string---)
-    - [`Std::Debug::debug_println : String -> ()`](#stddebugdebug_println--string---)
-    - [`Std::Debug::abort : () -> a`](#stddebugabort-----a)
-    - [`Std::Debug::assert : String -> Bool -> ()`](#stddebugassert--string---bool---)
-    - [`Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()`](#stddebugassert_eq--a-eq-string---a---a---)
   - [Traits](#traits)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
@@ -383,7 +378,13 @@
       - [`to_U32 : [a: ToU32] a -> U32`](#to_u32--a-tou32-a---u32)
     - [Std::ToU64](#stdtou64)
       - [`to_U64 : [a: ToU64] a -> U64`](#to_u64--a-tou64-a---u64)
-  - [Operators](#operators)
+- [`Debug` module](#debug-module)
+  - [`abort : () -> a`](#abort-----a)
+  - [`assert : String -> Bool -> ()`](#assert--string---bool---)
+  - [`assert_eq : [a: Eq] String -> a -> a -> ()`](#assert_eq--a-eq-string---a---a---)
+  - [`debug_print : String -> ()`](#debug_print--string---)
+  - [`debug_println : String -> ()`](#debug_println--string---)
+- [Operators](#operators)
 
 
 # Tutorial
@@ -1310,7 +1311,7 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 
 Note that calling C function may break Fix's features such as immutability or memory safety. Use this feature carefully.
 
-# Built-in and standard library features
+# `Std` module
 
 ## Types
 
@@ -2155,16 +2156,6 @@ main = (
 );
 ```
 
-### `Std::Debug::debug_print : String -> ()`
-
-### `Std::Debug::debug_println : String -> ()`
-
-### `Std::Debug::abort : () -> a`
-
-### `Std::Debug::assert : String -> Bool -> ()`
-
-### `Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()`
-
 ## Traits
 
 ### Std::Functor (* -> *)
@@ -2221,7 +2212,19 @@ This is equivalent to `Monad::bind(|x|x)`.
 
 #### `to_U64 : [a: ToU64] a -> U64`
 
-## Operators
+# `Debug` module
+
+## `abort : () -> a`
+
+## `assert : String -> Bool -> ()`
+
+## `assert_eq : [a: Eq] String -> a -> a -> ()`
+
+## `debug_print : String -> ()`
+
+## `debug_println : String -> ()`
+
+# Operators
 
 The following is the table of operators sorted by it's precedence (operator of higher precedence appears earlier).
 

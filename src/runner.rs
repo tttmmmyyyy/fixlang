@@ -246,7 +246,18 @@ fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement
             continue;
         }
 
-        // TODO: search for library here.
+        // Search for library.
+        let found_mod = if import.module == DEBUG_NAME {
+            Some(make_debug_mod())
+        } else {
+            None
+        };
+        if found_mod.is_some() {
+            let found_mod = found_mod.unwrap();
+            imports.append(&mut found_mod.import_statements.clone());
+            target_mod.link(found_mod);
+            continue;
+        }
 
         error_exit_with_src(
             &format!("Cannot find module `{}`", import.module),
