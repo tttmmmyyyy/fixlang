@@ -58,6 +58,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::vec::Vec;
 use stdlib::*;
@@ -79,6 +80,8 @@ pub enum LinkType {
 
 #[derive(Clone)]
 pub struct Configuration {
+    // Source files.
+    source_files: Vec<PathBuf>,
     // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
     // Requires shared library sanitizer/libfixsanitizer.so.
     sanitize_memory: bool,
@@ -97,6 +100,7 @@ impl Configuration {
     // Configuration for release build.
     pub fn release() -> Configuration {
         Configuration {
+            source_files: vec![],
             sanitize_memory: false,
             funptr_optimization: true,
             preretain_global: true,
@@ -108,6 +112,7 @@ impl Configuration {
     // Usual configuration for compiler development
     pub fn develop_compiler() -> Configuration {
         Configuration {
+            source_files: vec![],
             sanitize_memory: true,
             funptr_optimization: true,
             preretain_global: false,
@@ -118,7 +123,12 @@ impl Configuration {
 }
 
 fn main() {
-    let source_file = Arg::new("source-file").required(true);
+    let source_file = Arg::new("source-files")
+        .long("file")
+        .short('f')
+        .multiple_values(true)
+        .takes_value(true)
+        .required(true);
     let static_link_library = Arg::new("static-link-library")
         .long("static-link")
         .action(clap::ArgAction::Append)
@@ -140,6 +150,13 @@ fn main() {
         .subcommand(run_subc)
         .subcommand(build_subc);
 
+    fn read_source_files_options(m: &ArgMatches) -> Vec<PathBuf> {
+        m.get_many::<String>("source-files")
+            .unwrap()
+            .map(|s| PathBuf::from(s))
+            .collect()
+    }
+
     fn read_library_options(m: &ArgMatches) -> Vec<(String, LinkType)> {
         let mut options = vec![];
         for (opt_id, link_type) in [
@@ -157,18 +174,19 @@ fn main() {
         options
     }
 
+    fn create_config_from_matches(m: &ArgMatches) -> Configuration {
+        let mut config = Configuration::release();
+        config.source_files = read_source_files_options(m);
+        config.linked_libraries = read_library_options(m);
+        config
+    }
+
     match app.get_matches().subcommand() {
         Some(("run", m)) => {
-            let path = m.value_of("source-file").unwrap();
-            let mut config = Configuration::release();
-            config.linked_libraries = read_library_options(m);
-            run_file(Path::new(path), config);
+            run_file(create_config_from_matches(m));
         }
         Some(("build", m)) => {
-            let path = m.value_of("source-file").unwrap();
-            let mut config = Configuration::release();
-            config.linked_libraries = read_library_options(m);
-            build_file(Path::new(path), config);
+            build_file(create_config_from_matches(m));
         }
         _ => eprintln!("Unknown command!"),
     }

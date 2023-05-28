@@ -64,7 +64,7 @@ fn build_module<'c>(
     let mut typechecker = TypeCheckContext::new(
         fix_mod.trait_env.clone(),
         fix_mod.type_env(),
-        fix_mod.linked_mod_to_visible_mods.clone(),
+        fix_mod.imported_mod_map.clone(),
     );
 
     // Register type declarations of global symbols to typechecker.
@@ -194,9 +194,20 @@ fn build_module<'c>(
 
 #[allow(dead_code)]
 pub fn run_source(source: &str, config: Configuration) -> i32 {
-    let mut fix_mod = parse_source(source);
-    fix_mod.link(make_std_mod());
-    run_module(fix_mod, config)
+    // When run source string, import only "Std".
+    let mut imports: Vec<ImportStatement> = vec![];
+
+    let std_mod = make_std_mod();
+    imports.append(&mut std_mod.import_statements.clone());
+    let mut target_mod = std_mod;
+
+    let source_mod = parse_source(source);
+    imports.append(&mut source_mod.import_statements.clone());
+    target_mod.link(source_mod);
+
+    resolve_imports(&mut target_mod, &mut imports);
+
+    run_module(target_mod, config)
 }
 
 pub fn run_module(fix_mod: FixModule, config: Configuration) -> i32 {
@@ -226,15 +237,43 @@ pub fn read_file(path: &Path) -> String {
     s
 }
 
-pub fn load_file(file_path: &Path) -> FixModule {
-    let mut fix_mod = parse_source(&read_file(file_path));
-    fix_mod.link(make_std_mod());
-    fix_mod.resolve_imports(file_path);
-    fix_mod
+fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement>) {
+    while imports.len() > 0 {
+        let import = imports.pop().unwrap();
+
+        // If import is already resolved, do nothing.
+        if target_mod.imported_mod_map.contains_key(&import.module) {
+            continue;
+        }
+
+        // TODO: search for library here.
+
+        error_exit_with_src(
+            &format!("Cannot find module `{}`", import.module),
+            &import.source,
+        );
+    }
 }
 
-pub fn run_file(file_path: &Path, config: Configuration) -> i32 {
-    run_module(load_file(file_path), config)
+pub fn load_file(config: &Configuration) -> FixModule {
+    let mut imports: Vec<ImportStatement> = vec![];
+
+    // Link all modules specified in source_files.
+    let std_mod = make_std_mod();
+    imports.append(&mut std_mod.import_statements.clone());
+    let mut target_mod = std_mod;
+    for file_path in &config.source_files {
+        let fix_mod = parse_source(&read_file(file_path));
+        imports.append(&mut fix_mod.import_statements.clone());
+        target_mod.link(fix_mod);
+    }
+
+    resolve_imports(&mut target_mod, &mut imports);
+    target_mod
+}
+
+pub fn run_file(config: Configuration) -> i32 {
+    run_module(load_file(&config), config)
 }
 
 fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
@@ -262,15 +301,13 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
     }
 }
 
-pub fn build_file(path: &Path, config: Configuration) {
-    let mut obj_path = PathBuf::from(path);
-    obj_path.set_extension("o");
-    let mut exec_path = PathBuf::from(path);
-    exec_path.set_extension("");
+pub fn build_file(config: Configuration) {
+    let obj_path = PathBuf::from("a.o");
+    let exec_path = PathBuf::from("a.out");
 
     let tm = get_target_machine(config.llvm_opt_level);
 
-    let fix_mod = load_file(path);
+    let fix_mod = load_file(&config);
 
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);

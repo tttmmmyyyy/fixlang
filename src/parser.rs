@@ -1553,54 +1553,11 @@ fn parse_pattern_union(pair: Pair<Rule>, src: &Rc<String>) -> Rc<PatternNode> {
 fn parse_import_statement(pair: Pair<Rule>, src: &Rc<String>) -> ImportStatement {
     assert_eq!(pair.as_rule(), Rule::import_statement);
     let span = Span::from_pair(&src, &pair);
-    let pair = pair.into_inner().next().unwrap();
-    let path = match pair.as_rule() {
-        Rule::rel_import_path => parse_rel_import_path(pair, src),
-        Rule::abs_import_path => parse_abs_import_path(pair, src),
-        _ => unreachable!(),
-    };
+    let module = pair.into_inner().next().unwrap().as_str().to_string();
     ImportStatement {
-        path,
+        module,
         source: Some(span),
     }
-}
-
-fn parse_rel_import_path(pair: Pair<Rule>, src: &Rc<String>) -> ImportPath {
-    assert_eq!(pair.as_rule(), Rule::rel_import_path);
-    let pair = pair.into_inner().next().unwrap();
-    match pair.as_rule() {
-        Rule::current_directory_path => parse_current_directory_path(pair, src),
-        Rule::parent_directory_path => parse_parent_directory_path(pair, src),
-        _ => unreachable!(),
-    }
-}
-
-fn parse_abs_import_path(pair: Pair<Rule>, src: &Rc<String>) -> ImportPath {
-    assert_eq!(pair.as_rule(), Rule::abs_import_path);
-    let pair = pair.into_inner().next().unwrap();
-    ImportPath::Absolute(parse_import_path(pair, src))
-}
-
-fn parse_current_directory_path(pair: Pair<Rule>, src: &Rc<String>) -> ImportPath {
-    assert_eq!(pair.as_rule(), Rule::current_directory_path);
-    let pair = pair.into_inner().next().unwrap();
-    ImportPath::Relative(0, parse_import_path(pair, src))
-}
-
-fn parse_parent_directory_path(pair: Pair<Rule>, src: &Rc<String>) -> ImportPath {
-    assert_eq!(pair.as_rule(), Rule::parent_directory_path);
-    let mut pairs = pair.into_inner();
-    let mut count: u32 = 0;
-    while pairs.peek().unwrap().as_rule() == Rule::dot_dot_slash {
-        pairs.next();
-        count += 1;
-    }
-    ImportPath::Relative(count, parse_import_path(pairs.next().unwrap(), src))
-}
-
-fn parse_import_path(pair: Pair<Rule>, _src: &Rc<String>) -> Vec<Name> {
-    assert_eq!(pair.as_rule(), Rule::import_path);
-    pair.into_inner().map(|p| p.as_str().to_string()).collect()
 }
 
 fn rule_to_string(r: &Rule) -> String {

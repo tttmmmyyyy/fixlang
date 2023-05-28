@@ -3173,7 +3173,9 @@ pub fn test_run_examples() {
         }
         println!("[run_examples] {}:", display);
 
-        run_file(&path, Configuration::develop_compiler());
+        let mut config = Configuration::develop_compiler();
+        config.source_files.push(path);
+        run_file(config);
     }
 }
 

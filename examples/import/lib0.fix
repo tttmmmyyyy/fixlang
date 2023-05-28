@@ -1,0 +1,11 @@
+module Lib0;
+
+import Main;
+import Lib1;
+import Lib2;
+
+name : String;
+name = "Lib0";
+
+imports : Array String;
+imports = [Main::name, Lib1::name, Lib2::name];

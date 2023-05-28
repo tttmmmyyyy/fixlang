@@ -350,7 +350,7 @@ pub struct TypeCheckContext {
     pub type_env: TypeEnv,
     // A map to represent modules imported by each submodule.
     // To decrease clone-cost, use Rc.
-    pub linked_mod_to_visible_mods: Rc<HashMap<Name, HashSet<Name>>>,
+    pub imported_mod_map: Rc<HashMap<Name, HashSet<Name>>>,
     // In which module is the current expression defined?
     // This is used as a state variable for typechecking.
     pub current_module: Option<Name>,
@@ -361,7 +361,7 @@ impl TypeCheckContext {
     pub fn new(
         trait_env: TraitEnv,
         type_env: TypeEnv,
-        linked_mod_to_visible_mods: HashMap<Name, HashSet<Name>>,
+        imported_mod_map: HashMap<Name, HashSet<Name>>,
     ) -> Self {
         Self {
             tyvar_id: Default::default(),
@@ -370,14 +370,14 @@ impl TypeCheckContext {
             predicates: Default::default(),
             type_env,
             trait_env,
-            linked_mod_to_visible_mods: Rc::new(linked_mod_to_visible_mods),
+            imported_mod_map: Rc::new(imported_mod_map),
             current_module: None,
         }
     }
 
     // Get modules imported by current module.
     pub fn imported_modules(&self) -> &HashSet<Name> {
-        self.linked_mod_to_visible_mods
+        self.imported_mod_map
             .get(self.current_module.as_ref().unwrap())
             .unwrap()
     }

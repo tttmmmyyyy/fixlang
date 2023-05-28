@@ -1,8 +1,10 @@
+// fix run -f main.fix lib0.fix lib1.fix lib2.fix
+
 module Main;
 
-import import_example/lib0.fix; // Import by path relative to the main file.
-import ./import_example/lib1.fix; // Import by path relative to the current file (= the main file).
-import import_example/directory/lib2.fix;  // Import by path relative to the main file.
+import Lib0;
+import Lib1;
+import Lib2;
 
 name : String;
 name = "Main";
