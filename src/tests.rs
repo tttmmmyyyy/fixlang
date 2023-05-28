@@ -3163,8 +3163,8 @@ pub fn test119() {
 #[test]
 #[serial]
 pub fn test_run_examples() {
+    // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();
-
     for path in paths {
         let path = path.unwrap().path();
         let display = path.display();
@@ -3177,6 +3177,19 @@ pub fn test_run_examples() {
         config.source_files.push(path);
         run_file(config);
     }
+
+    // Run import example.
+    println!("[run_examples] examples/import");
+    let paths = fs::read_dir("./examples/import").unwrap();
+    let mut config = Configuration::develop_compiler();
+    for path in paths {
+        let path = path.unwrap().path();
+        if path.extension().is_none() || path.extension().unwrap() != "fix" {
+            continue;
+        }
+        config.source_files.push(path);
+    }
+    run_file(config);
 }
 
 #[test]
