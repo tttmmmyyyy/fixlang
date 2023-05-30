@@ -293,6 +293,8 @@
       - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
       - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
       - [`fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`](#fold_m--m--monad-b---b---a---m-b---iterator-a---m-b)
+      - [`for_loop : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`](#for_loop--b---b---a---loopresult-b-b---iterator-a---b)
+      - [`for_loop_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`](#for_loop_m--m--monad-b---b---a---m-loopresult-b-b---iterator-a---m-b)
       - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
       - [`from_map : (I64 -> a) -> Iterator a`](#from_map--i64---a---iterator-a)
       - [`generate : s -> (s -> Option (a, s)) -> Iterator a`](#generate--s---s---option-a-s---iterator-a)
@@ -1876,6 +1878,12 @@ Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...
 
 #### `fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`
 Folds iterator from left to right by monadic action.
+
+#### `for_loop : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`
+Loop along an iterator. At each iteration step, you can choose to continue or to break.
+
+#### `for_loop_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`
+Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
 
 #### `from_array : Array a -> Iterator a`
 Create iterator from an array.

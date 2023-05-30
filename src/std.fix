@@ -764,6 +764,34 @@ namespace Iterator {
         ))
     );
 
+    // Loop along an iterator. At each iteration step, you can choose to continue or to break.
+    // TODO: add test.
+    for_loop : b -> (b -> a -> LoopResult b b) -> Iterator a -> b;
+    for_loop = |init, op, iter| (
+        loop((init, iter), |(accum, iter)|
+            let next = iter.advance;
+            if next.is_none { break $ accum };
+            let (next, iter) = next.as_some;
+            let loop_res = op(accum, next);
+            if loop_res.is_break { break $ loop_res.as_break };
+            continue $ (loop_res.as_continue, iter)
+        )
+    );
+
+    // Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
+    // TODO: add test.
+    for_loop_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b;
+    for_loop_m = |init, op, iter| (
+        loop_m((init, iter), |(accum, iter)|
+            let next = iter.advance;
+            if next.is_none { break_m $ accum };
+            let (next, iter) = next.as_some;
+            let loop_res = *op(accum, next);
+            if loop_res.is_break { break_m $ loop_res.as_break };
+            continue_m $ (loop_res.as_continue, iter)
+        )
+    );
+
     // Create iterator from an array.
     from_array : Array a -> Iterator a;
     from_array = |arr| count_up(0).take(arr.get_size).map(|i| arr.get(i));
