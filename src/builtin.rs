@@ -2702,17 +2702,17 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
 pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const A_NAME: &str = "a";
     const UNIT_NAME: &str = "unit";
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, _rvo| {
         // Abort
         gc.call_runtime(RuntimeFunctions::Abort, &[]);
 
         // Return
-        if rvo.is_some() {
-            assert!(ty.is_unbox(gc.type_env()));
-            rvo.unwrap()
-        } else {
-            allocate_obj(ty.clone(), &vec![], None, gc, Some(&"abort"))
-        }
+        Object::new(
+            ty.get_struct_type(gc, &vec![])
+                .ptr_type(AddressSpace::from(0))
+                .const_null(),
+            ty.clone(),
+        )
     });
     let expr = expr_abs(
         vec![var_local(UNIT_NAME)],
