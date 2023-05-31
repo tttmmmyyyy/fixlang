@@ -71,7 +71,7 @@ impl Span {
 
         let mut ret: String = String::default();
         ret += &format!(
-            "at {}:{}-{}:{} in {}\n",
+            "At {}:{}-{}:{} in {}\n",
             span.start_pos().line_col().0,
             span.start_pos().line_col().1,
             span.end_pos().line_col().0,

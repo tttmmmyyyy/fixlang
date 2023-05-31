@@ -720,7 +720,7 @@ impl TypeCheckContext {
                 if !self.unify(&ty, &ret_ty) {
                     error_exit_with_src(
                         &format!(
-                            "Type mismatch. Expected `{}`, found `{}`",
+                            "Type mismatch. Expected `{}`, found `{}`.",
                             ty.to_string(),
                             ret_ty.to_string()
                         ),
@@ -756,7 +756,7 @@ impl TypeCheckContext {
         if s.is_none() {
             error_exit_with_src(
                 &format!(
-                    "Type mismatch. Expected `{}`, found `{}`",
+                    "Type mismatch. Expected `{}`, found `{}`.",
                     specified_ty.to_string_normalize(),
                     deduced_ty.to_string_normalize()
                 ),

@@ -271,7 +271,7 @@ impl Predicate {
         let found = self.ty.kind(type_env);
         if *expected != found {
             error_exit(&format!(
-                "kind mismatch. Expect: {}, found: {}",
+                "kind mismatch. Expect: {}, found: {}.",
                 expected.to_string(),
                 found.to_string()
             ))
