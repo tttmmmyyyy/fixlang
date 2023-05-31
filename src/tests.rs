@@ -3162,6 +3162,26 @@ pub fn test119() {
 
 #[test]
 #[serial]
+pub fn test120() {
+    // Test abort of type Array or function.
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let x = 3;
+            let a = if true { Array::fill(1, |_| x) } else { abort() };
+            let _ = assert_eq("case 1", (a.get(0))(1), x);
+            let a = if true { |_| x } else { abort() };
+            let _ = assert_eq("case 1", a(1), x);
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();
