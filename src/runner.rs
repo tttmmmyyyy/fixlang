@@ -114,6 +114,8 @@ fn build_module<'c>(
 
     // Instanciate main function and all called functions.
     let main_expr = fix_mod.instantiate_main_function();
+
+    // Perform function pointer optimization.
     if config.funptr_optimization {
         funptr_optimization(&mut fix_mod);
     }
