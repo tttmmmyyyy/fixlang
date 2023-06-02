@@ -674,7 +674,7 @@ impl FixModule {
     }
 
     // Determine the name of instantiated generic symbol so that it has a specified type.
-    // tc: a typechecker (substituion) under which ty should be interpret.
+    // tc: a typechecker (substituion) under which ty should be interpreted.
     fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
         assert!(ty.free_vars().is_empty());
         let hash = ty.hash();
