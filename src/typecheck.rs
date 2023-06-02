@@ -770,7 +770,7 @@ impl TypeCheckContext {
             if !self.trait_env.entail(&given_preds, &p, &self.type_env) {
                 error_exit_with_src(
                     &format!(
-                        "Constraint `{}` is required for this expression but is not assumed in the type.",
+                        "Constraint `{}` is required for this expression but is not assumed in its type.",
                         p.to_string_normalize()
                     ),
                     &expr.source,
