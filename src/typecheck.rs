@@ -60,7 +60,7 @@ where
         }
         if self.var[&name].global.contains_key(namespace) {
             error_exit(&format!(
-                "duplicate definition for `{}.{}`",
+                "Duplicate definition for `{}.{}`",
                 namespace.to_string(),
                 name
             ))
