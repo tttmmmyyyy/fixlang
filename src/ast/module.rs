@@ -137,22 +137,6 @@ pub enum NameResolutionType {
 }
 
 impl<'a> NameResolutionContext {
-    // pub fn filter_by_imported_modules(&self, imported_modules: &HashSet<Name>) -> Self {
-    //     fn filter(source: &HashSet<FullName>, modules: &HashSet<Name>) -> HashSet<FullName> {
-    //         HashSet::from_iter(
-    //             source
-    //                 .iter()
-    //                 .filter(|name| modules.contains(&name.module()))
-    //                 .cloned(),
-    //         )
-    //     }
-
-    //     NameResolutionContext {
-    //         types: filter(&self.types, imported_modules),
-    //         traits: filter(&self.traits, imported_modules),
-    //     }
-    // }
-
     pub fn resolve(
         &self,
         ns: &FullName,
