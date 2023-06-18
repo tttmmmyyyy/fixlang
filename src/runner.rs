@@ -79,6 +79,7 @@ fn build_module<'c>(
     for (name, gv) in &mut fix_mod.global_values {
         match &gv.expr {
             SymbolExpr::Simple(e) => {
+                // TODO: cache this associating to `name`.
                 let mut tc = typechecker.clone();
                 tc.current_module = Some(name.module());
                 let e = tc.check_type(e.expr.clone(), gv.ty.clone());
@@ -90,6 +91,7 @@ fn build_module<'c>(
             SymbolExpr::Method(methods) => {
                 let mut methods = methods.clone();
                 for m in &mut methods {
+                    // TODO: cache this associating to `name + m.ty`. Remember to use normalized string of scheme `m.ty`.
                     let mut tc = typechecker.clone();
                     tc.current_module = Some(m.define_module.clone());
                     let e = tc.check_type(m.expr.expr.clone(), m.ty.clone());
