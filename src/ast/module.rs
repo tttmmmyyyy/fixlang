@@ -1,5 +1,3 @@
-use std::mem::replace;
-
 use inkwell::module::Linkage;
 
 use super::*;
@@ -48,7 +46,7 @@ pub struct InstantiatedSymbol {
     pub template_name: FullName,
     pub ty: Rc<TypeNode>,
     pub expr: Option<Rc<ExprNode>>,
-    pub typeresolver: TypeResolver, // type resolver for types in expr.
+    pub type_resolver: TypeResolver, // type resolver for types in expr.
 }
 
 pub struct GlobalValue {
@@ -75,7 +73,7 @@ impl GlobalValue {
         self.ty = self.ty.set_kinds(trait_kind_map);
         self.ty.check_kinds(kind_map, trait_kind_map);
         match &mut self.expr {
-            SymbolExpr::Simple(_, _) => {}
+            SymbolExpr::Simple(_) => {}
             SymbolExpr::Method(ms) => {
                 for m in ms {
                     m.ty = m.ty.set_kinds(trait_kind_map);
@@ -89,25 +87,51 @@ impl GlobalValue {
 // Expression of global symbol.
 #[derive(Clone)]
 pub enum SymbolExpr {
-    Simple(Rc<ExprNode>, TypeResolver), // Definition such as "id : a -> a; id = \x -> x".
-    Method(Vec<MethodImpl>),            // Trait method implementations.
+    Simple(TypedExpr),       // Definition such as "id : a -> a; id = \x -> x".
+    Method(Vec<MethodImpl>), // Trait method implementations.
 }
 
 impl SymbolExpr {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         match self {
-            SymbolExpr::Simple(e, tr) => {
-                *self = SymbolExpr::Simple(
-                    e.resolve_namespace(ctx),
-                    replace(tr, TypeResolver::default()),
-                );
-            }
+            SymbolExpr::Simple(e) => e.resolve_namespace(ctx),
             SymbolExpr::Method(mis) => {
                 for mi in mis {
                     mi.resolve_namespace(ctx);
                 }
             }
         }
+    }
+}
+
+// Pair of expression and type resolver for it.
+#[derive(Clone)]
+pub struct TypedExpr {
+    pub expr: Rc<ExprNode>,
+    pub type_resolver: TypeResolver,
+}
+
+impl TypedExpr {
+    pub fn from_expr(expr: Rc<ExprNode>) -> Self {
+        TypedExpr {
+            expr,
+            type_resolver: TypeResolver::default(),
+        }
+    }
+
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.expr = self.expr.resolve_namespace(ctx);
+    }
+
+    pub fn calculate_free_vars(&mut self) {
+        self.expr = calculate_free_vars(self.expr.clone());
+    }
+
+    // When unification fails, it has no side effect to self.
+    pub fn unify_to(&mut self, target_ty: &Rc<TypeNode>) -> bool {
+        return self
+            .type_resolver
+            .unify(&self.expr.ty.as_ref().unwrap(), target_ty);
     }
 }
 
@@ -119,21 +143,19 @@ pub struct MethodImpl {
     // the type of method "show" is "[a: Show, b: Show] (a, b) -> String",
     pub ty: Rc<Scheme>,
     // Expression of this implementation
-    pub expr: Rc<ExprNode>,
+    pub expr: TypedExpr,
     // Module where this implmentation is given.
     // NOTE:
     // For trait method, `define_module` may not differ to the first component of namespace of the function.
     // For example, if `Main` module implements `Eq : SomeType`, then implementation of `eq` for `SomeType` is defined in `Main` module,
     // but it's name as a function is still `Std::Eq::eq`.
     pub define_module: Name,
-    // Result of typechecking (mainly, substitution) of this symbol.
-    pub typeresolver: TypeResolver,
 }
 
 impl MethodImpl {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         self.ty = self.ty.resolve_namespace(ctx);
-        self.expr = self.expr.resolve_namespace(ctx);
+        self.expr.resolve_namespace(ctx);
     }
 }
 
@@ -302,7 +324,7 @@ impl FixModule {
             name,
             GlobalValue {
                 ty: scm,
-                expr: SymbolExpr::Simple(expr, TypeResolver::default()),
+                expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
             },
         );
     }
@@ -388,8 +410,8 @@ impl FixModule {
             .instantiated_global_symbols
             .iter()
             .map(|(name, sym)| {
-                gc.typeresolver = sym.typeresolver.clone();
-                let obj_ty = sym.typeresolver.substitute_type(&sym.ty);
+                gc.typeresolver = sym.type_resolver.clone();
+                let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
                 if obj_ty.is_funptr() {
                     let lam = sym.expr.as_ref().unwrap().clone();
                     let lam = lam.set_inferred_type(obj_ty.clone());
@@ -437,7 +459,7 @@ impl FixModule {
 
         // Implement functions.
         for (global_var, init_flag, acc_fn, sym, obj_ty) in global_objs {
-            gc.typeresolver = sym.typeresolver;
+            gc.typeresolver = sym.type_resolver;
             if obj_ty.is_funptr() {
                 // Implement lambda function.
                 let lam_fn = acc_fn;
@@ -520,29 +542,27 @@ impl FixModule {
     fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol) {
         assert!(sym.expr.is_none());
         let global_sym = self.global_values.get(&sym.template_name).unwrap();
-        let (template_expr, tr) = match &global_sym.expr {
-            SymbolExpr::Simple(e, tr) => {
-                let mut tr = tr.clone();
-                tr.unify(&e.ty.as_ref().unwrap(), &sym.ty);
-                (e.clone(), tr)
+        let typed_expr = match &global_sym.expr {
+            SymbolExpr::Simple(e) => {
+                let mut e = e.clone();
+                assert!(e.unify_to(&sym.ty));
+                e
             }
             SymbolExpr::Method(impls) => {
                 // Find method implementation that unifies to "sym.ty".
-                let mut opt_expr: Option<Rc<ExprNode>> = None;
-                let mut opt_tr: Option<TypeResolver> = None;
+                let mut opt_e: Option<TypedExpr> = None;
                 for method in impls {
-                    let mut tr = method.typeresolver.clone();
-                    if tr.unify(&method.expr.ty.as_ref().unwrap(), &sym.ty) {
-                        opt_expr = Some(method.expr.clone());
-                        opt_tr = Some(tr);
+                    let mut e = method.expr.clone();
+                    if e.unify_to(&sym.ty) {
+                        opt_e = Some(e);
                         break;
                     }
                 }
-                (opt_expr.unwrap(), opt_tr.unwrap())
+                opt_e.unwrap()
             }
         };
-        sym.expr = Some(self.instantiate_expr(&tr, &template_expr));
-        sym.typeresolver = tr;
+        sym.expr = Some(self.instantiate_expr(&typed_expr.type_resolver, &typed_expr.expr));
+        sym.type_resolver = typed_expr.type_resolver;
     }
 
     // Instantiate all symbols.
@@ -663,7 +683,7 @@ impl FixModule {
                     template_name: name.clone(),
                     ty: ty.clone(),
                     expr: None,
-                    typeresolver: TypeResolver::default(), // This field will be set in the end of instantiation.
+                    type_resolver: TypeResolver::default(), // This field will be set in the end of instantiation.
                 },
             );
         }
@@ -694,9 +714,8 @@ impl FixModule {
                         let expr = trait_impl.method_expr(method_name);
                         method_impls.push(MethodImpl {
                             ty,
-                            expr,
+                            expr: TypedExpr::from_expr(expr),
                             define_module: trait_impl.define_module.clone(),
-                            typeresolver: TypeResolver::default(), // Will be set after type checking.
                         });
                     }
                 }
@@ -882,8 +901,8 @@ impl FixModule {
         // Merge global values.
         for (name, gv) in other.global_values {
             let ty = gv.ty;
-            if let SymbolExpr::Simple(expr, _) = gv.expr {
-                self.add_global_value(name, (expr, ty));
+            if let SymbolExpr::Simple(expr) = gv.expr {
+                self.add_global_value(name, (expr.expr, ty));
             }
         }
     }

@@ -9,7 +9,7 @@ pub fn funptr_optimization(fix_mod: &mut FixModule) {
     // First, define function pointer versions of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
     for (sym_name, sym) in syms {
-        let typeresolver = &sym.typeresolver;
+        let typeresolver = &sym.type_resolver;
 
         fix_mod
             .instantiated_global_symbols
@@ -40,7 +40,7 @@ pub fn funptr_optimization(fix_mod: &mut FixModule) {
                     )),
                     ty,
                     expr: Some(expr.clone()),
-                    typeresolver: sym.typeresolver.clone(),
+                    type_resolver: sym.type_resolver.clone(),
                 },
             );
         }
@@ -55,7 +55,7 @@ pub fn funptr_optimization(fix_mod: &mut FixModule) {
         let expr = replace_closure_call_to_funptr_call_subexprs(
             sym.expr.as_ref().unwrap(),
             &symbol_names,
-            &sym.typeresolver,
+            &sym.type_resolver,
         );
         let expr = calculate_free_vars(expr);
         sym.expr = Some(expr);

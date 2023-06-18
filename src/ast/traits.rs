@@ -121,9 +121,8 @@ impl TraitInstance {
     }
 
     // Get type-scheme of a method implementation.
-    // Here, for example, in case "impl (a, b): Show for a: Show, b: Show",
-    // this function returns "a -> String for a: Show, b: Show" as the type of "show".
-    // Give type of this method, e.g., "a -> String".
+    // Here, for example, in case "impl [a: Show, b: Show] (a, b): Show",
+    // this function returns "[a: Show, b: Show] (a, b) -> String" as the type of "show".
     pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Rc<Scheme> {
         let trait_tyvar = &trait_info.type_var.name;
         let impl_type = self.qual_pred.predicate.ty.clone();

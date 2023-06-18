@@ -1,4 +1,4 @@
-use std::{mem::replace, path::PathBuf, process::Command};
+use std::{path::PathBuf, process::Command};
 
 use either::Either;
 use inkwell::{
@@ -78,19 +78,25 @@ fn build_module<'c>(
     // Check types.
     for (name, gv) in &mut fix_mod.global_values {
         match &gv.expr {
-            SymbolExpr::Simple(e, _) => {
+            SymbolExpr::Simple(e) => {
                 let mut tc = typechecker.clone();
                 tc.current_module = Some(name.module());
-                let e = tc.check_type(e.clone(), gv.ty.clone());
-                gv.expr = SymbolExpr::Simple(e, tc.resolver);
+                let e = tc.check_type(e.expr.clone(), gv.ty.clone());
+                gv.expr = SymbolExpr::Simple(TypedExpr {
+                    expr: e,
+                    type_resolver: tc.resolver,
+                });
             }
             SymbolExpr::Method(methods) => {
                 let mut methods = methods.clone();
                 for m in &mut methods {
                     let mut tc = typechecker.clone();
                     tc.current_module = Some(m.define_module.clone());
-                    m.expr = tc.check_type(m.expr.clone(), m.ty.clone());
-                    m.typeresolver = tc.resolver;
+                    let e = tc.check_type(m.expr.expr.clone(), m.ty.clone());
+                    m.expr = TypedExpr {
+                        expr: e,
+                        type_resolver: tc.resolver,
+                    };
                 }
                 gv.expr = SymbolExpr::Method(methods);
             }
@@ -100,16 +106,11 @@ fn build_module<'c>(
     // Calculate free variables of expressions.
     for (_name, sym) in &mut fix_mod.global_values {
         match &mut sym.expr {
-            SymbolExpr::Simple(e, tr) => {
-                let e = calculate_free_vars(e.clone());
-                sym.expr = SymbolExpr::Simple(e, replace(tr, TypeResolver::default()));
-            }
+            SymbolExpr::Simple(e) => e.calculate_free_vars(),
             SymbolExpr::Method(methods) => {
-                let mut methods = methods.clone();
-                for m in &mut methods {
-                    m.expr = calculate_free_vars(m.expr.clone());
+                for m in &mut methods.iter_mut() {
+                    m.expr.calculate_free_vars();
                 }
-                sym.expr = SymbolExpr::Method(methods);
             }
         }
     }
