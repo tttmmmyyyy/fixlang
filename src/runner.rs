@@ -43,6 +43,7 @@ fn build_module<'c>(
     fix_mod.calculate_type_env();
 
     // Resolve namespaces to traits and types (not to variables).
+    // ToDo: divide resolve_namespace by extracting a part which resolves names in expression and cache it's result.
     fix_mod.resolve_namespace();
 
     // Validate user-defined types.
