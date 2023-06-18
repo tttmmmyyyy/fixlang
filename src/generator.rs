@@ -952,16 +952,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate expression.
     pub fn eval_expr(&mut self, expr: Rc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
-        let expr = expr.set_inferred_type(
-            self.typeresolver
-                .substitute_type(&expr.inferred_ty.clone().unwrap()),
-        );
-        assert!(expr.inferred_ty.as_ref().unwrap().free_vars().is_empty());
+        let expr =
+            expr.set_inferred_type(self.typeresolver.substitute_type(&expr.ty.clone().unwrap()));
+        assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
         let mut ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone(), rvo),
-            Expr::Lit(lit) => {
-                self.eval_lit(lit.clone(), expr.inferred_ty.clone().unwrap().clone(), rvo)
-            }
+            Expr::Lit(lit) => self.eval_lit(lit.clone(), expr.ty.clone().unwrap().clone(), rvo),
             Expr::App(lambda, args) => self.eval_app(lambda.clone(), args.clone(), rvo),
             Expr::Lam(_, _) => self.eval_lam(expr.clone(), rvo),
             Expr::Let(pat, bound, expr) => self.eval_let(pat, bound.clone(), expr.clone(), rvo),
@@ -970,17 +966,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
             Expr::TyAnno(e, _) => self.eval_expr(e.clone(), rvo),
             Expr::MakeStruct(_, fields) => {
-                let struct_ty = expr.inferred_ty.clone().unwrap();
+                let struct_ty = expr.ty.clone().unwrap();
                 self.eval_make_struct(fields.clone(), struct_ty, rvo)
             }
-            Expr::ArrayLit(elems) => {
-                self.eval_array_lit(elems, expr.inferred_ty.clone().unwrap(), rvo)
-            }
+            Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.ty.clone().unwrap(), rvo),
             Expr::CallC(fun_name, ret_ty, param_tys, is_var_args, args) => {
                 self.eval_call_c(&expr, fun_name, ret_ty, param_tys, *is_var_args, args, rvo)
             }
         };
-        ret.ty = expr.inferred_ty.clone().unwrap();
+        ret.ty = expr.ty.clone().unwrap();
         ret
     }
 
@@ -1043,7 +1037,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         cap_vars.sort_by_key(|(name, _)| name.to_string());
 
         // Validation
-        let lam_ty = lam.inferred_ty.clone().unwrap();
+        let lam_ty = lam.ty.clone().unwrap();
         assert!(!lam_ty.is_funptr() || cap_vars.len() == 0); // Function poitners cannot capture objects.
 
         cap_vars
@@ -1051,7 +1045,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Declare function of lambda expression
     pub fn declare_lambda_function(&mut self, lam: Rc<ExprNode>) -> FunctionValue<'c> {
-        let lam_ty = lam.inferred_ty.clone().unwrap();
+        let lam_ty = lam.ty.clone().unwrap();
         let lam_fn_ty = lambda_function_type(&lam_ty, self);
         let lam_fn = self.module.add_function(
             &format!("lambda_{}", lam_ty.to_string_normalize()),
@@ -1068,7 +1062,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         lam_fn: FunctionValue<'c>,
         cap_vars: Option<Vec<(FullName, Rc<TypeNode>)>>,
     ) {
-        let lam_ty = lam.inferred_ty.clone().unwrap();
+        let lam_ty = lam.ty.clone().unwrap();
         let (args, body) = lam.destructure_lam();
         let cap_vars = if cap_vars.is_some() {
             cap_vars.unwrap()
@@ -1170,7 +1164,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate lambda abstraction.
     fn eval_lam(&mut self, lam: Rc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
         let (args, body) = lam.destructure_lam();
-        let lam_ty = lam.inferred_ty.clone().unwrap();
+        let lam_ty = lam.ty.clone().unwrap();
 
         // Calculate captured variables.
         let cap_vars = self.calculate_captured_vars_of_lambda(lam.clone());

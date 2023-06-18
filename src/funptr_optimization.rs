@@ -27,7 +27,7 @@ pub fn funptr_optimization(fix_mod: &mut FixModule) {
                 break;
             }
             let expr = calculate_free_vars(expr.take().unwrap());
-            let ty = expr.inferred_ty.clone().unwrap();
+            let ty = expr.ty.clone().unwrap();
             let mut name = sym_name.clone();
             convert_to_funptr_name(name.name_as_mut(), arg_cnt as usize);
             fix_mod.instantiated_global_symbols.insert(
@@ -89,7 +89,7 @@ fn funptr_lambda(
         return None;
     }
 
-    let expr_type = typeresolver.substitute_type(expr.inferred_ty.as_ref().unwrap());
+    let expr_type = typeresolver.substitute_type(expr.ty.as_ref().unwrap());
     if expr_type.is_funptr() {
         return None;
     }
@@ -104,7 +104,7 @@ fn funptr_lambda(
     // Collect types of argments.
     let (arg_types, body_ty) = collect_app_src(&expr_type, vars_count);
     assert_eq!(
-        typeresolver.substitute_type(body.inferred_ty.as_ref().unwrap()),
+        typeresolver.substitute_type(body.ty.as_ref().unwrap()),
         body_ty
     );
 
@@ -181,7 +181,7 @@ fn replace_closure_call_to_funptr_call(
     typechcker: &TypeResolver,
 ) -> Rc<ExprNode> {
     let (fun, args) = collect_app(expr);
-    let fun_ty = typechcker.substitute_type(fun.inferred_ty.as_ref().unwrap());
+    let fun_ty = typechcker.substitute_type(fun.ty.as_ref().unwrap());
     if fun_ty.is_funptr() {
         return expr.clone();
     }
@@ -202,10 +202,10 @@ fn replace_closure_call_to_funptr_call(
                 // If function pointer version is not defined, do not apply uncurry.
                 return expr.clone();
             }
-            let result_ty = expr.inferred_ty.clone().unwrap();
+            let result_ty = expr.ty.clone().unwrap();
             let arg_tys = args
                 .iter()
-                .map(|arg| arg.inferred_ty.clone().unwrap())
+                .map(|arg| arg.ty.clone().unwrap())
                 .collect::<Vec<_>>();
             let funptr_ty = type_funptr(arg_tys, result_ty.clone());
             let f_funptr = expr_var(f_funptr.name, None).set_inferred_type(funptr_ty);
@@ -318,7 +318,7 @@ fn move_abs_front_let_one(expr: &Rc<ExprNode>) -> Rc<ExprNode> {
             let let_val = move_abs_front_let_one(let_val);
             match &*let_val.expr {
                 Expr::Lam(lam_vars, lam_val) => {
-                    let ty = expr.inferred_ty.clone().unwrap();
+                    let ty = expr.ty.clone().unwrap();
 
                     // Replace lam_var and it's appearance in lam_val to avoid confliction with free variables in let_bound.
                     let let_bound = calculate_free_vars(let_bound.clone());
@@ -372,7 +372,7 @@ fn move_abs_front_let_one(expr: &Rc<ExprNode>) -> Rc<ExprNode> {
 
                     // Construct the expression.
                     let expr = expr_let(let_var.clone(), let_bound.clone(), lam_val.clone(), None)
-                        .set_inferred_type(lam_val.inferred_ty.clone().unwrap());
+                        .set_inferred_type(lam_val.ty.clone().unwrap());
                     let expr = expr_abs(lam_vars, expr, None).set_inferred_type(ty);
                     expr
                 }

@@ -18,7 +18,7 @@ pub struct ExprNode {
     pub free_vars: Option<HashSet<FullName>>,
     pub source: Option<Span>,
     pub app_order: AppSourceCodeOrderType,
-    pub inferred_ty: Option<Rc<TypeNode>>,
+    pub ty: Option<Rc<TypeNode>>,
 }
 
 impl ExprNode {
@@ -51,7 +51,7 @@ impl ExprNode {
     // Set inferred type.
     pub fn set_inferred_type(&self, ty: Rc<TypeNode>) -> Rc<Self> {
         let mut ret = self.clone();
-        ret.inferred_ty = Some(ty);
+        ret.ty = Some(ty);
         Rc::new(ret)
     }
 
@@ -736,7 +736,7 @@ impl Expr {
             free_vars: Default::default(),
             source: src,
             app_order: AppSourceCodeOrderType::FunctionIsFormer,
-            inferred_ty: None,
+            ty: None,
         })
     }
     pub fn to_string(&self) -> String {

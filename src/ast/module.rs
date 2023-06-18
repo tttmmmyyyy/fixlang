@@ -523,7 +523,7 @@ impl FixModule {
         let (template_expr, tr) = match &global_sym.expr {
             SymbolExpr::Simple(e, tr) => {
                 let mut tr = tr.clone();
-                tr.unify(&e.inferred_ty.as_ref().unwrap(), &sym.ty);
+                tr.unify(&e.ty.as_ref().unwrap(), &sym.ty);
                 (e.clone(), tr)
             }
             SymbolExpr::Method(impls) => {
@@ -532,7 +532,7 @@ impl FixModule {
                 let mut opt_tr: Option<TypeResolver> = None;
                 for method in impls {
                     let mut tr = method.typeresolver.clone();
-                    if tr.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
+                    if tr.unify(&method.expr.ty.as_ref().unwrap(), &sym.ty) {
                         opt_expr = Some(method.expr.clone());
                         opt_tr = Some(tr);
                         break;
@@ -576,7 +576,7 @@ impl FixModule {
                 if v.name.is_local() {
                     expr.clone()
                 } else {
-                    let ty = tr.substitute_type(&expr.inferred_ty.as_ref().unwrap());
+                    let ty = tr.substitute_type(&expr.ty.as_ref().unwrap());
                     let instance = self.require_instantiated_symbol(&v.name, &ty);
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
@@ -636,7 +636,7 @@ impl FixModule {
         };
         // If the type of an expression contains undetermied type variable after instantiation, raise an error.
         if !tr
-            .substitute_type(ret.inferred_ty.as_ref().unwrap())
+            .substitute_type(ret.ty.as_ref().unwrap())
             .free_vars()
             .is_empty()
         {
