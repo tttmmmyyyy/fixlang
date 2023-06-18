@@ -528,17 +528,17 @@ impl FixModule {
             }
             SymbolExpr::Method(impls) => {
                 // Find method implementation that unifies to "sym.ty".
-                let mut e: Option<Rc<ExprNode>> = None;
+                let mut opt_expr: Option<Rc<ExprNode>> = None;
                 let mut opt_tr: Option<TypeResolver> = None;
                 for method in impls {
                     let mut tr = method.typeresolver.clone();
                     if tr.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
-                        e = Some(method.expr.clone());
+                        opt_expr = Some(method.expr.clone());
                         opt_tr = Some(tr);
                         break;
                     }
                 }
-                (e.unwrap(), opt_tr.unwrap())
+                (opt_expr.unwrap(), opt_tr.unwrap())
             }
         };
         sym.expr = Some(self.instantiate_expr(&tr, &template_expr));
