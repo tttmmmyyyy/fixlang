@@ -473,13 +473,13 @@ impl TypeNode {
     }
 
     // Calculate kind.
-    pub fn kind(&self, type_env: &TypeEnv) -> Rc<Kind> {
+    pub fn kind(&self, kind_map: &HashMap<TyCon, Rc<Kind>>) -> Rc<Kind> {
         match &self.ty {
             Type::TyVar(tv) => tv.kind.clone(),
-            Type::TyCon(tc) => type_env.kind(&tc),
+            Type::TyCon(tc) => kind_map.get(&tc).unwrap().clone(),
             Type::TyApp(fun, arg) => {
-                let arg_kind = arg.kind(type_env);
-                let fun_kind = fun.kind(type_env);
+                let arg_kind = arg.kind(kind_map);
+                let fun_kind = fun.kind(kind_map);
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
@@ -491,10 +491,10 @@ impl TypeNode {
                 }
             }
             Type::FunTy(arg, ret) => {
-                if arg.kind(type_env) != kind_star() {
+                if arg.kind(kind_map) != kind_star() {
                     error_exit("Kind mismatch.")
                 }
-                if ret.kind(type_env) != kind_star() {
+                if ret.kind(kind_map) != kind_star() {
                     error_exit("Kind mismatch.")
                 }
                 kind_star()
@@ -805,11 +805,15 @@ impl Scheme {
         Rc::new(ret)
     }
 
-    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) {
+    pub fn check_kinds(
+        &self,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
+    ) {
         for p in &self.preds {
-            p.check_kinds(type_env, trait_kind_map);
+            p.check_kinds(kind_map, trait_kind_map);
         }
-        self.ty.kind(type_env);
+        self.ty.kind(kind_map);
     }
 
     // Create new instance.

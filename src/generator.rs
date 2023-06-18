@@ -275,7 +275,8 @@ pub struct GenerationContext<'c, 'm> {
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
     pub global: HashMap<FullName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
-    pub typechecker: Option<TypeCheckContext>,
+    pub typeresolver: TypeResolver,
+    type_env: TypeEnv,
     pub target: Either<TargetMachine, ExecutionEngine<'c>>,
     target_data_cache: Option<TargetData>,
     pub config: Configuration,
@@ -340,7 +341,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     pub fn type_env(&self) -> &TypeEnv {
-        &self.typechecker.as_ref().unwrap().type_env
+        &self.type_env
     }
 
     pub fn target_data(&mut self) -> &TargetData {
@@ -366,6 +367,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         module: &'m Module<'c>,
         target: Either<TargetMachine, ExecutionEngine<'c>>,
         config: Configuration,
+        type_env: TypeEnv,
     ) -> Self {
         let ret = Self {
             context: ctx,
@@ -374,7 +376,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             scope: Rc::new(RefCell::new(vec![Default::default()])),
             global: Default::default(),
             runtimes: Default::default(),
-            typechecker: None,
+            typeresolver: Default::default(),
+            type_env,
             target,
             target_data_cache: None,
             config,
@@ -950,9 +953,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate expression.
     pub fn eval_expr(&mut self, expr: Rc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
         let expr = expr.set_inferred_type(
-            self.typechecker
-                .as_ref()
-                .unwrap()
+            self.typeresolver
                 .substitute_type(&expr.inferred_ty.clone().unwrap()),
         );
         assert!(expr.inferred_ty.as_ref().unwrap().free_vars().is_empty());

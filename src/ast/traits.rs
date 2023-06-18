@@ -266,9 +266,13 @@ impl Predicate {
         self.ty = self.ty.set_kinds(scope);
     }
 
-    pub fn check_kinds(&self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) {
+    pub fn check_kinds(
+        &self,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
+    ) {
         let expected = &trait_kind_map[&self.trait_id];
-        let found = self.ty.kind(type_env);
+        let found = self.ty.kind(kind_map);
         if *expected != found {
             error_exit(&format!(
                 "kind mismatch. Expect: {}, found: {}.",
@@ -294,7 +298,7 @@ pub struct TraitEnv {
 }
 
 impl TraitEnv {
-    pub fn validate(&mut self, type_env: &TypeEnv) {
+    pub fn validate(&mut self, kind_map: &HashMap<TyCon, Rc<Kind>>) {
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
                 *inst.trait_id_mut() = trait_id.clone();
@@ -347,7 +351,7 @@ impl TraitEnv {
                     let inst_i = &insts[i];
                     let inst_j = &insts[j];
                     if Substitution::unify(
-                        type_env,
+                        kind_map,
                         &inst_i.qual_pred.predicate.ty,
                         &inst_j.qual_pred.predicate.ty,
                     )
@@ -443,12 +447,12 @@ impl TraitEnv {
     pub fn reduce_to_instance_contexts_one(
         &self,
         p: &Predicate,
-        type_env: &TypeEnv,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
     ) -> Option<Vec<Predicate>> {
         let insntances = self.instances.get(&p.trait_id);
         if let Some(instances) = insntances {
             for inst in instances {
-                match Substitution::matching(type_env, &inst.qual_pred.predicate.ty, &p.ty) {
+                match Substitution::matching(kind_map, &inst.qual_pred.predicate.ty, &p.ty) {
                     Some(s) => {
                         let ret = inst
                             .qual_pred
@@ -470,21 +474,26 @@ impl TraitEnv {
     }
 
     // Entailment.
-    pub fn entail(&self, ps: &Vec<Predicate>, p: &Predicate, type_env: &TypeEnv) -> bool {
+    pub fn entail(
+        &self,
+        ps: &Vec<Predicate>,
+        p: &Predicate,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+    ) -> bool {
         // If p in contained in ps, then ok.
         for q in ps {
             if q.trait_id == p.trait_id {
-                if Substitution::matching(type_env, &q.ty, &p.ty).is_some() {
+                if Substitution::matching(kind_map, &q.ty, &p.ty).is_some() {
                     return true;
                 }
             }
         }
         // Try reducing by instances.
-        match self.reduce_to_instance_contexts_one(p, type_env) {
+        match self.reduce_to_instance_contexts_one(p, kind_map) {
             Some(ctxs) => {
                 let mut all_ok = true;
                 for ctx in ctxs {
-                    if !self.entail(ps, &ctx, type_env) {
+                    if !self.entail(ps, &ctx, kind_map) {
                         all_ok = false;
                         break;
                     }
@@ -500,13 +509,13 @@ impl TraitEnv {
     pub fn reduce_to_hnf(
         &self,
         p: &Predicate,
-        type_env: &TypeEnv,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
     ) -> Result<Vec<Predicate>, Predicate> {
         if p.ty.is_hnf() {
             return Ok(vec![p.clone()]);
         }
-        match self.reduce_to_instance_contexts_one(p, type_env) {
-            Some(ps) => self.reduce_to_hnfs(&ps, type_env),
+        match self.reduce_to_instance_contexts_one(p, kind_map) {
+            Some(ps) => self.reduce_to_hnfs(&ps, kind_map),
             None => Err(p.clone()),
         }
     }
@@ -516,17 +525,21 @@ impl TraitEnv {
     pub fn reduce_to_hnfs(
         &self,
         ps: &Vec<Predicate>,
-        type_env: &TypeEnv,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
     ) -> Result<Vec<Predicate>, Predicate> {
         let mut ret: Vec<Predicate> = Default::default();
         for p in ps {
-            ret.append(&mut self.reduce_to_hnf(p, type_env)?)
+            ret.append(&mut self.reduce_to_hnf(p, kind_map)?)
         }
         Ok(ret)
     }
 
     // Simplify a set of predicates by entail.
-    pub fn simplify_predicates(&self, ps: &Vec<Predicate>, type_env: &TypeEnv) -> Vec<Predicate> {
+    pub fn simplify_predicates(
+        &self,
+        ps: &Vec<Predicate>,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+    ) -> Vec<Predicate> {
         let mut ps = ps.clone();
         let mut i = 0 as usize;
         while i < ps.len() {
@@ -535,7 +548,7 @@ impl TraitEnv {
                 .enumerate()
                 .filter_map(|(j, p)| if i == j { None } else { Some(p.clone()) })
                 .collect();
-            if self.entail(&qs, &ps[i], type_env) {
+            if self.entail(&qs, &ps[i], kind_map) {
                 ps.remove(i);
             } else {
                 i += 1;
@@ -552,10 +565,10 @@ impl TraitEnv {
     pub fn reduce(
         &self,
         ps: &Vec<Predicate>,
-        type_env: &TypeEnv,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
     ) -> Result<Vec<Predicate>, Predicate> {
-        let ret = self.reduce_to_hnfs(ps, type_env)?;
-        let ret = self.simplify_predicates(&ret, type_env);
+        let ret = self.reduce_to_hnfs(ps, kind_map)?;
+        let ret = self.simplify_predicates(&ret, kind_map);
         // Every predicate has to be hnf.
         assert!(ret.iter().all(|p| p.ty.is_hnf()));
         Ok(ret)

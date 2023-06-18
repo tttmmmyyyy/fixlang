@@ -177,16 +177,20 @@ impl Substitution {
     }
 
     // Calculate minimum substitution to unify two types.
-    pub fn unify(type_env: &TypeEnv, ty1: &Rc<TypeNode>, ty2: &Rc<TypeNode>) -> Option<Self> {
+    pub fn unify(
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        ty1: &Rc<TypeNode>,
+        ty2: &Rc<TypeNode>,
+    ) -> Option<Self> {
         match &ty1.ty {
             Type::TyVar(var1) => {
-                return Self::unify_tyvar(type_env, &var1, ty2);
+                return Self::unify_tyvar(kind_map, &var1, ty2);
             }
             _ => {}
         }
         match &ty2.ty {
             Type::TyVar(var2) => {
-                return Self::unify_tyvar(type_env, &var2, ty1);
+                return Self::unify_tyvar(kind_map, &var2, ty1);
             }
             _ => {}
         }
@@ -207,13 +211,13 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::unify(type_env, &fun1, &fun2) {
+                    match Self::unify(kind_map, &fun1, &fun2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
                     let arg1 = ret.substitute_type(arg1);
                     let arg2 = ret.substitute_type(arg2);
-                    match Self::unify(type_env, &arg1, &arg2) {
+                    match Self::unify(kind_map, &arg1, &arg2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
@@ -226,13 +230,13 @@ impl Substitution {
             Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
                 Type::FunTy(arg_ty2, ret_ty2) => {
                     let mut ret = Self::default();
-                    match Self::unify(type_env, &arg_ty1, &arg_ty2) {
+                    match Self::unify(kind_map, &arg_ty1, &arg_ty2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
                     let ret_ty1 = ret.substitute_type(ret_ty1);
                     let ret_ty2 = ret.substitute_type(ret_ty2);
-                    match Self::unify(type_env, &ret_ty1, &ret_ty2) {
+                    match Self::unify(kind_map, &ret_ty1, &ret_ty2) {
                         Some(sub) => ret.add_substitution(&sub),
                         None => return None,
                     };
@@ -246,7 +250,11 @@ impl Substitution {
     }
 
     // Subroutine of unify().
-    fn unify_tyvar(type_env: &TypeEnv, tyvar1: &Rc<TyVar>, ty2: &Rc<TypeNode>) -> Option<Self> {
+    fn unify_tyvar(
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        tyvar1: &Rc<TyVar>,
+        ty2: &Rc<TypeNode>,
+    ) -> Option<Self> {
         match &ty2.ty {
             Type::TyVar(tyvar2) => {
                 if tyvar1.name == tyvar2.name {
@@ -262,16 +270,20 @@ impl Substitution {
             // `map: [f: Functor] (a -> b) -> f a -> f b; map = |f, c| (...)`;
             return None;
         }
-        if tyvar1.kind != ty2.kind(type_env) {
+        if tyvar1.kind != ty2.kind(kind_map) {
             return None;
         }
         Some(Self::single(&tyvar1.name, ty2.clone()))
     }
 
     // Calculate minimum substitution s such that `s(ty1) = ty2`.
-    pub fn matching(type_env: &TypeEnv, ty1: &Rc<TypeNode>, ty2: &Rc<TypeNode>) -> Option<Self> {
+    pub fn matching(
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        ty1: &Rc<TypeNode>,
+        ty2: &Rc<TypeNode>,
+    ) -> Option<Self> {
         match &ty1.ty {
-            Type::TyVar(v1) => Self::unify_tyvar(type_env, v1, ty2),
+            Type::TyVar(v1) => Self::unify_tyvar(kind_map, v1, ty2),
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
                     if tc1 == tc2 {
@@ -285,7 +297,7 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::matching(type_env, fun1, fun2) {
+                    match Self::matching(kind_map, fun1, fun2) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -293,7 +305,7 @@ impl Substitution {
                         }
                         None => return None,
                     }
-                    match Self::matching(type_env, arg1, arg2) {
+                    match Self::matching(kind_map, arg1, arg2) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -308,7 +320,7 @@ impl Substitution {
             Type::FunTy(src1, dst1) => match &ty2.ty {
                 Type::FunTy(src2, dst2) => {
                     let mut ret = Self::default();
-                    match Self::matching(type_env, src1, src2) {
+                    match Self::matching(kind_map, src1, src2) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -316,7 +328,7 @@ impl Substitution {
                         }
                         None => return None,
                     }
-                    match Self::matching(type_env, dst1, dst2) {
+                    match Self::matching(kind_map, dst1, dst2) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -340,8 +352,8 @@ pub struct TypeCheckContext {
     tyvar_id: u32,
     // Scoped map of variable name -> scheme. (Assamptions of type inference.)
     pub scope: Scope<Rc<Scheme>>,
-    // Collected substitution.
-    substitution: Substitution,
+    // Type resolver.
+    pub resolver: TypeResolver,
     // Collected predicates.
     pub predicates: Vec<Predicate>,
     // Trait environment.
@@ -356,6 +368,47 @@ pub struct TypeCheckContext {
     pub current_module: Option<Name>,
 }
 
+#[derive(Clone, Default)]
+pub struct TypeResolver {
+    // Substitution.
+    pub substitution: Substitution,
+    // Type to kind mapping.
+    pub kind_map: HashMap<TyCon, Rc<Kind>>,
+}
+
+impl TypeResolver {
+    // Set type environment.
+    pub fn set_type_env(&mut self, type_env: TypeEnv) {
+        self.kind_map = type_env.kinds();
+    }
+
+    // Update substitution to unify two types.
+    // When substitution fails, it has no side effect to self.
+    pub fn unify(&mut self, ty1: &Rc<TypeNode>, ty2: &Rc<TypeNode>) -> bool {
+        let ty1 = &self.substitute_type(ty1);
+        let ty2 = &self.substitute_type(ty2);
+        match Substitution::unify(&self.kind_map, ty1, ty2) {
+            Some(sub) => {
+                self.substitution.add_substitution(&sub);
+                return true;
+            }
+            None => {
+                return false;
+            }
+        }
+    }
+
+    // Apply substitution to type.
+    pub fn substitute_type(&self, ty: &Rc<TypeNode>) -> Rc<TypeNode> {
+        self.substitution.substitute_type(ty)
+    }
+
+    // Apply substitution to a predicate.
+    pub fn substitute_predicate(&self, p: &mut Predicate) {
+        self.substitution.substitute_predicate(p)
+    }
+}
+
 impl TypeCheckContext {
     // Creaate instance.
     pub fn new(
@@ -363,10 +416,12 @@ impl TypeCheckContext {
         type_env: TypeEnv,
         imported_mod_map: HashMap<Name, HashSet<Name>>,
     ) -> Self {
+        let mut resolver = TypeResolver::default();
+        resolver.set_type_env(type_env.clone());
         Self {
             tyvar_id: Default::default(),
             scope: Default::default(),
-            substitution: Default::default(),
+            resolver,
             predicates: Default::default(),
             type_env,
             trait_env,
@@ -391,12 +446,12 @@ impl TypeCheckContext {
 
     // Apply substitution to type.
     pub fn substitute_type(&self, ty: &Rc<TypeNode>) -> Rc<TypeNode> {
-        self.substitution.substitute_type(ty)
+        self.resolver.substitute_type(ty)
     }
 
     // Apply substitution to a predicate.
     pub fn substitute_predicate(&self, p: &mut Predicate) {
-        self.substitution.substitute_predicate(p)
+        self.resolver.substitute_predicate(p)
     }
 
     // Instantiate a scheme.
@@ -424,17 +479,7 @@ impl TypeCheckContext {
     // Update substitution to unify two types.
     // When substitution fails, it has no side effect to self.
     pub fn unify(&mut self, ty1: &Rc<TypeNode>, ty2: &Rc<TypeNode>) -> bool {
-        let ty1 = &self.substitute_type(ty1);
-        let ty2 = &self.substitute_type(ty2);
-        match Substitution::unify(&self.type_env, ty1, ty2) {
-            Some(sub) => {
-                self.substitution.add_substitution(&sub);
-                return true;
-            }
-            None => {
-                return false;
-            }
-        }
+        self.resolver.unify(ty1, ty2)
     }
 
     // Reduce predicates.
@@ -445,7 +490,9 @@ impl TypeCheckContext {
             self.substitute_predicate(p);
         }
         self.predicates.append(&mut preds);
-        self.predicates = self.trait_env.reduce(&self.predicates, &self.type_env)?;
+        self.predicates = self
+            .trait_env
+            .reduce(&self.predicates, &self.type_env.kinds())?;
         Ok(())
     }
 
@@ -476,7 +523,7 @@ impl TypeCheckContext {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the expected type.",
                                 fullname.to_string(),
-                                scm.substitute(&self.substitution).to_string(),
+                                scm.substitute(&self.resolver.substitution).to_string(),
                             );
                             Err(msg)
                         } else {
@@ -489,7 +536,7 @@ impl TypeCheckContext {
                                 let msg = format!(
                                     "- `{}` of type `{}` does not match since the constraint `{}` is not satisifed.",
                                     fullname.to_string(),
-                                    scm.substitute(&self.substitution).to_string(),
+                                    scm.substitute(&self.resolver.substitution).to_string(),
                                     fail_predicate.to_string_normalize()
                                 );
                                 Err(msg)
@@ -752,7 +799,7 @@ impl TypeCheckContext {
         assert!(red_res.is_ok());
         let required_preds = std::mem::replace(&mut self.predicates, Default::default());
 
-        let s = Substitution::matching(&self.type_env, &deduced_ty, &specified_ty);
+        let s = Substitution::matching(&self.type_env.kinds(), &deduced_ty, &specified_ty);
         if s.is_none() {
             error_exit_with_src(
                 &format!(
@@ -767,7 +814,10 @@ impl TypeCheckContext {
         for p in required_preds {
             let mut p = p.clone();
             s.substitute_predicate(&mut p);
-            if !self.trait_env.entail(&given_preds, &p, &self.type_env) {
+            if !self
+                .trait_env
+                .entail(&given_preds, &p, &self.type_env.kinds())
+            {
                 error_exit_with_src(
                     &format!(
                         "Constraint `{}` is required for this expression but is not assumed in its type.",

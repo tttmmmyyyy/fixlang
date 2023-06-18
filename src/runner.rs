@@ -93,7 +93,7 @@ fn build_module<'c>(
                 sym.expr = SymbolExpr::Method(methods);
             }
         }
-        sym.typecheck_log = Some(tc);
+        sym.typeresolver = tc.resolver.clone();
     }
 
     // Calculate free variables of expressions.
@@ -122,7 +122,7 @@ fn build_module<'c>(
     }
 
     // Create GenerationContext.
-    let mut gc = GenerationContext::new(&context, &module, target, config);
+    let mut gc = GenerationContext::new(&context, &module, target, config, fix_mod.type_env());
 
     // Build runtime functions.
     build_runtime(&mut gc);

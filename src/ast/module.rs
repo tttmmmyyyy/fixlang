@@ -32,8 +32,12 @@ impl TypeEnv {
         }
     }
 
-    pub fn kind(&self, tycon: &TyCon) -> Rc<Kind> {
-        self.tycons.get(tycon).unwrap().kind.clone()
+    pub fn kinds(&self) -> HashMap<TyCon, Rc<Kind>> {
+        let mut res = HashMap::default();
+        for (tc, ti) in self.tycons.as_ref().iter() {
+            res.insert(tc.clone(), ti.kind.clone());
+        }
+        res
     }
 }
 
@@ -42,7 +46,7 @@ pub struct InstantiatedSymbol {
     pub template_name: FullName,
     pub ty: Rc<TypeNode>,
     pub expr: Option<Rc<ExprNode>>,
-    pub typechecker: Option<TypeCheckContext>, // type checker available for resolving types in expr.
+    pub typeresolver: TypeResolver, // type resolver for types in expr.
 }
 
 pub struct GlobalValue {
@@ -52,7 +56,7 @@ pub struct GlobalValue {
     pub ty: Rc<Scheme>,
     pub expr: SymbolExpr,
     // Result of typechecking (mainly, substitution) of this symbol.
-    pub typecheck_log: Option<TypeCheckContext>,
+    pub typeresolver: TypeResolver,
     // TODO: add ty_src: Span
     // TODO: add expr_src: Span
 }
@@ -63,15 +67,19 @@ impl GlobalValue {
         self.expr.resolve_namespace(ctx);
     }
 
-    pub fn set_kinds(&mut self, type_env: &TypeEnv, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) {
+    pub fn set_kinds(
+        &mut self,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
+    ) {
         self.ty = self.ty.set_kinds(trait_kind_map);
-        self.ty.check_kinds(type_env, trait_kind_map);
+        self.ty.check_kinds(kind_map, trait_kind_map);
         match &mut self.expr {
             SymbolExpr::Simple(_) => {}
             SymbolExpr::Method(ms) => {
                 for m in ms {
                     m.ty = m.ty.set_kinds(trait_kind_map);
-                    m.ty.check_kinds(type_env, trait_kind_map);
+                    m.ty.check_kinds(kind_map, trait_kind_map);
                 }
             }
         }
@@ -290,7 +298,7 @@ impl FixModule {
             GlobalValue {
                 ty: scm,
                 expr: SymbolExpr::Simple(expr),
-                typecheck_log: None,
+                typeresolver: Default::default(),
             },
         );
     }
@@ -376,8 +384,8 @@ impl FixModule {
             .instantiated_global_symbols
             .iter()
             .map(|(name, sym)| {
-                gc.typechecker = sym.typechecker.clone();
-                let obj_ty = sym.typechecker.as_ref().unwrap().substitute_type(&sym.ty);
+                gc.typeresolver = sym.typeresolver.clone();
+                let obj_ty = sym.typeresolver.substitute_type(&sym.ty);
                 if obj_ty.is_funptr() {
                     let lam = sym.expr.as_ref().unwrap().clone();
                     let lam = lam.set_inferred_type(obj_ty.clone());
@@ -425,7 +433,7 @@ impl FixModule {
 
         // Implement functions.
         for (global_var, init_flag, acc_fn, sym, obj_ty) in global_objs {
-            gc.typechecker = sym.typechecker;
+            gc.typeresolver = sym.typeresolver;
             if obj_ty.is_funptr() {
                 // Implement lambda function.
                 let lam_fn = acc_fn;
@@ -505,19 +513,19 @@ impl FixModule {
     }
 
     // Instantiate symbol.
-    fn instantiate_symbol(&mut self, mut tc: TypeCheckContext, sym: &mut InstantiatedSymbol) {
+    fn instantiate_symbol(&mut self, mut tr: TypeResolver, sym: &mut InstantiatedSymbol) {
         assert!(sym.expr.is_none());
         let global_sym = self.global_values.get(&sym.template_name).unwrap();
         let template_expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
-                tc.unify(&e.inferred_ty.as_ref().unwrap(), &sym.ty);
+                tr.unify(&e.inferred_ty.as_ref().unwrap(), &sym.ty);
                 e.clone()
             }
             SymbolExpr::Method(impls) => {
                 // Find method implementation that unifies to "sym.ty".
                 let mut e: Option<Rc<ExprNode>> = None;
                 for method in impls {
-                    if tc.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
+                    if tr.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
                         e = Some(method.expr.clone());
                         break;
                     }
@@ -525,8 +533,8 @@ impl FixModule {
                 e.unwrap()
             }
         };
-        sym.expr = Some(self.instantiate_expr(&tc, &template_expr));
-        sym.typechecker = Some(tc);
+        sym.expr = Some(self.instantiate_expr(&tr, &template_expr));
+        sym.typeresolver = tr;
     }
 
     // Instantiate all symbols.
@@ -534,7 +542,7 @@ impl FixModule {
         while !self.deferred_instantiation.is_empty() {
             let (name, sym) = self.deferred_instantiation.iter().next().unwrap();
             let gs = &self.global_values[&sym.template_name];
-            let tc = gs.typecheck_log.as_ref().unwrap().clone();
+            let tc = gs.typeresolver.clone();
             let name = name.clone();
             let mut sym = sym.clone();
             self.instantiate_symbol(tc, &mut sym);
@@ -556,13 +564,13 @@ impl FixModule {
     }
 
     // Instantiate expression.
-    fn instantiate_expr(&mut self, tc: &TypeCheckContext, expr: &Rc<ExprNode>) -> Rc<ExprNode> {
+    fn instantiate_expr(&mut self, tr: &TypeResolver, expr: &Rc<ExprNode>) -> Rc<ExprNode> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
                 if v.name.is_local() {
                     expr.clone()
                 } else {
-                    let ty = tc.substitute_type(&expr.inferred_ty.as_ref().unwrap());
+                    let ty = tr.substitute_type(&expr.inferred_ty.as_ref().unwrap());
                     let instance = self.require_instantiated_symbol(&v.name, &ty);
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
@@ -570,35 +578,35 @@ impl FixModule {
             }
             Expr::Lit(_) => expr.clone(),
             Expr::App(fun, args) => {
-                let fun = self.instantiate_expr(tc, fun);
+                let fun = self.instantiate_expr(tr, fun);
                 let args = args
                     .iter()
-                    .map(|arg| self.instantiate_expr(tc, arg))
+                    .map(|arg| self.instantiate_expr(tr, arg))
                     .collect::<Vec<_>>();
                 expr.set_app_func(fun).set_app_args(args)
             }
-            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(tc, body)),
+            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(tr, body)),
             Expr::Let(_, bound, val) => {
-                let bound = self.instantiate_expr(tc, bound);
-                let val = self.instantiate_expr(tc, val);
+                let bound = self.instantiate_expr(tr, bound);
+                let val = self.instantiate_expr(tr, val);
                 expr.set_let_bound(bound).set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.instantiate_expr(tc, cond);
-                let then_expr = self.instantiate_expr(tc, then_expr);
-                let else_expr = self.instantiate_expr(tc, else_expr);
+                let cond = self.instantiate_expr(tr, cond);
+                let then_expr = self.instantiate_expr(tr, then_expr);
+                let else_expr = self.instantiate_expr(tr, else_expr);
                 expr.set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
             Expr::TyAnno(e, _) => {
-                let e = self.instantiate_expr(tc, e);
+                let e = self.instantiate_expr(tr, e);
                 expr.set_tyanno_expr(e)
             }
             Expr::MakeStruct(_, fields) => {
                 let mut expr = expr.clone();
                 for (field_name, field_expr) in fields {
-                    let field_expr = self.instantiate_expr(tc, field_expr);
+                    let field_expr = self.instantiate_expr(tr, field_expr);
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }
                 expr
@@ -606,7 +614,7 @@ impl FixModule {
             Expr::ArrayLit(elems) => {
                 let mut expr = expr.clone();
                 for (i, e) in elems.iter().enumerate() {
-                    let e = self.instantiate_expr(tc, e);
+                    let e = self.instantiate_expr(tr, e);
                     expr = expr.set_array_lit_elem(e, i);
                 }
                 expr
@@ -614,14 +622,14 @@ impl FixModule {
             Expr::CallC(_, _, _, _, args) => {
                 let mut expr = expr.clone();
                 for (i, e) in args.iter().enumerate() {
-                    let e = self.instantiate_expr(tc, e);
+                    let e = self.instantiate_expr(tr, e);
                     expr = expr.set_call_c_arg(e, i);
                 }
                 expr
             }
         };
         // If the type of an expression contains undetermied type variable after instantiation, raise an error.
-        if !tc
+        if !tr
             .substitute_type(ret.inferred_ty.as_ref().unwrap())
             .free_vars()
             .is_empty()
@@ -649,8 +657,7 @@ impl FixModule {
                     template_name: name.clone(),
                     ty: ty.clone(),
                     expr: None,
-                    typechecker: None, // This field will be set after instantiation.
-                                       // In instantiation, typechecker carried by GlobalSymbol is used and set to this field in the end.
+                    typeresolver: TypeResolver::default(), // This field will be set in the end of instantiation.
                 },
             );
         }
@@ -692,7 +699,7 @@ impl FixModule {
                     GlobalValue {
                         ty: method_ty,
                         expr: SymbolExpr::Method(method_impls),
-                        typecheck_log: None,
+                        typeresolver: TypeResolver::default(),
                     },
                 );
             }
@@ -701,10 +708,10 @@ impl FixModule {
 
     pub fn set_kinds(&mut self) {
         self.trait_env.set_kinds();
-        let type_env = &self.type_env();
+        let kind_map = &self.type_env().kinds();
         let trait_kind_map = self.trait_env.trait_kind_map();
         for (_name, sym) in &mut self.global_values {
-            sym.set_kinds(type_env, &trait_kind_map);
+            sym.set_kinds(kind_map, &trait_kind_map);
         }
     }
 
@@ -768,7 +775,8 @@ impl FixModule {
     }
 
     pub fn validate_trait_env(&mut self) {
-        self.trait_env.validate(&self.type_env);
+        let kind_map = self.type_env.kinds();
+        self.trait_env.validate(&kind_map);
     }
 
     pub fn add_methods(self: &mut FixModule) {
