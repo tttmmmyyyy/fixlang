@@ -369,7 +369,7 @@ pub fn make_std_mod() -> FixModule {
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set_length"),
-        unsafe_set_length_array(),
+        unsafe_set_size_array(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_get"),

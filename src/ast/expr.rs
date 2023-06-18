@@ -1,16 +1,18 @@
+use serde::{Deserialize, Serialize};
+
 use super::*;
 use core::panic;
 use std::collections::HashSet;
 
 pub type Name = String;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum AppSourceCodeOrderType {
     FunctionIsFormer,
     ArgumentIsFormer,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ExprNode {
     pub expr: Rc<Expr>,
     pub free_vars: Option<HashSet<FullName>>,
@@ -413,7 +415,7 @@ impl ExprNode {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Expr {
     Var(Rc<Var>),
     Lit(Rc<Literal>),
@@ -437,7 +439,7 @@ pub enum Expr {
     ),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PatternNode {
     pub pattern: Pattern,
     pub info: PatternInfo,
@@ -560,12 +562,12 @@ impl PatternNode {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PatternInfo {
     pub source: Option<Span>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Pattern {
     Var(Rc<Var>, Option<Rc<TypeNode>>),
     Struct(Rc<TyCon>, Vec<(Name, Rc<PatternNode>)>),
@@ -821,23 +823,142 @@ impl Expr {
     }
 }
 
-pub type InlineLLVM = dyn Send
-    + Sync
-    + for<'c, 'm, 'b> Fn(
-        &mut GenerationContext<'c, 'm>,
-        &Rc<TypeNode>,      // type of this literal
-        Option<Object<'c>>, // rvo
-    ) -> Object<'c>;
+#[derive(Clone, Serialize, Deserialize)]
+pub enum InlineLLVM {
+    IntLit(InlineLLVMIntLit),
+    FloatLit(InlineLLVMFloatLit),
+    NullPtrLit(InlineLLVMNullPtrLit),
+    BoolLit(InlineLLVMBoolLit),
+    StringLit(InlineLLVMStringLit),
+    FixBody(InlineLLVMFixBody),
+    NumToStrBody(InlineLLVMNumToStrBody),
+    CastIntegralBody(InlineLLVMCastIntegralBody),
+    CastFloatBody(InlineLLVMCastFloatBody),
+    CastIntToFloatBody(InlineLLVMCastIntToFloatBody),
+    CastFloatToIntBody(InlineLLVMCastFloatToIntBody),
+    ShiftBody(InlineLLVMShiftBody),
+    BitwiseOperationBody(InlineLLVMBitwiseOperationBody),
+    FillArrayBody(InlineLLVMFillArrayBody),
+    MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody),
+    UnsafeSetArrayBody(InlineLLVMUnsafeSetArrayBody),
+    UnsafeGetArrayBody(InlineLLVMUnsafeGetArrayBody),
+    UnsafeSetSizeArrayBody(InlineLLVMUnsafeSetSizeArrayBody),
+    ArrayGetBody(InlineLLVMArrayGetBody),
+    ArraySetBody(InlineLLVMArraySetBody),
+    ArrayModBody(InlineLLVMArrayModBody),
+    ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody),
+    ArrayGetPtrBody(InlineLLVMArrayGetPtrBody),
+    ArrayGetSizeBody(InlineLLVMArrayGetSizeBody),
+    ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody),
+    StructGetBody(InlineLLVMStructGetBody),
+    StructModBody(InlineLLVMStructModBody),
+    StructSetBody(InlineLLVMStructSetBody),
+    MakeUnionBody(InlineLLVMMakeUnionBody),
+    UnionAsBody(InlineLLVMUnionAsBody),
+    UnionIsBody(InlineLLVMUnionIsBody),
+    UnionModBody(InlineLLVMUnionModBody),
+    LoopFunctionBody(InlineLLVMLoopFunctionBody),
+    DebugPrintFunctionBody(InlineLLVMDebugPrintFunctionBody),
+    AbortFunctionBody(InlineLLVMAbortFunctionBody),
+    IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody),
+    IntNegBody(InlineLLVMIntNegBody),
+    FloatNegBody(InlineLLVMFloatNegBody),
+    BoolNegBody(InlineLLVMBoolNegBody),
+    IntEqBody(InlineLLVMIntEqBody),
+    PtrEqBody(InlineLLVMPtrEqBody),
+    FloatEqBody(InlineLLVMFloatEqBody),
+    IntLessThanBody(InlineLLVMIntLessThanBody),
+    FloatLessThanBody(InlineLLVMFloatLessThanBody),
+    IntLessThanOrEqBody(InlineLLVMIntLessThanOrEqBody),
+    FloatLessThanOrEqBody(InlineLLVMFloatLessThanOrEqBody),
+    IntAddBody(InlineLLVMIntAddBody),
+    FloatAddBody(InlineLLVMFloatAddBody),
+    IntSubBody(InlineLLVMIntSubBody),
+    FloatSubBody(InlineLLVMFloatSubBody),
+    IntMulBody(InlineLLVMIntMulBody),
+    FloatMulBody(InlineLLVMFloatMulBody),
+    IntDivBody(InlineLLVMIntDivBody),
+    FloatDivBody(InlineLLVMFloatDivBody),
+    IntRemBody(InlineLLVMIntRemBody),
+}
+// XX(InlineLLVMXX)
 
-#[derive(Clone)]
+impl InlineLLVM {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        match self {
+            InlineLLVM::IntLit(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatLit(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::NullPtrLit(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::BoolLit(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::StringLit(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FixBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::NumToStrBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::CastIntegralBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::CastFloatBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::CastIntToFloatBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::CastFloatToIntBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::ShiftBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::BitwiseOperationBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FillArrayBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::MakeEmptyArrayBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::UnsafeSetArrayBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::UnsafeGetArrayBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::UnsafeSetSizeArrayBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::ArrayGetBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::ArraySetBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::ArrayModBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::ArrayForceUniqueBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::ArrayGetPtrBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::ArrayGetSizeBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::ArrayGetCapacityBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::StructGetBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::StructModBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::StructSetBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::MakeUnionBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::UnionAsBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::UnionIsBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::UnionModBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::LoopFunctionBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::DebugPrintFunctionBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::AbortFunctionBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IsUniqueFunctionBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntNegBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatNegBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::BoolNegBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntEqBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::PtrEqBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatEqBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntLessThanBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatLessThanBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntLessThanOrEqBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatLessThanOrEqBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntAddBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatAddBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntSubBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatSubBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntMulBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatMulBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntDivBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::FloatDivBody(x) => x.generate(gc, ty, rvo),
+            InlineLLVM::IntRemBody(x) => x.generate(gc, ty, rvo),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Literal {
-    pub generator: Rc<InlineLLVM>,
+    pub generator: InlineLLVM,
     pub free_vars: Vec<FullName>, // e.g. "+" literal has two free variables.
     name: String,
     pub ty: Rc<TypeNode>,
 }
 
-#[derive(Eq, Hash, PartialEq, Clone)]
+#[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize)]
 pub struct NameSpace {
     pub names: Vec<String>, // Empty implies it is local.
 }
@@ -895,12 +1016,12 @@ impl NameSpace {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Var {
     pub name: FullName,
 }
 
-#[derive(Eq, Hash, PartialEq, Clone)]
+#[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FullName {
     pub namespace: NameSpace,
     pub name: String,
@@ -978,7 +1099,7 @@ pub fn var_local(var_name: &str) -> Rc<Var> {
 }
 
 pub fn expr_lit(
-    generator: Rc<InlineLLVM>,
+    generator: InlineLLVM,
     free_vars: Vec<FullName>,
     name: String,
     ty: Rc<TypeNode>,

@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 // Implement built-in functions, types, etc.
 use super::*;
 
@@ -313,15 +315,44 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
     number_str.parse::<u32>().ok()
 }
 
-pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+pub fn tuple_defn(size: u32) -> TypeDefn {
+    let tyvars = (0..size)
+        .map(|i| "t".to_string() + &i.to_string())
+        .collect::<Vec<_>>();
+    TypeDefn {
+        name: make_tuple_name(size),
+        tyvars: tyvars.clone(),
+        value: TypeDeclValue::Struct(Struct {
+            fields: (0..size)
+                .map(|i| Field {
+                    name: i.to_string(),
+                    ty: type_tyvar_star(&tyvars[i as usize]),
+                })
+                .collect(),
+            is_unbox: TUPLE_UNBOX,
+        }),
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntLit {
+    val: u64,
+}
+
+impl InlineLLVMIntLit {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         let obj = if rvo.is_none() {
             allocate_obj(
                 ty.clone(),
                 &vec![],
                 None,
                 gc,
-                Some(&format!("int_lit_{}", val)),
+                Some(&format!("int_lit_{}", self.val)),
             )
         } else {
             rvo.unwrap()
@@ -331,22 +362,41 @@ pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<Expr
             .get_field_type_at_index(0)
             .unwrap()
             .into_int_type();
-        let value = int_ty.const_int(val as u64, false);
+        let value = int_ty.const_int(self.val as u64, false);
         obj.store_field_nocap(gc, 0, value);
         obj
-    });
-    expr_lit(generator, vec![], val.to_string(), ty, source)
+    }
 }
 
-pub fn expr_float_lit(val: f64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
+    expr_lit(
+        InlineLLVM::IntLit(InlineLLVMIntLit { val }),
+        vec![],
+        val.to_string(),
+        ty,
+        source,
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatLit {
+    val: f64,
+}
+
+impl InlineLLVMFloatLit {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         let obj = if rvo.is_none() {
             allocate_obj(
                 ty.clone(),
                 &vec![],
                 None,
                 gc,
-                Some(&format!("float_lit_{}", val)),
+                Some(&format!("float_lit_{}", self.val)),
             )
         } else {
             rvo.unwrap()
@@ -356,15 +406,32 @@ pub fn expr_float_lit(val: f64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<Ex
             .get_field_type_at_index(0)
             .unwrap()
             .into_float_type();
-        let value = float_ty.const_float(val);
+        let value = float_ty.const_float(self.val);
         obj.store_field_nocap(gc, 0, value);
         obj
-    });
-    expr_lit(generator, vec![], val.to_string(), ty, source)
+    }
 }
 
-pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+pub fn expr_float_lit(val: f64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
+    expr_lit(
+        InlineLLVM::FloatLit(InlineLLVMFloatLit { val }),
+        vec![],
+        val.to_string(),
+        ty,
+        source,
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMNullPtrLit {}
+
+impl InlineLLVMNullPtrLit {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         let obj = if rvo.is_none() {
             allocate_obj(ty.clone(), &vec![], None, gc, Some("nullptr"))
         } else {
@@ -374,9 +441,12 @@ pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
         let value = ptr_ty.const_null();
         obj.store_field_nocap(gc, 0, value);
         obj
-    });
+    }
+}
+
+pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
     expr_lit(
-        generator,
+        InlineLLVM::NullPtrLit(InlineLLVMNullPtrLit {}),
         vec![],
         "nullptr_literal".to_string(),
         make_ptr_ty(),
@@ -384,24 +454,43 @@ pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
     )
 }
 
-pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Rc<ExprNode> {
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMBoolLit {
+    val: bool,
+}
+
+impl InlineLLVMBoolLit {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         let obj = if rvo.is_none() {
             allocate_obj(
                 ty.clone(),
                 &vec![],
                 None,
                 gc,
-                Some(&format!("bool_lit_{}", val)),
+                Some(&format!("bool_lit_{}", self.val)),
             )
         } else {
             rvo.unwrap()
         };
-        let value = gc.context.i8_type().const_int(val as u64, false);
+        let value = gc.context.i8_type().const_int(self.val as u64, false);
         obj.store_field_nocap(gc, 0, value);
         obj
-    });
-    expr_lit(generator, vec![], val.to_string(), make_bool_ty(), source)
+    }
+}
+
+pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Rc<ExprNode> {
+    expr_lit(
+        InlineLLVM::BoolLit(InlineLLVMBoolLit { val }),
+        vec![],
+        val.to_string(),
+        make_bool_ty(),
+        source,
+    )
 }
 
 pub fn make_string_from_ptr<'c, 'm>(
@@ -452,21 +541,34 @@ pub fn make_string_from_ptr<'c, 'm>(
     string
 }
 
-pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<ExprNode> {
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMStringLit {
+    string: String,
+}
+
+impl InlineLLVMStringLit {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         let string_ptr = gc
             .builder()
-            .build_global_string_ptr(&string, "string_literal")
+            .build_global_string_ptr(&self.string, "string_literal")
             .as_basic_value_enum()
             .into_pointer_value();
         let len_with_null_terminator = gc
             .context
             .i64_type()
-            .const_int(string.as_bytes().len() as u64 + 1, false);
+            .const_int(self.string.as_bytes().len() as u64 + 1, false);
         make_string_from_ptr(gc, string_ptr, len_with_null_terminator, rvo)
-    });
+    }
+}
+
+pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<ExprNode> {
     expr_lit(
-        generator,
+        InlineLLVM::StringLit(InlineLLVMStringLit { string }),
         vec![],
         "string_literal".to_string(),
         make_string_ty(),
@@ -474,15 +576,22 @@ pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<
     )
 }
 
-fn fix_lit(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
-    let f_str = FullName::local(f);
-    let x_str = FullName::local(x);
-    let name = format!("fix({}, {})", f_str.to_string(), x_str.to_string());
-    let free_vars = vec![FullName::local(CAP_NAME), f_str.clone(), x_str.clone()];
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFixBody {
+    x_str: FullName,
+    f_str: FullName,
+}
+
+impl InlineLLVMFixBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get arguments
-        let x = gc.get_var(&x_str).ptr.get(gc);
-        let f = gc.get_var(&f_str).ptr.get(gc);
+        let x = gc.get_var(&self.x_str).ptr.get(gc);
+        let f = gc.get_var(&self.f_str).ptr.get(gc);
 
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
@@ -503,15 +612,28 @@ fn fix_lit(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
         let f_fixf = gc.apply_lambda(f, vec![fixf], None);
         let f_fixf_x = gc.apply_lambda(f_fixf, vec![x], rvo);
         f_fixf_x
-    });
-    expr_lit(generator, free_vars, name, type_tyvar_star(b), None)
+    }
+}
+
+fn fix_body(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
+    let f_str = FullName::local(f);
+    let x_str = FullName::local(x);
+    let name = format!("fix({}, {})", f_str.to_string(), x_str.to_string());
+    let free_vars = vec![FullName::local(CAP_NAME), f_str.clone(), x_str.clone()];
+    expr_lit(
+        InlineLLVM::FixBody(InlineLLVMFixBody { x_str, f_str }),
+        free_vars,
+        name,
+        type_tyvar_star(b),
+        None,
+    )
 }
 
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
 pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("f")],
-        expr_abs(vec![var_local("x")], fix_lit("b", "f", "x"), None),
+        expr_abs(vec![var_local("x")], fix_body("b", "f", "x"), None),
         None,
     );
     let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
@@ -526,26 +648,26 @@ pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// number_to_string function
-pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const VAL_NAME: &str = "number";
-    let (buf_size, specifier) = match ty.toplevel_tycon().unwrap().name.name.as_str() {
-        U8_NAME => (4, C_U8_FORMATTER),
-        I32_NAME => (12, C_I32_FORMATTER),
-        U32_NAME => (11, C_U32_FORMATTER),
-        I64_NAME => (21, C_I64_FORMATTER),
-        U64_NAME => (20, C_U64_FORMATTER),
-        F32_NAME => (50, C_F32_FORMATTER),
-        F64_NAME => (500, C_F64_FORMATTER),
-        _ => unreachable!(),
-    };
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMNumToStrBody {
+    val_name: String,
+    buf_size: i32,
+    specifier: String,
+}
+
+impl InlineLLVMNumToStrBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get value
-        let val = gc.get_var_field(&FullName::local(VAL_NAME), 0);
-        gc.release(gc.get_var(&FullName::local(VAL_NAME)).ptr.get(gc));
+        let val = gc.get_var_field(&FullName::local(&self.val_name), 0);
+        gc.release(gc.get_var(&FullName::local(&self.val_name)).ptr.get(gc));
 
         // Allocate buffer for sprintf.
-        let buf_size = gc.context.i32_type().const_int(buf_size as u64, false);
+        let buf_size = gc.context.i32_type().const_int(self.buf_size as u64, false);
         let buf = gc.builder().build_array_alloca(
             gc.context.i8_type(),
             buf_size,
@@ -555,7 +677,7 @@ pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>)
         // Call sprintf.
         let format = gc
             .builder()
-            .build_global_string_ptr(specifier, "format@number_to_string")
+            .build_global_string_ptr(&self.specifier, "format@number_to_string")
             .as_basic_value_enum()
             .into_pointer_value();
         let len = gc
@@ -580,7 +702,22 @@ pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>)
         );
 
         make_string_from_ptr(gc, buf, len_with_null_terminator, rvo)
-    });
+    }
+}
+
+// number_to_string function
+pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const VAL_NAME: &str = "number";
+    let (buf_size, specifier) = match ty.toplevel_tycon().unwrap().name.name.as_str() {
+        U8_NAME => (4, C_U8_FORMATTER),
+        I32_NAME => (12, C_I32_FORMATTER),
+        U32_NAME => (11, C_U32_FORMATTER),
+        I64_NAME => (21, C_I64_FORMATTER),
+        U64_NAME => (20, C_U64_FORMATTER),
+        F32_NAME => (50, C_F32_FORMATTER),
+        F64_NAME => (500, C_F64_FORMATTER),
+        _ => unreachable!(),
+    };
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -589,7 +726,11 @@ pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>)
     let expr = expr_abs(
         vec![var_local(VAL_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::NumToStrBody(InlineLLVMNumToStrBody {
+                val_name: VAL_NAME.to_string(),
+                buf_size,
+                specifier: specifier.to_string(),
+            }),
             vec![FullName::local(VAL_NAME)],
             format!("{}_to_string({})", ty.to_string(), VAL_NAME),
             make_string_ty(),
@@ -600,20 +741,24 @@ pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>)
     (expr, scm)
 }
 
-// Cast function of integrals
-pub fn cast_between_integral_function(
-    from: Rc<TypeNode>,
-    to: Rc<TypeNode>,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const FROM_NAME: &str = "from";
-    let is_signed = from.toplevel_tycon().unwrap().is_singned_intger()
-        && to.toplevel_tycon().unwrap().is_singned_intger();
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, to_ty, rvo| {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMCastIntegralBody {
+    from_name: String,
+    is_signed: bool,
+}
+
+impl InlineLLVMCastIntegralBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        to_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get value
         let from_val = gc
-            .get_var_field(&FullName::local(FROM_NAME), 0)
+            .get_var_field(&FullName::local(&self.from_name), 0)
             .into_int_value();
-        gc.release(gc.get_var(&FullName::local(FROM_NAME)).ptr.get(gc));
+        gc.release(gc.get_var(&FullName::local(&self.from_name)).ptr.get(gc));
 
         // Get target type.
         let to_int = to_ty
@@ -626,7 +771,7 @@ pub fn cast_between_integral_function(
         let to_val = gc.builder().build_int_cast_sign_flag(
             from_val,
             to_int,
-            is_signed,
+            self.is_signed,
             "int_cast_sign_flag@cast_between_integral_function",
         );
 
@@ -644,7 +789,17 @@ pub fn cast_between_integral_function(
         };
         obj.store_field_nocap(gc, 0, to_val);
         obj
-    });
+    }
+}
+
+// Cast function of integrals
+pub fn cast_between_integral_function(
+    from: Rc<TypeNode>,
+    to: Rc<TypeNode>,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const FROM_NAME: &str = "from";
+    let is_signed = from.toplevel_tycon().unwrap().is_singned_intger()
+        && to.toplevel_tycon().unwrap().is_singned_intger();
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -653,7 +808,10 @@ pub fn cast_between_integral_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::CastIntegralBody(InlineLLVMCastIntegralBody {
+                from_name: FROM_NAME.to_string(),
+                is_signed,
+            }),
             vec![FullName::local(FROM_NAME)],
             format!(
                 "cast_{}_to_{}({})",
@@ -669,18 +827,23 @@ pub fn cast_between_integral_function(
     (expr, scm)
 }
 
-// Cast function of integrals
-pub fn cast_between_float_function(
-    from: Rc<TypeNode>,
-    to: Rc<TypeNode>,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const FROM_NAME: &str = "from";
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, to_ty, rvo| {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMCastFloatBody {
+    from_name: String,
+}
+
+impl InlineLLVMCastFloatBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        to_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get value
         let from_val = gc
-            .get_var_field(&FullName::local(FROM_NAME), 0)
+            .get_var_field(&FullName::local(&self.from_name), 0)
             .into_float_value();
-        gc.release(gc.get_var(&FullName::local(FROM_NAME)).ptr.get(gc));
+        gc.release(gc.get_var(&FullName::local(&self.from_name)).ptr.get(gc));
 
         // Get target type.
         let to_float = to_ty
@@ -710,7 +873,15 @@ pub fn cast_between_float_function(
         };
         obj.store_field_nocap(gc, 0, to_val);
         obj
-    });
+    }
+}
+
+// Cast function of integrals
+pub fn cast_between_float_function(
+    from: Rc<TypeNode>,
+    to: Rc<TypeNode>,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const FROM_NAME: &str = "from";
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -719,7 +890,9 @@ pub fn cast_between_float_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::CastFloatBody(InlineLLVMCastFloatBody {
+                from_name: FROM_NAME.to_string(),
+            }),
             vec![FullName::local(FROM_NAME)],
             format!(
                 "cast_{}_to_{}({})",
@@ -735,20 +908,24 @@ pub fn cast_between_float_function(
     (expr, scm)
 }
 
-// Cast function from int to float.
-pub fn cast_int_to_float_function(
-    from: Rc<TypeNode>,
-    to: Rc<TypeNode>,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const FROM_NAME: &str = "from";
-    let is_signed = from.toplevel_tycon().unwrap().is_singned_intger();
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMCastIntToFloatBody {
+    from_name: String,
+    is_signed: bool,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, to_ty, rvo| {
+impl InlineLLVMCastIntToFloatBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        to_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get value
         let from_val = gc
-            .get_var_field(&FullName::local(FROM_NAME), 0)
+            .get_var_field(&FullName::local(&self.from_name), 0)
             .into_int_value();
-        gc.release(gc.get_var(&FullName::local(FROM_NAME)).ptr.get(gc));
+        gc.release(gc.get_var(&FullName::local(&self.from_name)).ptr.get(gc));
 
         // Get target type.
         let to_float = to_ty
@@ -758,7 +935,7 @@ pub fn cast_int_to_float_function(
             .into_float_type();
 
         // Perform cast.
-        let to_val = if is_signed {
+        let to_val = if self.is_signed {
             gc.builder().build_signed_int_to_float(
                 from_val,
                 to_float,
@@ -786,7 +963,17 @@ pub fn cast_int_to_float_function(
         };
         obj.store_field_nocap(gc, 0, to_val);
         obj
-    });
+    }
+}
+
+// Cast function from int to float.
+pub fn cast_int_to_float_function(
+    from: Rc<TypeNode>,
+    to: Rc<TypeNode>,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const FROM_NAME: &str = "from";
+    let is_signed = from.toplevel_tycon().unwrap().is_singned_intger();
+
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -795,7 +982,10 @@ pub fn cast_int_to_float_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::CastIntToFloatBody(InlineLLVMCastIntToFloatBody {
+                from_name: FROM_NAME.to_string(),
+                is_signed,
+            }),
             vec![FullName::local(FROM_NAME)],
             format!(
                 "cast_{}_to_{}({})",
@@ -811,19 +1001,23 @@ pub fn cast_int_to_float_function(
     (expr, scm)
 }
 
-// Cast function from int to float.
-pub fn cast_float_to_int_function(
-    from: Rc<TypeNode>,
-    to: Rc<TypeNode>,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const FROM_NAME: &str = "from";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMCastFloatToIntBody {
+    from_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, to_ty, rvo| {
+impl InlineLLVMCastFloatToIntBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        to_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get value
         let from_val = gc
-            .get_var_field(&FullName::local(FROM_NAME), 0)
+            .get_var_field(&FullName::local(&self.from_name), 0)
             .into_float_value();
-        gc.release(gc.get_var(&FullName::local(FROM_NAME)).ptr.get(gc));
+        gc.release(gc.get_var(&FullName::local(&self.from_name)).ptr.get(gc));
 
         // Get target type.
         let to_int = to_ty
@@ -853,7 +1047,16 @@ pub fn cast_float_to_int_function(
         };
         obj.store_field_nocap(gc, 0, to_val);
         obj
-    });
+    }
+}
+
+// Cast function from int to float.
+pub fn cast_float_to_int_function(
+    from: Rc<TypeNode>,
+    to: Rc<TypeNode>,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const FROM_NAME: &str = "from";
+
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -862,7 +1065,9 @@ pub fn cast_float_to_int_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::CastFloatToIntBody(InlineLLVMCastFloatToIntBody {
+                from_name: FROM_NAME.to_string(),
+            }),
             vec![FullName::local(FROM_NAME)],
             format!(
                 "cast_{}_to_{}({})",
@@ -878,24 +1083,32 @@ pub fn cast_float_to_int_function(
     (expr, scm)
 }
 
-// Shift functions
-pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const VALUE_NAME: &str = "val";
-    const N_NAME: &str = "n";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMShiftBody {
+    value_name: String,
+    n_name: String,
+    is_left: bool,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+impl InlineLLVMShiftBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get value
         let val = gc
-            .get_var_field(&FullName::local(VALUE_NAME), 0)
+            .get_var_field(&FullName::local(&self.value_name), 0)
             .into_int_value();
         let n = gc
-            .get_var_field(&FullName::local(N_NAME), 0)
+            .get_var_field(&FullName::local(&self.n_name), 0)
             .into_int_value();
 
         let is_signed = ty.toplevel_tycon().unwrap().is_singned_intger();
 
         // Perform cast.
-        let to_val = if is_left {
+        let to_val = if self.is_left {
             gc.builder()
                 .build_left_shift(val, n, "left_shift@shift_function")
         } else {
@@ -911,7 +1124,14 @@ pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Sche
         };
         obj.store_field_nocap(gc, 0, to_val);
         obj
-    });
+    }
+}
+
+// Shift functions
+pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const VALUE_NAME: &str = "val";
+    const N_NAME: &str = "n";
+
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -922,7 +1142,11 @@ pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Sche
         expr_abs(
             vec![var_local(VALUE_NAME)],
             expr_lit(
-                generator,
+                InlineLLVM::ShiftBody(InlineLLVMShiftBody {
+                    value_name: VALUE_NAME.to_string(),
+                    n_name: N_NAME.to_string(),
+                    is_left,
+                }),
                 vec![FullName::local(VALUE_NAME), FullName::local(N_NAME)],
                 format!(
                     "shift_{}({},{})",
@@ -940,7 +1164,7 @@ pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Sche
     (expr, scm)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum BitOperationType {
     Xor,
     Or,
@@ -958,24 +1182,30 @@ impl BitOperationType {
     }
 }
 
-pub fn bitwise_operation_function(
-    ty: Rc<TypeNode>,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMBitwiseOperationBody {
+    lhs_name: String,
+    rhs_name: String,
     op_type: BitOperationType,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const LHS_NAME: &str = "lhs";
-    const RHS_NAME: &str = "rhs";
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+impl InlineLLVMBitwiseOperationBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get value
         let lhs = gc
-            .get_var_field(&FullName::local(LHS_NAME), 0)
+            .get_var_field(&FullName::local(&self.lhs_name), 0)
             .into_int_value();
         let rhs = gc
-            .get_var_field(&FullName::local(RHS_NAME), 0)
+            .get_var_field(&FullName::local(&self.rhs_name), 0)
             .into_int_value();
 
         // Perform cast.
-        let val = match op_type {
+        let val = match self.op_type {
             BitOperationType::Xor => {
                 gc.builder()
                     .build_xor(lhs, rhs, "xor@bitwise_operation_function")
@@ -1004,7 +1234,16 @@ pub fn bitwise_operation_function(
         };
         obj.store_field_nocap(gc, 0, val);
         obj
-    });
+    }
+}
+
+pub fn bitwise_operation_function(
+    ty: Rc<TypeNode>,
+    op_type: BitOperationType,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const LHS_NAME: &str = "lhs";
+    const RHS_NAME: &str = "rhs";
+
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -1015,7 +1254,11 @@ pub fn bitwise_operation_function(
         expr_abs(
             vec![var_local(RHS_NAME)],
             expr_lit(
-                generator,
+                InlineLLVM::BitwiseOperationBody(InlineLLVMBitwiseOperationBody {
+                    lhs_name: LHS_NAME.to_string(),
+                    rhs_name: RHS_NAME.to_string(),
+                    op_type,
+                }),
                 vec![FullName::local(LHS_NAME), FullName::local(RHS_NAME)],
                 format!("bit_{}({},{})", op_type.to_string(), LHS_NAME, RHS_NAME),
                 ty,
@@ -1028,32 +1271,51 @@ pub fn bitwise_operation_function(
     (expr, scm)
 }
 
-// Implementation of Array::fill built-in function.
-fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
-    let size_str = FullName::local(size);
-    let value_str = FullName::local(value);
-    let name = format!("Array::fill({}, {})", size, value);
-    let name_cloned = name.clone();
-    let free_vars = vec![size_str.clone(), value_str.clone()];
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        let size = gc.get_var_field(&size_str, 0).into_int_value();
-        gc.release(gc.get_var(&size_str).ptr.get(gc));
-        let value = gc.get_var(&value_str).ptr.get(gc);
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFillArrayBody {
+    size_name: FullName,
+    value_name: FullName,
+    array_name: String,
+}
+
+impl InlineLLVMFillArrayBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let size = gc.get_var_field(&self.size_name, 0).into_int_value();
+        gc.release(gc.get_var(&self.size_name).ptr.get(gc));
+        let value = gc.get_var(&self.value_name).ptr.get(gc);
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
         let array = allocate_obj(
             ty.clone(),
             &vec![],
             Some(size),
             gc,
-            Some(name_cloned.as_str()),
+            Some(&self.array_name.as_str()),
         );
         array.store_field_nocap(gc, ARRAY_LEN_IDX, size);
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         ObjectFieldType::initialize_array_buf_by_value(gc, size, buf, value);
         array
-    });
+    }
+}
+
+// Implementation of Array::fill built-in function.
+fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
+    let size_name = FullName::local(size);
+    let value_name = FullName::local(value);
+    let name = format!("Array::fill({}, {})", size, value);
+    let name_cloned = name.clone();
+    let free_vars = vec![size_name.clone(), value_name.clone()];
     expr_lit(
-        generator,
+        InlineLLVM::FillArrayBody(InlineLLVMFillArrayBody {
+            size_name,
+            value_name,
+            array_name: name_cloned,
+        }),
         free_vars,
         name,
         type_tyapp(make_array_ty(), type_tyvar_star(a)),
@@ -1087,17 +1349,23 @@ pub fn fill_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Make an empty array.
-pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const CAP_NAME: &str = "cap";
-    const ELEM_TYPE: &str = "a";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMMakeEmptyArrayBody {
+    cap_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, arr_ty, rvo| {
+impl InlineLLVMMakeEmptyArrayBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        arr_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
 
         // Get capacity
         let cap = gc
-            .get_var_field(&FullName::local(CAP_NAME), 0)
+            .get_var_field(&FullName::local(&self.cap_name), 0)
             .into_int_value();
 
         // Allocate
@@ -1106,7 +1374,7 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
             &vec![],
             Some(cap),
             gc,
-            Some(&format!("Array::empty({})", CAP_NAME)),
+            Some(&format!("Array::empty({})", self.cap_name)),
         );
 
         // Set size to zero.
@@ -1114,7 +1382,13 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
         array.store_field_nocap(gc, ARRAY_LEN_IDX, cap);
 
         array
-    });
+    }
+}
+
+// Make an empty array.
+pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const CAP_NAME: &str = "cap";
+    const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar);
@@ -1122,7 +1396,9 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(CAP_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody {
+                cap_name: CAP_NAME.to_string(),
+            }),
             vec![FullName::local(CAP_NAME)],
             format!("make_empty({})", CAP_NAME),
             array_ty.clone(),
@@ -1138,22 +1414,28 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Set an element to an array, with no uniqueness checking and without releasing the old value.
-pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const IDX_NAME: &str = "idx";
-    const ARR_NAME: &str = "array";
-    const VALUE_NAME: &str = "val";
-    const ELEM_TYPE: &str = "a";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMUnsafeSetArrayBody {
+    arr_name: String,
+    idx_name: String,
+    value_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+impl InlineLLVMUnsafeSetArrayBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
 
         // Get argments
-        let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
+        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
         let idx = gc
-            .get_var_field(&FullName::local(IDX_NAME), 0)
+            .get_var_field(&FullName::local(&self.idx_name), 0)
             .into_int_value();
-        let value = gc.get_var(&FullName::local(VALUE_NAME)).ptr.get(gc);
+        let value = gc.get_var(&FullName::local(&self.value_name)).ptr.get(gc);
 
         // Get array cap and buffer.
         let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
@@ -1161,7 +1443,15 @@ pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         // Perform write and return.
         ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, value, false);
         array
-    });
+    }
+}
+
+// Set an element to an array, with no uniqueness checking and without releasing the old value.
+pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const IDX_NAME: &str = "idx";
+    const ARR_NAME: &str = "array";
+    const VALUE_NAME: &str = "val";
+    const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
@@ -1173,7 +1463,11 @@ pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             expr_abs(
                 vec![var_local(ARR_NAME)],
                 expr_lit(
-                    generator,
+                    InlineLLVM::UnsafeSetArrayBody(InlineLLVMUnsafeSetArrayBody {
+                        arr_name: ARR_NAME.to_string(),
+                        idx_name: IDX_NAME.to_string(),
+                        value_name: VALUE_NAME.to_string(),
+                    }),
                     vec![
                         FullName::local(IDX_NAME),
                         FullName::local(VALUE_NAME),
@@ -1201,17 +1495,23 @@ pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Gets a value from an array, without bounds checking and retaining the returned value.
-pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const IDX_NAME: &str = "idx";
-    const ARR_NAME: &str = "array";
-    const ELEM_TYPE: &str = "a";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMUnsafeGetArrayBody {
+    arr_name: String,
+    idx_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
+impl InlineLLVMUnsafeGetArrayBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
+        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
         let idx = gc
-            .get_var_field(&FullName::local(IDX_NAME), 0)
+            .get_var_field(&FullName::local(&self.idx_name), 0)
             .into_int_value();
 
         // Get array buffer
@@ -1225,7 +1525,14 @@ pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         gc.release(array);
 
         elem
-    });
+    }
+}
+
+// Gets a value from an array, without bounds checking and retaining the returned value.
+pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const IDX_NAME: &str = "idx";
+    const ARR_NAME: &str = "array";
+    const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
@@ -1235,7 +1542,10 @@ pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_lit(
-                generator,
+                InlineLLVM::UnsafeGetArrayBody(InlineLLVMUnsafeGetArrayBody {
+                    arr_name: ARR_NAME.to_string(),
+                    idx_name: IDX_NAME.to_string(),
+                }),
                 vec![FullName::local(IDX_NAME), FullName::local(ARR_NAME)],
                 format!("{}.get_array_noretain({})", ARR_NAME, IDX_NAME),
                 elem_tyvar.clone(),
@@ -1254,19 +1564,25 @@ pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// Set the length of an array, with no uniqueness checking, no validation of size argument.
-pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const ARR_NAME: &str = "array";
-    const LENGTH_NAME: &str = "length";
-    const ELEM_TYPE: &str = "a";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMUnsafeSetSizeArrayBody {
+    arr_name: String,
+    len_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+impl InlineLLVMUnsafeSetSizeArrayBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
 
         // Get argments
-        let array = gc.get_var(&FullName::local(ARR_NAME)).ptr.get(gc);
+        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
         let length = gc
-            .get_var_field(&FullName::local(LENGTH_NAME), 0)
+            .get_var_field(&FullName::local(&self.len_name), 0)
             .into_int_value();
 
         // Get pointer to length field.
@@ -1275,7 +1591,14 @@ pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         // Perform write and return.
         gc.builder().build_store(ptr_to_length, length);
         array
-    });
+    }
+}
+
+// Set the length of an array, with no uniqueness checking, no validation of size argument.
+pub fn unsafe_set_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const ARR_NAME: &str = "array";
+    const LENGTH_NAME: &str = "length";
+    const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
@@ -1285,7 +1608,10 @@ pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_lit(
-                generator,
+                InlineLLVM::UnsafeSetSizeArrayBody(InlineLLVMUnsafeSetSizeArrayBody {
+                    arr_name: ARR_NAME.to_string(),
+                    len_name: LENGTH_NAME.to_string(),
+                }),
                 vec![FullName::local(LENGTH_NAME), FullName::local(ARR_NAME)],
                 format!("{}.unsafe_set_length({})", ARR_NAME, LENGTH_NAME),
                 array_ty.clone(),
@@ -1304,25 +1630,48 @@ pub fn unsafe_set_length_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayGetBody {
+    arr_name: FullName,
+    idx_name: FullName,
+}
+
+impl InlineLLVMArrayGetBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        let array = gc.get_var(&self.arr_name).ptr.get(gc);
+        let len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
+        gc.release(gc.get_var(&self.idx_name).ptr.get(gc));
+        let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx, rvo);
+        gc.release(array);
+        elem
+    }
+}
+
 // Implementation of Array::get built-in function.
-fn read_array_lit(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
+fn read_array_body(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
     let name = format!("Array::get({}, {})", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
-        let array = gc.get_var(&array_str).ptr.get(gc);
-        let len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
-        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-        let idx = gc.get_var_field(&idx_str, 0).into_int_value();
-        gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx, rvo);
-        gc.release(array);
-        elem
-    });
-    expr_lit(generator, free_vars, name, elem_ty, None)
+    expr_lit(
+        InlineLLVM::ArrayGetBody(InlineLLVMArrayGetBody {
+            arr_name: array_str,
+            idx_name: idx_str,
+        }),
+        free_vars,
+        name,
+        elem_ty,
+        None,
+    )
 }
 
 // "Array::get : Array a -> I64 -> a" built-in function.
@@ -1331,7 +1680,7 @@ pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         vec![var_local("idx")],
         expr_abs(
             vec![var_local("array")],
-            read_array_lit("a", "array", "idx"),
+            read_array_body("a", "array", "idx"),
             None,
         ),
         None,
@@ -1434,6 +1783,40 @@ fn make_array_unique<'c, 'm>(
     array
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArraySetBody {
+    array_name: FullName,
+    idx_name: FullName,
+    value_name: FullName,
+    is_unique_version: bool,
+}
+
+impl InlineLLVMArraySetBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        assert!(rvo.is_none());
+
+        // Get argments
+        let array = gc.get_var(&self.array_name).ptr.get(gc);
+        let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
+        gc.release(gc.get_var(&self.idx_name).ptr.get(gc));
+        let value = gc.get_var(&self.value_name).ptr.get(gc);
+
+        // Force array to be unique
+        let array = make_array_unique(gc, array, self.is_unique_version);
+
+        // Perform write and return.
+        let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
+        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        ObjectFieldType::write_to_array_buf(gc, Some(array_len), array_buf, idx, value, true);
+        array
+    }
+}
+
 // Implementation of Array::set/Array::set! built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
 fn set_array_lit(
@@ -1456,26 +1839,13 @@ fn set_array_lit(
     });
     let name = format!("{} {} {} {}", func_name, idx, value, array);
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
-        assert!(rvo.is_none());
-
-        // Get argments
-        let array = gc.get_var(&array_str).ptr.get(gc);
-        let idx = gc.get_var_field(&idx_str, 0).into_int_value();
-        gc.release(gc.get_var(&idx_str).ptr.get(gc));
-        let value = gc.get_var(&value_str).ptr.get(gc);
-
-        // Force array to be unique
-        let array = make_array_unique(gc, array, is_unique_version);
-
-        // Perform write and return.
-        let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
-        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-        ObjectFieldType::write_to_array_buf(gc, Some(array_len), array_buf, idx, value, true);
-        array
-    });
     expr_lit(
-        generator,
+        InlineLLVM::ArraySetBody(InlineLLVMArraySetBody {
+            array_name: array_str,
+            idx_name: idx_str,
+            value_name: value_str,
+            is_unique_version,
+        }),
         free_vars,
         name,
         type_tyapp(make_array_ty(), elem_ty),
@@ -1520,27 +1890,35 @@ pub fn write_array_unique() -> (Rc<ExprNode>, Rc<Scheme>) {
     set_array_common(true)
 }
 
-pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const MODIFIED_ARRAY_NAME: &str = "arr";
-    const MODIFIER_NAME: &str = "f";
-    const INDEX_NAME: &str = "idx";
-    const ELEM_TYPE: &str = "a";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayModBody {
+    array_name: String,
+    idx_name: String,
+    modifier_name: String,
+    is_unique_version: bool,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+impl InlineLLVMArrayModBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         assert!(rvo.is_none());
 
         // Get argments
-        let array = gc
-            .get_var(&FullName::local(MODIFIED_ARRAY_NAME))
+        let array = gc.get_var(&FullName::local(&self.array_name)).ptr.get(gc);
+        let idx = gc
+            .get_var_field(&FullName::local(&self.idx_name), 0)
+            .into_int_value();
+        let modifier = gc
+            .get_var(&FullName::local(&self.modifier_name))
             .ptr
             .get(gc);
-        let idx = gc
-            .get_var_field(&FullName::local(INDEX_NAME), 0)
-            .into_int_value();
-        let modifier = gc.get_var(&FullName::local(MODIFIER_NAME)).ptr.get(gc);
 
         // Make array unique
-        let array = make_array_unique(gc, array, is_unique_version);
+        let array = make_array_unique(gc, array, self.is_unique_version);
 
         // Get old element without retain.
         let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
@@ -1561,7 +1939,14 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
         // Perform write and return.
         ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, elem, false);
         array
-    });
+    }
+}
+
+pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const MODIFIED_ARRAY_NAME: &str = "arr";
+    const MODIFIER_NAME: &str = "f";
+    const INDEX_NAME: &str = "idx";
+    const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
@@ -1573,7 +1958,12 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
             expr_abs(
                 vec![var_local(MODIFIED_ARRAY_NAME)],
                 expr_lit(
-                    generator,
+                    InlineLLVM::ArrayModBody(InlineLLVMArrayModBody {
+                        array_name: MODIFIED_ARRAY_NAME.to_string(),
+                        idx_name: INDEX_NAME.to_string(),
+                        modifier_name: MODIFIER_NAME.to_string(),
+                        is_unique_version,
+                    }),
                     vec![
                         FullName::local(INDEX_NAME),
                         FullName::local(MODIFIER_NAME),
@@ -1609,33 +1999,49 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const ARRAY_NAME: &str = "arr";
-    const ELEM_TYPE: &str = "a";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayForceUniqueBody {
+    arr_name: String,
+    is_unique_version: bool,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+impl InlineLLVMArrayForceUniqueBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         assert!(rvo.is_none());
 
         // Get argments
-        let array = gc.get_var(&FullName::local(ARRAY_NAME)).ptr.get(gc);
+        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
 
         // Make array unique
-        let array = make_array_unique(gc, array, is_unique_version);
+        let array = make_array_unique(gc, array, self.is_unique_version);
 
         array
-    });
+    }
+}
+
+pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const ARR_NAME: &str = "arr";
+    const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(ARRAY_NAME)],
+        vec![var_local(ARR_NAME)],
         expr_lit(
-            generator,
-            vec![FullName::local(ARRAY_NAME)],
+            InlineLLVM::ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody {
+                arr_name: ARR_NAME.to_string(),
+                is_unique_version,
+            }),
+            vec![FullName::local(ARR_NAME)],
             format!(
                 "{}.force_unique{}",
-                ARRAY_NAME,
+                ARR_NAME,
                 if is_unique_version { "!" } else { "" },
             ),
             array_ty.clone(),
@@ -1651,14 +2057,20 @@ pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
     (expr, scm)
 }
 
-// `get_ptr` function for Array.
-pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const ARRAY_NAME: &str = "arr";
-    const ELEM_TYPE: &str = "a";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayGetPtrBody {
+    arr_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+impl InlineLLVMArrayGetPtrBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get argment
-        let array = gc.get_var(&FullName::local(ARRAY_NAME)).ptr.get(gc);
+        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
 
         // Get pointer
         let ptr = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
@@ -1683,17 +2095,25 @@ pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         obj.store_field_nocap(gc, 0, ptr);
 
         obj
-    });
+    }
+}
+
+// `get_ptr` function for Array.
+pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const ARR_NAME: &str = "arr";
+    const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(ARRAY_NAME)],
+        vec![var_local(ARR_NAME)],
         expr_lit(
-            generator,
-            vec![FullName::local(ARRAY_NAME)],
-            format!("{}.get_ptr", ARRAY_NAME,),
+            InlineLLVM::ArrayGetPtrBody(InlineLLVMArrayGetPtrBody {
+                arr_name: ARR_NAME.to_string(),
+            }),
+            vec![FullName::local(ARR_NAME)],
+            format!("{}.get_ptr", ARR_NAME,),
             make_ptr_ty(),
             None,
         ),
@@ -1707,12 +2127,19 @@ pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// `get_size` built-in function for Array.
-pub fn get_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const ARR_NAME: &str = "arr";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayGetSizeBody {
+    arr_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
-        let arr_name = FullName::local(ARR_NAME);
+impl InlineLLVMArrayGetSizeBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let arr_name = FullName::local(&self.arr_name);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
         let len = array_obj
@@ -1726,12 +2153,19 @@ pub fn get_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         };
         int_obj.store_field_nocap(gc, 0, len);
         int_obj
-    });
+    }
+}
+
+// `get_size` built-in function for Array.
+pub fn get_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const ARR_NAME: &str = "arr";
 
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::ArrayGetSizeBody(InlineLLVMArrayGetSizeBody {
+                arr_name: ARR_NAME.to_string(),
+            }),
             vec![FullName::local(ARR_NAME)],
             "len arr".to_string(),
             make_i64_ty(),
@@ -1748,12 +2182,19 @@ pub fn get_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// `Array::get_capacity : Array a -> I64` built-in function.
-pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const ARR_NAME: &str = "arr";
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayGetCapacityBody {
+    arr_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
-        let arr_name = FullName::local(ARR_NAME);
+impl InlineLLVMArrayGetCapacityBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let arr_name = FullName::local(&self.arr_name);
         // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
         let len = array_obj
@@ -1767,12 +2208,19 @@ pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         };
         int_obj.store_field_nocap(gc, 0, len);
         int_obj
-    });
+    }
+}
+
+// `Array::get_capacity : Array a -> I64` built-in function.
+pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const ARR_NAME: &str = "arr";
 
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody {
+                arr_name: ARR_NAME.to_string(),
+            }),
             vec![FullName::local(ARR_NAME)],
             "arr.get_capacity".to_string(),
             make_i64_ty(),
@@ -1789,8 +2237,27 @@ pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMStructGetBody {
+    var_name: FullName,
+    field_idx: usize,
+}
+
+impl InlineLLVMStructGetBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Get struct object.
+        let str = gc.get_var(&self.var_name).ptr.get(gc);
+        ObjectFieldType::get_struct_fields(gc, &str, vec![(self.field_idx as u32, rvo)])[0].clone()
+    }
+}
+
 // `get` built-in function for a given struct.
-pub fn struct_get_lit(
+pub fn struct_get_body(
     var_name: &str,
     field_idx: usize,
     field_ty: Rc<TypeNode>,
@@ -1798,29 +2265,6 @@ pub fn struct_get_lit(
     field_name: &str,
 ) -> Rc<ExprNode> {
     let var_name_clone = FullName::local(var_name);
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
-        // Get struct object.
-        let str = gc.get_var(&var_name_clone).ptr.get(gc);
-
-        // Extract field.
-        // let field = ObjectFieldType::get_struct_field(gc, &str, field_idx as u32);
-        // let field_val = field.value(gc);
-        // let field = if rvo.is_none() {
-        //     Object::create_from_value(field_val, field.ty, gc)
-        // } else {
-        //     let rvo = rvo.unwrap();
-        //     rvo.store_unbox(gc, field_val);
-        //     rvo
-        // };
-
-        // // Retain field and release struct.
-        // gc.retain(field.clone());
-        // gc.release(str);
-
-        // field
-
-        ObjectFieldType::get_struct_fields(gc, &str, vec![(field_idx as u32, rvo)])[0].clone()
-    });
     let free_vars = vec![FullName::local(var_name)];
     let name = format!(
         "{}.get_{}({})",
@@ -1828,7 +2272,16 @@ pub fn struct_get_lit(
         field_name,
         var_name
     );
-    expr_lit(generator, free_vars, name, field_ty, None)
+    expr_lit(
+        InlineLLVM::StructGetBody(InlineLLVMStructGetBody {
+            var_name: var_name_clone,
+            field_idx,
+        }),
+        free_vars,
+        name,
+        field_ty,
+        None,
+    )
 }
 
 // field getter function for a given struct.
@@ -1852,7 +2305,7 @@ pub fn struct_get(
     const VAR_NAME: &str = "str_obj";
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        struct_get_lit(
+        struct_get_body(
             VAR_NAME,
             field_idx as usize,
             field.ty.clone(),
@@ -1866,8 +2319,50 @@ pub fn struct_get(
     (expr, scm)
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMStructModBody {
+    f_name: FullName,
+    x_name: FullName,
+    is_unique_version: bool,
+    field_idx: usize,
+    field_count: usize,
+}
+
+impl InlineLLVMStructModBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let is_unbox = ty.is_unbox(gc.type_env());
+
+        // Get arguments
+        let modfier = gc.get_var(&self.f_name).ptr.get(gc);
+        let str = gc.get_var(&self.x_name).ptr.get(gc);
+
+        let mut str = make_struct_unique(gc, str, self.field_count as u32, self.is_unique_version);
+
+        // Modify field
+        let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
+        let field = gc.apply_lambda(modfier, vec![field], None);
+        ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &field);
+
+        if rvo.is_some() {
+            assert!(is_unbox);
+            // Move str to rvo.
+            let rvo = rvo.unwrap();
+            let str_val = str.load_nocap(gc);
+            rvo.store_unbox(gc, str_val);
+            str = rvo;
+        }
+
+        str
+    }
+}
+
 // `mod` built-in function for a given struct.
-pub fn struct_mod_lit(
+pub fn struct_mod_body(
     f_name: &str,
     x_name: &str,
     field_count: usize, // number of fields in this struct
@@ -1888,32 +2383,19 @@ pub fn struct_mod_lit(
     let f_name = FullName::local(f_name);
     let x_name = FullName::local(x_name);
     let free_vars = vec![f_name.clone(), x_name.clone()];
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        let is_unbox = ty.is_unbox(gc.type_env());
-
-        // Get arguments
-        let modfier = gc.get_var(&f_name).ptr.get(gc);
-        let str = gc.get_var(&x_name).ptr.get(gc);
-
-        let mut str = make_struct_unique(gc, str, field_count as u32, is_unique_version);
-
-        // Modify field
-        let field = ObjectFieldType::get_struct_field_noclone(gc, &str, field_idx as u32);
-        let field = gc.apply_lambda(modfier, vec![field], None);
-        ObjectFieldType::set_struct_field_norelease(gc, &str, field_idx as u32, &field);
-
-        if rvo.is_some() {
-            assert!(is_unbox);
-            // Move str to rvo.
-            let rvo = rvo.unwrap();
-            let str_val = str.load_nocap(gc);
-            rvo.store_unbox(gc, str_val);
-            str = rvo;
-        }
-
-        str
-    });
-    expr_lit(generator, free_vars, name, struct_defn.ty(), None)
+    expr_lit(
+        InlineLLVM::StructModBody(InlineLLVMStructModBody {
+            f_name,
+            x_name,
+            is_unique_version,
+            field_idx,
+            field_count,
+        }),
+        free_vars,
+        name,
+        struct_defn.ty(),
+        None,
+    )
 }
 
 // `mod` built-in function for a given struct.
@@ -1940,7 +2422,7 @@ pub fn struct_mod(
         vec![var_local("f")],
         expr_abs(
             vec![var_local("x")],
-            struct_mod_lit(
+            struct_mod_body(
                 "f",
                 "x",
                 field_count,
@@ -2040,6 +2522,50 @@ fn make_struct_unique<'c, 'm>(
     str
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMStructSetBody {
+    value_name: String,
+    struct_name: String,
+    field_count: u32,
+    is_unique_version: bool,
+    field_idx: u32,
+}
+
+impl InlineLLVMStructSetBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        str_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Get arguments
+        let value = gc.get_var(&FullName::local(&self.value_name)).ptr.get(gc);
+        let str = gc.get_var(&FullName::local(&self.struct_name)).ptr.get(gc);
+
+        // Make struct object unique.
+        let mut str = make_struct_unique(gc, str, self.field_count, self.is_unique_version);
+
+        // Release old value
+        let old_value = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
+        gc.release(old_value);
+
+        // Set new value
+        ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &value);
+
+        // If rvo, store the result to the rvo.
+        if rvo.is_some() {
+            assert!(str_ty.is_unbox(gc.type_env()));
+            // Move str to rvo.
+            let rvo = rvo.unwrap();
+            let str_val = str.load_nocap(gc);
+            rvo.store_unbox(gc, str_val);
+            str = rvo;
+        }
+
+        str
+    }
+}
+
 // `set` built-in function for a given struct.
 pub fn struct_set(
     struct_name: &FullName,
@@ -2062,41 +2588,19 @@ pub fn struct_set(
     let (field_idx, field) = field.unwrap();
     let field_count = definition.fields().len() as u32;
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, str_ty, rvo| {
-        // Get arguments
-        let value = gc.get_var(&FullName::local(VALUE_NAME)).ptr.get(gc);
-        let str = gc.get_var(&FullName::local(STRUCT_NAME)).ptr.get(gc);
-
-        // Make struct object unique.
-        let mut str = make_struct_unique(gc, str, field_count, is_unique_version);
-
-        // Release old value
-        let old_value = ObjectFieldType::get_struct_field_noclone(gc, &str, field_idx as u32);
-        gc.release(old_value);
-
-        // Set new value
-        ObjectFieldType::set_struct_field_norelease(gc, &str, field_idx as u32, &value);
-
-        // If rvo, store the result to the rvo.
-        if rvo.is_some() {
-            assert!(str_ty.is_unbox(gc.type_env()));
-            // Move str to rvo.
-            let rvo = rvo.unwrap();
-            let str_val = str.load_nocap(gc);
-            rvo.store_unbox(gc, str_val);
-            str = rvo;
-        }
-
-        str
-    });
-
     let str_ty = definition.ty();
     let expr = expr_abs(
         vec![var_local(VALUE_NAME)],
         expr_abs(
             vec![var_local(STRUCT_NAME)],
             expr_lit(
-                generator,
+                InlineLLVM::StructSetBody(InlineLLVMStructSetBody {
+                    value_name: VALUE_NAME.to_string(),
+                    struct_name: STRUCT_NAME.to_string(),
+                    field_count,
+                    is_unique_version,
+                    field_idx,
+                }),
                 vec![FullName::local(VALUE_NAME), FullName::local(STRUCT_NAME)],
                 format!(
                     "{}.{}{}{}({})",
@@ -2116,6 +2620,78 @@ pub fn struct_set(
     let ty = type_fun(field.ty.clone(), type_fun(str_ty.clone(), str_ty.clone()));
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMMakeUnionBody {
+    field_name: String,
+    generated_union_name: String,
+    field_idx: usize,
+}
+
+impl InlineLLVMMakeUnionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let is_unbox = ty.is_unbox(gc.type_env());
+        let offset: u32 = if is_unbox { 0 } else { 1 };
+
+        // Get field values.
+        let field = gc.get_var(&FullName::local(&self.field_name)).ptr.get(gc);
+
+        // Create union object.
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&self.generated_union_name),
+            )
+        } else {
+            rvo.unwrap()
+        };
+
+        // Set tag value.
+        let tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(self.field_idx as u64, false);
+        obj.store_field_nocap(gc, 0 + offset, tag_value);
+
+        // Set value.
+        let buf = obj.ptr_to_field_nocap(gc, offset + 1);
+        ObjectFieldType::set_value_to_union_buf(gc, buf, field);
+
+        obj
+    }
+}
+
+// constructor function for a given union.
+pub fn union_new_body(
+    union_name: &FullName,
+    union_defn: &TypeDefn,
+    field_name: &Name,
+    field_idx: usize,
+) -> Rc<ExprNode> {
+    let free_vars = vec![FullName::local(field_name)];
+    let name = format!("{}.new_{}", union_name.to_string(), field_name);
+    let name_cloned = name.clone();
+    let field_name_cloned = field_name.clone();
+    expr_lit(
+        InlineLLVM::MakeUnionBody(InlineLLVMMakeUnionBody {
+            field_name: field_name_cloned,
+            generated_union_name: name_cloned,
+            field_idx,
+        }),
+        free_vars,
+        name,
+        union_defn.ty(),
+        None,
+    )
 }
 
 // `new_{field}` built-in function for a given union.
@@ -2141,7 +2717,7 @@ pub fn union_new(
     }
     let expr = expr_abs(
         vec![var_local(field_name)],
-        union_new_lit(union_name, union, field_name, field_idx),
+        union_new_body(union_name, union, field_name, field_idx),
         None,
     );
     let union_ty = union.ty();
@@ -2149,47 +2725,6 @@ pub fn union_new(
     let ty = type_fun(field_ty, union_ty);
     let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
     (expr, scm)
-}
-
-// constructor function for a given union.
-pub fn union_new_lit(
-    union_name: &FullName,
-    union_defn: &TypeDefn,
-    field_name: &Name,
-    field_idx: usize,
-) -> Rc<ExprNode> {
-    let free_vars = vec![FullName::local(field_name)];
-    let name = format!("{}.new_{}", union_name.to_string(), field_name);
-    let name_cloned = name.clone();
-    let field_name_cloned = field_name.clone();
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        let is_unbox = ty.is_unbox(gc.type_env());
-        let offset: u32 = if is_unbox { 0 } else { 1 };
-
-        // Get field values.
-        let field = gc.get_var(&FullName::local(&field_name_cloned)).ptr.get(gc);
-
-        // Create union object.
-        let obj = if rvo.is_none() {
-            allocate_obj(ty.clone(), &vec![], None, gc, Some(&name_cloned))
-        } else {
-            rvo.unwrap()
-        };
-
-        // Set tag value.
-        let tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc)
-            .into_int_type()
-            .const_int(field_idx as u64, false);
-        obj.store_field_nocap(gc, 0 + offset, tag_value);
-
-        // Set value.
-        let buf = obj.ptr_to_field_nocap(gc, offset + 1);
-        ObjectFieldType::set_value_to_union_buf(gc, buf, field);
-
-        obj
-    });
-    expr_lit(generator, free_vars, name, union_defn.ty(), None)
 }
 
 // `as_{field}` built-in function for a given union.
@@ -2232,6 +2767,41 @@ pub fn union_as(
     (expr, scm)
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMUnionAsBody {
+    union_arg_name: String,
+    field_idx: usize,
+}
+
+impl InlineLLVMUnionAsBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Get union object.
+        let obj = gc
+            .get_var(&FullName::local(&self.union_arg_name))
+            .ptr
+            .get(gc);
+
+        let elem_ty = ty.clone();
+
+        // Create specified tag value.
+        let specified_tag_value = ObjectFieldType::UnionTag
+            .to_basic_type(gc)
+            .into_int_type()
+            .const_int(self.field_idx as u64, false);
+
+        // If tag unmatch, panic.
+        ObjectFieldType::panic_if_union_tag_unmatch(gc, obj.clone(), specified_tag_value);
+
+        // If tag match, return the field value.
+        ObjectFieldType::get_union_field(gc, obj, &elem_ty, rvo)
+    }
+}
+
 // `as_{field}` built-in function for a given union.
 pub fn union_as_lit(
     union_name: &FullName,
@@ -2243,25 +2813,16 @@ pub fn union_as_lit(
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        // Get union object.
-        let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
-
-        let elem_ty = ty.clone();
-
-        // Create specified tag value.
-        let specified_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc)
-            .into_int_type()
-            .const_int(field_idx as u64, false);
-
-        // If tag unmatch, panic.
-        ObjectFieldType::panic_if_union_tag_unmatch(gc, obj.clone(), specified_tag_value);
-
-        // If tag match, return the field value.
-        ObjectFieldType::get_union_field(gc, obj, &elem_ty, rvo)
-    });
-    expr_lit(generator, free_vars, name, field_ty, None)
+    expr_lit(
+        InlineLLVM::UnionAsBody(InlineLLVMUnionAsBody {
+            union_arg_name,
+            field_idx,
+        }),
+        free_vars,
+        name,
+        field_ty,
+        None,
+    )
 }
 
 // `is_{field}` built-in function for a given union.
@@ -2297,20 +2858,25 @@ pub fn union_is(
     (expr, scm)
 }
 
-// `is_{field}` built-in function for a given union.
-pub fn union_is_lit(
-    union_name: &FullName,
-    union_arg_name: &Name,
-    field_name: &Name,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMUnionIsBody {
+    union_arg_name: String,
     field_idx: usize,
-) -> Rc<ExprNode> {
-    let name = format!("{}.is_{}", union_name.to_string(), field_name);
-    let name_cloned = name.clone();
-    let free_vars = vec![FullName::local(union_arg_name)];
-    let union_arg_name = union_arg_name.clone();
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _, rvo| {
+    name_cloned: String,
+}
+
+impl InlineLLVMUnionIsBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get union object.
-        let obj = gc.get_var(&FullName::local(&union_arg_name)).ptr.get(gc);
+        let obj = gc
+            .get_var(&FullName::local(&self.union_arg_name))
+            .ptr
+            .get(gc);
 
         let is_unbox = obj.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
@@ -2319,14 +2885,14 @@ pub fn union_is_lit(
         let specified_tag_value = ObjectFieldType::UnionTag
             .to_basic_type(gc)
             .into_int_type()
-            .const_int(field_idx as u64, false);
+            .const_int(self.field_idx as u64, false);
 
         // Get tag value.
         let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
 
         // Create returned value.
         let ret = if rvo.is_none() {
-            allocate_obj(make_bool_ty(), &vec![], None, gc, Some(&name_cloned))
+            allocate_obj(make_bool_ty(), &vec![], None, gc, Some(&self.name_cloned))
         } else {
             rvo.unwrap()
         };
@@ -2360,35 +2926,53 @@ pub fn union_is_lit(
         gc.builder().position_at_end(cont_bb);
         gc.release(obj);
         ret
-    });
-    expr_lit(generator, free_vars, name, make_bool_ty(), None)
+    }
 }
 
-pub fn union_mod_function(
+// `is_{field}` built-in function for a given union.
+pub fn union_is_lit(
     union_name: &FullName,
+    union_arg_name: &Name,
     field_name: &Name,
-    union: &TypeDefn,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
-    const UNION_NAME: &str = "union_value";
-    const MODIFIER_NAME: &str = "modifier";
+    field_idx: usize,
+) -> Rc<ExprNode> {
+    let name = format!("{}.is_{}", union_name.to_string(), field_name);
+    let name_cloned = name.clone();
+    let free_vars = vec![FullName::local(union_arg_name)];
+    let union_arg_name = union_arg_name.clone();
+    expr_lit(
+        InlineLLVM::UnionIsBody(InlineLLVMUnionIsBody {
+            union_arg_name,
+            field_idx,
+            name_cloned,
+        }),
+        free_vars,
+        name,
+        make_bool_ty(),
+        None,
+    )
+}
 
-    let field_idx = if let Some((field_idx, _)) = union.get_field_by_name(&field_name) {
-        field_idx
-    } else {
-        error_exit(&format!(
-            "Unknown field `{}` for union `{}`",
-            field_name,
-            union_name.to_string()
-        ));
-    };
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMUnionModBody {
+    union_name: String,
+    modifier_name: String,
+    field_idx: u32,
+}
 
-    let union_ty = union.ty();
-    let field_ty = union.fields()[field_idx as usize].ty.clone();
-
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, union_ty, rvo| {
+impl InlineLLVMUnionModBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        union_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Get arguments
-        let obj = gc.get_var(&FullName::local(&UNION_NAME)).ptr.get(gc);
-        let modifier = gc.get_var(&FullName::local(&MODIFIER_NAME)).ptr.get(gc);
+        let obj = gc.get_var(&FullName::local(&self.union_name)).ptr.get(gc);
+        let modifier = gc
+            .get_var(&FullName::local(&self.modifier_name))
+            .ptr
+            .get(gc);
 
         let is_unbox = obj.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
@@ -2397,7 +2981,7 @@ pub fn union_mod_function(
         let specified_tag_value = ObjectFieldType::UnionTag
             .to_basic_type(gc)
             .into_int_type()
-            .const_int(field_idx as u64, false);
+            .const_int(self.field_idx as u64, false);
 
         // Get tag value.
         let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
@@ -2419,7 +3003,7 @@ pub fn union_mod_function(
 
         // Implement match_bb
         gc.builder().position_at_end(match_bb);
-        let field_ty = union_ty.field_types(gc.type_env())[field_idx as usize].clone();
+        let field_ty = union_ty.field_types(gc.type_env())[self.field_idx as usize].clone();
         let value = ObjectFieldType::get_union_field(gc, obj.clone(), &field_ty, None);
         let value = gc.apply_lambda(modifier.clone(), vec![value], None);
         // Prepare space for returned union object.
@@ -2461,14 +3045,40 @@ pub fn union_mod_function(
         } else {
             ret_obj
         }
-    });
+    }
+}
+
+pub fn union_mod_function(
+    union_name: &FullName,
+    field_name: &Name,
+    union: &TypeDefn,
+) -> (Rc<ExprNode>, Rc<Scheme>) {
+    const UNION_NAME: &str = "union_value";
+    const MODIFIER_NAME: &str = "modifier";
+
+    let field_idx = if let Some((field_idx, _)) = union.get_field_by_name(&field_name) {
+        field_idx
+    } else {
+        error_exit(&format!(
+            "Unknown field `{}` for union `{}`",
+            field_name,
+            union_name.to_string()
+        ));
+    };
+
+    let union_ty = union.ty();
+    let field_ty = union.fields()[field_idx as usize].ty.clone();
 
     let expr = expr_abs(
         vec![var_local(MODIFIER_NAME)],
         expr_abs(
             vec![var_local(UNION_NAME)],
             expr_lit(
-                generator,
+                InlineLLVM::UnionModBody(InlineLLVMUnionModBody {
+                    union_name: UNION_NAME.to_string(),
+                    modifier_name: MODIFIER_NAME.to_string(),
+                    field_idx,
+                }),
                 vec![FullName::local(MODIFIER_NAME), FullName::local(UNION_NAME)],
                 format!("mod_{}({}, {})", field_name, MODIFIER_NAME, UNION_NAME),
                 union_ty.clone(),
@@ -2507,36 +3117,21 @@ pub fn loop_result_defn() -> TypeDefn {
     }
 }
 
-// `loop` built-in function.
-// loop : s -> (s -> LoopResult s b) -> b;
-pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const S_NAME: &str = "s";
-    const B_NAME: &str = "b";
-    const INITIAL_STATE_NAME: &str = "initial_state";
-    const LOOP_BODY_NAME: &str = "loop_body";
-    let tyvar_s = type_tyvar(S_NAME, &kind_star());
-    let tyvar_b = type_tyvar(B_NAME, &kind_star());
-    let scm = Scheme::generalize(
-        HashMap::from([
-            (S_NAME.to_string(), kind_star()),
-            (B_NAME.to_string(), kind_star()),
-        ]),
-        vec![],
-        type_fun(
-            tyvar_s.clone(),
-            type_fun(
-                type_fun(
-                    tyvar_s.clone(),
-                    type_tyapp(type_tyapp(make_loop_result_ty(), tyvar_s), tyvar_b.clone()),
-                ),
-                tyvar_b,
-            ),
-        ),
-    );
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMLoopFunctionBody {
+    initial_state_name: String,
+    loop_body_name: String,
+}
 
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        let initial_state_name = FullName::local(INITIAL_STATE_NAME);
-        let loop_body_name = FullName::local(LOOP_BODY_NAME);
+impl InlineLLVMLoopFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let initial_state_name = FullName::local(&self.initial_state_name);
+        let loop_body_name = FullName::local(&self.loop_body_name);
 
         // Prepare constant.
         let cont_tag_value = ObjectFieldType::UnionTag
@@ -2602,7 +3197,35 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
         gc.builder().position_at_end(break_bb);
         gc.release(loop_body);
         ObjectFieldType::get_union_field(gc, loop_res, ty, rvo)
-    });
+    }
+}
+
+// `loop` built-in function.
+// loop : s -> (s -> LoopResult s b) -> b;
+pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const S_NAME: &str = "s";
+    const B_NAME: &str = "b";
+    const INITIAL_STATE_NAME: &str = "initial_state";
+    const LOOP_BODY_NAME: &str = "loop_body";
+    let tyvar_s = type_tyvar(S_NAME, &kind_star());
+    let tyvar_b = type_tyvar(B_NAME, &kind_star());
+    let scm = Scheme::generalize(
+        HashMap::from([
+            (S_NAME.to_string(), kind_star()),
+            (B_NAME.to_string(), kind_star()),
+        ]),
+        vec![],
+        type_fun(
+            tyvar_s.clone(),
+            type_fun(
+                type_fun(
+                    tyvar_s.clone(),
+                    type_tyapp(type_tyapp(make_loop_result_ty(), tyvar_s), tyvar_b.clone()),
+                ),
+                tyvar_b,
+            ),
+        ),
+    );
 
     let initial_state_name = FullName::local(INITIAL_STATE_NAME);
     let loop_body_name = FullName::local(LOOP_BODY_NAME);
@@ -2611,7 +3234,10 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
         expr_abs(
             vec![var_var(loop_body_name.clone())],
             expr_lit(
-                generator,
+                InlineLLVM::LoopFunctionBody(InlineLLVMLoopFunctionBody {
+                    initial_state_name: INITIAL_STATE_NAME.to_string(),
+                    loop_body_name: LOOP_BODY_NAME.to_string(),
+                }),
                 vec![initial_state_name, loop_body_name],
                 format!("loop {} {}", INITIAL_STATE_NAME, LOOP_BODY_NAME),
                 type_tyvar_star(B_NAME),
@@ -2637,11 +3263,19 @@ fn extract_array_from_string<'c, 'm>(
     array
 }
 
-// `debug_print` built-in function
-pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const MSG_NAME: &str = "msg";
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, rvo| {
-        let msg_name = FullName::local(MSG_NAME);
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMDebugPrintFunctionBody {
+    msg_name: String,
+}
+
+impl InlineLLVMDebugPrintFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let msg_name = FullName::local(&self.msg_name);
         let string = gc.get_var(&msg_name).ptr.get(gc);
 
         // Get ptr to string buffer.
@@ -2675,14 +3309,21 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
                 &vec![],
                 None,
                 gc,
-                Some(&format!("debug_print {}", MSG_NAME)),
+                Some(&format!("debug_print {}", self.msg_name)),
             )
         }
-    });
+    }
+}
+
+// `debug_print` built-in function
+pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const MSG_NAME: &str = "msg";
     let expr = expr_abs(
         vec![var_local(MSG_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::DebugPrintFunctionBody(InlineLLVMDebugPrintFunctionBody {
+                msg_name: MSG_NAME.to_string(),
+            }),
             vec![FullName::local(MSG_NAME)],
             format!("debug_print {}", MSG_NAME),
             make_unit_ty(),
@@ -2698,11 +3339,16 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// `abort` built-in function
-pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const A_NAME: &str = "a";
-    const UNIT_NAME: &str = "unit";
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ty, _rvo| {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMAbortFunctionBody {}
+
+impl InlineLLVMAbortFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Rc<TypeNode>,
+        _rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
         // Abort
         gc.call_runtime(RuntimeFunctions::Abort, &[]);
 
@@ -2713,11 +3359,17 @@ pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
                 .const_null(),
             ty.clone(),
         )
-    });
+    }
+}
+
+// `abort` built-in function
+pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const A_NAME: &str = "a";
+    const UNIT_NAME: &str = "unit";
     let expr = expr_abs(
         vec![var_local(UNIT_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::AbortFunctionBody(InlineLLVMAbortFunctionBody {}),
             vec![],
             "abort".to_string(),
             type_tyvar_star(A_NAME),
@@ -2733,1109 +3385,22 @@ pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-pub fn tuple_defn(size: u32) -> TypeDefn {
-    let tyvars = (0..size)
-        .map(|i| "t".to_string() + &i.to_string())
-        .collect::<Vec<_>>();
-    TypeDefn {
-        name: make_tuple_name(size),
-        tyvars: tyvars.clone(),
-        value: TypeDeclValue::Struct(Struct {
-            fields: (0..size)
-                .map(|i| Field {
-                    name: i.to_string(),
-                    ty: type_tyvar_star(&tyvars[i as usize]),
-                })
-                .collect(),
-            is_unbox: TUPLE_UNBOX,
-        }),
-    }
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIsUniqueFunctionBody {
+    var_name: String,
 }
 
-pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
-    const TYVAR_NAME: &str = "a";
-    let kind = kind_star();
-    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
-    let tv_type = type_tyvar(TYVAR_NAME, &kind);
-    TraitInfo {
-        id: trait_id,
-        type_var: tv_tyvar,
-        methods: HashMap::from([(
-            method_name,
-            QualType {
-                preds: vec![],
-                kind_preds: vec![],
-                ty: type_fun(tv_type.clone(), tv_type.clone()),
-            },
-        )]),
-        kind_predicates: vec![],
-    }
-}
-
-pub fn unary_opeartor_instance(
-    trait_id: TraitId,
-    method_name: &Name,
-    operand_ty: Rc<TypeNode>,
-    result_ty: Rc<TypeNode>,
-    generator: for<'c, 'm> fn(
-        &mut GenerationContext<'c, 'm>, // gc
-        Object<'c>,                     // rhs
-        Option<Object<'c>>,             // rvo
-    ) -> Object<'c>,
-) -> TraitInstance {
-    const RHS_NAME: &str = "rhs";
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
-        let rhs_name = FullName::local(RHS_NAME);
-        let rhs = gc.get_var(&rhs_name).ptr.get(gc);
-        generator(gc, rhs, rvo)
-    });
-    TraitInstance {
-        qual_pred: QualPredicate {
-            context: vec![],
-            kind_preds: vec![],
-            predicate: Predicate::make(trait_id, operand_ty),
-        },
-        methods: HashMap::from([(
-            method_name.to_string(),
-            expr_abs(
-                vec![var_local(RHS_NAME)],
-                expr_lit(
-                    generator,
-                    vec![FullName::local(RHS_NAME)],
-                    method_name.to_string(),
-                    result_ty,
-                    None,
-                ),
-                None,
-            ),
-        )]),
-        define_module: STD_NAME.to_string(),
-    }
-}
-
-pub fn binary_operator_trait(
-    trait_id: TraitId,
-    method_name: Name,
-    output_ty: Option<Rc<TypeNode>>,
-) -> TraitInfo {
-    const TYVAR_NAME: &str = "a";
-    let kind = kind_star();
-    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
-    let tv_type = type_tyvar(TYVAR_NAME, &kind);
-    let output_ty = match output_ty {
-        Some(t) => t,
-        None => tv_type.clone(),
-    };
-    TraitInfo {
-        id: trait_id,
-        type_var: tv_tyvar,
-        methods: HashMap::from([(
-            method_name,
-            QualType {
-                preds: vec![],
-                kind_preds: vec![],
-                ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
-            },
-        )]),
-        kind_predicates: vec![],
-    }
-}
-
-pub fn binary_opeartor_instance(
-    trait_id: TraitId,
-    method_name: &Name,
-    operand_ty: Rc<TypeNode>,
-    result_ty: Rc<TypeNode>,
-    generator: for<'c, 'm> fn(
-        &mut GenerationContext<'c, 'm>, // gc
-        Object<'c>,                     // lhs
-        Object<'c>,                     // rhs
-        Option<Object<'c>>,             // rvo
-    ) -> Object<'c>,
-) -> TraitInstance {
-    const LHS_NAME: &str = "lhs";
-    const RHS_NAME: &str = "rhs";
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, _ty, rvo| {
-        let lhs = FullName::local(LHS_NAME);
-        let rhs = FullName::local(RHS_NAME);
-        let lhs_val = gc.get_var(&lhs).ptr.get(gc);
-        let rhs_val = gc.get_var(&rhs).ptr.get(gc);
-        generator(gc, lhs_val, rhs_val, rvo)
-    });
-    TraitInstance {
-        qual_pred: QualPredicate {
-            context: vec![],
-            kind_preds: vec![],
-            predicate: Predicate::make(trait_id, operand_ty),
-        },
-        methods: HashMap::from([(
-            method_name.to_string(),
-            expr_abs(
-                vec![var_local(LHS_NAME)],
-                expr_abs(
-                    vec![var_local(RHS_NAME)],
-                    expr_lit(
-                        generator,
-                        vec![FullName::local(LHS_NAME), FullName::local(RHS_NAME)],
-                        method_name.to_string(),
-                        result_ty,
-                        None,
-                    ),
-                    None,
-                ),
-                None,
-            ),
-        )]),
-        define_module: STD_NAME.to_string(),
-    }
-}
-
-pub const EQ_TRAIT_NAME: &str = "Eq";
-pub const EQ_TRAIT_EQ_NAME: &str = "eq";
-
-pub fn eq_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
-    }
-}
-
-pub fn eq_trait() -> TraitInfo {
-    binary_operator_trait(
-        eq_trait_id(),
-        EQ_TRAIT_EQ_NAME.to_string(),
-        Some(make_bool_ty()),
-    )
-}
-
-pub fn eq_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_eq_int<'c, 'm>(
+impl InlineLLVMIsUniqueFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
         gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
+        ret_ty: &Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let value =
-            gc.builder()
-                .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-            "eq",
-        );
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                make_bool_ty(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        eq_trait_id(),
-        &EQ_TRAIT_EQ_NAME.to_string(),
-        ty,
-        make_bool_ty(),
-        generate_eq_int,
-    )
-}
-
-pub fn eq_trait_instance_ptr(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_eq_ptr<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_pointer_value();
-        gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_pointer_value();
-        gc.release(rhs);
-        let diff = gc
-            .builder()
-            .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr");
-        let value = gc.builder().build_int_compare(
-            IntPredicate::EQ,
-            diff,
-            diff.get_type().const_zero(),
-            EQ_TRAIT_EQ_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-            "eq_of_int",
-        );
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                make_bool_ty(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        eq_trait_id(),
-        &EQ_TRAIT_EQ_NAME.to_string(),
-        ty,
-        make_bool_ty(),
-        generate_eq_ptr,
-    )
-}
-
-pub fn eq_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_eq_float<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(rhs);
-        let value = gc.builder().build_float_compare(
-            inkwell::FloatPredicate::OEQ,
-            lhs_val,
-            rhs_val,
-            EQ_TRAIT_EQ_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-            "eq_of_float",
-        );
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                make_bool_ty(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        eq_trait_id(),
-        &EQ_TRAIT_EQ_NAME.to_string(),
-        ty,
-        make_bool_ty(),
-        generate_eq_float,
-    )
-}
-
-pub const LESS_THAN_TRAIT_NAME: &str = "LessThan";
-pub const LESS_THAN_TRAIT_LT_NAME: &str = "less_than";
-
-pub fn less_than_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], LESS_THAN_TRAIT_NAME),
-    }
-}
-
-pub fn less_than_trait() -> TraitInfo {
-    binary_operator_trait(
-        less_than_trait_id(),
-        LESS_THAN_TRAIT_LT_NAME.to_string(),
-        Some(make_bool_ty()),
-    )
-}
-
-pub fn less_than_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_less_than_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
-
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let value = gc.builder().build_int_compare(
-            if is_singed {
-                IntPredicate::SLT
-            } else {
-                IntPredicate::ULT
-            },
-            lhs_val,
-            rhs_val,
-            LESS_THAN_TRAIT_LT_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-            LESS_THAN_TRAIT_LT_NAME,
-        );
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                make_bool_ty(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        less_than_trait_id(),
-        &LESS_THAN_TRAIT_LT_NAME.to_string(),
-        ty,
-        make_bool_ty(),
-        generate_less_than_int,
-    )
-}
-
-pub fn less_than_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_less_than_float<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(rhs);
-        let value = gc.builder().build_float_compare(
-            inkwell::FloatPredicate::OLT,
-            lhs_val,
-            rhs_val,
-            LESS_THAN_TRAIT_LT_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-            LESS_THAN_TRAIT_LT_NAME,
-        );
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                make_bool_ty(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        less_than_trait_id(),
-        &LESS_THAN_TRAIT_LT_NAME.to_string(),
-        ty,
-        make_bool_ty(),
-        generate_less_than_float,
-    )
-}
-
-pub const LESS_THAN_OR_EQUAL_TO_TRAIT_NAME: &str = "LessThanOrEq";
-pub const LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME: &str = "less_than_or_eq";
-
-pub fn less_than_or_equal_to_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], LESS_THAN_OR_EQUAL_TO_TRAIT_NAME),
-    }
-}
-
-pub fn less_than_or_equal_to_trait() -> TraitInfo {
-    binary_operator_trait(
-        less_than_or_equal_to_trait_id(),
-        LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
-        Some(make_bool_ty()),
-    )
-}
-
-pub fn less_than_or_equal_to_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_less_than_or_equal_to_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
-
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let value = gc.builder().build_int_compare(
-            if is_singed {
-                IntPredicate::SLE
-            } else {
-                IntPredicate::ULE
-            },
-            lhs_val,
-            rhs_val,
-            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
-        );
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                make_bool_ty(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        less_than_or_equal_to_trait_id(),
-        &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
-        ty,
-        make_bool_ty(),
-        generate_less_than_or_equal_to_int,
-    )
-}
-
-pub fn less_than_or_equal_to_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_less_than_or_equal_to_float<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(rhs);
-        let value = gc.builder().build_float_compare(
-            inkwell::FloatPredicate::OLE,
-            lhs_val,
-            rhs_val,
-            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
-        );
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                make_bool_ty(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        less_than_or_equal_to_trait_id(),
-        &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
-        ty,
-        make_bool_ty(),
-        generate_less_than_or_equal_to_float,
-    )
-}
-
-pub const ADD_TRAIT_NAME: &str = "Add";
-pub const ADD_TRAIT_ADD_NAME: &str = "add";
-
-pub fn add_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], ADD_TRAIT_NAME),
-    }
-}
-
-pub fn add_trait() -> TraitInfo {
-    binary_operator_trait(add_trait_id(), ADD_TRAIT_ADD_NAME.to_string(), None)
-}
-
-pub fn add_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_add_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let value = gc
-            .builder()
-            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        add_trait_id(),
-        &ADD_TRAIT_ADD_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_add_int,
-    )
-}
-
-pub fn add_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_add_float<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(rhs);
-        let value = gc
-            .builder()
-            .build_float_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        add_trait_id(),
-        &ADD_TRAIT_ADD_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_add_float,
-    )
-}
-
-pub const SUBTRACT_TRAIT_NAME: &str = "Sub";
-pub const SUBTRACT_TRAIT_SUBTRACT_NAME: &str = "sub";
-
-pub fn subtract_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], SUBTRACT_TRAIT_NAME),
-    }
-}
-
-pub fn subtract_trait() -> TraitInfo {
-    binary_operator_trait(
-        subtract_trait_id(),
-        SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
-        None,
-    )
-}
-
-pub fn subtract_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_subtract_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let value = gc
-            .builder()
-            .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        subtract_trait_id(),
-        &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_subtract_int,
-    )
-}
-
-pub fn subtract_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_subtract_float<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(rhs);
-        let value = gc
-            .builder()
-            .build_float_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        subtract_trait_id(),
-        &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_subtract_float,
-    )
-}
-
-pub const MULTIPLY_TRAIT_NAME: &str = "Mul";
-pub const MULTIPLY_TRAIT_MULTIPLY_NAME: &str = "mul";
-
-pub fn multiply_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], MULTIPLY_TRAIT_NAME),
-    }
-}
-
-pub fn multiply_trait() -> TraitInfo {
-    binary_operator_trait(
-        multiply_trait_id(),
-        MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
-        None,
-    )
-}
-
-pub fn multiply_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_multiply_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let value = gc
-            .builder()
-            .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        multiply_trait_id(),
-        &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_multiply_int,
-    )
-}
-
-pub fn multiply_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_multiply_float<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(rhs);
-        let value = gc
-            .builder()
-            .build_float_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        multiply_trait_id(),
-        &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_multiply_float,
-    )
-}
-
-pub const DIVIDE_TRAIT_NAME: &str = "Div";
-pub const DIVIDE_TRAIT_DIVIDE_NAME: &str = "div";
-
-pub fn divide_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], DIVIDE_TRAIT_NAME),
-    }
-}
-
-pub fn divide_trait() -> TraitInfo {
-    binary_operator_trait(
-        divide_trait_id(),
-        DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
-        None,
-    )
-}
-
-pub fn divide_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_divide_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
-
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let value = if is_singed {
-            gc.builder()
-                .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
-        } else {
-            gc.builder()
-                .build_int_unsigned_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
-        };
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        divide_trait_id(),
-        &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_divide_int,
-    )
-}
-
-pub fn divide_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_divide_float<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(rhs);
-        let value = gc
-            .builder()
-            .build_float_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        divide_trait_id(),
-        &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_divide_float,
-    )
-}
-
-pub const REMAINDER_TRAIT_NAME: &str = "Rem";
-pub const REMAINDER_TRAIT_REMAINDER_NAME: &str = "rem";
-
-pub fn remainder_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], REMAINDER_TRAIT_NAME),
-    }
-}
-
-pub fn remainder_trait() -> TraitInfo {
-    binary_operator_trait(
-        remainder_trait_id(),
-        REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
-        None,
-    )
-}
-
-pub fn remainder_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_remainder_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        lhs: Object<'c>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
-
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let value = if is_singed {
-            gc.builder()
-                .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
-        } else {
-            gc.builder()
-                .build_int_unsigned_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
-        };
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                lhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} lhs rhs", REMAINDER_TRAIT_REMAINDER_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    binary_opeartor_instance(
-        remainder_trait_id(),
-        &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_remainder_int,
-    )
-}
-
-pub const NEGATE_TRAIT_NAME: &str = "Neg";
-pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
-
-pub fn negate_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], NEGATE_TRAIT_NAME),
-    }
-}
-
-pub fn negate_trait() -> TraitInfo {
-    unary_operator_trait(negate_trait_id(), NEGATE_TRAIT_NEGATE_NAME.to_string())
-}
-
-pub fn negate_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_negate_int<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs.clone());
-        let value = gc
-            .builder()
-            .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                rhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    unary_opeartor_instance(
-        negate_trait_id(),
-        &NEGATE_TRAIT_NEGATE_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_negate_int,
-    )
-}
-
-pub fn negate_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
-    fn generate_negate_float<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
-        gc.release(rhs.clone());
-        let value = gc
-            .builder()
-            .build_float_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                rhs.ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    unary_opeartor_instance(
-        negate_trait_id(),
-        &NEGATE_TRAIT_NEGATE_NAME.to_string(),
-        ty.clone(),
-        ty,
-        generate_negate_float,
-    )
-}
-
-pub const NOT_TRAIT_NAME: &str = "Not";
-pub const NOT_TRAIT_OP_NAME: &str = "not";
-
-pub fn not_trait_id() -> TraitId {
-    TraitId {
-        name: FullName::from_strs(&[STD_NAME], NOT_TRAIT_NAME),
-    }
-}
-
-pub fn not_trait() -> TraitInfo {
-    unary_operator_trait(not_trait_id(), NOT_TRAIT_OP_NAME.to_string())
-}
-
-pub fn not_trait_instance_bool() -> TraitInstance {
-    fn generate_not_bool<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        rhs: Object<'c>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
-        gc.release(rhs);
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
-        let false_val = bool_ty.const_zero();
-        let value =
-            gc.builder()
-                .build_int_compare(IntPredicate::EQ, rhs_val, false_val, NOT_TRAIT_OP_NAME);
-        let value = gc
-            .builder()
-            .build_int_z_extend(value, bool_ty, NOT_TRAIT_OP_NAME);
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                make_bool_ty(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("{} rhs", NOT_TRAIT_OP_NAME)),
-            )
-        } else {
-            rvo.unwrap()
-        };
-        obj.store_field_nocap(gc, 0, value);
-        obj
-    }
-    unary_opeartor_instance(
-        not_trait_id(),
-        &NOT_TRAIT_OP_NAME.to_string(),
-        make_bool_ty(),
-        make_bool_ty(),
-        generate_not_bool,
-    )
-}
-
-// Std::is_unique : a -> (Bool, a)
-pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
-    const TYPE_NAME: &str = "a";
-    const VAR_NAME: &str = "x";
-    let generator: Rc<InlineLLVM> = Rc::new(move |gc, ret_ty, rvo| {
         let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
 
         // Get argument
-        let obj = gc.get_var(&FullName::local(VAR_NAME)).ptr.get(gc);
+        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
 
         // Prepare returned object.
         let ret = if rvo.is_some() {
@@ -3879,7 +3444,13 @@ pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         ret.store_field_nocap(gc, 1, obj_val);
 
         ret
-    });
+    }
+}
+
+// Std::is_unique : a -> (Bool, a)
+pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const TYPE_NAME: &str = "a";
+    const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let ret_type = make_tuple_ty(vec![make_bool_ty(), obj_type.clone()]);
     let scm = Scheme::generalize(
@@ -3890,7 +3461,9 @@ pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_lit(
-            generator,
+            InlineLLVM::IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody {
+                var_name: VAR_NAME.to_string(),
+            }),
             vec![FullName::local(VAR_NAME)],
             format!("is_unique({})", VAR_NAME),
             ret_type,
@@ -3899,4 +3472,1249 @@ pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
         None,
     );
     (expr, scm)
+}
+
+pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
+    const TYVAR_NAME: &str = "a";
+    let kind = kind_star();
+    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
+    let tv_type = type_tyvar(TYVAR_NAME, &kind);
+    TraitInfo {
+        id: trait_id,
+        type_var: tv_tyvar,
+        methods: HashMap::from([(
+            method_name,
+            QualType {
+                preds: vec![],
+                kind_preds: vec![],
+                ty: type_fun(tv_type.clone(), tv_type.clone()),
+            },
+        )]),
+        kind_predicates: vec![],
+    }
+}
+
+const UNARY_OPERATOR_RHS_NAME: &str = "rhs";
+
+pub fn unary_opeartor_instance(
+    trait_id: TraitId,
+    method_name: &Name,
+    operand_ty: Rc<TypeNode>,
+    result_ty: Rc<TypeNode>,
+    generator: InlineLLVM,
+) -> TraitInstance {
+    TraitInstance {
+        qual_pred: QualPredicate {
+            context: vec![],
+            kind_preds: vec![],
+            predicate: Predicate::make(trait_id, operand_ty),
+        },
+        methods: HashMap::from([(
+            method_name.to_string(),
+            expr_abs(
+                vec![var_local(UNARY_OPERATOR_RHS_NAME)],
+                expr_lit(
+                    generator,
+                    vec![FullName::local(UNARY_OPERATOR_RHS_NAME)],
+                    method_name.to_string(),
+                    result_ty,
+                    None,
+                ),
+                None,
+            ),
+        )]),
+        define_module: STD_NAME.to_string(),
+    }
+}
+
+pub fn binary_operator_trait(
+    trait_id: TraitId,
+    method_name: Name,
+    output_ty: Option<Rc<TypeNode>>,
+) -> TraitInfo {
+    const TYVAR_NAME: &str = "a";
+    let kind = kind_star();
+    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
+    let tv_type = type_tyvar(TYVAR_NAME, &kind);
+    let output_ty = match output_ty {
+        Some(t) => t,
+        None => tv_type.clone(),
+    };
+    TraitInfo {
+        id: trait_id,
+        type_var: tv_tyvar,
+        methods: HashMap::from([(
+            method_name,
+            QualType {
+                preds: vec![],
+                kind_preds: vec![],
+                ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
+            },
+        )]),
+        kind_predicates: vec![],
+    }
+}
+
+const BINARY_OPERATOR_LHS_NAME: &str = "lhs";
+const BINARY_OPERATOR_RHS_NAME: &str = "rhs";
+
+pub fn binary_opeartor_instance(
+    trait_id: TraitId,
+    method_name: &Name,
+    operand_ty: Rc<TypeNode>,
+    result_ty: Rc<TypeNode>,
+    generator: InlineLLVM,
+) -> TraitInstance {
+    TraitInstance {
+        qual_pred: QualPredicate {
+            context: vec![],
+            kind_preds: vec![],
+            predicate: Predicate::make(trait_id, operand_ty),
+        },
+        methods: HashMap::from([(
+            method_name.to_string(),
+            expr_abs(
+                vec![var_local(BINARY_OPERATOR_LHS_NAME)],
+                expr_abs(
+                    vec![var_local(BINARY_OPERATOR_RHS_NAME)],
+                    expr_lit(
+                        generator,
+                        vec![
+                            FullName::local(BINARY_OPERATOR_LHS_NAME),
+                            FullName::local(BINARY_OPERATOR_RHS_NAME),
+                        ],
+                        method_name.to_string(),
+                        result_ty,
+                        None,
+                    ),
+                    None,
+                ),
+                None,
+            ),
+        )]),
+        define_module: STD_NAME.to_string(),
+    }
+}
+
+pub const EQ_TRAIT_NAME: &str = "Eq";
+pub const EQ_TRAIT_EQ_NAME: &str = "eq";
+
+pub fn eq_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
+    }
+}
+
+pub fn eq_trait() -> TraitInfo {
+    binary_operator_trait(
+        eq_trait_id(),
+        EQ_TRAIT_EQ_NAME.to_string(),
+        Some(make_bool_ty()),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntEqBody {}
+
+impl InlineLLVMIntEqBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
+        let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs_obj.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs_obj);
+        let rhs_val = rhs_obj.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs_obj);
+        let value =
+            gc.builder()
+                .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            "eq",
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn eq_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        eq_trait_id(),
+        &EQ_TRAIT_EQ_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        InlineLLVM::IntEqBody(InlineLLVMIntEqBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMPtrEqBody {}
+
+impl InlineLLVMPtrEqBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
+        let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs_obj.load_field_nocap(gc, 0).into_pointer_value();
+        gc.release(lhs_obj);
+        let rhs_val = rhs_obj.load_field_nocap(gc, 0).into_pointer_value();
+        gc.release(rhs_obj);
+        let diff = gc
+            .builder()
+            .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr");
+        let value = gc.builder().build_int_compare(
+            IntPredicate::EQ,
+            diff,
+            diff.get_type().const_zero(),
+            EQ_TRAIT_EQ_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            "eq_of_int",
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn eq_trait_instance_ptr(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        eq_trait_id(),
+        &EQ_TRAIT_EQ_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        InlineLLVM::PtrEqBody(InlineLLVMPtrEqBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatEqBody {}
+
+impl InlineLLVMFloatEqBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
+        let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs_obj.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs_obj);
+        let rhs_val = rhs_obj.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs_obj);
+        let value = gc.builder().build_float_compare(
+            inkwell::FloatPredicate::OEQ,
+            lhs_val,
+            rhs_val,
+            EQ_TRAIT_EQ_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            "eq_of_float",
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn eq_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        eq_trait_id(),
+        &EQ_TRAIT_EQ_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        InlineLLVM::FloatEqBody(InlineLLVMFloatEqBody {}),
+    )
+}
+
+pub const LESS_THAN_TRAIT_NAME: &str = "LessThan";
+pub const LESS_THAN_TRAIT_LT_NAME: &str = "less_than";
+
+pub fn less_than_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], LESS_THAN_TRAIT_NAME),
+    }
+}
+
+pub fn less_than_trait() -> TraitInfo {
+    binary_operator_trait(
+        less_than_trait_id(),
+        LESS_THAN_TRAIT_LT_NAME.to_string(),
+        Some(make_bool_ty()),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntLessThanBody {}
+
+impl InlineLLVMIntLessThanBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
+        let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
+        let is_singed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let lhs_val = lhs_obj.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs_obj);
+        let rhs_val: IntValue = rhs_obj.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs_obj);
+        let value = gc.builder().build_int_compare(
+            if is_singed {
+                IntPredicate::SLT
+            } else {
+                IntPredicate::ULT
+            },
+            lhs_val,
+            rhs_val,
+            LESS_THAN_TRAIT_LT_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            LESS_THAN_TRAIT_LT_NAME,
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn less_than_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        less_than_trait_id(),
+        &LESS_THAN_TRAIT_LT_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        InlineLLVM::IntLessThanBody(InlineLLVMIntLessThanBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatLessThanBody {}
+
+impl InlineLLVMFloatLessThanBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc.builder().build_float_compare(
+            inkwell::FloatPredicate::OLT,
+            lhs_val,
+            rhs_val,
+            LESS_THAN_TRAIT_LT_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            LESS_THAN_TRAIT_LT_NAME,
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn less_than_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        less_than_trait_id(),
+        &LESS_THAN_TRAIT_LT_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        InlineLLVM::FloatLessThanBody(InlineLLVMFloatLessThanBody {}),
+    )
+}
+
+pub const LESS_THAN_OR_EQUAL_TO_TRAIT_NAME: &str = "LessThanOrEq";
+pub const LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME: &str = "less_than_or_eq";
+
+pub fn less_than_or_equal_to_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], LESS_THAN_OR_EQUAL_TO_TRAIT_NAME),
+    }
+}
+
+pub fn less_than_or_equal_to_trait() -> TraitInfo {
+    binary_operator_trait(
+        less_than_or_equal_to_trait_id(),
+        LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
+        Some(make_bool_ty()),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntLessThanOrEqBody {}
+
+impl InlineLLVMIntLessThanOrEqBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc.builder().build_int_compare(
+            if is_singed {
+                IntPredicate::SLE
+            } else {
+                IntPredicate::ULE
+            },
+            lhs_val,
+            rhs_val,
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn less_than_or_equal_to_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        less_than_or_equal_to_trait_id(),
+        &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        InlineLLVM::IntLessThanOrEqBody(InlineLLVMIntLessThanOrEqBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatLessThanOrEqBody {}
+
+impl InlineLLVMFloatLessThanOrEqBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc.builder().build_float_compare(
+            inkwell::FloatPredicate::OLE,
+            lhs_val,
+            rhs_val,
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let value = gc.builder().build_int_z_extend(
+            value,
+            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+        );
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn less_than_or_equal_to_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        less_than_or_equal_to_trait_id(),
+        &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
+        ty,
+        make_bool_ty(),
+        InlineLLVM::FloatLessThanOrEqBody(InlineLLVMFloatLessThanOrEqBody {}),
+    )
+}
+
+pub const ADD_TRAIT_NAME: &str = "Add";
+pub const ADD_TRAIT_ADD_NAME: &str = "add";
+
+pub fn add_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], ADD_TRAIT_NAME),
+    }
+}
+
+pub fn add_trait() -> TraitInfo {
+    binary_operator_trait(add_trait_id(), ADD_TRAIT_ADD_NAME.to_string(), None)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntAddBody {}
+
+impl InlineLLVMIntAddBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn add_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        add_trait_id(),
+        &ADD_TRAIT_ADD_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::IntAddBody(InlineLLVMIntAddBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatAddBody {}
+
+impl InlineLLVMFloatAddBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_float_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn add_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        add_trait_id(),
+        &ADD_TRAIT_ADD_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::FloatAddBody(InlineLLVMFloatAddBody {}),
+    )
+}
+
+pub const SUBTRACT_TRAIT_NAME: &str = "Sub";
+pub const SUBTRACT_TRAIT_SUBTRACT_NAME: &str = "sub";
+
+pub fn subtract_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], SUBTRACT_TRAIT_NAME),
+    }
+}
+
+pub fn subtract_trait() -> TraitInfo {
+    binary_operator_trait(
+        subtract_trait_id(),
+        SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
+        None,
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntSubBody {}
+
+impl InlineLLVMIntSubBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn subtract_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        subtract_trait_id(),
+        &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::IntSubBody(InlineLLVMIntSubBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatSubBody {}
+
+impl InlineLLVMFloatSubBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_float_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn subtract_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        subtract_trait_id(),
+        &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::FloatSubBody(InlineLLVMFloatSubBody {}),
+    )
+}
+
+pub const MULTIPLY_TRAIT_NAME: &str = "Mul";
+pub const MULTIPLY_TRAIT_MULTIPLY_NAME: &str = "mul";
+
+pub fn multiply_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], MULTIPLY_TRAIT_NAME),
+    }
+}
+
+pub fn multiply_trait() -> TraitInfo {
+    binary_operator_trait(
+        multiply_trait_id(),
+        MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
+        None,
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntMulBody {}
+
+impl InlineLLVMIntMulBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn multiply_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        multiply_trait_id(),
+        &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::IntMulBody(InlineLLVMIntMulBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatMulBody {}
+
+impl InlineLLVMFloatMulBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_float_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn multiply_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        multiply_trait_id(),
+        &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::FloatMulBody(InlineLLVMFloatMulBody {}),
+    )
+}
+
+pub const DIVIDE_TRAIT_NAME: &str = "Div";
+pub const DIVIDE_TRAIT_DIVIDE_NAME: &str = "div";
+
+pub fn divide_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], DIVIDE_TRAIT_NAME),
+    }
+}
+
+pub fn divide_trait() -> TraitInfo {
+    binary_operator_trait(
+        divide_trait_id(),
+        DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
+        None,
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntDivBody {}
+
+impl InlineLLVMIntDivBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = if is_singed {
+            gc.builder()
+                .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
+        } else {
+            gc.builder()
+                .build_int_unsigned_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
+        };
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn divide_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        divide_trait_id(),
+        &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::IntDivBody(InlineLLVMIntDivBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatDivBody {}
+
+impl InlineLLVMFloatDivBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs);
+        let value = gc
+            .builder()
+            .build_float_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn divide_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        divide_trait_id(),
+        &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::FloatDivBody(InlineLLVMFloatDivBody {}),
+    )
+}
+
+pub const REMAINDER_TRAIT_NAME: &str = "Rem";
+pub const REMAINDER_TRAIT_REMAINDER_NAME: &str = "rem";
+
+pub fn remainder_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], REMAINDER_TRAIT_NAME),
+    }
+}
+
+pub fn remainder_trait() -> TraitInfo {
+    binary_operator_trait(
+        remainder_trait_id(),
+        REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
+        None,
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntRemBody {}
+
+impl InlineLLVMIntRemBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
+        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
+        let lhs = gc.get_var(&lhs).ptr.get(gc);
+        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+
+        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(lhs.clone());
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let value = if is_singed {
+            gc.builder()
+                .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
+        } else {
+            gc.builder()
+                .build_int_unsigned_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
+        };
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                lhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} lhs rhs", REMAINDER_TRAIT_REMAINDER_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn remainder_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    binary_opeartor_instance(
+        remainder_trait_id(),
+        &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::IntRemBody(InlineLLVMIntRemBody {}),
+    )
+}
+
+pub const NEGATE_TRAIT_NAME: &str = "Neg";
+pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
+
+pub fn negate_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], NEGATE_TRAIT_NAME),
+    }
+}
+
+pub fn negate_trait() -> TraitInfo {
+    unary_operator_trait(negate_trait_id(), NEGATE_TRAIT_NEGATE_NAME.to_string())
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMIntNegBody {}
+
+impl InlineLLVMIntNegBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
+        let rhs = gc.get_var(&rhs_name).ptr.get(gc);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs.clone());
+        let value = gc
+            .builder()
+            .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                rhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn negate_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+    unary_opeartor_instance(
+        negate_trait_id(),
+        &NEGATE_TRAIT_NEGATE_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::IntNegBody(InlineLLVMIntNegBody {}),
+    )
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFloatNegBody {}
+
+impl InlineLLVMFloatNegBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
+        let rhs = gc.get_var(&rhs_name).ptr.get(gc);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        gc.release(rhs.clone());
+        let value = gc
+            .builder()
+            .build_float_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                rhs.ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn negate_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+    unary_opeartor_instance(
+        negate_trait_id(),
+        &NEGATE_TRAIT_NEGATE_NAME.to_string(),
+        ty.clone(),
+        ty,
+        InlineLLVM::FloatNegBody(InlineLLVMFloatNegBody {}),
+    )
+}
+
+pub const NOT_TRAIT_NAME: &str = "Not";
+pub const NOT_TRAIT_OP_NAME: &str = "not";
+
+pub fn not_trait_id() -> TraitId {
+    TraitId {
+        name: FullName::from_strs(&[STD_NAME], NOT_TRAIT_NAME),
+    }
+}
+
+pub fn not_trait() -> TraitInfo {
+    unary_operator_trait(not_trait_id(), NOT_TRAIT_OP_NAME.to_string())
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMBoolNegBody {}
+
+impl InlineLLVMBoolNegBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
+        let rhs = gc.get_var(&rhs_name).ptr.get(gc);
+        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        gc.release(rhs);
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let false_val = bool_ty.const_zero();
+        let value =
+            gc.builder()
+                .build_int_compare(IntPredicate::EQ, rhs_val, false_val, NOT_TRAIT_OP_NAME);
+        let value = gc
+            .builder()
+            .build_int_z_extend(value, bool_ty, NOT_TRAIT_OP_NAME);
+        let obj = if rvo.is_none() {
+            allocate_obj(
+                make_bool_ty(),
+                &vec![],
+                None,
+                gc,
+                Some(&format!("{} rhs", NOT_TRAIT_OP_NAME)),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        obj.store_field_nocap(gc, 0, value);
+        obj
+    }
+}
+
+pub fn not_trait_instance_bool() -> TraitInstance {
+    unary_opeartor_instance(
+        not_trait_id(),
+        &NOT_TRAIT_OP_NAME.to_string(),
+        make_bool_ty(),
+        make_bool_ty(),
+        InlineLLVM::BoolNegBody(InlineLLVMBoolNegBody {}),
+    )
 }

@@ -1015,7 +1015,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ty: Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        (lit.generator)(self, &ty, rvo)
+        lit.generator.generate(self, &ty, rvo)
     }
 
     // Calculate captured variables and their types of lambda expression.

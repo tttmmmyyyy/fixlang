@@ -5,17 +5,18 @@ struct FixParser;
 use std::{cmp::min, mem::swap};
 
 use pest::error::Error;
+use serde::{Deserialize, Serialize};
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
     string: Rc<String>,
     file_name: String,
 }
 
 // lifetime-free version of pest::Span
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Span {
     pub input: SourceFile,
     pub start: usize,

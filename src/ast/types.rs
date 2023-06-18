@@ -1,10 +1,11 @@
 use core::panic;
 
 use inkwell::types::BasicType;
+use serde::{Deserialize, Serialize};
 
 use super::*;
 
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TyVar {
     pub name: String,
     pub kind: Rc<Kind>,
@@ -18,7 +19,7 @@ impl TyVar {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub enum Kind {
     Star,
     Arrow(Rc<Kind>, Rc<Kind>),
@@ -53,7 +54,7 @@ pub enum TyConVariant {
     DynamicObject,
 }
 
-#[derive(Clone, PartialEq, Hash, Eq)]
+#[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     pub name: FullName,
 }
@@ -177,6 +178,7 @@ impl TyConInfo {
 }
 
 // Node of type ast tree with user defined additional information
+#[derive(Serialize, Deserialize)]
 pub struct TypeNode {
     pub ty: Type,
     pub info: TypeInfo,
@@ -539,7 +541,7 @@ impl Clone for TypeNode {
 }
 
 // Variant of type
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Serialize, Deserialize)]
 pub enum Type {
     TyVar(Rc<TyVar>),
     TyCon(Rc<TyCon>),
@@ -701,7 +703,7 @@ pub fn tycon(name: FullName) -> Rc<TyCon> {
 }
 
 // Additional information of types.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     #[allow(dead_code)]
     source: Option<Span>,

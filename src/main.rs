@@ -4,7 +4,8 @@ extern crate pest_derive;
 #[allow(unused_imports)]
 #[macro_use]
 extern crate serial_test;
-// extern crate rustc_llvm_proxy;
+extern crate serde;
+extern crate serde_json;
 
 mod ast;
 mod builtin;
