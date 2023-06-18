@@ -1,3 +1,5 @@
+use std::mem::replace;
+
 use inkwell::module::Linkage;
 
 use super::*;
@@ -55,8 +57,6 @@ pub struct GlobalValue {
     // the type of method "show" is "a -> String for a: Show",
     pub ty: Rc<Scheme>,
     pub expr: SymbolExpr,
-    // Result of typechecking (mainly, substitution) of this symbol.
-    pub typeresolver: TypeResolver,
     // TODO: add ty_src: Span
     // TODO: add expr_src: Span
 }
@@ -75,7 +75,7 @@ impl GlobalValue {
         self.ty = self.ty.set_kinds(trait_kind_map);
         self.ty.check_kinds(kind_map, trait_kind_map);
         match &mut self.expr {
-            SymbolExpr::Simple(_) => {}
+            SymbolExpr::Simple(_, _) => {}
             SymbolExpr::Method(ms) => {
                 for m in ms {
                     m.ty = m.ty.set_kinds(trait_kind_map);
@@ -89,15 +89,18 @@ impl GlobalValue {
 // Expression of global symbol.
 #[derive(Clone)]
 pub enum SymbolExpr {
-    Simple(Rc<ExprNode>),    // Definition such as "id : a -> a; id = \x -> x".
-    Method(Vec<MethodImpl>), // Trait method implementations.
+    Simple(Rc<ExprNode>, TypeResolver), // Definition such as "id : a -> a; id = \x -> x".
+    Method(Vec<MethodImpl>),            // Trait method implementations.
 }
 
 impl SymbolExpr {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         match self {
-            SymbolExpr::Simple(e) => {
-                *self = SymbolExpr::Simple(e.resolve_namespace(ctx));
+            SymbolExpr::Simple(e, tr) => {
+                *self = SymbolExpr::Simple(
+                    e.resolve_namespace(ctx),
+                    replace(tr, TypeResolver::default()),
+                );
             }
             SymbolExpr::Method(mis) => {
                 for mi in mis {
@@ -123,6 +126,8 @@ pub struct MethodImpl {
     // For example, if `Main` module implements `Eq : SomeType`, then implementation of `eq` for `SomeType` is defined in `Main` module,
     // but it's name as a function is still `Std::Eq::eq`.
     pub define_module: Name,
+    // Result of typechecking (mainly, substitution) of this symbol.
+    pub typeresolver: TypeResolver,
 }
 
 impl MethodImpl {
@@ -297,8 +302,7 @@ impl FixModule {
             name,
             GlobalValue {
                 ty: scm,
-                expr: SymbolExpr::Simple(expr),
-                typeresolver: Default::default(),
+                expr: SymbolExpr::Simple(expr, TypeResolver::default()),
             },
         );
     }
@@ -513,24 +517,28 @@ impl FixModule {
     }
 
     // Instantiate symbol.
-    fn instantiate_symbol(&mut self, mut tr: TypeResolver, sym: &mut InstantiatedSymbol) {
+    fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol) {
         assert!(sym.expr.is_none());
         let global_sym = self.global_values.get(&sym.template_name).unwrap();
-        let template_expr = match &global_sym.expr {
-            SymbolExpr::Simple(e) => {
+        let (template_expr, tr) = match &global_sym.expr {
+            SymbolExpr::Simple(e, tr) => {
+                let mut tr = tr.clone();
                 tr.unify(&e.inferred_ty.as_ref().unwrap(), &sym.ty);
-                e.clone()
+                (e.clone(), tr)
             }
             SymbolExpr::Method(impls) => {
                 // Find method implementation that unifies to "sym.ty".
                 let mut e: Option<Rc<ExprNode>> = None;
+                let mut opt_tr: Option<TypeResolver> = None;
                 for method in impls {
+                    let mut tr = method.typeresolver.clone();
                     if tr.unify(&method.expr.inferred_ty.as_ref().unwrap(), &sym.ty) {
                         e = Some(method.expr.clone());
+                        opt_tr = Some(tr);
                         break;
                     }
                 }
-                e.unwrap()
+                (e.unwrap(), opt_tr.unwrap())
             }
         };
         sym.expr = Some(self.instantiate_expr(&tr, &template_expr));
@@ -541,11 +549,9 @@ impl FixModule {
     pub fn instantiate_symbols(&mut self) {
         while !self.deferred_instantiation.is_empty() {
             let (name, sym) = self.deferred_instantiation.iter().next().unwrap();
-            let gs = &self.global_values[&sym.template_name];
-            let tc = gs.typeresolver.clone();
             let name = name.clone();
             let mut sym = sym.clone();
-            self.instantiate_symbol(tc, &mut sym);
+            self.instantiate_symbol(&mut sym);
             self.deferred_instantiation.remove(&name);
             self.instantiated_global_symbols.insert(name, sym);
         }
@@ -690,6 +696,7 @@ impl FixModule {
                             ty,
                             expr,
                             define_module: trait_impl.define_module.clone(),
+                            typeresolver: TypeResolver::default(), // Will be set after type checking.
                         });
                     }
                 }
@@ -699,7 +706,6 @@ impl FixModule {
                     GlobalValue {
                         ty: method_ty,
                         expr: SymbolExpr::Method(method_impls),
-                        typeresolver: TypeResolver::default(),
                     },
                 );
             }
@@ -876,7 +882,7 @@ impl FixModule {
         // Merge global values.
         for (name, gv) in other.global_values {
             let ty = gv.ty;
-            if let SymbolExpr::Simple(expr) = gv.expr {
+            if let SymbolExpr::Simple(expr, _) = gv.expr {
                 self.add_global_value(name, (expr, ty));
             }
         }
