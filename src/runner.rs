@@ -76,13 +76,13 @@ fn build_module<'c>(
     }
 
     // Check types.
-    for (name, sym) in &mut fix_mod.global_values {
+    for (name, gv) in &mut fix_mod.global_values {
         let mut tc = typechecker.clone();
-        match &sym.expr {
+        match &gv.expr {
             SymbolExpr::Simple(e) => {
                 tc.current_module = Some(name.module());
-                let e = tc.check_type(e.clone(), sym.ty.clone());
-                sym.expr = SymbolExpr::Simple(e);
+                let e = tc.check_type(e.clone(), gv.ty.clone());
+                gv.expr = SymbolExpr::Simple(e);
             }
             SymbolExpr::Method(methods) => {
                 let mut methods = methods.clone();
@@ -90,10 +90,10 @@ fn build_module<'c>(
                     tc.current_module = Some(m.define_module.clone());
                     m.expr = tc.check_type(m.expr.clone(), m.ty.clone());
                 }
-                sym.expr = SymbolExpr::Method(methods);
+                gv.expr = SymbolExpr::Method(methods);
             }
         }
-        sym.typeresolver = tc.resolver.clone();
+        gv.typeresolver = tc.resolver.clone();
     }
 
     // Calculate free variables of expressions.
