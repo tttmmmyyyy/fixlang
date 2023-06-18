@@ -10,8 +10,8 @@ use super::*;
 
 #[derive(Clone)]
 pub struct SourceFile {
-    string: Rc<String>,
-    file_name: String,
+    pub string: Rc<String>,
+    pub file_name: String,
 }
 
 // lifetime-free version of pest::Span
@@ -152,23 +152,37 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
     }
 }
 
-pub fn parse_source(source: &str, file_name: &str) -> FixModule {
-    let source = SourceFile {
-        string: Rc::new(source.to_string()),
-        file_name: file_name.to_string(),
-    };
+fn parse_to_pairs(source: &SourceFile) -> Pairs<Rule> {
     let file = FixParser::parse(Rule::file, &source.string);
     let file = match file {
         Ok(res) => res,
         Err(e) => error_exit(&message_parse_error(e, &source)),
     };
+    file
+}
+
+pub fn parse_source(source: &SourceFile) -> FixModule {
+    let file = parse_to_pairs(&source);
     parse_file(file, &source)
+}
+
+pub fn parse_source_if(source: &SourceFile) -> FixModuleIf {
+    let file = parse_to_pairs(&source);
+    parse_file_if(file, &source)
 }
 
 fn parse_file(mut file: Pairs<Rule>, src: &SourceFile) -> FixModule {
     let pair = file.next().unwrap();
     match pair.as_rule() {
         Rule::module => return parse_module(pair, src),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_file_if(mut file: Pairs<Rule>, src: &SourceFile) -> FixModuleIf {
+    let pair = file.next().unwrap();
+    match pair.as_rule() {
+        Rule::module => return parse_module_if(pair, src),
         _ => unreachable!(),
     }
 }
@@ -216,6 +230,44 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> FixModule {
     fix_mod
 }
 
+fn parse_module_if(pair: Pair<Rule>, src: &SourceFile) -> FixModuleIf {
+    assert_eq!(pair.as_rule(), Rule::module);
+    let mut pairs = pair.into_inner();
+    let module_name = parse_module_defn(pairs.next().unwrap(), src);
+    let namespace = NameSpace::new(vec![module_name.clone()]);
+    let mut fix_mod = FixModuleIf::new(module_name.clone());
+
+    let mut import_statements: Vec<ImportStatement> = vec![];
+    let mut type_defns: Vec<TypeDefn> = Vec::new();
+    let mut global_values: Vec<(FullName, Rc<Scheme>)> = vec![];
+    let mut trait_infos: Vec<TraitInfo> = vec![];
+
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::global_defns => parse_global_defns_if(
+                pair,
+                src,
+                &namespace,
+                &mut global_values,
+                &mut type_defns,
+                &mut trait_infos,
+            ),
+            Rule::trait_impl => {}
+            Rule::import_statement => {
+                import_statements.push(parse_import_statement(pair, src));
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fix_mod.add_global_values(global_values);
+    fix_mod.add_type_defns(type_defns);
+    fix_mod.add_traits(trait_infos);
+    fix_mod.add_import_statements(import_statements);
+
+    fix_mod
+}
+
 fn parse_global_defns(
     pair: Pair<Rule>,
     src: &SourceFile,
@@ -257,6 +309,43 @@ fn parse_global_defns(
     }
 }
 
+fn parse_global_defns_if(
+    pair: Pair<Rule>,
+    src: &SourceFile,
+    namespace: &NameSpace,
+    global_values: &mut Vec<(FullName, Rc<Scheme>)>,
+    type_defns: &mut Vec<TypeDefn>,
+    trait_infos: &mut Vec<TraitInfo>,
+) {
+    assert_eq!(pair.as_rule(), Rule::global_defns);
+    let pairs = pair.into_inner();
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::global_defns_in_namespace => {
+                parse_global_defns_if_in_namespace(
+                    pair,
+                    src,
+                    namespace,
+                    global_values,
+                    type_defns,
+                    trait_infos,
+                );
+            }
+            Rule::type_defn => {
+                type_defns.push(parse_type_defn(pair, src, &namespace));
+            }
+            Rule::global_name_type_sign => {
+                global_values.push(parse_global_name_type_sign(pair, src, &namespace));
+            }
+            Rule::global_name_defn => {}
+            Rule::trait_defn => {
+                trait_infos.push(parse_trait_defn(pair, src, &namespace));
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 fn parse_global_defns_in_namespace(
     pair: Pair<Rule>,
     src: &SourceFile,
@@ -276,6 +365,29 @@ fn parse_global_defns_in_namespace(
             &namespace,
             global_name_type_signs,
             global_value_defns,
+            type_defns,
+            trait_infos,
+        );
+    }
+}
+
+fn parse_global_defns_if_in_namespace(
+    pair: Pair<Rule>,
+    src: &SourceFile,
+    namespace: &NameSpace,
+    global_values: &mut Vec<(FullName, Rc<Scheme>)>,
+    type_defns: &mut Vec<TypeDefn>,
+    trait_infos: &mut Vec<TraitInfo>,
+) {
+    assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
+    let mut pairs = pair.into_inner();
+    let namespace = namespace.append(parse_namespace(pairs.next().unwrap(), src));
+    for pair in pairs {
+        parse_global_defns_if(
+            pair,
+            src,
+            &namespace,
+            global_values,
             type_defns,
             trait_infos,
         );

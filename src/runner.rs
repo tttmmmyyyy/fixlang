@@ -203,7 +203,11 @@ pub fn run_source(source: &str, config: Configuration) -> i32 {
     imports.append(&mut std_mod.import_statements.clone());
     let mut target_mod = std_mod;
 
-    let source_mod = parse_source(source, "{filename unknown}");
+    let source = SourceFile {
+        string: Rc::new(source.to_string()),
+        file_name: "{filename unknown}".to_string(),
+    };
+    let source_mod = parse_source(&source);
     imports.append(&mut source_mod.import_statements.clone());
     target_mod.link(source_mod);
 
@@ -265,7 +269,11 @@ pub fn load_file(config: &Configuration) -> FixModule {
     imports.append(&mut std_mod.import_statements.clone());
     let mut target_mod = std_mod;
     for file_path in &config.source_files {
-        let fix_mod = parse_source(&read_file(file_path), file_path.to_str().unwrap());
+        let source = SourceFile {
+            string: Rc::new(read_file(file_path)),
+            file_name: file_path.to_str().unwrap().to_string(),
+        };
+        let fix_mod = parse_source(&source);
         imports.append(&mut fix_mod.import_statements.clone());
         target_mod.link(fix_mod);
     }

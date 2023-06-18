@@ -422,7 +422,7 @@ impl TraitEnv {
         // Check duplicate definition.
         if self.traits.contains_key(&info.id) {
             error_exit(&format!(
-                "duplicate definition for trait {}.",
+                "Duplicate definition for trait {}.",
                 info.id.to_string()
             ));
         }

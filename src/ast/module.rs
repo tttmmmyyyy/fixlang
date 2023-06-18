@@ -709,7 +709,7 @@ impl FixModule {
     }
 
     // Resolve namespaces of types and traits that appear in this module.
-    // NOTE: names of in the definition of types/traits/global_values have to be full-named already when this function called.
+    // NOTE: names in the definition of types/traits/global_values have to be full-named already when this function called.
     pub fn resolve_namespace(&mut self) {
         let mut ctx = NameResolutionContext {
             types: self.tycon_names(),
@@ -883,5 +883,270 @@ impl FixModule {
             .get_mut(importer)
             .unwrap()
             .insert(imported.clone());
+    }
+}
+
+// Interface of fix module, consists of type signatures of global values, type definitions, trait definitions.
+pub struct FixModuleIf {
+    // Module name.
+    pub name: Name,
+    // Import statements.
+    pub import_statements: Vec<ImportStatement>,
+    // A map to from each linked module to importing modules.
+    // - Each module imports itself.
+    // - Used to name-resolution and overloading resolution,
+    pub imported_mod_map: HashMap<Name, HashSet<Name>>,
+    // Modules linked to this module.
+    pub linked_mods: HashSet<Name>,
+    // Type definitions.
+    pub type_defns: Vec<TypeDefn>,
+    // Names global values and their types.
+    pub global_values: HashMap<FullName, Rc<Scheme>>,
+    // Trait environment.
+    pub trait_env: HashMap<TraitId, TraitInfo>,
+    // Type environment.
+    pub type_env: TypeEnv,
+}
+
+impl FixModuleIf {
+    // Create empty module.
+    pub fn new(name: String) -> FixModuleIf {
+        let mut fix_mod = FixModuleIf {
+            name: name.clone(),
+            import_statements: Default::default(),
+            imported_mod_map: Default::default(),
+            linked_mods: Default::default(),
+            type_defns: Default::default(),
+            global_values: Default::default(),
+            trait_env: Default::default(),
+            type_env: Default::default(),
+        };
+        fix_mod.insert_imported_mod_map(&name, &name);
+        fix_mod.insert_imported_mod_map(&name, &STD_NAME.to_string());
+        fix_mod
+    }
+
+    // Create from FixModule.
+    // TODO: in a future, FixModule will have a field of type FixModuleIf, and this function will be unnecessary.
+    pub fn from_module(fix_mod: &FixModule) -> FixModuleIf {
+        let name = fix_mod.name.clone();
+        let import_statements = fix_mod.import_statements.clone();
+        let imported_mod_map = fix_mod.imported_mod_map.clone();
+        let linked_mods = fix_mod.linked_mods.clone();
+        let type_defns = fix_mod.type_defns.clone();
+        let global_values = fix_mod
+            .global_values
+            .iter()
+            .map(|(name, gv)| (name.clone(), gv.ty.clone()))
+            .collect::<HashMap<_, _>>();
+        let trait_env = fix_mod.trait_env.traits.clone();
+        let type_env = fix_mod.type_env.clone();
+        FixModuleIf {
+            name,
+            import_statements,
+            imported_mod_map,
+            linked_mods,
+            type_defns,
+            global_values,
+            trait_env,
+            type_env,
+        }
+    }
+
+    // Add type signatures of global values.
+    pub fn add_global_values(&mut self, types: Vec<(FullName, Rc<Scheme>)>) {
+        let mut global_values: HashMap<FullName, Rc<Scheme>> = Default::default();
+        for (name, ty) in types {
+            if !global_values.contains_key(&name) {
+                global_values.insert(name, ty);
+            } else {
+                error_exit(&format!(
+                    "Duplicated type signature for `{}`",
+                    name.to_string()
+                ))
+            }
+        }
+    }
+
+    // Add type definitions.
+    pub fn add_type_defns(&mut self, mut type_defns: Vec<TypeDefn>) {
+        self.type_defns.append(&mut type_defns);
+    }
+
+    // Add trait definitions.
+    pub fn add_traits(&mut self, trait_infos: Vec<TraitInfo>) {
+        for trait_info in &trait_infos {
+            self.add_trait(trait_info.clone())
+        }
+    }
+
+    // Add trait definition.
+    pub fn add_trait(&mut self, trait_info: TraitInfo) {
+        // Check duplicate definition.
+        if self.trait_env.contains_key(&trait_info.id) {
+            error_exit(&format!(
+                "Duplicate definition for trait {}.",
+                trait_info.id.to_string()
+            ));
+        }
+        self.trait_env.insert(trait_info.id.clone(), trait_info);
+    }
+
+    // Add import statements.
+    pub fn add_import_statements(&mut self, mut imports: Vec<ImportStatement>) {
+        for import in &imports {
+            let mod_name = self.name.clone();
+            self.insert_imported_mod_map(&mod_name, &import.module);
+        }
+        self.import_statements.append(&mut imports);
+    }
+
+    // Insert element to imported_mod_map.
+    pub fn insert_imported_mod_map(&mut self, importer: &Name, imported: &Name) {
+        if !self.imported_mod_map.contains_key(importer) {
+            self.imported_mod_map
+                .insert(importer.clone(), Default::default());
+        }
+        self.imported_mod_map
+            .get_mut(importer)
+            .unwrap()
+            .insert(imported.clone());
+    }
+
+    // Link two modules.
+    pub fn link(&mut self, other: FixModuleIf) {
+        // TODO: check if a module is defined by a single source file.
+
+        // If already linked, do nothing.
+        if self.linked_mods.contains(&other.name) {
+            return;
+        }
+        self.linked_mods.insert(other.name);
+
+        // Merge imported_mod_map.
+        for (importer, importee) in &other.imported_mod_map {
+            if let Some(known_importee) = self.imported_mod_map.get(importer) {
+                assert_eq!(known_importee, importee);
+            } else {
+                self.imported_mod_map
+                    .insert(importer.clone(), importee.clone());
+            }
+        }
+
+        // Merge types.
+        self.add_type_defns(other.type_defns);
+
+        // Merge traits and instances.
+        self.trait_env.extend(other.trait_env);
+
+        // Merge global values.
+        self.add_global_values(other.global_values.into_iter().collect())
+    }
+
+    // Calculate list of type constructors including user-defined types.
+    pub fn calculate_type_env(&mut self) {
+        let mut tycons = bulitin_tycons();
+        for type_decl in &self.type_defns {
+            let tycon = type_decl.tycon();
+            if tycons.contains_key(&tycon) {
+                error_exit_with_src(
+                    &format!("Type `{}` is already defined.", tycon.to_string()),
+                    &None,
+                );
+            }
+            tycons.insert(tycon, type_decl.tycon_info());
+        }
+        self.type_env = TypeEnv::new(tycons);
+    }
+
+    // Get list of type constructors including user-defined types.
+    pub fn type_env(&self) -> TypeEnv {
+        self.type_env.clone()
+    }
+
+    // Get of list of tycons that can be used for namespace resolution.
+    pub fn tycon_names(&self) -> HashSet<FullName> {
+        let mut res: HashSet<FullName> = Default::default();
+        for (k, _v) in self.type_env().tycons.iter() {
+            res.insert(k.name.clone());
+        }
+        res
+    }
+
+    // Get of list of traits that can be used for namespace resolution.
+    pub fn trait_names(&self) -> HashSet<FullName> {
+        let mut res: HashSet<FullName> = Default::default();
+        for (k, _v) in &self.trait_env {
+            res.insert(k.name.clone());
+        }
+        res
+    }
+
+    // Resolve namespaces of types and traits that appear in this module.
+    // NOTE: names in the lhs of definition of types/traits/global values have to be full-named already when this function is called.
+    pub fn resolve_namespace(&mut self) {
+        let mut ctx = NameResolutionContext {
+            types: self.tycon_names(),
+            traits: self.trait_names(),
+            imported_modules: HashSet::default(),
+        };
+        {
+            let mut tycons = (*self.type_env.tycons).clone();
+            for (tc, ti) in &mut tycons {
+                ctx.imported_modules = self.imported_mod_map[&tc.name.module()].clone();
+                ti.resolve_namespace(&ctx);
+            }
+            self.type_env.tycons = Rc::new(tycons);
+        }
+
+        for (trait_id, trait_info) in &mut self.trait_env {
+            ctx.imported_modules = self.imported_mod_map[&trait_id.name.module()].clone();
+            // Keys in self.traits should already be resolved.
+            assert!(
+                trait_id.name
+                    == ctx
+                        .resolve(&trait_id.name, NameResolutionType::Trait)
+                        .unwrap()
+            );
+            trait_info.resolve_namespace(&ctx);
+        }
+        for decl in &mut self.type_defns {
+            ctx.imported_modules = self.imported_mod_map[&decl.name.module()].clone();
+            decl.resolve_namespace(&ctx);
+        }
+        for (name, scm) in &mut self.global_values {
+            ctx.imported_modules = self.imported_mod_map[&name.module()].clone();
+            scm.resolve_namespace(&ctx);
+        }
+    }
+
+    // Validate user-defined types
+    pub fn validate_type_defns(&self) {
+        for type_defn in &self.type_defns {
+            type_defn.check_tyvars();
+            let type_name = &type_defn.name;
+            match &type_defn.value {
+                TypeDeclValue::Struct(str) => match Field::check_duplication(&str.fields) {
+                    Some(field_name) => {
+                        error_exit(&format!(
+                            "Duplicate field `{}` for struct `{}`",
+                            field_name,
+                            type_name.to_string()
+                        ));
+                    }
+                    _ => {}
+                },
+                TypeDeclValue::Union(union) => match Field::check_duplication(&union.fields) {
+                    Some(field_name) => {
+                        error_exit(&format!(
+                            "Duplicate field `{}` for union `{}`",
+                            field_name,
+                            type_name.to_string()
+                        ));
+                    }
+                    _ => {}
+                },
+            }
+        }
     }
 }

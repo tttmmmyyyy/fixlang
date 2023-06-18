@@ -5,7 +5,11 @@ pub const FIX_NAME: &str = "fix";
 const STD_SOURCE: &str = include_str!("std.fix");
 
 pub fn make_std_mod() -> FixModule {
-    let mut fix_module = parse_source(STD_SOURCE, "std.fix");
+    let source = SourceFile {
+        string: Rc::new(STD_SOURCE.to_string()),
+        file_name: "std.fix".to_string(),
+    };
+    let mut fix_module = parse_source(&source);
 
     // Types
     fix_module.type_defns.push(loop_result_defn());
