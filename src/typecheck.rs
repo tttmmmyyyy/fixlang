@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use super::*;
 
 #[derive(Clone)]
@@ -97,7 +99,7 @@ where
 // Type substitution. Name of type variable -> type.
 // Managed so that the value (a type) of this HashMap doesn't contain a type variable that appears in keys. i.e.,
 // when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
     pub data: HashMap<Name, Rc<TypeNode>>,
 }
@@ -368,7 +370,7 @@ pub struct TypeCheckContext {
     pub current_module: Option<Name>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct TypeResolver {
     // Substitution.
     pub substitution: Substitution,

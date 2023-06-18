@@ -1,4 +1,5 @@
 use inkwell::module::Linkage;
+use serde::{Deserialize, Serialize};
 
 use super::*;
 
@@ -105,7 +106,7 @@ impl SymbolExpr {
 }
 
 // Pair of expression and type resolver for it.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
     pub expr: Rc<ExprNode>,
     pub type_resolver: TypeResolver,
