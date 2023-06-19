@@ -1,3 +1,7 @@
+use std::time::SystemTime;
+
+use chrono::{DateTime, Utc};
+
 use inkwell::module::Linkage;
 use serde::{Deserialize, Serialize};
 
@@ -218,6 +222,45 @@ impl<'a> NameResolutionContext {
     }
 }
 
+#[derive(Clone)]
+pub struct UpdateDate(pub DateTime<Utc>);
+
+impl Serialize for UpdateDate {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.0.to_rfc3339())
+    }
+}
+
+impl<'de> Deserialize<'de> for UpdateDate {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(UpdateDateVisitor)
+    }
+}
+
+struct UpdateDateVisitor;
+impl<'de> serde::de::Visitor<'de> for UpdateDateVisitor {
+    type Value = UpdateDate;
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(UpdateDate(
+            DateTime::parse_from_rfc3339(v).unwrap().with_timezone(&Utc),
+        ))
+    }
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("String for UpdateDate")
+    }
+}
+
 pub struct FixModule {
     pub name: Name,
     pub import_statements: Vec<ImportStatement>,
@@ -233,6 +276,8 @@ pub struct FixModule {
     pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
     pub trait_env: TraitEnv,
     pub type_env: TypeEnv,
+    // Last update date for each linked modules.
+    pub last_updates: HashMap<Name, UpdateDate>,
 }
 
 impl FixModule {
@@ -249,10 +294,17 @@ impl FixModule {
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
             type_env: Default::default(),
+            last_updates: Default::default(),
         };
         fix_mod.insert_imported_mod_map(&name, &name);
         fix_mod.insert_imported_mod_map(&name, &STD_NAME.to_string());
+        fix_mod.set_last_update(UpdateDate(SystemTime::now().into())); // Later updated to source file's last modified date.
         fix_mod
+    }
+
+    // Set this module's last update.
+    pub fn set_last_update(&mut self, time: UpdateDate) {
+        self.last_updates.insert(self.name.clone(), time);
     }
 
     // Add import statements.
@@ -905,6 +957,11 @@ impl FixModule {
             if let SymbolExpr::Simple(expr) = gv.expr {
                 self.add_global_value(name, (expr.expr, ty));
             }
+        }
+
+        // Merge last updates.
+        for (module, dt) in other.last_updates {
+            self.last_updates.insert(module, dt);
         }
     }
 

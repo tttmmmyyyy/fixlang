@@ -1,11 +1,13 @@
-use std::{path::PathBuf, process::Command};
+use std::{env, fs::create_dir_all, path::PathBuf, process::Command, time::SystemTime};
 
+use chrono::{DateTime, Utc};
 use either::Either;
 use inkwell::{
     execution_engine::ExecutionEngine,
     passes::{PassManager, PassManagerSubType},
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
+use serde::Serialize;
 
 use super::*;
 
@@ -227,21 +229,36 @@ pub fn run_module(fix_mod: FixModule, config: Configuration) -> i32 {
     execute_main_module(&ee, &config)
 }
 
-pub fn read_file(path: &Path) -> String {
+// Return file content and last modified.
+pub fn read_file(path: &Path) -> (String, UpdateDate) {
     let display = path.display();
-
     let mut file = match File::open(&path) {
         Err(why) => panic!("Couldn't open {}: {}", display, why),
         Ok(file) => file,
     };
-
     let mut s = String::new();
     match file.read_to_string(&mut s) {
         Err(why) => panic!("Couldn't read {}: {}", display, why),
         Ok(_) => (),
     }
-
-    s
+    let last_modified: Option<UpdateDate> = match file.metadata() {
+        Err(why) => {
+            println!("Failed to get last modified date of {}: {}", display, why);
+            None
+        }
+        Ok(md) => match md.modified() {
+            Err(why) => {
+                println!("Failed to get last modified date of {}: {}", display, why);
+                None
+            }
+            Ok(time) => Some(UpdateDate(time.into())),
+        },
+    };
+    if last_modified.is_none() {
+        println!("Build cache for {} will be ignored", display);
+    }
+    let last_modified = last_modified.unwrap_or(UpdateDate(SystemTime::now().into()));
+    (s, last_modified)
 }
 
 fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement>) {
@@ -262,6 +279,62 @@ fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement
     }
 }
 
+// Create a directory if it doesn't exist, and return it's path.
+pub fn touch_directory(rel_path: &Path) -> PathBuf {
+    let cur_dir = match env::current_dir() {
+        Err(why) => panic!("Failed to get current directory: {}", why),
+        Ok(dir) => dir,
+    };
+    let res = cur_dir.join(rel_path);
+    match create_dir_all(&res) {
+        Err(why) => panic!("Failed to create directory {}: {}", res.display(), why),
+        Ok(_) => {}
+    };
+    res
+}
+
+// Create a cache directory if it doesn't exist, and return it's path.
+pub fn touch_cache_directory() -> PathBuf {
+    touch_directory(&PathBuf::new().join(".fixlang").join("cache"))
+}
+
+// Read module_last_updates file
+pub fn read_module_last_updates() -> HashMap<Name, UpdateDate> {
+    let module_last_update_file = touch_cache_directory().join("module_last_updates");
+    let mut module_last_update_file = match File::open(&module_last_update_file) {
+        Err(_) => {
+            return Default::default();
+        }
+        Ok(file) => file,
+    };
+    let mut module_last_update_s: String = String::default();
+    match module_last_update_file.read_to_string(&mut module_last_update_s) {
+        Err(_) => {
+            return Default::default();
+        }
+        Ok(_) => {}
+    }
+    match serde_json::from_str(&module_last_update_s) {
+        Err(_) => Default::default(),
+        Ok(last_updates) => last_updates,
+    }
+}
+
+// Calculate set of modules which are updated after previous bulid.
+pub fn get_updated_modules(fix_mod: &FixModule) -> HashSet<Name> {
+    let mod_last_updates = read_module_last_updates();
+    let now_last_updates = &fix_mod.last_updates;
+    let mut updated_mods: HashSet<Name> = Default::default();
+    for (name, last_modified) in now_last_updates.iter() {
+        if !mod_last_updates.contains_key(name) {
+            updated_mods.insert(name.clone());
+        } else if mod_last_updates.get(name).unwrap().0 < last_modified.0 {
+            updated_mods.insert(name.clone());
+        }
+    }
+    updated_mods
+}
+
 pub fn load_file(config: &Configuration) -> FixModule {
     let mut imports: Vec<ImportStatement> = vec![];
 
@@ -270,7 +343,9 @@ pub fn load_file(config: &Configuration) -> FixModule {
     imports.append(&mut std_mod.import_statements.clone());
     let mut target_mod = std_mod;
     for file_path in &config.source_files {
-        let fix_mod = parse_source(&read_file(file_path), file_path.to_str().unwrap());
+        let (content, last_modified) = read_file(file_path);
+        let mut fix_mod = parse_source(&content, file_path.to_str().unwrap());
+        fix_mod.set_last_update(last_modified);
         imports.append(&mut fix_mod.import_statements.clone());
         target_mod.link(fix_mod);
     }
