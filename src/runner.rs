@@ -77,13 +77,17 @@ fn build_module<'c>(
             .add_global(name.name.clone(), &name.namespace, &defn.ty);
     }
 
+    // Calculate dirty modules.
+    let dirty_modules = get_dirty_modules(&fix_mod);
+
     // Check types.
     for (name, gv) in &mut fix_mod.global_values {
         match &gv.expr {
             SymbolExpr::Simple(e) => {
                 // TODO: cache this associating to `name`.
+                let define_module = name.module();
                 let mut tc = typechecker.clone();
-                tc.current_module = Some(name.module());
+                tc.current_module = Some(define_module);
                 let e = tc.check_type(e.expr.clone(), gv.ty.clone());
                 gv.expr = SymbolExpr::Simple(TypedExpr {
                     expr: e,
@@ -94,8 +98,9 @@ fn build_module<'c>(
                 let mut methods = methods.clone();
                 for m in &mut methods {
                     // TODO: cache this associating to `name + m.ty`. Remember to use normalized string of scheme `m.ty`.
+                    let define_module = m.define_module.clone();
                     let mut tc = typechecker.clone();
-                    tc.current_module = Some(m.define_module.clone());
+                    tc.current_module = Some(define_module);
                     let e = tc.check_type(m.expr.expr.clone(), m.ty.clone());
                     m.expr = TypedExpr {
                         expr: e,
@@ -334,6 +339,23 @@ pub fn get_updated_modules(fix_mod: &FixModule) -> HashSet<Name> {
     }
     updated_mods
 }
+
+// Calculate set of dirty modules (modules which should not use build cache).
+pub fn get_dirty_modules(fix_mod: &FixModule) -> HashSet<Name> {
+    let updated = get_updated_modules(fix_mod);
+    let (imported_graph, mod_to_node) = fix_mod.imported_module_graph();
+    let updated_nodes = updated
+        .iter()
+        .map(|module| *mod_to_node.get(module).unwrap())
+        .collect::<Vec<_>>();
+    let dirty_nodes = imported_graph.reachable_nodes_from_set(&updated_nodes);
+    dirty_nodes
+        .iter()
+        .map(|node| imported_graph.get(*node).clone())
+        .collect()
+}
+
+pub fn typed_expr_cache_file_name(full_name: &FullName, scheme: Rc<Scheme>) {}
 
 pub fn load_file(config: &Configuration) -> FixModule {
     let mut imports: Vec<ImportStatement> = vec![];
