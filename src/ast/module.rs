@@ -1,4 +1,4 @@
-use std::{os::unix::prelude::FileExt, time::SystemTime};
+use std::time::SystemTime;
 
 use chrono::{DateTime, Utc};
 
@@ -114,15 +114,13 @@ impl SymbolExpr {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
     pub expr: Rc<ExprNode>,
-    pub scm: Rc<Scheme>,
     pub type_resolver: TypeResolver,
 }
 
 impl TypedExpr {
-    pub fn from_expr_scm(expr: Rc<ExprNode>, scm: Rc<Scheme>) -> Self {
+    pub fn from_expr(expr: Rc<ExprNode>) -> Self {
         TypedExpr {
             expr,
-            scm,
             type_resolver: TypeResolver::default(),
         }
     }
@@ -390,8 +388,8 @@ impl FixModule {
         self.global_values.insert(
             name,
             GlobalValue {
-                ty: scm.clone(),
-                expr: SymbolExpr::Simple(TypedExpr::from_expr_scm(expr, scm)),
+                ty: scm,
+                expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
             },
         );
     }
@@ -609,6 +607,7 @@ impl FixModule {
     fn check_type(
         &self,
         te: &mut TypedExpr,
+        required_scheme: &Rc<Scheme>,
         name: &FullName,
         define_module: &Name,
         tc: &TypeCheckContext,
@@ -667,11 +666,12 @@ impl FixModule {
 
         fn save_cache(
             te: &TypedExpr,
+            required_scheme: &Rc<Scheme>,
             name: &FullName,
             define_module: &Name,
             last_updated: &UpdateDate,
         ) {
-            let cache_file_name = cache_file_name(name, define_module, &te.scm);
+            let cache_file_name = cache_file_name(name, define_module, required_scheme);
             let cache_dir = touch_directory(".fixlang/type_check_cache");
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
@@ -693,7 +693,7 @@ impl FixModule {
 
         // Load type-checking cache file.
         let last_affected_date = self.last_affected_dates.get(define_module).unwrap();
-        let opt_cache = load_cache(name, define_module, last_affected_date, &te.scm);
+        let opt_cache = load_cache(name, define_module, last_affected_date, required_scheme);
         if opt_cache.is_some() {
             // If cache is available,
             *te = opt_cache.unwrap();
@@ -703,11 +703,11 @@ impl FixModule {
         // Perform type-checking.
         let mut tc = tc.clone();
         tc.current_module = Some(define_module.clone());
-        te.expr = tc.check_type(te.expr.clone(), te.scm.clone());
+        te.expr = tc.check_type(te.expr.clone(), required_scheme.clone());
         te.type_resolver = tc.resolver;
 
         // Save the result to cache file.
-        save_cache(te, name, define_module, last_affected_date);
+        // save_cache(te, name, define_module, last_affected_date);
     }
 
     // Instantiate symbol.
@@ -719,8 +719,13 @@ impl FixModule {
                 // Perform type-checking.
                 let define_module = sym.template_name.module();
                 let mut e = e.clone();
-                e.scm = global_sym.ty.clone();
-                self.check_type(&mut e, &sym.template_name, &define_module, tc);
+                self.check_type(
+                    &mut e,
+                    &global_sym.ty,
+                    &sym.template_name,
+                    &define_module,
+                    tc,
+                );
                 // Calculate free vars.
                 e.calculate_free_vars();
                 // Specialize e's type to the required type `sym.ty`.
@@ -740,8 +745,7 @@ impl FixModule {
                     // Perform type-checking.
                     let define_module = method.define_module.clone();
                     let mut e = method.expr.clone();
-                    e.scm = method.ty.clone();
-                    self.check_type(&mut e, &sym.template_name, &define_module, tc);
+                    self.check_type(&mut e, &method.ty, &sym.template_name, &define_module, tc);
                     // Calculate free vars.
                     e.calculate_free_vars();
                     // Specialize e's type to required type `sym.ty`
@@ -905,8 +909,8 @@ impl FixModule {
                         let scm = trait_impl.method_scheme(method_name, trait_info);
                         let expr = trait_impl.method_expr(method_name);
                         method_impls.push(MethodImpl {
-                            ty: scm.clone(),
-                            expr: TypedExpr::from_expr_scm(expr, scm),
+                            ty: scm,
+                            expr: TypedExpr::from_expr(expr),
                             define_module: trait_impl.define_module.clone(),
                         });
                     }
