@@ -255,63 +255,6 @@ where
     res
 }
 
-// Create a cache directory if it doesn't exist, and return it's path.
-pub fn touch_cache_directory() -> PathBuf {
-    touch_directory(&PathBuf::new().join(".fixlang").join("cache"))
-}
-
-// Read module_last_updates file
-pub fn read_module_last_updates() -> HashMap<Name, UpdateDate> {
-    let module_last_update_file = touch_cache_directory().join("module_last_updates");
-    let mut module_last_update_file = match File::open(&module_last_update_file) {
-        Err(_) => {
-            return Default::default();
-        }
-        Ok(file) => file,
-    };
-    let mut module_last_update_s: String = String::default();
-    match module_last_update_file.read_to_string(&mut module_last_update_s) {
-        Err(_) => {
-            return Default::default();
-        }
-        Ok(_) => {}
-    }
-    match serde_json::from_str(&module_last_update_s) {
-        Err(_) => Default::default(),
-        Ok(last_updates) => last_updates,
-    }
-}
-
-// Calculate set of modules which are updated after previous bulid.
-pub fn get_updated_modules(fix_mod: &FixModule) -> HashSet<Name> {
-    let mod_last_updates = read_module_last_updates();
-    let now_last_updates = &fix_mod.last_updates;
-    let mut updated_mods: HashSet<Name> = Default::default();
-    for (name, last_modified) in now_last_updates.iter() {
-        if !mod_last_updates.contains_key(name) {
-            updated_mods.insert(name.clone());
-        } else if mod_last_updates.get(name).unwrap().0 < last_modified.0 {
-            updated_mods.insert(name.clone());
-        }
-    }
-    updated_mods
-}
-
-// Calculate set of dirty modules (modules which should not use build cache).
-pub fn get_dirty_modules(fix_mod: &FixModule) -> HashSet<Name> {
-    let updated = get_updated_modules(fix_mod);
-    let (imported_graph, mod_to_node) = fix_mod.imported_module_graph();
-    let updated_nodes = updated
-        .iter()
-        .map(|module| *mod_to_node.get(module).unwrap())
-        .collect::<Vec<_>>();
-    let dirty_nodes = imported_graph.reachable_nodes_from_set(&updated_nodes);
-    dirty_nodes
-        .iter()
-        .map(|node| imported_graph.get(*node).clone())
-        .collect()
-}
-
 pub fn load_file(config: &Configuration) -> FixModule {
     let mut imports: Vec<ImportStatement> = vec![];
 

@@ -1120,20 +1120,6 @@ impl FixModule {
     }
 
     // Create a graph of modules. If module A imports module B, an edge from B to A is added.
-    pub fn imported_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
-        let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods.clone());
-        for (to, froms) in &self.imported_mod_map {
-            for from in froms {
-                graph.connect(
-                    *elem_to_idx.get(from).unwrap(),
-                    *elem_to_idx.get(to).unwrap(),
-                );
-            }
-        }
-        (graph, elem_to_idx)
-    }
-
-    // Create a graph of modules. If module A imports module B, an edge from B to A is added.
     pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods.clone());
         for (from, tos) in &self.imported_mod_map {
