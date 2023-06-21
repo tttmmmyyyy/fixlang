@@ -609,7 +609,7 @@ impl FixModule {
                 e.type_resolver = tc.resolver;
                 // Calculate free vars.
                 e.calculate_free_vars();
-                // Specialize e's type to required type `sym.ty`.
+                // Specialize e's type to the required type `sym.ty`.
                 let ok = e.unify_to(&sym.ty);
                 assert!(ok);
                 e
