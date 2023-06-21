@@ -1,13 +1,11 @@
 use std::{env, fs::create_dir_all, path::PathBuf, process::Command, time::SystemTime};
 
-use chrono::{DateTime, Utc};
 use either::Either;
 use inkwell::{
     execution_engine::ExecutionEngine,
     passes::{PassManager, PassManagerSubType},
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
-use serde::Serialize;
 
 use super::*;
 
