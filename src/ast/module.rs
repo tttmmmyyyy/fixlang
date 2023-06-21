@@ -614,7 +614,7 @@ impl FixModule {
     ) {
         fn cache_file_name(name: &FullName, define_module: &Name, scheme: &Rc<Scheme>) -> String {
             format!(
-                "{}@{}@{}",
+                "{}@{}@{}.json",
                 name.to_string(),
                 define_module,
                 scheme.to_string()
@@ -707,7 +707,7 @@ impl FixModule {
         te.type_resolver = tc.resolver;
 
         // Save the result to cache file.
-        // save_cache(te, name, define_module, last_affected_date);
+        save_cache(te, required_scheme, name, define_module, last_affected_date);
     }
 
     // Instantiate symbol.

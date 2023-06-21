@@ -1,7 +1,7 @@
 use core::panic;
 
 use inkwell::types::BasicType;
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 
 use super::*;
 
@@ -54,9 +54,49 @@ pub enum TyConVariant {
     DynamicObject,
 }
 
-#[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Hash, Eq)]
 pub struct TyCon {
     pub name: FullName,
+}
+
+impl Serialize for TyCon {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.name.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for TyCon {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(TyConVisitor)
+    }
+}
+
+struct TyConVisitor;
+impl<'de> serde::de::Visitor<'de> for TyConVisitor {
+    type Value = TyCon;
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        match FullName::parse(v) {
+            Some(name) => Ok(TyCon::new(name)),
+            None => Err(de::Error::custom(format!(
+                "Failed to parse `{}` as FullName.",
+                v
+            ))),
+        }
+    }
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("String for TyCon")
+    }
 }
 
 impl TyCon {
