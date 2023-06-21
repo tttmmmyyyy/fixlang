@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
+
 use super::*;
 
 // Identifier to spacify trait.
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TraitId {
     pub name: FullName,
 }
@@ -220,14 +222,14 @@ impl QualType {
 }
 
 // Statement such as "String: Show" or "a: Eq".
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Predicate {
     pub trait_id: TraitId,
     pub ty: Rc<TypeNode>,
     pub info: PredicateInfo,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PredicateInfo {
     source: Option<Span>,
 }
@@ -356,7 +358,7 @@ impl TraitEnv {
                     )
                     .is_some()
                     {
-                        error_exit("overlapping instance.");
+                        error_exit("Overlapping instance.");
                     }
                 }
             }

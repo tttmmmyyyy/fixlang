@@ -80,52 +80,8 @@ fn build_module<'c>(
     // Calculate dirty modules.
     let dirty_modules = get_dirty_modules(&fix_mod);
 
-    // Check types.
-    for (name, gv) in &mut fix_mod.global_values {
-        match &gv.expr {
-            SymbolExpr::Simple(e) => {
-                // TODO: cache this associating to `name`.
-                let define_module = name.module();
-                let mut tc = typechecker.clone();
-                tc.current_module = Some(define_module);
-                let e = tc.check_type(e.expr.clone(), gv.ty.clone());
-                gv.expr = SymbolExpr::Simple(TypedExpr {
-                    expr: e,
-                    type_resolver: tc.resolver,
-                });
-            }
-            SymbolExpr::Method(methods) => {
-                let mut methods = methods.clone();
-                for m in &mut methods {
-                    // TODO: cache this associating to `name + m.ty`. Remember to use normalized string of scheme `m.ty`.
-                    let define_module = m.define_module.clone();
-                    let mut tc = typechecker.clone();
-                    tc.current_module = Some(define_module);
-                    let e = tc.check_type(m.expr.expr.clone(), m.ty.clone());
-                    m.expr = TypedExpr {
-                        expr: e,
-                        type_resolver: tc.resolver,
-                    };
-                }
-                gv.expr = SymbolExpr::Method(methods);
-            }
-        }
-    }
-
-    // Calculate free variables of expressions.
-    for (_name, sym) in &mut fix_mod.global_values {
-        match &mut sym.expr {
-            SymbolExpr::Simple(e) => e.calculate_free_vars(),
-            SymbolExpr::Method(methods) => {
-                for m in &mut methods.iter_mut() {
-                    m.expr.calculate_free_vars();
-                }
-            }
-        }
-    }
-
     // Instantiate main function and all called functions.
-    let main_expr = fix_mod.instantiate_main_function();
+    let main_expr = fix_mod.instantiate_main_function(&typechecker);
 
     // Perform function pointer optimization.
     if config.funptr_optimization {

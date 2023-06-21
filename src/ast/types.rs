@@ -732,7 +732,7 @@ impl TypeNode {
 }
 
 // Type scheme.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Scheme {
     pub vars: HashMap<Name, Rc<Kind>>,
     pub preds: Vec<Predicate>,

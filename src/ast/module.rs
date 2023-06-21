@@ -113,13 +113,15 @@ impl SymbolExpr {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
     pub expr: Rc<ExprNode>,
+    pub scm: Rc<Scheme>,
     pub type_resolver: TypeResolver,
 }
 
 impl TypedExpr {
-    pub fn from_expr(expr: Rc<ExprNode>) -> Self {
+    pub fn from_expr_scm(expr: Rc<ExprNode>, scm: Rc<Scheme>) -> Self {
         TypedExpr {
             expr,
+            scm,
             type_resolver: TypeResolver::default(),
         }
     }
@@ -296,6 +298,7 @@ impl FixModule {
             type_env: Default::default(),
             last_updates: Default::default(),
         };
+        fix_mod.linked_mods.insert(name.clone());
         fix_mod.insert_imported_mod_map(&name, &name);
         fix_mod.insert_imported_mod_map(&name, &STD_NAME.to_string());
         fix_mod.set_last_update(UpdateDate(SystemTime::now().into())); // Later updated to source file's last modified date.
@@ -376,8 +379,8 @@ impl FixModule {
         self.global_values.insert(
             name,
             GlobalValue {
-                ty: scm,
-                expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
+                ty: scm.clone(),
+                expr: SymbolExpr::Simple(TypedExpr::from_expr_scm(expr, scm)),
             },
         );
     }
@@ -592,24 +595,48 @@ impl FixModule {
     }
 
     // Instantiate symbol.
-    fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol) {
+    fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol, tc: &TypeCheckContext) {
         assert!(sym.expr.is_none());
         let global_sym = self.global_values.get(&sym.template_name).unwrap();
         let typed_expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
+                // Perform type-checking.
+                let define_module = sym.template_name.module();
+                let mut tc = tc.clone();
+                tc.current_module = Some(define_module);
                 let mut e = e.clone();
-                assert!(e.unify_to(&sym.ty));
+                e.expr = tc.check_type(e.expr.clone(), global_sym.ty.clone());
+                e.type_resolver = tc.resolver;
+                // Calculate free vars.
+                e.calculate_free_vars();
+                // Specialize e's type to required type `sym.ty`.
+                let ok = e.unify_to(&sym.ty);
+                assert!(ok);
                 e
             }
             SymbolExpr::Method(impls) => {
-                // Find method implementation that unifies to "sym.ty".
                 let mut opt_e: Option<TypedExpr> = None;
                 for method in impls {
-                    let mut e = method.expr.clone();
-                    if e.unify_to(&sym.ty) {
-                        opt_e = Some(e);
-                        break;
+                    // Check if the type of this implementation unify with the required type `sym.ty`.
+                    let mut tc0 = tc.clone();
+                    let (_, method_ty) = tc0.instantiate_scheme(&method.ty, false);
+                    if Substitution::unify(&tc.type_env.kinds(), &method_ty, &sym.ty).is_none() {
+                        continue;
                     }
+                    // Perform type-checking.
+                    let define_module = method.define_module.clone();
+                    let mut tc = tc.clone();
+                    tc.current_module = Some(define_module);
+                    let mut e = method.expr.clone();
+                    e.expr = tc.check_type(e.expr.clone(), method.ty.clone());
+                    e.type_resolver = tc.resolver;
+                    // Calculate free vars.
+                    e.calculate_free_vars();
+                    // Specialize e's type to required type `sym.ty`
+                    let ok = e.unify_to(&sym.ty);
+                    assert!(ok);
+                    opt_e = Some(e);
+                    break;
                 }
                 opt_e.unwrap()
             }
@@ -619,26 +646,26 @@ impl FixModule {
     }
 
     // Instantiate all symbols.
-    pub fn instantiate_symbols(&mut self) {
+    pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) {
         while !self.deferred_instantiation.is_empty() {
             let (name, sym) = self.deferred_instantiation.iter().next().unwrap();
             let name = name.clone();
             let mut sym = sym.clone();
-            self.instantiate_symbol(&mut sym);
+            self.instantiate_symbol(&mut sym, tc);
             self.deferred_instantiation.remove(&name);
             self.instantiated_global_symbols.insert(name, sym);
         }
     }
 
     // Instantiate main function.
-    pub fn instantiate_main_function(&mut self) -> Rc<ExprNode> {
+    pub fn instantiate_main_function(&mut self, tc: &TypeCheckContext) -> Rc<ExprNode> {
         let main_func_name = FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME);
         if !self.global_values.contains_key(&main_func_name) {
             error_exit(&format!("{} not found.", main_func_name.to_string()));
         }
         let main_ty = make_io_unit_ty();
         let inst_name = self.require_instantiated_symbol(&main_func_name, &main_ty);
-        self.instantiate_symbols();
+        self.instantiate_symbols(tc);
         expr_var(inst_name, None).set_inferred_type(main_ty)
     }
 
@@ -763,11 +790,11 @@ impl FixModule {
                 let instances = self.trait_env.instances.get(trait_id);
                 if let Some(insntances) = instances {
                     for trait_impl in insntances {
-                        let ty = trait_impl.method_scheme(method_name, trait_info);
+                        let scm = trait_impl.method_scheme(method_name, trait_info);
                         let expr = trait_impl.method_expr(method_name);
                         method_impls.push(MethodImpl {
-                            ty,
-                            expr: TypedExpr::from_expr(expr),
+                            ty: scm.clone(),
+                            expr: TypedExpr::from_expr_scm(expr, scm),
                             define_module: trait_impl.define_module.clone(),
                         });
                     }
