@@ -1,9 +1,10 @@
-use std::time::SystemTime;
+use std::{os::unix::prelude::FileExt, time::SystemTime};
 
 use chrono::{DateTime, Utc};
 
 use inkwell::module::Linkage;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 
 use super::*;
 
@@ -227,6 +228,12 @@ impl<'a> NameResolutionContext {
 #[derive(Clone)]
 pub struct UpdateDate(pub DateTime<Utc>);
 
+impl UpdateDate {
+    pub fn max(&self, other: &UpdateDate) -> UpdateDate {
+        UpdateDate(self.0.max(other.0))
+    }
+}
+
 impl Serialize for UpdateDate {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -280,6 +287,9 @@ pub struct FixModule {
     pub type_env: TypeEnv,
     // Last update date for each linked modules.
     pub last_updates: HashMap<Name, UpdateDate>,
+    // Last affected date for each linked modules.
+    // Last affected date is defined as the maximum value of last update dates of all importing modules.
+    pub last_affected_dates: HashMap<Name, UpdateDate>,
 }
 
 impl FixModule {
@@ -297,6 +307,7 @@ impl FixModule {
             trait_env: Default::default(),
             type_env: Default::default(),
             last_updates: Default::default(),
+            last_affected_dates: Default::default(),
         };
         fix_mod.linked_mods.insert(name.clone());
         fix_mod.insert_imported_mod_map(&name, &name);
@@ -594,6 +605,111 @@ impl FixModule {
         }
     }
 
+    // Perform typechecking. The result will be written to `te`.
+    fn check_type(
+        &self,
+        te: &mut TypedExpr,
+        name: &FullName,
+        define_module: &Name,
+        tc: &TypeCheckContext,
+    ) {
+        fn cache_file_name(name: &FullName, define_module: &Name, scheme: &Rc<Scheme>) -> String {
+            format!(
+                "{}@{}@{}",
+                name.to_string(),
+                define_module,
+                scheme.to_string()
+            )
+        }
+        fn load_cache(
+            name: &FullName,
+            define_module: &Name,
+            define_module_last_affected: &UpdateDate,
+            required_scheme: &Rc<Scheme>,
+        ) -> Option<TypedExpr> {
+            let cache_file_name = cache_file_name(name, define_module, required_scheme);
+            let cache_dir = touch_directory("type_check_cache");
+            let cache_file = cache_dir.join(cache_file_name);
+            let cache_file_display = cache_file.display();
+            if !cache_file.exists() {
+                return None;
+            }
+            let mut cache_file = match File::open(&cache_file) {
+                Err(_) => {
+                    return None;
+                }
+                Ok(file) => file,
+            };
+            let mut cache_str = "".to_string();
+            match cache_file.read_to_string(&mut cache_str) {
+                Err(_) => {
+                    eprintln!("Cannot read cache file {}.", cache_file_display);
+                    return None;
+                }
+                Ok(_) => {}
+            }
+            let (expr, last_update): (TypedExpr, UpdateDate) =
+                match serde_json::from_str(&cache_str) {
+                    Err(_) => {
+                        eprintln!(
+                            "Failed to parse content of cache file {}.",
+                            cache_file_display
+                        );
+                        return None;
+                    }
+                    Ok(res) => res,
+                };
+            if last_update.0 < define_module_last_affected.0 {
+                return None;
+            }
+            Some(expr)
+        }
+
+        fn save_cache(
+            te: &TypedExpr,
+            name: &FullName,
+            define_module: &Name,
+            last_updated: &UpdateDate,
+        ) {
+            let cache_file_name = cache_file_name(name, define_module, &te.scm);
+            let cache_dir = touch_directory(".fixlang/type_check_cache");
+            let cache_file = cache_dir.join(cache_file_name);
+            let cache_file_display = cache_file.display();
+            let mut cache_file = match File::create(&cache_file) {
+                Err(_) => {
+                    eprintln!("Failed to create cache file {}.", cache_file_display);
+                    return;
+                }
+                Ok(file) => file,
+            };
+            let serialized = serde_json::to_string(&(te, last_updated)).unwrap();
+            match write!(cache_file, "{}", serialized) {
+                Err(_) => {
+                    eprintln!("Failed to write cache file {}.", cache_file_display);
+                }
+                Ok(_) => {}
+            }
+        }
+
+        // Load type-checking cache file.
+        let last_affected_date = self.last_affected_dates.get(define_module).unwrap();
+        let opt_cache = load_cache(name, define_module, last_affected_date, &te.scm);
+        if opt_cache.is_some() {
+            // If cache is available,
+            *te = opt_cache.unwrap();
+            return;
+        }
+
+        // Perform type-checking.
+        let mut tc = tc.clone();
+        tc.current_module = Some(define_module.clone());
+        te.expr = tc.check_type(te.expr.clone(), te.scm.clone());
+        te.type_resolver = tc.resolver;
+
+        // Save the result to cache file.
+        save_cache(te, name, define_module, last_affected_date);
+    }
+
     // Instantiate symbol.
     fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol, tc: &TypeCheckContext) {
         assert!(sym.expr.is_none());
@@ -602,11 +718,9 @@ impl FixModule {
             SymbolExpr::Simple(e) => {
                 // Perform type-checking.
                 let define_module = sym.template_name.module();
-                let mut tc = tc.clone();
-                tc.current_module = Some(define_module);
                 let mut e = e.clone();
-                e.expr = tc.check_type(e.expr.clone(), global_sym.ty.clone());
-                e.type_resolver = tc.resolver;
+                e.scm = global_sym.ty.clone();
+                self.check_type(&mut e, &sym.template_name, &define_module, tc);
                 // Calculate free vars.
                 e.calculate_free_vars();
                 // Specialize e's type to the required type `sym.ty`.
@@ -625,11 +739,9 @@ impl FixModule {
                     }
                     // Perform type-checking.
                     let define_module = method.define_module.clone();
-                    let mut tc = tc.clone();
-                    tc.current_module = Some(define_module);
                     let mut e = method.expr.clone();
-                    e.expr = tc.check_type(e.expr.clone(), method.ty.clone());
-                    e.type_resolver = tc.resolver;
+                    e.scm = method.ty.clone();
+                    self.check_type(&mut e, &sym.template_name, &define_module, tc);
                     // Calculate free vars.
                     e.calculate_free_vars();
                     // Specialize e's type to required type `sym.ty`
@@ -1015,5 +1127,36 @@ impl FixModule {
             }
         }
         (graph, elem_to_idx)
+    }
+
+    // Create a graph of modules. If module A imports module B, an edge from B to A is added.
+    pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
+        let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods.clone());
+        for (from, tos) in &self.imported_mod_map {
+            for to in tos {
+                graph.connect(
+                    *elem_to_idx.get(from).unwrap(),
+                    *elem_to_idx.get(to).unwrap(),
+                );
+            }
+        }
+        (graph, elem_to_idx)
+    }
+
+    // Calculate and set last_affected_dates from last_updates.
+    pub fn set_last_affected_dates(&mut self) {
+        self.last_affected_dates = Default::default();
+        let (imported_graph, mod_to_node) = self.importing_module_graph();
+        for module in &self.linked_mods {
+            let mut last_affected = self.last_updates.get(module).unwrap().clone();
+            let imported_modules =
+                imported_graph.reachable_nodes(*mod_to_node.get(module).unwrap());
+            for imported_module in imported_modules {
+                let imported_module = imported_graph.get(imported_module);
+                last_affected = last_affected.max(self.last_updates.get(imported_module).unwrap());
+            }
+            self.last_affected_dates
+                .insert(module.clone(), last_affected);
+        }
     }
 }

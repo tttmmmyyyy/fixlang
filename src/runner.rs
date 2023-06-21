@@ -39,6 +39,9 @@ fn build_module<'c>(
     mut fix_mod: FixModule,
     config: Configuration,
 ) -> Either<TargetMachine, ExecutionEngine<'c>> {
+    // Calculate last affected dates.
+    fix_mod.set_last_affected_dates();
+
     // Calculate list of type constructors.
     fix_mod.calculate_type_env();
 
@@ -74,9 +77,6 @@ fn build_module<'c>(
             .scope
             .add_global(name.name.clone(), &name.namespace, &defn.ty);
     }
-
-    // Calculate dirty modules.
-    let dirty_modules = get_dirty_modules(&fix_mod);
 
     // Instantiate main function and all called functions.
     let main_expr = fix_mod.instantiate_main_function(&typechecker);
@@ -239,7 +239,10 @@ fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement
 }
 
 // Create a directory if it doesn't exist, and return it's path.
-pub fn touch_directory(rel_path: &Path) -> PathBuf {
+pub fn touch_directory<P>(rel_path: P) -> PathBuf
+where
+    P: AsRef<Path>,
+{
     let cur_dir = match env::current_dir() {
         Err(why) => panic!("Failed to get current directory: {}", why),
         Ok(dir) => dir,
@@ -308,8 +311,6 @@ pub fn get_dirty_modules(fix_mod: &FixModule) -> HashSet<Name> {
         .map(|node| imported_graph.get(*node).clone())
         .collect()
 }
-
-pub fn typed_expr_cache_file_name(full_name: &FullName, scheme: Rc<Scheme>) {}
 
 pub fn load_file(config: &Configuration) -> FixModule {
     let mut imports: Vec<ImportStatement> = vec![];

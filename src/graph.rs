@@ -57,4 +57,10 @@ impl<T> Graph<T> {
             self.reachable_nodes_inner(*to, visited)
         }
     }
+    // Collect nodes reachable from a node.
+    pub fn reachable_nodes(&self, from: usize) -> HashSet<usize> {
+        let mut nodes: HashSet<usize> = Default::default();
+        self.reachable_nodes_inner(from, &mut nodes);
+        nodes
+    }
 }
