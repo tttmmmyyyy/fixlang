@@ -627,7 +627,7 @@ impl FixModule {
             required_scheme: &Rc<Scheme>,
         ) -> Option<TypedExpr> {
             let cache_file_name = cache_file_name(name, define_module, required_scheme);
-            let cache_dir = touch_directory("type_check_cache");
+            let cache_dir = touch_directory(".fixlang/type_check_cache");
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
             if !cache_file.exists() {
@@ -649,10 +649,10 @@ impl FixModule {
             }
             let (expr, last_update): (TypedExpr, UpdateDate) =
                 match serde_json::from_str(&cache_str) {
-                    Err(_) => {
+                    Err(why) => {
                         eprintln!(
-                            "Failed to parse content of cache file {}.",
-                            cache_file_display
+                            "Failed to parse content of cache file {}: {}.",
+                            cache_file_display, why
                         );
                         return None;
                     }
