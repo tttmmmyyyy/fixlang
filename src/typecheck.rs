@@ -375,6 +375,7 @@ pub struct TypeResolver {
     // Substitution.
     pub substitution: Substitution,
     // Type to kind mapping.
+    #[serde(skip)]
     pub kind_map: HashMap<TyCon, Rc<Kind>>,
 }
 

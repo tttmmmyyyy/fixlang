@@ -614,7 +614,7 @@ impl FixModule {
     ) {
         fn cache_file_name(name: &FullName, define_module: &Name, scheme: &Rc<Scheme>) -> String {
             format!(
-                "{}@{}@{}.json",
+                "{}@{}@{}",
                 name.to_string(),
                 define_module,
                 scheme.to_string()
@@ -697,6 +697,7 @@ impl FixModule {
         if opt_cache.is_some() {
             // If cache is available,
             *te = opt_cache.unwrap();
+            te.type_resolver.kind_map = tc.type_env.kinds();
             return;
         }
 
@@ -750,6 +751,10 @@ impl FixModule {
                     e.calculate_free_vars();
                     // Specialize e's type to required type `sym.ty`
                     let ok = e.unify_to(&sym.ty);
+                    if !ok {
+                        println!("{}", e.expr.ty.as_ref().unwrap().to_string());
+                        println!("{}", sym.ty.to_string());
+                    }
                     assert!(ok);
                     opt_e = Some(e);
                     break;

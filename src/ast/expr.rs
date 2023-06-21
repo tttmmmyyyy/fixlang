@@ -1065,7 +1065,7 @@ impl FullName {
             return None;
         }
         let name = names.pop().unwrap();
-        if names.len() > 1 {
+        if names.len() > 0 {
             Some(FullName::new(&NameSpace { names }, &name))
         } else {
             Some(FullName::local(&name))
