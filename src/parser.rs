@@ -11,8 +11,18 @@ use super::*;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
-    string: Rc<String>,
+    #[serde(skip)]
+    string: Option<Rc<String>>,
     file_name: String,
+}
+
+impl SourceFile {
+    pub fn string(&self) -> String {
+        match &self.string {
+            Some(s) => s.as_str().to_string(),
+            None => read_file(&PathBuf::from(self.file_name.clone())).0,
+        }
+    }
 }
 
 // lifetime-free version of pest::Span
@@ -62,7 +72,8 @@ impl Span {
 
     // Show source codes around this span.
     pub fn to_string(&self) -> String {
-        let span = pest::Span::new(&self.input.string, self.start, self.end).unwrap();
+        let source_string = self.input.string();
+        let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
 
         let mut linenum_str_size = 0;
         for line_span in span.lines_span() {
@@ -154,16 +165,16 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 }
 
 pub fn parse_source(source: &str, file_name: &str) -> FixModule {
-    let source = SourceFile {
-        string: Rc::new(source.to_string()),
+    let source_file = SourceFile {
+        string: Some(Rc::new(source.to_string())),
         file_name: file_name.to_string(),
     };
-    let file = FixParser::parse(Rule::file, &source.string);
+    let file = FixParser::parse(Rule::file, source);
     let file = match file {
         Ok(res) => res,
-        Err(e) => error_exit(&message_parse_error(e, &source)),
+        Err(e) => error_exit(&message_parse_error(e, &source_file)),
     };
-    parse_file(file, &source)
+    parse_file(file, &source_file)
 }
 
 fn parse_file(mut file: Pairs<Rule>, src: &SourceFile) -> FixModule {
@@ -1647,7 +1658,7 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> String {
         pest::error::InputLocation::Pos(s) => Span {
             input: src.clone(),
             start: s,
-            end: min(s + 1, src.string.len()),
+            end: min(s + 1, src.string().len()),
         },
         pest::error::InputLocation::Span((s, e)) => Span {
             input: src.clone(),

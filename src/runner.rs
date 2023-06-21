@@ -169,7 +169,7 @@ pub fn run_source(source: &str, config: Configuration) -> i32 {
     imports.append(&mut std_mod.import_statements.clone());
     let mut target_mod = std_mod;
 
-    let source_mod = parse_source(source, "{filename unknown}");
+    let source_mod = parse_source(source, "{filename unspecified}");
     imports.append(&mut source_mod.import_statements.clone());
     target_mod.link(source_mod);
 
