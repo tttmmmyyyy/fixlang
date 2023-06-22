@@ -352,7 +352,7 @@
     - [`Std::is_unique : a -> (Bool, a)`](#stdis_unique--a---bool-a)
     - [`Std::fix : ((a -> b) -> a -> b) -> a -> b`](#stdfix--a---b---a---b---a---b)
     - [`Std::loop : s -> (s -> LoopResult s r) -> r`](#stdloop--s---s---loopresult-s-r---r)
-    - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
+    - [`Std::loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#stdloop_m--m--monad-s---s---m-loopresult-s-r---m-r)
     - [`Std::Debug::debug_print : String -> ()`](#stddebugdebug_print--string---)
     - [`Std::Debug::debug_println : String -> ()`](#stddebugdebug_println--string---)
     - [`Std::Debug::abort : () -> a`](#stddebugabort-----a)
@@ -2140,7 +2140,7 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
-### `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
+### `Std::loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
 
 Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
 

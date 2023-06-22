@@ -255,10 +255,25 @@ namespace Debug {
         }
     );
 
+    debug_print : String -> ();
+    debug_print = |s| (
+        s.borrow_c_str(|ptr| (
+            let _ = CALL_C[I32 printf(Ptr, ...), ptr];
+            let _ = CALL_C[I32 fflush(Ptr), nullptr];
+            ()
+        ))
+    );
+
     debug_println : String -> ();
-    debug_println = |str| (
-        let _ = debug_print(str);
-        debug_print("\n")
+    debug_println = |s| (
+        let _ = s.borrow_c_str(|ptr| (
+            CALL_C[I32 printf(Ptr, ...), ptr]
+        ));
+        let _ = "\n".borrow_c_str(|ptr| (
+            CALL_C[I32 printf(Ptr, ...), ptr]
+        ));
+        let _ = CALL_C[I32 fflush(Ptr), nullptr];
+        ()
     );
 }
 
@@ -1133,7 +1148,7 @@ impl String : ToString {
     to_string = |s| s;
 }
 
-// Functions
+// Function
 
 // Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
 compose : (a -> b) -> (b -> c) -> a -> c;
