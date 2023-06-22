@@ -336,7 +336,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntLit {
-    val: u64,
+    val: i64, // Since `serde_pickle` only supports i64 and not u64, we use i64 here.
 }
 
 impl InlineLLVMIntLit {
@@ -370,7 +370,7 @@ impl InlineLLVMIntLit {
 
 pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
     expr_lit(
-        InlineLLVM::IntLit(InlineLLVMIntLit { val }),
+        InlineLLVM::IntLit(InlineLLVMIntLit { val: val as i64 }),
         vec![],
         val.to_string(),
         ty,
