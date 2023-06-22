@@ -639,16 +639,17 @@ impl FixModule {
                 }
                 Ok(file) => file,
             };
-            let mut cache_str = "".to_string();
-            match cache_file.read_to_string(&mut cache_str) {
-                Err(_) => {
-                    eprintln!("Cannot read cache file {}.", cache_file_display);
+            let mut cache_bytes = vec![];
+            match cache_file.read_to_end(&mut cache_bytes) {
+                Ok(_) => {}
+                Err(why) => {
+                    eprintln!("Failed to read cache file {}: {}.", cache_file_display, why);
                     return None;
                 }
-                Ok(_) => {}
             }
             let (expr, last_update): (TypedExpr, UpdateDate) =
-                match serde_json::from_str(&cache_str) {
+                match serde_pickle::from_slice(&cache_bytes, Default::default()) {
+                    Ok(res) => res,
                     Err(why) => {
                         eprintln!(
                             "Failed to parse content of cache file {}: {}.",
@@ -656,7 +657,6 @@ impl FixModule {
                         );
                         return None;
                     }
-                    Ok(res) => res,
                 };
             if last_update.0 < define_module_last_affected.0 {
                 return None;
@@ -682,12 +682,12 @@ impl FixModule {
                 }
                 Ok(file) => file,
             };
-            let serialized = serde_json::to_string(&(te, last_updated)).unwrap();
-            match write!(cache_file, "{}", serialized) {
+            let serialized = serde_pickle::to_vec(&(te, last_updated), Default::default()).unwrap();
+            match cache_file.write_all(&serialized) {
+                Ok(_) => {}
                 Err(_) => {
                     eprintln!("Failed to write cache file {}.", cache_file_display);
                 }
-                Ok(_) => {}
             }
         }
 

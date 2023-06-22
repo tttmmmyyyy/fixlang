@@ -8,6 +8,7 @@ extern crate build_time;
 extern crate chrono;
 extern crate serde;
 extern crate serde_json;
+extern crate serde_pickle;
 
 mod ast;
 mod builtin;
