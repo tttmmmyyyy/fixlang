@@ -769,6 +769,22 @@ impl TypeNode {
         };
         free_vars
     }
+
+    // Output free type variables to Vec buffer. Elements of the resulting buf may be duplicated.
+    pub fn free_vars_vec(self: &Rc<TypeNode>, buf: &mut Vec<Name>) {
+        match &self.ty {
+            Type::TyVar(tv) => buf.push(tv.name.clone()),
+            Type::TyApp(tyfun, arg) => {
+                tyfun.free_vars_vec(buf);
+                arg.free_vars_vec(buf);
+            }
+            Type::FunTy(input, output) => {
+                input.free_vars_vec(buf);
+                output.free_vars_vec(buf);
+            }
+            Type::TyCon(_) => {}
+        };
+    }
 }
 
 // Type scheme.
@@ -781,12 +797,30 @@ pub struct Scheme {
 
 impl Scheme {
     pub fn to_string(&self) -> String {
+        // First, fix ordering of generalized variables (self.vars) following the ordering they appear.
+        let mut vars0 = vec![];
+        for p in &self.preds {
+            p.ty.free_vars_vec(&mut vars0);
+        }
+        self.ty.free_vars_vec(&mut vars0);
+        let mut added: HashSet<Name> = Default::default();
+        let mut vars = vec![];
+        for v in vars0 {
+            if added.contains(&v) {
+                continue;
+            }
+            if !self.vars.contains_key(&v) {
+                continue;
+            }
+            vars.push((v.clone(), self.vars.get(&v).unwrap().clone()));
+            added.insert(v.clone());
+        }
+
         // Change name of type variables to t0, t1, ...
         let free_vars = self.free_vars();
         let mut s = Substitution::default();
         let mut tyvar_num = -1;
-
-        for (tyvar, kind) in &self.vars {
+        for (tyvar, kind) in &vars {
             let new_name = loop {
                 tyvar_num += 1;
                 let new_name = format!("t{}", tyvar_num);
@@ -797,6 +831,8 @@ impl Scheme {
             };
             s.add_substitution(&Substitution::single(tyvar, type_tyvar(&new_name, kind)))
         }
+
+        // Substitute type variables in predicates and type to chosen names.
         let preds = self
             .preds
             .clone()
@@ -809,6 +845,7 @@ impl Scheme {
             .collect::<Vec<_>>();
         let ty = s.substitute_type(&self.ty);
 
+        // Stringify.
         let preds_str = if preds.is_empty() {
             "".to_string()
         } else {
