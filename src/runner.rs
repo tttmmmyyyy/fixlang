@@ -45,9 +45,8 @@ fn build_module<'c>(
     // Calculate list of type constructors.
     fix_mod.calculate_type_env();
 
-    // Resolve namespaces to traits and types (not to variables).
-    // ToDo: divide resolve_namespace by extracting a part which resolves names in expression and cache it's result.
-    fix_mod.resolve_namespace();
+    // Infer namespaces to traits and types that appear in declarations (not in expressions).
+    fix_mod.resolve_namespace_in_declaration();
 
     // Validate user-defined types.
     fix_mod.validate_type_defns();
@@ -75,7 +74,7 @@ fn build_module<'c>(
     for (name, defn) in &fix_mod.global_values {
         typechecker
             .scope
-            .add_global(name.name.clone(), &name.namespace, &defn.ty);
+            .add_global(name.name.clone(), &name.namespace, &defn.scm);
     }
 
     // Instantiate main function and all called functions.

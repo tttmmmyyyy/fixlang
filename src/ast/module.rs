@@ -56,16 +56,15 @@ pub struct GlobalValue {
     // Type of this symbol.
     // For example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String for a: Show",
-    pub ty: Rc<Scheme>,
+    pub scm: Rc<Scheme>,
     pub expr: SymbolExpr,
     // TODO: add ty_src: Span
     // TODO: add expr_src: Span
 }
 
 impl GlobalValue {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.ty = self.ty.resolve_namespace(ctx);
-        self.expr.resolve_namespace(ctx);
+    pub fn resolve_namespace_in_declaration(&mut self, ctx: &NameResolutionContext) {
+        self.scm = self.scm.resolve_namespace(ctx);
     }
 
     pub fn set_kinds(
@@ -73,8 +72,8 @@ impl GlobalValue {
         kind_map: &HashMap<TyCon, Rc<Kind>>,
         trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
     ) {
-        self.ty = self.ty.set_kinds(trait_kind_map);
-        self.ty.check_kinds(kind_map, trait_kind_map);
+        self.scm = self.scm.set_kinds(trait_kind_map);
+        self.scm.check_kinds(kind_map, trait_kind_map);
         match &mut self.expr {
             SymbolExpr::Simple(_) => {}
             SymbolExpr::Method(ms) => {
@@ -94,19 +93,6 @@ pub enum SymbolExpr {
     Method(Vec<MethodImpl>), // Trait method implementations.
 }
 
-impl SymbolExpr {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        match self {
-            SymbolExpr::Simple(e) => e.resolve_namespace(ctx),
-            SymbolExpr::Method(mis) => {
-                for mi in mis {
-                    mi.resolve_namespace(ctx);
-                }
-            }
-        }
-    }
-}
-
 // Pair of expression and type resolver for it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
@@ -120,10 +106,6 @@ impl TypedExpr {
             expr,
             type_resolver: TypeResolver::default(),
         }
-    }
-
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.expr = self.expr.resolve_namespace(ctx);
     }
 
     pub fn calculate_free_vars(&mut self) {
@@ -153,13 +135,6 @@ pub struct MethodImpl {
     // For example, if `Main` module implements `Eq : SomeType`, then implementation of `eq` for `SomeType` is defined in `Main` module,
     // but it's name as a function is still `Std::Eq::eq`.
     pub define_module: Name,
-}
-
-impl MethodImpl {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.ty = self.ty.resolve_namespace(ctx);
-        self.expr.resolve_namespace(ctx);
-    }
 }
 
 pub struct NameResolutionContext {
@@ -387,7 +362,7 @@ impl FixModule {
         self.global_values.insert(
             name,
             GlobalValue {
-                ty: scm,
+                scm,
                 expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
             },
         );
@@ -602,8 +577,9 @@ impl FixModule {
         }
     }
 
-    // Perform typechecking. The result will be written to `te`.
-    fn check_type(
+    // Resolve namespace of type and trats in expression, and perform typechecking.
+    // The result will be written to `te`.
+    fn resolve_namespace_and_check_type(
         &self,
         te: &mut TypedExpr,
         required_scheme: &Rc<Scheme>,
@@ -700,6 +676,14 @@ impl FixModule {
             return;
         }
 
+        // Perform namespace inference.
+        let nrctx = NameResolutionContext {
+            types: self.tycon_names(),
+            traits: self.trait_names(),
+            imported_modules: self.imported_mod_map[define_module].clone(),
+        };
+        te.expr = te.expr.resolve_namespace(&nrctx);
+
         // Perform type-checking.
         let mut tc = tc.clone();
         tc.current_module = Some(define_module.clone());
@@ -719,9 +703,9 @@ impl FixModule {
                 // Perform type-checking.
                 let define_module = sym.template_name.module();
                 let mut e = e.clone();
-                self.check_type(
+                self.resolve_namespace_and_check_type(
                     &mut e,
-                    &global_sym.ty,
+                    &global_sym.scm,
                     &sym.template_name,
                     &define_module,
                     tc,
@@ -745,7 +729,13 @@ impl FixModule {
                     // Perform type-checking.
                     let define_module = method.define_module.clone();
                     let mut e = method.expr.clone();
-                    self.check_type(&mut e, &method.ty, &sym.template_name, &define_module, tc);
+                    self.resolve_namespace_and_check_type(
+                        &mut e,
+                        &method.ty,
+                        &sym.template_name,
+                        &define_module,
+                        tc,
+                    );
                     // Calculate free vars.
                     e.calculate_free_vars();
                     // Specialize e's type to required type `sym.ty`
@@ -923,7 +913,7 @@ impl FixModule {
                 self.global_values.insert(
                     method_name,
                     GlobalValue {
-                        ty: method_ty,
+                        scm: method_ty,
                         expr: SymbolExpr::Method(method_impls),
                     },
                 );
@@ -940,9 +930,9 @@ impl FixModule {
         }
     }
 
-    // Resolve namespaces of types and traits that appear in this module.
+    // Infer namespaces to traits and types that appear in declarations (not in expressions).
     // NOTE: names of in the definition of types/traits/global_values have to be full-named already when this function called.
-    pub fn resolve_namespace(&mut self) {
+    pub fn resolve_namespace_in_declaration(&mut self) {
         let mut ctx = NameResolutionContext {
             types: self.tycon_names(),
             traits: self.trait_names(),
@@ -965,7 +955,7 @@ impl FixModule {
         }
         for (name, sym) in &mut self.global_values {
             ctx.imported_modules = self.imported_mod_map[&name.module()].clone();
-            sym.resolve_namespace(&ctx);
+            sym.resolve_namespace_in_declaration(&ctx);
         }
     }
 
@@ -1100,7 +1090,7 @@ impl FixModule {
 
         // Merge global values.
         for (name, gv) in other.global_values {
-            let ty = gv.ty;
+            let ty = gv.scm;
             if let SymbolExpr::Simple(expr) = gv.expr {
                 self.add_global_value(name, (expr.expr, ty));
             }
