@@ -370,7 +370,7 @@ impl InlineLLVMIntLit {
 
 pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
     expr_lit(
-        InlineLLVM::IntLit(InlineLLVMIntLit { val: val as i64 }),
+        LLVMGenerator::IntLit(InlineLLVMIntLit { val: val as i64 }),
         vec![],
         val.to_string(),
         ty,
@@ -414,7 +414,7 @@ impl InlineLLVMFloatLit {
 
 pub fn expr_float_lit(val: f64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
     expr_lit(
-        InlineLLVM::FloatLit(InlineLLVMFloatLit { val }),
+        LLVMGenerator::FloatLit(InlineLLVMFloatLit { val }),
         vec![],
         val.to_string(),
         ty,
@@ -446,7 +446,7 @@ impl InlineLLVMNullPtrLit {
 
 pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
     expr_lit(
-        InlineLLVM::NullPtrLit(InlineLLVMNullPtrLit {}),
+        LLVMGenerator::NullPtrLit(InlineLLVMNullPtrLit {}),
         vec![],
         "nullptr_literal".to_string(),
         make_ptr_ty(),
@@ -485,7 +485,7 @@ impl InlineLLVMBoolLit {
 
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Rc<ExprNode> {
     expr_lit(
-        InlineLLVM::BoolLit(InlineLLVMBoolLit { val }),
+        LLVMGenerator::BoolLit(InlineLLVMBoolLit { val }),
         vec![],
         val.to_string(),
         make_bool_ty(),
@@ -568,7 +568,7 @@ impl InlineLLVMStringLit {
 
 pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<ExprNode> {
     expr_lit(
-        InlineLLVM::StringLit(InlineLLVMStringLit { string }),
+        LLVMGenerator::StringLit(InlineLLVMStringLit { string }),
         vec![],
         "string_literal".to_string(),
         make_string_ty(),
@@ -621,7 +621,7 @@ fn fix_body(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
     let name = format!("fix({}, {})", f_str.to_string(), x_str.to_string());
     let free_vars = vec![FullName::local(CAP_NAME), f_str.clone(), x_str.clone()];
     expr_lit(
-        InlineLLVM::FixBody(InlineLLVMFixBody { x_str, f_str }),
+        LLVMGenerator::FixBody(InlineLLVMFixBody { x_str, f_str }),
         free_vars,
         name,
         type_tyvar_star(b),
@@ -726,7 +726,7 @@ pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>)
     let expr = expr_abs(
         vec![var_local(VAL_NAME)],
         expr_lit(
-            InlineLLVM::NumToStrBody(InlineLLVMNumToStrBody {
+            LLVMGenerator::NumToStrBody(InlineLLVMNumToStrBody {
                 val_name: VAL_NAME.to_string(),
                 buf_size,
                 specifier: specifier.to_string(),
@@ -808,7 +808,7 @@ pub fn cast_between_integral_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_lit(
-            InlineLLVM::CastIntegralBody(InlineLLVMCastIntegralBody {
+            LLVMGenerator::CastIntegralBody(InlineLLVMCastIntegralBody {
                 from_name: FROM_NAME.to_string(),
                 is_signed,
             }),
@@ -890,7 +890,7 @@ pub fn cast_between_float_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_lit(
-            InlineLLVM::CastFloatBody(InlineLLVMCastFloatBody {
+            LLVMGenerator::CastFloatBody(InlineLLVMCastFloatBody {
                 from_name: FROM_NAME.to_string(),
             }),
             vec![FullName::local(FROM_NAME)],
@@ -982,7 +982,7 @@ pub fn cast_int_to_float_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_lit(
-            InlineLLVM::CastIntToFloatBody(InlineLLVMCastIntToFloatBody {
+            LLVMGenerator::CastIntToFloatBody(InlineLLVMCastIntToFloatBody {
                 from_name: FROM_NAME.to_string(),
                 is_signed,
             }),
@@ -1065,7 +1065,7 @@ pub fn cast_float_to_int_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_lit(
-            InlineLLVM::CastFloatToIntBody(InlineLLVMCastFloatToIntBody {
+            LLVMGenerator::CastFloatToIntBody(InlineLLVMCastFloatToIntBody {
                 from_name: FROM_NAME.to_string(),
             }),
             vec![FullName::local(FROM_NAME)],
@@ -1142,7 +1142,7 @@ pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Sche
         expr_abs(
             vec![var_local(VALUE_NAME)],
             expr_lit(
-                InlineLLVM::ShiftBody(InlineLLVMShiftBody {
+                LLVMGenerator::ShiftBody(InlineLLVMShiftBody {
                     value_name: VALUE_NAME.to_string(),
                     n_name: N_NAME.to_string(),
                     is_left,
@@ -1254,7 +1254,7 @@ pub fn bitwise_operation_function(
         expr_abs(
             vec![var_local(RHS_NAME)],
             expr_lit(
-                InlineLLVM::BitwiseOperationBody(InlineLLVMBitwiseOperationBody {
+                LLVMGenerator::BitwiseOperationBody(InlineLLVMBitwiseOperationBody {
                     lhs_name: LHS_NAME.to_string(),
                     rhs_name: RHS_NAME.to_string(),
                     op_type,
@@ -1311,7 +1311,7 @@ fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     let name_cloned = name.clone();
     let free_vars = vec![size_name.clone(), value_name.clone()];
     expr_lit(
-        InlineLLVM::FillArrayBody(InlineLLVMFillArrayBody {
+        LLVMGenerator::FillArrayBody(InlineLLVMFillArrayBody {
             size_name,
             value_name,
             array_name: name_cloned,
@@ -1396,7 +1396,7 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(CAP_NAME)],
         expr_lit(
-            InlineLLVM::MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody {
+            LLVMGenerator::MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody {
                 cap_name: CAP_NAME.to_string(),
             }),
             vec![FullName::local(CAP_NAME)],
@@ -1463,7 +1463,7 @@ pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             expr_abs(
                 vec![var_local(ARR_NAME)],
                 expr_lit(
-                    InlineLLVM::UnsafeSetArrayBody(InlineLLVMUnsafeSetArrayBody {
+                    LLVMGenerator::UnsafeSetArrayBody(InlineLLVMUnsafeSetArrayBody {
                         arr_name: ARR_NAME.to_string(),
                         idx_name: IDX_NAME.to_string(),
                         value_name: VALUE_NAME.to_string(),
@@ -1542,7 +1542,7 @@ pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_lit(
-                InlineLLVM::UnsafeGetArrayBody(InlineLLVMUnsafeGetArrayBody {
+                LLVMGenerator::UnsafeGetArrayBody(InlineLLVMUnsafeGetArrayBody {
                     arr_name: ARR_NAME.to_string(),
                     idx_name: IDX_NAME.to_string(),
                 }),
@@ -1608,7 +1608,7 @@ pub fn unsafe_set_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_lit(
-                InlineLLVM::UnsafeSetSizeArrayBody(InlineLLVMUnsafeSetSizeArrayBody {
+                LLVMGenerator::UnsafeSetSizeArrayBody(InlineLLVMUnsafeSetSizeArrayBody {
                     arr_name: ARR_NAME.to_string(),
                     len_name: LENGTH_NAME.to_string(),
                 }),
@@ -1663,7 +1663,7 @@ fn read_array_body(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     let name = format!("Array::get({}, {})", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
     expr_lit(
-        InlineLLVM::ArrayGetBody(InlineLLVMArrayGetBody {
+        LLVMGenerator::ArrayGetBody(InlineLLVMArrayGetBody {
             arr_name: array_str,
             idx_name: idx_str,
         }),
@@ -1840,7 +1840,7 @@ fn set_array_lit(
     let name = format!("{} {} {} {}", func_name, idx, value, array);
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
     expr_lit(
-        InlineLLVM::ArraySetBody(InlineLLVMArraySetBody {
+        LLVMGenerator::ArraySetBody(InlineLLVMArraySetBody {
             array_name: array_str,
             idx_name: idx_str,
             value_name: value_str,
@@ -1958,7 +1958,7 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
             expr_abs(
                 vec![var_local(MODIFIED_ARRAY_NAME)],
                 expr_lit(
-                    InlineLLVM::ArrayModBody(InlineLLVMArrayModBody {
+                    LLVMGenerator::ArrayModBody(InlineLLVMArrayModBody {
                         array_name: MODIFIED_ARRAY_NAME.to_string(),
                         idx_name: INDEX_NAME.to_string(),
                         modifier_name: MODIFIER_NAME.to_string(),
@@ -2034,7 +2034,7 @@ pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_lit(
-            InlineLLVM::ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody {
+            LLVMGenerator::ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody {
                 arr_name: ARR_NAME.to_string(),
                 is_unique_version,
             }),
@@ -2109,7 +2109,7 @@ pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_lit(
-            InlineLLVM::ArrayGetPtrBody(InlineLLVMArrayGetPtrBody {
+            LLVMGenerator::ArrayGetPtrBody(InlineLLVMArrayGetPtrBody {
                 arr_name: ARR_NAME.to_string(),
             }),
             vec![FullName::local(ARR_NAME)],
@@ -2163,7 +2163,7 @@ pub fn get_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_lit(
-            InlineLLVM::ArrayGetSizeBody(InlineLLVMArrayGetSizeBody {
+            LLVMGenerator::ArrayGetSizeBody(InlineLLVMArrayGetSizeBody {
                 arr_name: ARR_NAME.to_string(),
             }),
             vec![FullName::local(ARR_NAME)],
@@ -2218,7 +2218,7 @@ pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_lit(
-            InlineLLVM::ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody {
+            LLVMGenerator::ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody {
                 arr_name: ARR_NAME.to_string(),
             }),
             vec![FullName::local(ARR_NAME)],
@@ -2273,7 +2273,7 @@ pub fn struct_get_body(
         var_name
     );
     expr_lit(
-        InlineLLVM::StructGetBody(InlineLLVMStructGetBody {
+        LLVMGenerator::StructGetBody(InlineLLVMStructGetBody {
             var_name: var_name_clone,
             field_idx,
         }),
@@ -2384,7 +2384,7 @@ pub fn struct_mod_body(
     let x_name = FullName::local(x_name);
     let free_vars = vec![f_name.clone(), x_name.clone()];
     expr_lit(
-        InlineLLVM::StructModBody(InlineLLVMStructModBody {
+        LLVMGenerator::StructModBody(InlineLLVMStructModBody {
             f_name,
             x_name,
             is_unique_version,
@@ -2594,7 +2594,7 @@ pub fn struct_set(
         expr_abs(
             vec![var_local(STRUCT_NAME)],
             expr_lit(
-                InlineLLVM::StructSetBody(InlineLLVMStructSetBody {
+                LLVMGenerator::StructSetBody(InlineLLVMStructSetBody {
                     value_name: VALUE_NAME.to_string(),
                     struct_name: STRUCT_NAME.to_string(),
                     field_count,
@@ -2682,7 +2682,7 @@ pub fn union_new_body(
     let name_cloned = name.clone();
     let field_name_cloned = field_name.clone();
     expr_lit(
-        InlineLLVM::MakeUnionBody(InlineLLVMMakeUnionBody {
+        LLVMGenerator::MakeUnionBody(InlineLLVMMakeUnionBody {
             field_name: field_name_cloned,
             generated_union_name: name_cloned,
             field_idx,
@@ -2814,7 +2814,7 @@ pub fn union_as_lit(
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
     expr_lit(
-        InlineLLVM::UnionAsBody(InlineLLVMUnionAsBody {
+        LLVMGenerator::UnionAsBody(InlineLLVMUnionAsBody {
             union_arg_name,
             field_idx,
         }),
@@ -2941,7 +2941,7 @@ pub fn union_is_lit(
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
     expr_lit(
-        InlineLLVM::UnionIsBody(InlineLLVMUnionIsBody {
+        LLVMGenerator::UnionIsBody(InlineLLVMUnionIsBody {
             union_arg_name,
             field_idx,
             name_cloned,
@@ -3074,7 +3074,7 @@ pub fn union_mod_function(
         expr_abs(
             vec![var_local(UNION_NAME)],
             expr_lit(
-                InlineLLVM::UnionModBody(InlineLLVMUnionModBody {
+                LLVMGenerator::UnionModBody(InlineLLVMUnionModBody {
                     union_name: UNION_NAME.to_string(),
                     modifier_name: MODIFIER_NAME.to_string(),
                     field_idx,
@@ -3234,7 +3234,7 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
         expr_abs(
             vec![var_var(loop_body_name.clone())],
             expr_lit(
-                InlineLLVM::LoopFunctionBody(InlineLLVMLoopFunctionBody {
+                LLVMGenerator::LoopFunctionBody(InlineLLVMLoopFunctionBody {
                     initial_state_name: INITIAL_STATE_NAME.to_string(),
                     loop_body_name: LOOP_BODY_NAME.to_string(),
                 }),
@@ -3321,7 +3321,7 @@ pub fn debug_print_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(MSG_NAME)],
         expr_lit(
-            InlineLLVM::DebugPrintFunctionBody(InlineLLVMDebugPrintFunctionBody {
+            LLVMGenerator::DebugPrintFunctionBody(InlineLLVMDebugPrintFunctionBody {
                 msg_name: MSG_NAME.to_string(),
             }),
             vec![FullName::local(MSG_NAME)],
@@ -3369,7 +3369,7 @@ pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(UNIT_NAME)],
         expr_lit(
-            InlineLLVM::AbortFunctionBody(InlineLLVMAbortFunctionBody {}),
+            LLVMGenerator::AbortFunctionBody(InlineLLVMAbortFunctionBody {}),
             vec![],
             "abort".to_string(),
             type_tyvar_star(A_NAME),
@@ -3461,7 +3461,7 @@ pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_lit(
-            InlineLLVM::IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody {
+            LLVMGenerator::IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody {
                 var_name: VAR_NAME.to_string(),
             }),
             vec![FullName::local(VAR_NAME)],
@@ -3501,7 +3501,7 @@ pub fn unary_opeartor_instance(
     method_name: &Name,
     operand_ty: Rc<TypeNode>,
     result_ty: Rc<TypeNode>,
-    generator: InlineLLVM,
+    generator: LLVMGenerator,
 ) -> TraitInstance {
     TraitInstance {
         qual_pred: QualPredicate {
@@ -3563,7 +3563,7 @@ pub fn binary_opeartor_instance(
     method_name: &Name,
     operand_ty: Rc<TypeNode>,
     result_ty: Rc<TypeNode>,
-    generator: InlineLLVM,
+    generator: LLVMGenerator,
 ) -> TraitInstance {
     TraitInstance {
         qual_pred: QualPredicate {
@@ -3661,7 +3661,7 @@ pub fn eq_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        InlineLLVM::IntEqBody(InlineLLVMIntEqBody {}),
+        LLVMGenerator::IntEqBody(InlineLLVMIntEqBody {}),
     )
 }
 
@@ -3719,7 +3719,7 @@ pub fn eq_trait_instance_ptr(ty: Rc<TypeNode>) -> TraitInstance {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        InlineLLVM::PtrEqBody(InlineLLVMPtrEqBody {}),
+        LLVMGenerator::PtrEqBody(InlineLLVMPtrEqBody {}),
     )
 }
 
@@ -3774,7 +3774,7 @@ pub fn eq_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        InlineLLVM::FloatEqBody(InlineLLVMFloatEqBody {}),
+        LLVMGenerator::FloatEqBody(InlineLLVMFloatEqBody {}),
     )
 }
 
@@ -3851,7 +3851,7 @@ pub fn less_than_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         ty,
         make_bool_ty(),
-        InlineLLVM::IntLessThanBody(InlineLLVMIntLessThanBody {}),
+        LLVMGenerator::IntLessThanBody(InlineLLVMIntLessThanBody {}),
     )
 }
 
@@ -3906,7 +3906,7 @@ pub fn less_than_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         ty,
         make_bool_ty(),
-        InlineLLVM::FloatLessThanBody(InlineLLVMFloatLessThanBody {}),
+        LLVMGenerator::FloatLessThanBody(InlineLLVMFloatLessThanBody {}),
     )
 }
 
@@ -3984,7 +3984,7 @@ pub fn less_than_or_equal_to_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstan
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
         ty,
         make_bool_ty(),
-        InlineLLVM::IntLessThanOrEqBody(InlineLLVMIntLessThanOrEqBody {}),
+        LLVMGenerator::IntLessThanOrEqBody(InlineLLVMIntLessThanOrEqBody {}),
     )
 }
 
@@ -4039,7 +4039,7 @@ pub fn less_than_or_equal_to_trait_instance_float(ty: Rc<TypeNode>) -> TraitInst
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
         ty,
         make_bool_ty(),
-        InlineLLVM::FloatLessThanOrEqBody(InlineLLVMFloatLessThanOrEqBody {}),
+        LLVMGenerator::FloatLessThanOrEqBody(InlineLLVMFloatLessThanOrEqBody {}),
     )
 }
 
@@ -4099,7 +4099,7 @@ pub fn add_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         &ADD_TRAIT_ADD_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::IntAddBody(InlineLLVMIntAddBody {}),
+        LLVMGenerator::IntAddBody(InlineLLVMIntAddBody {}),
     )
 }
 
@@ -4146,7 +4146,7 @@ pub fn add_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
         &ADD_TRAIT_ADD_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::FloatAddBody(InlineLLVMFloatAddBody {}),
+        LLVMGenerator::FloatAddBody(InlineLLVMFloatAddBody {}),
     )
 }
 
@@ -4210,7 +4210,7 @@ pub fn subtract_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::IntSubBody(InlineLLVMIntSubBody {}),
+        LLVMGenerator::IntSubBody(InlineLLVMIntSubBody {}),
     )
 }
 
@@ -4257,7 +4257,7 @@ pub fn subtract_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::FloatSubBody(InlineLLVMFloatSubBody {}),
+        LLVMGenerator::FloatSubBody(InlineLLVMFloatSubBody {}),
     )
 }
 
@@ -4321,7 +4321,7 @@ pub fn multiply_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::IntMulBody(InlineLLVMIntMulBody {}),
+        LLVMGenerator::IntMulBody(InlineLLVMIntMulBody {}),
     )
 }
 
@@ -4368,7 +4368,7 @@ pub fn multiply_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::FloatMulBody(InlineLLVMFloatMulBody {}),
+        LLVMGenerator::FloatMulBody(InlineLLVMFloatMulBody {}),
     )
 }
 
@@ -4438,7 +4438,7 @@ pub fn divide_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::IntDivBody(InlineLLVMIntDivBody {}),
+        LLVMGenerator::IntDivBody(InlineLLVMIntDivBody {}),
     )
 }
 
@@ -4485,7 +4485,7 @@ pub fn divide_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::FloatDivBody(InlineLLVMFloatDivBody {}),
+        LLVMGenerator::FloatDivBody(InlineLLVMFloatDivBody {}),
     )
 }
 
@@ -4555,7 +4555,7 @@ pub fn remainder_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::IntRemBody(InlineLLVMIntRemBody {}),
+        LLVMGenerator::IntRemBody(InlineLLVMIntRemBody {}),
     )
 }
 
@@ -4611,7 +4611,7 @@ pub fn negate_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::IntNegBody(InlineLLVMIntNegBody {}),
+        LLVMGenerator::IntNegBody(InlineLLVMIntNegBody {}),
     )
 }
 
@@ -4654,7 +4654,7 @@ pub fn negate_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         ty.clone(),
         ty,
-        InlineLLVM::FloatNegBody(InlineLLVMFloatNegBody {}),
+        LLVMGenerator::FloatNegBody(InlineLLVMFloatNegBody {}),
     )
 }
 
@@ -4715,6 +4715,6 @@ pub fn not_trait_instance_bool() -> TraitInstance {
         &NOT_TRAIT_OP_NAME.to_string(),
         make_bool_ty(),
         make_bool_ty(),
-        InlineLLVM::BoolNegBody(InlineLLVMBoolNegBody {}),
+        LLVMGenerator::BoolNegBody(InlineLLVMBoolNegBody {}),
     )
 }

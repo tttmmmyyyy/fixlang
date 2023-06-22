@@ -1005,7 +1005,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate literal
     fn eval_lit(
         &mut self,
-        lit: Rc<Literal>,
+        lit: Rc<InlineLLVM>,
         ty: Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
