@@ -8,9 +8,6 @@ use std::io::Write;
 
 use super::*;
 
-// Module of fix-lang.
-// Avoiding name confliction with "Module" of inkwell.
-
 const MAIN_FUNCTION_NAME: &str = "main";
 const MAIN_MODULE_NAME: &str = "Main";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "%";
@@ -268,6 +265,8 @@ impl<'de> serde::de::Visitor<'de> for UpdateDateVisitor {
     }
 }
 
+// Module of fix-lang.
+// To avoid confliction with "inkwell::Module", we name it as `FixModule`.
 pub struct FixModule {
     pub name: Name,
     pub import_statements: Vec<ImportStatement>,
@@ -286,7 +285,7 @@ pub struct FixModule {
     // Last update date for each linked modules.
     pub last_updates: HashMap<Name, UpdateDate>,
     // Last affected date for each linked modules.
-    // Last affected date is defined as the maximum value of last update dates of all importing modules.
+    // Last affected date is defined as the maximum value of last update dates of all imported modules.
     pub last_affected_dates: HashMap<Name, UpdateDate>,
 }
 
