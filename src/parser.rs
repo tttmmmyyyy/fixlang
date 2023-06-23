@@ -193,7 +193,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> FixModule {
     let mut fix_mod = FixModule::new(module_name.clone());
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
-    let mut global_name_type_signs: Vec<(FullName, Rc<Scheme>)> = vec![];
+    let mut global_value_decls: Vec<(FullName, Rc<Scheme>)> = vec![];
     let mut global_value_defns: Vec<(FullName, Rc<ExprNode>)> = vec![];
     let mut trait_infos: Vec<TraitInfo> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
@@ -205,7 +205,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> FixModule {
                 pair,
                 src,
                 &namespace,
-                &mut global_name_type_signs,
+                &mut global_value_decls,
                 &mut global_value_defns,
                 &mut type_defns,
                 &mut trait_infos,
@@ -220,7 +220,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> FixModule {
         }
     }
 
-    fix_mod.add_global_values(global_value_defns, global_name_type_signs);
+    fix_mod.add_global_values(global_value_defns, global_value_decls);
     fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls);
     fix_mod.add_import_statements(import_statements);
@@ -232,7 +232,7 @@ fn parse_global_defns(
     pair: Pair<Rule>,
     src: &SourceFile,
     namespace: &NameSpace,
-    global_name_type_signs: &mut Vec<(FullName, Rc<Scheme>)>,
+    global_value_decls: &mut Vec<(FullName, Rc<Scheme>)>,
     global_value_defns: &mut Vec<(FullName, Rc<ExprNode>)>,
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
@@ -246,7 +246,7 @@ fn parse_global_defns(
                     pair,
                     src,
                     namespace,
-                    global_name_type_signs,
+                    global_value_decls,
                     global_value_defns,
                     type_defns,
                     trait_infos,
@@ -256,7 +256,7 @@ fn parse_global_defns(
                 type_defns.push(parse_type_defn(pair, src, &namespace));
             }
             Rule::global_name_type_sign => {
-                global_name_type_signs.push(parse_global_name_type_sign(pair, src, &namespace));
+                global_value_decls.push(parse_global_value_decl(pair, src, &namespace));
             }
             Rule::global_name_defn => {
                 global_value_defns.push(parse_global_name_defn(pair, src, &namespace));
@@ -273,7 +273,7 @@ fn parse_global_defns_in_namespace(
     pair: Pair<Rule>,
     src: &SourceFile,
     namespace: &NameSpace,
-    global_name_type_signs: &mut Vec<(FullName, Rc<Scheme>)>,
+    global_value_decls: &mut Vec<(FullName, Rc<Scheme>)>,
     global_value_defns: &mut Vec<(FullName, Rc<ExprNode>)>,
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
@@ -286,7 +286,7 @@ fn parse_global_defns_in_namespace(
             pair,
             src,
             &namespace,
-            global_name_type_signs,
+            global_value_decls,
             global_value_defns,
             type_defns,
             trait_infos,
@@ -368,7 +368,7 @@ fn parse_predicate_qualified(pair: Pair<Rule>, src: &SourceFile) -> QualPredicat
     qp
 }
 
-fn parse_global_name_type_sign(
+fn parse_global_value_decl(
     pair: Pair<Rule>,
     src: &SourceFile,
     namespace: &NameSpace,
