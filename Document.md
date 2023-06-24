@@ -2081,6 +2081,10 @@ This function checks if a value is uniquely refernced by a name, and returns the
 Example: 
 
 ```
+module Main;
+
+import Debug;
+
 main : IO ();
 main = (
     // For unboxed value, it returns true even if the value is used later.
