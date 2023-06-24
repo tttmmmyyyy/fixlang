@@ -246,6 +246,15 @@ impl TypeNode {
         Rc::new(ret)
     }
 
+    // Set source if only when self does not have source info.
+    pub fn set_source_if_none(self: &Rc<TypeNode>, src: Option<Span>) -> Rc<TypeNode> {
+        if self.info.source.is_none() {
+            self.set_source(src)
+        } else {
+            self.clone()
+        }
+    }
+
     // Set kinds to type variables.
     pub fn set_kinds(self: &Rc<TypeNode>, kinds: &HashMap<Name, Rc<Kind>>) -> Rc<TypeNode> {
         match &self.ty {
@@ -746,7 +755,7 @@ pub fn tycon(name: FullName) -> Rc<TyCon> {
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     #[allow(dead_code)]
-    source: Option<Span>,
+    pub source: Option<Span>,
 }
 
 impl TypeNode {

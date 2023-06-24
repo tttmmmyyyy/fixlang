@@ -154,19 +154,16 @@ impl Substitution {
     // Apply substitution to type
     pub fn substitute_type(&self, ty: &Rc<TypeNode>) -> Rc<TypeNode> {
         match &ty.ty {
-            Type::TyVar(tyvar) => self
-                .data
-                .get(&tyvar.name)
-                .map_or(ty.clone(), |sub| sub.clone()),
+            Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
+                sub.set_source_if_none(ty.info.source.clone())
+            }),
             Type::TyCon(_) => ty.clone(),
-            Type::TyApp(fun, arg) => {
-                let fun = self.substitute_type(fun);
-                let arg = self.substitute_type(arg);
-                type_tyapp(fun, arg)
-            }
-            Type::FunTy(param, body) => {
-                type_fun(self.substitute_type(&param), self.substitute_type(&body))
-            }
+            Type::TyApp(fun, arg) => ty
+                .set_tyapp_fun(self.substitute_type(fun))
+                .set_tyapp_arg(self.substitute_type(arg)),
+            Type::FunTy(src, dst) => ty
+                .set_funty_src(self.substitute_type(&src))
+                .set_funty_dst(self.substitute_type(&dst)),
         }
     }
 
