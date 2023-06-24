@@ -161,18 +161,11 @@ fn build_module<'c>(
 
 #[allow(dead_code)]
 pub fn run_source(source: &str, config: Configuration) -> i32 {
-    // When run source string, import only "Std".
-    let mut imports: Vec<ImportStatement> = vec![];
-
-    let std_mod = make_std_mod();
-    imports.append(&mut std_mod.import_statements.clone());
-    let mut target_mod = std_mod;
+    let mut target_mod = make_std_mod();
 
     let source_mod = parse_source(source, "{filename unspecified}");
-    imports.append(&mut source_mod.import_statements.clone());
     target_mod.link(source_mod);
-
-    resolve_imports(&mut target_mod, &mut imports);
+    target_mod.resolve_imports();
 
     run_module(target_mod, config)
 }
@@ -219,32 +212,6 @@ pub fn read_file(path: &Path) -> (String, UpdateDate) {
     (s, last_modified)
 }
 
-fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement>) {
-    while imports.len() > 0 {
-        let import = imports.pop().unwrap();
-
-        // If import is already resolved, do nothing.
-        if target_mod.imported_mod_map.contains_key(&import.module) {
-            continue;
-        }
-
-        // Search for bulit-in modules.
-        if import.module == "Debug" {
-            target_mod.link(parse_source(include_str!("debug.fix"), "debug.fix"));
-            continue;
-        }
-        if import.module == "HashMap" {
-            target_mod.link(parse_source(include_str!("hashmap.fix"), "hashmap.fix"));
-            continue;
-        }
-
-        error_exit_with_src(
-            &format!("Cannot find module `{}`", import.module),
-            &import.source,
-        );
-    }
-}
-
 // Create a directory if it doesn't exist, and return its path.
 pub fn touch_directory<P>(rel_path: P) -> PathBuf
 where
@@ -263,21 +230,15 @@ where
 }
 
 pub fn load_file(config: &Configuration) -> FixModule {
-    let mut imports: Vec<ImportStatement> = vec![];
-
     // Link all modules specified in source_files.
-    let std_mod = make_std_mod();
-    imports.append(&mut std_mod.import_statements.clone());
-    let mut target_mod = std_mod;
+    let mut target_mod = make_std_mod();
     for file_path in &config.source_files {
         let (content, last_modified) = read_file(file_path);
         let mut fix_mod = parse_source(&content, file_path.to_str().unwrap());
         fix_mod.set_last_update(last_modified);
-        imports.append(&mut fix_mod.import_statements.clone());
         target_mod.link(fix_mod);
     }
-
-    resolve_imports(&mut target_mod, &mut imports);
+    target_mod.resolve_imports();
     target_mod
 }
 

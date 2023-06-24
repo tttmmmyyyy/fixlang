@@ -244,12 +244,13 @@ impl<'de> serde::de::Visitor<'de> for UpdateDateVisitor {
 // To avoid confliction with "inkwell::Module", we name it as `FixModule`.
 pub struct FixModule {
     pub name: Name,
-    pub import_statements: Vec<ImportStatement>,
+    pub unresolved_imports: Vec<ImportStatement>,
     // A map to represent modules imported by each submodule.
     // Each module imports itself.
     // This is used to name-resolution and overloading resolution,
     pub imported_mod_map: HashMap<Name, HashSet<Name>>,
     // Modules linked to this module.
+    // TODO maybe we can get this from keys-set of imported_mod_map?
     pub linked_mods: HashSet<Name>,
     pub type_defns: Vec<TypeDefn>,
     pub global_values: HashMap<FullName, GlobalValue>,
@@ -269,7 +270,7 @@ impl FixModule {
     pub fn new(name: Name) -> FixModule {
         let mut fix_mod = FixModule {
             name: name.clone(),
-            import_statements: vec![],
+            unresolved_imports: vec![],
             imported_mod_map: Default::default(),
             linked_mods: Default::default(),
             type_defns: Default::default(),
@@ -299,7 +300,7 @@ impl FixModule {
             let mod_name = self.name.clone();
             self.insert_imported_mod_map(&mod_name, &import.module);
         }
-        self.import_statements.append(&mut imports);
+        self.unresolved_imports.append(&mut imports);
     }
 
     // Add traits.
@@ -1063,7 +1064,7 @@ impl FixModule {
     }
 
     // Link two modules.
-    pub fn link(&mut self, other: FixModule) {
+    pub fn link(&mut self, mut other: FixModule) {
         // TODO: check if a module defined by a single source file.
 
         // If already linked, do nothing.
@@ -1071,6 +1072,9 @@ impl FixModule {
             return;
         }
         self.linked_mods.insert(other.name);
+
+        self.unresolved_imports
+            .append(&mut other.unresolved_imports);
 
         // Merge imported_mod_map.
         for (importer, importee) in &other.imported_mod_map {
@@ -1099,6 +1103,36 @@ impl FixModule {
         // Merge last updates.
         for (module, dt) in other.last_updates {
             self.last_updates.insert(module, dt);
+        }
+    }
+
+    pub fn resolve_imports(&mut self) {
+        while self.unresolved_imports.len() > 0 {
+            let import = self.unresolved_imports.pop().unwrap();
+
+            // If import is already resolved, do nothing.
+            if self.imported_mod_map.contains_key(&import.module) {
+                continue;
+            }
+
+            // Search for bulit-in modules.
+            if import.module == "Debug" {
+                self.link(parse_source(include_str!("../debug.fix"), "debug.fix"));
+                continue;
+            }
+            if import.module == "HashMap" {
+                self.link(parse_source(include_str!("../hashmap.fix"), "hashmap.fix"));
+                continue;
+            }
+            if import.module == "Hash" {
+                self.link(parse_source(include_str!("../hash.fix"), "hash.fix"));
+                continue;
+            }
+
+            error_exit_with_src(
+                &format!("Cannot find module `{}`", import.module),
+                &import.source,
+            );
         }
     }
 

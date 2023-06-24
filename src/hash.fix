@@ -1,0 +1,41 @@
+module Hash;
+
+trait a : Hash {
+    hash : a -> U64;
+}
+
+impl [a : Hash] Array a : Hash {
+    hash = |arr| (
+        let len = arr.get_size;
+        loop((0, 5381_U64), |(i, h)| (
+            if i == len { break $ h };
+            let h = h.shift_left(5_U64) + h + arr.get(i).hash;
+            continue $ (i+1, h)
+        ))
+    );
+}
+
+impl String : Hash {
+    hash = |s| s.@_data.hash;
+}
+
+impl U8 : Hash {
+    hash = |x| x.to_U64.hash;
+}
+
+impl U64 : Hash {
+    hash = |x| (
+        // https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
+        let x = x.bit_xor(x.shift_right(30_U64)) * 13787848793156543929_U64;
+        let x = x.bit_xor(x.shift_right(27_U64)) * 10723151780598845931_U64;
+        x.bit_xor(x.shift_right(31_U64))
+    );
+}
+
+impl I64 : Hash {
+    hash = I64::to_U64 >> hash;
+}
+
+impl [a : Hash, b : Hash] (a, b) : Hash {
+    hash = |(a, b)| [a.hash, b.hash].hash;
+}

@@ -73,7 +73,6 @@
       - [`to_F64 : U8 -> F64`](#to_f64--u8---f64)
       - [`impl U8 : Add`](#impl-u8--add)
       - [`impl U8 : Eq`](#impl-u8--eq)
-      - [`impl U8 : Hash`](#impl-u8--hash)
       - [`impl U8 : LessThan`](#impl-u8--lessthan)
       - [`impl U8 : LessThanOrEq`](#impl-u8--lessthanoreq)
       - [`impl U8 : Mul`](#impl-u8--mul)
@@ -145,7 +144,6 @@
       - [`to_F64 : I64 -> F64`](#to_f64--i64---f64)
       - [`impl I64 : Add`](#impl-i64--add)
       - [`impl I64 : Eq`](#impl-i64--eq)
-      - [`impl I64 : Hash`](#impl-i64--hash)
       - [`impl I64 : LessThan`](#impl-i64--lessthan)
       - [`impl I64 : LessThanOrEq`](#impl-i64--lessthanoreq)
       - [`impl I64 : Mul`](#impl-i64--mul)
@@ -169,7 +167,6 @@
       - [`to_F64 : U64 -> F64`](#to_f64--u64---f64)
       - [`impl U64 : Add`](#impl-u64--add)
       - [`impl U64 : Eq`](#impl-u64--eq)
-      - [`impl U64 : Hash`](#impl-u64--hash)
       - [`impl U64 : LessThan`](#impl-u64--lessthan)
       - [`impl U64 : LessThanOrEq`](#impl-u64--lessthanoreq)
       - [`impl U64 : Mul`](#impl-u64--mul)
@@ -236,7 +233,6 @@
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
       - [`to_iter : Array a -> Iterator a`](#to_iter--array-a---iterator-a)
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
-      - [`impl [a : Hash] Array a : Hash`](#impl-a--hash-array-a--hash)
     - [Std::Destructor](#stddestructor)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [Std::IO](#stdio)
@@ -329,11 +325,9 @@
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
     - [`impl String : Add`](#impl-string--add)
     - [`impl String : Eq`](#impl-string--eq)
-    - [`impl String : Hash`](#impl-string--hash)
     - [`impl String : ToString`](#impl-string--tostring)
     - [Std::Tuple{N}](#stdtuplen)
       - [`impl [a : Eq, b : Eq] (a, b) : Eq`](#impl-a--eq-b--eq-a-b--eq)
-      - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
       - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
   - [Functions](#functions-1)
     - [`Std::abort : () -> a`](#stdabort-----a)
@@ -345,8 +339,6 @@
   - [Traits](#traits)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
-    - [Std::Hash](#stdhash)
-      - [(required) `hash : [a : Hash] a -> U64`](#required-hash--a--hash-a---u64)
     - [Std::LessThan](#stdlessthan)
       - [(required) `less_than : [a : LessThan] a -> a -> a`](#required-less_than--a--lessthan-a---a---a)
       - [`max : [a : LessThan] a -> a -> a`](#max--a--lessthan-a---a---a)
@@ -369,24 +361,33 @@
       - [`to_U32 : [a: ToU32] a -> U32`](#to_u32--a-tou32-a---u32)
     - [Std::ToU64](#stdtou64)
       - [`to_U64 : [a: ToU64] a -> U64`](#to_u64--a-tou64-a---u64)
-  - [Module `Debug`](#module-debug)
-    - [`assert : String -> Bool -> ()`](#assert--string---bool---)
-    - [`assert_eq : [a: Eq] String -> a -> a -> ()`](#assert_eq--a-eq-string---a---a---)
-    - [`debug_print : String -> ()`](#debug_print--string---)
-    - [`debug_println : String -> ()`](#debug_println--string---)
-  - [Module `HashMap`](#module-hashmap)
-    - [`type HashMap k v`](#type-hashmap-k-v)
-    - [`_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`](#_find_place--k--eq-k--hash-k---hashmap-k-v---i64-option-i64)
-    - [`_get_pot_geq : I64 -> I64`](#_get_pot_geq--i64---i64)
-    - [`empty : I64 -> HashMap k v`](#empty--i64---hashmap-k-v)
-    - [`erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v`](#erase--k--eq-k--hash-k---hashmap-k-v---hashmap-k-v)
-    - [`find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`](#find--k--eq-k--hash-k---hashmap-k-v---option-v)
-    - [`find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> Option v`](#find_or--k--eq-k--hash-k---v---hashmap-k-v---option-v)
-    - [`get_capacity : HashMap k v -> I64`](#get_capacity--hashmap-k-v---i64)
-    - [`get_size : HashMap k v -> I64`](#get_size--hashmap-k-v---i64)
-    - [`insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`](#insert--k--eq-k--hash-k---v---hashmap-k-v---hashmap-k-v)
-    - [`reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`](#reserve--k--hash-k--eq-i64---hashmap-k-v---hashmap-k-v)
-    - [`to_iter : HashMap k v -> Iterator (k, v)`](#to_iter--hashmap-k-v---iterator-k-v)
+- [Module `Debug`](#module-debug)
+  - [`assert : String -> Bool -> ()`](#assert--string---bool---)
+  - [`assert_eq : [a: Eq] String -> a -> a -> ()`](#assert_eq--a-eq-string---a---a---)
+  - [`debug_print : String -> ()`](#debug_print--string---)
+  - [`debug_println : String -> ()`](#debug_println--string---)
+- [Module `Hash`](#module-hash)
+  - [`trait a : Hash`](#trait-a--hash)
+    - [(required) `hash : [a : Hash] a -> U64`](#required-hash--a--hash-a---u64)
+    - [`impl [a : Hash] Array a : Hash`](#impl-a--hash-array-a--hash)
+    - [`impl String : Hash`](#impl-string--hash)
+    - [`impl U8 : Hash`](#impl-u8--hash)
+    - [`impl I64 : Hash`](#impl-i64--hash)
+    - [`impl U64 : Hash`](#impl-u64--hash)
+    - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
+- [Module `HashMap`](#module-hashmap)
+  - [`type HashMap k v`](#type-hashmap-k-v)
+  - [`_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`](#_find_place--k--eq-k--hash-k---hashmap-k-v---i64-option-i64)
+  - [`_get_pot_geq : I64 -> I64`](#_get_pot_geq--i64---i64)
+  - [`empty : I64 -> HashMap k v`](#empty--i64---hashmap-k-v)
+  - [`erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v`](#erase--k--eq-k--hash-k---hashmap-k-v---hashmap-k-v)
+  - [`find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`](#find--k--eq-k--hash-k---hashmap-k-v---option-v)
+  - [`find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> Option v`](#find_or--k--eq-k--hash-k---v---hashmap-k-v---option-v)
+  - [`get_capacity : HashMap k v -> I64`](#get_capacity--hashmap-k-v---i64)
+  - [`get_size : HashMap k v -> I64`](#get_size--hashmap-k-v---i64)
+  - [`insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`](#insert--k--eq-k--hash-k---v---hashmap-k-v---hashmap-k-v)
+  - [`reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`](#reserve--k--hash-k--eq-i64---hashmap-k-v---hashmap-k-v)
+  - [`to_iter : HashMap k v -> Iterator (k, v)`](#to_iter--hashmap-k-v---iterator-k-v)
   - [Operators](#operators)
 
 
@@ -1355,7 +1356,6 @@ Literals:
 #### `to_F64 : U8 -> F64`
 #### `impl U8 : Add`
 #### `impl U8 : Eq`
-#### `impl U8 : Hash`
 #### `impl U8 : LessThan`
 #### `impl U8 : LessThanOrEq`
 #### `impl U8 : Mul`
@@ -1454,7 +1454,6 @@ Literals:
 #### `to_F64 : I64 -> F64`
 #### `impl I64 : Add`
 #### `impl I64 : Eq`
-#### `impl I64 : Hash`
 #### `impl I64 : LessThan`
 #### `impl I64 : LessThanOrEq`
 #### `impl I64 : Mul`
@@ -1487,7 +1486,6 @@ Literals:
 #### `to_F64 : U64 -> F64`
 #### `impl U64 : Add`
 #### `impl U64 : Eq`
-#### `impl U64 : Hash`
 #### `impl U64 : LessThan`
 #### `impl U64 : LessThanOrEq`
 #### `impl U64 : Mul`
@@ -1653,9 +1651,6 @@ Sort elements in an array by "less than" comparator.
 Convert an array to an iterator.
 
 #### `impl [a : Eq] Array a : Eq`
-
-#### `impl [a : Hash] Array a : Hash`
-This is implemented by djb2 algorithm, although I don't know whether it is effective for not only strings (i.e., `U8` array) but also `U64` (result type of hash function) array!
 
 ### Std::Destructor
 
@@ -2015,16 +2010,12 @@ Add two strings by `String.concat`.
 
 ### `impl String : Eq`
 
-### `impl String : Hash`
-
 ### `impl String : ToString`
 Defined as an identity function.
 
 ### Std::Tuple{N}
 
 #### `impl [a : Eq, b : Eq] (a, b) : Eq`
-
-#### `impl [a : Hash, b : Hash] (a, b) : Hash`
 
 #### `impl [a : ToString, b : ToString] (a, b) : ToString`
 
@@ -2142,10 +2133,6 @@ main = (
 
 #### (required) `map : [f : Functor] (a -> b) -> f a -> f b`
 
-### Std::Hash
-
-#### (required) `hash : [a : Hash] a -> U64`
-
 ### Std::LessThan
 
 #### (required) `less_than : [a : LessThan] a -> a -> a`
@@ -2192,54 +2179,73 @@ This is equivalent to `Monad::bind(|x|x)`.
 
 #### `to_U64 : [a: ToU64] a -> U64`
 
-## Module `Debug`
+# Module `Debug`
 
-### `assert : String -> Bool -> ()`
+## `assert : String -> Bool -> ()`
 
-### `assert_eq : [a: Eq] String -> a -> a -> ()`
+## `assert_eq : [a: Eq] String -> a -> a -> ()`
 
-### `debug_print : String -> ()`
+## `debug_print : String -> ()`
 
-### `debug_println : String -> ()`
+## `debug_println : String -> ()`
 
-## Module `HashMap`
+# Module `Hash`
 
-### `type HashMap k v`
+## `trait a : Hash`
+
+### (required) `hash : [a : Hash] a -> U64`
+
+### `impl [a : Hash] Array a : Hash`
+This is implemented by djb2 algorithm, although I don't know whether it is effective for not only strings (i.e., `U8` array) but also `U64` (result type of hash function) array!
+
+### `impl String : Hash`
+
+### `impl U8 : Hash`
+
+### `impl I64 : Hash`
+
+### `impl U64 : Hash`
+
+### `impl [a : Hash, b : Hash] (a, b) : Hash`
+
+# Module `HashMap`
+
+## `type HashMap k v`
 `HashMap` is a structure that stores key-value pairs into hash tables.
 
-### `_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`
+## `_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`
 Find the place where an element with a key is stored.
 Returns pair of (index in hash table, index in bucket).
 
-### `_get_pot_geq : I64 -> I64`
+## `_get_pot_geq : I64 -> I64`
 Get a POT (power-of-two) value which is less than or equal to the given value.
 This is used for calculating capacity value.
 
-### `empty : I64 -> HashMap k v`
+## `empty : I64 -> HashMap k v`
 Create an empty HashMap which is reserved so that it will not rehash until size exceeds the spacified value.
 
-### `erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v`
+## `erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v`
 Erase an element from a HashMap.
 
-### `find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`
+## `find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`
 Find an element from a HashMap.
 
-### `find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> Option v`
+## `find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> Option v`
 Find an element from a HashMap. If the map doesn't contain the key, it returns the given default value.
 
-### `get_capacity : HashMap k v -> I64`
+## `get_capacity : HashMap k v -> I64`
 Get capacity of a HashMap. 
 
-### `get_size : HashMap k v -> I64`
+## `get_size : HashMap k v -> I64`
 Get size (number of elements) in a HashMap.
 
-### `insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`
+## `insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`
 Insert an element into a HashMap.
 
-### `reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`
+## `reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`
 Reserve a HashMap so that it will not rehash until size exceeds the spacified value.
 
-### `to_iter : HashMap k v -> Iterator (k, v)`
+## `to_iter : HashMap k v -> Iterator (k, v)`
 Convert a HashMap into an iterator.
 
 ## Operators

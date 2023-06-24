@@ -1,5 +1,7 @@
 module HashMap;
 
+import Hash;
+
 type HashMap k v = struct { _table : Array (Array (Option (k, v))), _size : I64 };
 
 // Find the place where an element with a key is stored.
