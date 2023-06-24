@@ -3010,7 +3010,10 @@ pub fn test114() {
 pub fn test115() {
     // Test HashMap
     let source = r#"
-        module Main; import Debug;
+        module Main; 
+
+        import Debug;
+        import HashMap;
 
         main : IO ();
         main = (

@@ -233,6 +233,10 @@ fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement
             target_mod.link(parse_source(include_str!("debug.fix"), "debug.fix"));
             continue;
         }
+        if import.module == "HashMap" {
+            target_mod.link(parse_source(include_str!("hashmap.fix"), "hashmap.fix"));
+            continue;
+        }
 
         error_exit_with_src(
             &format!("Cannot find module `{}`", import.module),
