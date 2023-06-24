@@ -369,12 +369,12 @@
 - [Module `Hash`](#module-hash)
   - [`trait a : Hash`](#trait-a--hash)
     - [(required) `hash : [a : Hash] a -> U64`](#required-hash--a--hash-a---u64)
-    - [`impl [a : Hash] Array a : Hash`](#impl-a--hash-array-a--hash)
-    - [`impl String : Hash`](#impl-string--hash)
-    - [`impl U8 : Hash`](#impl-u8--hash)
-    - [`impl I64 : Hash`](#impl-i64--hash)
-    - [`impl U64 : Hash`](#impl-u64--hash)
-    - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
+  - [`impl [a : Hash] Array a : Hash`](#impl-a--hash-array-a--hash)
+  - [`impl String : Hash`](#impl-string--hash)
+  - [`impl U8 : Hash`](#impl-u8--hash)
+  - [`impl I64 : Hash`](#impl-i64--hash)
+  - [`impl U64 : Hash`](#impl-u64--hash)
+  - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
 - [Module `HashMap`](#module-hashmap)
   - [`type HashMap k v`](#type-hashmap-k-v)
   - [`_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`](#_find_place--k--eq-k--hash-k---hashmap-k-v---i64-option-i64)
@@ -2195,18 +2195,18 @@ This is equivalent to `Monad::bind(|x|x)`.
 
 ### (required) `hash : [a : Hash] a -> U64`
 
-### `impl [a : Hash] Array a : Hash`
+## `impl [a : Hash] Array a : Hash`
 This is implemented by djb2 algorithm, although I don't know whether it is effective for not only strings (i.e., `U8` array) but also `U64` (result type of hash function) array!
 
-### `impl String : Hash`
+## `impl String : Hash`
 
-### `impl U8 : Hash`
+## `impl U8 : Hash`
 
-### `impl I64 : Hash`
+## `impl I64 : Hash`
 
-### `impl U64 : Hash`
+## `impl U64 : Hash`
 
-### `impl [a : Hash, b : Hash] (a, b) : Hash`
+## `impl [a : Hash, b : Hash] (a, b) : Hash`
 
 # Module `HashMap`
 
