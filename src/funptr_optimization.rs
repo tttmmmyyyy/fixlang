@@ -5,7 +5,7 @@ use super::*;
 // function pointer optimization:
 // Convert global closure to function pointer.
 
-pub fn funptr_optimization(fix_mod: &mut FixModule) {
+pub fn funptr_optimization(fix_mod: &mut Program) {
     // First, define function pointer versions of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
     for (sym_name, sym) in syms {

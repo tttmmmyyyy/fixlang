@@ -7,7 +7,7 @@ pub const FIX_NAME: &str = "fix";
 
 const STD_SOURCE: &str = include_str!("std.fix");
 
-pub fn make_std_mod() -> FixModule {
+pub fn make_std_mod() -> Program {
     let mut fix_module = parse_source(STD_SOURCE, "std.fix");
     fix_module.set_last_update(UpdateDate(
         DateTime::parse_from_rfc3339(build_time_utc!())

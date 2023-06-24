@@ -164,7 +164,7 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
     }
 }
 
-pub fn parse_source(source: &str, file_name: &str) -> FixModule {
+pub fn parse_source(source: &str, file_name: &str) -> Program {
     let source_file = SourceFile {
         string: Some(Rc::new(source.to_string())),
         file_name: file_name.to_string(),
@@ -177,7 +177,7 @@ pub fn parse_source(source: &str, file_name: &str) -> FixModule {
     parse_file(file, &source_file)
 }
 
-fn parse_file(mut file: Pairs<Rule>, src: &SourceFile) -> FixModule {
+fn parse_file(mut file: Pairs<Rule>, src: &SourceFile) -> Program {
     let pair = file.next().unwrap();
     match pair.as_rule() {
         Rule::module => return parse_module(pair, src),
@@ -185,12 +185,12 @@ fn parse_file(mut file: Pairs<Rule>, src: &SourceFile) -> FixModule {
     }
 }
 
-fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> FixModule {
+fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut pairs = pair.into_inner();
     let module_name = parse_module_defn(pairs.next().unwrap(), src);
     let namespace = NameSpace::new(vec![module_name.clone()]);
-    let mut fix_mod = FixModule::new(module_name.clone());
+    let mut fix_mod = Program::new(module_name.clone());
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
     let mut global_value_decls: Vec<(FullName, Rc<Scheme>)> = vec![];

@@ -36,7 +36,7 @@ fn build_module<'c>(
     context: &'c Context,
     module: &Module<'c>,
     target: Either<TargetMachine, ExecutionEngine<'c>>,
-    mut fix_mod: FixModule,
+    mut fix_mod: Program,
     config: Configuration,
 ) -> Either<TargetMachine, ExecutionEngine<'c>> {
     // Calculate last affected dates.
@@ -170,7 +170,7 @@ pub fn run_source(source: &str, config: Configuration) -> i32 {
     run_module(target_mod, config)
 }
 
-pub fn run_module(fix_mod: FixModule, config: Configuration) -> i32 {
+pub fn run_module(fix_mod: Program, config: Configuration) -> i32 {
     let ctx = Context::create();
     let module = ctx.create_module(&fix_mod.name);
     let ee = module
@@ -229,7 +229,7 @@ where
     res
 }
 
-pub fn load_file(config: &Configuration) -> FixModule {
+pub fn load_file(config: &Configuration) -> Program {
     // Link all modules specified in source_files.
     let mut target_mod = make_std_mod();
     for file_path in &config.source_files {

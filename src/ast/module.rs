@@ -242,7 +242,7 @@ impl<'de> serde::de::Visitor<'de> for UpdateDateVisitor {
 
 // Module of fix-lang.
 // To avoid confliction with "inkwell::Module", we name it as `FixModule`.
-pub struct FixModule {
+pub struct Program {
     pub name: Name,
     pub unresolved_imports: Vec<ImportStatement>,
     // A map to represent modules imported by each module.
@@ -262,10 +262,10 @@ pub struct FixModule {
     pub last_affected_dates: HashMap<Name, UpdateDate>,
 }
 
-impl FixModule {
+impl Program {
     // Create empty module.
-    pub fn new(name: Name) -> FixModule {
-        let mut fix_mod = FixModule {
+    pub fn new(name: Name) -> Program {
+        let mut fix_mod = Program {
             name: name.clone(),
             unresolved_imports: vec![],
             imported_mod_map: Default::default(),
@@ -990,7 +990,7 @@ impl FixModule {
         self.trait_env.validate(&kind_map);
     }
 
-    pub fn add_methods(self: &mut FixModule) {
+    pub fn add_methods(self: &mut Program) {
         for decl in &self.type_defns.clone() {
             match &decl.value {
                 TypeDeclValue::Struct(str) => {
@@ -1063,7 +1063,7 @@ impl FixModule {
     }
 
     // Link two modules.
-    pub fn link(&mut self, mut other: FixModule) {
+    pub fn link(&mut self, mut other: Program) {
         // TODO: check if a module defined by a single source file.
 
         // If already linked, do nothing.
