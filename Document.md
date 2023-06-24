@@ -54,10 +54,10 @@
   - [Calling C functions](#calling-c-functions)
 - [Module `Std`](#module-std)
   - [Types](#types-1)
-    - [Std::Bool](#stdbool)
+    - [Bool](#bool)
       - [`impl Bool : Eq`](#impl-bool--eq)
       - [`impl Bool : ToString`](#impl-bool--tostring)
-    - [Std::U8](#stdu8)
+    - [U8](#u8)
       - [`maximum : U8`](#maximum--u8)
       - [`minimum : U8`](#minimum--u8)
       - [`bit_and : U8 -> U8 -> U8`](#bit_and--u8---u8---u8)
@@ -80,7 +80,7 @@
       - [`impl U8 : Rem`](#impl-u8--rem)
       - [`impl U8 : Sub`](#impl-u8--sub)
       - [`impl U8 : ToString`](#impl-u8--tostring)
-    - [Std::I32](#stdi32)
+    - [I32](#i32)
       - [`abs : I32 -> I32`](#abs--i32---i32)
       - [`maximum : I32`](#maximum--i32)
       - [`minimum : I32`](#minimum--i32)
@@ -104,7 +104,7 @@
       - [`impl I32 : Rem`](#impl-i32--rem)
       - [`impl I32 : Sub`](#impl-i32--sub)
       - [`impl I32 : ToString`](#impl-i32--tostring)
-    - [Std::U32](#stdu32)
+    - [U32](#u32)
       - [`maximum : U32`](#maximum--u32)
       - [`minimum : U32`](#minimum--u32)
       - [`bit_and : U32 -> U32 -> U32`](#bit_and--u32---u32---u32)
@@ -127,7 +127,7 @@
       - [`impl U32 : Rem`](#impl-u32--rem)
       - [`impl U32 : Sub`](#impl-u32--sub)
       - [`impl U32 : ToString`](#impl-u32--tostring)
-    - [Std::I64](#stdi64)
+    - [I64](#i64)
       - [`abs : I64 -> I64`](#abs--i64---i64)
       - [`maximum : I64`](#maximum--i64)
       - [`minimum : I64`](#minimum--i64)
@@ -151,7 +151,7 @@
       - [`impl I64 : Rem`](#impl-i64--rem)
       - [`impl I64 : Sub`](#impl-i64--sub)
       - [`impl I64 : ToString`](#impl-i64--tostring)
-    - [Std::U64](#stdu64)
+    - [U64](#u64)
       - [`maximum : U64`](#maximum--u64)
       - [`minimum : U64`](#minimum--u64)
       - [`bit_and : U64 -> U64 -> U64`](#bit_and--u64---u64---u64)
@@ -174,7 +174,7 @@
       - [`impl U64 : Rem`](#impl-u64--rem)
       - [`impl U64 : Sub`](#impl-u64--sub)
       - [`impl U64 : ToString`](#impl-u64--tostring)
-    - [Std::F32](#stdf32)
+    - [F32](#f32)
       - [`abs : F32 -> F32`](#abs--f32---f32)
       - [`to_I32 : F32 -> I32`](#to_i32--f32---i32)
       - [`to_I64 : F32 -> I64`](#to_i64--f32---i64)
@@ -187,7 +187,7 @@
       - [`impl F32 : Mul`](#impl-f32--mul)
       - [`impl F32 : Sub`](#impl-f32--sub)
       - [`impl F32 : ToString`](#impl-f32--tostring)
-    - [Std::F64](#stdf64)
+    - [F64](#f64)
       - [`abs : F64 -> F64`](#abs--f64---f64)
       - [`to_I32 : F64 -> I32`](#to_i32--f64---i32)
       - [`to_I64 : F64 -> I64`](#to_i64--f64---i64)
@@ -200,7 +200,7 @@
       - [`impl F64 : Mul`](#impl-f64--mul)
       - [`impl F64 : Sub`](#impl-f64--sub)
       - [`impl F64 : ToString`](#impl-f64--tostring)
-    - [Std::Array](#stdarray)
+    - [Array](#array-1)
       - [`__unsafe_set_length : I64 -> Array a -> Array a`](#__unsafe_set_length--i64---array-a---array-a)
       - [`__unsafe_get : I64 -> Array a -> a`](#__unsafe_get--i64---array-a---a)
       - [`__unsafe_set : I64 -> a -> Array a -> Array a`](#__unsafe_set--i64---a---array-a---array-a)
@@ -233,9 +233,9 @@
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
       - [`to_iter : Array a -> Iterator a`](#to_iter--array-a---iterator-a)
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
-    - [Std::Destructor](#stddestructor)
+    - [Destructor](#destructor)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
-    - [Std::IO](#stdio)
+    - [IO](#io)
       - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
       - [`open_file : Path -> String -> IOResult IOError IOHandle`](#open_file--path---string---ioresult-ioerror-iohandle)
@@ -250,19 +250,19 @@
       - [`write_file : Path -> String -> IOResult IOError ()`](#write_file--path---string---ioresult-ioerror-)
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
-    - [Std::IO::IOError](#stdioioerror)
+    - [IO::IOError](#ioioerror)
       - [`impl IOError : ToString`](#impl-ioerror--tostring)
-    - [Std::IO::IOHandle](#stdioiohandle)
+    - [IO::IOHandle](#ioiohandle)
       - [`stderr : IOHandle`](#stderr--iohandle)
       - [`stdin : IOHandle`](#stdin--iohandle)
       - [`stdout : IOHandle`](#stdout--iohandle)
-    - [Std::IO::IOResult](#stdioioresult)
+    - [IO::IOResult](#ioioresult)
       - [`from_result : Result e a -> IOResult e a`](#from_result--result-e-a---ioresult-e-a)
       - [`lift : IO a -> IOResult e a`](#lift--io-a---ioresult-e-a)
       - [`to_io : IOResult e a -> IO (Result e a)`](#to_io--ioresult-e-a---io-result-e-a)
       - [`impl IOResult e : Functor`](#impl-ioresult-e--functor)
       - [`impl IOResult e : Monad`](#impl-ioresult-e--monad)
-    - [Std::Iterator](#stditerator)
+    - [Iterator](#iterator)
       - [`_flatten : Iterator (Iterator a) -> Iterator a`](#_flatten--iterator-iterator-a---iterator-a)
       - [`advance : Iterator a -> Option (a, Iterator a)`](#advance--iterator-a---option-a-iterator-a)
       - [`append : Iterator a -> Iterator a -> Iterator a`](#append--iterator-a---iterator-a---iterator-a)
@@ -293,23 +293,23 @@
       - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
       - [`impl Iterator : Functor`](#impl-iterator--functor)
       - [`impl Iterator : Monad`](#impl-iterator--monad)
-    - [Std::LoopResult](#stdloopresult)
+    - [LoopResult](#loopresult)
       - [`break_m : [m : Monad] r -> m (LoopResult s r)`](#break_m--m--monad-r---m-loopresult-s-r)
       - [`continue_m : [m : Monad] s -> m (LoopResult s r)`](#continue_m--m--monad-s---m-loopresult-s-r)
-    - [Std::Option](#stdoption)
+    - [Option](#option)
       - [`as_some_or : a -> Option a -> a`](#as_some_or--a---option-a---a)
       - [`impl [a : Eq] Option a : Eq`](#impl-a--eq-option-a--eq)
       - [`impl Option : Functor`](#impl-option--functor)
       - [`impl Option : Monad`](#impl-option--monad)
-    - [Std::Path](#stdpath)
+    - [Path](#path)
       - [`parse : String -> Option Path`](#parse--string---option-path)
       - [`impl Path : ToString`](#impl-path--tostring)
-    - [Std::Ptr](#stdptr)
+    - [Ptr](#ptr)
       - [`impl Ptr : Eq`](#impl-ptr--eq)
-    - [Std::Result](#stdresult)
+    - [Result](#result)
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl Result e : Monad`](#impl-result-e--monad)
-    - [Std::String](#stdstring)
+    - [String](#string)
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
       - [`borrow_c_str : (Ptr -> a) -> String -> a`](#borrow_c_str--ptr---a---string---a)
       - [`concat : String -> String -> String`](#concat--string---string---string)
@@ -326,40 +326,40 @@
     - [`impl String : Add`](#impl-string--add)
     - [`impl String : Eq`](#impl-string--eq)
     - [`impl String : ToString`](#impl-string--tostring)
-    - [Std::Tuple{N}](#stdtuplen)
+    - [Tuple{N}](#tuplen)
       - [`impl [a : Eq, b : Eq] (a, b) : Eq`](#impl-a--eq-b--eq-a-b--eq)
       - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
   - [Functions](#functions-1)
-    - [`Std::abort : () -> a`](#stdabort-----a)
-    - [`Std::compose : (a -> b) -> (b -> c) -> a -> c`](#stdcompose--a---b---b---c---a---c)
-    - [`Std::is_unique : a -> (Bool, a)`](#stdis_unique--a---bool-a)
-    - [`Std::fix : ((a -> b) -> a -> b) -> a -> b`](#stdfix--a---b---a---b---a---b)
-    - [`Std::loop : s -> (s -> LoopResult s r) -> r`](#stdloop--s---s---loopresult-s-r---r)
-    - [`Std::loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#stdloop_m--m--monad-s---s---m-loopresult-s-r---m-r)
+    - [`abort : () -> a`](#abort-----a)
+    - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
+    - [`is_unique : a -> (Bool, a)`](#is_unique--a---bool-a)
+    - [`fix : ((a -> b) -> a -> b) -> a -> b`](#fix--a---b---a---b---a---b)
+    - [`loop : s -> (s -> LoopResult s r) -> r`](#loop--s---s---loopresult-s-r---r)
+    - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
   - [Traits](#traits)
-    - [Std::Functor (\* -\> \*)](#stdfunctor----)
+    - [Functor (\* -\> \*)](#functor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
-    - [Std::LessThan](#stdlessthan)
+    - [LessThan](#lessthan)
       - [(required) `less_than : [a : LessThan] a -> a -> a`](#required-less_than--a--lessthan-a---a---a)
       - [`max : [a : LessThan] a -> a -> a`](#max--a--lessthan-a---a---a)
       - [`min : [a : LessThan] a -> a -> a`](#min--a--lessthan-a---a---a)
-    - [Std::LessThanOrEq](#stdlessthanoreq)
+    - [LessThanOrEq](#lessthanoreq)
       - [(required) `less_than_or_eq : [a : LessThanOrEq] a -> a -> a`](#required-less_than_or_eq--a--lessthanoreq-a---a---a)
-    - [Std::Monad (\* -\> \*)](#stdmonad----)
+    - [Monad (\* -\> \*)](#monad----)
       - [(required) `bind : [m : Monad] (a -> m b) -> m a -> m b`](#required-bind--m--monad-a---m-b---m-a---m-b)
       - [(required) `pure : [m : Monad] a -> m a`](#required-pure--m--monad-a---m-a)
       - [`flatten : [m : Monad] m (m a) -> a`](#flatten--m--monad-m-m-a---a)
-    - [Std::ToString](#stdtostring)
+    - [ToString](#tostring)
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
-    - [Std::ToI32](#stdtoi32)
+    - [ToI32](#toi32)
       - [`to_I32 : [a: ToI32] a -> I32`](#to_i32--a-toi32-a---i32)
-    - [Std::ToI64](#stdtoi64)
+    - [ToI64](#toi64)
       - [`to_I64 : [a: ToI64] a -> I64`](#to_i64--a-toi64-a---i64)
-    - [Std::ToU8](#stdtou8)
+    - [ToU8](#tou8)
       - [`to_U8 : [a: ToU8] a -> U8`](#to_u8--a-tou8-a---u8)
-    - [Std::ToU32](#stdtou32)
+    - [ToU32](#tou32)
       - [`to_U32 : [a: ToU32] a -> U32`](#to_u32--a-tou32-a---u32)
-    - [Std::ToU64](#stdtou64)
+    - [ToU64](#tou64)
       - [`to_U64 : [a: ToU64] a -> U64`](#to_u64--a-tou64-a---u64)
 - [Module `Debug`](#module-debug)
   - [`assert : String -> Bool -> ()`](#assert--string---bool---)
@@ -1321,18 +1321,18 @@ Note that calling C function may break Fix's features such as immutability or me
 
 ## Types
 
-### Std::Bool
+### Bool
 
-`Std::Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
+`Bool` is the type of boolean values, represented by 8-bit integer `1` (`true`) and `0` (`false`). 
 
 Boolean literals are `true` and `false`.
 
 #### `impl Bool : Eq`
 #### `impl Bool : ToString`
 
-### Std::U8
+### U8
 
-`Std::U8` is the type of 8-bit unsigned integers.
+`U8` is the type of 8-bit unsigned integers.
 
 Literals:
 
@@ -1364,9 +1364,9 @@ Literals:
 #### `impl U8 : Sub`
 #### `impl U8 : ToString`
 
-### Std::I32
+### I32
 
-`Std::I32` is the type of 32-bit signed integers.
+`I32` is the type of 32-bit signed integers.
 
 Literals:
 - `{number}_I32`
@@ -1396,9 +1396,9 @@ Literals:
 #### `impl I32 : Sub`
 #### `impl I32 : ToString`
 
-### Std::U32
+### U32
 
-`Std::U32` is the type of 32-bit unsigned integers.
+`U32` is the type of 32-bit unsigned integers.
 
 Literals:
 
@@ -1428,9 +1428,9 @@ Literals:
 #### `impl U32 : Sub`
 #### `impl U32 : ToString`
 
-### Std::I64
+### I64
 
-`Std::I64` is the type of 64-bit signed integers.
+`I64` is the type of 64-bit signed integers.
 
 Literals:
 - `{number}`
@@ -1462,9 +1462,9 @@ Literals:
 #### `impl I64 : Sub`
 #### `impl I64 : ToString`
 
-### Std::U64
+### U64
 
-`Std::U64` is the type of 64-bit unsigned integers.
+`U64` is the type of 64-bit unsigned integers.
 
 Literals:
 
@@ -1494,7 +1494,7 @@ Literals:
 #### `impl U64 : Sub`
 #### `impl U64 : ToString`
 
-### Std::F32
+### F32
 
 `F32` is the type of 32-bit floating numbers.
 
@@ -1513,7 +1513,7 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 #### `impl F32 : Sub`
 #### `impl F32 : ToString`
 
-### Std::F64
+### F64
 
 `F64` is the type of 64-bit floating numbers.
 
@@ -1532,9 +1532,9 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 #### `impl F64 : Sub`
 #### `impl F64 : ToString`
 
-### Std::Array
+### Array
 
-`Std::Array` is the type of variable-length arrays.
+`Array` is the type of variable-length arrays.
 
 Literals: 
 - `[{elem_0}, {elem_1}, ...]`
@@ -1652,7 +1652,7 @@ Convert an array to an iterator.
 
 #### `impl [a : Eq] Array a : Eq`
 
-### Std::Destructor
+### Destructor
 
 `Destructor a` is a boxed type which has two fields of type `a` and `a -> ()`, where the latter field is called destructor.
 The destructor function will be called when a value of `Destructor a` is deallocated.
@@ -1666,7 +1666,7 @@ type Destructor a = box struct { value : a, dtor : a -> () };
 #### `make : a -> (a -> ()) -> Destructor a`
 Make a destructor value.
 
-### Std::IO
+### IO
 
 `IO a` is the type whose value represents an I/O action which returns a value of type `a`.
 
@@ -1735,7 +1735,7 @@ Write a string into a file.
 
 #### `impl IO : Monad`
 
-### Std::IO::IOError
+### IO::IOError
 
 A type for I/O error.
 
@@ -1747,7 +1747,7 @@ type IOError = unbox struct { msg : String };
 
 Returns the value of `msg` field.
 
-### Std::IO::IOHandle
+### IO::IOHandle
 
 A handle type for read / write operations on files/stdin/stdout/stderr.
 
@@ -1763,7 +1763,7 @@ The handle for standard input.
 
 The handle for standard output.
 
-### Std::IO::IOResult
+### IO::IOResult
 
 The type of I/O actions which may fail.
 
@@ -1787,7 +1787,7 @@ Convert an IOResult to an IO action.
 
 #### `impl IOResult e : Monad`
 
-### Std::Iterator
+### Iterator
 
 Iterators (a.k.a. lazy lists) are generators of sequenced values.
 
@@ -1889,7 +1889,7 @@ Adds two iterators by `Iterator::append`.
 
 #### `impl Iterator : Monad`
 
-### Std::LoopResult
+### LoopResult
 
 `LoopResult` represents the result of loop body function and used with `loop` function. For example of `LoopResult`, see the section for `loop` function.
 
@@ -1905,7 +1905,7 @@ This is used with `loop_m` function.
 Make a continue value wrapped in a monad.
 This is used with `loop_m` function.
 
-### Std::Option
+### Option
 
 `Option a` contains a value of type `a`, or contains nothing.
 
@@ -1922,7 +1922,7 @@ Unwrap an option value if it is `some`, or returns given default value if it is 
 
 #### `impl Option : Monad`
 
-### Std::Path
+### Path
 
 The type for file path.
 
@@ -1934,9 +1934,9 @@ Parse a string.
 
 #### `impl Path : ToString`
 
-### Std::Ptr
+### Ptr
 
-`Std::Ptr` is the type of pointers.
+`Ptr` is the type of pointers.
 
 Literals:
 - `nullptr`
@@ -1944,7 +1944,7 @@ Literals:
 
 #### `impl Ptr : Eq`
 
-### Std::Result
+### Result
 
 A type of result value for a computation that may fail.
 
@@ -1958,7 +1958,7 @@ Returns the containing value if the value is ok, or otherwise aborts.
 
 #### `impl Result e : Monad`
 
-### Std::String
+### String
 
 The type of strings.
 
@@ -2013,7 +2013,7 @@ Add two strings by `String.concat`.
 ### `impl String : ToString`
 Defined as an identity function.
 
-### Std::Tuple{N}
+### Tuple{N}
 
 #### `impl [a : Eq, b : Eq] (a, b) : Eq`
 
@@ -2021,15 +2021,15 @@ Defined as an identity function.
 
 ## Functions
 
-### `Std::abort : () -> a`
+### `abort : () -> a`
 
 Stops the execution of the program.
 
-### `Std::compose : (a -> b) -> (b -> c) -> a -> c`
+### `compose : (a -> b) -> (b -> c) -> a -> c`
 
 Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
 
-### `Std::is_unique : a -> (Bool, a)`
+### `is_unique : a -> (Bool, a)`
 
 This function checks if a value is uniquely refernced by a name, and returns the pair of the result and the given value. If `a` is unboxed, the 0th component of the returned value will be `true`.
 
@@ -2064,7 +2064,7 @@ main = (
 );
 ```
 
-### `Std::fix : ((a -> b) -> a -> b) -> a -> b`
+### `fix : ((a -> b) -> a -> b) -> a -> b`
 
 `fix` enables you to make a recursive function locally. The idiom is: `fix $ |loop, var| -> (expression calls loop)`.
 
@@ -2078,7 +2078,7 @@ main = (
 );
 ```
 
-### `Std::loop : s -> (s -> LoopResult s r) -> r`
+### `loop : s -> (s -> LoopResult s r) -> r`
 
 `loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
 
@@ -2106,7 +2106,7 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
-### `Std::loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
+### `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
 
 Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
 
@@ -2129,11 +2129,11 @@ main = (
 
 ## Traits
 
-### Std::Functor (* -> *)
+### Functor (* -> *)
 
 #### (required) `map : [f : Functor] (a -> b) -> f a -> f b`
 
-### Std::LessThan
+### LessThan
 
 #### (required) `less_than : [a : LessThan] a -> a -> a`
 
@@ -2141,11 +2141,11 @@ main = (
 
 #### `min : [a : LessThan] a -> a -> a`
 
-### Std::LessThanOrEq
+### LessThanOrEq
 
 #### (required) `less_than_or_eq : [a : LessThanOrEq] a -> a -> a`
 
-### Std::Monad (* -> *)
+### Monad (* -> *)
 
 #### (required) `bind : [m : Monad] (a -> m b) -> m a -> m b`
 
@@ -2155,27 +2155,27 @@ main = (
 
 This is equivalent to `Monad::bind(|x|x)`.
 
-### Std::ToString
+### ToString
 
 #### `to_string : [a: ToString] a -> String`
 
-### Std::ToI32
+### ToI32
 
 #### `to_I32 : [a: ToI32] a -> I32`
 
-### Std::ToI64
+### ToI64
 
 #### `to_I64 : [a: ToI64] a -> I64`
 
-### Std::ToU8
+### ToU8
 
 #### `to_U8 : [a: ToU8] a -> U8`
 
-### Std::ToU32
+### ToU32
 
 #### `to_U32 : [a: ToU32] a -> U32`
 
-### Std::ToU64
+### ToU64
 
 #### `to_U64 : [a: ToU64] a -> U64`
 
