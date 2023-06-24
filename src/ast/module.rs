@@ -245,13 +245,10 @@ impl<'de> serde::de::Visitor<'de> for UpdateDateVisitor {
 pub struct FixModule {
     pub name: Name,
     pub unresolved_imports: Vec<ImportStatement>,
-    // A map to represent modules imported by each submodule.
+    // A map to represent modules imported by each module.
     // Each module imports itself.
     // This is used to name-resolution and overloading resolution,
     pub imported_mod_map: HashMap<Name, HashSet<Name>>,
-    // Modules linked to this module.
-    // TODO maybe we can get this from keys-set of imported_mod_map?
-    pub linked_mods: HashSet<Name>,
     pub type_defns: Vec<TypeDefn>,
     pub global_values: HashMap<FullName, GlobalValue>,
     pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
@@ -272,7 +269,6 @@ impl FixModule {
             name: name.clone(),
             unresolved_imports: vec![],
             imported_mod_map: Default::default(),
-            linked_mods: Default::default(),
             type_defns: Default::default(),
             global_values: Default::default(),
             instantiated_global_symbols: Default::default(),
@@ -282,7 +278,6 @@ impl FixModule {
             last_updates: Default::default(),
             last_affected_dates: Default::default(),
         };
-        fix_mod.linked_mods.insert(name.clone());
         fix_mod.insert_imported_mod_map(&name, &name);
         fix_mod.insert_imported_mod_map(&name, &STD_NAME.to_string());
         fix_mod.set_last_update(UpdateDate(SystemTime::now().into())); // Later updated to source file's last modified date.
@@ -1063,15 +1058,19 @@ impl FixModule {
         }
     }
 
+    pub fn linked_mods(&self) -> HashSet<Name> {
+        self.imported_mod_map.keys().cloned().collect()
+    }
+
     // Link two modules.
     pub fn link(&mut self, mut other: FixModule) {
         // TODO: check if a module defined by a single source file.
 
         // If already linked, do nothing.
-        if self.linked_mods.contains(&other.name) {
+        if self.linked_mods().contains(&other.name) {
             return;
         }
-        self.linked_mods.insert(other.name);
+        self.linked_mods().insert(other.name);
 
         self.unresolved_imports
             .append(&mut other.unresolved_imports);
@@ -1149,7 +1148,7 @@ impl FixModule {
 
     // Create a graph of modules. If module A imports module B, an edge from B to A is added.
     pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
-        let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods.clone());
+        let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
         for (from, tos) in &self.imported_mod_map {
             for to in tos {
                 graph.connect(
@@ -1165,7 +1164,7 @@ impl FixModule {
     pub fn set_last_affected_dates(&mut self) {
         self.last_affected_dates = Default::default();
         let (imported_graph, mod_to_node) = self.importing_module_graph();
-        for module in &self.linked_mods {
+        for module in &self.linked_mods() {
             let mut last_affected = self.last_updates.get(module).unwrap().clone();
             let imported_modules =
                 imported_graph.reachable_nodes(*mod_to_node.get(module).unwrap());
