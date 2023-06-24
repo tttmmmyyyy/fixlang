@@ -1433,7 +1433,9 @@ fn parse_type_tyapp(pair: Pair<Rule>, src: &SourceFile) -> Rc<TypeNode> {
     let pair = pairs.next().unwrap();
     let mut ret = parse_type_nlr(pair, src);
     for pair in pairs {
-        ret = type_tyapp(ret, parse_type_nlr(pair, src));
+        let arg = parse_type_nlr(pair, src);
+        let span = unite_span(ret.get_source(), arg.get_source());
+        ret = type_tyapp(ret, arg).set_source(span);
     }
     ret.set_source(Some(span))
 }
