@@ -1015,9 +1015,9 @@ Modify a union value by a function acting on a variant. It is assured that if yo
 
 ## Module and imports 
 
-In Fix, values, functions, types and traits defined in a source file is collected to a module. Each source file has to declare the name of the module it defines by `module {module_name};`. The first letter of the module name must be capitalized.
+In Fix, all entities (values, functions, types and traits) defined in a source file is collected to form a module. Each source file has to declare the name of the module by `module {module_name};`. The first letter of the module name must be capitalized. Module name is used as the top-level item of the namespace of entities defined in a source file.
 
-As in other languages, a single program can be constructed from multiple source files. As an example, consider a program consists of two source files:
+You can import other module by `import {module_name};`. As an example, consider a program consists of two source files:
 
 `lib.fix`:
 ```
@@ -1048,7 +1048,9 @@ If you put these two files in a same directory and execute `fix run -f main.fix 
 This program consists of two modules, `Lib` and `Main`.
 ```
 
-Note that here two strings named `module_name` are defined and you can use these strings separately by writing `{module_name}::module_name`. Like this, module name is used as the top-level item of the namespace of values, types and traits defined in a source file.
+There is one special module: `Std`. This is a module of built-in entities. `Std` module is implicitly imported from all modules and you don't need to write `import Std` explicitly.
+
+There are also other convenient modules which is included in fix's compiler, such as `Debug` or `HashMap`. To import these modules, you need to write import statements explicitly, but no need for adding source files to arguments of `fix run` or `fix build` command.
 
 ## Recursion
 
