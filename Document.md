@@ -52,7 +52,7 @@
     - [Structs](#structs-2)
     - [Unions](#unions-2)
   - [Calling C functions](#calling-c-functions)
-- [Built-in and standard library features](#built-in-and-standard-library-features)
+- [`Std` module](#std-module)
   - [Types](#types-1)
     - [Std::Bool](#stdbool)
       - [`impl Bool : Eq`](#impl-bool--eq)
@@ -1310,7 +1310,9 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 
 Note that calling C function may break Fix's features such as immutability or memory safety. Use this feature carefully.
 
-# Built-in and standard library features
+# `Std` module
+
+`Std` is a module which is implicitly imported so you don't need to write `import Std`.
 
 ## Types
 
