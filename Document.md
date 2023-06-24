@@ -388,7 +388,7 @@
   - [`insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`](#insert--k--eq-k--hash-k---v---hashmap-k-v---hashmap-k-v)
   - [`reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`](#reserve--k--hash-k--eq-i64---hashmap-k-v---hashmap-k-v)
   - [`to_iter : HashMap k v -> Iterator (k, v)`](#to_iter--hashmap-k-v---iterator-k-v)
-  - [Operators](#operators)
+- [Operators](#operators)
 
 
 # Tutorial
@@ -2248,7 +2248,7 @@ Reserve a HashMap so that it will not rehash until size exceeds the spacified va
 ## `to_iter : HashMap k v -> Iterator (k, v)`
 Convert a HashMap into an iterator.
 
-## Operators
+# Operators
 
 The following is the table of operators sorted by its precedence (operator of higher precedence appears earlier).
 
