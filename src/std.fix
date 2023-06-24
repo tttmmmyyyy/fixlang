@@ -239,44 +239,6 @@ impl Bool : ToString {
     );
 }
 
-namespace Debug {
-
-    assert_eq : [a: Eq] String -> a -> a -> ();
-    assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
-
-    assert : String -> Bool -> ();
-    assert = |msg, b| (
-        if !b {
-            let u = debug_println("assertion failed!: ");
-            let u = debug_println(msg);
-            abort()
-        } else {
-            ()
-        }
-    );
-
-    debug_print : String -> ();
-    debug_print = |s| (
-        s.borrow_c_str(|ptr| (
-            let _ = CALL_C[I32 printf(Ptr, ...), ptr];
-            let _ = CALL_C[I32 fflush(Ptr), nullptr];
-            ()
-        ))
-    );
-
-    debug_println : String -> ();
-    debug_println = |s| (
-        let _ = s.borrow_c_str(|ptr| (
-            CALL_C[I32 printf(Ptr, ...), ptr]
-        ));
-        let _ = "\n".borrow_c_str(|ptr| (
-            CALL_C[I32 printf(Ptr, ...), ptr]
-        ));
-        let _ = CALL_C[I32 fflush(Ptr), nullptr];
-        ()
-    );
-}
-
 // `Destructor a` is a boxed type which has two fields of type `a` and `a -> ()`, where the latter field is called destructor.
 // The destructor function will be called when a value of `Destructor a` is deallocated.
 // Note that the inner value of type `a` may be still alive after the destructor function is called.
@@ -1007,11 +969,10 @@ type Result e o = unbox union { ok : o, err: e };
 
 namespace Result {
 
-    // Returns the containing value if the value is ok, or otherwise panics after printing the error value.
-    unwrap : [e : ToString] Result e o -> o;
+    // Returns the containing value if the value is ok, or otherwise aborts.
+    unwrap : Result e o -> o;
     unwrap = |res| (
         if res.is_err {
-            let _ = debug_print(res.as_err.to_string);
             abort()
         } else {
             res.as_ok

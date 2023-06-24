@@ -1,0 +1,36 @@
+module Debug;
+
+assert : String -> Bool -> ();
+assert = |msg, b| (
+    if !b {
+        let u = debug_println("assertion failed!: ");
+        let u = debug_println(msg);
+        abort()
+    } else {
+        ()
+    }
+);
+
+assert_eq : [a: Eq] String -> a -> a -> ();
+assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
+
+debug_print : String -> ();
+debug_print = |s| (
+    s.borrow_c_str(|ptr| (
+        let _ = CALL_C[I32 printf(Ptr, ...), ptr];
+        let _ = CALL_C[I32 fflush(Ptr), nullptr];
+        ()
+    ))
+);
+
+debug_println : String -> ();
+debug_println = |s| (
+    let _ = s.borrow_c_str(|ptr| (
+        CALL_C[I32 printf(Ptr, ...), ptr]
+    ));
+    let _ = "\n".borrow_c_str(|ptr| (
+        CALL_C[I32 printf(Ptr, ...), ptr]
+    ));
+    let _ = CALL_C[I32 fflush(Ptr), nullptr];
+    ()
+);

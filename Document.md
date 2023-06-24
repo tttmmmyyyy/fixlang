@@ -52,7 +52,7 @@
     - [Structs](#structs-2)
     - [Unions](#unions-2)
   - [Calling C functions](#calling-c-functions)
-- [`Std` module](#std-module)
+- [Module `Std`](#module-std)
   - [Types](#types-1)
     - [Std::Bool](#stdbool)
       - [`impl Bool : Eq`](#impl-bool--eq)
@@ -323,7 +323,7 @@
     - [Std::Ptr](#stdptr)
       - [`impl Ptr : Eq`](#impl-ptr--eq)
     - [Std::Result](#stdresult)
-      - [`unwrap : [e : ToString] Result e o -> o`](#unwrap--e--tostring-result-e-o---o)
+      - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl Result e : Monad`](#impl-result-e--monad)
     - [Std::String](#stdstring)
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
@@ -348,16 +348,12 @@
       - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
       - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
   - [Functions](#functions-1)
+    - [`Std::abort : () -> a`](#stdabort-----a)
     - [`Std::compose : (a -> b) -> (b -> c) -> a -> c`](#stdcompose--a---b---b---c---a---c)
     - [`Std::is_unique : a -> (Bool, a)`](#stdis_unique--a---bool-a)
     - [`Std::fix : ((a -> b) -> a -> b) -> a -> b`](#stdfix--a---b---a---b---a---b)
     - [`Std::loop : s -> (s -> LoopResult s r) -> r`](#stdloop--s---s---loopresult-s-r---r)
     - [`Std::loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#stdloop_m--m--monad-s---s---m-loopresult-s-r---m-r)
-    - [`Std::Debug::debug_print : String -> ()`](#stddebugdebug_print--string---)
-    - [`Std::Debug::debug_println : String -> ()`](#stddebugdebug_println--string---)
-    - [`Std::Debug::abort : () -> a`](#stddebugabort-----a)
-    - [`Std::Debug::assert : String -> Bool -> ()`](#stddebugassert--string---bool---)
-    - [`Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()`](#stddebugassert_eq--a-eq-string---a---a---)
   - [Traits](#traits)
     - [Std::Functor (\* -\> \*)](#stdfunctor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
@@ -385,6 +381,11 @@
       - [`to_U32 : [a: ToU32] a -> U32`](#to_u32--a-tou32-a---u32)
     - [Std::ToU64](#stdtou64)
       - [`to_U64 : [a: ToU64] a -> U64`](#to_u64--a-tou64-a---u64)
+  - [Module `Debug`](#module-debug)
+    - [`Debug::assert : String -> Bool -> ()`](#debugassert--string---bool---)
+    - [`Debug::assert_eq : [a: Eq] String -> a -> a -> ()`](#debugassert_eq--a-eq-string---a---a---)
+    - [`Debug::debug_print : String -> ()`](#debugdebug_print--string---)
+    - [`Debug::debug_println : String -> ()`](#debugdebug_println--string---)
   - [Operators](#operators)
 
 
@@ -1310,7 +1311,7 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 
 Note that calling C function may break Fix's features such as immutability or memory safety. Use this feature carefully.
 
-# `Std` module
+# Module `Std`
 
 `Std` is a module which is implicitly imported so you don't need to write `import Std`.
 
@@ -1992,9 +1993,9 @@ A type of result value for a computation that may fail.
 type Result o e = unbox union { ok : o, err: e };
 ```
 
-#### `unwrap : [e : ToString] Result e o -> o`
+#### `unwrap : Result e o -> o`
 
-Returns the containing value if the value is ok, or otherwise panics after printing error value.
+Returns the containing value if the value is ok, or otherwise aborts.
 
 #### `impl Result e : Monad`
 
@@ -2064,6 +2065,10 @@ Defined as an identity function.
 #### `impl [a : ToString, b : ToString] (a, b) : ToString`
 
 ## Functions
+
+### `Std::abort : () -> a`
+
+Stops the execution of the program.
 
 ### `Std::compose : (a -> b) -> (b -> c) -> a -> c`
 
@@ -2163,16 +2168,6 @@ main = (
 );
 ```
 
-### `Std::Debug::debug_print : String -> ()`
-
-### `Std::Debug::debug_println : String -> ()`
-
-### `Std::Debug::abort : () -> a`
-
-### `Std::Debug::assert : String -> Bool -> ()`
-
-### `Std::Debug::assert_eq : [a: Eq] String -> a -> a -> ()`
-
 ## Traits
 
 ### Std::Functor (* -> *)
@@ -2228,6 +2223,16 @@ This is equivalent to `Monad::bind(|x|x)`.
 ### Std::ToU64
 
 #### `to_U64 : [a: ToU64] a -> U64`
+
+## Module `Debug`
+
+### `Debug::assert : String -> Bool -> ()`
+
+### `Debug::assert_eq : [a: Eq] String -> a -> a -> ()`
+
+### `Debug::debug_print : String -> ()`
+
+### `Debug::debug_println : String -> ()`
 
 ## Operators
 

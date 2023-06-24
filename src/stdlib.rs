@@ -429,10 +429,7 @@ pub fn make_std_mod() -> FixModule {
     );
 
     // Debug
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, DEBUG_NAME], "abort"),
-        abort_function(),
-    );
+    fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "abort"), abort_function());
 
     fix_module
 }

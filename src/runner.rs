@@ -228,7 +228,11 @@ fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement
             continue;
         }
 
-        // TODO: search for library here.
+        // Search for bulit-in modules.
+        if import.module == "Debug" {
+            target_mod.link(parse_source(include_str!("debug.fix"), "debug.fix"));
+            continue;
+        }
 
         error_exit_with_src(
             &format!("Cannot find module `{}`", import.module),
