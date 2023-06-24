@@ -379,6 +379,7 @@
   - [`type HashMap k v`](#type-hashmap-k-v)
   - [`_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`](#_find_place--k--eq-k--hash-k---hashmap-k-v---i64-option-i64)
   - [`_get_pot_geq : I64 -> I64`](#_get_pot_geq--i64---i64)
+  - [`contains_key : [k : Eq, k : Hash] k -> HashMap k v -> Bool`](#contains_key--k--eq-k--hash-k---hashmap-k-v---bool)
   - [`empty : I64 -> HashMap k v`](#empty--i64---hashmap-k-v)
   - [`erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v`](#erase--k--eq-k--hash-k---hashmap-k-v---hashmap-k-v)
   - [`find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`](#find--k--eq-k--hash-k---hashmap-k-v---option-v)
@@ -2220,6 +2221,9 @@ Returns pair of (index in hash table, index in bucket).
 ## `_get_pot_geq : I64 -> I64`
 Get a POT (power-of-two) value which is less than or equal to the given value.
 This is used for calculating capacity value.
+
+## `contains_key : [k : Eq, k : Hash] k -> HashMap k v -> Bool`
+Check whether a hashmap contains a key.
 
 ## `empty : I64 -> HashMap k v`
 Create an empty HashMap which is reserved so that it will not rehash until size exceeds the spacified value.

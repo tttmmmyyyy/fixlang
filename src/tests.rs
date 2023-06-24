@@ -3036,6 +3036,16 @@ pub fn test115() {
             let _ = assert_eq("case 5", mp.find(5), Option::none());
             let _ = assert_eq("case 6", mp.find(6), Option::none());
             let _ = assert_eq("case 7", mp.find(7), Option::some(7));
+
+            let _ = assert_eq("case 0.5", mp.contains_key(0), true);
+            let _ = assert_eq("case 1.5", mp.contains_key(1), true);
+            let _ = assert_eq("case 2.5", mp.contains_key(2), true);
+            let _ = assert_eq("case 3.5", mp.contains_key(3), true);
+            let _ = assert_eq("case 4.5", mp.contains_key(4), false);
+            let _ = assert_eq("case 5.5", mp.contains_key(5), false);
+            let _ = assert_eq("case 6.5", mp.contains_key(6), false);
+            let _ = assert_eq("case 7.5", mp.contains_key(7), true);
+
             let _ = assert_eq("case size", mp.get_size, 5);
 
             pure()

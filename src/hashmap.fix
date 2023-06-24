@@ -22,6 +22,13 @@ _get_pot_geq = |max_size| (
     loop(1, |v| if v >= max_size { break $ v } else { continue $ 2 * v })
 );
 
+// Check whether a hashmap contains a key.
+contains_key : [k : Eq, k : Hash] k -> HashMap k v -> Bool;
+contains_key = |k, mp| (
+    let (_, opt_bucket_idx) = mp._find_place(k);
+    opt_bucket_idx.is_some
+);
+
 // Create an empty HashMap which is reserved so that it will not rehash until size exceeds the spacified value.
 empty : I64 -> HashMap k v;
 empty = |max_size| (
