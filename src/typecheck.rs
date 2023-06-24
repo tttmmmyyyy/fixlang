@@ -155,7 +155,7 @@ impl Substitution {
     pub fn substitute_type(&self, ty: &Rc<TypeNode>) -> Rc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
-                sub.set_source_if_none(ty.info.source.clone())
+                sub.set_source_if_none(ty.get_source().clone())
             }),
             Type::TyCon(_) => ty.clone(),
             Type::TyApp(fun, arg) => ty

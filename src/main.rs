@@ -93,7 +93,7 @@ pub struct Configuration {
     sanitize_memory: bool,
     // Perform function pointer optimization.
     funptr_optimization: bool,
-    // If true, pre-retain global object (i.e., set refcnt to large value) at it's construction
+    // If true, pre-retain global object (i.e., set refcnt to large value) at its construction
     // and do not retain global object thereafter.
     preretain_global: bool,
     // LLVM optimization level.

@@ -460,8 +460,8 @@ main = ...{expression B}...;
 
 These lines means that:
 
-- `calc_fib` global value has type `I64 -> Array I64` and it's value is defined by expression A.
-- `main` global value has type `IO ()` and it's value is defined by expression B.
+- `calc_fib` global value has type `I64 -> Array I64` and its value is defined by expression A.
+- `main` global value has type `IO ()` and its value is defined by expression B.
 
 In Fix, you have to specify the type of a global value explicitly. 
 
@@ -478,7 +478,7 @@ Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `
 
 ## Types
 
-Each value in Fix has it's type. You can consider that a type is a set in mathematics, and value in Fix is an element of it's type. 
+Each value in Fix has its type. You can consider that a type is a set in mathematics, and value in Fix is an element of its type. 
 
 The followings are examples of types:
 
@@ -489,9 +489,9 @@ The followings are examples of types:
 - `I64 -> Array I64`: the type of functions that takes an integer and returns an array of integers.
 - `()`: the unit type. This type has a single value which is also written as `()`. 
 - `(a, b)`: the type of pairs of values of `a` and `b`, where `a` and `b` are type parameters.
-- `IO a`: the type whose value corresponds to an I/O action such as printing a string, opening a file and reading it's content, etc. The type variable `a` is for the type of values returned by the I/O action. For example, if an I/O action reads the standard input as a `String` (and if we assume it never fails), it should have type `IO String`.
+- `IO a`: the type whose value corresponds to an I/O action such as printing a string, opening a file and reading its content, etc. The type variable `a` is for the type of values returned by the I/O action. For example, if an I/O action reads the standard input as a `String` (and if we assume it never fails), it should have type `IO String`.
 - `IO ()`: the type of I/O actions which returns no value. It is the type of `main` function of Fix program.
-- `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from it's length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
+- `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from its length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
 
 In Fix, the first letter of the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) has to be 
 capitalized. A type that starts with a lowercase letter is interpreted as a type parameter. Each type parameter will be instanciated to a specific type when the program is compiled.
@@ -560,7 +560,7 @@ use_rec_defn = (
 );
 ```
 
-will be compiled, but the name `x` in the right hand side of `let x = x + 3` is treated as the name `x` defined in the previous line (i.e., it's value is `5`), not as the new one.
+will be compiled, but the name `x` in the right hand side of `let x = x + 3` is treated as the name `x` defined in the previous line (i.e., its value is `5`), not as the new one.
 
 This means that you cannot define a local recursive function by let-expression naively. To do this, use `fix` built-in function.
 
@@ -1738,7 +1738,7 @@ Raad all characters from a file.
 
 #### `read_line : IOHandle -> IOResult IOError String`
 
-Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at it's end.
+Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at its end.
 
 Example: 
 ```
@@ -2229,7 +2229,7 @@ This is equivalent to `Monad::bind(|x|x)`.
 
 ## Operators
 
-The following is the table of operators sorted by it's precedence (operator of higher precedence appears earlier).
+The following is the table of operators sorted by its precedence (operator of higher precedence appears earlier).
 
 | Operator / syntax | Type                     | Trait / function                    | Explanation                                                        |
 | ----------------- | ------------------------ | ----------------------------------- | ------------------------------------------------------------------ |

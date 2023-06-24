@@ -237,7 +237,7 @@ fn resolve_imports(target_mod: &mut FixModule, imports: &mut Vec<ImportStatement
     }
 }
 
-// Create a directory if it doesn't exist, and return it's path.
+// Create a directory if it doesn't exist, and return its path.
 pub fn touch_directory<P>(rel_path: P) -> PathBuf
 where
     P: AsRef<Path>,

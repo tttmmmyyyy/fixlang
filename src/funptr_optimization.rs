@@ -68,7 +68,7 @@ pub fn exclude(name: &FullName) -> bool {
     if *name == fix_name
         || (name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
     {
-        // fix cannot be function ptr, because it calculates "fixf" in it's implementation.
+        // fix cannot be function ptr, because it calculates "fixf" in its implementation.
         return true;
     }
     return false;
@@ -320,7 +320,7 @@ fn move_abs_front_let_one(expr: &Rc<ExprNode>) -> Rc<ExprNode> {
                 Expr::Lam(lam_vars, lam_val) => {
                     let ty = expr.ty.clone().unwrap();
 
-                    // Replace lam_var and it's appearance in lam_val to avoid confliction with free variables in let_bound.
+                    // Replace lam_var and its appearance in lam_val to avoid confliction with free variables in let_bound.
                     let let_bound = calculate_free_vars(let_bound.clone());
                     let let_bound_free_vars = let_bound.free_vars();
 

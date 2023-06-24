@@ -1013,7 +1013,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Calculate captured variables and their types of lambda expression.
-    // Normalize it's orderings.
+    // Normalize its orderings.
     pub fn calculate_captured_vars_of_lambda(
         &mut self,
         lam: Rc<ExprNode>,
@@ -1028,7 +1028,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // We need not and should not capture global variable
         // If we capture global variable, then global recursive function such as
-        // "main = |x| if x == 0 then 0 else x + main(x-1)" results in infinite recursion at it's initialization.
+        // "main = |x| if x == 0 then 0 else x + main(x-1)" results in infinite recursion at its initialization.
         let mut cap_vars = cap_names
             .into_iter()
             .filter(|name| name.is_local())

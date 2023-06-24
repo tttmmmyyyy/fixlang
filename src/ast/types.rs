@@ -146,7 +146,7 @@ impl TyCon {
     }
 
     // Convert "()", "I8", "Ptr", etc to corresponding c_type.
-    // Returns none if it's VoidType.
+    // Returns none if it is VoidType.
     pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
             panic!("call get_c_type for {}", self.to_string())
@@ -239,6 +239,11 @@ impl std::fmt::Debug for TypeNode {
 }
 
 impl TypeNode {
+    // Get source.
+    pub fn get_source(&self) -> &Option<Span> {
+        &self.info.source
+    }
+
     // Set source.
     pub fn set_source(&self, src: Option<Span>) -> Rc<Self> {
         let mut ret = self.clone();
@@ -524,29 +529,48 @@ impl TypeNode {
     }
 
     // Calculate kind.
-    pub fn kind(&self, kind_map: &HashMap<TyCon, Rc<Kind>>) -> Rc<Kind> {
+    pub fn kind(self: &Rc<TypeNode>, kind_map: &HashMap<TyCon, Rc<Kind>>) -> Rc<Kind> {
         match &self.ty {
             Type::TyVar(tv) => tv.kind.clone(),
             Type::TyCon(tc) => kind_map.get(&tc).unwrap().clone(),
             Type::TyApp(fun, arg) => {
-                let arg_kind = arg.kind(kind_map);
                 let fun_kind = fun.kind(kind_map);
+                let arg_kind = arg.kind(kind_map);
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
-                            error_exit("Kind mismatch.");
+                            error_exit_with_src(
+                                &format!("Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.", self.to_string_normalize(), fun.to_string_normalize(), fun_kind.to_string(), arg.to_string_normalize(), arg_kind.to_string()),
+                                &self.get_source(),
+                            );
                         }
                         res.clone()
                     }
-                    Kind::Star => error_exit("Kind mismatch."),
+                    Kind::Star => error_exit_with_src(
+                        &format!("Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.", self.to_string_normalize(), fun.to_string_normalize(), fun_kind.to_string(), arg.to_string_normalize(), arg_kind.to_string()),
+                        &self.get_source(),
+                    ),
                 }
             }
-            Type::FunTy(arg, ret) => {
-                if arg.kind(kind_map) != kind_star() {
-                    error_exit("Kind mismatch.")
+            Type::FunTy(dom, codom) => {
+                let arg_kind = dom.kind(kind_map);
+                if arg_kind != kind_star() {
+                    error_exit_with_src(
+                        &format!(
+                            "Cannot form function type `{}` since its domain type `{}` has kind `{}`.",
+                            self.to_string_normalize(),
+                            dom.to_string_normalize(),
+                            arg_kind.to_string()
+                        ),
+                        self.get_source(),
+                    )
                 }
-                if ret.kind(kind_map) != kind_star() {
-                    error_exit("Kind mismatch.")
+                let ret_kind = codom.kind(kind_map);
+                if ret_kind != kind_star() {
+                    error_exit_with_src(
+                        &format!("Cannot form function type `{}` since its codomain type `{}` has kind `{}`.", self.to_string_normalize(), codom.to_string_normalize(), ret_kind.to_string()),
+                        self.get_source(),
+                    )
                 }
                 kind_star()
             }
@@ -754,8 +778,7 @@ pub fn tycon(name: FullName) -> Rc<TyCon> {
 // Additional information of types.
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
-    #[allow(dead_code)]
-    pub source: Option<Span>,
+    source: Option<Span>,
 }
 
 impl TypeNode {

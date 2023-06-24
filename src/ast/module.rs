@@ -133,7 +133,7 @@ pub struct MethodImpl {
     // NOTE:
     // For trait method, `define_module` may not differ to the first component of namespace of the function.
     // For example, if `Main` module implements `Eq : SomeType`, then implementation of `eq` for `SomeType` is defined in `Main` module,
-    // but it's name as a function is still `Std::Eq::eq`.
+    // but its name as a function is still `Std::Eq::eq`.
     pub define_module: Name,
 }
 

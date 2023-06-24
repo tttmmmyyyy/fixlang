@@ -159,7 +159,7 @@ pub fn make_array_tycon() -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], ARRAY_NAME))
 }
 
-// If given tycon is function pointer, returns it's arity
+// If given tycon is function pointer, returns its arity
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
         return None;

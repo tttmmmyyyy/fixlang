@@ -469,7 +469,7 @@ namespace IO {
     read_file = |path| with_file(path, "r", read_content);
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
-    // The returned string may include newline/carriage return at it's end.
+    // The returned string may include newline/carriage return at its end.
     read_line : IOHandle -> IOResult IOError String;
     read_line = read_line_inner(true);
 
