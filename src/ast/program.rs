@@ -299,9 +299,9 @@ impl Program {
     }
 
     // Add import statements.
-    pub fn add_import_statements(&mut self, mod_name: Name, mut imports: Vec<ImportStatement>) {
+    pub fn add_import_statements(&mut self, mut imports: Vec<ImportStatement>) {
         for import in &imports {
-            self.add_visible_mod(&mod_name, &import.module);
+            self.add_visible_mod(&import.source_module, &import.target_module);
         }
         self.unresolved_imports.append(&mut imports);
     }
@@ -1120,26 +1120,26 @@ impl Program {
             let import = self.unresolved_imports.pop().unwrap();
 
             // If import is already resolved, do nothing.
-            if self.visible_mods.contains_key(&import.module) {
+            if self.visible_mods.contains_key(&import.target_module) {
                 continue;
             }
 
             // Search for bulit-in modules.
-            if import.module == "Debug" {
+            if import.target_module == "Debug" {
                 self.link(parse_source(include_str!("../debug.fix"), "debug.fix"));
                 continue;
             }
-            if import.module == "HashMap" {
+            if import.target_module == "HashMap" {
                 self.link(parse_source(include_str!("../hashmap.fix"), "hashmap.fix"));
                 continue;
             }
-            if import.module == "Hash" {
+            if import.target_module == "Hash" {
                 self.link(parse_source(include_str!("../hash.fix"), "hash.fix"));
                 continue;
             }
 
             error_exit_with_src(
-                &format!("Cannot find module `{}`", import.module),
+                &format!("Cannot find module `{}`", import.target_module),
                 &import.source,
             );
         }

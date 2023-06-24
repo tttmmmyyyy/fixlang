@@ -2,6 +2,7 @@ use super::*;
 
 #[derive(Clone)]
 pub struct ImportStatement {
-    pub module: Name,
+    pub source_module: Name,
+    pub target_module: Name,
     pub source: Option<Span>,
 }

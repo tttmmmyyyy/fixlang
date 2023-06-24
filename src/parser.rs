@@ -214,7 +214,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
                 trait_impls.push(parse_trait_impl(pair, src, &module_name));
             }
             Rule::import_statement => {
-                import_statements.push(parse_import_statement(pair, src));
+                import_statements.push(parse_import_statement(pair, src, &module_name));
             }
             _ => unreachable!(),
         }
@@ -223,7 +223,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
     fix_mod.add_global_values(global_value_defns, global_value_decls);
     fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls);
-    fix_mod.add_import_statements(module_name, import_statements);
+    fix_mod.add_import_statements(import_statements);
 
     fix_mod
 }
@@ -1574,12 +1574,17 @@ fn parse_pattern_union(pair: Pair<Rule>, src: &SourceFile) -> Rc<PatternNode> {
     PatternNode::make_union(union_tycon, field_name, pat).set_source(span)
 }
 
-fn parse_import_statement(pair: Pair<Rule>, src: &SourceFile) -> ImportStatement {
+fn parse_import_statement(
+    pair: Pair<Rule>,
+    src: &SourceFile,
+    module_name: &Name,
+) -> ImportStatement {
     assert_eq!(pair.as_rule(), Rule::import_statement);
     let span = Span::from_pair(&src, &pair);
-    let module = pair.into_inner().next().unwrap().as_str().to_string();
+    let target_module = pair.into_inner().next().unwrap().as_str().to_string();
     ImportStatement {
-        module,
+        source_module: module_name.clone(),
+        target_module,
         source: Some(span),
     }
 }
