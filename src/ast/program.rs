@@ -240,21 +240,22 @@ impl<'de> serde::de::Visitor<'de> for UpdateDateVisitor {
     }
 }
 
-// Module of fix-lang.
-// To avoid confliction with "inkwell::Module", we name it as `FixModule`.
+// Program of fix a collection of modules.
+// A program can link another program which consists of a single module.
 pub struct Program {
-    pub name: Name,
-    pub unresolved_imports: Vec<ImportStatement>,
-    // A map to represent modules imported by each module.
-    // Each module imports itself.
-    // This is used to name-resolution and overloading resolution,
-    pub imported_mod_map: HashMap<Name, HashSet<Name>>,
     pub type_defns: Vec<TypeDefn>,
     pub global_values: HashMap<FullName, GlobalValue>,
     pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
     pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
     pub trait_env: TraitEnv,
     pub type_env: TypeEnv,
+
+    // Import statements to be resolved.
+    pub unresolved_imports: Vec<ImportStatement>,
+    // For each linked module `m`, `visible_mods[m]` is the set of modules imported by `m`.
+    // Each module imports itself.
+    // This is used to namespace resolution and overloading resolution.
+    pub visible_mods: HashMap<Name, HashSet<Name>>,
     // Last update date for each linked modules.
     pub last_updates: HashMap<Name, UpdateDate>,
     // Last affected date for each linked modules.
@@ -263,12 +264,11 @@ pub struct Program {
 }
 
 impl Program {
-    // Create empty module.
-    pub fn new(name: Name) -> Program {
+    // Create a program consists of single module.
+    pub fn single_module(module_name: Name) -> Program {
         let mut fix_mod = Program {
-            name: name.clone(),
             unresolved_imports: vec![],
-            imported_mod_map: Default::default(),
+            visible_mods: Default::default(),
             type_defns: Default::default(),
             global_values: Default::default(),
             instantiated_global_symbols: Default::default(),
@@ -278,22 +278,30 @@ impl Program {
             last_updates: Default::default(),
             last_affected_dates: Default::default(),
         };
-        fix_mod.insert_imported_mod_map(&name, &name);
-        fix_mod.insert_imported_mod_map(&name, &STD_NAME.to_string());
-        fix_mod.set_last_update(UpdateDate(SystemTime::now().into())); // Later updated to source file's last modified date.
+        fix_mod.add_visible_mod(&module_name, &module_name);
+        fix_mod.add_visible_mod(&module_name, &STD_NAME.to_string());
+        fix_mod.set_last_update(module_name, UpdateDate(SystemTime::now().into())); // Later updated to source file's last modified date.
         fix_mod
     }
 
+    // If this program consists of single module, returns its name.
+    pub fn get_name_if_single_module(&self) -> Name {
+        let linked_mods = self.linked_mods();
+        if linked_mods.len() == 1 {
+            return linked_mods.into_iter().next().unwrap();
+        }
+        panic!("")
+    }
+
     // Set this module's last update.
-    pub fn set_last_update(&mut self, time: UpdateDate) {
-        self.last_updates.insert(self.name.clone(), time);
+    pub fn set_last_update(&mut self, mod_name: Name, time: UpdateDate) {
+        self.last_updates.insert(mod_name, time);
     }
 
     // Add import statements.
-    pub fn add_import_statements(&mut self, mut imports: Vec<ImportStatement>) {
+    pub fn add_import_statements(&mut self, mod_name: Name, mut imports: Vec<ImportStatement>) {
         for import in &imports {
-            let mod_name = self.name.clone();
-            self.insert_imported_mod_map(&mod_name, &import.module);
+            self.add_visible_mod(&mod_name, &import.module);
         }
         self.unresolved_imports.append(&mut imports);
     }
@@ -676,7 +684,7 @@ impl Program {
         let nrctx = NameResolutionContext {
             types: self.tycon_names(),
             traits: self.trait_names(),
-            imported_modules: self.imported_mod_map[define_module].clone(),
+            imported_modules: self.visible_mods[define_module].clone(),
         };
         te.expr = te.expr.resolve_namespace(&nrctx);
 
@@ -937,20 +945,20 @@ impl Program {
         {
             let mut tycons = (*self.type_env.tycons).clone();
             for (tc, ti) in &mut tycons {
-                ctx.imported_modules = self.imported_mod_map[&tc.name.module()].clone();
+                ctx.imported_modules = self.visible_mods[&tc.name.module()].clone();
                 ti.resolve_namespace(&ctx);
             }
             self.type_env.tycons = Rc::new(tycons);
         }
 
         self.trait_env
-            .resolve_namespace(&mut ctx, &self.imported_mod_map);
+            .resolve_namespace(&mut ctx, &self.visible_mods);
         for decl in &mut self.type_defns {
-            ctx.imported_modules = self.imported_mod_map[&decl.name.module()].clone();
+            ctx.imported_modules = self.visible_mods[&decl.name.module()].clone();
             decl.resolve_namespace(&ctx);
         }
         for (name, sym) in &mut self.global_values {
-            ctx.imported_modules = self.imported_mod_map[&name.module()].clone();
+            ctx.imported_modules = self.visible_mods[&name.module()].clone();
             sym.resolve_namespace_in_declaration(&ctx);
         }
     }
@@ -1059,31 +1067,33 @@ impl Program {
     }
 
     pub fn linked_mods(&self) -> HashSet<Name> {
-        self.imported_mod_map.keys().cloned().collect()
+        self.visible_mods.keys().cloned().collect()
     }
 
-    // Link two modules.
+    // Link an module.
     pub fn link(&mut self, mut other: Program) {
         // TODO: check if a module defined by a single source file.
 
         // If already linked, do nothing.
-        if self.linked_mods().contains(&other.name) {
+        if self
+            .linked_mods()
+            .contains(&other.get_name_if_single_module())
+        {
             return;
         }
-        self.linked_mods().insert(other.name);
-
-        self.unresolved_imports
-            .append(&mut other.unresolved_imports);
 
         // Merge imported_mod_map.
-        for (importer, importee) in &other.imported_mod_map {
-            if let Some(known_importee) = self.imported_mod_map.get(importer) {
+        for (importer, importee) in &other.visible_mods {
+            if let Some(known_importee) = self.visible_mods.get(importer) {
                 assert_eq!(known_importee, importee);
             } else {
-                self.imported_mod_map
-                    .insert(importer.clone(), importee.clone());
+                self.visible_mods.insert(importer.clone(), importee.clone());
             }
         }
+
+        // Merge unresolved_imports.
+        self.unresolved_imports
+            .append(&mut other.unresolved_imports);
 
         // Merge types.
         self.add_type_defns(other.type_defns);
@@ -1110,7 +1120,7 @@ impl Program {
             let import = self.unresolved_imports.pop().unwrap();
 
             // If import is already resolved, do nothing.
-            if self.imported_mod_map.contains_key(&import.module) {
+            if self.visible_mods.contains_key(&import.module) {
                 continue;
             }
 
@@ -1135,12 +1145,12 @@ impl Program {
         }
     }
 
-    pub fn insert_imported_mod_map(&mut self, importer: &Name, imported: &Name) {
-        if !self.imported_mod_map.contains_key(importer) {
-            self.imported_mod_map
+    pub fn add_visible_mod(&mut self, importer: &Name, imported: &Name) {
+        if !self.visible_mods.contains_key(importer) {
+            self.visible_mods
                 .insert(importer.clone(), Default::default());
         }
-        self.imported_mod_map
+        self.visible_mods
             .get_mut(importer)
             .unwrap()
             .insert(imported.clone());
@@ -1149,7 +1159,7 @@ impl Program {
     // Create a graph of modules. If module A imports module B, an edge from B to A is added.
     pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
-        for (from, tos) in &self.imported_mod_map {
+        for (from, tos) in &self.visible_mods {
             for to in tos {
                 graph.connect(
                     *elem_to_idx.get(from).unwrap(),

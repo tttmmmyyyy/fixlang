@@ -67,7 +67,7 @@ fn build_module<'c>(
     let mut typechecker = TypeCheckContext::new(
         fix_mod.trait_env.clone(),
         fix_mod.type_env(),
-        fix_mod.imported_mod_map.clone(),
+        fix_mod.visible_mods.clone(),
     );
 
     // Register type declarations of global symbols to typechecker.
@@ -172,7 +172,7 @@ pub fn run_source(source: &str, config: Configuration) -> i32 {
 
 pub fn run_module(fix_mod: Program, config: Configuration) -> i32 {
     let ctx = Context::create();
-    let module = ctx.create_module(&fix_mod.name);
+    let module = ctx.create_module("Main");
     let ee = module
         .create_jit_execution_engine(config.llvm_opt_level)
         .unwrap();
@@ -235,7 +235,7 @@ pub fn load_file(config: &Configuration) -> Program {
     for file_path in &config.source_files {
         let (content, last_modified) = read_file(file_path);
         let mut fix_mod = parse_source(&content, file_path.to_str().unwrap());
-        fix_mod.set_last_update(last_modified);
+        fix_mod.set_last_update(fix_mod.get_name_if_single_module(), last_modified);
         target_mod.link(fix_mod);
     }
     target_mod.resolve_imports();
@@ -280,7 +280,7 @@ pub fn build_file(config: Configuration) {
     let fix_mod = load_file(&config);
 
     let ctx = Context::create();
-    let module = ctx.create_module(&fix_mod.name);
+    let module = ctx.create_module("Main");
     module.set_triple(&tm.get_triple());
     module.set_data_layout(&tm.get_target_data().get_data_layout());
 

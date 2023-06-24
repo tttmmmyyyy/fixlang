@@ -190,7 +190,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
     let mut pairs = pair.into_inner();
     let module_name = parse_module_defn(pairs.next().unwrap(), src);
     let namespace = NameSpace::new(vec![module_name.clone()]);
-    let mut fix_mod = Program::new(module_name.clone());
+    let mut fix_mod = Program::single_module(module_name.clone());
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
     let mut global_value_decls: Vec<(FullName, Rc<Scheme>)> = vec![];
@@ -223,7 +223,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
     fix_mod.add_global_values(global_value_defns, global_value_decls);
     fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls);
-    fix_mod.add_import_statements(import_statements);
+    fix_mod.add_import_statements(module_name, import_statements);
 
     fix_mod
 }

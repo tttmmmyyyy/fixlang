@@ -30,7 +30,7 @@ mod typecheck;
 
 use ast::expr::*;
 use ast::import::*;
-use ast::module::*;
+use ast::program::*;
 use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
