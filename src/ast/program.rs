@@ -1128,8 +1128,9 @@ impl Program {
             // Search for bulit-in modules.
             for (mod_name, source_content, file_name) in [
                 ("Debug", include_str!("../debug.fix"), "debug.fix"),
-                ("HashMap", include_str!("../hashmap.fix"), "hashmap.fix"),
                 ("Hash", include_str!("../hash.fix"), "hash.fix"),
+                ("HashMap", include_str!("../hashmap.fix"), "hashmap.fix"),
+                ("HashSet", include_str!("../hashset.fix"), "hashset.fix"),
                 ("Math", include_str!("../math.fix"), "math.fix"),
             ] {
                 if import.target_module == mod_name {

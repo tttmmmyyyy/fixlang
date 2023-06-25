@@ -389,6 +389,15 @@
   - [`insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`](#insert--k--eq-k--hash-k---v---hashmap-k-v---hashmap-k-v)
   - [`reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`](#reserve--k--hash-k--eq-i64---hashmap-k-v---hashmap-k-v)
   - [`to_iter : HashMap k v -> Iterator (k, v)`](#to_iter--hashmap-k-v---iterator-k-v)
+- [Module `HashSet`](#module-hashset)
+  - [`type HashSet k`](#type-hashset-k)
+  - [`contains : [k : Eq, k : Hash] k -> HashSet k -> Bool`](#contains--k--eq-k--hash-k---hashset-k---bool)
+  - [`erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`](#erase--k--eq-k--hash-k---hashset-k---hashset-k)
+  - [`get_capacity : HashSet k -> I64`](#get_capacity--hashset-k---i64)
+  - [`get_size : HashSet k -> I64`](#get_size--hashset-k---i64)
+  - [`insert : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`](#insert--k--eq-k--hash-k---hashset-k---hashset-k)
+  - [`reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`](#reserve--k--hash-k--eq-i64---hashset-k---hashset-k)
+  - [`to_iter : HashSet k -> Iterator k`](#to_iter--hashset-k---iterator-k)
 - [Module `Math`](#module-math)
   - [`_gcd_nonneg : I64 -> I64 -> I64`](#_gcd_nonneg--i64---i64---i64)
   - [`gcd : I64 -> I64 -> I64`](#gcd--i64---i64---i64)
@@ -2254,6 +2263,32 @@ Reserve a HashMap so that it will not rehash until size exceeds the spacified va
 
 ## `to_iter : HashMap k v -> Iterator (k, v)`
 Convert a HashMap into an iterator.
+
+# Module `HashSet`
+
+## `type HashSet k`
+`HashSet` is a structure that stores elements into hash tables.
+
+## `contains : [k : Eq, k : Hash] k -> HashSet k -> Bool`
+Check whether a hashset contains an element.
+
+## `erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`
+Erase an element from a HashSet. 
+
+## `get_capacity : HashSet k -> I64`
+Get capacity of a HashSet.
+
+## `get_size : HashSet k -> I64`
+Get size (number of elements) of a HashSet.
+
+## `insert : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`
+Insert an element into a HashSet.
+
+## `reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`
+Reserve a HashSet so that it will not rehash until size exceeds the spacified value.
+
+## `to_iter : HashSet k -> Iterator k`
+Convert a HashSet into an iterator.
 
 # Module `Math`
 

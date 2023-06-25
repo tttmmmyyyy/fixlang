@@ -3056,6 +3056,47 @@ pub fn test115() {
 
 #[test]
 #[serial]
+pub fn test115_5() {
+    // Test HashSet
+    let source = r#"
+        module Main; 
+
+        import Debug;
+        import HashSet;
+
+        main : IO ();
+        main = (
+            let set = HashSet::empty(0)
+                            .reserve(3)
+                            .insert(0)
+                            .insert(1)
+                            .insert(2)
+                            .erase(2).insert(2)
+                            .insert(3)
+                            .insert(4).erase(4)
+                            .erase(5)
+                            // Do nothing for 6
+                            .insert(7).insert(7);
+    
+            let _ = assert_eq("case 0", set.contains(0), true);
+            let _ = assert_eq("case 1", set.contains(1), true);
+            let _ = assert_eq("case 2", set.contains(2), true);
+            let _ = assert_eq("case 3", set.contains(3), true);
+            let _ = assert_eq("case 4", set.contains(4), false);
+            let _ = assert_eq("case 5", set.contains(5), false);
+            let _ = assert_eq("case 6", set.contains(6), false);
+            let _ = assert_eq("case 7", set.contains(7), true);
+
+            let _ = assert_eq("case size", set.get_size, 5);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test116() {
     // Test Std::Destructor
     let source = r#"

@@ -70,7 +70,7 @@ find_or = |key, def, mp| mp.find(key).as_some_or(def);
 get_capacity : HashMap k v -> I64;
 get_capacity = |mp| mp.@_table.get_size;
 
-// Get size (number of elements) in a HashMap.
+// Get size (number of elements) of a HashMap.
 get_size : HashMap k v -> I64;
 get_size = |mp| mp.@_size;
 
