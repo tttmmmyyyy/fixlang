@@ -3178,7 +3178,8 @@ pub fn test119() {
 pub fn test120() {
     // Test abort of type Array or function.
     let source = r#"
-        module Main; import Debug;
+        module Main; 
+        import Debug;
 
         main : IO ();
         main = (
@@ -3187,6 +3188,34 @@ pub fn test120() {
             let _ = assert_eq("case 1", (a.get(0))(1), x);
             let a = if true { |_| x } else { abort() };
             let _ = assert_eq("case 1", a(1), x);
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test121() {
+    // Test Math module
+    let source = r#"
+        module Main; 
+
+        import Debug;
+        import Math;
+
+        main : IO ();
+        main = (
+            let _ = assert_eq("case gcd-0", gcd(16, 6), 2);
+            let _ = assert_eq("case gcd-1", gcd(544, 119), 17);
+            let _ = assert_eq("case gcd-2", gcd(2089, 3571), 1);
+            let _ = assert_eq("case gcd-3", gcd(-16, 6), 2);
+            let _ = assert_eq("case gcd-4", gcd(544, -119), 17);
+            let _ = assert_eq("case gcd-5", gcd(-2089, 3571), 1);
+            let _ = assert_eq("case gcd-6", gcd(0, 0), 0);
+            let _ = assert_eq("case gcd-7", gcd(0, 1), 1);
+            let _ = assert_eq("case gcd-8", gcd(-1, 0), 1);
+
             pure()
         );
     "#;

@@ -1124,17 +1124,21 @@ impl Program {
                 continue;
             }
 
+            let mut imported = false;
             // Search for bulit-in modules.
-            if import.target_module == "Debug" {
-                self.link(parse_source(include_str!("../debug.fix"), "debug.fix"));
-                continue;
+            for (mod_name, source_content, file_name) in [
+                ("Debug", include_str!("../debug.fix"), "debug.fix"),
+                ("HashMap", include_str!("../hashmap.fix"), "hashmap.fix"),
+                ("Hash", include_str!("../hash.fix"), "hash.fix"),
+                ("Math", include_str!("../math.fix"), "math.fix"),
+            ] {
+                if import.target_module == mod_name {
+                    self.link(parse_source(source_content, file_name));
+                    imported = true;
+                    break;
+                }
             }
-            if import.target_module == "HashMap" {
-                self.link(parse_source(include_str!("../hashmap.fix"), "hashmap.fix"));
-                continue;
-            }
-            if import.target_module == "Hash" {
-                self.link(parse_source(include_str!("../hash.fix"), "hash.fix"));
+            if imported {
                 continue;
             }
 

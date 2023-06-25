@@ -389,6 +389,9 @@
   - [`insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`](#insert--k--eq-k--hash-k---v---hashmap-k-v---hashmap-k-v)
   - [`reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`](#reserve--k--hash-k--eq-i64---hashmap-k-v---hashmap-k-v)
   - [`to_iter : HashMap k v -> Iterator (k, v)`](#to_iter--hashmap-k-v---iterator-k-v)
+- [Module `Math`](#module-math)
+  - [`_gcd_nonneg : I64 -> I64 -> I64`](#_gcd_nonneg--i64---i64---i64)
+  - [`gcd : I64 -> I64 -> I64`](#gcd--i64---i64---i64)
 - [Operators](#operators)
 
 
@@ -2251,6 +2254,15 @@ Reserve a HashMap so that it will not rehash until size exceeds the spacified va
 
 ## `to_iter : HashMap k v -> Iterator (k, v)`
 Convert a HashMap into an iterator.
+
+# Module `Math`
+
+## `_gcd_nonneg : I64 -> I64 -> I64`
+Calculate greatest common divisors of two non-negative integers. 
+
+## `gcd : I64 -> I64 -> I64`
+Calculate greatest common divisor of two integers. `gcd(0, 0)` returns `0`.
+NOTE: currently, this function does not support I64::minimum.
 
 # Operators
 

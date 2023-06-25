@@ -1,0 +1,15 @@
+module Math;
+
+// Calculate greatest common divisor of two non-negative integers. 
+_gcd_nonneg : I64 -> I64 -> I64;
+_gcd_nonneg = |n, m| (
+    if n > m { _gcd_nonneg(m, n) };
+    // n <= m
+    if n == 0 { m };
+    _gcd_nonneg(m % n, n)
+);
+
+// Calculate greatest common divisor of two integers.
+// NOTE: currently, this function does not support I64::minimum.
+gcd : I64 -> I64 -> I64;
+gcd = |n, m| _gcd_nonneg(n.abs, m.abs);
