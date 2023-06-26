@@ -592,12 +592,13 @@ impl Program {
         tc: &TypeCheckContext,
     ) {
         fn cache_file_name(name: &FullName, define_module: &Name, scheme: &Rc<Scheme>) -> String {
-            format!(
-                "{}@{}@{}",
+            let data = format!(
+                "{}_{}_{}",
                 name.to_string(),
                 define_module,
                 scheme.to_string()
-            )
+            );
+            format!("{:x}", md5::compute(data))
         }
         fn load_cache(
             name: &FullName,
