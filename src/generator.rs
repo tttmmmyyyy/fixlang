@@ -408,7 +408,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ty: Rc<TypeNode>,
     ) {
         if self.global.contains_key(&name) {
-            error_exit(&format!("duplicate symbol: {}", name.to_string()));
+            error_exit(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
             let used_later = if self.config.preretain_global && ty.is_box(self.type_env()) {
                 // Global boxed objects are pre-retained, so we do not need to retain. Always move out it.
