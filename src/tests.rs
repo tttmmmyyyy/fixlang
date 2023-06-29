@@ -8,6 +8,8 @@ use super::*;
 pub fn test0() {
     let source = r#"
             module Main; import Debug;
+
+            main : IO ();
     
             main : IO ();
             main = (
