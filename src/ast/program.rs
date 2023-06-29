@@ -418,7 +418,7 @@ impl Program {
                 let gs = global_values.get_mut(&name).unwrap();
                 if gs.ty.is_some() {
                     error_exit(&format!(
-                        "duplicated type signature for `{}`",
+                        "Duplicated type signature for `{}`",
                         name.to_string()
                     ));
                 } else {
@@ -430,7 +430,7 @@ impl Program {
         for (name, gv) in global_values {
             if gv.expr.is_none() {
                 error_exit(&format!(
-                    "global value `{}` lacks type signature",
+                    "Global value `{}` lacks type signature",
                     name.to_string()
                 ))
             }
