@@ -418,7 +418,7 @@ impl Program {
                 let gs = global_values.get_mut(&name).unwrap();
                 if gs.ty.is_some() {
                     error_exit(&format!(
-                        "Duplicated type signature for `{}`",
+                        "duplicated type signature for `{}`",
                         name.to_string()
                     ));
                 } else {
