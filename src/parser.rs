@@ -83,7 +83,7 @@ impl Span {
 
         let mut ret: String = String::default();
         ret += &format!(
-            "At {}:{}-{}:{} in {}\n",
+            "At {}:{}-{}:{} in \"{}\", \n",
             span.start_pos().line_col().0,
             span.start_pos().line_col().1,
             span.end_pos().line_col().0,
@@ -193,8 +193,8 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
     let mut fix_mod = Program::single_module(module_name.clone());
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
-    let mut global_value_decls: Vec<(FullName, Rc<Scheme>)> = vec![];
-    let mut global_value_defns: Vec<(FullName, Rc<ExprNode>)> = vec![];
+    let mut global_value_decls: Vec<GlobalValueDecl> = vec![];
+    let mut global_value_defns: Vec<GlobalValueDefn> = vec![];
     let mut trait_infos: Vec<TraitInfo> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
     let mut import_statements: Vec<ImportStatement> = vec![];
@@ -232,8 +232,8 @@ fn parse_global_defns(
     pair: Pair<Rule>,
     src: &SourceFile,
     namespace: &NameSpace,
-    global_value_decls: &mut Vec<(FullName, Rc<Scheme>)>,
-    global_value_defns: &mut Vec<(FullName, Rc<ExprNode>)>,
+    global_value_decls: &mut Vec<GlobalValueDecl>,
+    global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
 ) {
@@ -273,8 +273,8 @@ fn parse_global_defns_in_namespace(
     pair: Pair<Rule>,
     src: &SourceFile,
     namespace: &NameSpace,
-    global_value_decls: &mut Vec<(FullName, Rc<Scheme>)>,
-    global_value_defns: &mut Vec<(FullName, Rc<ExprNode>)>,
+    global_value_decls: &mut Vec<GlobalValueDecl>,
+    global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
 ) {
@@ -372,29 +372,32 @@ fn parse_global_value_decl(
     pair: Pair<Rule>,
     src: &SourceFile,
     namespace: &NameSpace,
-) -> (FullName, Rc<Scheme>) {
+) -> GlobalValueDecl {
     assert_eq!(pair.as_rule(), Rule::global_name_type_sign);
+    let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), src);
     let preds = qual_type.preds.clone();
     let ty = qual_type.ty.clone();
-    (
-        FullName::new(namespace, &name),
-        Scheme::generalize(ty.free_vars(), preds, ty),
-    )
+    GlobalValueDecl {
+        name: FullName::new(namespace, &name),
+        ty: Scheme::generalize(ty.free_vars(), preds, ty),
+        src: Some(span),
+    }
 }
 
 fn parse_global_name_defn(
     pair: Pair<Rule>,
     src: &SourceFile,
     namespace: &NameSpace,
-) -> (FullName, Rc<ExprNode>) {
+) -> GlobalValueDefn {
     assert_eq!(pair.as_rule(), Rule::global_name_defn);
+    let span = Span::from_pair(&src, &pair);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let expr = parse_expr_with_new_do(pairs.next().unwrap(), src);
-    (FullName::new(namespace, &name), expr)
+    GlobalValueDefn{name: FullName::new(namespace, &name), expr: expr, src: Some(span)}
 }
 
 fn parse_type_qualified(pair: Pair<Rule>, src: &SourceFile) -> QualType {
@@ -1088,7 +1091,7 @@ fn parse_expr_let(expr: Pair<Rule>, msc: &mut DoContext, src: &SourceFile) -> Rc
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let pat = parse_pattern(pairs.next().unwrap(), src);
-    if pat.pattern.validate_duplicated_vars() {
+    if pat.pattern.validate_duplicate_vars() {
         error_exit_with_src(
             &format!("Each name defined in a pattern must appear exactly at once. "),
             &Some(span),

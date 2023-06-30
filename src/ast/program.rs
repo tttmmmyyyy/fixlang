@@ -46,6 +46,22 @@ pub struct InstantiatedSymbol {
     pub type_resolver: TypeResolver, // type resolver for types in expr.
 }
 
+// Declaration (name and type signature) of global value.
+// `main : IO()`
+pub struct GlobalValueDecl {
+    pub name: FullName,
+    pub ty: Rc<Scheme>,
+    pub src: Option<Span>,
+}
+
+// Definition (name and expression)
+// `main = println("Hello World")`
+pub struct GlobalValueDefn {
+    pub name: FullName,
+    pub expr: Rc<ExprNode>,
+    pub src: Option<Span>,
+}
+
 pub struct GlobalValue {
     // Type of this symbol.
     // For example, in case "trait a: Show { show: a -> String }",
@@ -352,10 +368,10 @@ impl Program {
     // Add a global value.
     pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Rc<ExprNode>, Rc<Scheme>)) {
         if self.global_values.contains_key(&name) {
-            error_exit(&format!(
-                "duplicated definition for global value: `{}`",
+            error_exit_with_src(&format!(
+                "Duplicated definition for global value: `{}`",
                 name.to_string()
-            ));
+            ), &Span::unite_opt(scm.ty.get_source(), &expr.source));
         }
         self.global_values.insert(
             name,
@@ -366,75 +382,72 @@ impl Program {
         );
     }
 
-    // Add global values
+    // Add global values. 
     pub fn add_global_values(
         &mut self,
-        exprs: Vec<(FullName, Rc<ExprNode>)>,
-        types: Vec<(FullName, Rc<Scheme>)>,
+        exprs: Vec<GlobalValueDefn>,
+        types: Vec<GlobalValueDecl>,
     ) {
         struct GlobalValue {
-            expr: Option<Rc<ExprNode>>,
-            ty: Option<Rc<Scheme>>,
+            defn: Option<GlobalValueDefn>,
+            decl: Option<GlobalValueDecl>,
         }
 
         let mut global_values: HashMap<FullName, GlobalValue> = Default::default();
-        for (name, expr) in exprs {
-            if !global_values.contains_key(&name) {
+        for defn in exprs {
+            if !global_values.contains_key(&defn.name) {
                 global_values.insert(
-                    name,
-                    GlobalValue {
-                        expr: Some(expr),
-                        ty: None,
-                    },
+                    defn.name.clone(),
+                    GlobalValue{ defn: Some(defn), decl: None},
                 );
             } else {
-                let gs = global_values.get_mut(&name).unwrap();
-                if gs.expr.is_some() {
-                    error_exit(&format!(
-                        "duplicated definition signature for global value: `{}`",
-                        name.to_string()
-                    ));
+                let gv = global_values.get_mut(&defn.name).unwrap();
+                if gv.defn.is_some() {
+                    error_exit_with_srcs(&format!(
+                        "Duplicate definition for global value: `{}`.",
+                        defn.name.to_string()
+                    ), &[&defn.src, &gv.defn.as_ref().unwrap().src]);
                 } else {
-                    gs.expr = Some(expr);
+                    gv.defn = Some(defn);
                 }
             }
         }
-        for (name, ty) in types {
-            if !global_values.contains_key(&name) {
+        for decl in types {
+            if !global_values.contains_key(&decl.name) {
                 global_values.insert(
-                    name,
+                    decl.name.clone(),
                     GlobalValue {
-                        ty: Some(ty),
-                        expr: None,
+                        decl: Some(decl),
+                        defn: None,
                     },
                 );
             } else {
-                let gs = global_values.get_mut(&name).unwrap();
-                if gs.ty.is_some() {
-                    error_exit(&format!(
-                        "Duplicated type signature for `{}`",
-                        name.to_string()
-                    ));
+                let gv = global_values.get_mut(&decl.name).unwrap();
+                if gv.decl.is_some() {
+                    error_exit_with_srcs(&format!(
+                        "Duplicate declaration for `{}`.",
+                        decl.name.to_string()
+                    ), &[&decl.src, &gv.decl.as_ref().unwrap().src]);
                 } else {
-                    gs.ty = Some(ty);
+                    gv.decl = Some(decl);
                 }
             }
         }
 
         for (name, gv) in global_values {
-            if gv.expr.is_none() {
-                error_exit(&format!(
-                    "Global value `{}` lacks type signature",
+            if gv.defn.is_none() {
+                error_exit_with_src(&format!(
+                    "Global value `{}` lacks declaration.",
                     name.to_string()
-                ))
+                ), &gv.decl.unwrap().src )
             }
-            if gv.ty.is_none() {
-                error_exit(&format!(
-                    "global value `{}` lacks definition",
+            if gv.decl.is_none() {
+                error_exit_with_src(&format!(
+                    "Global value `{}` lacks definition.",
                     name.to_string()
-                ))
+                ), &gv.defn.unwrap().src)
             }
-            self.add_global_value(name, (gv.expr.unwrap(), gv.ty.unwrap()))
+            self.add_global_value(name, (gv.defn.unwrap().expr, gv.decl.unwrap().ty))
         }
     }
 

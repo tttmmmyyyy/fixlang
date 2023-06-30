@@ -583,7 +583,7 @@ impl Pattern {
 
     // Check if variables defined in this pattern is duplicated or not.
     // For example, pattern (x, y) is ok, but (x, x) is invalid.
-    pub fn validate_duplicated_vars(&self) -> bool {
+    pub fn validate_duplicate_vars(&self) -> bool {
         (self.vars().len() as u32) < self.count_vars()
     }
 
