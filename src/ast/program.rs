@@ -8,12 +8,6 @@ use std::io::Write;
 
 use super::*;
 
-const MAIN_FUNCTION_NAME: &str = "main";
-const MAIN_MODULE_NAME: &str = "Main";
-pub const INSTANCIATED_NAME_SEPARATOR: &str = "%";
-pub const GETTER_SYMBOL: &str = "@";
-pub const SETTER_SYMBOL: &str = "=";
-
 #[derive(Clone)]
 pub struct TypeEnv {
     // List of type constructors including user-defined types.
