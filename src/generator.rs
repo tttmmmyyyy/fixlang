@@ -1488,7 +1488,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                         let c_type = param_ty.get_c_type(self.context);
                         if c_type.is_none() {
                             error_exit_with_src(
-                                "Cannot use `()` as a parameter type of c function.",
+                                "Cannot use `()` as a parameter type of C function.",
                                 &expr.source,
                             )
                         }
