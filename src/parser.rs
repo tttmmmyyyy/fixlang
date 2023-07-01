@@ -309,7 +309,10 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) -
         let pair = pairs.next().unwrap();
         let (preds, kinds) = parse_predicates(pair, src);
         if !preds.is_empty() {
-            error_exit("in trait definition, specification of the kinds are only allowed.");
+            error_exit_with_src(
+                "The current Fix does not support super-trait; only kinds of type parameters can be specified as a precondition for trait definition.",
+                &preds.first().unwrap().info.source
+            );
         }
         kinds
     } else {

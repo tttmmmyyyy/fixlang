@@ -231,7 +231,7 @@ pub struct Predicate {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PredicateInfo {
-    source: Option<Span>,
+    pub source: Option<Span>,
 }
 
 impl Predicate {
