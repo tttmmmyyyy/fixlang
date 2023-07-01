@@ -60,6 +60,14 @@ impl Span {
         }
     }
 
+    pub fn to_single_character(&self) -> Self {
+        Self {
+            input: self.input.clone(),
+            start: self.start,
+            end: self.start + 1,
+        }
+    }
+
     pub fn unite_opt(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
         if lhs.is_none() {
             return None;
@@ -397,7 +405,11 @@ fn parse_global_name_defn(
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let expr = parse_expr_with_new_do(pairs.next().unwrap(), src);
-    GlobalValueDefn{name: FullName::new(namespace, &name), expr: expr, src: Some(span)}
+    GlobalValueDefn {
+        name: FullName::new(namespace, &name),
+        expr: expr,
+        src: Some(span),
+    }
 }
 
 fn parse_type_qualified(pair: Pair<Rule>, src: &SourceFile) -> QualType {

@@ -9,6 +9,7 @@ pub fn error_exit(msg: &str) -> ! {
 pub fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
     let mut str = String::default();
     str += msg;
+    str += "\n";
     match src {
         None => {}
         Some(v) => {
@@ -22,6 +23,7 @@ pub fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
 pub fn error_exit_with_srcs(msg: &str, srcs: &[&Option<Span>]) -> ! {
     let mut str = String::default();
     str += msg;
+    str += "\n";
     for src in srcs {
         match src {
             None => {}
@@ -31,6 +33,6 @@ pub fn error_exit_with_srcs(msg: &str, srcs: &[&Option<Span>]) -> ! {
             }
         }
     }
-    
+
     error_exit(&str)
 }

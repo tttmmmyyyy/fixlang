@@ -368,10 +368,13 @@ impl Program {
     // Add a global value.
     pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Rc<ExprNode>, Rc<Scheme>)) {
         if self.global_values.contains_key(&name) {
-            error_exit_with_src(&format!(
-                "Duplicated definition for global value: `{}`",
-                name.to_string()
-            ), &Span::unite_opt(scm.ty.get_source(), &expr.source));
+            error_exit_with_src(
+                &format!(
+                    "Duplicated definition for global value: `{}`",
+                    name.to_string()
+                ),
+                &Span::unite_opt(scm.ty.get_source(), &expr.source),
+            );
         }
         self.global_values.insert(
             name,
@@ -382,12 +385,8 @@ impl Program {
         );
     }
 
-    // Add global values. 
-    pub fn add_global_values(
-        &mut self,
-        exprs: Vec<GlobalValueDefn>,
-        types: Vec<GlobalValueDecl>,
-    ) {
+    // Add global values.
+    pub fn add_global_values(&mut self, exprs: Vec<GlobalValueDefn>, types: Vec<GlobalValueDecl>) {
         struct GlobalValue {
             defn: Option<GlobalValueDefn>,
             decl: Option<GlobalValueDecl>,
@@ -398,15 +397,29 @@ impl Program {
             if !global_values.contains_key(&defn.name) {
                 global_values.insert(
                     defn.name.clone(),
-                    GlobalValue{ defn: Some(defn), decl: None},
+                    GlobalValue {
+                        defn: Some(defn),
+                        decl: None,
+                    },
                 );
             } else {
                 let gv = global_values.get_mut(&defn.name).unwrap();
                 if gv.defn.is_some() {
-                    error_exit_with_srcs(&format!(
-                        "Duplicate definition for global value: `{}`.",
-                        defn.name.to_string()
-                    ), &[&defn.src, &gv.defn.as_ref().unwrap().src]);
+                    error_exit_with_srcs(
+                        &format!(
+                            "Duplicate definition for global value: `{}`.",
+                            defn.name.to_string()
+                        ),
+                        &[
+                            &defn.src.map(|s| s.to_single_character()),
+                            &gv.defn
+                                .as_ref()
+                                .unwrap()
+                                .src
+                                .as_ref()
+                                .map(|s| s.to_single_character()),
+                        ],
+                    );
                 } else {
                     gv.defn = Some(defn);
                 }
@@ -424,10 +437,18 @@ impl Program {
             } else {
                 let gv = global_values.get_mut(&decl.name).unwrap();
                 if gv.decl.is_some() {
-                    error_exit_with_srcs(&format!(
-                        "Duplicate declaration for `{}`.",
-                        decl.name.to_string()
-                    ), &[&decl.src, &gv.decl.as_ref().unwrap().src]);
+                    error_exit_with_srcs(
+                        &format!("Duplicate declaration for `{}`.", decl.name.to_string()),
+                        &[
+                            &decl.src.map(|s| s.to_single_character()),
+                            &gv.decl
+                                .as_ref()
+                                .unwrap()
+                                .src
+                                .as_ref()
+                                .map(|s| s.to_single_character()),
+                        ],
+                    );
                 } else {
                     gv.decl = Some(decl);
                 }
@@ -436,16 +457,24 @@ impl Program {
 
         for (name, gv) in global_values {
             if gv.defn.is_none() {
-                error_exit_with_src(&format!(
-                    "Global value `{}` lacks declaration.",
-                    name.to_string()
-                ), &gv.decl.unwrap().src )
+                error_exit_with_src(
+                    &format!("Global value `{}` lacks declaration.", name.to_string()),
+                    &gv.decl
+                        .unwrap()
+                        .src
+                        .as_ref()
+                        .map(|s| s.to_single_character()),
+                )
             }
             if gv.decl.is_none() {
-                error_exit_with_src(&format!(
-                    "Global value `{}` lacks definition.",
-                    name.to_string()
-                ), &gv.defn.unwrap().src)
+                error_exit_with_src(
+                    &format!("Global value `{}` lacks definition.", name.to_string()),
+                    &gv.defn
+                        .unwrap()
+                        .src
+                        .as_ref()
+                        .map(|s| s.to_single_character()),
+                )
             }
             self.add_global_value(name, (gv.defn.unwrap().expr, gv.decl.unwrap().ty))
         }
