@@ -446,6 +446,16 @@ pub struct PatternNode {
 }
 
 impl PatternNode {
+    // Validate pattern and raise error if invalid,
+    pub fn error_if_invalid(&self) {
+        if self.pattern.has_duplicate_vars() {
+            error_exit_with_src(
+                &format!("Duplicate name defined by pattern."),
+                &self.info.source,
+            );
+        }
+    }
+
     pub fn resolve_namespace(self: &PatternNode, ctx: &NameResolutionContext) -> Rc<PatternNode> {
         match &self.pattern {
             Pattern::Var(_, ty) => {
@@ -583,7 +593,7 @@ impl Pattern {
 
     // Check if variables defined in this pattern is duplicated or not.
     // For example, pattern (x, y) is ok, but (x, x) is invalid.
-    pub fn validate_duplicate_vars(&self) -> bool {
+    pub fn has_duplicate_vars(&self) -> bool {
         (self.vars().len() as u32) < self.count_vars()
     }
 

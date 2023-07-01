@@ -1106,12 +1106,7 @@ fn parse_expr_let(expr: Pair<Rule>, msc: &mut DoContext, src: &SourceFile) -> Rc
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let pat = parse_pattern(pairs.next().unwrap(), src);
-    if pat.pattern.validate_duplicate_vars() {
-        error_exit_with_src(
-            &format!("Each name defined in a pattern must appear exactly at once. "),
-            &Some(span),
-        );
-    }
+    pat.error_if_invalid();
     let _eq_of_let = pairs.next().unwrap();
     let bound = parse_expr(pairs.next().unwrap(), msc, src);
     let _in_of_let = pairs.next().unwrap();
@@ -1124,7 +1119,9 @@ fn parse_expr_lam(expr: Pair<Rule>, _msc: &mut DoContext, src: &SourceFile) -> R
     let mut pairs = expr.into_inner();
     let mut pats = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::pattern {
-        pats.push(parse_pattern(pairs.next().unwrap(), src));
+        let pat = parse_pattern(pairs.next().unwrap(), src);
+        pat.error_if_invalid();
+        pats.push(pat);
     }
     let mut expr = parse_expr_with_new_do(pairs.next().unwrap(), src);
     let mut pat_body_span = expr.source.clone();
