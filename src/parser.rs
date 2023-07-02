@@ -1106,7 +1106,6 @@ fn parse_expr_let(expr: Pair<Rule>, msc: &mut DoContext, src: &SourceFile) -> Rc
     let span = Span::from_pair(&src, &expr);
     let mut pairs = expr.into_inner();
     let pat = parse_pattern(pairs.next().unwrap(), src);
-    pat.error_if_invalid();
     let _eq_of_let = pairs.next().unwrap();
     let bound = parse_expr(pairs.next().unwrap(), msc, src);
     let _in_of_let = pairs.next().unwrap();
@@ -1120,7 +1119,6 @@ fn parse_expr_lam(expr: Pair<Rule>, _msc: &mut DoContext, src: &SourceFile) -> R
     let mut pats = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::pattern {
         let pat = parse_pattern(pairs.next().unwrap(), src);
-        pat.error_if_invalid();
         pats.push(pat);
     }
     let mut expr = parse_expr_with_new_do(pairs.next().unwrap(), src);
@@ -1554,20 +1552,8 @@ fn parse_pattern_struct(pair: Pair<Rule>, src: &SourceFile) -> Rc<PatternNode> {
     let mut pairs = pair.clone().into_inner();
     let tycon = parse_tycon(pairs.next().unwrap());
     let mut field_to_pats = Vec::default();
-    let mut field_names: HashSet<Name> = Default::default();
     while pairs.peek().is_some() {
         let field_name = pairs.next().unwrap().as_str().to_string();
-        // Validate that field_name is not duplicated.
-        if field_names.contains(&field_name) {
-            error_exit(&format!(
-                "In struct pattern `{}`, field `{}` appears multiple times.",
-                pair.as_str(),
-                field_name
-            ));
-        } else {
-            field_names.insert(field_name.clone());
-        }
-
         let pat = parse_pattern(pairs.next().unwrap(), src);
         field_to_pats.push((field_name, pat));
     }

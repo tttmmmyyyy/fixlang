@@ -447,7 +447,54 @@ pub struct PatternNode {
 
 impl PatternNode {
     // Validate pattern and raise error if invalid,
-    pub fn error_if_invalid(&self) {
+    pub fn error_if_invalid(&self, te: &TypeEnv) {
+        match &self.pattern {
+            Pattern::Var(_, _) => {}
+            Pattern::Struct(tc, pats) => {
+                let ti = te.tycons.get(&tc).unwrap();
+                let fields_str = ti
+                    .fields
+                    .iter()
+                    .map(|f| f.name.clone())
+                    .collect::<HashSet<_>>();
+                let fields_pat = pats
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<HashSet<_>>();
+                if fields_pat.len() < pats.len() {
+                    error_exit_with_src("Duplicate field in struct pattern.", &self.info.source);
+                }
+                for f in fields_pat {
+                    if !fields_str.contains(&f) {
+                        error_exit_with_src(
+                            &format!(
+                                "Unknown field `{}` for struct `{}`.",
+                                f,
+                                tc.name.to_string()
+                            ),
+                            &self.info.source,
+                        );
+                    }
+                }
+                for (_, p) in pats {
+                    p.error_if_invalid(te);
+                }
+            }
+            Pattern::Union(tc, field, pat) => {
+                let ti = te.tycons.get(&tc).unwrap();
+                if ti.fields.iter().find(|f| &f.name == field).is_none() {
+                    error_exit_with_src(
+                        &format!(
+                            "Unknown variant `{}` for union `{}`.",
+                            field,
+                            tc.name.to_string()
+                        ),
+                        &self.info.source,
+                    );
+                }
+                pat.error_if_invalid(te);
+            }
+        }
         if self.pattern.has_duplicate_vars() {
             error_exit_with_src(
                 &format!("Duplicate name defined by pattern."),
