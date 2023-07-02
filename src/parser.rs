@@ -1557,11 +1557,10 @@ fn parse_pattern_struct(pair: Pair<Rule>, src: &SourceFile) -> Rc<PatternNode> {
     let mut field_names: HashSet<Name> = Default::default();
     while pairs.peek().is_some() {
         let field_name = pairs.next().unwrap().as_str().to_string();
-
-        // Validate that field_name doesn't appear upto here.
+        // Validate that field_name is not duplicated.
         if field_names.contains(&field_name) {
             error_exit(&format!(
-                "in the struct pattern `{}`, field `{}` appears multiple times.",
+                "In struct pattern `{}`, field `{}` appears multiple times.",
                 pair.as_str(),
                 field_name
             ));
