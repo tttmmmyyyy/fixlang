@@ -1688,6 +1688,7 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> String {
             end: e,
         },
     };
+    msg += "\n";
     msg += &span.to_string();
     msg
 }
