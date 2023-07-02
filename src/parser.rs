@@ -1355,7 +1355,10 @@ fn parse_expr_string_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
                         code += c << 4 * (3 - i);
                     }
                     let c = match char::from_u32(code) {
-                        None => error_exit(&format!("invalid unicode character: u{:X}", code)),
+                        None => error_exit_with_src(
+                            &format!("invalid unicode character: u{:X}", code),
+                            &Some(span),
+                        ),
                         Some(c) => c,
                     };
                     out_string.push(c);
