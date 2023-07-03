@@ -666,10 +666,10 @@ impl TypeCheckContext {
             }
             Expr::TyAnno(e, anno_ty) => {
                 if !anno_ty.free_vars().is_empty() {
-                    error_exit(&format!(
-                        "Unknown type variable `{}`.",
-                        ty.free_vars().iter().next().unwrap().0
-                    ))
+                    error_exit_with_src(
+                        &format!("Currently, cannot use type variable in type annotation.",),
+                        anno_ty.get_source(),
+                    )
                 }
                 if !self.unify(&ty, anno_ty) {
                     error_exit_with_src(

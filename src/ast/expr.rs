@@ -670,7 +670,14 @@ impl Pattern {
                 let ty = if ty.is_none() {
                     type_tyvar_star(&typechcker.new_tyvar())
                 } else {
-                    ty.as_ref().unwrap().clone()
+                    let ty = ty.as_ref().unwrap();
+                    if !ty.free_vars().is_empty() {
+                        error_exit_with_src(
+                            "Currently, cannot use type variable in type annotation.",
+                            ty.get_source(),
+                        )
+                    }
+                    ty.clone()
                 };
                 let mut var_to_ty = HashMap::default();
                 var_to_ty.insert(var_name, ty.clone());
