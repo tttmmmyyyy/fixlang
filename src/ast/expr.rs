@@ -731,12 +731,15 @@ impl Pattern {
                 var_to_ty.extend(var_ty);
                 let ok = typechcker.unify(&pat_ty, &field_ty);
                 if !ok {
-                    error_exit(&format!(
-                        "inappropriate pattern `{}` for field `{}` of union `{}`",
-                        pat.pattern.to_string(),
-                        field_name,
-                        tc.to_string(),
-                    ));
+                    error_exit_with_src(
+                        &format!(
+                            "Inappropriate pattern `{}` for a value of field `{}` of union `{}`.",
+                            pat.pattern.to_string(),
+                            field_name,
+                            tc.to_string(),
+                        ),
+                        &pat.info.source,
+                    );
                 }
                 (ty, var_to_ty)
             }
