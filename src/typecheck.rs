@@ -688,7 +688,10 @@ impl TypeCheckContext {
                 // Get list of field names.
                 let ti = self.type_env.tycons.get(tc);
                 if ti.is_none() {
-                    error_exit(&format!("Unknown type constructor `{}`.", tc.to_string()));
+                    error_exit_with_src(
+                        &format!("Unknown type name `{}`.", tc.to_string()),
+                        &ei.source,
+                    );
                 }
                 let ti = ti.unwrap();
                 let field_names = ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>();

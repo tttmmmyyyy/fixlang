@@ -184,10 +184,10 @@ impl<'a> NameResolutionContext {
         if candidates.len() == 0 {
             let msg = match type_or_trait {
                 NameResolutionType::Type => {
-                    format!("Unknown type name: {}", ns.to_string())
+                    format!("Unknown type name `{}`.", ns.to_string())
                 }
                 NameResolutionType::Trait => {
-                    format!("Unknown trait name: {}", ns.to_string())
+                    format!("Unknown trait name `{}`.", ns.to_string())
                 }
             };
             Err(msg)
