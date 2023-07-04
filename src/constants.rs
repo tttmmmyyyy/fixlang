@@ -26,3 +26,5 @@ pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "%";
 pub const GETTER_SYMBOL: &str = "@";
 pub const SETTER_SYMBOL: &str = "=";
+
+pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;

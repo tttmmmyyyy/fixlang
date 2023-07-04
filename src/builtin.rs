@@ -3110,7 +3110,6 @@ pub fn union_mod_function(
     (expr, scm)
 }
 
-const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 pub fn loop_result_defn() -> TypeDefn {
     TypeDefn {
         name: FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME),
