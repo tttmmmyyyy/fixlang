@@ -1012,21 +1012,27 @@ impl Program {
             match &type_defn.value {
                 TypeDeclValue::Struct(str) => match Field::check_duplication(&str.fields) {
                     Some(field_name) => {
-                        error_exit(&format!(
-                            "Duplicate field `{}` for struct `{}`",
-                            field_name,
-                            type_name.to_string()
-                        ));
+                        error_exit_with_src(
+                            &format!(
+                                "Duplicate field `{}` in the definition of struct `{}`.",
+                                field_name,
+                                type_name.to_string()
+                            ),
+                            &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                        );
                     }
                     _ => {}
                 },
                 TypeDeclValue::Union(union) => match Field::check_duplication(&union.fields) {
                     Some(field_name) => {
-                        error_exit(&format!(
-                            "Duplicate field `{}` for union `{}`",
-                            field_name,
-                            type_name.to_string()
-                        ));
+                        error_exit_with_src(
+                            &format!(
+                                "Duplicate field `{}` in the definition of union `{}`",
+                                field_name,
+                                type_name.to_string()
+                            ),
+                            &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                        );
                     }
                     _ => {}
                 },
