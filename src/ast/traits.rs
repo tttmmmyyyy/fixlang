@@ -186,7 +186,7 @@ impl QualPredicate {
             };
             let trait_id = &p.trait_id;
             if !trait_kind_map.contains_key(trait_id) {
-                error_exit(&format!("unknown kind: {}", trait_id.to_string()));
+                panic!("Unknown trait: {}", trait_id.to_string());
             }
             let kind = trait_kind_map[trait_id].clone();
             new_kind_bounds.insert(tyvar, kind);

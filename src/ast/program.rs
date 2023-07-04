@@ -742,6 +742,9 @@ impl Program {
     // Instantiate symbol.
     fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol, tc: &TypeCheckContext) {
         assert!(sym.expr.is_none());
+        if !sym.ty.free_vars().is_empty() {
+            error_exit_with_src(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", sym.template_name.to_string(), sym.ty.to_string_normalize()), &sym.expr.as_ref().unwrap().source);
+        }
         let global_sym = self.global_values.get(&sym.template_name).unwrap();
         let typed_expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
@@ -905,9 +908,6 @@ impl Program {
 
     // Require instantiate generic symbol such that it has a specified type.
     pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
-        if !ty.free_vars().is_empty() {
-            error_exit(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", name.to_string(), ty.to_string_normalize()));
-        }
         let inst_name = self.determine_instantiated_symbol_name(name, ty);
         if !self.instantiated_global_symbols.contains_key(&inst_name)
             && !self.deferred_instantiation.contains_key(&inst_name)
@@ -928,7 +928,6 @@ impl Program {
     // Determine the name of instantiated generic symbol so that it has a specified type.
     // tc: a typechecker (substituion) under which ty should be interpreted.
     fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
-        assert!(ty.free_vars().is_empty());
         let hash = ty.hash();
         let mut name = name.clone();
         name.name += INSTANCIATED_NAME_SEPARATOR;
