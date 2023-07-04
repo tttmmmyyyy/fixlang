@@ -532,6 +532,7 @@ fn parse_module_defn(pair: Pair<Rule>, _src: &SourceFile) -> String {
 
 fn parse_type_defn(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) -> TypeDefn {
     assert_eq!(pair.as_rule(), Rule::type_defn);
+    let span = Span::from_pair(src, &pair);
     let mut pairs = pair.into_inner();
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_name);
     let name = pairs.next().unwrap().as_str();
@@ -551,6 +552,7 @@ fn parse_type_defn(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) ->
         name: FullName::new(namespace, name),
         value: type_value,
         tyvars,
+        source: Some(span),
     }
 }
 

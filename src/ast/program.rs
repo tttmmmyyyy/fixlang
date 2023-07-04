@@ -332,9 +332,13 @@ impl Program {
         for type_decl in &self.type_defns {
             let tycon = type_decl.tycon();
             if tycons.contains_key(&tycon) {
-                error_exit_with_src(
-                    &format!("Type `{}` is already defined.", tycon.to_string()),
-                    &None,
+                let tc = tycons.get(&tycon).unwrap();
+                error_exit_with_srcs(
+                    &format!("Duplicate definition of type `{}`.", tycon.to_string()),
+                    &[
+                        &type_decl.source.as_ref().map(|s| s.to_single_character()),
+                        &tc.source.as_ref().map(|s| s.to_single_character()),
+                    ],
                 );
             }
             tycons.insert(tycon, type_decl.tycon_info());

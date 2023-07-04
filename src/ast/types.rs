@@ -207,6 +207,7 @@ pub struct TyConInfo {
     pub is_unbox: bool,
     pub tyvars: Vec<Name>,
     pub fields: Vec<Field>, // For array, element type.
+    pub source: Option<Span>,
 }
 
 impl TyConInfo {

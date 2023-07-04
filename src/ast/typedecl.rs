@@ -6,6 +6,7 @@ pub struct TypeDefn {
     pub name: FullName,
     pub value: TypeDeclValue,
     pub tyvars: Vec<Name>,
+    pub source: Option<Span>,
 }
 
 impl TypeDefn {
@@ -33,6 +34,7 @@ impl TypeDefn {
             is_unbox,
             tyvars: self.tyvars.clone(),
             fields,
+            source: self.source.clone(),
         }
     }
 

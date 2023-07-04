@@ -13,6 +13,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     ret.insert(
@@ -23,6 +24,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     ret.insert(
@@ -33,6 +35,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     ret.insert(
@@ -43,6 +46,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     ret.insert(
@@ -53,6 +57,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     ret.insert(
@@ -63,6 +68,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     ret.insert(
@@ -73,6 +79,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     ret.insert(
@@ -83,6 +90,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     ret.insert(
@@ -93,9 +101,11 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
     // IO is defined in the source code of Std.
+
     ret.insert(
         make_array_tycon(),
         TyConInfo {
@@ -107,6 +117,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                 name: "array_elem".to_string(), // Unused
                 ty: type_tyvar_star("a"),
             }],
+            source: None,
         },
     );
     // String is defined in the source code of Std.
@@ -121,10 +132,11 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                 is_unbox: true,
                 tyvars: (0..arity).map(|i| format!("a{}", i)).collect(),
                 fields: vec![],
+                source: None,
             },
         );
     }
-    // Opaque object
+    // Dynamic object
     ret.insert(
         TyCon::new(make_dynamic_object_name()),
         TyConInfo {
@@ -133,6 +145,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: false,
             tyvars: vec![],
             fields: vec![],
+            source: None,
         },
     );
 
@@ -331,6 +344,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
                 .collect(),
             is_unbox: TUPLE_UNBOX,
         }),
+        source: None,
     }
 }
 
@@ -3114,6 +3128,7 @@ pub fn loop_result_defn() -> TypeDefn {
             ],
             is_unbox: true,
         }),
+        source: None,
     }
 }
 
