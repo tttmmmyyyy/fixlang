@@ -304,13 +304,14 @@ fn parse_global_defns_in_namespace(
 
 fn parse_trait_defn(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) -> TraitInfo {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
+    let span = Span::from_pair(src, &pair);
     let mut pairs = pair.into_inner();
     let kinds = if pairs.peek().unwrap().as_rule() == Rule::predicates {
         let pair = pairs.next().unwrap();
         let (preds, kinds) = parse_predicates(pair, src);
         if !preds.is_empty() {
             error_exit_with_src(
-                "The current Fix does not support super-trait; only kinds of type parameters can be specified as a precondition for trait definition.",
+                "The current Fix does not support super-trait; only kinds of the type parameter can be specified as preconditions for trait definition.",
                 &preds.first().unwrap().info.source
             );
         }
@@ -329,6 +330,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) -
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
         kind_predicates: kinds,
+        source: Some(span),
     }
 }
 
@@ -451,10 +453,15 @@ fn parse_predicates(pair: Pair<Rule>, src: &SourceFile) -> (Vec<Predicate>, Vec<
 
 fn parse_predicate_kind(pair: Pair<Rule>, src: &SourceFile) -> KindPredicate {
     assert_eq!(pair.as_rule(), Rule::predicate_kind);
+    let span = Span::from_pair(src, &pair);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let kind = parse_kind(pairs.next().unwrap(), src);
-    KindPredicate { name, kind }
+    KindPredicate {
+        name,
+        kind,
+        source: Some(span),
+    }
 }
 
 fn parse_predicate(pair: Pair<Rule>, src: &SourceFile) -> Predicate {

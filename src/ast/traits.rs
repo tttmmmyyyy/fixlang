@@ -41,6 +41,8 @@ pub struct TraitInfo {
     pub methods: HashMap<Name, QualType>,
     // Predicates at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_predicates: Vec<KindPredicate>,
+    // Source location of trait definition.
+    pub source: Option<Span>,
 }
 
 impl TraitInfo {
@@ -57,10 +59,6 @@ impl TraitInfo {
     pub fn method_scheme(&self, name: &Name) -> Rc<Scheme> {
         let mut ty = self.methods.get(name).unwrap().clone();
         let vars = ty.free_vars();
-        if !vars.contains_key(&self.type_var.name) {
-            error_exit("Type of trait method must contain bounded type.");
-            // TODO: check this in more early stage.
-        }
         let mut preds = vec![Predicate::make(
             self.id.clone(),
             type_var_from_tyvar(self.type_var.clone()),
@@ -79,7 +77,14 @@ impl TraitInfo {
     // Validate kind_predicates and set it to self.type_var.
     pub fn set_trait_kind(&mut self) {
         if self.kind_predicates.len() >= 2 {
-            error_exit("In trait declaration, only one constraint (specification of kind of the type variable trait is implemented to) is allowed.");
+            let span = Span::unite_opt(
+                &self.kind_predicates[0].source,
+                &self.kind_predicates[1].source,
+            );
+            error_exit_with_src(
+                "Currently, exactly one condition is allowed as preconditions of trait definition.",
+                &span,
+            );
         }
         if self.kind_predicates.len() > 0 {
             if self.kind_predicates[0].name != self.type_var.name {
@@ -289,6 +294,7 @@ impl Predicate {
 pub struct KindPredicate {
     pub name: Name,
     pub kind: Rc<Kind>,
+    pub source: Option<Span>,
 }
 
 // Trait environments.
@@ -300,6 +306,7 @@ pub struct TraitEnv {
 
 impl TraitEnv {
     pub fn validate(&mut self, kind_map: &HashMap<TyCon, Rc<Kind>>) {
+        // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
                 *inst.trait_id_mut() = trait_id.clone();

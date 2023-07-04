@@ -3416,6 +3416,7 @@ pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
             },
         )]),
         kind_predicates: vec![],
+        source: None,
     }
 }
 
@@ -3477,6 +3478,7 @@ pub fn binary_operator_trait(
             },
         )]),
         kind_predicates: vec![],
+        source: None,
     }
 }
 
