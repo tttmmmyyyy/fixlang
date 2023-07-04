@@ -69,12 +69,14 @@ impl TypeDefn {
             let free_vars = field.ty.free_vars();
             for (v, _) in &free_vars {
                 if !tyvars.contains(v) {
-                    error_exit(&format!(
-                        "unknown type variable `{}` in the definition of field `{}` of type `{}`",
-                        v,
-                        field.name,
-                        self.name.to_string()
-                    ))
+                    error_exit_with_src(
+                        &format!(
+                            "Unknown type variable `{}` in the definition of type `{}`",
+                            v,
+                            self.name.to_string()
+                        ),
+                        &self.source.as_ref().map(|s| s.to_single_character()),
+                    )
                 }
             }
         }
