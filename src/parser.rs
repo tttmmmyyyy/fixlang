@@ -311,7 +311,7 @@ fn parse_trait_defn(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) -
         let (preds, kinds) = parse_predicates(pair, src);
         if !preds.is_empty() {
             error_exit_with_src(
-                "The current Fix does not support super-trait; only kinds of the type parameter can be specified as preconditions for trait definition.",
+                "The current Fix does not support super-trait; only kinds of the type parameter can be specified as the assumption for trait definition.",
                 &preds.first().unwrap().info.source
             );
         }
@@ -425,6 +425,14 @@ fn parse_type_qualified(pair: Pair<Rule>, src: &SourceFile) -> QualType {
     } else {
         (vec![], vec![])
     };
+    for pred in &preds {
+        match &pred.ty.ty {
+            Type::TyVar(_) => {}
+            _ => {
+                error_exit_with_src("Currently, trait bound has to be of the form `tv : SomeTrait` for some type variable `tv`.", &pred.info.source);
+            }
+        }
+    }
     let ty = parse_type(pairs.next().unwrap(), src);
     let qt = QualType {
         preds,

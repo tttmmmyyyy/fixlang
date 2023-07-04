@@ -82,7 +82,7 @@ impl TraitInfo {
                 &self.kind_predicates[1].source,
             );
             error_exit_with_src(
-                "Currently, exactly one condition is allowed as preconditions of trait definition.",
+                "Currently, exactly one condition is allowed as the assumption of trait definition.",
                 &span,
             );
         }
@@ -90,7 +90,7 @@ impl TraitInfo {
             if self.kind_predicates[0].name != self.type_var.name {
                 error_exit_with_src(
                     &format!(
-                        "The type variable used in the precondition of trait `{}` has to be `{}`.",
+                        "The type variable used in the assumption of trait `{}` has to be `{}`.",
                         self.id.to_string(),
                         self.type_var.name,
                     ),
@@ -181,7 +181,7 @@ impl QualPredicate {
             let tyvar = match &p.ty.ty {
                 Type::TyVar(tv) => tv.name.clone(),
                 _ => {
-                    error_exit("currently, trait bound in the context has to be a form `type-variable : trait`.");
+                    panic!("Trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.")
                 }
             };
             let trait_id = &p.trait_id;
