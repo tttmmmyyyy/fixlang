@@ -88,10 +88,14 @@ impl TraitInfo {
         }
         if self.kind_predicates.len() > 0 {
             if self.kind_predicates[0].name != self.type_var.name {
-                error_exit(&format!(
-                    "The type variable {} is not used in trait declaration.",
-                    self.kind_predicates[0].name
-                ));
+                error_exit_with_src(
+                    &format!(
+                        "The type variable used in the precondition of trait `{}` has to be `{}`.",
+                        self.id.to_string(),
+                        self.type_var.name,
+                    ),
+                    &self.kind_predicates[0].source,
+                );
             }
             self.type_var = self.type_var.set_kind(self.kind_predicates[0].kind.clone());
         }
