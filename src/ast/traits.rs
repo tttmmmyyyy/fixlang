@@ -437,10 +437,11 @@ impl TraitEnv {
     pub fn add_trait(&mut self, info: TraitInfo) {
         // Check duplicate definition.
         if self.traits.contains_key(&info.id) {
-            error_exit(&format!(
-                "duplicate definition for trait {}.",
-                info.id.to_string()
-            ));
+            let info1 = self.traits.get(&info.id).unwrap();
+            error_exit_with_srcs(
+                &format!("Duplicate definition for trait {}.", info.id.to_string()),
+                &[&info1.source, &info.source],
+            );
         }
         self.traits.insert(info.id.clone(), info);
     }
