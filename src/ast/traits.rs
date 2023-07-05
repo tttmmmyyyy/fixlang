@@ -183,7 +183,7 @@ impl QualPredicate {
             let tyvar = match &p.ty.ty {
                 Type::TyVar(tv) => tv.name.clone(),
                 _ => {
-                    panic!("Trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.")
+                    panic!("Currently, trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.")
                 }
             };
             let trait_id = &p.trait_id;
@@ -324,10 +324,14 @@ impl TraitEnv {
                 }
 
                 // Check context is head-normal-form.
+                // NOTE: we are currently require more string condition: `tv : SomeTrait`.
+                // This is because we don't have "kind inference", so predicate of form `m SomeType` cannot be handled.
                 for ctx in &inst.qual_pred.context {
-                    if !ctx.ty.is_hnf() {
-                        error_exit("trait implementation context must be a head-normal-form.");
-                        // TODO: better message?
+                    match ctx.ty.ty {
+                        Type::TyVar(_) => {}
+                        _ => {
+                            error_exit_with_src(&format!("Invalid trait bound `{}`. In current Fix, trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.", ctx.to_string_normalize()), &ctx.info.source);
+                        }
                     }
                 }
 
