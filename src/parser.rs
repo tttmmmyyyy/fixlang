@@ -344,6 +344,7 @@ fn parse_trait_member_defn(pair: Pair<Rule>, src: &SourceFile) -> (Name, QualTyp
 
 fn parse_trait_impl(pair: Pair<Rule>, src: &SourceFile, module_name: &Name) -> TraitInstance {
     assert_eq!(pair.as_rule(), Rule::trait_impl);
+    let span = Span::from_pair(src, &pair);
     let mut pairs = pair.into_inner();
     let qual_pred = parse_predicate_qualified(pairs.next().unwrap(), src);
     let methods: HashMap<Name, Rc<ExprNode>> = pairs
@@ -353,6 +354,7 @@ fn parse_trait_impl(pair: Pair<Rule>, src: &SourceFile, module_name: &Name) -> T
         qual_pred,
         methods,
         define_module: module_name.clone(),
+        source: Some(span),
     }
 }
 

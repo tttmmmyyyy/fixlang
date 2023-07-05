@@ -111,6 +111,8 @@ pub struct TraitInstance {
     pub methods: HashMap<Name, Rc<ExprNode>>,
     // Module where this instance is defined.
     pub define_module: Name,
+    // Source location where this module is defined.
+    pub source: Option<Span>,
 }
 
 impl TraitInstance {
@@ -339,12 +341,13 @@ impl TraitEnv {
                 for trait_method in trait_methods {
                     if !impl_methods.contains(trait_method) {
                         let pred = inst.qual_pred.predicate.to_string_normalize();
-                        error_exit(&format!(
-                            "An implementation of a method `{}` of trait `{}` is given for `{}`.",
-                            trait_method,
-                            trait_id.to_string(),
-                            pred
-                        ))
+                        error_exit_with_src(
+                            &format!(
+                                "Lacking implementation of method `{}` for `{}`",
+                                trait_method, pred,
+                            ),
+                            &inst.source,
+                        )
                     }
                 }
                 for impl_method in impl_methods {
