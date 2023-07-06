@@ -177,8 +177,22 @@ impl QualPredicate {
         preds: &Vec<Predicate>,
         kind_preds: &Vec<KindPredicate>,
         trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
-    ) {
-        let mut new_kind_bounds: HashMap<Name, Rc<Kind>> = Default::default();
+    ) -> Result<(), String> {
+        fn insert(
+            scope: &mut HashMap<Name, Rc<Kind>>,
+            tyvar: String,
+            kind: Rc<Kind>,
+        ) -> Result<(), String> {
+            if scope.contains_key(&tyvar) {
+                if scope[&tyvar] != kind {
+                    return Err("Kind mismatch on type variable.".to_string());
+                }
+            } else {
+                scope.insert(tyvar, kind);
+            }
+            Ok(())
+        }
+
         for p in preds {
             let tyvar = match &p.ty.ty {
                 Type::TyVar(tv) => tv.name.clone(),
@@ -191,22 +205,14 @@ impl QualPredicate {
                 panic!("Unknown trait: {}", trait_id.to_string());
             }
             let kind = trait_kind_map[trait_id].clone();
-            new_kind_bounds.insert(tyvar, kind);
+            insert(scope, tyvar, kind)?;
         }
         for kp in kind_preds {
             let tyvar = kp.name.clone();
             let kind = kp.kind.clone();
-            new_kind_bounds.insert(tyvar, kind);
+            insert(scope, tyvar, kind)?;
         }
-        for (tyvar, kind) in new_kind_bounds {
-            if scope.contains_key(&tyvar) {
-                if scope[&tyvar] != kind {
-                    error_exit(&format!("kind mismatch on {}", tyvar));
-                }
-            } else {
-                scope.insert(tyvar, kind);
-            }
-        }
+        Ok(())
     }
 }
 

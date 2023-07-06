@@ -913,7 +913,14 @@ impl Scheme {
     pub fn set_kinds(&self, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) -> Rc<Scheme> {
         let mut ret = self.clone();
         let mut scope: HashMap<Name, Rc<Kind>> = Default::default();
-        QualPredicate::extend_kind_scope(&mut scope, &ret.preds, &vec![], trait_kind_map);
+        let res = QualPredicate::extend_kind_scope(&mut scope, &ret.preds, &vec![], trait_kind_map);
+        if let Err(msg) = res {
+            let mut span = ret.preds[0].info.source.clone();
+            for i in 1..ret.preds.len() {
+                span = Span::unite_opt(&span, &ret.preds[i].info.source);
+            }
+            error_exit_with_src(&msg, &span);
+        }
         for p in &mut ret.preds {
             p.set_kinds(&scope);
         }
