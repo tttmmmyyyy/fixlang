@@ -321,7 +321,7 @@ impl TraitEnv {
                 let implemented_ty = &inst.qual_pred.predicate.ty;
                 if implemented_ty.is_hnf() {
                     error_exit_with_src(
-                        &format!("Implementing trait for type `{}` is not allowed (by type inference algorithm used in Fix). The head (in this case, `{}`) of a type for which a trait is implemented should be a type constructor and cannot be a type variable.", implemented_ty.to_string(), implemented_ty.get_head_string()),&inst.source.as_ref().map(|s|s.to_single_character())
+                        &format!("Implementing trait for type `{}` is not allowed (by type inference algorithm used in Fix). The head (in this case, `{}`) of a type for which trait is implemented should be a type constructor and cannot be a type variable.", implemented_ty.to_string(), implemented_ty.get_head_string()),&implemented_ty.get_source()
                     );
                 }
 
