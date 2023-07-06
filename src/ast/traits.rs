@@ -356,9 +356,19 @@ impl TraitEnv {
                 }
                 for impl_method in impl_methods {
                     if !trait_methods.contains(impl_method) {
-                        let pred = inst.qual_pred.predicate.to_string_normalize();
-                        error_exit(
-                            &format!("Unknown method `{}` of trait `{}` is given in the implementation for `{}`.", impl_method, trait_id.to_string(), pred),
+                        error_exit_with_src(
+                            &format!(
+                                "`{}` is not a method of trait `{}`.",
+                                impl_method,
+                                trait_id.to_string(),
+                            ),
+                            &inst
+                                .methods
+                                .get(impl_method)
+                                .unwrap()
+                                .source
+                                .as_ref()
+                                .map(|s| s.to_single_character()),
                         )
                     }
                 }
