@@ -318,9 +318,11 @@ impl TraitEnv {
                 *inst.trait_id_mut() = trait_id.clone();
 
                 // Check instance is not head-normal-form.
-                if inst.qual_pred.predicate.ty.is_hnf() {
-                    error_exit("trait implementation cannot be a head-normal-form.");
-                    // TODO: better message?
+                let implemented_ty = &inst.qual_pred.predicate.ty;
+                if implemented_ty.is_hnf() {
+                    error_exit_with_src(
+                        &format!("Implementing trait for type `{}` is not allowed (by type inference algorithm used in Fix). The head (in this case, `{}`) of a type for which a trait is implemented should be a type constructor and cannot be a type variable.", implemented_ty.to_string(), implemented_ty.get_head_string()),&inst.source.as_ref().map(|s|s.to_single_character())
+                    );
                 }
 
                 // Check context is head-normal-form.

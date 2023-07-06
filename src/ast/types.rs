@@ -291,6 +291,15 @@ impl TypeNode {
         }
     }
 
+    pub fn get_head_string(&self) -> String {
+        match &self.ty {
+            Type::TyVar(_) => self.to_string(),
+            Type::TyCon(_) => self.to_string(),
+            Type::TyApp(head, _) => head.get_head_string(),
+            Type::FunTy(_, _) => "->".to_string(),
+        }
+    }
+
     pub fn set_tyvar_kind(&self, kind: Rc<Kind>) -> Rc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
