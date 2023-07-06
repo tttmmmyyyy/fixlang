@@ -388,7 +388,16 @@ impl TraitEnv {
                     )
                     .is_some()
                     {
-                        error_exit("Overlapping instance.");
+                        error_exit_with_srcs(
+                            &format!(
+                                "Two trait implementations for `{}` are overlapping.",
+                                trait_id.to_string()
+                            ),
+                            &[
+                                &inst_i.source.as_ref().map(|s| s.to_single_character()),
+                                &inst_j.source.as_ref().map(|s| s.to_single_character()),
+                            ],
+                        );
                     }
                 }
             }
