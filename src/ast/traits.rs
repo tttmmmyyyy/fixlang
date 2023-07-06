@@ -292,11 +292,15 @@ impl Predicate {
         let expected = &trait_kind_map[&self.trait_id];
         let found = self.ty.kind(kind_map);
         if *expected != found {
-            error_exit(&format!(
-                "kind mismatch. Expect: {}, found: {}.",
-                expected.to_string(),
-                found.to_string()
-            ))
+            error_exit_with_src(
+                &format!(
+                    "Kind mismatch in `{}`. Expect: {}, found: {}.",
+                    self.to_string_normalize(),
+                    expected.to_string(),
+                    found.to_string()
+                ),
+                &self.info.source,
+            )
         }
     }
 }
