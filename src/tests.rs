@@ -1921,7 +1921,7 @@ pub fn test76() {
 #[test]
 #[serial]
 pub fn test77() {
-    // Test Iterator::zip / map / take / fold.
+    // Test Iterator::zip / map / take / fold / subsequences.
     let source = r#"
     module Main; import Debug;
 
@@ -1932,7 +1932,16 @@ pub fn test77() {
         let iter = iter0.zip(iter1);
         let iter = iter.map(|(a,b)| a+b).take(3);
         let res = iter.fold(0, add);
-        let _ = assert_eq("", res, (5+2*0) + (6+2*1) + (7+2*2));
+        let _ = assert_eq("case 1", res, (5+2*0) + (6+2*1) + (7+2*2));
+
+        let subs = (Iterator::empty : Iterator I64).subsequences;
+        let _ = assert_eq("subsequences 1", subs.get_size, 1);
+        let _ = assert_eq("subsequences 2", subs.advance.as_some.@0.get_size, 0);
+
+        let subs = [1,2,3].to_iter.subsequences;
+        let _ = assert_eq("subsequences 3", subs.map(to_array).to_array, [[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]]);
+        // let _ = debug_println $ subs.to_iter.map(to_iter).map(map(to_string) >> join(", ") >> |s| "[" + s + "]").join(", ");
+
         pure()
     );
     "#;

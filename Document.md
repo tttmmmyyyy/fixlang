@@ -284,6 +284,7 @@
       - [`generate : s -> (s -> Option (a, s)) -> Iterator a`](#generate--s---s---option-a-s---iterator-a)
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
+      - [`subsequences : Iterator a -> Iterator (Iterator a)`](#subsequences--iterator-a---iterator-iterator-a)
       - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
       - [`take_while : (a -> Bool) -> Iterator a -> Iterator a`](#take_while--a---bool---iterator-a---iterator-a)
       - [`to_array : Iterator a -> Array a`](#to_array--iterator-a---array-a)
@@ -1877,6 +1878,10 @@ Push an element to an iterator.
 
 #### `reverse : Iterator a -> Iterator a`
 Reverse an iterator.
+
+#### `subsequences : Iterator a -> Iterator (Iterator a)`
+Generated all subsequences of an iterator.
+For example, `[1,2,3].to_iter.subsequences` equals to `[[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]].to_iter.map(to_iter)`.
 
 #### `take : I64 -> Iterator a -> Iterator a`
 Take at most n elements from an iterator.

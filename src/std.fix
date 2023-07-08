@@ -690,6 +690,16 @@ namespace Iterator {
         ))
     );
 
+    // Generated all subsequences of an iterator.
+    // `[1,2,3].to_iter.subsequences` is `[[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]].to_iter.map(to_iter)`.
+    subsequences : Iterator a -> Iterator (Iterator a);
+    subsequences = |iter| (
+        if iter.is_empty { pure $ Iterator::empty };
+        let (head, iter) = iter.advance.as_some;
+        let subs = iter.subsequences;
+        subs.append(subs.map(push_front(head)))
+    );
+
     // Take at most n elements from an iterator.
     take : I64 -> Iterator a -> Iterator a;
     take = |n, iter| (
