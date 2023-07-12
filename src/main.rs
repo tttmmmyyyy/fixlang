@@ -70,7 +70,7 @@ use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
 
-// Max number of arguments if function pointer lambda.
+// Max number of arguments of function pointer lambda.
 pub const FUNPTR_ARGS_MAX: u32 = 100;
 // Max tuple size.
 // This affects on compilation time heavily. We should make tuple generation on-demand in a future.
