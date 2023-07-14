@@ -925,6 +925,10 @@ namespace String {
         String { _data : buf }
     );
 
+    // Get the byte array of a string, containing null-terminator.
+    get_bytes : String -> Array U8;
+    get_bytes = @_data;
+
     // Get the first byte of a string. Returns none if the string is empty.
     get_first_byte : String -> Option U8;
     get_first_byte = |s| (
