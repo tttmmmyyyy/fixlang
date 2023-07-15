@@ -316,7 +316,7 @@
       - [`concat : String -> String -> String`](#concat--string---string---string)
       - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
       - [`from_c_str : Vector U8 -> String`](#from_c_str--vector-u8---string)
-      - [get\_bytes : String -\> Array U8;](#get_bytes--string---array-u8)
+      - [`get_bytes : String -> Array U8`](#get_bytes--string---array-u8)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
       - [`get_size : String -> I64`](#get_size--string---i64)
@@ -1998,7 +1998,7 @@ Concatenate an iterator of strings.
 #### `from_c_str : Vector U8 -> String`
 Create a string from C string (i.e., null-terminated byte array).
 
-#### get_bytes : String -> Array U8;
+#### `get_bytes : String -> Array U8`
 Get the byte array of a string, containing null-terminator.
 
 #### `get_first_byte : String -> Option Byte`
