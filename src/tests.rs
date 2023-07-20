@@ -2395,9 +2395,10 @@ pub fn test94() {
 #[test]
 #[serial]
 pub fn test95() {
-    // Test Std::is_unique
+    // Test Std::is_unique, Debug::assert_unique!
     let source = r#"
-            module Main; import Debug;
+            module Main; 
+            import Debug;
     
             main : IO ();
             main = (
@@ -2418,6 +2419,14 @@ pub fn test95() {
                 let (unique, _) = arr.is_unique;
                 let use = arr.get(0);
                 let _ = assert_eq("fail: arr is unique", unique, false);
+
+                let int_val = 42;
+                let _ = int_val.assert_unique!("fail: int_val is shared (2)");
+                let use = int_val + 1;
+
+                let arr = Array::fill(10, 10);
+                let arr = arr.assert_unique!("fail: arr is shared (2)");
+                let use = arr.get(0);
 
                 pure()
             );

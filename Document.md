@@ -366,6 +366,7 @@
 - [Module `Debug`](#module-debug)
   - [`assert : String -> Bool -> ()`](#assert--string---bool---)
   - [`assert_eq : [a: Eq] String -> a -> a -> ()`](#assert_eq--a-eq-string---a---a---)
+  - [`assert_unique! : String -> a -> a`](#assert_unique--string---a---a)
   - [`debug_print : String -> ()`](#debug_print--string---)
   - [`debug_println : String -> ()`](#debug_println--string---)
 - [Module `Hash`](#module-hash)
@@ -2207,6 +2208,9 @@ This is equivalent to `Monad::bind(|x|x)`.
 ## `assert : String -> Bool -> ()`
 
 ## `assert_eq : [a: Eq] String -> a -> a -> ()`
+
+## `assert_unique! : String -> a -> a`
+Expression `assert_unique!(msg, obj)` assets that `obj`'s reference counter is one, and returns `obj` itself. If `obj` is shared by multiple names, `assert_unique!(msg, obj)` prints the `msg` to the standard output and aborts.
 
 ## `debug_print : String -> ()`
 

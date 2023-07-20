@@ -14,6 +14,13 @@ assert = |msg, b| (
 assert_eq : [a: Eq] String -> a -> a -> ();
 assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
+assert_unique! : String -> a -> a;
+assert_unique! = |msg, x| (
+    let (unique, x) = x.is_unique;
+    let _ = assert(msg, unique);
+    x
+);
+
 debug_print : String -> ();
 debug_print = |s| (
     s.borrow_c_str(|ptr| (
