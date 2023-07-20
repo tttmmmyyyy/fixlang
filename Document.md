@@ -394,6 +394,7 @@
 - [Module `HashSet`](#module-hashset)
   - [`type HashSet k`](#type-hashset-k)
   - [`contains : [k : Eq, k : Hash] k -> HashSet k -> Bool`](#contains--k--eq-k--hash-k---hashset-k---bool)
+  - [`empty : I64 -> HashSet k`](#empty--i64---hashset-k)
   - [`erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`](#erase--k--eq-k--hash-k---hashset-k---hashset-k)
   - [`get_capacity : HashSet k -> I64`](#get_capacity--hashset-k---i64)
   - [`get_size : HashSet k -> I64`](#get_size--hashset-k---i64)
@@ -2280,6 +2281,9 @@ Convert a HashMap into an iterator.
 
 ## `contains : [k : Eq, k : Hash] k -> HashSet k -> Bool`
 Check whether a hashset contains an element.
+
+## `empty : I64 -> HashSet k`
+Create an empty HashSet which is reserved so that it will not rehash until size exceeds the spacified value.
 
 ## `erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`
 Erase an element from a HashSet. 

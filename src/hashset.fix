@@ -5,15 +5,15 @@ import Hash;
 
 type HashSet k = unbox struct { _hashmap : HashMap k () };
 
+// Check whether a hashset contains an element.
+contains : [k : Eq, k : Hash] k -> HashSet k -> Bool;
+contains = |key, set| set.@_hashmap.contains_key(key);
+
 // Create an empty HashSet which is reserved so that it will not rehash until size exceeds the spacified value.
 empty : I64 -> HashSet k;
 empty = |max_size| (
     HashSet { _hashmap : HashMap::empty(max_size) }
 );
-
-// Check whether a hashset contains an element.
-contains : [k : Eq, k : Hash] k -> HashSet k -> Bool;
-contains = |key, set| set.@_hashmap.contains_key(key);
 
 // Erase an element from a HashSet. 
 erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k;
