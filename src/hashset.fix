@@ -19,6 +19,10 @@ empty = |max_size| (
 erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k;
 erase = |key, set| set.mod__hashmap(HashMap::erase(key));
 
+// Construct a HashSet from an iterator of elements.
+from_iter : [k : Eq, k : Hash] Iterator k -> HashSet k;
+from_iter = |iter| iter.fold(HashSet::empty(iter.get_size), |set, elm| set.insert(elm));
+
 // Get capacity of a HashSet. 
 get_capacity : HashSet k -> I64;
 get_capacity = |set| set.@_hashmap.get_capacity;
@@ -30,6 +34,13 @@ get_size = |set| set.@_hashmap.get_size;
 // Insert an element into a HashSet.
 insert : [k : Eq, k : Hash] k -> HashSet k -> HashSet k;
 insert = |key, set| set.mod__hashmap(HashMap::insert(key, ()));
+
+// Calculate intersection of two Hashsets.
+intersect : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k;
+intersect = |lhs, rhs| (
+    let (lhs, rhs) = if lhs.get_size <= rhs.get_size { (lhs, rhs) } else { (rhs, lhs) };
+    lhs.to_iter.filter(|elm| rhs.contains(elm)).from_iter
+);
 
 // Reserve a HashSet so that it will not rehash until size exceeds the spacified value.
 reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k;

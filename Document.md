@@ -397,9 +397,11 @@
   - [`contains : [k : Eq, k : Hash] k -> HashSet k -> Bool`](#contains--k--eq-k--hash-k---hashset-k---bool)
   - [`empty : I64 -> HashSet k`](#empty--i64---hashset-k)
   - [`erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`](#erase--k--eq-k--hash-k---hashset-k---hashset-k)
+  - [`from_iter : [k : Eq, k : Hash] Iterator k -> HashSet k`](#from_iter--k--eq-k--hash-iterator-k---hashset-k)
   - [`get_capacity : HashSet k -> I64`](#get_capacity--hashset-k---i64)
   - [`get_size : HashSet k -> I64`](#get_size--hashset-k---i64)
   - [`insert : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`](#insert--k--eq-k--hash-k---hashset-k---hashset-k)
+  - [`intersect : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`](#intersect--k--eq-k--hash-hashset-k---hashset-k---hashset-k)
   - [`reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`](#reserve--k--hash-k--eq-i64---hashset-k---hashset-k)
   - [`to_iter : HashSet k -> Iterator k`](#to_iter--hashset-k---iterator-k)
 - [Module `Math`](#module-math)
@@ -2292,6 +2294,9 @@ Create an empty HashSet which is reserved so that it will not rehash until size 
 ## `erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`
 Erase an element from a HashSet. 
 
+## `from_iter : [k : Eq, k : Hash] Iterator k -> HashSet k`
+Construct a HashSet from an iterator of elements.
+
 ## `get_capacity : HashSet k -> I64`
 Get capacity of a HashSet.
 
@@ -2300,6 +2305,9 @@ Get size (number of elements) of a HashSet.
 
 ## `insert : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`
 Insert an element into a HashSet.
+
+## `intersect : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`
+Calculate intersection of two Hashsets.
 
 ## `reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`
 Reserve a HashSet so that it will not rehash until size exceeds the spacified value.
@@ -2314,7 +2322,7 @@ Calculate greatest common divisors of two non-negative integers.
 
 ## `gcd : I64 -> I64 -> I64`
 Calculate greatest common divisor of two integers. `gcd(0, 0)` returns `0`.
-NOTE: currently, this function does not support I64::minimum.
+NOTE: currently, this function does not support `I64::minimum`.
 
 # Operators
 

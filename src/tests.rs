@@ -3096,16 +3096,44 @@ pub fn test115_5() {
                             // Do nothing for 6
                             .insert(7).insert(7);
     
-            let _ = assert_eq("case 0", set.contains(0), true);
-            let _ = assert_eq("case 1", set.contains(1), true);
-            let _ = assert_eq("case 2", set.contains(2), true);
-            let _ = assert_eq("case 3", set.contains(3), true);
-            let _ = assert_eq("case 4", set.contains(4), false);
-            let _ = assert_eq("case 5", set.contains(5), false);
-            let _ = assert_eq("case 6", set.contains(6), false);
-            let _ = assert_eq("case 7", set.contains(7), true);
+            let _ = assert_eq("case A-0", set.contains(0), true);
+            let _ = assert_eq("case A-1", set.contains(1), true);
+            let _ = assert_eq("case A-2", set.contains(2), true);
+            let _ = assert_eq("case A-3", set.contains(3), true);
+            let _ = assert_eq("case A-4", set.contains(4), false);
+            let _ = assert_eq("case A-5", set.contains(5), false);
+            let _ = assert_eq("case A-6", set.contains(6), false);
+            let _ = assert_eq("case A-7", set.contains(7), true);
 
-            let _ = assert_eq("case size", set.get_size, 5);
+            let _ = assert_eq("case B", set.get_size, 5);
+            
+            let set = HashSet::from_iter([1, 1, 2, 3].to_iter);
+
+            let _ = assert_eq("case C-0", set.contains(0), false);
+            let _ = assert_eq("case c-1", set.contains(1), true);
+            let _ = assert_eq("case C-2", set.contains(2), true);
+            let _ = assert_eq("case C-3", set.contains(3), true);
+            let _ = assert_eq("case C-4", set.contains(4), false);
+
+            let _ = assert_eq("case D", set.get_size, 3);
+
+            let set: HashSet I64 = HashSet::from_iter([].to_iter);
+            let _ = assert_eq("case E", set.get_size, 0);
+
+            let set0 = HashSet::from_iter([1, 2, 3].to_iter);
+            let set1 = HashSet::from_iter([3, 4, 5].to_iter);
+            let set = set0.intersect(set1);
+            let _ = assert_eq("case F", set.to_iter, [3].to_iter);
+
+            let set0 = HashSet::from_iter([1, 2, 3].to_iter);
+            let set1 = HashSet::from_iter([4, 5, 6].to_iter);
+            let set = set0.intersect(set1);
+            let _ = assert_eq("case G", set.to_iter, [].to_iter);
+
+            let set0 = HashSet::from_iter([1, 2, 3].to_iter);
+            let set1 = HashSet::from_iter([].to_iter);
+            let set = set0.intersect(set1);
+            let _ = assert_eq("case H", set.to_iter, [].to_iter);
 
             pure()
         );
