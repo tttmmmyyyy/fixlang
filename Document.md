@@ -2055,7 +2055,7 @@ Compose two functions. Composition operators `<<` and `>>` is translated to use 
 
 ### `is_unique : a -> (Bool, a)`
 
-This function checks if a value is uniquely refernced by a name, and returns the pair of the result and the given value. If `a` is unboxed, the 0th component of the returned value will be `true`.
+This function checks if a value is uniquely refernced by a name, and returns the result paired with the given value itself. If `a` is unboxed, the 0th component of the returned value is always `true`.
 
 Example: 
 
