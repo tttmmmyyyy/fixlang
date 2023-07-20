@@ -2096,8 +2096,8 @@ module Main;
 
 main : IO ();
 main = (
-    let fact = fix $ |loop, n| if n == 0 then 1 else n * loop (n-1);
-    print $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
+    let fact = fix $ |loop, n| if n == 0 { 1 } else { n * loop (n-1) };
+    println $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
 );
 ```
 
