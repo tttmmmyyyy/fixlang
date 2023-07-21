@@ -3135,6 +3135,11 @@ pub fn test115_5() {
             let set = set0.intersect(set1);
             let _ = assert_eq("case H", set.to_iter, [].to_iter);
 
+            let set0: HashSet I64 = HashSet::from_iter([].to_iter);
+            let set1 = HashSet::from_iter([].to_iter);
+            let set = set0.intersect(set1);
+            let _ = assert_eq("case I", set.to_iter, [].to_iter);
+
             pure()
         );
     "#;
