@@ -3165,7 +3165,7 @@ impl InlineLLVMLoopFunctionBody {
         // Allocate a space to store LoopResult on stack.
         let loop_res = allocate_obj(loop_res_ty, &vec![], None, gc, Some("LoopResult_in_loop"));
 
-        // If loop_state_ty is boxed, allocate a space to store loop state on stack to avoid alloca in loop body.
+        // If loop_state_ty is unboxed, allocate a space to store loop state on stack to avoid alloca in loop body.
         let loop_state_buf = if loop_state_ty.is_unbox(gc.type_env()) {
             let ty = loop_state_ty.get_embedded_type(gc, &vec![]);
             Some(Object::new(
