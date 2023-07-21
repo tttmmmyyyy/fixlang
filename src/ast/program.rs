@@ -647,7 +647,7 @@ impl Program {
             required_scheme: &Rc<Scheme>,
         ) -> Option<TypedExpr> {
             let cache_file_name = cache_file_name(name, define_module, required_scheme);
-            let cache_dir = touch_directory(".fixlang/type_check_cache");
+            let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
             if !cache_file.exists() {
@@ -692,7 +692,7 @@ impl Program {
             last_updated: &UpdateDate,
         ) {
             let cache_file_name = cache_file_name(name, define_module, required_scheme);
-            let cache_dir = touch_directory(".fixlang/type_check_cache");
+            let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
             let mut cache_file = match File::create(&cache_file) {
@@ -840,7 +840,7 @@ impl Program {
                     expr.set_var_var(v)
                 }
             }
-            Expr::Lit(_) => expr.clone(),
+            Expr::LLVM(_) => expr.clone(),
             Expr::App(fun, args) => {
                 let fun = self.instantiate_expr(tr, fun);
                 let args = args

@@ -28,3 +28,5 @@ pub const GETTER_SYMBOL: &str = "@";
 pub const SETTER_SYMBOL: &str = "=";
 
 pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
+
+pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";

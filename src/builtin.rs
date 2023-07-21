@@ -383,7 +383,7 @@ impl InlineLLVMIntLit {
 }
 
 pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::IntLit(InlineLLVMIntLit { val: val as i64 }),
         vec![],
         val.to_string(),
@@ -427,7 +427,7 @@ impl InlineLLVMFloatLit {
 }
 
 pub fn expr_float_lit(val: f64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val }),
         vec![],
         val.to_string(),
@@ -459,7 +459,7 @@ impl InlineLLVMNullPtrLit {
 }
 
 pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::NullPtrLit(InlineLLVMNullPtrLit {}),
         vec![],
         "nullptr_literal".to_string(),
@@ -498,7 +498,7 @@ impl InlineLLVMBoolLit {
 }
 
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Rc<ExprNode> {
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::BoolLit(InlineLLVMBoolLit { val }),
         vec![],
         val.to_string(),
@@ -581,7 +581,7 @@ impl InlineLLVMStringLit {
 }
 
 pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<ExprNode> {
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::StringLit(InlineLLVMStringLit { string }),
         vec![],
         "string_literal".to_string(),
@@ -634,7 +634,7 @@ fn fix_body(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
     let x_str = FullName::local(x);
     let name = format!("fix({}, {})", f_str.to_string(), x_str.to_string());
     let free_vars = vec![FullName::local(CAP_NAME), f_str.clone(), x_str.clone()];
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::FixBody(InlineLLVMFixBody { x_str, f_str }),
         free_vars,
         name,
@@ -643,7 +643,7 @@ fn fix_body(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
     )
 }
 
-// fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_lit(b, f, x): b
+// fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_body(b, f, x): b
 pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("f")],
@@ -739,7 +739,7 @@ pub fn number_to_string_function(ty: Rc<TypeNode>) -> (Rc<ExprNode>, Rc<Scheme>)
     );
     let expr = expr_abs(
         vec![var_local(VAL_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::NumToStrBody(InlineLLVMNumToStrBody {
                 val_name: VAL_NAME.to_string(),
                 buf_size,
@@ -821,7 +821,7 @@ pub fn cast_between_integral_function(
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::CastIntegralBody(InlineLLVMCastIntegralBody {
                 from_name: FROM_NAME.to_string(),
                 is_signed,
@@ -903,7 +903,7 @@ pub fn cast_between_float_function(
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::CastFloatBody(InlineLLVMCastFloatBody {
                 from_name: FROM_NAME.to_string(),
             }),
@@ -995,7 +995,7 @@ pub fn cast_int_to_float_function(
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::CastIntToFloatBody(InlineLLVMCastIntToFloatBody {
                 from_name: FROM_NAME.to_string(),
                 is_signed,
@@ -1078,7 +1078,7 @@ pub fn cast_float_to_int_function(
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::CastFloatToIntBody(InlineLLVMCastFloatToIntBody {
                 from_name: FROM_NAME.to_string(),
             }),
@@ -1155,7 +1155,7 @@ pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Sche
         vec![var_local(N_NAME)],
         expr_abs(
             vec![var_local(VALUE_NAME)],
-            expr_lit(
+            expr_llvm(
                 LLVMGenerator::ShiftBody(InlineLLVMShiftBody {
                     value_name: VALUE_NAME.to_string(),
                     n_name: N_NAME.to_string(),
@@ -1267,7 +1267,7 @@ pub fn bitwise_operation_function(
         vec![var_local(LHS_NAME)],
         expr_abs(
             vec![var_local(RHS_NAME)],
-            expr_lit(
+            expr_llvm(
                 LLVMGenerator::BitwiseOperationBody(InlineLLVMBitwiseOperationBody {
                     lhs_name: LHS_NAME.to_string(),
                     rhs_name: RHS_NAME.to_string(),
@@ -1318,13 +1318,13 @@ impl InlineLLVMFillArrayBody {
 }
 
 // Implementation of Array::fill built-in function.
-fn fill_array_lit(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
+fn fill_array_body(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
     let size_name = FullName::local(size);
     let value_name = FullName::local(value);
     let name = format!("Array::fill({}, {})", size, value);
     let name_cloned = name.clone();
     let free_vars = vec![size_name.clone(), value_name.clone()];
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::FillArrayBody(InlineLLVMFillArrayBody {
             size_name,
             value_name,
@@ -1344,7 +1344,7 @@ pub fn fill_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         vec![var_local("size")],
         expr_abs(
             vec![var_local("value")],
-            fill_array_lit("a", "size", "value"),
+            fill_array_body("a", "size", "value"),
             None,
         ),
         None,
@@ -1409,7 +1409,7 @@ pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
 
     let expr = expr_abs(
         vec![var_local(CAP_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody {
                 cap_name: CAP_NAME.to_string(),
             }),
@@ -1476,7 +1476,7 @@ pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
             vec![var_local(VALUE_NAME)],
             expr_abs(
                 vec![var_local(ARR_NAME)],
-                expr_lit(
+                expr_llvm(
                     LLVMGenerator::UnsafeSetArrayBody(InlineLLVMUnsafeSetArrayBody {
                         arr_name: ARR_NAME.to_string(),
                         idx_name: IDX_NAME.to_string(),
@@ -1555,7 +1555,7 @@ pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         vec![var_local(IDX_NAME)],
         expr_abs(
             vec![var_local(ARR_NAME)],
-            expr_lit(
+            expr_llvm(
                 LLVMGenerator::UnsafeGetArrayBody(InlineLLVMUnsafeGetArrayBody {
                     arr_name: ARR_NAME.to_string(),
                     idx_name: IDX_NAME.to_string(),
@@ -1621,7 +1621,7 @@ pub fn unsafe_set_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
         vec![var_local(LENGTH_NAME)],
         expr_abs(
             vec![var_local(ARR_NAME)],
-            expr_lit(
+            expr_llvm(
                 LLVMGenerator::UnsafeSetSizeArrayBody(InlineLLVMUnsafeSetSizeArrayBody {
                     arr_name: ARR_NAME.to_string(),
                     len_name: LENGTH_NAME.to_string(),
@@ -1676,7 +1676,7 @@ fn read_array_body(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     let idx_str = FullName::local(idx);
     let name = format!("Array::get({}, {})", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::ArrayGetBody(InlineLLVMArrayGetBody {
             arr_name: array_str,
             idx_name: idx_str,
@@ -1833,7 +1833,7 @@ impl InlineLLVMArraySetBody {
 
 // Implementation of Array::set/Array::set! built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
-fn set_array_lit(
+fn set_array_body(
     a: &str,
     array: &str,
     idx: &str,
@@ -1853,7 +1853,7 @@ fn set_array_lit(
     });
     let name = format!("{} {} {} {}", func_name, idx, value, array);
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::ArraySetBody(InlineLLVMArraySetBody {
             array_name: array_str,
             idx_name: idx_str,
@@ -1875,7 +1875,7 @@ pub fn set_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
             vec![var_local("value")],
             expr_abs(
                 vec![var_local("array")],
-                set_array_lit("a", "array", "idx", "value", is_unique_version),
+                set_array_body("a", "array", "idx", "value", is_unique_version),
                 None,
             ),
             None,
@@ -1971,7 +1971,7 @@ pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
             vec![var_local(MODIFIER_NAME)],
             expr_abs(
                 vec![var_local(MODIFIED_ARRAY_NAME)],
-                expr_lit(
+                expr_llvm(
                     LLVMGenerator::ArrayModBody(InlineLLVMArrayModBody {
                         array_name: MODIFIED_ARRAY_NAME.to_string(),
                         idx_name: INDEX_NAME.to_string(),
@@ -2047,7 +2047,7 @@ pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>)
 
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody {
                 arr_name: ARR_NAME.to_string(),
                 is_unique_version,
@@ -2122,7 +2122,7 @@ pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
 
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::ArrayGetPtrBody(InlineLLVMArrayGetPtrBody {
                 arr_name: ARR_NAME.to_string(),
             }),
@@ -2176,7 +2176,7 @@ pub fn get_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
 
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::ArrayGetSizeBody(InlineLLVMArrayGetSizeBody {
                 arr_name: ARR_NAME.to_string(),
             }),
@@ -2231,7 +2231,7 @@ pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
 
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody {
                 arr_name: ARR_NAME.to_string(),
             }),
@@ -2286,7 +2286,7 @@ pub fn struct_get_body(
         field_name,
         var_name
     );
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::StructGetBody(InlineLLVMStructGetBody {
             var_name: var_name_clone,
             field_idx,
@@ -2397,7 +2397,7 @@ pub fn struct_mod_body(
     let f_name = FullName::local(f_name);
     let x_name = FullName::local(x_name);
     let free_vars = vec![f_name.clone(), x_name.clone()];
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::StructModBody(InlineLLVMStructModBody {
             f_name,
             x_name,
@@ -2607,7 +2607,7 @@ pub fn struct_set(
         vec![var_local(VALUE_NAME)],
         expr_abs(
             vec![var_local(STRUCT_NAME)],
-            expr_lit(
+            expr_llvm(
                 LLVMGenerator::StructSetBody(InlineLLVMStructSetBody {
                     value_name: VALUE_NAME.to_string(),
                     struct_name: STRUCT_NAME.to_string(),
@@ -2695,7 +2695,7 @@ pub fn union_new_body(
     let name = format!("{}.new_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
     let field_name_cloned = field_name.clone();
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::MakeUnionBody(InlineLLVMMakeUnionBody {
             field_name: field_name_cloned,
             generated_union_name: name_cloned,
@@ -2765,7 +2765,7 @@ pub fn union_as(
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
         vec![var_local(&union_arg_name)],
-        union_as_lit(
+        union_as_body(
             union_name,
             &union_arg_name,
             field_name,
@@ -2817,7 +2817,7 @@ impl InlineLLVMUnionAsBody {
 }
 
 // `as_{field}` built-in function for a given union.
-pub fn union_as_lit(
+pub fn union_as_body(
     union_name: &FullName,
     union_arg_name: &Name,
     field_name: &Name,
@@ -2827,7 +2827,7 @@ pub fn union_as_lit(
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::UnionAsBody(InlineLLVMUnionAsBody {
             union_arg_name,
             field_idx,
@@ -2863,7 +2863,7 @@ pub fn union_is(
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
         vec![var_local(&union_arg_name)],
-        union_is_lit(union_name, &union_arg_name, field_name, field_idx),
+        union_is_body(union_name, &union_arg_name, field_name, field_idx),
         None,
     );
     let union_ty = union.ty();
@@ -2944,7 +2944,7 @@ impl InlineLLVMUnionIsBody {
 }
 
 // `is_{field}` built-in function for a given union.
-pub fn union_is_lit(
+pub fn union_is_body(
     union_name: &FullName,
     union_arg_name: &Name,
     field_name: &Name,
@@ -2954,7 +2954,7 @@ pub fn union_is_lit(
     let name_cloned = name.clone();
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
-    expr_lit(
+    expr_llvm(
         LLVMGenerator::UnionIsBody(InlineLLVMUnionIsBody {
             union_arg_name,
             field_idx,
@@ -3087,7 +3087,7 @@ pub fn union_mod_function(
         vec![var_local(MODIFIER_NAME)],
         expr_abs(
             vec![var_local(UNION_NAME)],
-            expr_lit(
+            expr_llvm(
                 LLVMGenerator::UnionModBody(InlineLLVMUnionModBody {
                     union_name: UNION_NAME.to_string(),
                     modifier_name: MODIFIER_NAME.to_string(),
@@ -3247,7 +3247,7 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
         vec![var_var(initial_state_name.clone())],
         expr_abs(
             vec![var_var(loop_body_name.clone())],
-            expr_lit(
+            expr_llvm(
                 LLVMGenerator::LoopFunctionBody(InlineLLVMLoopFunctionBody {
                     initial_state_name: INITIAL_STATE_NAME.to_string(),
                     loop_body_name: LOOP_BODY_NAME.to_string(),
@@ -3293,7 +3293,7 @@ pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const UNIT_NAME: &str = "unit";
     let expr = expr_abs(
         vec![var_local(UNIT_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::AbortFunctionBody(InlineLLVMAbortFunctionBody {}),
             vec![],
             "abort".to_string(),
@@ -3385,7 +3385,7 @@ pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        expr_lit(
+        expr_llvm(
             LLVMGenerator::IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody {
                 var_name: VAR_NAME.to_string(),
             }),
@@ -3439,7 +3439,7 @@ pub fn unary_opeartor_instance(
             method_name.to_string(),
             expr_abs(
                 vec![var_local(UNARY_OPERATOR_RHS_NAME)],
-                expr_lit(
+                expr_llvm(
                     generator,
                     vec![FullName::local(UNARY_OPERATOR_RHS_NAME)],
                     method_name.to_string(),
@@ -3505,7 +3505,7 @@ pub fn binary_opeartor_instance(
                 vec![var_local(BINARY_OPERATOR_LHS_NAME)],
                 expr_abs(
                     vec![var_local(BINARY_OPERATOR_RHS_NAME)],
-                    expr_lit(
+                    expr_llvm(
                         generator,
                         vec![
                             FullName::local(BINARY_OPERATOR_LHS_NAME),

@@ -587,7 +587,7 @@ impl TypeCheckContext {
                     ei.set_var_namespace(ns.clone())
                 }
             }
-            Expr::Lit(lit) => {
+            Expr::LLVM(lit) => {
                 if !self.unify(&lit.ty, &ty) {
                     error_exit_with_src(
                         &format!(

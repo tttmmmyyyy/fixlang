@@ -225,7 +225,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
     let expr = replace_closure_call_to_funptr_call(expr, symbols, typeresolver);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
-        Expr::Lit(_) => expr.clone(),
+        Expr::LLVM(_) => expr.clone(),
         Expr::App(fun, args) => {
             let args = args
                 .iter()
@@ -422,7 +422,7 @@ fn replace_free_var(
                 Ok(expr.clone())
             }
         }
-        Expr::Lit(_) => Ok(expr.clone()),
+        Expr::LLVM(_) => Ok(expr.clone()),
         Expr::App(func, args) => {
             let func = replace_free_var(func, from, to, scope)?;
             let args = args

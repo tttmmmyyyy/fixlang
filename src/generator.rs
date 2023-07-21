@@ -957,7 +957,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
         let mut ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone(), rvo),
-            Expr::Lit(lit) => self.eval_lit(lit.clone(), expr.ty.clone().unwrap().clone(), rvo),
+            Expr::LLVM(lit) => self.eval_llvm(lit.clone(), expr.ty.clone().unwrap().clone(), rvo),
             Expr::App(lambda, args) => self.eval_app(lambda.clone(), args.clone(), rvo),
             Expr::Lam(_, _) => self.eval_lam(expr.clone(), rvo),
             Expr::Let(pat, bound, expr) => self.eval_let(pat, bound.clone(), expr.clone(), rvo),
@@ -1003,7 +1003,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate literal
-    fn eval_lit(
+    fn eval_llvm(
         &mut self,
         lit: Rc<InlineLLVM>,
         ty: Rc<TypeNode>,
