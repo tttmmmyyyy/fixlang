@@ -663,7 +663,10 @@ impl Program {
             match cache_file.read_to_end(&mut cache_bytes) {
                 Ok(_) => {}
                 Err(why) => {
-                    eprintln!("Failed to read cache file {}: {}.", cache_file_display, why);
+                    eprintln!(
+                        "warning: Failed to read cache file {}: {}.",
+                        cache_file_display, why
+                    );
                     return None;
                 }
             }
@@ -672,7 +675,7 @@ impl Program {
                     Ok(res) => res,
                     Err(why) => {
                         eprintln!(
-                            "Failed to parse content of cache file {}: {}.",
+                            "warning: Failed to parse content of cache file {}: {}.",
                             cache_file_display, why
                         );
                         return None;
@@ -697,7 +700,10 @@ impl Program {
             let cache_file_display = cache_file.display();
             let mut cache_file = match File::create(&cache_file) {
                 Err(_) => {
-                    eprintln!("Failed to create cache file {}.", cache_file_display);
+                    eprintln!(
+                        "warning: Failed to create cache file {}.",
+                        cache_file_display
+                    );
                     return;
                 }
                 Ok(file) => file,
@@ -706,7 +712,10 @@ impl Program {
             match cache_file.write_all(&serialized) {
                 Ok(_) => {}
                 Err(_) => {
-                    eprintln!("Failed to write cache file {}.", cache_file_display);
+                    eprintln!(
+                        "warning: Failed to write cache file {}.",
+                        cache_file_display
+                    );
                 }
             }
         }
