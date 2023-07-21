@@ -1318,7 +1318,7 @@ pub fn test52() {
     let source = r#"
     module Main; import Debug;
 
-    type SieveState = struct {i: I64, arr: Array Bool};
+    type SieveState = box struct {i: I64, arr: Array Bool};
     
     // Calculate a Bool array whose element is true iff idx is prime.
     is_prime : I64 -> Array Bool;
@@ -1854,20 +1854,32 @@ pub fn test74() {
     let source = r#"
     module Main; import Debug;
 
-    type I64Bool = struct {x: I64, y: Bool};
+    type UnboxStr = unbox struct {x: I64, y: Bool};
+    type BoxStr = box struct {x: I64, y: Bool};
 
     main : IO ();
     main = (
-        let int_bool = I64Bool { y: false, x: 0 };
-        let int_bool = int_bool.=x(3);
-        let u = assert_eq("", int_bool.@x, 3);
-        let int_bool = int_bool.=x!(5);
-        let u = assert_eq("", int_bool.@x, 5);
+        // Setter / getter of unboxed struct.
+        let int_bool = UnboxStr { y: false, x: 0 };
+        let int_bool = int_bool.set_x(3);
+        let u = assert_eq("case 0", int_bool.@x, 3);
+        let int_bool = int_bool.set_x!(5);
+        let u = assert_eq("case 1", int_bool.@x, 5);
+
+        // Setter / getter of pair.
         let pair = (false, 0);
-        let pair = pair.=0(true);
-        let u = assert_eq("", pair.@0, true);
-        let pair = pair.=0!(false);
-        let u = assert_eq("", pair.@0, false);
+        let pair = pair.set_0(true);
+        let u = assert_eq("case 2", pair.@0, true);
+        let pair = pair.set_0!(false);
+        let u = assert_eq("case 3", pair.@0, false);
+
+        // Setter / getter of boxed struct.
+        let int_bool = BoxStr { y: false, x: 0 };
+        let int_bool = int_bool.set_y(true);
+        let u = assert_eq("case 4", int_bool.@y, true);
+        let int_bool = int_bool.set_y!(false);
+        let u = assert_eq("case 5", int_bool.@y, false);
+
         pure()
     );
     "#;
@@ -2365,8 +2377,8 @@ pub fn test93() {
     main : IO ();
     main = (
         let ref = SelfRef { data : Option::none() };
-        // let ref = ref.=data!(Option::some(ref)); // fails
-        let ref = ref.=data(Option::some(ref)); // fails
+        // let ref = ref.set_data!(Option::some(ref)); // fails
+        let ref = ref.set_data(Option::some(ref)); // doesn't make circular reference in fact.
         pure()
     );
 

@@ -24,8 +24,8 @@
   - [Float literals](#float-literals)
   - [Structs](#structs-1)
     - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
-    - [`={field_name} : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct)
-    - [`={field_name}! : {field_type} -> {struct} -> {struct}`](#field_name--field_type---struct---struct-1)
+    - [`set_{field_name} : {field_type} -> {struct} -> {struct}`](#set_field_name--field_type---struct---struct)
+    - [`set_{field_name}! : {field_type} -> {struct} -> {struct}`](#set_field_name--field_type---struct---struct-1)
     - [`mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct)
     - [`mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct-1)
   - [Unions](#unions-1)
@@ -823,7 +823,7 @@ As in the case of unions, there are methods that are automatically defined for s
 
 - `@price : Product -> I64` and `@sold : Product -> Bool`
     - Extracts the value of a field from a `Product` value.
-- `=price : I64 -> Product -> Product` and `=sold : Bool -> Product -> Product`
+- `set_price : I64 -> Product -> Product` and `set_sold : Bool -> Product -> Product`
     - Modify a `Product` value by setting a field.
 - `mod_price : (I64 -> I64) -> Product -> Product` and `mod_sold : (Bool -> Bool) -> Product -> Product`
     - Modify a `Product` value by a function acting on a field.
@@ -994,12 +994,12 @@ NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Fu
 
 Extract the value of a field from a struct value.
 
-### `={field_name} : {field_type} -> {struct} -> {struct}`
+### `set_{field_name} : {field_type} -> {struct} -> {struct}`
 
 Modify a struct value by setting a field.
 This function clones the struct value if it is shared between multiple references.
 
-### `={field_name}! : {field_type} -> {struct} -> {struct}`
+### `set_{field_name}! : {field_type} -> {struct} -> {struct}`
 
 Modify a struct value by setting a field.
 This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
