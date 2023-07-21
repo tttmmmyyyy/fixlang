@@ -2,11 +2,12 @@ use crate::typecheck::Scope;
 
 use super::*;
 
-// function pointer optimization:
-// Convert global closure to function pointer.
+// First-order uncurrying optimizaion:
+// Global closures are uncurried as long as possible, and converted to function pointers (= has no field for captured values).
+// NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
 
-pub fn funptr_optimization(fix_mod: &mut Program) {
-    // First, define function pointer versions of global symbols.
+pub fn uncurry_optimization(fix_mod: &mut Program) {
+    // First, define uncurried version of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
     for (sym_name, sym) in syms {
         let typeresolver = &sym.type_resolver;
@@ -34,7 +35,7 @@ pub fn funptr_optimization(fix_mod: &mut Program) {
                 name.clone(),
                 InstantiatedSymbol {
                     template_name: FullName::local(&format!(
-                        "{} created by funptr_optimization from {}",
+                        "{} created by uncurrying optimization from {}",
                         &name.to_string(),
                         sym.template_name.to_string()
                     )),

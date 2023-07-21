@@ -14,7 +14,6 @@ mod ast;
 mod builtin;
 mod c_config;
 mod constants;
-mod funptr_optimization;
 mod generator;
 mod graph;
 mod llvm_passes;
@@ -27,6 +26,7 @@ mod stdlib;
 #[cfg(test)]
 mod tests;
 mod typecheck;
+mod uncurry_optimization;
 
 use ast::expr::*;
 use ast::import::*;
@@ -39,7 +39,6 @@ use c_config::*;
 use clap::ArgMatches;
 use clap::{App, AppSettings, Arg};
 use constants::*;
-use funptr_optimization::*;
 use generator::*;
 use graph::*;
 use inkwell::builder::Builder;
@@ -69,6 +68,7 @@ use std::rc::Rc;
 use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
+use uncurry_optimization::*;
 
 // Max number of arguments of function pointer lambda.
 pub const FUNPTR_ARGS_MAX: u32 = 100;
@@ -91,8 +91,8 @@ pub struct Configuration {
     // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
     // Requires shared library sanitizer/libfixsanitizer.so.
     sanitize_memory: bool,
-    // Perform function pointer optimization.
-    funptr_optimization: bool,
+    // Perform uncurrying optimization.
+    uncurry_optimization: bool,
     // If true, pre-retain global object (i.e., set refcnt to large value) at its construction
     // and do not retain global object thereafter.
     preretain_global: bool,
@@ -108,7 +108,7 @@ impl Configuration {
         Configuration {
             source_files: vec![],
             sanitize_memory: false,
-            funptr_optimization: true,
+            uncurry_optimization: true,
             preretain_global: true,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
@@ -120,7 +120,7 @@ impl Configuration {
         Configuration {
             source_files: vec![],
             sanitize_memory: true,
-            funptr_optimization: true,
+            uncurry_optimization: true,
             preretain_global: false,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],

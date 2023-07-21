@@ -80,9 +80,9 @@ fn build_module<'c>(
     // Instantiate main function and all called functions.
     let main_expr = fix_mod.instantiate_main_function(&typechecker);
 
-    // Perform function pointer optimization.
-    if config.funptr_optimization {
-        funptr_optimization(&mut fix_mod);
+    // Perform uncurrying optimization.
+    if config.uncurry_optimization {
+        uncurry_optimization(&mut fix_mod);
     }
 
     // Create GenerationContext.
