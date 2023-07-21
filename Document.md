@@ -402,6 +402,7 @@
   - [`get_size : HashSet k -> I64`](#get_size--hashset-k---i64)
   - [`insert : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`](#insert--k--eq-k--hash-k---hashset-k---hashset-k)
   - [`intersect : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`](#intersect--k--eq-k--hash-hashset-k---hashset-k---hashset-k)
+  - [`merge : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`](#merge--k--eq-k--hash-hashset-k---hashset-k---hashset-k)
   - [`reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`](#reserve--k--hash-k--eq-i64---hashset-k---hashset-k)
   - [`to_iter : HashSet k -> Iterator k`](#to_iter--hashset-k---iterator-k)
 - [Module `Math`](#module-math)
@@ -2308,6 +2309,9 @@ Insert an element into a HashSet.
 
 ## `intersect : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`
 Calculate intersection of two Hashsets.
+
+## `merge : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`
+Calculate union of two HashSets.
 
 ## `reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`
 Reserve a HashSet so that it will not rehash until size exceeds the spacified value.

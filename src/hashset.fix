@@ -42,6 +42,13 @@ intersect = |lhs, rhs| (
     lhs.to_iter.filter(|elm| rhs.contains(elm)).from_iter
 );
 
+// Calculate union of two HashSets.
+merge : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k;
+merge = |lhs, rhs| (
+    let (lhs, rhs) = if lhs.get_size <= rhs.get_size { (lhs, rhs) } else { (rhs, lhs) };
+    lhs.to_iter.fold(rhs, |rhs, elm| rhs.insert(elm))
+);
+
 // Reserve a HashSet so that it will not rehash until size exceeds the spacified value.
 reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k;
 reserve = |max_size, set| set.mod__hashmap(HashMap::reserve(max_size));
