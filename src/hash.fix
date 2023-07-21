@@ -9,7 +9,7 @@ impl [a : Hash] Array a : Hash {
         let len = arr.get_size;
         loop((0, 5381_U64), |(i, h)| (
             if i == len { break $ h };
-            let h = h.shift_left(5_U64) + h + arr.get(i).hash;
+            let h = h.shift_left(5_U64) + h + arr.@(i).hash;
             continue $ (i+1, h)
         ))
     );

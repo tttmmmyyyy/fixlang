@@ -24,7 +24,7 @@ impl [a: Eq, b: Eq] Pair a b : Eq {
 search : [a: Eq] a -> Array a -> I64;
 search = |elem, arr| loop(0, |idx|
     if idx == arr.get_size { break $ -1 };
-    if arr.get(idx) == elem { break $ idx };
+    if arr.@(idx) == elem { break $ idx };
     continue $ (idx + 1)
 );
 
@@ -36,7 +36,7 @@ trait [f:*->*] f : MyFunctor {
 
 impl Array : MyFunctor {
     mymap = |f, arr| (
-        Array::from_map(arr.get_size, |idx| f(arr.get(idx)))
+        Array::from_map(arr.get_size, |idx| f(arr.@(idx)))
     );
 }
 

@@ -7,8 +7,9 @@ use super::*;
 #[serial]
 pub fn test0() {
     let source = r#"
-            module Main; import Debug;
-    
+            module Main; 
+            import Debug;
+
             main : IO ();
             main = (
                 let _ = assert_eq("", 5 + 3 * 8 / 5 + 7 % 3, 10);
@@ -22,7 +23,8 @@ pub fn test0() {
 #[serial]
 pub fn test1() {
     let source = r#"
-            module Main; import Debug;
+            module Main; 
+            import Debug;
             
             main : IO ();
             main = (
@@ -37,7 +39,9 @@ pub fn test1() {
 #[serial]
 pub fn test2() {
     let source = r#"
-            module Main; import Debug;
+            module Main; 
+            import Debug;
+
             main : IO ();
             main = (
                 let u = assert_eq("", let x = 5 in 3, 3);
@@ -51,7 +55,9 @@ pub fn test2() {
 #[serial]
 pub fn test3() {
     let source = r#"
-        module Main; import Debug;
+        module Main; 
+        import Debug;
+
         main : IO ();
         main = (
             let u = assert_eq("", let n = -5 in let p = 5 in n, -5);
@@ -65,7 +71,9 @@ pub fn test3() {
 #[serial]
 pub fn test4() {
     let source = r#"
-        module Main; import Debug;
+        module Main; 
+        import Debug;
+
         main : IO ();
         main = (
             let u = assert_eq("", let n = -5 in let p = 5 in p, 5);
@@ -79,7 +87,9 @@ pub fn test4() {
 #[serial]
 pub fn test5() {
     let source = r#"
-        module Main; import Debug;
+        module Main; 
+        import Debug;
+
         main : IO ();
         main = (
             let u = assert_eq("", let x = -5 in let x = 5 in x, 5);
@@ -508,7 +518,7 @@ pub fn test25() {
         main : IO ();
         main = (
             let arr = Array::fill(100, 42);
-            let elem = arr.get(50);
+            let elem = arr.@(50);
             let u = assert_eq("", elem, 42);
             pure()
         );
@@ -526,7 +536,7 @@ pub fn test26() {
         main = (
             let arr = Array::fill(100, 42);
             let arr = arr.set(50, 21);
-            let u = assert_eq("", arr.get(50), 21);
+            let u = assert_eq("", arr.@(50), 21);
             pure()
         );
         "#;
@@ -543,7 +553,7 @@ pub fn test27() {
         main = (
             let arr0 = Array::fill(100, 42);
             let arr1 = arr0.set(50, 21);
-            let u = assert_eq("", arr0.get(50) + arr1.get(50), 63);
+            let u = assert_eq("", arr0.@(50) + arr1.@(50), 63);
             pure()
         );
         "#;
@@ -560,7 +570,7 @@ pub fn test27_5() {
         main = (
             let arr = Array::from_map(100) $ |i| add(i);
             let arr = arr.set(99, |x| x - 100);
-            let u = assert_eq("", arr.get(99) $ arr.get(50) $ 1, 1 + 50 - 100);
+            let u = assert_eq("", arr.@(99) $ arr.@(50) $ 1, 1 + 50 - 100);
             pure()
         );
         "#;
@@ -582,14 +592,14 @@ pub fn test28() {
                 if n == 31 {
                     arr
                 } else {
-                    let x = arr.get(add(n, -1));
-                    let y = arr.get(add(n, -2));
+                    let x = arr.@(add(n, -1));
+                    let y = arr.@(add(n, -2));
                     let arr = arr.set!(n, x+y);
                     f(arr, n+1)
                 }
             );
             let fib = loop(arr, 2);
-            let u = assert_eq("", fib.get(30), 832040);
+            let u = assert_eq("", fib.@(30), 832040);
             pure()
         );
         "#;
@@ -989,8 +999,8 @@ pub fn test44() {
 
         add_head_and_next : [a: Main::ToI64] Array a -> I64; 
         add_head_and_next = |arr| (
-            let head = arr.get(0).toI64;
-            let next = arr.get(1).toI64;
+            let head = arr.@(0).toI64;
+            let next = arr.@(1).toI64;
             add(head, next)
         );
 
@@ -1024,7 +1034,7 @@ pub fn test44_5() {
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
                 if idx == arr.get_size { sum };
-                loop(idx + 1, sum + arr.get(idx))
+                loop(idx + 1, sum + arr.@(idx))
             );
             loop(0, 0)
         );
@@ -1053,7 +1063,7 @@ pub fn test45() {
 
         impl Array : MyFunctor {
             map = |f, arr| (
-                Array::from_map(arr.get_size, |idx| f $ arr.get(idx))
+                Array::from_map(arr.get_size, |idx| f $ arr.@(idx))
             );
         }
 
@@ -1061,7 +1071,7 @@ pub fn test45() {
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
                 if idx == arr.get_size { sum };
-                loop(idx + 1, sum + arr.get(idx))
+                loop(idx + 1, sum + arr.@(idx))
             );
             loop(0, 0)
         );
@@ -1182,12 +1192,12 @@ pub fn test47_6() {
                 |lhs| lhs.force_unique!.append([4,5,6])
             );
             let arr = uni.as_some;
-            let _ = assert_eq("", arr.get(0), 1);
-            let _ = assert_eq("", arr.get(1), 2);
-            let _ = assert_eq("", arr.get(2), 3);
-            let _ = assert_eq("", arr.get(3), 4);
-            let _ = assert_eq("", arr.get(4), 5);
-            let _ = assert_eq("", arr.get(5), 6);
+            let _ = assert_eq("", arr.@(0), 1);
+            let _ = assert_eq("", arr.@(1), 2);
+            let _ = assert_eq("", arr.@(2), 3);
+            let _ = assert_eq("", arr.@(3), 4);
+            let _ = assert_eq("", arr.@(4), 5);
+            let _ = assert_eq("", arr.@(5), 6);
             let _ = assert_eq("", arr.get_size, 6);
             pure()
         );
@@ -1208,8 +1218,8 @@ pub fn test48() {
         main = (
             let int_vec = Vec {data: Array::fill(2, 5)};
             let int_vec = int_vec.mod_data!(|arr| arr.set(0, 3));
-            let head = int_vec.@data.get(0);
-            let next = int_vec.@data.get(1);
+            let head = int_vec.@data.@(0);
+            let next = int_vec.@data.@(1);
             let ans = add(head, next);
             let u = assert_eq("", ans, 8);
             pure()
@@ -1289,7 +1299,7 @@ pub fn test51() {
     search = |elem, arr| loop(0) $ |idx| (
         if idx == arr.get_size {
             break $ -1
-        } else if arr.get(idx) == elem { 
+        } else if arr.@(idx) == elem { 
             break $ idx
         } else { 
             continue $ idx + 1 
@@ -1330,7 +1340,7 @@ pub fn test52() {
             let i = state.@i;
             let arr = state.@arr;
             if i*i > n { break $ arr };
-            let next_arr = if arr.get(i) {
+            let next_arr = if arr.@(i) {
                 loop(SieveState {i: i+i, arr: arr}, |state|
                     let q = state.@i;
                     let arr = state.@arr;
@@ -1354,7 +1364,7 @@ pub fn test52() {
             let i = state.@0;
             let sum = state.@1;
             if arr.get_size == i { break $ sum };
-            let sum = sum + (if arr.get(i) == elem {1} else {0});
+            let sum = sum + (if arr.@(i) == elem {1} else {0});
             continue $ (i+1, sum)
         )
     );
@@ -1382,7 +1392,7 @@ pub fn test53() {
         let pair = pair.mod_0!(|x| x + 3);
         let pair = pair.mod_1!(|arr| arr.set!(0, 5));
         let x = pair.@0;
-        let y = pair.@1.get(0);
+        let y = pair.@1.@(0);
         let ans = x + y;
         let u = assert_eq("", ans, 13 + 3 + 5);
         pure()
@@ -1403,7 +1413,7 @@ pub fn test54() {
         let pair0 = (13, Array::fill(1, 0));
         let pair1 = pair0.mod_1(|arr| arr.set(0, 5));
         let pair2 = pair0.mod_0!(|x| x + 3);
-        let x = pair1.@1.get(0);
+        let x = pair1.@1.@(0);
         let y = pair2.@0;
         let ans = x + y;
         let u = assert_eq("", ans, 13 + 3 + 5);
@@ -1923,7 +1933,7 @@ pub fn test76() {
     main = (
         let array = Array::from_map(3, |_i| Array::from_map(3, |_j| 0));
         let array = array.mod!(1, Array::set!(1, 9));
-        let _ = assert_eq("", array.get(1).get(1), 9);
+        let _ = assert_eq("", array.@(1).@(1), 9);
         pure()
     );
     "#;
@@ -2055,8 +2065,8 @@ pub fn test82() {
         let v = v1.append(v2);
         let _ = assert_eq("wrong reserved length (0+2)", v.get_capacity, 2);
         let _ = assert_eq("wrong length (0+2)", v.get_size, 2);
-        let _ = assert_eq("wrong element (0+2)", v.get(0), 3);
-        let _ = assert_eq("wrong element (0+2)", v.get(1), 4);
+        let _ = assert_eq("wrong element (0+2)", v.@(0), 3);
+        let _ = assert_eq("wrong element (0+2)", v.@(1), 4);
 
         // Test 2+0
         let v1 = [1,2];
@@ -2064,8 +2074,8 @@ pub fn test82() {
         let v = v1.append(v2);
         let _ = assert_eq("wrong reserved length (2+0)", v.get_capacity, 2);
         let _ = assert_eq("wrong length (2+0)", v.get_size, 2);
-        let _ = assert_eq("wrong element (2+0)", v.get(0), 1);
-        let _ = assert_eq("wrong element (2+0)", v.get(1), 2);
+        let _ = assert_eq("wrong element (2+0)", v.@(0), 1);
+        let _ = assert_eq("wrong element (2+0)", v.@(1), 2);
 
         // Test 0+0
         let v1: Array (I64 -> Bool) = [];
@@ -2079,13 +2089,13 @@ pub fn test82() {
         let v2 = [add(3), add(4)];
         let v = v1.append(v2);
         let x = 0;
-        let x = v.get(0) $ x;
+        let x = v.@(0) $ x;
         let _ = assert_eq("wrong value (boxed) 0+1", x, 0+1);
-        let x = v.get(1) $ x;
+        let x = v.@(1) $ x;
         let _ = assert_eq("wrong value (boxed) 0+1+2", x, 0+1+2);
-        let x = v.get(2) $ x;
+        let x = v.@(2) $ x;
         let _ = assert_eq("wrong value (boxed) 0+1+2+3", x, 0+1+2+3);
-        let x = v.get(3) $ x;
+        let x = v.@(3) $ x;
         let _ = assert_eq("wrong value (boxed) 0+1+2+3+4", x, 0+1+2+3+4);
 
         // Test appending shared array.
@@ -2094,8 +2104,8 @@ pub fn test82() {
         let v = v1.append(v2);
         let w = v2.append(v1);
         let x = 0;
-        let x = v.get(0) $ x; // += 1
-        let x = w.get(3) $ x; // += 2
+        let x = v.@(0) $ x; // += 1
+        let x = w.@(3) $ x; // += 2
         let _ = assert_eq("", x, 3);
 
         pure()
@@ -2122,7 +2132,7 @@ pub fn test83() {
         ));
         let _ = loop(0, |idx|(
             if idx == 100 { break $ () };
-            let _ = assert_eq("wrong element", idx, v.get(idx));
+            let _ = assert_eq("wrong element", idx, v.@(idx));
             continue $ idx + 1
         ));
         let v = loop((0, v), |(idx, v)|(
@@ -2142,7 +2152,7 @@ pub fn test83() {
         ));
         let x = loop((0, 0), |(idx, x)|(
             if idx == 100 { break $ x };
-            let x = v.get(idx) $ x;
+            let x = v.@(idx) $ x;
             continue $ (idx + 1, x)
         ));
         let _ = assert_eq("wrong value (boxed)", x, 99 * 100 / 2);
@@ -2423,13 +2433,13 @@ pub fn test95() {
                 // For boxed value, it returns true if the value isn't used later.
                 let arr = Array::fill(10, 10);
                 let (unique, arr) = arr.is_unique;
-                let use = arr.get(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+                let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
                 let _ = assert_eq("fail: arr is shared", unique, true);
 
                 // Fox boxed value, it returns false if the value will be used later.
                 let arr = Array::fill(10, 10);
                 let (unique, _) = arr.is_unique;
-                let use = arr.get(0);
+                let use = arr.@(0);
                 let _ = assert_eq("fail: arr is unique", unique, false);
 
                 let int_val = 42;
@@ -2438,7 +2448,7 @@ pub fn test95() {
 
                 let arr = Array::fill(10, 10);
                 let arr = arr.assert_unique!("fail: arr is shared (2)");
-                let use = arr.get(0);
+                let use = arr.@(0);
 
                 pure()
             );
@@ -2765,8 +2775,8 @@ pub fn test108() {
                 let read_lines = *with_file(file_path, "r", |file| (
                     pure $ [*read_line(file), *read_line(file)]
                 ));
-                let _ = assert_eq("case 2", read_lines.get(0), lines.get(0) + "\n");
-                let _ = assert_eq("case 3", read_lines.get(1), lines.get(1));
+                let _ = assert_eq("case 2", read_lines.@(0), lines.@(0) + "\n");
+                let _ = assert_eq("case 3", read_lines.@(1), lines.@(1));
 
                 pure()
             }.to_io.map(as_ok)
@@ -3304,7 +3314,7 @@ pub fn test120() {
         main = (
             let x = 3;
             let a = if true { Array::fill(1, |_| x) } else { abort() };
-            let _ = assert_eq("case 1", (a.get(0))(1), x);
+            let _ = assert_eq("case 1", (a.@(0))(1), x);
             let a = if true { |_| x } else { abort() };
             let _ = assert_eq("case 1", a(1), x);
             pure()

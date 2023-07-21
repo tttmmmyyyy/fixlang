@@ -395,7 +395,7 @@ pub fn make_std_mod() -> Program {
         force_unique_array(false),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "@"),
         read_array(),
     );
     fix_module.add_global_value(

@@ -26,16 +26,16 @@ namespace Array {
             if former_pos == former_end { // If former_pos reached to the end,
                 if latter_pos == latter_end { break $ buffer };
                 // Copy elements in latter to buffer.
-                let buffer = buffer.push_back(vec.get(latter_pos));
+                let buffer = buffer.push_back(vec.@(latter_pos));
                 continue $ (former_pos, latter_pos + 1, buffer)
             };
             if latter_pos == latter_end { // If latter_pos reached to the end,
                 // Copy elements in former to buffer.
-                let buffer = buffer.push_back(vec.get(former_pos));
+                let buffer = buffer.push_back(vec.@(former_pos));
                 continue $ (former_pos + 1, latter_pos, buffer)
             };
-            let former_elem = vec.get(former_pos);
-            let latter_elem = vec.get(latter_pos);
+            let former_elem = vec.@(former_pos);
+            let latter_elem = vec.@(latter_pos);
             if less_than((former_elem, latter_elem)) {
                 // Copy elements in former to buffer.
                 let buffer = buffer.push_back(former_elem);
@@ -49,7 +49,7 @@ namespace Array {
         // Copy buffer to vec.
         loop((0, vec), |(idx, vec)|(
             if idx == len { break $ (vec, buffer) };
-            let vec = vec.set(begin + idx, buffer.get(idx));
+            let vec = vec.set(begin + idx, buffer.@(idx));
             continue $ (idx + 1, vec)
         ))
     );
@@ -76,7 +76,7 @@ namespace Array {
         // Copy elements of v2 to v1.
         loop((0, v1), |(idx, v1)|(
             if idx >= v2_len { break $ v1 };
-            let v1 = v1.__unsafe_set(v1_len + idx, v2.get(idx));
+            let v1 = v1.__unsafe_set(v1_len + idx, v2.@(idx));
             continue $ (idx+1, v1)
         ))
     );
@@ -95,7 +95,7 @@ namespace Array {
         let len = arr.get_size;
         loop(0, |idx| (
             if idx == len { break $ Option::none $ () };
-            if cond(arr.get(idx)) { break $ Option::some $ idx };
+            if cond(arr.@(idx)) { break $ Option::some $ idx };
             continue $ idx + 1
         ))
     );
@@ -129,7 +129,7 @@ namespace Array {
     get_first : Array a -> Option a;
     get_first = |arr| (
         if arr.is_empty { Option::none() };
-        Option::some $ arr.get(0)
+        Option::some $ arr.@(0)
     );
 
     // Get the last element of an array. Returns none if the array is empty.
@@ -137,7 +137,7 @@ namespace Array {
     get_last = |arr| (
         let len = arr.get_size;
         if len == 0 { Option::none() };
-        Option::some $ arr.get(len - 1)
+        Option::some $ arr.@(len - 1)
     );
 
     // Returns if the array is empty
@@ -188,7 +188,7 @@ namespace Array {
             if idx == len {
                 break $ new
             } else {
-                let new = new.__unsafe_set(idx, arr.get(idx));
+                let new = new.__unsafe_set(idx, arr.@(idx));
                 continue $ (idx + 1, new)
             }
         ))
@@ -216,7 +216,7 @@ impl [a : Eq] Array a : Eq {
         let len = lhs.get_size;
         loop(0, |idx| (
             if idx == len { break $ true };
-            if lhs.get(idx) != rhs.get(idx) { break $ false };
+            if lhs.@(idx) != rhs.@(idx) { break $ false };
             continue $ idx + 1
         ))
     );
@@ -345,7 +345,7 @@ namespace IO {
 
                 if upto_newline {
                     // If the last character is \n or \r, break.
-                    let last_byte = buf.get(strlen-1);
+                    let last_byte = buf.@(strlen-1);
                     if last_byte == '\n' || last_byte == '\r' { break $ strs };
                     continue $ strs
                 } else {
@@ -651,7 +651,7 @@ namespace Iterator {
 
     // Create iterator from an array.
     from_array : Array a -> Iterator a;
-    from_array = |arr| count_up(0).take(arr.get_size).map(|i| arr.get(i));
+    from_array = |arr| count_up(0).take(arr.get_size).map(|i| arr.@(i));
 
     // Creates iterator from mapping function.
     // from_map(f) = [f(0), f(1), f(2), ...]
@@ -933,7 +933,7 @@ namespace String {
     get_first_byte : String -> Option U8;
     get_first_byte = |s| (
         if s.is_empty { Option::none() };
-        Option::some $ s.@_data.get(0)
+        Option::some $ s.@_data.@(0)
     );
 
     // Get the last byte of a string. Returns none if the string is empty.
@@ -941,7 +941,7 @@ namespace String {
     get_last_byte = |s| (
         let len = s.get_size;
         if len == 0 { Option::none() };
-        Option::some $ s.@_data.get(len - 1)
+        Option::some $ s.@_data.@(len - 1)
     );
 
     // Get the length of a string.

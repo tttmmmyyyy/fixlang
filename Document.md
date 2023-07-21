@@ -201,6 +201,7 @@
       - [`impl F64 : Sub`](#impl-f64--sub)
       - [`impl F64 : ToString`](#impl-f64--tostring)
     - [Array](#array-1)
+      - [`@ : I64 -> Array a -> a`](#--i64---array-a---a)
       - [`__unsafe_set_length : I64 -> Array a -> Array a`](#__unsafe_set_length--i64---array-a---array-a)
       - [`__unsafe_get : I64 -> Array a -> a`](#__unsafe_get--i64---array-a---a)
       - [`__unsafe_set : I64 -> a -> Array a -> Array a`](#__unsafe_set--i64---a---array-a---array-a)
@@ -215,7 +216,6 @@
       - [`force_unique! : Array a -> Array a`](#force_unique--array-a---array-a-1)
       - [`from_iter : Iterator a -> Array a`](#from_iter--iterator-a---array-a)
       - [`from_map : I64 -> (I64 -> a) -> Array a`](#from_map--i64---i64---a---array-a)
-      - [`get : I64 -> Array a -> a`](#get--i64---array-a---a)
       - [`get_capacity : Array a -> I64`](#get_capacity--array-a---i64)
       - [`get_first : Array a -> Option a`](#get_first--array-a---option-a)
       - [`get_last : Array a -> Option a`](#get_last--array-a---option-a)
@@ -429,8 +429,8 @@ calc_fib = |n| (
         if idx == arr.get_size {
             break $ arr
         } else {
-            let x = arr.get(idx-1);
-            let y = arr.get(idx-2);
+            let x = arr.@(idx-1);
+            let y = arr.@(idx-2);
             let arr = arr.set!(idx, x+y);
             continue $ (idx+1, arr)
         }
@@ -665,8 +665,8 @@ calc_fib = |n| (
         if idx == arr.get_size {
             break $ arr
         } else {
-            let x = arr.get(idx-1);
-            let y = arr.get(idx-2);
+            let x = arr.@(idx-1);
+            let y = arr.@(idx-2);
             let arr = arr.set!(idx, x+y);
             continue $ (idx+1, arr)
         }
@@ -686,8 +686,8 @@ let arr = loop((2, arr), |(idx, arr)|
     if idx == arr.get_size {
         break $ arr
     } else {
-        let x = arr.get(idx-1);
-        let y = arr.get(idx-2);
+        let x = arr.@(idx-1);
+        let y = arr.@(idx-2);
         let arr = arr.set!(idx, x+y);
         continue $ (idx+1, arr)
     }
@@ -705,7 +705,7 @@ In the program of Fibonacci sequence, the followings are examples of use of oper
 
 - `arr.get_size`: `get_size` is a function of type `Array a -> I64`, which returns the length of an array. Note that you should not write `arr.get_size()` as if you call a method of a class on an instance in other languages. Remembering syntax sugars `f() == f(())` and `x.f == f(x)`, you can desugar the expression `arr.get_size()` to `get_size((), arr)`, which raises an error because `get_size` takes only one argument.
 - `arr.set!(0, 1)`: `set!` is a function of type `I64 -> a -> Array a -> Array a`, which updates an element of an array to the specified value. 
-- `arr.get(idx-1)`: `get` is a function of type `I64 -> Array a -> a`, which returns the element at the specified index.
+- `arr.@(idx-1)`: `@` is a function of type `I64 -> Array a -> a`, which returns the element at the specified index.
 
 We sometimes call a function of type `Param0 -> ... -> ParamN -> Obj -> Result` as a "method" on the type `Obj` that has N+1 parameters and returns a value of type `Result`. A method can be called by `obj.method(arg0, ..., argN)` as if writing OOP languages.
 
@@ -766,8 +766,8 @@ loop((2, arr), |(idx, arr)|
     if idx == arr.get_size {
         break $ arr
     } else {
-        let x = arr.get(idx-1);
-        let y = arr.get(idx-2);
+        let x = arr.@(idx-1);
+        let y = arr.@(idx-2);
         let arr = arr.set!(idx, x+y);
         continue $ (idx+1, arr)
     }
@@ -926,11 +926,11 @@ Remember that an expression in Fix is only a sentence that describes a value. It
 main = (
     let arr0 = Array::fill(100, 1);
     let arr1 = arr0.set(0, 2);
-    println("arr0.get(0): " + arr0.get(0).to_string + ".")
+    println("arr0.@(0): " + arr0.@(0).to_string + ".")
 );
 ```
 
-The above prints `arr0.get(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` but with the 0th element replaced by `2`", and it is NOT a command "update the 0th element of `arr0` to `2`". To realize this behavior, `set` function in the above program has to clone `arr0` before updating the 0th element of an array.
+The above prints `arr0.@(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` but with the 0th element replaced by `2`", and it is NOT a command "update the 0th element of `arr0` to `2`". To realize this behavior, `set` function in the above program has to clone `arr0` before updating the 0th element of an array.
 
 More generally, all values of Fix are immutable. Immutability is good for reducing bugs caused by fails on state management, but it can be an obstacle for implementing an algorithm with its optimum time (or space) complexity. Consider the implementation of `calc_fib` function of the example program using `set` instead of `set!`:
 
@@ -944,8 +944,8 @@ calc_fib = |n| (
         if idx == arr.get_size {
             break $ arr
         } else {
-            let x = arr.get(idx-1);
-            let y = arr.get(idx-2);
+            let x = arr.@(idx-1);
+            let y = arr.@(idx-2);
             let arr = arr.set(idx, x+y);
             continue $ (idx+1, arr)
         }
@@ -962,7 +962,7 @@ In fact, `set` in the above program doesn't clone the array and `calc_fib` works
 main = (
     let arr0 = Array::fill(100, 1);
     let arr1 = arr0.set(0, 2);
-    println("arr1.get(0): " + arr1.get(0).to_string + ".")
+    println("arr1.@(0): " + arr1.@(0).to_string + ".")
 );
 ```
 
@@ -1564,6 +1564,9 @@ NOTE: In a future, we will add lens functions such as `act : [f: Functor] I64 ->
 
 Methods:
 
+#### `@ : I64 -> Array a -> a`
+Returns an element of an array at an index.
+
 #### `__unsafe_set_length : I64 -> Array a -> Array a`
 Updates the length of an array, without uniqueness checking or validation of the given length value.
 
@@ -1613,9 +1616,6 @@ Create an array from an iterator.
 #### `from_map : I64 -> (I64 -> a) -> Array a`
 Creates an array by a mapping function.
 Example: `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
-
-#### `get : I64 -> Array a -> a`
-Returns an element of an array at an index.
 
 #### `get_capacity : Array a -> I64`
 Returns the capacity of an array.
@@ -2078,13 +2078,13 @@ main = (
     // For boxed value, it returns true if the value isn't used later.
     let arr = Array::fill(10, 10);
     let (unique, arr) = arr.is_unique;
-    let use = arr.get(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
     let _ = assert_eq("fail: arr is shared", unique, true);
 
     // Fox boxed value, it returns false if the value will be used later.
     let arr = Array::fill(10, 10);
     let (unique, _) = arr.is_unique;
-    let use = arr.get(0);
+    let use = arr.@(0);
     let _ = assert_eq("fail: arr is unique", unique, false);
 
     pure()

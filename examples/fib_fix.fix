@@ -12,11 +12,11 @@ main = (
         // fix \loop -> \(argments) -> (body of recursive_function that calls `loop`).
         fix $ |loop, arr: Array I64, n|
             if n == 31 { arr };
-            let x = arr.get(n-1);
-            let y = arr.get(n-2);
+            let x = arr.@(n-1);
+            let y = arr.@(n-2);
             let arr = arr.set!(n, x+y);
             loop(arr, n+1)
     );
     let fib_array = calc_fib_array(arr, 2) ;
-    print $ fib_array.get(30).to_string // 832040
+    print $ fib_array.@(30).to_string // 832040
 );

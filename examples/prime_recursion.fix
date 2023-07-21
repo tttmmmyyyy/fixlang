@@ -12,7 +12,7 @@ is_prime_loop : I64 -> I64 -> Array Bool -> Array Bool;
 is_prime_loop = |n, i, arr| (
     if i*i > n { arr };
     let next_arr = (
-        if !arr.get(i) { arr };
+        if !arr.@(i) { arr };
         is_prime_inner_loop(n, i+i, i, arr)
     );
     is_prime_loop(n, i+1, next_arr)
@@ -31,7 +31,7 @@ count = |elem, arr| count_loop(0, 0, elem, arr);
 count_loop : [a: Eq] I64 -> I64 -> a -> Array a -> I64;
 count_loop = |i, sum, elem, arr| (
     if arr.get_size == i { sum };
-    let sum = sum + (if arr.get(i) == elem {1} else {0});
+    let sum = sum + (if arr.@(i) == elem {1} else {0});
     count_loop(i+1, sum, elem, arr)
 );
 

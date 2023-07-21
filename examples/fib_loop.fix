@@ -9,11 +9,11 @@ main = (
         if idx == arr.get_size {
             break $ arr
         } else {
-            let x = arr.get(idx-1);
-            let y = arr.get(idx-2);
+            let x = arr.@(idx-1);
+            let y = arr.@(idx-2);
             let arr = arr.set!(idx, x+y);
             continue $ (idx+1, arr)
         }
     );
-    println $ arr.get(30).to_string // 832040
+    println $ arr.@(30).to_string // 832040
 );

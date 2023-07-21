@@ -11,7 +11,7 @@ _find_place = |k, mp| (
     let cap = mp.get_capacity;
     if cap == 0 { (-1, Option::none()) };
     let table_idx = (k.hash % cap.to_U64).to_I64;
-    let opt_bucket_idx = mp.@_table.get(table_idx).find_by(|opt_kv| opt_kv.is_some && opt_kv.as_some.@0 == k);
+    let opt_bucket_idx = mp.@_table.@(table_idx).find_by(|opt_kv| opt_kv.is_some && opt_kv.as_some.@0 == k);
     (table_idx, opt_bucket_idx)
 );
 
@@ -57,7 +57,7 @@ find = |k, mp| (
         Option::none()
     } else {
         let bucket_idx = opt_bucket_idx.as_some;
-        let v = mp.@_table.get(table_idx).get(bucket_idx).as_some.@1;
+        let v = mp.@_table.@(table_idx).@(bucket_idx).as_some.@1;
         Option::some(v)
     }
 );
@@ -85,7 +85,7 @@ insert = |k, v, mp| (
         let bucket_idx = opt_bucket_idx.as_some;
         mp.mod__table(Array::mod(table_idx, Array::set(bucket_idx, Option::some $ (k, v))))
     } else {
-        let open_idx = mp.@_table.get(table_idx).find_by(Option::is_none);
+        let open_idx = mp.@_table.@(table_idx).find_by(Option::is_none);
         let mp = if open_idx.is_some {
             let open_idx = open_idx.as_some;
             mp.mod__table(Array::mod(table_idx, Array::set(open_idx, Option::some $ (k, v))))
@@ -108,8 +108,8 @@ reserve = |max_size, mp| (
 to_iter : HashMap k v -> Iterator (k, v);
 to_iter = |mp| (
     let table_idx = *Iterator::range(0, mp.get_capacity);
-    let bucket_idx = *Iterator::range(0, mp.@_table.get(table_idx).get_size);
-    let opt_elem = mp.@_table.get(table_idx).get(bucket_idx);
+    let bucket_idx = *Iterator::range(0, mp.@_table.@(table_idx).get_size);
+    let opt_elem = mp.@_table.@(table_idx).@(bucket_idx);
     if opt_elem.is_none { Iterator::empty };
     pure $ opt_elem.as_some
 );

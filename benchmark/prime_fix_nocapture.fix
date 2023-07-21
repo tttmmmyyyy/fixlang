@@ -8,7 +8,7 @@ is_prime = |n| (
     (2, arr, n).fix(|continue, (i, arr, n)|
         if i*i > n { arr };
         let next_arr = (
-            if !arr.get(i) { arr };
+            if !arr.@(i) { arr };
             (i+i, arr, n, i).fix(|continue, (q, arr, n, i)|
                 if n-1 < q { arr };
                 continue $ (q+i, arr.set!(q, false), n, i)
@@ -23,7 +23,7 @@ count : [a: Eq] a -> Array a -> I64;
 count = |elem, arr| (
     (0, 0, arr, elem).fix(|continue, (i, sum, arr, elem)|
         if arr.get_size == i { sum };
-        let sum = sum + (if arr.get(i) == elem {1} else {0});
+        let sum = sum + (if arr.@(i) == elem {1} else {0});
         continue $ (i+1, sum, arr, elem)
     )
 );
