@@ -1595,7 +1595,7 @@ Functorial version of `Array::mod`, a.k.a. "lens" in Haskell community.
 
 This function can be defined for any functor `f` in general, but it is easier to understand the behavior when `f` is a monad: the monadic action `act(idx, fun, arr)` first performs `fun(arr.@(idx))` to get a value `elm`, and returns a pure value `arr.set(idx, elm)`. In short, this function modifies an array by a monadic action. 
 
-This action can be implemented as `fun(arr.@(idx)).bind(|elm| pure $ arr.set(idx, elm))`. As we have identity `map(f) == bind(|x| pure $ f(x))` for `map` of a functor underlying a monad, it can be written as `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))` and therefore this function can be defined using only functor structure.
+This action can be implemented as `fun(arr.@(idx)).bind(|elm| pure $ arr.set(idx, elm))`. As we have identity `map(f) == bind(|x| pure $ f(x))` for `map` of a functor underlying a monad, it can be written as `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))` and therefore this function can be defined using only a method of a functor.
 
 What is special about this function is that if you call `arr.act(idx, fun)` when the reference counters of both of `arr` and `arr.@(idx)` are one, it is assured that `fun` receives the element with reference counter one.
 
