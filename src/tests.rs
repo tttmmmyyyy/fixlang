@@ -3359,7 +3359,6 @@ pub fn test122() {
         module Main; 
 
         import Debug;
-        import Math;
 
         type Boxed = box struct { x : I64 };
 
@@ -3445,6 +3444,163 @@ pub fn test122() {
             let _ = assert_eq("case 4-2-a", five, 5);
             let arr = parr.plug_in!(13);
             let _ = assert_eq("case 4-2-b", arr.@(0) + arr.@(1), 13 + 7);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test123() {
+    // Test Array::act and Array::act!
+    let source = r#"
+        module Main; 
+
+        import Debug;
+
+        type Boxed = box struct { x : I64 };
+
+        main : IO ();
+        main = (
+            let act0: Boxed -> Option Boxed = |v| (
+                if v.@x == 0 { Option::some $ v.mod_x!(add(5)) } else { Option::none() }
+            );
+            let act01: Boxed -> Option Boxed = |v| (
+                if v.@x == 0 { Option::some $ v.mod_x(add(5)) } else { Option::none() }
+            );
+            let act1: Boxed -> Option Boxed = |v| (
+                if v.@x == 0 { Option::some $ Boxed { x : 5 } } else { Option::none() }
+            );
+
+            // Case 0-0-0-0: Boxed element, unique array, act0 succeeds.
+            let case = "0-0-0-0";
+            let arr = [Boxed { x : 0 }, Boxed { x : 3 }];
+            let opt_arr = arr.act!(0, act0);
+            let _ = assert("Case " + case + "-a", opt_arr.is_some);
+            let _ = assert_eq("Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            let _ = assert_eq("Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
+            let _ = assert_eq("Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
+
+            // Case 0-0-0-1: Boxed element, unique array, act0 fails.
+            let case = "0-0-0-1";
+            let arr = [Boxed { x : 1 }, Boxed { x : 3 }];
+            let opt_arr = arr.act!(0, act0);
+            let _ = assert("Case " + case + "-a", opt_arr.is_none);
+
+            // Case 0-0-1-0: Boxed element, unique array, act1 succeeds.
+            let case = "0-0-1-0";
+            let arr = [Boxed { x : 0 }, Boxed { x : 3 }];
+            let opt_arr = arr.act!(0, act1);
+            let _ = assert("Case " + case + "-a", opt_arr.is_some);
+            let _ = assert_eq("Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            let _ = assert_eq("Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
+            let _ = assert_eq("Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
+
+            // Case 0-0-1-1: Boxed element, unique array, act1 fails.
+            let case = "0-0-1-1";
+            let arr = [Boxed { x : 1 }, Boxed { x : 3 }];
+            let opt_arr = arr.act!(0, act1);
+            let _ = assert("Case " + case + "-a", opt_arr.is_none);
+
+            // Case 0-1-0-0: Boxed element, shared array, act01 succeeds.
+            let case = "0-1-0-0";
+            let arr = [Boxed { x : 0 }, Boxed { x : 3 }];
+            let opt_arr = arr.act(0, act01);
+            let _ = assert("Case " + case + "-a", opt_arr.is_some);
+            let _ = assert_eq("Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            let _ = assert_eq("Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
+            let _ = assert_eq("Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
+            let _ = assert_eq("Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);
+
+            // Case 0-1-0-1: Boxed element, shared array, act0 fails.
+            let case = "0-1-0-1";
+            let arr = [Boxed { x : 1 }, Boxed { x : 3 }];
+            let opt_arr = arr.act(0, act0);
+            let _ = assert("Case " + case + "-a", opt_arr.is_none);
+            let _ = assert_eq("Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
+
+            // Case 0-1-1-0: Boxed element, shared array, act1 succeeds.
+            let case = "0-1-1-0";
+            let arr = [Boxed { x : 0 }, Boxed { x : 3 }];
+            let opt_arr = arr.act(0, act1);
+            let _ = assert("Case " + case + "-a", opt_arr.is_some);
+            let _ = assert_eq("Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            let _ = assert_eq("Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
+            let _ = assert_eq("Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
+            let _ = assert_eq("Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);
+
+            // Case 0-1-1-1: Boxed element, shared array, act1 fails.
+            let case = "0-1-1-1";
+            let arr = [Boxed { x : 1 }, Boxed { x : 3 }];
+            let opt_arr = arr.act(0, act1);
+            let _ = assert("Case " + case + "-a", opt_arr.is_none);
+            let _ = assert_eq("Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
+
+            let act2: I64 -> Option I64 = |v| (
+                if v == 0 { Option::some $ v + 5 } else { Option::none() }
+            );
+
+            // Case 1-0-0-0: Unboxed element, unique array, act2 succeeds.
+            let case = "1-0-0-0";
+            let arr = [0, 3];
+            let opt_arr = arr.act!(0, act2);
+            let _ = assert("Case " + case + "-a", opt_arr.is_some);
+            let _ = assert_eq("Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            let _ = assert_eq("Case " + case + "-c", opt_arr.as_some.@(0), 5);
+            let _ = assert_eq("Case " + case + "-d", opt_arr.as_some.@(1), 3);
+
+            // Case 1-0-0-1: Unboxed element, unique array, act2 fails.
+            let case = "1-0-0-1";
+            let arr = [1, 3];
+            let opt_arr = arr.act!(0, act2);
+            let _ = assert("Case " + case + "-a", opt_arr.is_none);
+
+            // Case 1-1-0-0: Unboxed element, shared array, act2 succeeds.
+            let case = "1-1-0-0";
+            let arr = [0, 3];
+            let opt_arr = arr.act(0, act2);
+            let _ = assert("Case " + case + "-a", opt_arr.is_some);
+            let _ = assert_eq("Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            let _ = assert_eq("Case " + case + "-c", opt_arr.as_some.@(0), 5);
+            let _ = assert_eq("Case " + case + "-d", opt_arr.as_some.@(1), 3);
+            let _ = assert_eq("Case " + case + "-e", arr.@(0) + arr.@(1), 3);
+
+            // Case 1-1-0-1: Unboxed element, shared array, act2 fails.
+            let case = "1-1-0-1";
+            let arr = [1, 3];
+            let opt_arr = arr.act(0, act2);
+            let _ = assert("Case " + case + "-a", opt_arr.is_none);
+            let _ = assert_eq("Case " + case + "-e", arr.@(0) + arr.@(1), 4);
+
+            // Case 2-0-0: Succeeds updating an element of unique two-dimensional array by act2.
+            let case = "2-0-0";
+            let arr = [[1, 2, 3], [4, 0, 6], [7, 8, 9]];
+            let opt_arr = arr.act!(1, act!(1, act2));
+            let _ = assert("Case " + case + "-a", opt_arr.is_some);
+            let _ = assert_eq("Case " + case + "-b", opt_arr.as_some, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+
+            // Case 2-0-1: Fails updating an element of unique two-dimensional array by act2.
+            let case = "2-0-1";
+            let arr = [[1, 2, 3], [4, 1, 6], [7, 8, 9]];
+            let opt_arr = arr.act!(1, act!(1, act2));
+            let _ = assert("Case " + case + "-a", opt_arr.is_none);
+
+            // Case 2-1-0: Succeeds updating an element of shared two-dimensional array by act2.
+            let case = "2-1-0";
+            let arr = [[1, 2, 3], [4, 0, 6], [7, 8, 9]];
+            let opt_arr = arr.act(1, act!(1, act2));
+            let _ = assert("Case " + case + "-a", opt_arr.is_some);
+            let _ = assert_eq("Case " + case + "-b", opt_arr.as_some, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+            let _ = assert_eq("Case " + case + "-c", arr, [[1, 2, 3], [4, 0, 6], [7, 8, 9]]);
+
+            // Case 2-1-1: Fails updating an element of shared two-dimensional array by act2.
+            let case = "2-1-1";
+            let arr = [[1, 2, 3], [4, 1, 6], [7, 8, 9]];
+            let opt_arr = arr.act(1, act!(1, act2));
+            let _ = assert("Case " + case + "-a", opt_arr.is_none);
+            let _ = assert_eq("Case " + case + "-c", arr, [[1, 2, 3], [4, 1, 6], [7, 8, 9]]);
 
             pure()
         );
