@@ -3353,6 +3353,31 @@ pub fn test121() {
 
 #[test]
 #[serial]
+pub fn test122() {
+    // Test PunchedArray.
+    let source = r#"
+        module Main; 
+
+        import Debug;
+        import Math;
+
+        type Boxed = box struct { x : I64 };
+
+        main : IO ();
+        main = (
+            // Case 1: Punch an array of two boxed values and release parray.
+            let arr = [Boxed { x : 5 }, Boxed { x : 7 }];
+            let (parr, five) = PunchedArray::punch!(0, arr);
+            let _ = assert_eq("case 1", five.@x, 5);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();
