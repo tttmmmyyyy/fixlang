@@ -908,7 +908,7 @@ namespace PunchedArray {
             let arr = arr.__unsafe_set_length(0); // Avoid releaseing elements in the destructor of Array.
             loop((arr, 0), |(arr, i)| (
                 if i == size { break $ () };
-                if i != idx { continue $ (arr, i+1) };
+                if i == idx { continue $ (arr, i+1) };
                 let _ = arr.__unsafe_get(i); // Release the element.
                 continue $ (arr, i+1)
             ))
