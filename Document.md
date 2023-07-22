@@ -1591,7 +1591,7 @@ Sort elements in a range of an array by "less than" comparator.
 This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
 #### `act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`
-Functorial version of `Array::mod`, a.k.a. "lens" of `Array` in Haskell community.
+Functorial version of `Array::mod`, a.k.a. "lens" in Haskell community.
 
 This function can be defined for any functor `f` in general, but it is easier to understand the behavior when `f` is a monad: the monadic action `act(idx, fun, arr)` first performs `fun(arr.@(idx))` to get a value `elm`, and returns a pure value `arr.set(idx, elm)`. In short, this function modifies an array by a monadic action. 
 
