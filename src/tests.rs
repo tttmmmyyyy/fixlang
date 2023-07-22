@@ -3365,10 +3365,86 @@ pub fn test122() {
 
         main : IO ();
         main = (
-            // Case 1: Punch an array of two boxed values and release parray.
+            // Case 1-1: Punch an array of two boxed values and release parray.
             let arr = [Boxed { x : 5 }, Boxed { x : 7 }];
-            let (parr, five) = PunchedArray::punch!(0, arr);
-            let _ = assert_eq("case 1", five.@x, 5);
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 1-1", five.@x, 5);
+
+            // Case 1-2: Punch an array of two boxed values and plug-in the same element.
+            let arr = [Boxed { x : 5 }, Boxed { x : 7 }];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 1-2-a", five.@x, 5);
+            let arr = parr.plug_in!(five);
+            let _ = assert_eq("case 1-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 7);
+
+            // Case 1-3: Punch an array of two boxed values and plug-in the other element.
+            let seven = Boxed { x : 7 };
+            let arr = [Boxed { x : 5 }, seven];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 1-3-a", five.@x, 5);
+            let arr = parr.plug_in!(seven);
+            let _ = assert_eq("case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 7);
+
+            // Case 1-4: Punch an array of two boxed values and plug-in another value.
+            let arr = [Boxed { x : 5 }, Boxed { x : 7 }];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 1-3-a", five.@x, 5);
+            let arr = parr.plug_in!(Boxed { x : 11 });
+            let _ = assert_eq("case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 11);
+
+            // Case 2-1: Punch an array of two shared boxed values and release parray.
+            let five = Boxed { x : 5 };
+            let arr = [five, five];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 2-1", five.@x, 5);
+
+            // Case 2-2: Punch an array of two shared boxed values and plug-in the same element.
+            let five = Boxed { x : 5 };
+            let arr = [five, five];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 2-2-a", five.@x, 5);
+            let arr = parr.plug_in!(five);
+            let _ = assert_eq("case 2-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
+
+            // Case 2-3: Punch an array of two shared boxed values and plug-in the value again.
+            let five = Boxed { x : 5 };
+            let arr = [five, five];
+            let (parr, five1) = arr.punch!(0);
+            let _ = assert_eq("case 2-3-a", five1.@x, 5);
+            let arr = parr.plug_in!(five);
+            let _ = assert_eq("case 1-3-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
+
+            // Case 2-4: Punch an array of two shared boxed values and plug-in another value.
+            let five = Boxed { x : 5 };
+            let arr = [five, five];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 2-3-a", five.@x, 5);
+            let arr = parr.plug_in!(Boxed { x : 7 });
+            let _ = assert_eq("case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 5);
+
+            // Case 3-1: Punch an array of one boxed values and release parray.
+            let arr = [Boxed { x : 5 }];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 3-1", five.@x, 5);
+
+            // Case 3-2: Punch an array of two boxed values and plug-in the same element.
+            let arr = [Boxed { x : 5 }];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 3-2-a", five.@x, 5);
+            let arr = parr.plug_in!(five);
+            let _ = assert_eq("case 3-2-b", arr.@(0).@x, 5);
+
+            // Case 4-1: Punch an array of two unboxed values and release parray.
+            let arr = [5, 7];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 1-1", five, 5);
+
+            // Case 4-2: Punch an array of two boxed values and plug-in a value.
+            let arr = [5, 7];
+            let (parr, five) = arr.punch!(0);
+            let _ = assert_eq("case 4-2-a", five, 5);
+            let arr = parr.plug_in!(13);
+            let _ = assert_eq("case 4-2-b", arr.@(0) + arr.@(1), 13 + 7);
 
             pure()
         );
