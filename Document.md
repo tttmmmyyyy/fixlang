@@ -1566,8 +1566,6 @@ Literals:
 - `[{elem_0}, {elem_1}, ...]`
     - Example: `[1, 2, 3]` for integer array of length 3.
 
-NOTE: In a future, we will add lens functions such as `act : [f: Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`, which are generalization of `mod` functions.
-
 Methods:
 
 #### `@ : I64 -> Array a -> a`
