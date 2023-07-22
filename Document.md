@@ -207,6 +207,8 @@
       - [`__unsafe_set : I64 -> a -> Array a -> Array a`](#__unsafe_set--i64---a---array-a---array-a)
       - [`_get_ptr : Array a -> Ptr`](#_get_ptr--array-a---ptr)
       - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
+      - [`act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a)
+      - [`act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a-1)
       - [`append : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a)
       - [`borrow_ptr : (Ptr -> b) -> Array a -> b`](#borrow_ptr--ptr---b---array-a---b)
       - [`empty : I64 -> Array a`](#empty--i64---array-a)
@@ -307,6 +309,9 @@
       - [`impl Path : ToString`](#impl-path--tostring)
     - [Ptr](#ptr)
       - [`impl Ptr : Eq`](#impl-ptr--eq)
+    - [PunchedArray](#punchedarray)
+      - [`plug_in! : a -> PunchedArray a -> Array a`](#plug_in--a---punchedarray-a---array-a)
+      - [`punch! : I64 -> Array a -> (PunchedArray a, a)`](#punch--i64---array-a---punchedarray-a-a)
     - [Result](#result)
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl Result e : Monad`](#impl-result-e--monad)
@@ -1008,13 +1013,13 @@ This function never clones the given struct value. If the struct value is shared
 
 Modify a struct value by acting on a field value.
 This function clones the given struct value if it is shared between multiple references.
-What is special about this function is that if you call `obj.mod_field(f)` when the reference counter of `obj.@field` is one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field(f)` is NOT equivalent to `let v = obj.@field; obj.set_field(f(v))`.
+What is special about this function is that if you call `obj.mod_field(f)` when the reference counters of both of `obj` and `obj.@field` are one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field(f)` is NOT equivalent to `let v = obj.@field; obj.set_field(f(v))`.
 
 ### `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
 
 Modify a struct value by acting on a field value.
 This function never clones the given struct value. If the struct value is shared between multiple references, this function panics.
-What is special about this function is that if you call `obj.mod_field!(f)` when the reference counter of `obj.@field` is one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field!(f)` is NOT equivalent to `let v = obj.@field; obj.set_field!(f(v))`.
+What is special about this function is that if you call `obj.mod_field!(f)` when the reference counters of both of `obj` and `obj.@field` are one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field!(f)` is NOT equivalent to `let v = obj.@field; obj.set_field!(f(v))`.
 
 ## Unions
 
@@ -1585,6 +1590,17 @@ Note that in case the array is not used after call of this function, the returne
 Sort elements in a range of an array by "less than" comparator.
 This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
+#### `act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`
+Functorial version of `Array::mod`, a.k.a. "lens" of `Array` in Haskell community.
+This function can be defined for any functor `f` in general, but it is easier to understand the behavior when `f` is a monad: the monadic action `act(idx, fun, arr)` first performs `fun(arr.@(idx))` to get a value `elm`, and returns a pure value `arr.set(idx, elm)`. In short, this function modifies an array by a monadic action. 
+This action can be implemented as `fun(arr.@(idx)).bind(|elm| pure $ arr.set(idx, elm))`. As we have identity `map(f) == bind(|x| pure $ f(x))` for `map` of a functor underlying a monad, it can be written as `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))` and therefore this function can be defined using only functor structure.
+What is special about this function is that if you call `arr.act(idx, fun)` when the reference counters of both of `arr` and `arr.@(idx)` are one, it is assured that `fun` receives the element with reference counter one.
+If you call `act` on an array which is shared by multiple references, this function clones the given array when inserting the result of your action into the array. This means that you don't need to pay cloning cost when your action failed, as expected.
+
+#### `act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`
+Functorial version of `Array::mod!`, a.k.a. "lens" of `Array` in Haskell community.
+This function is almost the same as `Array::act`, but it panics if the given array is shared by multiple references.
+
 #### `append : Array a -> Array a -> Array a`
 Append an array to an array.
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`. 
@@ -1635,13 +1651,13 @@ Returns if the array is empty or not.
 
 #### `mod : I64 -> (a -> a) -> Array a -> Array a`
 Modifies an array value by acting on an element at an index.
-This function clones the array if it is shared between multiple references.
-What is special about this function is that if you call `arr.mod(0, f)` when the reference counter of `arr.@(0)` is one, it is assured that `f` receives the field value with reference counter one. So `arr.mod(0, f)` is NOT equivalent to `let v = arr.@(0); arr.set(0, f(v))`.
+This function clones the given array if it is shared between multiple references.
+What is special about this function is that if you call `arr.mod(i, f)` when the reference counters of both of `arr` and `arr.@(i)` are one, it is assured that `f` receives the element value with reference counter one. So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
 
 #### `mod! : I64 -> (a -> a) -> Array a -> Array a`
 Modifies an array value by acting on an element at an index.
 This function never clones the given array. If the array is shared between multiple references, this function panics. 
-What is special about this function is that if you call `arr.mod(0, f)` when the reference counter of `arr.@(0)` is one, it is assured that `f` receives the field value with reference counter one. So `arr.mod(0, f)` is NOT equivalent to `let v = arr.@(0); arr.set(0, f(v))`.
+What is special about this function is that if you call `arr.mod(i, f)` when the reference counters of both of `arr` and `arr.@(i)` are one, it is assured that `f` receives the element value with reference counter one. So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
 
 #### `pop_back : Array a -> Array a`
 Pop an element at the back of an array.
@@ -1970,6 +1986,23 @@ Literals:
     - The null pointer.
 
 #### `impl Ptr : Eq`
+
+### PunchedArray
+The type of punched arrays. A punched array is an array from which a certain element has been removed.
+If you create a punched array `parr` by punching an array `arr` at an index `idx`, only elements of `arr` whose indices are outside `idx` are released when `parr` is destructed.
+
+```
+type PunchedArray a = unbox struct { _data : Destructor (Array a), idx : I64 };
+```
+
+#### `plug_in! : a -> PunchedArray a -> Array a`
+Plug in an element to a punched array to get back an array.
+This function panics if (the internal data of) the given punched array is shared by multiple references.
+
+#### `punch! : I64 -> Array a -> (PunchedArray a, a)`
+Creates a punched array.
+Expression `punch(idx, arr)` evaluates to a pair `(parr, elm)`, where `elm` is the value that was stored at `idx` of `arr` and `parr` is the punched `arr` at `idx`.
+This function panics if the given array is shared by multiple references.
 
 ### Result
 

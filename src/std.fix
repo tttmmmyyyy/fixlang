@@ -1,5 +1,7 @@
 module Std;
 
+import Debug;
+
 namespace Array {
 
     // Sort elements in a range of a vector by "less than" comparator.
@@ -52,6 +54,29 @@ namespace Array {
             let vec = vec.set(begin + idx, buffer.@(idx));
             continue $ (idx + 1, vec)
         ))
+    );
+
+    // Functorial version of `Array::mod`, a.k.a. "lens" of `Array` in Haskell community.
+    // This function can be defined for any functor `f` in general, but it is easier to understand the behavior when `f` is a monad: the monadic action `act(idx, fun, arr)` first performs `fun(arr.@(idx))` to get a value `elm`, and returns a pure value `arr.set(idx, elm)`. In short, this function modifies an array by a monadic action. 
+    // This action can be implemented as `fun(arr.@(idx)).bind(|elm| pure $ arr.set(idx, elm))`. As we have identity `map(f) == bind(|x| pure $ f(x))` for `map` of a functor underlying a monad, it can be written as `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))` and therefore this function can be defined using only functor structure.
+    // What is special about this function is that if you call `arr.act(idx, fun)` when the reference counters of both of `arr` and `arr.@(idx)` are one, it is assured that `fun` receives the element with reference counter one.
+    // If you call `act` on an array which is shared by multiple references, this function clones the given array when inserting the result of your action into the array. This means that you don't need to pay cloning cost when your action failed, as expected.
+    act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
+    act = |idx, fun, arr| {
+        let (unique, arr) = arr.is_unique;
+        if unique {
+            arr.act!(idx, fun)
+        } else { // shared
+            fun(arr.@(idx)).map(|elm| arr.set(idx, elm))
+        }        
+    };
+
+    // Functorial version of `Array::mod!`, a.k.a. "lens" of `Array` in Haskell community.
+    // This function is almost the same as `Array::act`, but it panics if the given array is shared by multiple references.
+    act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
+    act! = |idx, act, arr| (
+        let (parr, elm) = PunchedArray::punch!(idx, arr);
+        act(elm).map(|elm| parr.plug_in!(elm))
     );
 
     // Append an array to an array.
@@ -852,6 +877,45 @@ namespace Path {
 
 impl Path : ToString {
     to_string = @_data;
+}
+
+// The type of punched arrays. A punched array is an array from which a certain element has been removed.
+// If you create a punched array `parr` by punching an array `arr` at an index `idx`, only elements of `arr` whose indices are outside `idx` are released when `parr` is released.
+type PunchedArray a = unbox struct { _data : Destructor (Array a), idx : I64 };
+
+namespace PunchedArray {
+
+    // Plug in an element to a punched array to get back an array.
+    // This function panics if (the internal data of) the given punched array is shared by multiple references.
+    plug_in! : a -> PunchedArray a -> Array a;
+    plug_in! = |elm, parr| (
+        let PunchedArray { _data : data, idx : idx } = parr;
+        let arr = data.set_dtor!(|_|()).@value; // Clear destructor and extract value.
+        arr.force_unique!.__unsafe_set(idx, elm) 
+        // The above force_unique! is redundant and added just to be safe: as long as the user doesn't access to `_data` of `PunchedArray`, `arr` should be uniquely owned by `data`.
+    );
+
+    // Creates a punched array.
+    // Expression `punch(idx, arr)` evaluates to a pair `(parr, elm)`, where `elm` is the value that was stored at `idx` of `arr` and `parr` is the punched `arr` at `idx`.
+    // This function panics if the given array is shared by multiple references.
+    punch! : I64 -> Array a -> (PunchedArray a, a);
+    punch! = |idx, arr| (
+        let arr = arr.assert_unique!("[PunchedArray::punch!] Called on a shared array.");
+        let size = arr.get_size;
+        let _ = assert("[PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
+        let elm = arr.__unsafe_get(idx);
+        let dtor = |arr| (
+            let arr = arr.__unsafe_set_length(0); // Avoid releaseing elements in the destructor of Array.
+            loop((arr, 0), |(arr, i)| (
+                if i == size { break $ () };
+                if i != idx { continue $ (arr, i+1) };
+                let _ = arr.__unsafe_get(i); // Release the element.
+                continue $ (arr, i+1)
+            ))
+        );
+        let parr = PunchedArray { _data : Destructor::make(arr, dtor), idx : idx };
+        (parr, elm)
+    );
 }
 
 // A type of result value for a computation that may fail.
