@@ -314,7 +314,7 @@ impl ObjectFieldType {
                 .build_gep(buffer, &[idx.into()], "ptr_to_elem_of_array")
         };
 
-        // Release element that is already at the place.
+        // Release element that is already at the place (if required).
         if release_old_value {
             let elem = if elem_ty.is_box(gc.type_env()) {
                 gc.builder().build_load(place, "elem").into_pointer_value()
