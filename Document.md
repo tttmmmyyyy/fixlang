@@ -1006,13 +1006,13 @@ This function never clones the given struct value. If the struct value is shared
 
 ### `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
 
-Modify a struct value by acting on a field.
+Modify a struct value by acting on a field value.
 This function clones the given struct value if it is shared between multiple references.
 What is special about this function is that if you call `obj.mod_field(f)` when the reference counter of `obj.@field` is one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field(f)` is NOT equivalent to `let v = obj.@field; obj.set_field(f(v))`.
 
 ### `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
 
-Modify a struct value by acting on a field.
+Modify a struct value by acting on a field value.
 This function never clones the given struct value. If the struct value is shared between multiple references, this function panics.
 What is special about this function is that if you call `obj.mod_field!(f)` when the reference counter of `obj.@field` is one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field!(f)` is NOT equivalent to `let v = obj.@field; obj.set_field!(f(v))`.
 
@@ -1634,12 +1634,14 @@ Returns the length of an array.
 Returns if the array is empty or not.
 
 #### `mod : I64 -> (a -> a) -> Array a -> Array a`
-Modifies a value of an element at the specified index of an array by a function.
+Modifies an array value by acting on an element at an index.
 This function clones the array if it is shared between multiple references.
+What is special about this function is that if you call `arr.mod(0, f)` when the reference counter of `arr.@(0)` is one, it is assured that `f` receives the field value with reference counter one. So `arr.mod(0, f)` is NOT equivalent to `let v = arr.@(0); arr.set(0, f(v))`.
 
 #### `mod! : I64 -> (a -> a) -> Array a -> Array a`
-Modifies a value of an element at the specified index of an array by a function.
+Modifies an array value by acting on an element at an index.
 This function never clones the given array. If the array is shared between multiple references, this function panics. 
+What is special about this function is that if you call `arr.mod(0, f)` when the reference counter of `arr.@(0)` is one, it is assured that `f` receives the field value with reference counter one. So `arr.mod(0, f)` is NOT equivalent to `let v = arr.@(0); arr.set(0, f(v))`.
 
 #### `pop_back : Array a -> Array a`
 Pop an element at the back of an array.
