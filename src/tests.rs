@@ -3574,7 +3574,29 @@ pub fn test123() {
             let _ = assert("Case " + case + "-a", opt_arr.is_none);
             let _ = assert_eq("Case " + case + "-e", arr.@(0) + arr.@(1), 4);
 
-            // Case 2-0-0: Succeeds updating an element of unique two-dimensional array by act2.
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test123_5() {
+    // Test Array::act and Array::act! (case 2)
+    let source = r#"
+        module Main; 
+
+        import Debug;
+
+        type Boxed = box struct { x : I64 };
+
+        main : IO ();
+        main = (
+            let act2: I64 -> Option I64 = |v| (
+                if v == 0 { Option::some $ v + 5 } else { Option::none() }
+            );
+
             let case = "2-0-0";
             let arr = [[1, 2, 3], [4, 0, 6], [7, 8, 9]];
             let opt_arr = arr.act!(1, act!(1, act2));
@@ -3590,7 +3612,7 @@ pub fn test123() {
             // Case 2-1-0: Succeeds updating an element of shared two-dimensional array by act2.
             let case = "2-1-0";
             let arr = [[1, 2, 3], [4, 0, 6], [7, 8, 9]];
-            let opt_arr = arr.act(1, act!(1, act2));
+            let opt_arr = arr.act(1, act(1, act2));
             let _ = assert("Case " + case + "-a", opt_arr.is_some);
             let _ = assert_eq("Case " + case + "-b", opt_arr.as_some, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
             let _ = assert_eq("Case " + case + "-c", arr, [[1, 2, 3], [4, 0, 6], [7, 8, 9]]);
@@ -3598,7 +3620,7 @@ pub fn test123() {
             // Case 2-1-1: Fails updating an element of shared two-dimensional array by act2.
             let case = "2-1-1";
             let arr = [[1, 2, 3], [4, 1, 6], [7, 8, 9]];
-            let opt_arr = arr.act(1, act!(1, act2));
+            let opt_arr = arr.act(1, act(1, act2));
             let _ = assert("Case " + case + "-a", opt_arr.is_none);
             let _ = assert_eq("Case " + case + "-c", arr, [[1, 2, 3], [4, 1, 6], [7, 8, 9]]);
 
