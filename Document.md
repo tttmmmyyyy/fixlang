@@ -996,24 +996,25 @@ Extract the value of a field from a struct value.
 
 ### `set_{field_name} : {field_type} -> {struct} -> {struct}`
 
-Modify a struct value by setting a field.
-This function clones the struct value if it is shared between multiple references.
+Modify a struct value by inserting a value to a field.
+This function clones the given struct value if it is shared between multiple references.
 
 ### `set_{field_name}! : {field_type} -> {struct} -> {struct}`
 
-Modify a struct value by setting a field.
-This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+Modify a struct value by inserting a value to a field.
+This function never clones the given struct value. If the struct value is shared between multiple references, this function panics.
 
 ### `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
 
-Modify a struct value by a function acting on a field.
-This function clones the struct value if it is shared between multiple references.
-It is assured that if you call `obj.mod_field(f)` when the reference counter of the field value in `obj` is one, then `f` receives the field value uniquely.
+Modify a struct value by acting on a field.
+This function clones the given struct value if it is shared between multiple references.
+What is special about this function is that if you call `obj.mod_field(f)` when the reference counter of `obj.@field` is one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field(f)` is NOT equivalent to `let v = obj.@field; obj.set_field(f(v))`.
 
 ### `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
 
-This function is almost same as `mod_{field_name}` except that this function asserts uniqueness of given struct value.
-This function always updates the struct value. If the struct value is shared between multiple references, this function panics.
+Modify a struct value by acting on a field.
+This function never clones the given struct value. If the struct value is shared between multiple references, this function panics.
+What is special about this function is that if you call `obj.mod_field!(f)` when the reference counter of `obj.@field` is one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field!(f)` is NOT equivalent to `let v = obj.@field; obj.set_field!(f(v))`.
 
 ## Unions
 
@@ -1637,8 +1638,8 @@ Modifies a value of an element at the specified index of an array by a function.
 This function clones the array if it is shared between multiple references.
 
 #### `mod! : I64 -> (a -> a) -> Array a -> Array a`
-This function clones the array if it is shared between multiple references.
-This function always update the array. If the array is shared between multiple references, this function panics.  
+Modifies a value of an element at the specified index of an array by a function.
+This function never clones the given array. If the array is shared between multiple references, this function panics. 
 
 #### `pop_back : Array a -> Array a`
 Pop an element at the back of an array.
@@ -1662,7 +1663,7 @@ This function clones the given array if it is shared between multiple references
 
 #### `set! : I64 -> a -> Array a -> Array a`
 Updates a value of an element at an index of an array.
-This function always update the given array. If the given array is shared between multiple references, this function panics.
+This function never clones the given array. If the given array is shared between multiple references, this function panics.
 
 #### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
 Sort elements in an array by "less than" comparator.
