@@ -398,16 +398,16 @@ impl ExprNode {
                 expr
             }
             Expr::ArrayLit(elems) => {
-                let expr = self.clone();
+                let mut expr = self.clone();
                 for (i, elem) in elems.iter().enumerate() {
-                    expr.set_array_lit_elem(elem.resolve_namespace(ctx), i);
+                    expr = expr.set_array_lit_elem(elem.resolve_namespace(ctx), i);
                 }
                 expr
             }
             Expr::CallC(_, _, _, _, args) => {
-                let expr = self.clone();
+                let mut expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {
-                    expr.set_call_c_arg(arg.resolve_namespace(ctx), i);
+                    expr = expr.set_call_c_arg(arg.resolve_namespace(ctx), i);
                 }
                 expr
             }
