@@ -1602,7 +1602,6 @@ What is special about this function is that if you call `arr.act(idx, fun)` when
 If you call `act` on an array which is shared by multiple references, this function clones the given array when inserting the result of your action into the array. This means that you don't need to pay cloning cost when your action failed, as expected.
 
 #### `act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`
-Functorial version of `Array::mod!`, a.k.a. "lens" of `Array` in Haskell community.
 This function is almost the same as `Array::act`, but it panics if the given array is shared by multiple references.
 
 #### `append : Array a -> Array a -> Array a`
