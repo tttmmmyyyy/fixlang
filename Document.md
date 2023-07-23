@@ -226,6 +226,7 @@
       - [`mod : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a)
       - [`mod! : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a-1)
       - [`pop_back : Array a -> Array a`](#pop_back--array-a---array-a)
+      - [`pop_back! : Array a -> Array a`](#pop_back--array-a---array-a-1)
       - [`push_back : a -> Array a -> Array a`](#push_back--a---array-a---array-a)
       - [`push_back! : a -> Array a -> Array a`](#push_back--a---array-a---array-a-1)
       - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
@@ -1665,6 +1666,12 @@ What is special about this function is that if you call `arr.mod(i, f)` when the
 #### `pop_back : Array a -> Array a`
 Pop an element at the back of an array.
 If the array is empty, this function does nothing.
+
+#### `pop_back! : Array a -> Array a`
+Pop an element at the back of an array.
+If the array is empty, this function does nothing.
+This function panics if elements must be cloned due to the given array being shared by multiple references. 
+Note that, when the given array is empty, this function will not panic even if it is shared.
 
 #### `push_back : a -> Array a -> Array a`
 Push an element to the back of an array.

@@ -180,6 +180,19 @@ namespace Array {
         arr.__unsafe_set_length(len-1)
     );
 
+    // Pop an element at the back of an array.
+    // If the array is empty, this function does nothing.
+    // This function panics if elements must be cloned due to the given array being shared by multiple references. 
+    // Note that, when the given array is empty, this function will not panic even if it is shared.
+    pop_back! : Array a -> Array a;
+    pop_back! = |arr| (
+        let len = arr.get_size;
+        if len == 0 { arr };
+        let arr = arr.force_unique!;
+        let released_elem = arr.__unsafe_get(len-1);
+        arr.__unsafe_set_length(len-1)
+    );
+
     // Push an element to the back of an array.
     push_back : a -> Array a -> Array a;
     push_back = |e, arr| (
