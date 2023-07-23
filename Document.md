@@ -235,6 +235,7 @@
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
       - [`to_iter : Array a -> Iterator a`](#to_iter--array-a---iterator-a)
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
+      - [`impl Array : Monad`](#impl-array--monad)
     - [Destructor](#destructor)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [IO](#io)
@@ -1691,6 +1692,8 @@ Sort elements in an array by "less than" comparator.
 Convert an array to an iterator.
 
 #### `impl [a : Eq] Array a : Eq`
+
+#### `impl Array : Monad`
 
 ### Destructor
 

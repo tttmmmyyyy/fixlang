@@ -247,6 +247,11 @@ impl [a : Eq] Array a : Eq {
     );
 }
 
+impl Array : Monad {
+    pure = |e| [e];
+    bind = |f, arr| arr.to_iter.map(f >> to_iter)._flatten.to_array;
+}
+
 impl Bool : ToString {
     to_string = |lhs| (
         if lhs { "true" } else { "false" }
