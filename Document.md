@@ -412,6 +412,7 @@
   - [`reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`](#reserve--k--hash-k--eq-i64---hashset-k---hashset-k)
   - [`to_iter : HashSet k -> Iterator k`](#to_iter--hashset-k---iterator-k)
 - [Module `Math`](#module-math)
+  - [`binomial_coefficients : I64 -> Array (Array I64)`](#binomial_coefficients--i64---array-array-i64)
   - [`_gcd_nonneg : I64 -> I64 -> I64`](#_gcd_nonneg--i64---i64---i64)
   - [`gcd : I64 -> I64 -> I64`](#gcd--i64---i64---i64)
 - [Operators](#operators)
@@ -2363,6 +2364,11 @@ Reserve a HashSet so that it will not rehash until size exceeds the spacified va
 Convert a HashSet into an iterator.
 
 # Module `Math`
+
+## `binomial_coefficients : I64 -> Array (Array I64)`
+Calculate table (2-dimensional array) of binomial coefficients.
+`binomial_coefficients(m)` evaluates to an array of arrays `table` where `table.@(n).@(r)` is the binomial coefficient "binom(n, r)" for 0 <= n <= m and 0 <= r <= n.
+Here `m` has to be less than or equal to 66 to avoid overflow.
 
 ## `_gcd_nonneg : I64 -> I64 -> I64`
 Calculate greatest common divisors of two non-negative integers. 

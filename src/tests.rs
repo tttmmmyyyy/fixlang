@@ -3335,6 +3335,7 @@ pub fn test121() {
 
         main : IO ();
         main = (
+            // gcd
             let _ = assert_eq("case gcd-0", gcd(16, 6), 2);
             let _ = assert_eq("case gcd-1", gcd(544, 119), 17);
             let _ = assert_eq("case gcd-2", gcd(2089, 3571), 1);
@@ -3344,6 +3345,22 @@ pub fn test121() {
             let _ = assert_eq("case gcd-6", gcd(0, 0), 0);
             let _ = assert_eq("case gcd-7", gcd(0, 1), 1);
             let _ = assert_eq("case gcd-8", gcd(-1, 0), 1);
+
+            // binomial_coefficients
+            let binom = [
+                [1],
+                [1, 1],
+                [1, 2, 1],
+                [1, 3, 3, 1],
+                [1, 4, 6, 4, 1],
+                [1, 5, 10, 10, 5, 1],
+                [1, 6, 15, 20, 15, 6, 1],
+                [1, 7, 21, 35, 35, 21, 7, 1],
+                [1, 8, 28, 56, 70, 56, 28, 8, 1],
+                [1, 9, 36, 84, 126, 126, 84, 36, 9, 1],
+                [1, 10, 45, 120, 210, 252, 210, 120, 45, 10, 1]
+            ];
+            let _ = assert_eq("case binomial_coefficients", binomial_coefficients(10), binom);
 
             pure()
         );

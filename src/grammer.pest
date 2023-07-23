@@ -35,7 +35,7 @@ expr_nullptr_lit = { "nullptr" }
 
 expr_bool_lit = { "true" | "false" }
 
-expr_array_lit = { "[" ~ (expr ~ sep* ~ ("," ~ sep* ~ expr)*)? ~ sep* ~ "]" }
+expr_array_lit = { "[" ~ (sep* ~ expr ~ sep* ~ ("," ~ sep* ~ expr)*)? ~ sep* ~ "]" }
 
 expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
 
