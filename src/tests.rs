@@ -3360,7 +3360,18 @@ pub fn test121() {
                 [1, 9, 36, 84, 126, 126, 84, 36, 9, 1],
                 [1, 10, 45, 120, 210, 252, 210, 120, 45, 10, 1]
             ];
-            let _ = assert_eq("case binomial_coefficients", binomial_coefficients(10), binom);
+            let _ = assert_eq("case binomial_coefficients-0", binomial_coefficients(10), binom);
+
+            let binom = [
+                [1]
+            ];
+            let _ = assert_eq("case binomial_coefficients-1", binomial_coefficients(0), binom);
+
+            let binom = [
+                [1],
+                [1, 1]
+            ];
+            let _ = assert_eq("case binomial_coefficients-2", binomial_coefficients(1), binom);
 
             pure()
         );
