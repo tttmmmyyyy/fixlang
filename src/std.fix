@@ -193,6 +193,21 @@ namespace Array {
         arr.__unsafe_set(len, e)
     );
 
+    // Push an element to the back of an array.
+    // This function panics if elements must be cloned due to the given array being shared by multiple references. 
+    // Note that, when the capacity of `arr` is equal to its size, `arr.push_back!(e)` will not panic even if `arr` is shared because in this case cloning elements is inevitable whether or not `arr` is shared.
+    push_back! : a -> Array a -> Array a;
+    push_back! = |e, arr| (
+        let len = arr.get_size;
+        let arr = if arr.get_capacity < len + 1 {
+            arr.reserve(2*(len + 1))
+        } else {
+            arr
+        };
+        let arr = arr.force_unique!.__unsafe_set_length(len+1);
+        arr.__unsafe_set(len, e)
+    );
+
     // Reduce the length of an array.
     reduce_length : I64 -> Array a -> Array a;
     reduce_length = |length, vec| (

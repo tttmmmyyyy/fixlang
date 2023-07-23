@@ -227,6 +227,7 @@
       - [`mod! : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a-1)
       - [`pop_back : Array a -> Array a`](#pop_back--array-a---array-a)
       - [`push_back : a -> Array a -> Array a`](#push_back--a---array-a---array-a)
+      - [`push_back! : a -> Array a -> Array a`](#push_back--a---array-a---array-a-1)
       - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
       - [`reduce_length : I64 -> Array a -> Array a`](#reduce_length--i64---array-a---array-a)
       - [`reserve : I64 -> Array a -> Array a`](#reserve--i64---array-a---array-a)
@@ -1666,6 +1667,11 @@ If the array is empty, this function does nothing.
 
 #### `push_back : a -> Array a -> Array a`
 Push an element to the back of an array.
+
+#### `push_back! : a -> Array a -> Array a`
+Push an element to the back of an array.
+This function panics if elements must be cloned due to the given array being shared by multiple references. 
+Note that, when the capacity of `arr` is equal to its size, `arr.push_back!(e)` will not panic even if `arr` is shared because in this case cloning elements is inevitable whether or not `arr` is shared.
 
 #### `range : I64 -> I64 -> Iterator I64`
 Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
