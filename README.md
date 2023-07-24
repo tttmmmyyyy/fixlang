@@ -31,3 +31,7 @@ You can try Fix in [Google Colaboratory](https://colab.research.google.com/githu
 ## Tutorial / references
 
 See [document](/Document.md).
+
+## Discord
+
+https://discord.gg/ad4GakEA7R
