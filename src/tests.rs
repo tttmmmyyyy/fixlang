@@ -1290,6 +1290,35 @@ pub fn test50() {
 
 #[test]
 #[serial]
+pub fn test50_3() {
+    // test loop_iter, loop_iter_m.
+    let source = r#"
+        module Main; import Debug;
+        
+        main : IO ();
+        main = (
+            let sum = Iterator::count_up(0).loop_iter(0, |sum, n| (
+                if n > 100 { break $ sum };
+                continue $ sum + n
+            ));
+            let _ = assert_eq("case-loop", sum, 100 * 101 / 2);
+
+            let io_sum : IO I64 = Iterator::count_up(0).loop_iter_m(0, |sum, n| (
+                if n > 5 { break_m $ sum };
+                let _ = *(print $ n.to_string + " ");
+                continue_m $ sum + n
+            ));
+            let _ = *println("");
+            let _ = assert_eq("case-loop_m", io_sum.__unsafe_perform, 5 * 6 / 2);
+
+            pure()
+        );
+            "#;
+    run_source(source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test51() {
     // test trait bounds.
     let source = r#"

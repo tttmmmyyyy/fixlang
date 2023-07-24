@@ -680,7 +680,6 @@ namespace Iterator {
     is_empty = |iter| iter.advance.is_none;
 
     // Loop along an iterator. At each iteration step, you can choose to continue or to break.
-    // TODO: add test.
     loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b;
     loop_iter = |init, op, iter| (
         loop((init, iter), |(accum, iter)|
@@ -694,7 +693,6 @@ namespace Iterator {
     );
 
     // Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
-    // TODO: add test.
     loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b;
     loop_iter_m = |init, op, iter| (
         loop_m((init, iter), |(accum, iter)|
