@@ -273,19 +273,19 @@
       - [`bang : Iterator a -> Iterator a`](#bang--iterator-a---iterator-a)
       - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
       - [`empty : Iterator a`](#empty--iterator-a)
+      - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
+      - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
+      - [`fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`](#fold_m--m--monad-b---b---a---m-b---iterator-a---m-b)
+      - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
+      - [`from_map : (I64 -> a) -> Iterator a`](#from_map--i64---a---iterator-a)
+      - [`generate : s -> (s -> Option (a, s)) -> Iterator a`](#generate--s---s---option-a-s---iterator-a)
       - [`get_first : Iterator a -> Option a`](#get_first--iterator-a---option-a)
       - [`get_size : Iterator a -> I64`](#get_size--iterator-a---i64)
       - [`get_tail : Iterator a -> Option (Iterator a)`](#get_tail--iterator-a---option-iterator-a)
       - [`intersperse : a -> Iterator a -> Iterator a`](#intersperse--a---iterator-a---iterator-a)
       - [`is_empty : Iterator a -> Bool`](#is_empty--iterator-a---bool)
-      - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
-      - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
-      - [`fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`](#fold_m--m--monad-b---b---a---m-b---iterator-a---m-b)
-      - [`for_loop : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`](#for_loop--b---b---a---loopresult-b-b---iterator-a---b)
-      - [`for_loop_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`](#for_loop_m--m--monad-b---b---a---m-loopresult-b-b---iterator-a---m-b)
-      - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
-      - [`from_map : (I64 -> a) -> Iterator a`](#from_map--i64---a---iterator-a)
-      - [`generate : s -> (s -> Option (a, s)) -> Iterator a`](#generate--s---s---option-a-s---iterator-a)
+      - [`loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`](#loop_iter--b---b---a---loopresult-b-b---iterator-a---b)
+      - [`loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`](#loop_iter_m--m--monad-b---b---a---m-loopresult-b-b---iterator-a---m-b)
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`subsequences : Iterator a -> Iterator (Iterator a)`](#subsequences--iterator-a---iterator-iterator-a)
@@ -1867,24 +1867,6 @@ Example: `count_up(n) = [n, n+1, n+2, ...]` (continues infinitely).
 #### `empty : Iterator a`
 Create an empty iterator.
 
-#### `get_first : Iterator a -> Option a`
-Get the first element of an iterator. If the iterator is empty, this function returns `none`.
-
-#### `get_size : Iterator a -> I64`
-Count the number of elements of an iterator.
-
-#### `get_tail : Iterator a -> Option (Iterator a)`
-Remove the first element from an iterator. If the iterator is empty, this function returns `none`.
-
-#### `intersperse : a -> Iterator a -> Iterator a`
-
-Intersperse an elemnt between elements of an iterator.
-Example: `Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])`
-
-#### `is_empty : Iterator a -> Bool`
-
-Check if the iterator is empty.
-
 #### `filter : (a -> Bool) -> Iterator a -> Iterator a`
 Filter elements by a condition function.
 
@@ -1894,12 +1876,6 @@ Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...
 
 #### `fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`
 Folds iterator from left to right by monadic action.
-
-#### `for_loop : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`
-Loop along an iterator. At each iteration step, you can choose to continue or to break.
-
-#### `for_loop_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`
-Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
 
 #### `from_array : Array a -> Iterator a`
 Create iterator from an array.
@@ -1912,6 +1888,28 @@ Example: `from_map(f) = [f(0), f(1), f(2), ...]`.
 Generate an iterator from a state transition function.
 - if `f(s)` is none, `generate(s, f)` is empty.
 - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
+
+#### `get_first : Iterator a -> Option a`
+Get the first element of an iterator. If the iterator is empty, this function returns `none`.
+
+#### `get_size : Iterator a -> I64`
+Count the number of elements of an iterator.
+
+#### `get_tail : Iterator a -> Option (Iterator a)`
+Remove the first element from an iterator. If the iterator is empty, this function returns `none`.
+
+#### `intersperse : a -> Iterator a -> Iterator a`
+Intersperse an elemnt between elements of an iterator.
+Example: `Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])`
+
+#### `is_empty : Iterator a -> Bool`
+Check if the iterator is empty.
+
+#### `loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`
+Loop along an iterator. At each iteration step, you can choose to continue or to break.
+
+#### `loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`
+Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
 
 #### `push_front : a -> Iterator a -> Iterator a`
 Push an element to an iterator.

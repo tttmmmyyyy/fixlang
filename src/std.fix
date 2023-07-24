@@ -584,54 +584,7 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Get the first element of an iterator. If the iterator is empty, this function returns `none`.
-    // TODO: add test
-    get_first : Iterator a -> Option a;
-    get_first = |iter| iter.advance.map(@0);
-
-    // Count the number of elements of an iterator.
-    get_size : Iterator a -> I64;
-    get_size = fold(0, |acm, _| acm + 1);
-
-    // Remove the first element from an iterator. If the iterator is empty, this function returns `none`.
-    // TODO: add test
-    get_tail : Iterator a -> Option (Iterator a);
-    get_tail = |iter| iter.advance.map(@1);
-
-    // Intersperse an elemnt between elements of an iterator.
-    // Example: 
-    // ```
-    // Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])
-    // ```
-    intersperse : a -> Iterator a -> Iterator a;
-    intersperse = |sep, iter| (
-        let next = |_| (
-            if iter.is_empty { Option::none() };
-            let (e, tail) = iter.advance.as_some;
-            if tail.is_empty { Option::some $ (e, Iterator::empty) };
-            Option::some $ (e, Iterator::push_front(sep) $ tail.intersperse(sep))
-        );
-        Iterator { next : next }
-    );
-
-    // Check if the iterator is empty.
-    is_empty : Iterator a -> Bool;
-    is_empty = |iter| iter.advance.is_none;
-
-    // Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
-    range : I64 -> I64 -> Iterator I64;
-    range = |a, b| (
-        let next = |_| (
-            if a == b {
-                Option::none()
-            } else {
-                Option::some $ (a, Iterator::range(a+1, b))
-            }
-        );
-        Iterator { next: next }
-    );
-
-    // Filter elements by a condition function
+        // Filter elements by a condition function
     filter : (a -> Bool) -> Iterator a -> Iterator a;
     filter = |cond, iter| (
         let next = |_| (
@@ -674,10 +627,62 @@ namespace Iterator {
         ))
     );
 
+    // Create iterator from an array.
+    from_array : Array a -> Iterator a;
+    from_array = |arr| count_up(0).take(arr.get_size).map(|i| arr.@(i));
+
+    // Creates iterator from mapping function.
+    // from_map(f) = [f(0), f(1), f(2), ...]
+    from_map : (I64 -> a) -> Iterator a;
+    from_map = |f| count_up(0).map(f);
+
+    // Generate an iterator from a state transition function.
+    // - if `f(s)` is none, `generate(s, f)` is empty.
+    // - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
+    generate : s -> (s -> Option (a, s)) -> Iterator a;
+    generate = |s, f| (
+        let next = |_| f(s).map(|(e, s)| (e, Iterator::generate(s, f)));
+        Iterator { next: next }
+    );
+
+    // Get the first element of an iterator. If the iterator is empty, this function returns `none`.
+    // TODO: add test
+    get_first : Iterator a -> Option a;
+    get_first = |iter| iter.advance.map(@0);
+
+    // Count the number of elements of an iterator.
+    get_size : Iterator a -> I64;
+    get_size = fold(0, |acm, _| acm + 1);
+
+    // Remove the first element from an iterator. If the iterator is empty, this function returns `none`.
+    // TODO: add test
+    get_tail : Iterator a -> Option (Iterator a);
+    get_tail = |iter| iter.advance.map(@1);
+
+    // Intersperse an elemnt between elements of an iterator.
+    // Example: 
+    // ```
+    // Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])
+    // ```
+    intersperse : a -> Iterator a -> Iterator a;
+    intersperse = |sep, iter| (
+        let next = |_| (
+            if iter.is_empty { Option::none() };
+            let (e, tail) = iter.advance.as_some;
+            if tail.is_empty { Option::some $ (e, Iterator::empty) };
+            Option::some $ (e, Iterator::push_front(sep) $ tail.intersperse(sep))
+        );
+        Iterator { next : next }
+    );
+
+    // Check if the iterator is empty.
+    is_empty : Iterator a -> Bool;
+    is_empty = |iter| iter.advance.is_none;
+
     // Loop along an iterator. At each iteration step, you can choose to continue or to break.
     // TODO: add test.
-    for_loop : b -> (b -> a -> LoopResult b b) -> Iterator a -> b;
-    for_loop = |init, op, iter| (
+    loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b;
+    loop_iter = |init, op, iter| (
         loop((init, iter), |(accum, iter)|
             let next = iter.advance;
             if next.is_none { break $ accum };
@@ -690,8 +695,8 @@ namespace Iterator {
 
     // Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
     // TODO: add test.
-    for_loop_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b;
-    for_loop_m = |init, op, iter| (
+    loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b;
+    loop_iter_m = |init, op, iter| (
         loop_m((init, iter), |(accum, iter)|
             let next = iter.advance;
             if next.is_none { break_m $ accum };
@@ -702,21 +707,16 @@ namespace Iterator {
         )
     );
 
-    // Create iterator from an array.
-    from_array : Array a -> Iterator a;
-    from_array = |arr| count_up(0).take(arr.get_size).map(|i| arr.@(i));
-
-    // Creates iterator from mapping function.
-    // from_map(f) = [f(0), f(1), f(2), ...]
-    from_map : (I64 -> a) -> Iterator a;
-    from_map = |f| count_up(0).map(f);
-    
-    // Generate an iterator from a state transition function.
-    // - if `f(s)` is none, `generate(s, f)` is empty.
-    // - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
-    generate : s -> (s -> Option (a, s)) -> Iterator a;
-    generate = |s, f| (
-        let next = |_| f(s).map(|(e, s)| (e, Iterator::generate(s, f)));
+    // Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
+    range : I64 -> I64 -> Iterator I64;
+    range = |a, b| (
+        let next = |_| (
+            if a == b {
+                Option::none()
+            } else {
+                Option::some $ (a, Iterator::range(a+1, b))
+            }
+        );
         Iterator { next: next }
     );
 
