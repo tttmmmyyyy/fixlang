@@ -14,6 +14,10 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 
 (This project is still a WIP and has no practical use yet.)
 
+## Examples
+
+- [How to use loop function](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src=module+Main%3B%0D%0A%0D%0A%2F%2F+Prints+30th+value+of+Fibonacci+sequence.%0D%0Amain+%3A+IO+%28%29%3B%0D%0Amain+%3D+%28%0D%0A++++let+arr+%3D+Array%3A%3Afill%2831%2C+0%29%3B%0D%0A++++let+arr+%3D+arr.set%21%280%2C+0%29%3B%0D%0A++++let+arr+%3D+arr.set%21%281%2C+1%29%3B%0D%0A++++%2F%2F+A+way+for+loop+is+to+use+%60loop%60%2C+%60continue%60+and+%60break%60.%0D%0A++++%2F%2F+loop+%3A+s+-%3E+LoopResult+s+r+-%3E+r+--+Takes+the+initial+state+and+loop+body%2C+and+performs+loop.%0D%0A++++%2F%2F+continue+%3A+s+-%3E+LoopResult+s+r+--+Takes+the+next+state+and+continues+the+loop.%0D%0A++++%2F%2F+break+%3A+r+-%3E+LoopResult+s+r+--+Breaks+the+loop+and+returns+the+given+value+as+a+result+of+loop.%0D%0A++++let+arr+%3D+loop%28%282%2C+arr%29%2C+%7C%28idx%2C+arr%29%7C%0D%0A++++++++if+idx+%3D%3D+arr.get_size+%7B%0D%0A++++++++++++break+%24+arr%0D%0A++++++++%7D+else+%7B%0D%0A++++++++++++let+x+%3D+arr.%40%28idx-1%29%3B%0D%0A++++++++++++let+y+%3D+arr.%40%28idx-2%29%3B%0D%0A++++++++++++let+arr+%3D+arr.set%21%28idx%2C+x%2By%29%3B%0D%0A++++++++++++continue+%24+%28idx%2B1%2C+arr%29%0D%0A++++++++%7D%0D%0A++++%29%3B%0D%0A++++println+%24+arr.%40%2830%29.to_string+%2F%2F+832040%0D%0A%29%3B%0D%0A)
+
 ## Install (macOS / WSL)
 
 - Install [Rust](https://www.rust-lang.org/tools/install).
