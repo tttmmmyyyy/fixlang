@@ -3,8 +3,8 @@ module Main;
 /*
 Eq trait is defined in standard library as follows: 
 
-trait a: Eq {
-    eq: a -> a -> Bool
+trait a : Eq {
+    eq : a -> a -> Bool
 }
 
 Expression `x == y` is interpreted as `Eq.eq(x, y)`.
@@ -12,25 +12,24 @@ Expression `x == y` is interpreted as `Eq.eq(x, y)`.
 
 type Pair a b = struct { fst: a, snd: b };
 
-// In the trait implementation, you can specify assumptions of the trait in the `[]` bracket after `impl`.
-impl [a: Eq, b: Eq] Pair a b : Eq {
+// In the trait implementation, you can specify preconditions on type variables in `[]` bracket after `impl`.
+impl [a : Eq, b : Eq] Pair a b : Eq {
     eq = |lhs, rhs| (
         lhs.@fst == rhs.@fst && lhs.@snd == rhs.@snd
     );
 }
 
-// Also, you can specify assumptions of the type of a symbol (= module-level global value) 
-// in the `[]` bracket before the type signature.
-search : [a: Eq] a -> Array a -> I64;
+// You can specify preconditions of type variables in the `[]` bracket before type signature.
+search : [a : Eq] a -> Array a -> I64;
 search = |elem, arr| loop(0, |idx|
     if idx == arr.get_size { break $ -1 };
     if arr.@(idx) == elem { break $ idx };
     continue $ (idx + 1)
 );
 
-// An example of higher-kinded trait.
+// An example of defining higher-kinded trait.
 // All type variable has kind `*` by default, and any kind of higher-kinded type variable need to be annoted explicitly.
-trait [f:*->*] f : MyFunctor {
+trait [f : *->*] f : MyFunctor {
     mymap : (a -> b) -> f a -> f b;
 }
 
