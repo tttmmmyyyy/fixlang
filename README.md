@@ -10,7 +10,7 @@ Fix is a programming language with the following features:
 
 In another perspective, Fix is a language which uses reference counting to provide garbage collection and interior mutability. To avoid circular reference, all values are semantically immutable and it restricts dynamic recursive definition and forces to use fixed-point combinator instead. To reduce copy cost on "modify" operation of a value, Fix mutates it if the reference counter is one.
 
-You can try Fix in [Google Colaboratory](https://colab.research.google.com/github/tttmmmyyyy/fixlang/blob/main/run_fix_2.ipynb).
+You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-playground/).
 
 (This project is still a WIP and has no practical use yet.)
 
