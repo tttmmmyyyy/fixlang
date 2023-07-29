@@ -7,7 +7,7 @@ trait a : Eq {
     eq : a -> a -> Bool
 }
 
-Expression `x == y` is interpreted as `Eq.eq(x, y)`.
+Expression `x == y` is interpreted as `Eq::eq(x, y)`.
 */
 
 type Pair a b = struct { fst: a, snd: b };
@@ -33,6 +33,8 @@ trait [f : *->*] f : MyFunctor {
     mymap : (a -> b) -> f a -> f b;
 }
 
+// An example of implementing higher-kinded trait.
+// `Array` is a type of kind `* -> *`, so matches to the kind of trait `MyFunctor`.
 impl Array : MyFunctor {
     mymap = |f, arr| (
         Array::from_map(arr.get_size, |idx| f(arr.@(idx)))
