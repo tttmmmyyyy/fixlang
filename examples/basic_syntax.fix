@@ -41,7 +41,7 @@ truth2 = (
     // It has lower priority than usual function call, so `3.f(1, 2) == f(1, 2)(3) == f(1, 2, 3)`.
     let nine = 3.f(1, 2);
 
-    double(nine + twelve)
+    double $ nine + twelve
 );
 
 // Fix program calls `Main::main` (i.e., `main` of `Main` module) as the entry point.
