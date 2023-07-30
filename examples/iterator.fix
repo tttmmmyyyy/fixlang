@@ -1,0 +1,49 @@
+module Main;
+
+import Math; // for Math::gcd
+
+// Iterator, a.k.a. lazy list, is defined as follows.
+// `type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };`
+
+// Instead of containing "the next value", a non-empty iterator has a function to generate a pair of
+// - the next value and 
+// - the iterator to generate rest values.
+
+// Iterators are important to write program in a functional manner. 
+// The following example illustrates the power of iterators.
+
+// Count divisors of a number.
+// For example, divisors of 100 are 1, 2, 4, 5, 10, 20, 25, 50, 100, 
+// which can be grouped into as {1, 100}, {2, 50}, {4, 25}, {10}.
+// So `count_divs(100) == 2 + 2 + 2 + 2 + 1`. 
+count_divs : I64 -> I64;
+count_divs = |n| (
+    Iterator::count_up(1) // Generate an infinite iterator `1, 2, 3, ...` which are candidates for divisors of `n`.
+        .take_while(|d| d*d <= n) // Take elements less than or equal to root of `n`.
+        .filter(|d| n%d == 0) // Take only divisors.
+        .map(|d| if d*d == n { 1 } else { 2 }) // Convert a divisor into the size of the group it belongs to.
+        .fold(0, Add::add) // Sum up the iterator. `fold` folds an iterator by an operator (two-variable function). 
+        // `Add::add : I64 -> I64 -> I64` adds two integers.
+);
+
+// Infinite iterator of positive rational numbers less than 1.
+rationals : Iterator (I64, I64); // Pair of numerator and denominator.
+rationals = (
+    Iterator::count_up(1) // Iterator of denominators
+        .map(|d| (
+            Iterator::range(1, d) // Iterator of numerators
+                .filter(|n| gcd(n, d) == 1) // Filter out numerators which has common factor with the denominator.
+                .map(|n| (n, d)) // Make pair of numerator and denominator.
+        ))
+        .flatten // `flatten : Iterator (Iterator a) -> Iterator a`
+);
+
+stringify_rational : (I64, I64) -> String;
+stringify_rational = |(n, d)| n.to_string + "/" + d.to_string;
+
+main : IO ();
+main = (
+    let _ = *(println $ "Number of divisors of 100 is " + count_divs(100).to_string + ".");
+    let _ = *(println $ "Fist 100 rationals : " + rationals.take(100).map(stringify_rational).join(", "));
+    pure()
+);
