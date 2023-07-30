@@ -1,0 +1,30 @@
+module Main;
+
+import Math; // for pi64
+
+// Tagged union can be defined as follows:
+type Angle = union { radian: F64, degree: F64 };
+
+// You can define generic unions by writing `type SomeUnion a = union { ...(use type `a` for type of fields)... };`
+
+namespace Angle {
+    to_degree : Angle -> Angle;
+    to_degree = |a| (
+        // `is_(variant) : (Union) -> Bool` checks whether the union value is a specific variant.
+        if a.is_degree { a };
+        // `(variant) : (VariantType) -> (Union)` constructs an union value.
+        // `as_(variant) : (Union) -> (VariantType)` extracts a value from an union value (or panics).
+        Angle::degree(a.as_radian * 180.0 / Math::pi64)
+    );
+
+    stringify_as_degree : Angle -> String;
+    stringify_as_degree = |a| (
+        let a = a.to_degree;
+        a.as_degree.to_string + " deg" 
+    );
+}
+
+main : IO ();
+main = (
+    println $ Angle::radian(Math::pi64 / 6.0).stringify_as_degree // 30 degree
+);

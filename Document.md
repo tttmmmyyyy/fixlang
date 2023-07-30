@@ -416,6 +416,8 @@
   - [`binomial_coefficients : I64 -> Array (Array I64)`](#binomial_coefficients--i64---array-array-i64)
   - [`_gcd_nonneg : I64 -> I64 -> I64`](#_gcd_nonneg--i64---i64---i64)
   - [`gcd : I64 -> I64 -> I64`](#gcd--i64---i64---i64)
+  - [`pi32 : F32`](#pi32--f32)
+  - [`pi64 : F64`](#pi64--f64)
 - [Operators](#operators)
 
 
@@ -2381,6 +2383,12 @@ Calculate greatest common divisors of two non-negative integers.
 ## `gcd : I64 -> I64 -> I64`
 Calculate greatest common divisor of two integers. `gcd(0, 0)` returns `0`.
 NOTE: currently, this function does not support `I64::minimum`.
+
+## `pi32 : F32`
+Pi as `F32`
+
+## `pi64 : F64`
+Pi as `F64`
 
 # Operators
 
