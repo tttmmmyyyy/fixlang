@@ -33,3 +33,11 @@ _gcd_nonneg = |n, m| (
 // NOTE: currently, this function does not support I64::minimum.
 gcd : I64 -> I64 -> I64;
 gcd = |n, m| _gcd_nonneg(n.abs, m.abs);
+
+// pi as F32
+pi32 : F32;
+pi32 = 3.14159265_F32;
+
+// pi as F64
+pi64 : F64;
+pi64 = 3.141592653589793;
