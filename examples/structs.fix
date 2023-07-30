@@ -1,0 +1,70 @@
+module Main;
+
+// You can define struct as follows:
+// `F64` is the type of 64-bit floating values.
+type Quantity = struct { value : F64, unit : String };
+
+namespace Quantity {
+
+    make : F64 -> String -> Quantity;
+    make = |val, unit| (
+        // Construction of a struct value.
+        Quantity { value : val, unit : unit }
+    );
+
+    stringify : Quantity -> String;
+    stringify = |q| (
+        // To get a field value, use the function `@(field name) : (Struct) -> (FieldType)`.
+        q.@value.to_string + " " + q.@unit
+    );
+
+    add : Quantity -> Quantity -> Quantity;
+    // Pattern matching is available in function definition.
+    add = |Quantity { value : lhs_val, unit : lhs_unit }, rhs| (
+        // Pattern matching is also available in let-binding.
+        let Quantity { value : rhs_val, unit : rhs_unit } = rhs;
+        if lhs_unit == rhs_unit {
+            Quantity { value : lhs_val + rhs_val, unit : lhs_unit }
+        } else {
+            abort()
+        }
+    );
+
+    // "3.0 kg" * "2.0 m" == "6.0 kg m"
+    mul : Quantity -> Quantity -> Quantity;
+    mul = |rhs, lhs| ( // Note that `lhs.mul(rhs) == mul(rhs, lhs)`, so we call the first argument as `rhs`.
+        let val = lhs.@value * rhs.@value;
+        // `set_(field name) : (FieldType) -> (Struct) -> (Struct)` updates a field.
+        // `mod_(field name) : ((FieldType) -> (FieldType)) -> (Struct) -> (Struct)` transforms a field.
+        lhs.set_value(val).mod_unit(|u| u + " " + rhs.@unit)
+    );
+
+    // Pair (or tuple) is a special struct with fields `0` and `1`.
+    // Field accessor functions `@0`, `@1`, sette/modifier functions `set_0`, `set_1`, `mod_0`, `mod_1`
+    // and pattern matching are available as well as user-defined structs.
+    from_pair : (F64, String) -> Quantity;
+    from_pair = |(val, unit)| make(val, unit);
+}
+
+// You can also define a generic struct parametrized by a type variable:
+type Quantity2 a = struct { value : a, unit : String };
+
+namespace Quantity2 {
+    make : a -> String -> Quantity2 a;
+    make = |val, unit| Quantity2 { value : val, unit : unit };
+
+    stringify : [a : ToString] Quantity2 a -> String;
+    stringify = |q| q.@value.to_string + " " + q.@unit;
+}
+
+main : IO ();
+main = (
+    let x = Quantity::make(1.0, "kg");
+    let y = Quantity::make(2.0, "kg");
+    let z = Quantity::make(3.0, "m");
+    let q = x.add(y).mul(z); // (1.0 kg + 2.0 kg) * 3.0 m 
+    let _ = *(println $ q.stringify);
+    let q2 = Quantity2::make(42, "s"); // q2 : Quantity2 I64
+    let _ = *(println $ q2.stringify);
+    pure()
+);
