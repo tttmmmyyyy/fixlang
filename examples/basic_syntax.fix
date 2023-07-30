@@ -1,0 +1,51 @@
+// Each source file has to start module declaration.
+module Main;
+
+// Declaration and definition of global value.
+// `I64` is the type of 64-bit integers.
+truth : I64;
+truth = 42; 
+
+// Declaration and definition of global (recursive) function.
+// To define function, write `|arg0, arg1, ...| (function body)`.
+// (Parentheses around `(function body)` is not mandatory.)
+calc_fib : I64 -> I64;
+calc_fib = |n| (
+    if n <= 1 { 
+        n  // Note that Fix is an expression based language. You don't need to write "return statement".
+    } else {
+        calc_fib(n-1) + calc_fib(n-2)
+    }
+);
+
+// Another syntax of `if`, `if (cond) { (then expr) }; (else expr)`, can be used to write early return.
+calc_fib2 : I64 -> I64;
+calc_fib2 = |n| (
+    if n <= 1 { n }; // Returnn early.
+    let x = calc_fib2(n-1); // Use `let` to define local name.
+    let y = calc_fib2(n-2);
+    x + y
+);
+
+truth2 : I64;
+truth2 = (
+    let f = |a, b, c| (a + b) * c; // You can define local function (closure) like this. `f` has type `I64 -> I64 -> I64 -> I64`.
+    let double = f(1, 1); // Partial application. `double` has type `I64 -> I64` and maps `c` to `(1 + 1) * c == 2 * c`.
+    let twelve = double $ double $ 3; // Right-associative operator `$` applies a function to a value: `f $ x == f(x)` and `f $ g $ x == f(g(x))`.
+    let nine = 3.f(1, 2); // `.` is another operator to apply a function: `x.f == f(x)`. It has lower priority than usual function call, so `3.f(1, 2) == f(1, 2)(3) == f(1, 2, 3)`.
+    double(nine + twelve)
+);
+
+// Fix program calls `Main::main` (i.e., `main` of `Main` module) as the entry point.
+// `Main::main` must have type `IO ()`, where `IO a` is the type of I/O actions which return a value of type `a`.
+// `()` is the unit type, which has a unique value also written as `()`.
+main : IO ();
+main = (
+    // `println : String -> IO ()` makes an I/O action that prints a string (and a newline).
+    // Roughly speaking, prefix operator `*act` performs the I/O action `act` and evaluates to the value returned by `act`.
+    let _ = *(println $ "truth : " + truth.to_string);
+    let _ = *(println $ "truth2 : " + truth2.to_string);
+    let _ = *(println $ "calc_fib(10) : " + calc_fib(10).to_string);
+    let _ = *(println $ "calc_fib2(10) : " + calc_fib2(10).to_string);
+    pure() // `pure : a -> IO a` creates an I/O action which does nothing and only returns a value. By a syntax sugar, you can write `pure()` instead of `pure(())`.
+);
