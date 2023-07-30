@@ -1,4 +1,4 @@
-// Each source file has to start module declaration.
+// Each source file has to start with module declaration.
 module Main;
 
 // Declaration and definition of global value.
