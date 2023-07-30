@@ -9,7 +9,7 @@ main = (
     let arr = arr.set!(1, 1);
     let calc_fib_array = (
         // To make recursive function locally, use the idiom:
-        // fix \loop -> \(argments) -> (body of recursive_function that calls `loop`).
+        // fix |loop, arg| (body of recursive_function that calls `loop`).
         fix $ |loop, arr: Array I64, n|
             if n == 31 { arr };
             let x = arr.@(n-1);
