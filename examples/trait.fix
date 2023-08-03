@@ -1,15 +1,28 @@
 module Main;
 
-/*
-Eq trait is defined in standard library as follows: 
+// You can define a trait and implement it as follows:
+trait a : SelfIntroduction {
+    // An IO action which introduces the given value.
+    introduce_self : a -> IO ();
+}
 
+impl I64 : SelfIntroduction {
+    introduce_self = |n| println $ "Hi! I'm a 64-bit integer " + n.to_string + "!";
+}
+
+/*
+`Eq` trait is defined in standard library as follows: 
+
+```
 trait a : Eq {
     eq : a -> a -> Bool
 }
+```
 
 Expression `x == y` is interpreted as `Eq::eq(x, y)`.
 */
 
+// As another example, 
 type Pair a b = struct { fst: a, snd: b };
 
 // In the trait implementation, you can specify preconditions on type variables in `[]` bracket after `impl`.
@@ -45,5 +58,6 @@ main : IO ();
 main = (
     let arr = Array::from_map(6, |x| x); // arr = [0,1,2,...,9].
     let arr = arr.mymap(|x| Pair { fst: x % 2, snd: x % 3 }); // arr = [(0, 0), (1, 1), (0, 2), ...].
-    println $ arr.search(Pair { fst: 1, snd: 2}).to_string // 5, the first number x such that x % 2 == 1 and x % 3 == 2.
+    let x = arr.search(Pair { fst: 1, snd: 2}); // 5, the first number x such that x % 2 == 1 and x % 3 == 2.
+    x.introduce_self
 );
