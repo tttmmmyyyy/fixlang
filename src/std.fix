@@ -865,6 +865,9 @@ namespace Option {
         if opt.is_none { def } else { opt.as_some }
     );
 
+    // Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
+    map_or : b -> (a -> b) -> Option a -> b;
+    map_or = |def, f, opt| if opt.is_some { f(opt.as_some) } else { def };
 }
 
 impl [a : Eq] Option a : Eq {

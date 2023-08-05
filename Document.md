@@ -303,6 +303,7 @@
       - [`continue_m : [m : Monad] s -> m (LoopResult s r)`](#continue_m--m--monad-s---m-loopresult-s-r)
     - [Option](#option)
       - [`as_some_or : a -> Option a -> a`](#as_some_or--a---option-a---a)
+      - [`map_or : b -> (a -> b) -> Option a -> b`](#map_or--b---a---b---option-a---b)
       - [`impl [a : Eq] Option a : Eq`](#impl-a--eq-option-a--eq)
       - [`impl Option : Functor`](#impl-option--functor)
       - [`impl Option : Monad`](#impl-option--monad)
@@ -1973,6 +1974,9 @@ type Option a = union { none: (), some: a };
 
 #### `as_some_or : a -> Option a -> a`
 Unwrap an option value if it is `some`, or returns given default value if it is `none`.
+
+#### `map_or : b -> (a -> b) -> Option a -> b`
+Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
 
 #### `impl [a : Eq] Option a : Eq`
 
