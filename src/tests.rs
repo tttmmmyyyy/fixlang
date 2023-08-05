@@ -2137,6 +2137,13 @@ pub fn test82() {
         let x = w.@(3) $ x; // += 2
         let _ = assert_eq("", x, 3);
 
+        let res = Array::empty(3);
+        let v = [[1], [2], [3]].to_iter.fold(res, |res, v| (
+            let res = res.assert_unique!("res is shared!");
+            res.append(v)
+        ));
+        let _ = assert_eq("", v, [1, 2, 3]);
+
         pure()
     );
     "#;
