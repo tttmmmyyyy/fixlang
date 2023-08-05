@@ -210,6 +210,7 @@
       - [`act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a)
       - [`act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a-1)
       - [`append : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a)
+      - [`append! : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a-1)
       - [`borrow_ptr : (Ptr -> b) -> Array a -> b`](#borrow_ptr--ptr---b---array-a---b)
       - [`empty : I64 -> Array a`](#empty--i64---array-a)
       - [`fill : I64 -> a -> Array a`](#fill--i64---a---array-a)
@@ -1610,7 +1611,15 @@ This function is almost the same as `Array::act`, but it panics if the given arr
 
 #### `append : Array a -> Array a -> Array a`
 Append an array to an array.
-Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`. 
+Note 1: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
+Note 2: 
+As an optimization, when `a1` is empty, `a1.append(a2)` may return `a2` itself.
+So even if you call `append` on an unique empty array, the returned array can be a shared one.
+
+#### `append! : Array a -> Array a -> Array a`
+Append an array to an array.
+This is similar to `Array::append`, but `a1.append!(a2)` panics if this function has to clone `a1` due to it being shared.
+Note that, when the capacity of `a1` is less than `a1.get_size + a2.get_size`, then `a1.append!(a2)` will not panic even if `a1` is shared, because in this case cloning is inevitable whether or not `a1` is shared.
 
 #### `borrow_ptr : (Ptr -> b) -> Array a -> b`
 Call a function with a pointer to the memory region where elements are stored.

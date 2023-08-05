@@ -80,7 +80,10 @@ namespace Array {
     );
 
     // Append an array to an array.
-    // Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
+    // Note 1: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
+    // Note 2: 
+    // As an optimization, when `a1` is empty, `a1.append(a2)` may return `a2` itself.
+    // So even if you call `append` on an unique empty array, the returned array can be a shared one.
     append : Array a -> Array a -> Array a;
     append = |v2, v1| (
         // if v2 is empty, return early to avoid unnecessary clone.
@@ -94,6 +97,34 @@ namespace Array {
         // Reserve v1's buffer and force uniqueness.
         let len = v1_len + v2_len;
         let v1 = v1.reserve(len).force_unique;
+        
+        // Set length.
+        let v1 = v1.__unsafe_set_length(len);
+
+        // Copy elements of v2 to v1.
+        loop((0, v1), |(idx, v1)|(
+            if idx >= v2_len { break $ v1 };
+            let v1 = v1.__unsafe_set(v1_len + idx, v2.@(idx));
+            continue $ (idx+1, v1)
+        ))
+    );
+
+    // Append an array to an array.
+    // This is similar to `Array::append`, but `a1.append!(a2)` panics if this function has to clone `a1` due to it being shared.
+    // Note that, when the capacity of `a1` is less than `a1.get_size + a2.get_size`, then `a1.append!(a2)` will not panic even if `a1` is shared, because in this case cloning is inevitable whether or not `a1` is shared.
+    append! : Array a -> Array a -> Array a;
+    append! = |v2, v1| (
+        // if v2 is empty, return early to avoid unnecessary clone.
+        let v2_len = v2.get_size;
+        if v2_len == 0 { v1 };
+
+        // if v1 is empty, return early to avoid unnecessary clone.
+        let v1_len = v1.get_size;
+        if v1_len == 0 { v2 };
+
+        // Reserve v1's buffer and force uniqueness.
+        let len = v1_len + v2_len;
+        let v1 = v1.reserve(len).force_unique!;
         
         // Set length.
         let v1 = v1.__unsafe_set_length(len);
