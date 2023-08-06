@@ -306,6 +306,34 @@ impl [a : Eq] Array a : Eq {
     );
 }
 
+impl Array : Monad {
+    pure = |e| [e];
+    bind = |f, arr| (
+        let size = arr.get_size;
+        let arr_arr = Array::empty(size);
+        let (arr_arr, count) = loop((0, arr_arr, 0), |(idx, arr_arr, count)| (
+            if idx == size { break $ (arr_arr, count) };
+            let inner = f $ arr.@(idx);
+            let count = count + inner.get_size;
+            let arr_arr = arr_arr.push_back(inner);
+            continue $ (idx + 1, arr_arr, count)
+        ));
+        let ret = Array::empty(count);
+        loop((0, ret), |(i, ret)| (
+            if i == size { break $ ret };
+            let inner = arr_arr.@(i);
+            continue $ loop((0, ret), |(j, ret)|(
+                if j == inner.get_size {
+                    break $ (i + 1, ret)
+                } else {
+                    let ret = ret.push_back(inner.@(j));
+                    continue $ (j + 1, ret)
+                }
+            ))
+        ))
+    );
+}
+
 impl Bool : ToString {
     to_string = |lhs| (
         if lhs { "true" } else { "false" }
