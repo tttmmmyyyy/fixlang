@@ -3695,6 +3695,27 @@ pub fn test123_5() {
 
 #[test]
 #[serial]
+pub fn test124() {
+    // Test Array : Monad (via flatten)
+    let source = r#"
+        module Main; 
+
+        import Debug;
+
+        main : IO ();
+        main = (
+            // let _ = assert_eq("case 1", [[1,2,3], [], [4, 5, 6]].flatten, [1, 2, 3, 4, 5, 6]);
+            // let _ = assert_eq("case 2", [[]].flatten, []);
+            // let _ = assert_eq("case 3", [].flatten, []);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();
