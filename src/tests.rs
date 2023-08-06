@@ -2415,15 +2415,15 @@ pub fn test92() {
 pub fn test93() {
     // Test try to make circular reference (and fail).
     let source = r#"
-    module Main; import Debug;
+    module Main; 
 
-    type SelfRef = box struct { data : Option SelfRef };
+    type Leaker = box struct { data : Option Leaker };
 
     main : IO ();
     main = (
-        let ref = SelfRef { data : Option::none() };
-        // let ref = ref.set_data!(Option::some(ref)); // fails
-        let ref = ref.set_data(Option::some(ref)); // doesn't make circular reference in fact.
+        let leaker = Leaker { data : Option::none() };
+        // let leaker = leaker.set_data!(Option::some(leaker)); // panics
+        let leaker = leaker.set_data(Option::some(leaker)); // doesn't make circular reference in fact.
         pure()
     );
 
