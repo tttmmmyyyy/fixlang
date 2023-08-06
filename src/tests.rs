@@ -3704,9 +3704,9 @@ pub fn test124() {
 
         main : IO ();
         main = (
-            // let _ = assert_eq("case 1", [[1,2,3], [], [4, 5, 6]].flatten, [1, 2, 3, 4, 5, 6]);
-            // let _ = assert_eq("case 2", [[]].flatten, []);
-            // let _ = assert_eq("case 3", [].flatten, []);
+            let _ = assert_eq("case 1", [[1,2,3], [], [4, 5, 6]].flatten, [1, 2, 3, 4, 5, 6]);
+            let _ = assert_eq("case 2", [[]].flatten, []);
+            let _ = assert_eq("case 3", [].flatten, []);
 
             pure()
         );
