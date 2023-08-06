@@ -3696,7 +3696,7 @@ pub fn test123_5() {
 #[test]
 #[serial]
 pub fn test124() {
-    // Test Array : Monad (via flatten)
+    // Test Array : Monad
     let source = r#"
         module Main; 
 
@@ -3704,9 +3704,36 @@ pub fn test124() {
 
         main : IO ();
         main = (
+            // flatten
             let _ = assert_eq("case 1", [[1,2,3], [], [4, 5, 6]].flatten, [1, 2, 3, 4, 5, 6]);
             let _ = assert_eq("case 2", [[]].flatten, []: Array I64);
             let _ = assert_eq("case 3", [].flatten, []: Array I64);
+
+            // bind
+            let arr = do {
+                let x = *[1,2,3];
+                let y = *['a','b','c'];
+                pure $ (x, y)
+            };
+            let _ = assert_eq("case 4", arr, [(1, 'a'), (1, 'b'), (1, 'c'), (2, 'a'), (2, 'b'), (2, 'c'), (3, 'a'), (3, 'b'), (3, 'c')]);
+
+            let arr = do {
+                let x = *[1,2,3];
+                [x, x]
+            };
+            let _ = assert_eq("case 5", arr, [1, 1, 2, 2, 3, 3]);
+
+            let arr = do {
+                let x = *[1,2,3];
+                []
+            };
+            let _ = assert_eq("case 5", arr, [] : Array I64);
+
+            let arr = do {
+                let x = *[];
+                [x]
+            };
+            let _ = assert_eq("case 5", arr, [] : Array I64);
 
             pure()
         );
