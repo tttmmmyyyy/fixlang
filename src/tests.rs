@@ -3696,7 +3696,7 @@ pub fn test123_5() {
 #[test]
 #[serial]
 pub fn test124() {
-    // Test Array : Monad
+    // Test Array : Functor, Array : Monad
     let source = r#"
         module Main; 
 
@@ -3727,13 +3727,17 @@ pub fn test124() {
                 let x = *[1,2,3];
                 []
             };
-            let _ = assert_eq("case 5", arr, [] : Array I64);
+            let _ = assert_eq("case 6", arr, [] : Array I64);
 
             let arr = do {
                 let x = *[];
                 [x]
             };
-            let _ = assert_eq("case 5", arr, [] : Array I64);
+            let _ = assert_eq("case 7", arr, [] : Array I64);
+
+            // map
+            let _ = assert_eq("case 8", [1, 2, 3].map(|i| i*i), [1, 4, 9]);
+            let _ = assert_eq("case 9", [].map(|i| i*i), [] : Array I64);
 
             pure()
         );

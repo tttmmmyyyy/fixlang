@@ -286,11 +286,9 @@ namespace Array {
         vec
     );
 
-
     // Convert an array to an iterator.
     to_iter : Array a -> Iterator a;
     to_iter = Iterator::from_array;
-
 }
 
 impl [a : Eq] Array a : Eq {
@@ -302,6 +300,18 @@ impl [a : Eq] Array a : Eq {
             if idx == len { break $ true };
             if lhs.@(idx) != rhs.@(idx) { break $ false };
             continue $ idx + 1
+        ))
+    );
+}
+
+impl Array : Functor {
+    map = |f, arr| (
+        let n = arr.get_size;
+        let res = Array::empty(n);
+        loop((0, res), |(i, res)| (
+            if i == n { break $ res };
+            let e = f $ arr.@(i);
+            continue $ (i+1, res.push_back(e))
         ))
     );
 }
