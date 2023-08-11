@@ -40,7 +40,7 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 ## Tutorial / references
 
 * See [document](/Document.md).
-* 日本語解説：[HaskellとRustを足して2で割ったような関数型言語Fixを作っている話](https://qiita.com/tttmmmyyyy/items/ddb1c44efd81e3fc2370)
+* 紹介（日本語）：[HaskellとRustを足して2で割ったような関数型言語Fixを作っている話](https://qiita.com/tttmmmyyyy/items/ddb1c44efd81e3fc2370)
 
 ## Discord
 
