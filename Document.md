@@ -342,6 +342,8 @@
     - [Tuple{N}](#tuplen)
       - [`impl [a : Eq, b : Eq] (a, b) : Eq`](#impl-a--eq-b--eq-a-b--eq)
       - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
+    - [()](#)
+      - [`impl () : Eq`](#impl---eq)
   - [Functions](#functions-1)
     - [`abort : () -> a`](#abort-----a)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
@@ -2115,6 +2117,15 @@ Defined as an identity function.
 #### `impl [a : Eq, b : Eq] (a, b) : Eq`
 
 #### `impl [a : ToString, b : ToString] (a, b) : ToString`
+
+### ()
+
+The unit type which has a unique value also written as `()`.
+
+Literals:
+* `() : ()` represents the unique value of type `()`.
+
+#### `impl () : Eq`
 
 ## Functions
 

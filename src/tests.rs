@@ -3747,6 +3747,26 @@ pub fn test124() {
 
 #[test]
 #[serial]
+pub fn test125() {
+    // Test () : Eq
+    let source = r#"
+        module Main; 
+
+        import Debug;
+
+        main : IO ();
+        main = (
+            let arr = [(), ()];
+            let _ = assert_eq("", arr.@(0), arr.@(1));
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();

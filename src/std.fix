@@ -1161,6 +1161,10 @@ impl String : ToString {
     to_string = |s| s;
 }
 
+impl () : Eq {
+    eq = |_, _| true;
+}
+
 // Function
 
 // Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
