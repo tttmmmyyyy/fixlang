@@ -347,10 +347,10 @@
   - [Functions](#functions-1)
     - [`abort : () -> a`](#abort-----a)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
-    - [`is_unique : a -> (Bool, a)`](#is_unique--a---bool-a)
     - [`fix : ((a -> b) -> a -> b) -> a -> b`](#fix--a---b---a---b---a---b)
     - [`loop : s -> (s -> LoopResult s r) -> r`](#loop--s---s---loopresult-s-r---r)
     - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
+    - [`unsafe_is_unique : a -> (Bool, a)`](#unsafe_is_unique--a---bool-a)
   - [Traits](#traits)
     - [Functor (\* -\> \*)](#functor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
@@ -2139,41 +2139,6 @@ Stops the execution of the program.
 
 Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
 
-### `is_unique : a -> (Bool, a)`
-
-This function checks if a value is uniquely refernced by a name, and returns the result paired with the given value itself. If `a` is unboxed, the 0th component of the returned value is always `true`.
-
-Example: 
-
-```
-module Main;
-
-import Debug;
-
-main : IO ();
-main = (
-    // For unboxed value, it returns true even if the value is used later.
-    let int_val = 42;
-    let (unique, _) = int_val.is_unique;
-    let use = int_val + 1;
-    let _ = assert_eq("fail: int_val is shared", unique, true);
-
-    // For boxed value, it returns true if the value isn't used later.
-    let arr = Array::fill(10, 10);
-    let (unique, arr) = arr.is_unique;
-    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
-    let _ = assert_eq("fail: arr is shared", unique, true);
-
-    // Fox boxed value, it returns false if the value will be used later.
-    let arr = Array::fill(10, 10);
-    let (unique, _) = arr.is_unique;
-    let use = arr.@(0);
-    let _ = assert_eq("fail: arr is unique", unique, false);
-
-    pure()
-);
-```
-
 ### `fix : ((a -> b) -> a -> b) -> a -> b`
 
 `fix` enables you to make a recursive function locally. The idiom is: `fix $ |loop, var| -> (expression calls loop)`.
@@ -2237,6 +2202,45 @@ main = (
 );
 ```
 
+### `unsafe_is_unique : a -> (Bool, a)`
+
+This function checks if a value is uniquely refernced by a name, and returns the result paired with the given value itself. If `a` is unboxed, the 0th component of the returned value is always `true`.
+
+NOTE: この関数の戻り値を使用して条件分岐し、あなたの実装している関数の戻り値を変更することは、関数の参照等価性を失う可能性があります。もしある値がsharedなときにプログラムをpanicさたいなら、この関数の代わりに`Debug::assert_unique!`を使うことを検討してください。
+
+NOTE: Using the return value of this function to branch and change the return value of your function may break the referential transparency of the function. If you want to panic when a value is shared, consider using `Debug::assert_unique!` instead.
+
+Example: 
+
+```
+module Main;
+
+import Debug;
+
+main : IO ();
+main = (
+    // For unboxed value, it returns true even if the value is used later.
+    let int_val = 42;
+    let (unique, _) = int_val.unsafe_is_unique;
+    let use = int_val + 1;
+    let _ = assert_eq("fail: int_val is shared", unique, true);
+
+    // For boxed value, it returns true if the value isn't used later.
+    let arr = Array::fill(10, 10);
+    let (unique, arr) = arr.unsafe_is_unique;
+    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+    let _ = assert_eq("fail: arr is shared", unique, true);
+
+    // Fox boxed value, it returns false if the value will be used later.
+    let arr = Array::fill(10, 10);
+    let (unique, _) = arr.unsafe_is_unique;
+    let use = arr.@(0);
+    let _ = assert_eq("fail: arr is unique", unique, false);
+
+    pure()
+);
+```
+
 ## Traits
 
 ### Functor (* -> *)
@@ -2296,7 +2300,10 @@ This is equivalent to `Monad::bind(|x|x)`.
 ## `assert_eq : [a: Eq] String -> a -> a -> ()`
 
 ## `assert_unique! : String -> a -> a`
+
 Expression `assert_unique!(msg, obj)` assets that `obj`'s reference counter is one, and returns `obj` itself. If `obj` is shared by multiple names, `assert_unique!(msg, obj)` prints the `msg` to the standard output and aborts.
+
+The main use of this function is to check whether a boxed value given as an argument is unique.
 
 ## `debug_print : String -> ()`
 

@@ -365,7 +365,7 @@ pub fn make_std_mod() -> Program {
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "loop"), state_loop());
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "is_unique"),
+        FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),
     );
 

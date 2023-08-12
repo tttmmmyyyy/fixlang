@@ -63,7 +63,7 @@ namespace Array {
     // If you call `act` on an array which is shared by multiple references, this function clones the given array when inserting the result of your action into the array. This means that you don't need to pay cloning cost when your action failed, as expected.
     act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     act = |idx, fun, arr| (
-        let (unique, arr) = arr.is_unique;
+        let (unique, arr) = arr.unsafe_is_unique;
         if unique {
             arr.act!(idx, fun)
         } else { // shared

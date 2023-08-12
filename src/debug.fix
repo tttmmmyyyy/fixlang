@@ -16,7 +16,7 @@ assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
 assert_unique! : String -> a -> a;
 assert_unique! = |msg, x| (
-    let (unique, x) = x.is_unique;
+    let (unique, x) = x.unsafe_is_unique;
     let _ = assert(msg, unique);
     x
 );
