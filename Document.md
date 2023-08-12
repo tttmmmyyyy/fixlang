@@ -22,6 +22,7 @@
 - [Other topics on syntax](#other-topics-on-syntax)
   - [Integer literals](#integer-literals)
   - [Float literals](#float-literals)
+  - [Namespaces](#namespaces-1)
   - [Structs](#structs-1)
     - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
     - [`set_{field_name} : {field_type} -> {struct} -> {struct}`](#set_field_name--field_type---struct---struct)
@@ -999,6 +1000,10 @@ The `set!` function is almost same as the `set` function, but it panics (i.e., s
 ## Float literals
 
 Float literals requires at least one digit before and after the decimal point. For example, `1.` or `.1` is not valid float literal (where it is valid in C) and you need to write `1.0` or `0.1` instead.
+
+## Namespaces 
+
+(TBA)
 
 ## Structs
 
