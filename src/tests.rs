@@ -1058,11 +1058,11 @@ pub fn test45() {
         module Main; import Debug;
 
         trait [f:*->*] f : MyFunctor {
-            map : (a -> b) -> f a -> f b;
+            my_map : (a -> b) -> f a -> f b;
         }
 
         impl Array : MyFunctor {
-            map = |f, arr| (
+            my_map = |f, arr| (
                 Array::from_map(arr.get_size, |idx| f $ arr.@(idx))
             );
         }
@@ -1079,7 +1079,7 @@ pub fn test45() {
         main : IO ();
         main = (
             let arr = Array::from_map(10, |x| x);
-            let arr = arr.map(|x| x * x);
+            let arr = arr.my_map(|x| x * x);
             let ans = arr.sum;
             let u = assert_eq("", ans, 285);
             pure()
