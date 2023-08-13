@@ -23,6 +23,7 @@
   - [Boolean values and literals](#boolean-values-and-literals)
   - [Numbers and literals](#numbers-and-literals)
   - [Strings and literals](#strings-and-literals)
+  - [Arrays and literals](#arrays-and-literals)
   - [Structs](#structs-1)
     - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
     - [`set_{field_name} : {field_type} -> {struct} -> {struct}`](#set_field_name--field_type---struct---struct)
@@ -37,6 +38,8 @@
   - [Modules and import statements](#modules-and-import-statements)
   - [Namespaces and overloading](#namespaces-and-overloading)
   - [Recursion](#recursion)
+  - [Type annotation](#type-annotation)
+  - [Pattern matching](#pattern-matching)
   - [Trait](#trait)
   - [Monad](#monad)
     - [What is monad?](#what-is-monad)
@@ -44,7 +47,6 @@
       - [Result-like monads](#result-like-monads)
       - [List-like monads](#list-like-monads)
     - [`do` block and monadic bind operator `*`](#do-block-and-monadic-bind-operator-)
-  - [Type annotation](#type-annotation)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
     - [Tuples](#tuples)
@@ -1023,6 +1025,10 @@ For other types of numbers, you need to specify its type explicitl, such as `127
 
 The type for strings is `String`. String literals are enclosed in double quotation marks, such as `"Hello World!"`
 
+## Arrays and literals
+
+The type for arrays is `Array`. Array literals are enclosed in "[" and "]", and each elements are separated by ",", such as `[1, 2, 3]`.
+
 ## Structs
 
 If you define a struct named `{struct}` with a field `{field_name}` of type `{field_type}`, the following methods are defined in the namespace named `{struct}`.
@@ -1214,6 +1220,33 @@ main = print $ fib(30).to_string; // 832040
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
 
+## Type annotation
+
+You need to write types of global value explicity. You can specify the type of a local value for readability or for helping type / namespace inference of Fix compiler.
+
+The following demonstrates type annotations for local values.
+
+```
+module Main;
+
+main : IO ();
+main = (
+    let x = 42 : I64; // Type annotation on expression.
+    let y : I64 = 42; // Type annotation on let-binding.
+    let f = |v : I64| v * 3; // Type annotation on a variable of lambda.
+    
+    let _ = *(println $ x.to_string);
+    let _ = *(println $ y.to_string);
+    let _ = *(println $ f(14).to_string);
+
+    pure()
+);
+```
+
+## Pattern matching 
+
+(TBA)
+
 ## Trait
 
 (TBA)
@@ -1372,10 +1405,6 @@ add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
 ```
 
 which won't be compiled, because the inner `bind` requires a function that returns `Option I64` but the function `|y| (pure $ x + y).as_some` has type `I64 -> I64`.
-
-## Type annotation
-
-(TBA)
 
 ## Boxed and unboxed types
 
