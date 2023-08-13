@@ -232,7 +232,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
 
     fix_mod.add_global_values(global_value_defns, global_value_decls);
     fix_mod.add_type_defns(type_defns);
-    fix_mod.add_traits(trait_infos, trait_impls);
+    fix_mod.add_traits(trait_infos, trait_impls, trait_aliases);
     fix_mod.add_import_statements(import_statements);
 
     fix_mod
@@ -328,6 +328,7 @@ fn parse_trait_alias(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) 
         id,
         value: values,
         source: Some(span),
+        kind: kind_star(), // Will be set to a correct value in TraitEnv::set_kinds.
     }
 }
 

@@ -27,7 +27,7 @@ impl TraitId {
     }
 }
 
-// Information on trait.
+// Traits.
 #[derive(Clone)]
 pub struct TraitInfo {
     // Identifier of this trait (i.e. the name).
@@ -42,15 +42,6 @@ pub struct TraitInfo {
     // Predicates at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_predicates: Vec<KindPredicate>,
     // Source location of trait definition.
-    pub source: Option<Span>,
-}
-
-pub struct TraitAlias {
-    // Identifier of this trait (i.e., the name).
-    pub id: TraitId,
-    // Aliased traits.
-    pub value: Vec<TraitId>,
-    // Source location of alias definition.
     pub source: Option<Span>,
 }
 
@@ -91,7 +82,7 @@ impl TraitInfo {
                 &self.kind_predicates[1].source,
             );
             error_exit_with_src(
-                "Currently, exactly one condition is allowed as the assumption of trait definition.",
+                "You can specify at most one condition of the form `{type-variable} : {kind}` as the assumption of trait definition.",
                 &span,
             );
         }
@@ -162,6 +153,31 @@ impl TraitInstance {
     // Get expression that implements a method.
     pub fn method_expr(&self, name: &Name) -> Rc<ExprNode> {
         self.methods.get(name).unwrap().clone()
+    }
+}
+
+// Trait Aliases
+#[derive(Clone)]
+pub struct TraitAlias {
+    // Identifier of this trait (i.e., the name).
+    pub id: TraitId,
+    // Aliased traits.
+    pub value: Vec<TraitId>,
+    // Source location of alias definition.
+    pub source: Option<Span>,
+    // Kind of this trait alias.
+    pub kind: Rc<Kind>,
+}
+
+impl TraitAlias {
+    // Resolve namespace of trait names in value.
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        for trait_id in &mut self.value {
+            let res = trait_id.resolve_namespace(ctx);
+            if res.is_err() {
+                error_exit_with_src(&res.unwrap_err(), &self.source);
+            }
+        }
     }
 }
 
@@ -255,11 +271,6 @@ pub struct Predicate {
     pub info: PredicateInfo,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct PredicateInfo {
-    pub source: Option<Span>,
-}
-
 impl Predicate {
     pub fn set_source(&mut self, source: Span) {
         self.info.source = Some(source);
@@ -312,6 +323,26 @@ impl Predicate {
             )
         }
     }
+
+    // If the trait used in this predicate is a trait alias, resolve it to a set of predicates that are not using trait aliases.
+    fn resolve_trait_aliases(&self, trait_env: &TraitEnv) -> Vec<Predicate> {
+        if !trait_env.is_alias(&self.trait_id) {
+            return vec![self.clone()];
+        }
+        let trait_ids = trait_env.resolve_aliases(&self.trait_id);
+        let mut res = vec![];
+        for trait_id in trait_ids {
+            let mut p = self.clone();
+            p.trait_id = trait_id;
+            res.push(p);
+        }
+        res
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PredicateInfo {
+    pub source: Option<Span>,
 }
 
 // Statement such as "f: * -> *".
@@ -327,10 +358,53 @@ pub struct KindPredicate {
 pub struct TraitEnv {
     pub traits: HashMap<TraitId, TraitInfo>,
     pub instances: HashMap<TraitId, Vec<TraitInstance>>,
+    pub aliases: HashMap<TraitId, TraitAlias>,
 }
 
 impl TraitEnv {
+    // Get of list of trait names including aliases.
+    pub fn trait_names(&self) -> HashSet<FullName> {
+        let mut res: HashSet<FullName> = Default::default();
+        for (k, _v) in &self.traits {
+            res.insert(k.name.clone());
+        }
+        for (k, _v) in &self.aliases {
+            res.insert(k.name.clone());
+        }
+        res
+    }
+
     pub fn validate(&mut self, kind_map: &HashMap<TyCon, Rc<Kind>>) {
+        // Check name confliction of traits and aliases.
+        fn create_aconflicting_error(env: &TraitEnv, trait_id: &TraitId) {
+            let this_src = &env.traits.get(trait_id).unwrap().source;
+            let other_src = &env.aliases.get(trait_id).unwrap().source;
+            error_exit_with_srcs(
+                &format!("Duplicate definition for `{}`", trait_id.to_string()),
+                &[&this_src, &other_src],
+            );
+        }
+        for (trait_id, _) in &self.traits {
+            if self.aliases.contains_key(trait_id) {
+                create_aconflicting_error(self, trait_id);
+            }
+        }
+        for (trait_id, _) in &self.aliases {
+            if self.traits.contains_key(trait_id) {
+                create_aconflicting_error(self, trait_id);
+            }
+        }
+
+        // Check that values of trait aliases are defined.
+        for (_, ta) in &self.aliases {
+            for v in &ta.value {
+                if !self.traits.contains_key(v) && !self.aliases.contains_key(v) {
+                    error_exit_with_src(&format!("Unknown trait `{}`.", v.to_string()), &ta.source);
+                }
+            }
+        }
+        // Circular aliasing will be detected in `TraitEnv::resolve_aliases`.
+
         // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
@@ -345,7 +419,7 @@ impl TraitEnv {
                 }
 
                 // Check context is head-normal-form.
-                // NOTE: we are currently require more string condition: `tv : SomeTrait`.
+                // NOTE: we are currently require more strong condition: `tv : SomeTrait`.
                 // This is because we don't have "kind inference", so predicate of form `m SomeType` cannot be handled.
                 for ctx in &inst.qual_pred.context {
                     match ctx.ty.ty {
@@ -428,6 +502,12 @@ impl TraitEnv {
         ctx: &mut NameResolutionContext,
         imported_modules: &HashMap<Name, HashSet<Name>>,
     ) {
+        // Resolve names in trait aliases.
+        for (trait_id, alias_info) in &mut self.aliases {
+            ctx.imported_modules = imported_modules[&trait_id.name.module()].clone();
+            alias_info.resolve_namespace(ctx);
+        }
+
         // Resolve names in trait definitions.
         for (trait_id, trait_info) in &mut self.traits {
             ctx.imported_modules = imported_modules[&trait_id.name.module()].clone();
@@ -471,12 +551,20 @@ impl TraitEnv {
     }
 
     // Add traits.
-    pub fn add(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
+    pub fn add(
+        &mut self,
+        trait_infos: Vec<TraitInfo>,
+        trait_impls: Vec<TraitInstance>,
+        trait_aliases: Vec<TraitAlias>,
+    ) {
         for trait_info in trait_infos {
             self.add_trait(trait_info);
         }
         for trait_impl in trait_impls {
             self.add_instance(trait_impl);
+        }
+        for trait_alias in trait_aliases {
+            self.add_alias(trait_alias);
         }
     }
 
@@ -500,6 +588,19 @@ impl TraitEnv {
             self.instances.insert(trait_id.clone(), vec![]);
         }
         self.instances.get_mut(&trait_id).unwrap().push(inst);
+    }
+
+    // Add an trait alias.
+    fn add_alias(&mut self, alias: TraitAlias) {
+        // Check duplicate definition.
+        if self.aliases.contains_key(&alias.id) {
+            let alias1 = self.aliases.get(&alias.id).unwrap();
+            error_exit_with_srcs(
+                &format!("Duplicate definition for trait {}.", alias.id.to_string()),
+                &[&alias1.source, &alias.source],
+            );
+        }
+        self.aliases.insert(alias.id.clone(), alias);
     }
 
     // Reduce a predicate p to a context of trait instance.
@@ -536,6 +637,27 @@ impl TraitEnv {
 
     // Judge whether a predicate p is entailed by a set of predicates ps.
     pub fn entail(
+        &self,
+        ps: &Vec<Predicate>,
+        p: &Predicate,
+        kind_map: &HashMap<TyCon, Rc<Kind>>,
+    ) -> bool {
+        // Resolve trait aliases in ps.
+        let mut resolved_ps = vec![];
+        for p in ps {
+            resolved_ps.append(&mut p.resolve_trait_aliases(self));
+        }
+        let ps = resolved_ps;
+
+        // Resolve trait aliases in p.
+        p.resolve_trait_aliases(self)
+            .iter()
+            .all(|p| self.entail_inner(&ps, p, kind_map))
+    }
+
+    // Judge whether a predicate p is entailed by a set of predicates ps.
+    // p and ps cannot contain trait aliases.
+    fn entail_inner(
         &self,
         ps: &Vec<Predicate>,
         p: &Predicate,
@@ -628,17 +750,83 @@ impl TraitEnv {
         ps: &Vec<Predicate>,
         kind_map: &HashMap<TyCon, Rc<Kind>>,
     ) -> Result<Vec<Predicate>, Predicate> {
-        let ret = self.reduce_to_hnfs_many(ps, kind_map)?;
+        // Resolve trait aliases in ps.
+        let mut resolved_ps = vec![];
+        for p in ps {
+            resolved_ps.append(&mut p.resolve_trait_aliases(self));
+        }
+        let ps = resolved_ps;
+
+        let ret = self.reduce_to_hnfs_many(&ps, kind_map)?;
         let ret = self.reduce_predicates_by_entail(&ret, kind_map);
         // Every predicate has to be hnf.
         assert!(ret.iter().all(|p| p.ty.is_hnf()));
         Ok(ret)
     }
 
-    // Set each TraitInfo's kind.
+    // Resolve trait aliases.
+    fn resolve_aliases(&self, trait_id: &TraitId) -> Vec<TraitId> {
+        fn resolve_aliases_inner(
+            env: &TraitEnv,
+            trait_id: &TraitId,
+            res: &mut Vec<TraitId>,
+            visited: &mut HashSet<TraitId>,
+        ) {
+            if visited.contains(trait_id) {
+                error_exit(&format!(
+                    "Circular aliasing detected in trait `{}`.",
+                    trait_id.to_string()
+                ));
+            }
+            visited.insert(trait_id.clone());
+            if env.traits.contains_key(trait_id) {
+                res.push(trait_id.clone());
+                return;
+            }
+            for v in &env.aliases.get(trait_id).unwrap().value {
+                resolve_aliases_inner(env, v, res, visited);
+            }
+        }
+
+        let mut res = vec![];
+        let mut visited = HashSet::new();
+        resolve_aliases_inner(self, trait_id, &mut res, &mut visited);
+        res
+    }
+
+    // Check if a trait name is an alias.
+    pub fn is_alias(&self, trait_id: &TraitId) -> bool {
+        self.aliases.contains_key(trait_id)
+    }
+
+    // Set kinds in TraitInfo and TraitAlias.
     pub fn set_kinds(&mut self) {
         for (_id, ti) in &mut self.traits {
             ti.set_trait_kind();
+        }
+        let mut resolved_aliases: HashMap<TraitId, Vec<TraitId>> = HashMap::new();
+        for (id, _) in &self.aliases {
+            resolved_aliases.insert(id.clone(), self.resolve_aliases(id));
+        }
+        for (id, ta) in &mut self.aliases {
+            let mut kinds = resolved_aliases
+                .get(id)
+                .unwrap()
+                .iter()
+                .map(|id| self.traits.get(id).unwrap().type_var.kind.clone());
+            let kind = kinds.next().unwrap();
+            for k in kinds {
+                if k != kind {
+                    error_exit_with_src(
+                        &format!(
+                            "Kind mismatch in the definition of trait alias `{}`",
+                            id.to_string()
+                        ),
+                        &ta.source,
+                    )
+                }
+            }
+            ta.kind = kind;
         }
     }
 
@@ -646,6 +834,9 @@ impl TraitEnv {
         let mut res: HashMap<TraitId, Rc<Kind>> = HashMap::default();
         for (id, ti) in &self.traits {
             res.insert(id.clone(), ti.type_var.kind.clone());
+        }
+        for (id, ta) in &self.aliases {
+            res.insert(id.clone(), ta.kind.clone());
         }
         res
     }
@@ -656,8 +847,11 @@ impl TraitEnv {
         }
         for (_, insts) in other.instances {
             for inst in insts {
-                self.add_instance(inst)
+                self.add_instance(inst);
             }
+        }
+        for (_, alias) in other.aliases {
+            self.add_alias(alias);
         }
     }
 }

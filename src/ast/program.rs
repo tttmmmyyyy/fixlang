@@ -317,8 +317,13 @@ impl Program {
     }
 
     // Add traits.
-    pub fn add_traits(&mut self, trait_infos: Vec<TraitInfo>, trait_impls: Vec<TraitInstance>) {
-        self.trait_env.add(trait_infos, trait_impls);
+    pub fn add_traits(
+        &mut self,
+        trait_infos: Vec<TraitInfo>,
+        trait_impls: Vec<TraitInstance>,
+        trait_aliases: Vec<TraitAlias>,
+    ) {
+        self.trait_env.add(trait_infos, trait_impls, trait_aliases);
     }
 
     // Register declarations of user-defined types.
@@ -362,11 +367,7 @@ impl Program {
 
     // Get of list of traits that can be used for namespace resolution.
     pub fn trait_names(&self) -> HashSet<FullName> {
-        let mut res: HashSet<FullName> = Default::default();
-        for (k, _v) in &self.trait_env.traits {
-            res.insert(k.name.clone());
-        }
-        res
+        self.trait_env.trait_names()
     }
 
     // Add a global value.
