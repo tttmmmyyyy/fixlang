@@ -18,7 +18,7 @@
   - [Unions](#unions)
   - [Structs](#structs)
   - [Iterators](#iterators)
-  - [Mutation in Fix](#mutation-in-fix)
+  - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
 - [Other topics on syntax](#other-topics-on-syntax)
   - [Integer literals](#integer-literals)
   - [Float literals](#float-literals)
@@ -931,7 +931,7 @@ For example, `Iterator::from_array(["Hello", "World!"]).join(" ") == "Hello Worl
 
 In the last, `to_string : I64 -> String` is a function that converts an integer to a decimal string.
 
-## Mutation in Fix
+## Mutation in Fix and reference counter
 
 In the last of this tutorial, I explain the meaning of the exclamation mark of `set!` function.
 
@@ -990,6 +990,13 @@ Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, 
 As a summary, since values in Fix are immutable, the `set : I64 -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning an array if the array will not be used later.
 
 The `set!` function is almost same as the `set` function, but it panics (i.e., stop the execution of the program) if the given array will be used later. In other words, there is assurance that `set!` doesn't clone the array. This is useful to assure that a program is running at a expected time complexity. We put the exclamation mark for a function that requires the assurance that the given value will not be used later.
+
+Fix judges whether a value may be used later or not by it's *reference counter*. Fix assigns reference counters to all boxed values - values which are always allocated on heap memory, and referenced by names or struct fields by pointers. Fix tracks the number of references to a boxed value using reference counter. A value is called "unique" if the reference counter is one, and called "shared" if otherwise. For convenience, an unboxed value is considered to be always unique.
+
+Using terminologies introduced above, if an array is shared, the `set` function clones it while the `set!` function panics.
+
+The exclamation mark in fix is not syntax, but merely one of characters you can use in value names.
+We add exclamation marks for functions which will be panic if a given value is shared.
 
 # Other topics on syntax
 
