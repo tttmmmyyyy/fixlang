@@ -1286,11 +1286,9 @@ impl I64 : SelfIntroduction {
 /*
 `Eq` trait is defined in standard library as follows: 
 
-```
 trait a : Eq {
     eq : a -> a -> Bool
 }
-```
 
 Expression `x == y` is interpreted as `Eq::eq(x, y)`.
 */
