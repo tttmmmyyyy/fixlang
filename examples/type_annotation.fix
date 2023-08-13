@@ -1,0 +1,14 @@
+module Main;
+
+main : IO ();
+main = (
+    let x = 42 : I64; // Type annotation on expression.
+    let y : I64 = 42; // Type annotation on let-binding.
+    let f = |v : I64| v * 3; // Type annotation on a variable of function.
+    
+    let _ = *(println $ x.to_string);
+    let _ = *(println $ y.to_string);
+    let _ = *(println $ f(14).to_string);
+
+    pure()
+);

@@ -1,0 +1,16 @@
+module Main;
+
+namespace BooleanTruth {
+    truth : Bool;
+    truth = true;
+}
+
+namespace IntegralTruth {
+    truth : I64;
+    truth = 42;
+}
+
+main : IO ();
+main = (
+    println $ (0 + truth).to_string
+);

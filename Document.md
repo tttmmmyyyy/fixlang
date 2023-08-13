@@ -1193,6 +1193,7 @@ main = (
     println $ (0 + truth).to_string
 );
 ```
+[Run on playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCm5hbWVzcGFjZSBCb29sZWFuVHJ1dGggew0KICAgIHRydXRoIDogQm9vbDsNCiAgICB0cnV0aCA9IHRydWU7DQp9DQoNCm5hbWVzcGFjZSBJbnRlZ3JhbFRydXRoIHsNCiAgICB0cnV0aCA6IEk2NDsNCiAgICB0cnV0aCA9IDQyOw0KfQ0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIHByaW50bG4gJCAoMCArIHRydXRoKS50b19zdHJpbmcNCik7)
 
 will compile because Fix can infer the type of `truth` by the fact that it can be added to `0` of type `I64`.
 
@@ -1217,6 +1218,7 @@ fib = |n| (
 main : IO ();
 main = print $ fib(30).to_string; // 832040
 ```
+[Run on playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCmZpYiA6IEk2NCAtPiBJNjQ7DQpmaWIgPSB8bnwgKA0KICAgIGlmIG4gPT0gMCB7DQogICAgICAgIDANCiAgICB9IGVsc2UgaWYgbiA9PSAxIHsNCiAgICAgICAgMQ0KICAgIH0gZWxzZSB7DQogICAgICAgIGZpYihuLTEpICsgZmliKG4tMikNCiAgICB9DQopOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gcHJpbnQgJCBmaWIoMzApLnRvX3N0cmluZzsgLy8gODMyMDQw)
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
 
@@ -1242,6 +1244,7 @@ main = (
     pure()
 );
 ```
+[Run on playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgbGV0IHggPSA0MiA6IEk2NDsgLy8gVHlwZSBhbm5vdGF0aW9uIG9uIGV4cHJlc3Npb24uDQogICAgbGV0IHkgOiBJNjQgPSA0MjsgLy8gVHlwZSBhbm5vdGF0aW9uIG9uIGxldC1iaW5kaW5nLg0KICAgIGxldCBmID0gfHYgOiBJNjR8IHYgKiAzOyAvLyBUeXBlIGFubm90YXRpb24gb24gYSB2YXJpYWJsZSBvZiBmdW5jdGlvbi4NCiAgICANCiAgICBsZXQgXyA9ICoocHJpbnRsbiAkIHgudG9fc3RyaW5nKTsNCiAgICBsZXQgXyA9ICoocHJpbnRsbiAkIHkudG9fc3RyaW5nKTsNCiAgICBsZXQgXyA9ICoocHJpbnRsbiAkIGYoMTQpLnRvX3N0cmluZyk7DQoNCiAgICBwdXJlKCkNCik7)
 
 ## Pattern matching
 
@@ -1253,18 +1256,86 @@ module Main;
 type IntBool = struct { int_field : I64, bool_field : Bool };
 
 destructure : IntBool -> (I64, Bool);
-destructure = |IntBool { int_field : i, bool_field : b }| (i, b); // On function definition
+destructure = |IntBool { int_field : i, bool_field : b }| (i, b); // Pattern matching on function definition
 
 main : IO ();
 main = (
-    let (i, b) = destructure $ IntBool { int_field : 42, bool_field : true }; // On let-binding
+    let (i, b) = destructure $ IntBool { int_field : 42, bool_field : true }; // Pattern matching on let-binding
     println $ "(" + i.to_string + ", " + b.to_string + ")"
 );
 ```
+[Run on playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCnR5cGUgSW50Qm9vbCA9IHN0cnVjdCB7IGludF9maWVsZCA6IEk2NCwgYm9vbF9maWVsZCA6IEJvb2wgfTsNCg0KZGVzdHJ1Y3R1cmUgOiBJbnRCb29sIC0%2BIChJNjQsIEJvb2wpOw0KZGVzdHJ1Y3R1cmUgPSB8SW50Qm9vbCB7IGludF9maWVsZCA6IGksIGJvb2xfZmllbGQgOiBiIH18IChpLCBiKTsgLy8gUGF0dGVybiBtYXRjaGluZyBvbiBmdW5jdGlvbiBkZWZpbml0aW9uDQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgbGV0IChpLCBiKSA9IGRlc3RydWN0dXJlICQgSW50Qm9vbCB7IGludF9maWVsZCA6IDQyLCBib29sX2ZpZWxkIDogdHJ1ZSB9OyAvLyBQYXR0ZXJuIG1hdGNoaW5nIG9uIGxldC1iaW5kaW5nDQogICAgcHJpbnRsbiAkICIoIiArIGkudG9fc3RyaW5nICsgIiwgIiArIGIudG9fc3RyaW5nICsgIikiDQopOw%3D%3D)
 
 ## Traits
 
-(TBA)
+A Trait is a predicate on types. A trait can require that some "methods" are implemented for the type which is an instance of itself.
+
+```
+module Main;
+
+// You can define a trait and implement it as follows:
+trait a : SelfIntroduction {
+    // An IO action which introduces the given value.
+    introduce_self : a -> IO ();
+}
+
+impl I64 : SelfIntroduction {
+    introduce_self = |n| println $ "Hi! I'm a 64-bit integer " + n.to_string + "!";
+}
+
+/*
+`Eq` trait is defined in standard library as follows: 
+
+```
+trait a : Eq {
+    eq : a -> a -> Bool
+}
+```
+
+Expression `x == y` is interpreted as `Eq::eq(x, y)`.
+*/
+
+// As another example, 
+type Pair a b = struct { fst: a, snd: b };
+
+// In the trait implementation, you can specify preconditions on type variables in `[]` bracket after `impl`.
+impl [a : Eq, b : Eq] Pair a b : Eq {
+    eq = |lhs, rhs| (
+        lhs.@fst == rhs.@fst && lhs.@snd == rhs.@snd
+    );
+}
+
+// You can specify preconditions of type variables in the `[]` bracket before type signature.
+search : [a : Eq] a -> Array a -> I64;
+search = |elem, arr| loop(0, |idx|
+    if idx == arr.get_size { break $ -1 };
+    if arr.@(idx) == elem { break $ idx };
+    continue $ (idx + 1)
+);
+
+// An example of defining higher-kinded trait.
+// All type variable has kind `*` by default, and any kind of higher-kinded type variable need to be annoted explicitly.
+trait [f : *->*] f : MyFunctor {
+    mymap : (a -> b) -> f a -> f b;
+}
+
+// An example of implementing higher-kinded trait.
+// `Array` is a type of kind `* -> *`, so matches to the kind of trait `MyFunctor`.
+impl Array : MyFunctor {
+    mymap = |f, arr| (
+        Array::from_map(arr.get_size, |idx| f(arr.@(idx)))
+    );
+}
+
+main : IO ();
+main = (
+    let arr = Array::from_map(6, |x| x); // arr = [0,1,2,...,9].
+    let arr = arr.mymap(|x| Pair { fst: x % 2, snd: x % 3 }); // arr = [(0, 0), (1, 1), (0, 2), ...].
+    let x = arr.search(Pair { fst: 1, snd: 2}); // 5, the first number x such that x % 2 == 1 and x % 3 == 2.
+    x.introduce_self
+);
+```
+[Run on playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCi8vIFlvdSBjYW4gZGVmaW5lIGEgdHJhaXQgYW5kIGltcGxlbWVudCBpdCBhcyBmb2xsb3dzOg0KdHJhaXQgYSA6IFNlbGZJbnRyb2R1Y3Rpb24gew0KICAgIC8vIEFuIElPIGFjdGlvbiB3aGljaCBpbnRyb2R1Y2VzIHRoZSBnaXZlbiB2YWx1ZS4NCiAgICBpbnRyb2R1Y2Vfc2VsZiA6IGEgLT4gSU8gKCk7DQp9DQoNCmltcGwgSTY0IDogU2VsZkludHJvZHVjdGlvbiB7DQogICAgaW50cm9kdWNlX3NlbGYgPSB8bnwgcHJpbnRsbiAkICJIaSEgSSdtIGEgNjQtYml0IGludGVnZXIgIiArIG4udG9fc3RyaW5nICsgIiEiOw0KfQ0KDQovKg0KYEVxYCB0cmFpdCBpcyBkZWZpbmVkIGluIHN0YW5kYXJkIGxpYnJhcnkgYXMgZm9sbG93czogDQoNCmBgYA0KdHJhaXQgYSA6IEVxIHsNCiAgICBlcSA6IGEgLT4gYSAtPiBCb29sDQp9DQpgYGANCg0KRXhwcmVzc2lvbiBgeCA9PSB5YCBpcyBpbnRlcnByZXRlZCBhcyBgRXE6OmVxKHgsIHkpYC4NCiovDQoNCi8vIEFzIGFub3RoZXIgZXhhbXBsZSwgDQp0eXBlIFBhaXIgYSBiID0gc3RydWN0IHsgZnN0OiBhLCBzbmQ6IGIgfTsNCg0KLy8gSW4gdGhlIHRyYWl0IGltcGxlbWVudGF0aW9uLCB5b3UgY2FuIHNwZWNpZnkgcHJlY29uZGl0aW9ucyBvbiB0eXBlIHZhcmlhYmxlcyBpbiBgW11gIGJyYWNrZXQgYWZ0ZXIgYGltcGxgLg0KaW1wbCBbYSA6IEVxLCBiIDogRXFdIFBhaXIgYSBiIDogRXEgew0KICAgIGVxID0gfGxocywgcmhzfCAoDQogICAgICAgIGxocy5AZnN0ID09IHJocy5AZnN0ICYmIGxocy5Ac25kID09IHJocy5Ac25kDQogICAgKTsNCn0NCg0KLy8gWW91IGNhbiBzcGVjaWZ5IHByZWNvbmRpdGlvbnMgb2YgdHlwZSB2YXJpYWJsZXMgaW4gdGhlIGBbXWAgYnJhY2tldCBiZWZvcmUgdHlwZSBzaWduYXR1cmUuDQpzZWFyY2ggOiBbYSA6IEVxXSBhIC0%2BIEFycmF5IGEgLT4gSTY0Ow0Kc2VhcmNoID0gfGVsZW0sIGFycnwgbG9vcCgwLCB8aWR4fA0KICAgIGlmIGlkeCA9PSBhcnIuZ2V0X3NpemUgeyBicmVhayAkIC0xIH07DQogICAgaWYgYXJyLkAoaWR4KSA9PSBlbGVtIHsgYnJlYWsgJCBpZHggfTsNCiAgICBjb250aW51ZSAkIChpZHggKyAxKQ0KKTsNCg0KLy8gQW4gZXhhbXBsZSBvZiBkZWZpbmluZyBoaWdoZXIta2luZGVkIHRyYWl0Lg0KLy8gQWxsIHR5cGUgdmFyaWFibGUgaGFzIGtpbmQgYCpgIGJ5IGRlZmF1bHQsIGFuZCBhbnkga2luZCBvZiBoaWdoZXIta2luZGVkIHR5cGUgdmFyaWFibGUgbmVlZCB0byBiZSBhbm5vdGVkIGV4cGxpY2l0bHkuDQp0cmFpdCBbZiA6ICotPipdIGYgOiBNeUZ1bmN0b3Igew0KICAgIG15bWFwIDogKGEgLT4gYikgLT4gZiBhIC0%2BIGYgYjsNCn0NCg0KLy8gQW4gZXhhbXBsZSBvZiBpbXBsZW1lbnRpbmcgaGlnaGVyLWtpbmRlZCB0cmFpdC4NCi8vIGBBcnJheWAgaXMgYSB0eXBlIG9mIGtpbmQgYCogLT4gKmAsIHNvIG1hdGNoZXMgdG8gdGhlIGtpbmQgb2YgdHJhaXQgYE15RnVuY3RvcmAuDQppbXBsIEFycmF5IDogTXlGdW5jdG9yIHsNCiAgICBteW1hcCA9IHxmLCBhcnJ8ICgNCiAgICAgICAgQXJyYXk6OmZyb21fbWFwKGFyci5nZXRfc2l6ZSwgfGlkeHwgZihhcnIuQChpZHgpKSkNCiAgICApOw0KfQ0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBhcnIgPSBBcnJheTo6ZnJvbV9tYXAoNiwgfHh8IHgpOyAvLyBhcnIgPSBbMCwxLDIsLi4uLDldLg0KICAgIGxldCBhcnIgPSBhcnIubXltYXAofHh8IFBhaXIgeyBmc3Q6IHggJSAyLCBzbmQ6IHggJSAzIH0pOyAvLyBhcnIgPSBbKDAsIDApLCAoMSwgMSksICgwLCAyKSwgLi4uXS4NCiAgICBsZXQgeCA9IGFyci5zZWFyY2goUGFpciB7IGZzdDogMSwgc25kOiAyfSk7IC8vIDUsIHRoZSBmaXJzdCBudW1iZXIgeCBzdWNoIHRoYXQgeCAlIDIgPT0gMSBhbmQgeCAlIDMgPT0gMi4NCiAgICB4LmludHJvZHVjZV9zZWxmDQopOw%3D%3D)
 
 ## Monads
 

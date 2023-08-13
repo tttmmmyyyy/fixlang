@@ -1,0 +1,12 @@
+module Main;
+
+type IntBool = struct { int_field : I64, bool_field : Bool };
+
+destructure : IntBool -> (I64, Bool);
+destructure = |IntBool { int_field : i, bool_field : b }| (i, b); // Pattern matching on function definition
+
+main : IO ();
+main = (
+    let (i, b) = destructure $ IntBool { int_field : 42, bool_field : true }; // Pattern matching on let-binding
+    println $ "(" + i.to_string + ", " + b.to_string + ")"
+);
