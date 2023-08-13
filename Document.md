@@ -1120,7 +1120,7 @@ There are also other convenient modules which is included in fix's compiler, suc
 ## Namespaces and overloading
 
 Entities (global values, types and traits) in Fix can be overloaded in the sense that they can have conflicting name. 
-They must be distinguished by their full name (name and namespaces).
+All entities must be distinguished uniquely by their full name (name and namespaces).
 Module name is used as the top-level namespace of entities defined in a source file. 
 In addition, you can create a namespace explicitly by `namespace TheNameSpace { ... }`.
 
