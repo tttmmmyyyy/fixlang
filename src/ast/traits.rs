@@ -405,9 +405,18 @@ impl TraitEnv {
         }
         // Circular aliasing will be detected in `TraitEnv::resolve_aliases`.
 
+        let aliases: HashSet<_> = self.aliases.keys().collect();
         // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
+                // check implementation is given for trait, not for trait alias.
+                if aliases.contains(trait_id) {
+                    error_exit_with_src(
+                        "You cannot implement a trait alias directly. Implement each aliased trait instead.",
+                        &inst.qual_pred.predicate.info.source,
+                    )
+                }
+
                 *inst.trait_id_mut() = trait_id.clone();
 
                 // Check instance is not head-normal-form.
@@ -773,7 +782,7 @@ impl TraitEnv {
         ) {
             if visited.contains(trait_id) {
                 error_exit(&format!(
-                    "Circular aliasing detected in trait `{}`.",
+                    "Circular aliasing detected in trait alias `{}`.",
                     trait_id.to_string()
                 ));
             }

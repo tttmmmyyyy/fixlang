@@ -3825,6 +3825,13 @@ pub fn test127() {
             add = |lhs, rhs| Vector2 { x : lhs.@x + rhs.@x, y : lhs.@y + rhs.@y };
         }
 
+        // Error (cannot implement trait alias directly)
+        // impl [a : Additive] Vector2 a : Additive {}
+
+        // Error (circular aliasing)
+        // trait MyTraitA = MyTraitB + ToString;
+        // trait MyTraitB = MyTraitA + Eq;
+
         main : IO ();
         main = (
             let sum_vec = [Vector2{x : 1, y : 2}, Vector2{x : 3, y : 4}].to_iter.sum;
