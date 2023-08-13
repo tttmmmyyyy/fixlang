@@ -35,9 +35,8 @@
     - [`as_{variant_name} : {union} -> {variant_type}`](#as_variant_name--union---variant_type)
     - [`mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`](#mod_variant_name--variant_type---variant_type---union---union)
   - [Modules and import statements](#modules-and-import-statements)
-  - [Namespaces](#namespaces-1)
+  - [Namespaces and overloading](#namespaces-and-overloading)
   - [Recursion](#recursion)
-  - [Overloading](#overloading)
   - [Trait](#trait)
   - [Monad](#monad)
     - [What is monad?](#what-is-monad)
@@ -1118,9 +1117,10 @@ There is one special module: `Std`. This is a module of built-in entities. `Std`
 
 There are also other convenient modules which is included in fix's compiler, such as `Debug` or `HashMap`. To import these modules, you need to write import statements explicitly, but no need for adding source files to arguments of `fix run` or `fix build` command.
 
-## Namespaces
+## Namespaces and overloading
 
-Entities (global values, types and traits) can have conflicting name, but must be distinguished by their full name, i.e., name with namespaces explicitly written.
+Entities (global values, types and traits) in Fix can be overloaded in the sense that they can have conflicting name. 
+They must be distinguished by their full name (name and namespaces).
 Module name is used as the top-level namespace of entities defined in a source file. 
 In addition, you can create a namespace explicitly by `namespace TheNameSpace { ... }`.
 
@@ -1213,10 +1213,6 @@ main = print $ fib(30).to_string; // 832040
 ```
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
-
-## Overloading
-
-(TBA)
 
 ## Trait
 
