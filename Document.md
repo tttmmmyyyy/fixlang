@@ -40,8 +40,8 @@
   - [Recursion](#recursion)
   - [Type annotation](#type-annotation)
   - [Pattern matching](#pattern-matching)
-  - [Trait](#trait)
-  - [Monad](#monad)
+  - [Traits](#traits)
+  - [Monads](#monads)
     - [What is monad?](#what-is-monad)
       - [State-like monads](#state-like-monads)
       - [Result-like monads](#result-like-monads)
@@ -354,7 +354,7 @@
     - [`loop : s -> (s -> LoopResult s r) -> r`](#loop--s---s---loopresult-s-r---r)
     - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
     - [`unsafe_is_unique : a -> (Bool, a)`](#unsafe_is_unique--a---bool-a)
-  - [Traits](#traits)
+  - [Traits](#traits-1)
     - [Functor (\* -\> \*)](#functor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
     - [LessThan](#lessthan)
@@ -1233,7 +1233,7 @@ main : IO ();
 main = (
     let x = 42 : I64; // Type annotation on expression.
     let y : I64 = 42; // Type annotation on let-binding.
-    let f = |v : I64| v * 3; // Type annotation on a variable of lambda.
+    let f = |v : I64| v * 3; // Type annotation on a variable of function.
     
     let _ = *(println $ x.to_string);
     let _ = *(println $ y.to_string);
@@ -1243,15 +1243,30 @@ main = (
 );
 ```
 
-## Pattern matching 
+## Pattern matching
+
+Pattern matching are available in let-binding or function definition.
+
+```
+module Main;
+
+type IntBool = struct { int_field : I64, bool_field : Bool };
+
+destructure : IntBool -> (I64, Bool);
+destructure = |IntBool { int_field : i, bool_field : b }| (i, b); // On function definition
+
+main : IO ();
+main = (
+    let (i, b) = destructure $ IntBool { int_field : 42, bool_field : true }; // On let-binding
+    println $ "(" + i.to_string + ", " + b.to_string + ")"
+);
+```
+
+## Traits
 
 (TBA)
 
-## Trait
-
-(TBA)
-
-## Monad
+## Monads
 
 ### What is monad?
 
