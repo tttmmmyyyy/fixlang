@@ -1025,24 +1025,24 @@ Extract the value of a field from a struct value.
 ### `set_{field_name} : {field_type} -> {struct} -> {struct}`
 
 Modify a struct value by inserting a value to a field.
-This function clones the given struct value if it is shared between multiple references.
+This function clones the given struct value if it is shared.
 
 ### `set_{field_name}! : {field_type} -> {struct} -> {struct}`
 
 Modify a struct value by inserting a value to a field.
-This function never clones the given struct value. If the struct value is shared between multiple references, this function panics.
+This function never clones the given struct value. If the struct value is shared, this function panics.
 
 ### `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
 
 Modify a struct value by acting on a field value.
-This function clones the given struct value if it is shared between multiple references.
-What is special about this function is that if you call `obj.mod_field(f)` when the reference counters of both of `obj` and `obj.@field` are one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field(f)` is NOT equivalent to `let v = obj.@field; obj.set_field(f(v))`.
+This function clones the given struct value if it is shared.
+What is special about this function is that if you call `obj.mod_field(f)` when both of `obj` and `obj.@field` are unique, it is assured that `f` receives the field value which is unique. So `obj.mod_field(f)` is NOT equivalent to `let v = obj.@field; obj.set_field(f(v))`.
 
 ### `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
 
 Modify a struct value by acting on a field value.
-This function never clones the given struct value. If the struct value is shared between multiple references, this function panics.
-What is special about this function is that if you call `obj.mod_field!(f)` when the reference counters of both of `obj` and `obj.@field` are one, it is assured that `f` receives the field value with reference counter one. So `obj.mod_field!(f)` is NOT equivalent to `let v = obj.@field; obj.set_field!(f(v))`.
+This function never clones the given struct value. If the struct value is shared, this function panics.
+What is special about this function is that if you call `obj.mod_field!(f)` when both of `obj` and `obj.@field` are unique, it is assured that `f` receives the field value which is unique. So `obj.mod_field!(f)` is NOT equivalent to `let v = obj.@field; obj.set_field!(f(v))`.
 
 ## Unions
 
@@ -1062,7 +1062,7 @@ Converts a union value into a variant value if it is created as the variant. If 
 
 ### `mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`
 
-Modify a union value by a function acting on a variant. It is assured that if you call `obj.mod_variant(f)` when the reference counter of the variant value in `obj` is one, then `f` receives the variant value uniquely.
+Modify a union value by a function acting on a variant. It is assured that if you call `obj.mod_variant(f)` when the value in `obj` is unique, then `f` receives the variant value uniquely.
 
 ## Module and imports 
 
@@ -1620,12 +1620,12 @@ This function can be defined for any functor `f` in general, but it is easier to
 
 This action can be implemented as `fun(arr.@(idx)).bind(|elm| pure $ arr.set(idx, elm))`. As we have identity `map(f) == bind(|x| pure $ f(x))` for `map` of a functor underlying a monad, it can be written as `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))` and therefore this function can be defined using only a method of a functor.
 
-What is special about this function is that if you call `arr.act(idx, fun)` when the reference counters of both of `arr` and `arr.@(idx)` are one, it is assured that `fun` receives the element with reference counter one.
+What is special about this function is that if you call `arr.act(idx, fun)` when both of `arr` and `arr.@(idx)` are unique, it is assured that `fun` receives the element which is unique.
 
-If you call `act` on an array which is shared by multiple references, this function clones the given array when inserting the result of your action into the array. This means that you don't need to pay cloning cost when your action failed, as expected.
+If you call `act` on an array which is shared, this function clones the given array when inserting the result of your action into the array. This means that you don't need to pay cloning cost when your action failed, as expected.
 
 #### `act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`
-This function is almost the same as `Array::act`, but it panics if the given array is shared by multiple references.
+This function is almost the same as `Array::act`, but it panics if the given array is shared.
 
 #### `append : Array a -> Array a -> Array a`
 Append an array to an array.
@@ -1685,13 +1685,13 @@ Returns if the array is empty or not.
 
 #### `mod : I64 -> (a -> a) -> Array a -> Array a`
 Modifies an array value by acting on an element at an index.
-This function clones the given array if it is shared between multiple references.
-What is special about this function is that if you call `arr.mod(i, f)` when the reference counters of both of `arr` and `arr.@(i)` are one, it is assured that `f` receives the element value with reference counter one. So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
+This function clones the given array if it is shared.
+What is special about this function is that if you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
 
 #### `mod! : I64 -> (a -> a) -> Array a -> Array a`
 Modifies an array value by acting on an element at an index.
-This function never clones the given array. If the array is shared between multiple references, this function panics. 
-What is special about this function is that if you call `arr.mod(i, f)` when the reference counters of both of `arr` and `arr.@(i)` are one, it is assured that `f` receives the element value with reference counter one. So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
+This function never clones the given array. If the array is shared, this function panics. 
+What is special about this function is that if you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
 
 #### `pop_back : Array a -> Array a`
 Pop an element at the back of an array.
@@ -1700,7 +1700,7 @@ If the array is empty, this function does nothing.
 #### `pop_back! : Array a -> Array a`
 Pop an element at the back of an array.
 If the array is empty, this function does nothing.
-This function panics if elements must be cloned due to the given array being shared by multiple references. 
+This function panics if elements must be cloned due to the given array being shared. 
 Note that, when the given array is empty, this function will not panic even if it is shared.
 
 #### `push_back : a -> Array a -> Array a`
@@ -1708,7 +1708,7 @@ Push an element to the back of an array.
 
 #### `push_back! : a -> Array a -> Array a`
 Push an element to the back of an array.
-This function panics if elements must be cloned due to the given array being shared by multiple references. 
+This function panics if elements must be cloned due to the given array being shared. 
 Note that, when the capacity of `arr` is equal to its size, `arr.push_back!(e)` will not panic even if `arr` is shared because in this case cloning elements is inevitable whether or not `arr` is shared.
 
 #### `range : I64 -> I64 -> Iterator I64`
@@ -1722,11 +1722,11 @@ Reserves the memory region for an array.
 
 #### `set : I64 -> a -> Array a -> Array a`
 Updates a value of an element at an index of an array.
-This function clones the given array if it is shared between multiple references.
+This function clones the given array if it is shared.
 
 #### `set! : I64 -> a -> Array a -> Array a`
 Updates a value of an element at an index of an array.
-This function never clones the given array. If the given array is shared between multiple references, this function panics.
+This function never clones the given array. If the given array is shared, this function panics.
 
 #### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
 Sort elements in an array by "less than" comparator.
@@ -2047,12 +2047,12 @@ type PunchedArray a = unbox struct { _data : Destructor (Array a), idx : I64 };
 
 #### `plug_in! : a -> PunchedArray a -> Array a`
 Plug in an element to a punched array to get back an array.
-This function panics if (the internal data of) the given punched array is shared by multiple references.
+This function panics if (the internal data of) the given punched array is shared.
 
 #### `punch! : I64 -> Array a -> (PunchedArray a, a)`
 Creates a punched array.
 Expression `punch(idx, arr)` evaluates to a pair `(parr, elm)`, where `elm` is the value that was stored at `idx` of `arr` and `parr` is the punched `arr` at `idx`.
-This function panics if the given array is shared by multiple references.
+This function panics if the given array is shared.
 
 ### Result
 
@@ -2218,8 +2218,6 @@ main = (
 
 This function checks if a value is uniquely refernced by a name, and returns the result paired with the given value itself. If `a` is unboxed, the 0th component of the returned value is always `true`.
 
-NOTE: この関数の戻り値を使用して条件分岐し、あなたの実装している関数の戻り値を変更することは、関数の参照等価性を失う可能性があります。もしある値がsharedなときにプログラムをpanicさたいなら、この関数の代わりに`Debug::assert_unique!`を使うことを検討してください。
-
 NOTE: Using the return value of this function to branch and change the return value of your function may break the referential transparency of the function. If you want to panic when a value is shared, consider using `Debug::assert_unique!` instead.
 
 Example: 
@@ -2313,7 +2311,7 @@ This is equivalent to `Monad::bind(|x|x)`.
 
 ## `assert_unique! : String -> a -> a`
 
-Expression `assert_unique!(msg, obj)` assets that `obj`'s reference counter is one, and returns `obj` itself. If `obj` is shared by multiple names, `assert_unique!(msg, obj)` prints the `msg` to the standard output and aborts.
+Expression `assert_unique!(msg, obj)` assets that `obj` is unique, and returns `obj` itself. If `obj` is shared by multiple names, `assert_unique!(msg, obj)` prints the `msg` to the standard output and aborts.
 
 The main use of this function is to check whether a boxed value given as an argument is unique.
 
