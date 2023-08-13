@@ -215,7 +215,7 @@ trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_
 trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
 // === Trait aliases ===
-trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_name ~ (sep* ~ "+" ~ sep* ~ trait_name)* ~ sep* ~ ";" }
+trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ ";" }
 
 // === Global names === 
 global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
@@ -232,7 +232,7 @@ module_name = { module_name_head ~ module_name_char* }
 
 module_defn = { "module" ~ sep+ ~ namespace ~ sep* ~ ";" }
 
-global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn }
+global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_alias_defn }
 
 global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep* ~ global_defns)* ~ sep* ~ "}" }
 

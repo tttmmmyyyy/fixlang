@@ -3763,6 +3763,27 @@ pub fn test125() {
 
 #[test]
 #[serial]
+pub fn test126() {
+    // Test Iterator::sum.
+    let source = r#"
+        module Main; 
+
+        import Debug;
+
+        main : IO ();
+        main = (
+            let n = 100;
+            let v = Iterator::range(0, n+1).sum;
+            let _ = assert_eq("", v, n*(n+1)/2);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();

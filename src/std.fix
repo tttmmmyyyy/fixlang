@@ -653,7 +653,7 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-        // Filter elements by a condition function
+    // Filter elements by a condition function
     filter : (a -> Bool) -> Iterator a -> Iterator a;
     filter = |cond, iter| (
         let next = |_| (
@@ -667,6 +667,18 @@ namespace Iterator {
             ))
         );
         Iterator { next: next }
+    );
+
+    // Find the last element of an iterator.
+    find_last : Iterator a -> Option a;
+    find_last = |iter| (
+        if iter.is_empty { none() };
+        let (elem, iter) = iter.advance.as_some;
+        if iter.is_empty { 
+            some(elem)
+        } else {
+            iter.find_last
+        }
     );
 
     // Folds iterator from left to right.
@@ -820,6 +832,10 @@ namespace Iterator {
         subs.append(subs.map(push_front(head)))
     );
 
+    // Calculate the sum of elements of an iterator.
+    sum : [a : Additive] Iterator a -> a;
+    sum = fold(Zero::zero, Add::add);
+
     // Take at most n elements from an iterator.
     take : I64 -> Iterator a -> Iterator a;
     take = |n, iter| (
@@ -845,18 +861,6 @@ namespace Iterator {
             some $ (v, iter.take_while(cond))
         );
         Iterator { next: next }        
-    );
-
-    // Find the last element of an iterator.
-    find_last : Iterator a -> Option a;
-    find_last = |iter| (
-        if iter.is_empty { none() };
-        let (elem, iter) = iter.advance.as_some;
-        if iter.is_empty { 
-            some(elem)
-        } else {
-            iter.find_last
-        }
     );
 
     // Convert an iterator to an array.
@@ -962,7 +966,7 @@ impl Option : Monad {
 }
 
 // The type for file path.
-// TODO: give right implementation.
+// TODO: give better implementation.
 type Path = unbox struct { _data: String };
 
 namespace Path {
@@ -1188,6 +1192,9 @@ namespace U8 {
     minimum : U8;
     minimum = 0_U8;
 }
+impl U8 : Zero {
+    zero = 0_U8;
+}
 
 namespace I32 {
     maximum : I32;
@@ -1195,6 +1202,9 @@ namespace I32 {
 
     minimum : I32;
     minimum = -2147483648_I32;
+}
+impl I32 : Zero {
+    zero = 0_I32;
 }
 
 namespace U32 {
@@ -1204,6 +1214,9 @@ namespace U32 {
     minimum : U32;
     minimum = 0_U32;
 }
+impl U32 : Zero {
+    zero = 0_U32;
+}
 
 namespace I64 {
     maximum : I64;
@@ -1211,6 +1224,9 @@ namespace I64 {
 
     minimum : I64;
     minimum = -9223372036854775808;
+}
+impl I64 : Zero {
+    zero = 0_I64;
 }
 
 namespace U64 {
@@ -1220,8 +1236,21 @@ namespace U64 {
     minimum : U64;
     minimum = 0_U64;
 }
+impl U64 : Zero {
+    zero = 0_U64;
+}
+
+impl F32 : Zero {
+    zero = 0.0_F32;
+}
+
+impl F64 : Zero {
+    zero = 0.0_F64;
+}
 
 // Traits
+
+trait Additive = Add + Zero;
 
 trait [f : *->*] f : Functor {
     map : (a -> b) -> f a -> f b;
@@ -1247,6 +1276,10 @@ namespace Monad {
 
 trait a : ToString {
     to_string : a -> String;
+}
+
+trait a : Zero {
+    zero : a;
 }
 
 // Abs

@@ -83,6 +83,7 @@
       - [`impl U8 : Rem`](#impl-u8--rem)
       - [`impl U8 : Sub`](#impl-u8--sub)
       - [`impl U8 : ToString`](#impl-u8--tostring)
+      - [`impl U8 : Zero`](#impl-u8--zero)
     - [I32](#i32)
       - [`abs : I32 -> I32`](#abs--i32---i32)
       - [`maximum : I32`](#maximum--i32)
@@ -107,6 +108,7 @@
       - [`impl I32 : Rem`](#impl-i32--rem)
       - [`impl I32 : Sub`](#impl-i32--sub)
       - [`impl I32 : ToString`](#impl-i32--tostring)
+      - [`impl I32 : Zero`](#impl-i32--zero)
     - [U32](#u32)
       - [`maximum : U32`](#maximum--u32)
       - [`minimum : U32`](#minimum--u32)
@@ -130,6 +132,7 @@
       - [`impl U32 : Rem`](#impl-u32--rem)
       - [`impl U32 : Sub`](#impl-u32--sub)
       - [`impl U32 : ToString`](#impl-u32--tostring)
+      - [`impl U32 : Zero`](#impl-u32--zero)
     - [I64](#i64)
       - [`abs : I64 -> I64`](#abs--i64---i64)
       - [`maximum : I64`](#maximum--i64)
@@ -154,6 +157,7 @@
       - [`impl I64 : Rem`](#impl-i64--rem)
       - [`impl I64 : Sub`](#impl-i64--sub)
       - [`impl I64 : ToString`](#impl-i64--tostring)
+      - [`impl I64 : Zero`](#impl-i64--zero)
     - [U64](#u64)
       - [`maximum : U64`](#maximum--u64)
       - [`minimum : U64`](#minimum--u64)
@@ -177,6 +181,7 @@
       - [`impl U64 : Rem`](#impl-u64--rem)
       - [`impl U64 : Sub`](#impl-u64--sub)
       - [`impl U64 : ToString`](#impl-u64--tostring)
+      - [`impl U64 : Zero`](#impl-u64--zero)
     - [F32](#f32)
       - [`abs : F32 -> F32`](#abs--f32---f32)
       - [`to_I32 : F32 -> I32`](#to_i32--f32---i32)
@@ -190,6 +195,7 @@
       - [`impl F32 : Mul`](#impl-f32--mul)
       - [`impl F32 : Sub`](#impl-f32--sub)
       - [`impl F32 : ToString`](#impl-f32--tostring)
+      - [`impl F32 : Zero`](#impl-f32--zero)
     - [F64](#f64)
       - [`abs : F64 -> F64`](#abs--f64---f64)
       - [`to_I32 : F64 -> I32`](#to_i32--f64---i32)
@@ -203,6 +209,7 @@
       - [`impl F64 : Mul`](#impl-f64--mul)
       - [`impl F64 : Sub`](#impl-f64--sub)
       - [`impl F64 : ToString`](#impl-f64--tostring)
+      - [`impl F64 : Zero`](#impl-f64--zero)
     - [Array](#array-1)
       - [`@ : I64 -> Array a -> a`](#--i64---array-a---a)
       - [`__unsafe_set_length : I64 -> Array a -> Array a`](#__unsafe_set_length--i64---array-a---array-a)
@@ -280,6 +287,7 @@
       - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
       - [`empty : Iterator a`](#empty--iterator-a)
       - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
+      - [`find_last : Iterator a -> Option a`](#find_last--iterator-a---option-a)
       - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
       - [`fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`](#fold_m--m--monad-b---b---a---m-b---iterator-a---m-b)
       - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
@@ -295,10 +303,10 @@
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`subsequences : Iterator a -> Iterator (Iterator a)`](#subsequences--iterator-a---iterator-iterator-a)
+      - [`sum : [a : Additive] Iterator a -> a`](#sum--a--additive-iterator-a---a)
       - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
       - [`take_while : (a -> Bool) -> Iterator a -> Iterator a`](#take_while--a---bool---iterator-a---iterator-a)
       - [`to_array : Iterator a -> Array a`](#to_array--iterator-a---array-a)
-      - [`find_last : Iterator a -> Option a`](#find_last--iterator-a---option-a)
       - [`zip : Iterator b -> Iterator a -> Iterator (a, b)`](#zip--iterator-b---iterator-a---iterator-a-b)
       - [`impl Iterator a : Add`](#impl-iterator-a--add)
       - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
@@ -1610,6 +1618,7 @@ Literals:
 #### `impl U8 : Rem`
 #### `impl U8 : Sub`
 #### `impl U8 : ToString`
+#### `impl U8 : Zero`
 
 ### I32
 
@@ -1642,6 +1651,7 @@ Literals:
 #### `impl I32 : Rem`
 #### `impl I32 : Sub`
 #### `impl I32 : ToString`
+#### `impl I32 : Zero`
 
 ### U32
 
@@ -1674,6 +1684,7 @@ Literals:
 #### `impl U32 : Rem`
 #### `impl U32 : Sub`
 #### `impl U32 : ToString`
+#### `impl U32 : Zero`
 
 ### I64
 
@@ -1708,6 +1719,7 @@ Literals:
 #### `impl I64 : Rem`
 #### `impl I64 : Sub`
 #### `impl I64 : ToString`
+#### `impl I64 : Zero`
 
 ### U64
 
@@ -1740,6 +1752,7 @@ Literals:
 #### `impl U64 : Rem`
 #### `impl U64 : Sub`
 #### `impl U64 : ToString`
+#### `impl U64 : Zero`
 
 ### F32
 
@@ -1759,6 +1772,7 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 #### `impl F32 : Mul`
 #### `impl F32 : Sub`
 #### `impl F32 : ToString`
+#### `impl F32 : Zero`
 
 ### F64
 
@@ -1778,6 +1792,7 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 #### `impl F64 : Mul`
 #### `impl F64 : Sub`
 #### `impl F64 : ToString`
+#### `impl F64 : Zero`
 
 ### Array
 
@@ -2100,6 +2115,9 @@ Create an empty iterator.
 #### `filter : (a -> Bool) -> Iterator a -> Iterator a`
 Filter elements by a condition function.
 
+#### `find_last : Iterator a -> Option a`
+Takes the last element of an iterator.
+
 #### `fold : b -> (b -> a -> b) -> Iterator a -> b`
 Folds iterator from left to right.
 Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`.
@@ -2151,6 +2169,9 @@ Reverse an iterator.
 Generated all subsequences of an iterator.
 For example, `[1,2,3].to_iter.subsequences` equals to `[[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]].to_iter.map(to_iter)`.
 
+#### `sum : [a : Additive] Iterator a -> a`
+Calculate the sum of elements of an iterator.
+
 #### `take : I64 -> Iterator a -> Iterator a`
 Take at most n elements from an iterator.
 
@@ -2159,9 +2180,6 @@ Take elements of an iterator while a condition is satisfied.
 
 #### `to_array : Iterator a -> Array a`
 Convert an iterator to an array.
-
-#### `find_last : Iterator a -> Option a`
-Takes the last element of an iterator.
 
 #### `zip : Iterator b -> Iterator a -> Iterator (a, b)`
 Zip two iterators.
