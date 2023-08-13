@@ -23,7 +23,6 @@
   - [Boolean values and literals](#boolean-values-and-literals)
   - [Numbers and literals](#numbers-and-literals)
   - [Strings and literals](#strings-and-literals)
-  - [Namespaces](#namespaces-1)
   - [Structs](#structs-1)
     - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
     - [`set_{field_name} : {field_type} -> {struct} -> {struct}`](#set_field_name--field_type---struct---struct)
@@ -35,7 +34,8 @@
     - [`is_{variant_name} : {union} -> Bool`](#is_variant_name--union---bool)
     - [`as_{variant_name} : {union} -> {variant_type}`](#as_variant_name--union---variant_type)
     - [`mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`](#mod_variant_name--variant_type---variant_type---union---union)
-  - [Module and imports](#module-and-imports)
+  - [Modules and import statements](#modules-and-import-statements)
+  - [Namespaces](#namespaces-1)
   - [Recursion](#recursion)
   - [Overloading](#overloading)
   - [Trait](#trait)
@@ -1024,10 +1024,6 @@ For other types of numbers, you need to specify its type explicitl, such as `127
 
 The type for strings is `String`. String literals are enclosed in double quotation marks, such as `"Hello World!"`
 
-## Namespaces 
-
-(TBA)
-
 ## Structs
 
 If you define a struct named `{struct}` with a field `{field_name}` of type `{field_type}`, the following methods are defined in the namespace named `{struct}`.
@@ -1080,9 +1076,12 @@ Converts a union value into a variant value if it is created as the variant. If 
 
 Modify a union value by a function acting on a variant. It is assured that if you call `obj.mod_variant(f)` when the value in `obj` is unique, then `f` receives the variant value uniquely.
 
-## Module and imports 
+## Modules and import statements
 
-In Fix, all entities (values, functions, types and traits) defined in a source file is collected to form a module. Each source file has to declare the name of the module by `module {module_name};`. The first letter of the module name must be capitalized. Module name is used as the top-level item of the namespace of entities defined in a source file.
+In Fix, all entities (values, types, traits) defined in a source file is collected to form a module.
+Each source file has to declare the name of the module by `module {module_name};`.
+The first letter of a module name must be capitalized.
+Module name is used as the top-level namespace of entities defined in a source file.
 
 You can import other module by `import {module_name};`. As an example, consider a program consists of two source files:
 
@@ -1118,6 +1117,78 @@ This program consists of two modules, `Lib` and `Main`.
 There is one special module: `Std`. This is a module of built-in entities. `Std` module is implicitly imported from all modules and you don't need to write `import Std` explicitly.
 
 There are also other convenient modules which is included in fix's compiler, such as `Debug` or `HashMap`. To import these modules, you need to write import statements explicitly, but no need for adding source files to arguments of `fix run` or `fix build` command.
+
+## Namespaces
+
+Entities (global values, types and traits) can have conflicting name, but must be distinguished by their full name, i.e., name with namespaces explicitly written.
+Module name is used as the top-level namespace of entities defined in a source file. 
+In addition, you can create a namespace explicitly by `namespace TheNameSpace { ... }`.
+
+The first letter of a namespace name must be capitalized.
+
+For example, consider the following program.
+
+```
+module Main;
+
+namespace BooleanTruth {
+    truth : Bool;
+    truth = true;
+}
+
+namespace IntegralTruth {
+    truth : I64;
+    truth = 42;
+}
+```
+
+Then there are two entities named `truth`: `Main::BooleanTruth::truth` and `Main::IntegralTruth::truth`.
+
+If you omit a prefix of (or all of) the namespaces of an entity, Fix tries to infer its full name by type information obtained up to the point where the entity is used.
+For example, the follwing program
+
+```
+module Main;
+
+namespace BooleanTruth {
+    truth : Bool;
+    truth = true;
+}
+
+namespace IntegralTruth {
+    truth : I64;
+    truth = 42;
+}
+
+main : IO ();
+main = (
+    println $ truth.to_string
+);
+```
+
+failes to compile, because Fix cannot infer which `truth` should be used. 
+On the other hand, the program
+
+```
+module Main;
+
+namespace BooleanTruth {
+    truth : Bool;
+    truth = true;
+}
+
+namespace IntegralTruth {
+    truth : I64;
+    truth = 42;
+}
+
+main : IO ();
+main = (
+    println $ (0 + truth).to_string
+);
+```
+
+will compile because Fix can infer the type of `truth` by the fact that it can be added to `0` of type `I64`.
 
 ## Recursion
 
