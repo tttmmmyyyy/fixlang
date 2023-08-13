@@ -214,6 +214,9 @@ trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_
 
 trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
 
+// === Trait aliases ===
+trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_name ~ (sep* ~ "+" ~ sep* ~ trait_name)* ~ sep* ~ ";" }
+
 // === Global names === 
 global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
 

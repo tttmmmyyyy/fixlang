@@ -204,6 +204,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
     let mut global_value_decls: Vec<GlobalValueDecl> = vec![];
     let mut global_value_defns: Vec<GlobalValueDefn> = vec![];
     let mut trait_infos: Vec<TraitInfo> = vec![];
+    let mut trait_aliases: Vec<TraitAlias> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
     let mut import_statements: Vec<ImportStatement> = vec![];
 
@@ -217,6 +218,7 @@ fn parse_module(pair: Pair<Rule>, src: &SourceFile) -> Program {
                 &mut global_value_defns,
                 &mut type_defns,
                 &mut trait_infos,
+                &mut trait_aliases,
             ),
             Rule::trait_impl => {
                 trait_impls.push(parse_trait_impl(pair, src, &module_name));
@@ -244,6 +246,7 @@ fn parse_global_defns(
     global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
+    trait_aliases: &mut Vec<TraitAlias>,
 ) {
     assert_eq!(pair.as_rule(), Rule::global_defns);
     let pairs = pair.into_inner();
@@ -258,6 +261,7 @@ fn parse_global_defns(
                     global_value_defns,
                     type_defns,
                     trait_infos,
+                    trait_aliases,
                 );
             }
             Rule::type_defn => {
@@ -272,6 +276,9 @@ fn parse_global_defns(
             Rule::trait_defn => {
                 trait_infos.push(parse_trait_defn(pair, src, &namespace));
             }
+            Rule::trait_alias_defn => {
+                trait_aliases.push(parse_trait_alias(pair, src, &namespace));
+            }
             _ => unreachable!(),
         }
     }
@@ -285,6 +292,7 @@ fn parse_global_defns_in_namespace(
     global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
+    trait_aliases: &mut Vec<TraitAlias>,
 ) {
     assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
     let mut pairs = pair.into_inner();
@@ -298,7 +306,28 @@ fn parse_global_defns_in_namespace(
             global_value_defns,
             type_defns,
             trait_infos,
+            trait_aliases,
         );
+    }
+}
+
+fn parse_trait_alias(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) -> TraitAlias {
+    assert_eq!(pair.as_rule(), Rule::trait_alias_defn);
+    let span = Span::from_pair(src, &pair);
+    let mut pairs = pair.into_inner();
+    assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
+    let id = TraitId::from_fullname(FullName::new(
+        namespace,
+        &pairs.next().unwrap().as_str().to_string(),
+    ));
+    let mut values = vec![];
+    for pair in pairs {
+        values.push(parse_trait_fullname(pair, src));
+    }
+    TraitAlias {
+        id,
+        value: values,
+        source: Some(span),
     }
 }
 

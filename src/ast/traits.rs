@@ -45,6 +45,15 @@ pub struct TraitInfo {
     pub source: Option<Span>,
 }
 
+pub struct TraitAlias {
+    // Identifier of this trait (i.e., the name).
+    pub id: TraitId,
+    // Aliased traits.
+    pub value: Vec<TraitId>,
+    // Source location of alias definition.
+    pub source: Option<Span>,
+}
+
 impl TraitInfo {
     // Resolve namespace.
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
