@@ -20,8 +20,9 @@
   - [Iterators](#iterators)
   - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
 - [Other topics on syntax](#other-topics-on-syntax)
-  - [Integer literals](#integer-literals)
-  - [Float literals](#float-literals)
+  - [Boolean values and literals](#boolean-values-and-literals)
+  - [Numbers and literals](#numbers-and-literals)
+  - [Strings and literals](#strings-and-literals)
   - [Namespaces](#namespaces-1)
   - [Structs](#structs-1)
     - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
@@ -1000,13 +1001,28 @@ We add exclamation marks for functions which will be panic if a given value is s
 
 # Other topics on syntax
 
-## Integer literals
+## Boolean values and literals
 
-(TBA)
+The boolean type is `Bool` and its literals are `true` and `false`.
 
-## Float literals
+## Numbers and literals
 
-Float literals requires at least one digit before and after the decimal point. For example, `1.` or `.1` is not valid float literal (where it is valid in C) and you need to write `1.0` or `0.1` instead.
+Types for numbers are `I32`, `I64` (signed integers), `U8`, `U32`, `U64` (unsigned integers) and `F32`, `F64` (floating point values).
+
+Syntax for number literals is: 
+```
+"-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )?
+```
+
+Note that literals for floating point values requires at least one digit before and after the decimal point. 
+For example, `1.` or `.1` is not valid float literal (where it is valid in C) and you need to write `1.0` or `0.1` instead.
+
+The defaut type for integer liteal is `I64`, and the one for floating point value literal is `F64`.
+For other types of numbers, you need to specify its type explicitl, such as `127_U8` or `3.14_F32` .
+
+## Strings and literals
+
+The type for strings is `String`. String literals are enclosed in double quotation marks, such as `"Hello World!"`
 
 ## Namespaces 
 
