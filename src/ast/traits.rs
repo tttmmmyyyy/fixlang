@@ -616,16 +616,15 @@ impl TraitEnv {
             for inst in instances {
                 match Substitution::matching(kind_map, &inst.qual_pred.predicate.ty, &p.ty) {
                     Some(s) => {
-                        let ret = inst
-                            .qual_pred
-                            .context
-                            .iter()
-                            .map(|c| {
-                                let mut c = c.clone();
-                                s.substitute_predicate(&mut c);
-                                c
-                            })
-                            .collect();
+                        let ps = inst.qual_pred.context.iter().map(|c| {
+                            let mut c = c.clone();
+                            s.substitute_predicate(&mut c);
+                            c
+                        });
+                        let mut ret = vec![];
+                        for p in ps {
+                            ret.append(&mut p.resolve_trait_aliases(self));
+                        }
                         return Some(ret);
                     }
                     None => {}

@@ -1042,7 +1042,7 @@ pub fn test44_5() {
         main : IO ();
         main = (
             let arr = Array::from_map(10, |x| x * x);
-            let ans = sum(arr);
+            let ans = Main::sum(arr);
             let u = assert_eq("", ans, 285);
             pure()
         );
@@ -3775,6 +3775,77 @@ pub fn test126() {
             let n = 100;
             let v = Iterator::range(0, n+1).sum;
             let _ = assert_eq("", v, n*(n+1)/2);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test127() {
+    // Test trait alias.
+    // Basic example are Additive and Iterator::sum, which are tested in other tests.
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        // Higher kinded trait alias.
+
+        trait [f : * -> *] f : MyFunctorZero {
+            my_fzero : f a;
+        }
+        trait [f : * -> *] f : MyFunctorPlus {
+            my_fplus : f a -> f a -> f a;
+        }
+        trait MyMonadAdditive = Monad + MyFunctorZero + MyFunctorPlus;
+
+        impl Option : MyFunctorZero {
+            my_fzero = Option::none();
+        }
+        impl Option : MyFunctorPlus {
+            my_fplus = |rhs, lhs| if lhs.is_some { lhs } else { rhs };
+        }
+        my_msum : [m : MyMonadAdditive] Iterator (m a) -> m a;
+        my_msum = |iter| (
+            let next = iter.advance;
+            if next.is_none { my_fzero };
+            let (act, iter) = next.as_some;
+            act.my_fplus(my_msum(iter))
+        );
+
+        // Using trait alias as precondition of trait implementation.
+
+        type Vector2 a = struct { x : a, y : a };
+        impl [a : Additive] Vector2 a : Zero {
+            zero = Vector2 { x : Zero::zero, y : Zero::zero };
+        }
+        impl [a : Additive] Vector2 a : Add {
+            add = |lhs, rhs| Vector2 { x : lhs.@x + rhs.@x, y : lhs.@y + rhs.@y };
+        }
+
+        main : IO ();
+        main = (
+            let sum_vec = [Vector2{x : 1, y : 2}, Vector2{x : 3, y : 4}].to_iter.sum;
+            let _ = assert_eq("case 1", sum_vec.@x, 4);
+            let _ = assert_eq("case 2", sum_vec.@y, 6);
+
+            let opts = [Option::some(1), Option::some(2)].to_iter;
+            let opt_sum = opts.my_msum;
+            let _ = assert_eq("case 3", opt_sum.as_some, 1);
+
+            let opts = [Option::none(), Option::some(2)].to_iter;
+            let opt_sum = opts.my_msum;
+            let _ = assert_eq("case 4", opt_sum.as_some, 2);
+
+            let opts = [Option::none(), Option::none()].to_iter;
+            let opt_sum : Option I64 = opts.my_msum;
+            let _ = assert_eq("case 5", opt_sum.is_none, true);
+
+            let opts = [].to_iter;
+            let opt_sum : Option I64 = opts.my_msum;
+            let _ = assert_eq("case 6", opt_sum.is_none, true);
 
             pure()
         );
