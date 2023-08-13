@@ -396,6 +396,7 @@
   - [`debug_println : String -> ()`](#debug_println--string---)
 - [Module `Hash`](#module-hash)
   - [`trait a : Hash`](#trait-a--hash)
+  - [`trait HashKey = Hash + Eq`](#trait-hashkey--hash--eq)
     - [(required) `hash : [a : Hash] a -> U64`](#required-hash--a--hash-a---u64)
   - [`impl [a : Hash] Array a : Hash`](#impl-a--hash-array-a--hash)
   - [`impl String : Hash`](#impl-string--hash)
@@ -405,30 +406,30 @@
   - [`impl [a : Hash, b : Hash] (a, b) : Hash`](#impl-a--hash-b--hash-a-b--hash)
 - [Module `HashMap`](#module-hashmap)
   - [`type HashMap k v`](#type-hashmap-k-v)
-  - [`_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`](#_find_place--k--eq-k--hash-k---hashmap-k-v---i64-option-i64)
+  - [`_find_place : [k : HashKey] k -> HashMap k v -> (I64, Option I64)`](#_find_place--k--hashkey-k---hashmap-k-v---i64-option-i64)
   - [`_get_pot_geq : I64 -> I64`](#_get_pot_geq--i64---i64)
-  - [`contains_key : [k : Eq, k : Hash] k -> HashMap k v -> Bool`](#contains_key--k--eq-k--hash-k---hashmap-k-v---bool)
+  - [`contains_key : [k : HashKey] k -> HashMap k v -> Bool`](#contains_key--k--hashkey-k---hashmap-k-v---bool)
   - [`empty : I64 -> HashMap k v`](#empty--i64---hashmap-k-v)
-  - [`erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v`](#erase--k--eq-k--hash-k---hashmap-k-v---hashmap-k-v)
-  - [`find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`](#find--k--eq-k--hash-k---hashmap-k-v---option-v)
-  - [`find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> Option v`](#find_or--k--eq-k--hash-k---v---hashmap-k-v---option-v)
+  - [`erase : [k : HashKey] k -> HashMap k v -> HashMap k v`](#erase--k--hashkey-k---hashmap-k-v---hashmap-k-v)
+  - [`find : [k : HashKey] k -> HashMap k v -> Option v`](#find--k--hashkey-k---hashmap-k-v---option-v)
+  - [`find_or : [k : HashKey] k -> v -> HashMap k v -> Option v`](#find_or--k--hashkey-k---v---hashmap-k-v---option-v)
   - [`get_capacity : HashMap k v -> I64`](#get_capacity--hashmap-k-v---i64)
   - [`get_size : HashMap k v -> I64`](#get_size--hashmap-k-v---i64)
-  - [`insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`](#insert--k--eq-k--hash-k---v---hashmap-k-v---hashmap-k-v)
-  - [`reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`](#reserve--k--hash-k--eq-i64---hashmap-k-v---hashmap-k-v)
+  - [`insert : [k : HashKey] k -> v -> HashMap k v -> HashMap k v`](#insert--k--hashkey-k---v---hashmap-k-v---hashmap-k-v)
+  - [`reserve : [k : HashKey] I64 -> HashMap k v -> HashMap k v`](#reserve--k--hashkey-i64---hashmap-k-v---hashmap-k-v)
   - [`to_iter : HashMap k v -> Iterator (k, v)`](#to_iter--hashmap-k-v---iterator-k-v)
 - [Module `HashSet`](#module-hashset)
   - [`type HashSet k`](#type-hashset-k)
-  - [`contains : [k : Eq, k : Hash] k -> HashSet k -> Bool`](#contains--k--eq-k--hash-k---hashset-k---bool)
+  - [`contains : [k : HashKey] k -> HashSet k -> Bool`](#contains--k--hashkey-k---hashset-k---bool)
   - [`empty : I64 -> HashSet k`](#empty--i64---hashset-k)
-  - [`erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`](#erase--k--eq-k--hash-k---hashset-k---hashset-k)
-  - [`from_iter : [k : Eq, k : Hash] Iterator k -> HashSet k`](#from_iter--k--eq-k--hash-iterator-k---hashset-k)
+  - [`erase : [k : HashKey] k -> HashSet k -> HashSet k`](#erase--k--hashkey-k---hashset-k---hashset-k)
+  - [`from_iter : [k : HashKey] Iterator k -> HashSet k`](#from_iter--k--hashkey-iterator-k---hashset-k)
   - [`get_capacity : HashSet k -> I64`](#get_capacity--hashset-k---i64)
   - [`get_size : HashSet k -> I64`](#get_size--hashset-k---i64)
-  - [`insert : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`](#insert--k--eq-k--hash-k---hashset-k---hashset-k)
-  - [`intersect : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`](#intersect--k--eq-k--hash-hashset-k---hashset-k---hashset-k)
-  - [`merge : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`](#merge--k--eq-k--hash-hashset-k---hashset-k---hashset-k)
-  - [`reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`](#reserve--k--hash-k--eq-i64---hashset-k---hashset-k)
+  - [`insert : [k : HashKey] k -> HashSet k -> HashSet k`](#insert--k--hashkey-k---hashset-k---hashset-k)
+  - [`intersect : [k : HashKey] HashSet k -> HashSet k -> HashSet k`](#intersect--k--hashkey-hashset-k---hashset-k---hashset-k)
+  - [`merge : [k : HashKey] HashSet k -> HashSet k -> HashSet k`](#merge--k--hashkey-hashset-k---hashset-k---hashset-k)
+  - [`reserve : [k : HashKey] I64 -> HashSet k -> HashSet k`](#reserve--k--hashkey-i64---hashset-k---hashset-k)
   - [`to_iter : HashSet k -> Iterator k`](#to_iter--hashset-k---iterator-k)
 - [Module `Math`](#module-math)
   - [`binomial_coefficients : I64 -> Array (Array I64)`](#binomial_coefficients--i64---array-array-i64)
@@ -2550,6 +2551,9 @@ The main use of this function is to check whether a boxed value given as an argu
 
 ## `trait a : Hash`
 
+## `trait HashKey = Hash + Eq`
+Trait required for keys of HashSet and HashMap.
+
 ### (required) `hash : [a : Hash] a -> U64`
 
 ## `impl [a : Hash] Array a : Hash`
@@ -2570,7 +2574,7 @@ This is implemented by djb2 algorithm, although I don't know whether it is effec
 ## `type HashMap k v`
 `HashMap` is a structure that stores key-value pairs into hash tables.
 
-## `_find_place : [k : Eq, k : Hash] k -> HashMap k v -> (I64, Option I64)`
+## `_find_place : [k : HashKey] k -> HashMap k v -> (I64, Option I64)`
 Find the place where an element with a key is stored.
 Returns pair of (index in hash table, index in bucket).
 
@@ -2578,19 +2582,19 @@ Returns pair of (index in hash table, index in bucket).
 Get a POT (power-of-two) value which is less than or equal to the given value.
 This is used for calculating capacity value.
 
-## `contains_key : [k : Eq, k : Hash] k -> HashMap k v -> Bool`
+## `contains_key : [k : HashKey] k -> HashMap k v -> Bool`
 Check whether a hashmap contains a key.
 
 ## `empty : I64 -> HashMap k v`
 Create an empty HashMap which is reserved so that it will not rehash until size exceeds the spacified value.
 
-## `erase : [k : Eq, k : Hash] k -> HashMap k v -> HashMap k v`
+## `erase : [k : HashKey] k -> HashMap k v -> HashMap k v`
 Erase an element from a HashMap.
 
-## `find : [k : Eq, k : Hash] k -> HashMap k v -> Option v`
+## `find : [k : HashKey] k -> HashMap k v -> Option v`
 Find an element from a HashMap.
 
-## `find_or : [k : Eq, k : Hash] k -> v -> HashMap k v -> Option v`
+## `find_or : [k : HashKey] k -> v -> HashMap k v -> Option v`
 Find an element from a HashMap. If the map doesn't contain the key, it returns the given default value.
 
 ## `get_capacity : HashMap k v -> I64`
@@ -2599,10 +2603,10 @@ Get capacity of a HashMap.
 ## `get_size : HashMap k v -> I64`
 Get size (number of elements) in a HashMap.
 
-## `insert : [k : Eq, k : Hash] k -> v -> HashMap k v -> HashMap k v`
+## `insert : [k : HashKey] k -> v -> HashMap k v -> HashMap k v`
 Insert an element into a HashMap.
 
-## `reserve : [k : Hash, k : Eq] I64 -> HashMap k v -> HashMap k v`
+## `reserve : [k : HashKey] I64 -> HashMap k v -> HashMap k v`
 Reserve a HashMap so that it will not rehash until size exceeds the spacified value.
 
 ## `to_iter : HashMap k v -> Iterator (k, v)`
@@ -2613,16 +2617,16 @@ Convert a HashMap into an iterator.
 ## `type HashSet k`
 `HashSet` is a structure that stores elements into hash tables.
 
-## `contains : [k : Eq, k : Hash] k -> HashSet k -> Bool`
+## `contains : [k : HashKey] k -> HashSet k -> Bool`
 Check whether a hashset contains an element.
 
 ## `empty : I64 -> HashSet k`
 Create an empty HashSet which is reserved so that it will not rehash until size exceeds the spacified value.
 
-## `erase : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`
+## `erase : [k : HashKey] k -> HashSet k -> HashSet k`
 Erase an element from a HashSet. 
 
-## `from_iter : [k : Eq, k : Hash] Iterator k -> HashSet k`
+## `from_iter : [k : HashKey] Iterator k -> HashSet k`
 Construct a HashSet from an iterator of elements.
 
 ## `get_capacity : HashSet k -> I64`
@@ -2631,16 +2635,16 @@ Get capacity of a HashSet.
 ## `get_size : HashSet k -> I64`
 Get size (number of elements) of a HashSet.
 
-## `insert : [k : Eq, k : Hash] k -> HashSet k -> HashSet k`
+## `insert : [k : HashKey] k -> HashSet k -> HashSet k`
 Insert an element into a HashSet.
 
-## `intersect : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`
+## `intersect : [k : HashKey] HashSet k -> HashSet k -> HashSet k`
 Calculate intersection of two Hashsets.
 
-## `merge : [k : Eq, k : Hash] HashSet k -> HashSet k -> HashSet k`
+## `merge : [k : HashKey] HashSet k -> HashSet k -> HashSet k`
 Calculate union of two HashSets.
 
-## `reserve : [k : Hash, k : Eq] I64 -> HashSet k -> HashSet k`
+## `reserve : [k : HashKey] I64 -> HashSet k -> HashSet k`
 Reserve a HashSet so that it will not rehash until size exceeds the spacified value.
 
 ## `to_iter : HashSet k -> Iterator k`

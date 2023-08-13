@@ -4,6 +4,9 @@ trait a : Hash {
     hash : a -> U64;
 }
 
+// Trait required for keys of HashSet and HashMap.
+trait HashKey = Hash + Eq;
+
 impl [a : Hash] Array a : Hash {
     hash = |arr| (
         let len = arr.get_size;
