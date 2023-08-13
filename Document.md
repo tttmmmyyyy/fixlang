@@ -1354,6 +1354,8 @@ trait Foo = Bar + Baz;
 
 allows you to write `a : Foo` instead of `a : Bar, a : Baz`.
 
+You cannot implement a trait alias directly. If you want to implement `Foo` for a type `SomeType`, then implement `SomeType : Bar` and `SomeType : Baz` individually.
+
 ## Monads
 
 ### What is monad?
