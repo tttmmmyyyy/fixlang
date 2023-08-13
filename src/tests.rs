@@ -1761,87 +1761,87 @@ pub fn test67() {
     run_source(source, Configuration::develop_compiler());
 }
 
-#[test]
-#[serial]
-pub fn test68() {
-    // Test unboxed union pattern matching.
-    let source = r#"
-    module Main; import Debug;
+// #[test]
+// #[serial]
+// pub fn test68() {
+//     // Test unboxed union pattern matching.
+//     let source = r#"
+//     module Main; import Debug;
 
-    type I64OrBool = unbox union {int: I64, bool: Bool};
+//     type I64OrBool = unbox union {int: I64, bool: Bool};
 
-    main : IO ();
-    main = (
-        let u = I64OrBool::int(42);
-        let I64OrBool::int(x) = u;
-        let u = assert_eq("", x, 42);
-        pure()
-    );
-    "#;
-    run_source(source, Configuration::develop_compiler());
-}
+//     main : IO ();
+//     main = (
+//         let u = I64OrBool::int(42);
+//         let I64OrBool::int(x) = u;
+//         let u = assert_eq("", x, 42);
+//         pure()
+//     );
+//     "#;
+//     run_source(source, Configuration::develop_compiler());
+// }
 
-#[test]
-#[serial]
-pub fn test69() {
-    // Test boxed union pattern matching.
-    let source = r#"
-    module Main; import Debug;
+// #[test]
+// #[serial]
+// pub fn test69() {
+//     // Test boxed union pattern matching.
+//     let source = r#"
+//     module Main; import Debug;
 
-    type I64OrBool = box union {int: I64, bool: Bool};
+//     type I64OrBool = box union {int: I64, bool: Bool};
 
-    main : IO ();
-    main = (
-        let u = I64OrBool::bool(true);
-        let I64OrBool::bool(x) = u;
-        let u = assert_eq("", x, true);
-        pure()
-    );
-    "#;
-    run_source(source, Configuration::develop_compiler());
-}
+//     main : IO ();
+//     main = (
+//         let u = I64OrBool::bool(true);
+//         let I64OrBool::bool(x) = u;
+//         let u = assert_eq("", x, true);
+//         pure()
+//     );
+//     "#;
+//     run_source(source, Configuration::develop_compiler());
+// }
 
-#[test]
-#[serial]
-pub fn test70() {
-    // Test tuple in union pattern.
-    let source = r#"
-    module Main; import Debug;
+// #[test]
+// #[serial]
+// pub fn test70() {
+//     // Test tuple in union pattern.
+//     let source = r#"
+//     module Main; import Debug;
 
-    type Union = union {left: (I64, String), right: Bool};
+//     type Union = union {left: (I64, String), right: Bool};
 
-    main : IO ();
-    main = (
-        let u = Union::left((42, "truth"));
-        let Union::left((x, y)) = u;
-        let u = assert_eq("", x, 42);
-        pure()
-    );
-    "#;
-    run_source(source, Configuration::develop_compiler());
-}
+//     main : IO ();
+//     main = (
+//         let u = Union::left((42, "truth"));
+//         let Union::left((x, y)) = u;
+//         let u = assert_eq("", x, 42);
+//         pure()
+//     );
+//     "#;
+//     run_source(source, Configuration::develop_compiler());
+// }
 
-#[test]
-#[serial]
-pub fn test71() {
-    // Test union in struct pattern.
-    let source = r#"
-    module Main; import Debug;
+// #[test]
+// #[serial]
+// pub fn test71() {
+//     // Test union in struct pattern.
+//     let source = r#"
+//     module Main; import Debug;
 
-    type Struct = struct {uni: Union, value: I64};
-    type Union = union {left: (I64, String), right: Bool};
+//     type Struct = struct {uni: Union, value: I64};
+//     type Union = union {left: (I64, String), right: Bool};
 
-    main : IO ();
-    main = (
-        let u = Struct {uni: Union::left((42, "truth")), value: 13};
-        let Struct { uni: Union::left((truth, string)), value: val } = u;
-        let u = assert_eq("", truth, 42);
-        let u = assert_eq("", val, 13);
-        pure()
-    );
-    "#;
-    run_source(source, Configuration::develop_compiler());
-}
+//     main : IO ();
+//     main = (
+//         let u = Struct {uni: Union::left((42, "truth")), value: 13};
+//         let Struct { uni: Union::left((truth, string)), value: val } = u;
+//         let u = assert_eq("", truth, 42);
+//         let u = assert_eq("", val, 13);
+//         pure()
+//     );
+//     "#;
+//     run_source(source, Configuration::develop_compiler());
+// }
 
 #[test]
 #[serial]
@@ -1935,15 +1935,15 @@ pub fn test75() {
     main : IO ();
     main = (
         let iter = Iterator::from_map(|i| i*i );
-        let Option::some((n, iter)) = iter.advance;
+        let (n, iter) = iter.advance.as_some;
         let _ = assert_eq("", n, 0*0);
-        let Option::some((n, iter)) = iter.advance;
+        let (n, iter) = iter.advance.as_some;
         let _ = assert_eq("", n, 1*1);
-        let Option::some((n, iter)) = iter.advance;
+        let (n, iter) = iter.advance.as_some;
         let _ = assert_eq("", n, 2*2);
-        let Option::some((n, iter)) = iter.advance;
+        let (n, iter) = iter.advance.as_some;
         let _ = assert_eq("", n, 3*3);
-        let Option::some((n, iter)) = iter.advance;
+        let (n, iter) = iter.advance.as_some;
         let _ = assert_eq("", n, 4*4);
         pure()
     );
@@ -3327,10 +3327,6 @@ pub fn test119() {
             let A::S { data : _ } = s;
             let s = B::S { data : () };
             let B::S { data : _ } = s;
-            let u = A::U::data();
-            let A::U::data(_) = u;
-            let u = B::U::data();
-            let B::U::data(_) = u;
             pure()
         );
     "#;

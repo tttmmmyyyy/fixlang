@@ -131,7 +131,8 @@ expr = { expr_type_annotation }
 
 // === Patterns === 
 
-pattern = { pattern_var | pattern_tuple | pattern_struct | pattern_union }
+// pattern = { pattern_var | pattern_tuple | pattern_struct | pattern_union } // We currently disable pattern_union because we don't have "if-let" or "match" yet.
+pattern = { pattern_var | pattern_tuple | pattern_struct }
 
 pattern_var = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
