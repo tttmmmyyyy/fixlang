@@ -63,6 +63,12 @@ fn build_module<'c>(
     // Create symbols.
     fix_mod.create_trait_method_symbols();
 
+    // Resolve type aliases in declaration of global values.
+    let type_env = fix_mod.type_env();
+    for (_name, defn) in &mut fix_mod.global_values {
+        defn.resolve_type_aliases(&type_env);
+    }
+
     // Set and check kinds that appear in the module.
     fix_mod.set_kinds();
 

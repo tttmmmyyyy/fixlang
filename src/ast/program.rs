@@ -81,12 +81,14 @@ pub struct GlobalValue {
 
 impl GlobalValue {
     pub fn resolve_namespace_in_declaration(&mut self, ctx: &NameResolutionContext) {
+        // If this function is called for methods, we must call resolve_namespace on MethodImpl.ty.
+        assert!(matches!(self.expr, SymbolExpr::Simple(_)));
         self.scm = self.scm.resolve_namespace(ctx);
     }
 
-    #[allow(dead_code)]
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
         self.scm = self.scm.resolve_type_aliases(type_env);
+        self.expr.resolve_type_aliases(type_env);
     }
 
     pub fn set_kinds(
@@ -113,6 +115,19 @@ impl GlobalValue {
 pub enum SymbolExpr {
     Simple(TypedExpr),       // Definition such as "id : a -> a; id = \x -> x".
     Method(Vec<MethodImpl>), // Trait method implementations.
+}
+
+impl SymbolExpr {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        match self {
+            SymbolExpr::Simple(_) => {}
+            SymbolExpr::Method(impls) => {
+                for method_impl in impls {
+                    method_impl.resolve_type_aliases(type_env);
+                }
+            }
+        }
+    }
 }
 
 // Pair of expression and type resolver for it.
@@ -157,6 +172,12 @@ pub struct MethodImpl {
     // For example, if `Main` module implements `Eq : SomeType`, then implementation of `eq` for `SomeType` is defined in `Main` module,
     // but its name as a function is still `Std::Eq::eq`.
     pub define_module: Name,
+}
+
+impl MethodImpl {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        self.ty = self.ty.resolve_type_aliases(type_env);
+    }
 }
 
 pub struct NameResolutionContext {

@@ -313,6 +313,7 @@
       - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
       - [`impl Iterator : Functor`](#impl-iterator--functor)
       - [`impl Iterator : Monad`](#impl-iterator--monad)
+    - [Lazy](#lazy)
     - [LoopResult](#loopresult)
       - [`break_m : [m : Monad] r -> m (LoopResult s r)`](#break_m--m--monad-r---m-loopresult-s-r)
       - [`continue_m : [m : Monad] s -> m (LoopResult s r)`](#continue_m--m--monad-s---m-loopresult-s-r)
@@ -2206,6 +2207,11 @@ Adds two iterators by `Iterator::append`.
 #### `impl Iterator : Functor`
 
 #### `impl Iterator : Monad`
+
+### Lazy
+
+The type of lazy value.
+This is a type alias defined as `type Lazy a = () -> a;`
 
 ### LoopResult
 

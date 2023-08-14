@@ -509,7 +509,7 @@ impl TypeNode {
                     }
                     let resolved = s.substitute_type(&ta.value);
                     let mut resolved = resolved.set_source(src);
-                    for i in ta.tyvars.len()..app_seq.len() {
+                    for i in (ta.tyvars.len() + 1)..app_seq.len() {
                         let arg = app_seq[i].clone();
                         let src = Span::unite_opt(resolved.get_source(), arg.get_source());
                         resolved = type_tyapp(resolved, arg).set_source(src);

@@ -914,6 +914,12 @@ impl Iterator : Monad {
     bind = |f, xs| xs.map(f)._flatten;
 }
 
+// The type of lazy value.
+// This is a type alias defined as `type Lazy a = () -> a;`
+type Lazy a = () -> a;
+
+// LoopResult
+
 namespace LoopResult {
 
     // Make a break value wrapped in a monad.
@@ -1165,6 +1171,7 @@ impl String : ToString {
     to_string = |s| s;
 }
 
+// Unit
 impl () : Eq {
     eq = |_, _| true;
 }
