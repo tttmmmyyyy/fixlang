@@ -304,6 +304,12 @@ pub fn make_unit_ty() -> Rc<TypeNode> {
     make_tuple_ty(vec![])
 }
 
+// Get Lazy.
+pub fn make_lazy_ty() -> Rc<TypeNode> {
+    let name = FullName::from_strs(&[STD_NAME], LAZY_NAME);
+    type_tycon(&tycon(name))
+}
+
 // Make type `IO ()`
 pub fn make_io_unit_ty() -> Rc<TypeNode> {
     type_tyapp(
@@ -3305,7 +3311,7 @@ pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let scm = Scheme::generalize(
         HashMap::from([(A_NAME.to_string(), kind_star())]),
         vec![],
-        type_fun(make_unit_ty(), type_tyvar_star(A_NAME)),
+        type_tyapp(make_lazy_ty(), type_tyvar_star(A_NAME)),
     );
     (expr, scm)
 }

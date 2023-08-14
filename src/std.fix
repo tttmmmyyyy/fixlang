@@ -914,8 +914,9 @@ impl Iterator : Monad {
     bind = |f, xs| xs.map(f)._flatten;
 }
 
-// The type of lazy value.
+// The type of lazily generated values.
 // This is a type alias defined as `type Lazy a = () -> a;`
+// You can evaluate a lazy value `v` by `v()`.
 type Lazy a = () -> a;
 
 // LoopResult

@@ -10,6 +10,7 @@ pub const F32_NAME: &str = "F32";
 pub const F64_NAME: &str = "F64";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
+pub const LAZY_NAME: &str = "Lazy";
 pub const DESTRUCTOR_OBJECT_NAME: &str = "Destructor";
 pub const DESTRUCTOR_OBJECT_VALUE_FIELD_IDX: u32 = 0;
 pub const DESTRUCTOR_OBJECT_DTOR_FIELD_IDX: u32 = 1;

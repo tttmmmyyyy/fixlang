@@ -358,7 +358,7 @@
     - [()](#)
       - [`impl () : Eq`](#impl---eq)
   - [Functions](#functions-1)
-    - [`abort : () -> a`](#abort-----a)
+    - [`abort : Lazy a`](#abort--lazy-a)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
     - [`fix : ((a -> b) -> a -> b) -> a -> b`](#fix--a---b---a---b---a---b)
     - [`loop : s -> (s -> LoopResult s r) -> r`](#loop--s---s---loopresult-s-r---r)
@@ -2210,8 +2210,9 @@ Adds two iterators by `Iterator::append`.
 
 ### Lazy
 
-The type of lazy value.
+The type of lazily generated values.
 This is a type alias defined as `type Lazy a = () -> a;`
+You can evaluate a lazy value `v` by `v()`.
 
 ### LoopResult
 
@@ -2377,7 +2378,7 @@ Literals:
 
 ## Functions
 
-### `abort : () -> a`
+### `abort : Lazy a`
 
 Stops the execution of the program.
 
