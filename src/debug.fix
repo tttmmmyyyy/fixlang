@@ -1,20 +1,20 @@
 module Debug;
 
-assert : String -> Bool -> ();
+assert : Lazy String -> Bool -> ();
 assert = |msg, b| (
     if !b {
         let u = debug_println("assertion failed!: ");
-        let u = debug_println(msg);
+        let u = debug_println(msg());
         abort()
     } else {
         ()
     }
 );
 
-assert_eq : [a: Eq] String -> a -> a -> ();
+assert_eq : [a: Eq] Lazy String -> a -> a -> ();
 assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
-assert_unique! : String -> a -> a;
+assert_unique! : Lazy String -> a -> a;
 assert_unique! = |msg, x| (
     let (unique, x) = x.unsafe_is_unique;
     let _ = assert(msg, unique);

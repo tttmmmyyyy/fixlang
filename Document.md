@@ -390,9 +390,9 @@
     - [ToU64](#tou64)
       - [`to_U64 : [a: ToU64] a -> U64`](#to_u64--a-tou64-a---u64)
 - [Module `Debug`](#module-debug)
-  - [`assert : String -> Bool -> ()`](#assert--string---bool---)
-  - [`assert_eq : [a: Eq] String -> a -> a -> ()`](#assert_eq--a-eq-string---a---a---)
-  - [`assert_unique! : String -> a -> a`](#assert_unique--string---a---a)
+  - [`assert : Lazy String -> Bool -> ()`](#assert--lazy-string---bool---)
+  - [`assert_eq : [a: Eq] Lazy String -> a -> a -> ()`](#assert_eq--a-eq-lazy-string---a---a---)
+  - [`assert_unique! : Lazy String -> a -> a`](#assert_unique--lazy-string---a---a)
   - [`debug_print : String -> ()`](#debug_print--string---)
   - [`debug_println : String -> ()`](#debug_println--string---)
 - [Module `Hash`](#module-hash)
@@ -2212,7 +2212,8 @@ Adds two iterators by `Iterator::append`.
 
 The type of lazily generated values.
 This is a type alias defined as `type Lazy a = () -> a;`
-You can evaluate a lazy value `v` by `v()`.
+You can create a lazy value by `|_| (...an expression to generate the value...)`, and  
+you can evaluate a lazy value `v` by `v()`.
 
 ### LoopResult
 
@@ -2540,11 +2541,11 @@ This is equivalent to `Monad::bind(|x|x)`.
 
 # Module `Debug`
 
-## `assert : String -> Bool -> ()`
+## `assert : Lazy String -> Bool -> ()`
 
-## `assert_eq : [a: Eq] String -> a -> a -> ()`
+## `assert_eq : [a: Eq] Lazy String -> a -> a -> ()`
 
-## `assert_unique! : String -> a -> a`
+## `assert_unique! : Lazy String -> a -> a`
 
 Expression `assert_unique!(msg, obj)` assets that `obj` is unique, and returns `obj` itself. If `obj` is shared by multiple names, `assert_unique!(msg, obj)` prints the `msg` to the standard output and aborts.
 

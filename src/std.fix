@@ -916,7 +916,8 @@ impl Iterator : Monad {
 
 // The type of lazily generated values.
 // This is a type alias defined as `type Lazy a = () -> a;`
-// You can evaluate a lazy value `v` by `v()`.
+// You can create a lazy value by `|_| (...an expression to generate the value...)`, and  
+// you can evaluate a lazy value `v` by `v()`.
 type Lazy a = () -> a;
 
 // LoopResult
