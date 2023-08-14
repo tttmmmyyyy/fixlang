@@ -480,7 +480,7 @@ impl TypeNode {
     }
 
     // Remove type aliases in a type.
-    pub fn resolve_aliases(self: &Rc<TypeNode>, env: &TypeEnv) -> Rc<TypeNode> {
+    pub fn resolve_type_aliases(self: &Rc<TypeNode>, env: &TypeEnv) -> Rc<TypeNode> {
         // First, treat the case where top-level type constructor is a type alias.
         let app_seq = self.flatten_type_application();
         let toplevel_ty = &app_seq[0];
@@ -514,7 +514,7 @@ impl TypeNode {
                         let src = Span::unite_opt(resolved.get_source(), arg.get_source());
                         resolved = type_tyapp(resolved, arg).set_source(src);
                     }
-                    return resolved.resolve_aliases(env);
+                    return resolved.resolve_type_aliases(env);
                 }
             }
             _ => {}
@@ -523,12 +523,12 @@ impl TypeNode {
         match &self.ty {
             Type::TyVar(_) => self.clone(),
             Type::FunTy(dom_ty, codom_ty) => self
-                .set_funty_src(dom_ty.resolve_aliases(env))
-                .set_funty_dst(codom_ty.resolve_aliases(env)),
+                .set_funty_src(dom_ty.resolve_type_aliases(env))
+                .set_funty_dst(codom_ty.resolve_type_aliases(env)),
             Type::TyCon(_) => self.clone(),
             Type::TyApp(fun_ty, arg_ty) => self
-                .set_tyapp_fun(fun_ty.resolve_aliases(env))
-                .set_tyapp_arg(arg_ty.resolve_aliases(env)),
+                .set_tyapp_fun(fun_ty.resolve_type_aliases(env))
+                .set_tyapp_arg(arg_ty.resolve_type_aliases(env)),
         }
     }
 
@@ -1114,7 +1114,7 @@ impl Scheme {
         for p in &mut res.preds {
             p.resolve_type_aliases(type_env);
         }
-        res.ty = res.ty.resolve_aliases(type_env);
+        res.ty = res.ty.resolve_type_aliases(type_env);
         Rc::new(res)
     }
 }

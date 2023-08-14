@@ -224,7 +224,7 @@ impl Field {
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.ty = self.ty.resolve_aliases(type_env);
+        self.ty = self.ty.resolve_type_aliases(type_env);
     }
 
     // Check if fields are duplicated. If duplication found, it returns the duplicated field.

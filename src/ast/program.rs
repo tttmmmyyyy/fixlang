@@ -38,6 +38,9 @@ impl TypeEnv {
         for (tc, ti) in self.tycons.as_ref().iter() {
             res.insert(tc.clone(), ti.kind.clone());
         }
+        for (tc, ta) in self.aliases.as_ref().iter() {
+            res.insert(tc.clone(), ta.kind.clone());
+        }
         res
     }
 }
@@ -81,6 +84,7 @@ impl GlobalValue {
         self.scm = self.scm.resolve_namespace(ctx);
     }
 
+    #[allow(dead_code)]
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
         self.scm = self.scm.resolve_type_aliases(type_env);
     }
@@ -644,9 +648,11 @@ impl Program {
         }
     }
 
-    // Resolve namespace of type and trats in expression, and perform typechecking.
+    // - Resolve namespace of type and trats in expression,
+    // - resolve type aliases, and
+    // - perform typechecking.
     // The result will be written to `te`.
-    fn resolve_namespace_and_check_type(
+    fn resolve_and_check_type(
         &self,
         te: &mut TypedExpr,
         required_scheme: &Rc<Scheme>,
@@ -742,6 +748,8 @@ impl Program {
                 }
             }
         }
+        // First, resolve type aliases in required_scheme. This will affect to the cache file name.
+        let required_scheme = &required_scheme.resolve_type_aliases(&tc.type_env);
 
         // Load type-checking cache file.
         let last_affected_date = self.last_affected_dates.get(define_module).unwrap();
@@ -760,6 +768,9 @@ impl Program {
             imported_modules: self.visible_mods[define_module].clone(),
         };
         te.expr = te.expr.resolve_namespace(&nrctx);
+
+        // Resolve type aliases in expression.
+        te.expr = te.expr.resolve_type_aliases(&tc.type_env);
 
         // Perform type-checking.
         let mut tc = tc.clone();
@@ -783,7 +794,7 @@ impl Program {
                 // Perform type-checking.
                 let define_module = sym.template_name.module();
                 let mut e = e.clone();
-                self.resolve_namespace_and_check_type(
+                self.resolve_and_check_type(
                     &mut e,
                     &global_sym.scm,
                     &sym.template_name,
@@ -809,7 +820,7 @@ impl Program {
                     // Perform type-checking.
                     let define_module = method.define_module.clone();
                     let mut e = method.expr.clone();
-                    self.resolve_namespace_and_check_type(
+                    self.resolve_and_check_type(
                         &mut e,
                         &method.ty,
                         &sym.template_name,
@@ -960,6 +971,7 @@ impl Program {
     // Determine the name of instantiated generic symbol so that it has a specified type.
     // tc: a typechecker (substituion) under which ty should be interpreted.
     fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
+        let ty = ty.resolve_type_aliases(&self.type_env());
         let hash = ty.hash();
         let mut name = name.clone();
         name.name += INSTANCIATED_NAME_SEPARATOR;
@@ -1046,6 +1058,7 @@ impl Program {
     }
 
     // Resolve type aliases that appear in declarations (not in expressions).
+    #[allow(dead_code)]
     pub fn resolve_type_aliases_in_declaration(&mut self) {
         // Resolve in type constructors.
         {

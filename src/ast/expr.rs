@@ -413,6 +413,71 @@ impl ExprNode {
             }
         }
     }
+
+    pub fn resolve_type_aliases(self: &Rc<ExprNode>, type_env: &TypeEnv) -> Rc<ExprNode> {
+        match &*self.expr {
+            Expr::Var(_) => self.clone(),
+            Expr::LLVM(lit) => {
+                let mut lit = lit.as_ref().clone();
+                lit.ty = lit.ty.resolve_type_aliases(type_env);
+                self.clone().set_lit_lit(Rc::new(lit))
+            }
+            Expr::App(fun, args) => {
+                let args = args
+                    .iter()
+                    .map(|arg| arg.resolve_type_aliases(type_env))
+                    .collect();
+                self.clone()
+                    .set_app_func(fun.resolve_type_aliases(type_env))
+                    .set_app_args(args)
+            }
+            Expr::Lam(_, body) => self
+                .clone()
+                .set_lam_body(body.resolve_type_aliases(type_env)),
+            Expr::Let(pat, bound, value) => self
+                .clone()
+                .set_let_pat(pat.resolve_type_aliases(type_env))
+                .set_let_bound(bound.resolve_type_aliases(type_env))
+                .set_let_value(value.resolve_type_aliases(type_env)),
+            Expr::If(cond, then_expr, else_expr) => self
+                .clone()
+                .set_if_cond(cond.resolve_type_aliases(type_env))
+                .set_if_then(then_expr.resolve_type_aliases(type_env))
+                .set_if_else(else_expr.resolve_type_aliases(type_env)),
+            Expr::TyAnno(expr, ty) => self
+                .clone()
+                .set_tyanno_expr(expr.resolve_type_aliases(type_env))
+                .set_tyanno_ty(ty.resolve_type_aliases(type_env)),
+            Expr::MakeStruct(tc, fields) => {
+                let mut expr = self.clone();
+                if type_env.aliases.contains_key(tc) {
+                    error_exit_with_src(
+                        "In struct construction, cannot use type alias instead of struct name.",
+                        &self.source,
+                    );
+                }
+                for (field_name, field_expr) in fields {
+                    let field_expr = field_expr.resolve_type_aliases(type_env);
+                    expr = expr.set_make_struct_field(field_name, field_expr);
+                }
+                expr
+            }
+            Expr::ArrayLit(elems) => {
+                let mut expr = self.clone();
+                for (i, elem) in elems.iter().enumerate() {
+                    expr = expr.set_array_lit_elem(elem.resolve_type_aliases(type_env), i);
+                }
+                expr
+            }
+            Expr::CallC(_, _, _, _, args) => {
+                let mut expr = self.clone();
+                for (i, arg) in args.iter().enumerate() {
+                    expr = expr.set_call_c_arg(arg.resolve_type_aliases(type_env), i);
+                }
+                expr
+            }
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -529,6 +594,38 @@ impl PatternNode {
                 }
                 self.set_union_tycon(Rc::new(tc))
                     .set_union_pat(pat.resolve_namespace(ctx))
+            }
+        }
+    }
+
+    pub fn resolve_type_aliases(self: &PatternNode, type_env: &TypeEnv) -> Rc<PatternNode> {
+        match &self.pattern {
+            Pattern::Var(_, ty) => {
+                self.set_var_tyanno(ty.as_ref().map(|ty| ty.resolve_type_aliases(type_env)))
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                if type_env.aliases.contains_key(tc) {
+                    error_exit_with_src(
+                        "In struct pattern, cannot use type alias instead of struct name.",
+                        &self.info.source,
+                    );
+                }
+                let field_to_pat = field_to_pat
+                    .iter()
+                    .map(|(field_name, pat)| {
+                        (field_name.clone(), pat.resolve_type_aliases(type_env))
+                    })
+                    .collect::<Vec<_>>();
+                self.set_struct_field_to_pat(field_to_pat)
+            }
+            Pattern::Union(tc, _, pat) => {
+                if type_env.aliases.contains_key(tc) {
+                    error_exit_with_src(
+                        "In union pattern, cannot use type alias instead of union name.",
+                        &self.info.source,
+                    );
+                }
+                self.set_union_pat(pat.resolve_type_aliases(type_env))
             }
         }
     }

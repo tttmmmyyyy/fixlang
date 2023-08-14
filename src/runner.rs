@@ -49,7 +49,7 @@ fn build_module<'c>(
     fix_mod.resolve_namespace_in_declaration();
 
     // Resolve type aliases that appear in declarations (not in expressions).
-    fix_mod.resolve_type_aliases_in_declaration();
+    // fix_mod.resolve_type_aliases_in_declaration();
 
     // Validate user-defined types.
     fix_mod.validate_type_defns();

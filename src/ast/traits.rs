@@ -283,7 +283,7 @@ impl QualType {
         for pred in &mut self.preds {
             pred.resolve_type_aliases(type_env);
         }
-        self.ty = self.ty.resolve_aliases(type_env);
+        self.ty = self.ty.resolve_type_aliases(type_env);
     }
 
     // Calculate free type variables.
@@ -322,7 +322,7 @@ impl Predicate {
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.ty = self.ty.resolve_aliases(type_env);
+        self.ty = self.ty.resolve_type_aliases(type_env);
     }
 
     pub fn to_string_normalize(&self) -> String {
