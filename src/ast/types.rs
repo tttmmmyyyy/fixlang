@@ -200,6 +200,8 @@ impl TyCon {
     }
 }
 
+// Information of type constructor.
+// For type alias, this struct is not used; use TyAliasInfo instead.
 #[derive(Clone)]
 pub struct TyConInfo {
     pub kind: Rc<Kind>,
@@ -216,6 +218,14 @@ impl TyConInfo {
             field.resolve_namespace(ctx);
         }
     }
+}
+
+#[derive(Clone)]
+pub struct TyAliasInfo {
+    pub kind: Rc<Kind>,
+    pub value: Rc<TypeNode>,
+    pub tyvars: Vec<Name>,
+    pub source: Option<Span>,
 }
 
 // Node of type ast tree with user defined additional information
@@ -812,7 +822,7 @@ impl TypeNode {
         free_vars
     }
 
-    // Output free type variables to Vec buffer. Elements of the resulting buf may be duplicated.
+    // Append free type variables to a buffer of type Vec. Elements of the resulting buf may be duplicated.
     pub fn free_vars_vec(self: &Rc<TypeNode>, buf: &mut Vec<Name>) {
         match &self.ty {
             Type::TyVar(tv) => buf.push(tv.name.clone()),

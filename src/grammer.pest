@@ -186,7 +186,7 @@ type_field_name = { !keywords ~ var_head ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_defn = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn) ~ sep* ~ ";" }
+type_defn = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn | type_alias_defn) ~ sep* ~ ";" }
 
 comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* }
 
@@ -197,6 +197,9 @@ struct_defn = { (box_or_unbox ~ sep+)? ~ "struct" ~ sep* ~ "{" ~ sep* ~ comma_se
 
 // === union definitions ===
 union_defn = { (box_or_unbox ~ sep+)? ~ "union" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
+
+// === type alias definitions === 
+type_alias_defn = { type_expr }
 
 // === Trait definitions ===
 trait_name = { capital_name }

@@ -592,6 +592,8 @@ fn parse_type_defn(pair: Pair<Rule>, src: &SourceFile, namespace: &NameSpace) ->
         parse_struct_defn(pair, src)
     } else if pair.as_rule() == Rule::union_defn {
         parse_union_defn(pair, src)
+    } else if pair.as_rule() == Rule::type_alias_defn {
+        parse_type_alias_defn(pair, src)
     } else {
         unreachable!();
     };
@@ -629,6 +631,16 @@ fn parse_union_defn(pair: Pair<Rule>, src: &SourceFile) -> TypeDeclValue {
         fields.push(parse_type_field(pair, src));
     }
     TypeDeclValue::Union(Union { fields, is_unbox })
+}
+
+fn parse_type_alias_defn(pair: Pair<Rule>, src: &SourceFile) -> TypeDeclValue {
+    assert_eq!(pair.as_rule(), Rule::type_alias_defn);
+    let mut pairs = pair.into_inner();
+    let pair = pairs.next().unwrap();
+    let aliased_type = parse_type(pair, src);
+    TypeDeclValue::Alias(TypeAlias {
+        value: aliased_type,
+    })
 }
 
 // Return true if unbox.

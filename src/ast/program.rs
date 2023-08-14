@@ -12,20 +12,24 @@ use super::*;
 pub struct TypeEnv {
     // List of type constructors including user-defined types.
     pub tycons: Rc<HashMap<TyCon, TyConInfo>>,
+    // List of type aliases.
+    pub aliases: Rc<HashMap<TyCon, TyAliasInfo>>,
 }
 
 impl Default for TypeEnv {
     fn default() -> Self {
         Self {
             tycons: Rc::new(Default::default()),
+            aliases: Rc::new(Default::default()),
         }
     }
 }
 
 impl TypeEnv {
-    pub fn new(tycons: HashMap<TyCon, TyConInfo>) -> TypeEnv {
+    pub fn new(tycons: HashMap<TyCon, TyConInfo>, aliases: HashMap<TyCon, TyAliasInfo>) -> TypeEnv {
         TypeEnv {
             tycons: Rc::new(tycons),
+            aliases: Rc::new(aliases),
         }
     }
 
@@ -334,21 +338,32 @@ impl Program {
     // Calculate list of type constructors including user-defined types.
     pub fn calculate_type_env(&mut self) {
         let mut tycons = bulitin_tycons();
+        let mut aliases: HashMap<TyCon, TyAliasInfo> = HashMap::new();
         for type_decl in &self.type_defns {
             let tycon = type_decl.tycon();
-            if tycons.contains_key(&tycon) {
-                let tc = tycons.get(&tycon).unwrap();
+            if tycons.contains_key(&tycon) || aliases.contains_key(&tycon) {
+                let other_src = if tycons.contains_key(&tycon) {
+                    let tc = tycons.get(&tycon).unwrap();
+                    tc.source.clone()
+                } else {
+                    let ta = aliases.get(&tycon).unwrap();
+                    ta.source.clone()
+                };
                 error_exit_with_srcs(
                     &format!("Duplicate definition of type `{}`.", tycon.to_string()),
                     &[
                         &type_decl.source.as_ref().map(|s| s.to_single_character()),
-                        &tc.source.as_ref().map(|s| s.to_single_character()),
+                        &other_src.as_ref().map(|s| s.to_single_character()),
                     ],
                 );
             }
-            tycons.insert(tycon, type_decl.tycon_info());
+            if type_decl.is_alias() {
+                aliases.insert(tycon, type_decl.alias_info());
+            } else {
+                tycons.insert(tycon, type_decl.tycon_info());
+            }
         }
-        self.type_env = TypeEnv::new(tycons);
+        self.type_env = TypeEnv::new(tycons, aliases);
     }
 
     // Get list of type constructors including user-defined types.
@@ -1045,6 +1060,7 @@ impl Program {
                     }
                     _ => {}
                 },
+                TypeDeclValue::Alias(_) => {} // Nothing to do.
             }
         }
     }
@@ -1118,6 +1134,7 @@ impl Program {
                         );
                     }
                 }
+                TypeDeclValue::Alias(_) => {} // Nothing to do
             }
         }
     }
