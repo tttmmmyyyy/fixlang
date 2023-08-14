@@ -1367,7 +1367,7 @@ You can define type alias as follows:
 type Name = String;
 ```
 
-Type alias does NOT define a new type: it merely another name of the aliased type.
+Type alias does NOT define a new type: it is merely another name of the aliased type.
 
 You can also define higher-kinded type alias. The following is an example of such type alias defined in "Std":
 
