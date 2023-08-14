@@ -42,6 +42,7 @@
   - [Pattern matching](#pattern-matching)
   - [Traits](#traits)
   - [Trait alias](#trait-alias)
+  - [Type alias](#type-alias)
   - [Monads](#monads)
     - [What is monad?](#what-is-monad)
       - [State-like monads](#state-like-monads)
@@ -1357,6 +1358,24 @@ trait Foo = Bar + Baz;
 allows you to write `a : Foo` instead of `a : Bar, a : Baz`.
 
 You cannot implement a trait alias directly. If you want to implement `Foo` for a type `SomeType`, then implement `SomeType : Bar` and `SomeType : Baz` individually.
+
+## Type alias
+
+You can define type alias as follows:
+
+```
+type Name = String;
+```
+
+Type alias does NOT define a new type: it merely another name of the aliased type.
+
+You can also define higher-kinded type alias. The following is an example of such type alias defined in "Std":
+
+```
+type Lazy a = () -> a;
+```
+
+which defines a type alias `Lazy` of kind `* -> *`.
 
 ## Monads
 
