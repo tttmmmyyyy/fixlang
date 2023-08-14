@@ -1010,9 +1010,9 @@ namespace PunchedArray {
     // This function panics if the given array is shared by multiple references.
     punch! : I64 -> Array a -> (PunchedArray a, a);
     punch! = |idx, arr| (
-        let arr = arr.assert_unique!("[PunchedArray::punch!] Called on a shared array.");
+        let arr = arr.assert_unique!(|_|"[PunchedArray::punch!] Called on a shared array.");
         let size = arr.get_size;
-        let _ = assert("[PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
+        let _ = assert(|_|"[PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
         let elm = arr.__unsafe_get(idx);
         let dtor = |arr| (
             let arr = arr.__unsafe_set_length(0); // Avoid releaseing elements in the destructor of Array.

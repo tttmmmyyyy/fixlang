@@ -2469,19 +2469,19 @@ main = (
     let int_val = 42;
     let (unique, _) = int_val.unsafe_is_unique;
     let use = int_val + 1;
-    let _ = assert_eq("fail: int_val is shared", unique, true);
+    let _ = assert_eq(|_|"fail: int_val is shared", unique, true);
 
     // For boxed value, it returns true if the value isn't used later.
     let arr = Array::fill(10, 10);
     let (unique, arr) = arr.unsafe_is_unique;
     let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
-    let _ = assert_eq("fail: arr is shared", unique, true);
+    let _ = assert_eq(|_|"fail: arr is shared", unique, true);
 
     // Fox boxed value, it returns false if the value will be used later.
     let arr = Array::fill(10, 10);
     let (unique, _) = arr.unsafe_is_unique;
     let use = arr.@(0);
-    let _ = assert_eq("fail: arr is unique", unique, false);
+    let _ = assert_eq(|_|"fail: arr is unique", unique, false);
 
     pure()
 );
