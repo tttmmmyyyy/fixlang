@@ -218,6 +218,12 @@ impl TyConInfo {
             field.resolve_namespace(ctx);
         }
     }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        for field in &mut self.fields {
+            field.resolve_type_aliases(type_env);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -226,6 +232,12 @@ pub struct TyAliasInfo {
     pub value: Rc<TypeNode>,
     pub tyvars: Vec<Name>,
     pub source: Option<Span>,
+}
+
+impl TyAliasInfo {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.value = self.value.resolve_namespace(ctx);
+    }
 }
 
 // Node of type ast tree with user defined additional information
@@ -432,6 +444,28 @@ impl TypeNode {
         ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
     }
 
+    // Flatten type application:
+    // `f a b` => `(f, vec![a, b])`.
+    // `a` => `(a, vec![])`.
+    fn flatten_type_application(&self) -> Vec<Rc<TypeNode>> {
+        fn flatten_type_application_inner(ty: &TypeNode, args: &mut Vec<Rc<TypeNode>>) {
+            match &ty.ty {
+                Type::TyApp(fun, arg) => {
+                    flatten_type_application_inner(fun, args);
+                    args.push(arg.clone());
+                }
+                _ => {
+                    assert!(args.is_empty());
+                    args.push(Rc::new(ty.clone()));
+                }
+            }
+        }
+
+        let mut args: Vec<Rc<TypeNode>> = vec![];
+        flatten_type_application_inner(self, &mut args);
+        args
+    }
+
     fn collect_type_argments(&self) -> Vec<Rc<TypeNode>> {
         let mut ret: Vec<Rc<TypeNode>> = vec![];
         match &self.ty {
@@ -445,7 +479,60 @@ impl TypeNode {
         ret
     }
 
-    // Get top-level type constructor.
+    // Remove type aliases in a type.
+    pub fn resolve_aliases(self: &Rc<TypeNode>, env: &TypeEnv) -> Rc<TypeNode> {
+        // First, treat the case where top-level type constructor is a type alias.
+        let app_seq = self.flatten_type_application();
+        let toplevel_ty = &app_seq[0];
+        match &toplevel_ty.ty {
+            Type::TyCon(tc) => {
+                if let Some(ta) = env.aliases.get(&tc) {
+                    if app_seq.len() - 1 < ta.tyvars.len() {
+                        // When the type alias is not fully applied, raise error.
+                        error_exit_with_src(
+                            &format!(
+                                "Cannot resolve type alias `{}` in `{}`",
+                                tc.to_string(),
+                                Rc::new(self.clone()).to_string_normalize()
+                            ),
+                            toplevel_ty.get_source(),
+                        )
+                    }
+                    // Resolve alias and calculate type application.
+                    let mut s = Substitution::default();
+                    let mut src: Option<Span> = toplevel_ty.get_source().clone();
+                    for i in 0..ta.tyvars.len() {
+                        let param = &ta.tyvars[i];
+                        let arg = app_seq[i + 1].clone();
+                        src = Span::unite_opt(&src, arg.get_source());
+                        s.add_substitution(&Substitution::single(&param, arg));
+                    }
+                    let resolved = s.substitute_type(&ta.value);
+                    let mut resolved = resolved.set_source(src);
+                    for i in ta.tyvars.len()..app_seq.len() {
+                        let arg = app_seq[i].clone();
+                        let src = Span::unite_opt(resolved.get_source(), arg.get_source());
+                        resolved = type_tyapp(resolved, arg).set_source(src);
+                    }
+                    return resolved.resolve_aliases(env);
+                }
+            }
+            _ => {}
+        }
+        // Treat other cases.
+        match &self.ty {
+            Type::TyVar(_) => self.clone(),
+            Type::FunTy(dom_ty, codom_ty) => self
+                .set_funty_src(dom_ty.resolve_aliases(env))
+                .set_funty_dst(codom_ty.resolve_aliases(env)),
+            Type::TyCon(_) => self.clone(),
+            Type::TyApp(fun_ty, arg_ty) => self
+                .set_tyapp_fun(fun_ty.resolve_aliases(env))
+                .set_tyapp_arg(arg_ty.resolve_aliases(env)),
+        }
+    }
+
+    // Get top-level type constructor of a type.
     pub fn toplevel_tycon(&self) -> Option<Rc<TyCon>> {
         match &self.ty {
             Type::TyVar(_) => None,
@@ -1019,6 +1106,15 @@ impl Scheme {
             p.resolve_namespace(ctx);
         }
         res.ty = res.ty.resolve_namespace(ctx);
+        Rc::new(res)
+    }
+
+    pub fn resolve_type_aliases(&self, type_env: &TypeEnv) -> Rc<Scheme> {
+        let mut res = self.clone();
+        for p in &mut res.preds {
+            p.resolve_type_aliases(type_env);
+        }
+        res.ty = res.ty.resolve_aliases(type_env);
         Rc::new(res)
     }
 }

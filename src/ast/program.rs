@@ -81,6 +81,10 @@ impl GlobalValue {
         self.scm = self.scm.resolve_namespace(ctx);
     }
 
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        self.scm = self.scm.resolve_type_aliases(type_env);
+    }
+
     pub fn set_kinds(
         &mut self,
         kind_map: &HashMap<TyCon, Rc<Kind>>,
@@ -372,16 +376,19 @@ impl Program {
     }
 
     // Get of list of tycons that can be used for namespace resolution.
-    pub fn tycon_names(&self) -> HashSet<FullName> {
+    pub fn tycon_names_with_aliases(&self) -> HashSet<FullName> {
         let mut res: HashSet<FullName> = Default::default();
-        for (k, _v) in self.type_env().tycons.iter() {
+        for (k, _) in self.type_env().tycons.iter() {
+            res.insert(k.name.clone());
+        }
+        for (k, _) in self.type_env().aliases.iter() {
             res.insert(k.name.clone());
         }
         res
     }
 
     // Get of list of traits that can be used for namespace resolution.
-    pub fn trait_names(&self) -> HashSet<FullName> {
+    pub fn trait_names_with_aliases(&self) -> HashSet<FullName> {
         self.trait_env.trait_names()
     }
 
@@ -748,8 +755,8 @@ impl Program {
 
         // Perform namespace inference.
         let nrctx = NameResolutionContext {
-            types: self.tycon_names(),
-            traits: self.trait_names(),
+            types: self.tycon_names_with_aliases(),
+            traits: self.trait_names_with_aliases(),
             imported_modules: self.visible_mods[define_module].clone(),
         };
         te.expr = te.expr.resolve_namespace(&nrctx);
@@ -1003,10 +1010,11 @@ impl Program {
     // NOTE: names of in the definition of types/traits/global_values have to be full-named already when this function called.
     pub fn resolve_namespace_in_declaration(&mut self) {
         let mut ctx = NameResolutionContext {
-            types: self.tycon_names(),
-            traits: self.trait_names(),
+            types: self.tycon_names_with_aliases(),
+            traits: self.trait_names_with_aliases(),
             imported_modules: HashSet::default(),
         };
+        // Resolve namespaces in type constructors.
         {
             let mut tycons = (*self.type_env.tycons).clone();
             for (tc, ti) in &mut tycons {
@@ -1014,6 +1022,15 @@ impl Program {
                 ti.resolve_namespace(&ctx);
             }
             self.type_env.tycons = Rc::new(tycons);
+        }
+        // Resolve namespaces in type aliases.
+        {
+            let mut aliases = (*self.type_env.aliases).clone();
+            for (tc, ta) in &mut aliases {
+                ctx.imported_modules = self.visible_mods[&tc.name.module()].clone();
+                ta.resolve_namespace(&ctx);
+            }
+            self.type_env.aliases = Rc::new(aliases);
         }
 
         self.trait_env
@@ -1025,6 +1042,27 @@ impl Program {
         for (name, sym) in &mut self.global_values {
             ctx.imported_modules = self.visible_mods[&name.module()].clone();
             sym.resolve_namespace_in_declaration(&ctx);
+        }
+    }
+
+    // Resolve type aliases that appear in declarations (not in expressions).
+    pub fn resolve_type_aliases_in_declaration(&mut self) {
+        // Resolve in type constructors.
+        {
+            let type_env = self.type_env();
+            let mut tycons = (*self.type_env.tycons).clone();
+            for (_, ti) in &mut tycons {
+                ti.resolve_type_aliases(&type_env);
+            }
+            self.type_env.tycons = Rc::new(tycons);
+        }
+        let type_env = self.type_env();
+        self.trait_env.resolve_type_aliases(&type_env);
+        for decl in &mut self.type_defns {
+            decl.resolve_type_aliases(&type_env);
+        }
+        for (_, sym) in &mut self.global_values {
+            sym.resolve_type_aliases(&type_env);
         }
     }
 

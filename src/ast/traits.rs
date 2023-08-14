@@ -53,6 +53,13 @@ impl TraitInfo {
         }
     }
 
+    // Resolve type aliases
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        for (_name, qt) in &mut self.methods {
+            qt.resolve_type_aliases(type_env);
+        }
+    }
+
     // Get type-scheme of a method.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // this function returns "[a: Show] a -> String" as type of "show" method.
@@ -118,9 +125,16 @@ pub struct TraitInstance {
 impl TraitInstance {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         self.qual_pred.resolve_namespace(ctx);
-        for (_name, expr) in &mut self.methods {
-            *expr = expr.resolve_namespace(ctx);
-        }
+
+        // This function is called only by resolve_namespace_in_declaration, so we don't need to see into expression.
+
+        // for (_name, expr) in &mut self.methods {
+        //     *expr = expr.resolve_namespace(ctx);
+        // }
+    }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        self.qual_pred.resolve_type_aliases(type_env);
     }
 
     // Get trait id.
@@ -197,6 +211,13 @@ impl QualPredicate {
         self.predicate.resolve_namespace(ctx);
     }
 
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        for p in &mut self.context {
+            p.resolve_type_aliases(type_env);
+        }
+        self.predicate.resolve_type_aliases(type_env);
+    }
+
     pub fn extend_kind_scope(
         scope: &mut HashMap<Name, Rc<Kind>>,
         preds: &Vec<Predicate>,
@@ -257,6 +278,14 @@ impl QualType {
         self.ty = self.ty.resolve_namespace(ctx);
     }
 
+    // Resolve type aliases
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        for pred in &mut self.preds {
+            pred.resolve_type_aliases(type_env);
+        }
+        self.ty = self.ty.resolve_aliases(type_env);
+    }
+
     // Calculate free type variables.
     pub fn free_vars(&self) -> HashMap<Name, Rc<Kind>> {
         self.ty.free_vars()
@@ -290,6 +319,10 @@ impl Predicate {
             error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
         }
         self.ty = self.ty.resolve_namespace(ctx);
+    }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        self.ty = self.ty.resolve_aliases(type_env);
     }
 
     pub fn to_string_normalize(&self) -> String {
@@ -548,6 +581,30 @@ impl TraitEnv {
 
                 // Resolve names in TrantInstance.
                 inst.resolve_namespace(ctx);
+
+                // Insert to instances_resolved
+                if !instances_resolved.contains_key(&trait_id) {
+                    instances_resolved.insert(trait_id.clone(), vec![]);
+                }
+                instances_resolved.get_mut(&trait_id).unwrap().push(inst);
+            }
+        }
+        self.instances = instances_resolved;
+    }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        // Resolve aliases in trait definitions.
+        for (_, trait_info) in &mut self.traits {
+            trait_info.resolve_type_aliases(type_env);
+        }
+
+        // Resolve aliases in trait implementations.
+        let insntaces = std::mem::replace(&mut self.instances, Default::default());
+        let mut instances_resolved: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
+        for (trait_id, insts) in insntaces {
+            for mut inst in insts {
+                // Resolve names in TrantInstance.
+                inst.resolve_type_aliases(type_env);
 
                 // Insert to instances_resolved
                 if !instances_resolved.contains_key(&trait_id) {

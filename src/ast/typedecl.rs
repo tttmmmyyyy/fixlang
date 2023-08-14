@@ -15,6 +15,10 @@ impl TypeDefn {
         self.value.resolve_namespace(ctx);
     }
 
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        self.value.resolve_type_aliases(type_env);
+    }
+
     pub fn tycon(&self) -> TyCon {
         TyCon::new(self.name.clone())
     }
@@ -141,6 +145,14 @@ impl TypeDeclValue {
         }
     }
 
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        match self {
+            TypeDeclValue::Struct(s) => s.resolve_type_aliases(type_env),
+            TypeDeclValue::Union(u) => u.resolve_type_aliases(type_env),
+            TypeDeclValue::Alias(_) => {} // Nothing to do.
+        }
+    }
+
     pub fn is_alias(&self) -> bool {
         match self {
             TypeDeclValue::Alias(_) => true,
@@ -161,6 +173,12 @@ impl Struct {
             f.resolve_namespace(ctx);
         }
     }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        for f in &mut self.fields {
+            f.resolve_type_aliases(type_env);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -173,6 +191,12 @@ impl Union {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         for f in &mut self.fields {
             f.resolve_namespace(ctx);
+        }
+    }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        for f in &mut self.fields {
+            f.resolve_type_aliases(type_env);
         }
     }
 }
@@ -197,6 +221,10 @@ pub struct Field {
 impl Field {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         self.ty = self.ty.resolve_namespace(ctx);
+    }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        self.ty = self.ty.resolve_aliases(type_env);
     }
 
     // Check if fields are duplicated. If duplication found, it returns the duplicated field.
