@@ -3825,6 +3825,16 @@ pub fn test127() {
             add = |lhs, rhs| Vector2 { x : lhs.@x + rhs.@x, y : lhs.@y + rhs.@y };
         }
 
+        // Define trait alias of a trait alias.
+        trait MyAdditive = Additive;
+        my_sum : [a : MyAdditive] Array a -> a;
+        my_sum = |arr| (
+            loop((0, Zero::zero), |(i, sum)| (
+                if i == arr.get_size { break $ sum };
+                continue $ (i+1, sum + arr.@(i))
+            ))
+        );
+
         // Error (cannot implement trait alias directly)
         // impl [a : Additive] Vector2 a : Additive {}
 
@@ -3853,6 +3863,8 @@ pub fn test127() {
             let opts = [].to_iter;
             let opt_sum : Option I64 = opts.my_msum;
             let _ = assert_eq(|_|"case 6", opt_sum.is_none, true);
+
+            let _ = assert_eq(|_|"case 7", [1,2,3,4,5].my_sum, 1+2+3+4+5);
 
             pure()
         );
