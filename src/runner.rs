@@ -49,7 +49,7 @@ fn build_module<'c>(
     fix_mod.resolve_namespace_in_declaration();
 
     // Resolve type aliases that appear in declarations (not in expressions).
-    // fix_mod.resolve_type_aliases_in_declaration();
+    fix_mod.resolve_type_aliases_in_declaration();
 
     // Validate user-defined types.
     fix_mod.validate_type_defns();
@@ -62,12 +62,6 @@ fn build_module<'c>(
 
     // Create symbols.
     fix_mod.create_trait_method_symbols();
-
-    // Resolve type aliases in declaration of global values.
-    let type_env = fix_mod.type_env();
-    for (_name, defn) in &mut fix_mod.global_values {
-        defn.resolve_type_aliases(&type_env);
-    }
 
     // Set and check kinds that appear in the module.
     fix_mod.set_kinds();

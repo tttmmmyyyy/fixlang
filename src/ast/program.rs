@@ -769,8 +769,6 @@ impl Program {
                 }
             }
         }
-        // First, resolve type aliases in required_scheme. This will affect to the cache file name.
-        let required_scheme = &required_scheme.resolve_type_aliases(&tc.type_env);
 
         // Load type-checking cache file.
         let last_affected_date = self.last_affected_dates.get(define_module).unwrap();

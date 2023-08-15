@@ -3909,13 +3909,11 @@ pub fn test128() {
 
         main : IO ();
         main = (
-            let _ = *println(greet $ "John");
-            let _ = *println(get_name $ Person { name : "Smith" });
+            let _ = assert_eq(|_|"", "John".greet + " " + get_name(Person { name : "Smith" }), "My name is John Smith");
 
             // Type alias in type annotation.
             let names : Array Name = ["John Smith"];
-            let _ = *println(names.@0);
-            let _ = *println(names.@0.to_string);
+            let _ = assert_eq(|_|"", names.@(0).MyToString::to_string, "John Smith");
 
             pure()
         );
