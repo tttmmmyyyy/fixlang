@@ -3874,6 +3874,57 @@ pub fn test127() {
 
 #[test]
 #[serial]
+pub fn test128() {
+    // Test type alias.
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        // Test of higher kinded trait alias is covered by Std::Lazy.
+
+        type Name = String;
+
+        // Type alias in declaration of global value.
+        greet : Name -> String;
+        greet = |name| "My name is " + name;
+
+        // Type alias in type definition.
+        type Person = struct { name : Name };
+
+        // Type alias in definition of trait.
+        trait a : Named {
+            get_name : a -> Name;
+        }
+        impl Person : Named {
+            get_name = @name;
+        }
+        
+        // Implement trait on type alias.
+        trait a : MyToString {
+            to_string : a -> String;
+        }
+        impl Name : MyToString {
+            to_string = |s : Name| s;
+        }
+
+        main : IO ();
+        main = (
+            let _ = *println(greet $ "John");
+            let _ = *println(get_name $ Person { name : "Smith" });
+
+            // Type alias in type annotation.
+            let names : Array Name = ["John Smith"];
+            let _ = *println(names.@0);
+            let _ = *println(names.@0.to_string);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();
