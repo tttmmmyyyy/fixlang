@@ -266,9 +266,9 @@
       - [`open_file : Path -> String -> IOResult IOError IOHandle`](#open_file--path---string---ioresult-ioerror-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
-      - [`read_content : IOHandle -> IOResult IOError String`](#read_content--iohandle---ioresult-ioerror-string)
       - [`read_file : Path -> IOResult IOError String`](#read_file--path---ioresult-ioerror-string)
       - [`read_line : IOHandle -> IOResult IOError String`](#read_line--iohandle---ioresult-ioerror-string)
+      - [`read_string : IOHandle -> IOResult IOError String`](#read_string--iohandle---ioresult-ioerror-string)
       - [`with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a`](#with_file--path---string---iohandle---ioresult-ioerror-a---ioresult-ioerror-a)
       - [`write_file : Path -> String -> IOResult IOError ()`](#write_file--path---string---ioresult-ioerror-)
       - [`write_string : IOHandle -> String -> IOResult IOError ()`](#write_string--iohandle---string---ioresult-ioerror-)
@@ -2057,10 +2057,6 @@ Print a string to stdout.
 
 Print a string followed by a newline to stdout.
 
-#### `read_content : IOHandle -> IOResult IOError String`
-
-Read all characters from a IOHandle.
-
 #### `read_file : Path -> IOResult IOError String`
 
 Raad all characters from a file.
@@ -2068,6 +2064,10 @@ Raad all characters from a file.
 #### `read_line : IOHandle -> IOResult IOError String`
 
 Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at its end.
+
+#### `read_string : IOHandle -> IOResult IOError String`
+
+Read all characters from a IOHandle.
 
 #### `with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a`
 

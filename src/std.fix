@@ -513,18 +513,18 @@ namespace IO {
         pure()
     );
 
-    // Read all characters from a IOHandle.
-    read_content : IOHandle -> IOResult ErrMsg String;
-    read_content = _read_line_inner(false);
-
     // Raad all characters from a file.
     read_file : Path -> IOResult ErrMsg String;
-    read_file = |path| with_file(path, "r", read_content);
+    read_file = |path| with_file(path, "r", read_string);
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
     // The returned string may include newline/carriage return at its end.
     read_line : IOHandle -> IOResult ErrMsg String;
     read_line = _read_line_inner(true);
+
+    // Read all characters from a IOHandle.
+    read_string : IOHandle -> IOResult ErrMsg String;
+    read_string = _read_line_inner(false);
 
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
