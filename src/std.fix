@@ -462,6 +462,19 @@ namespace IO {
         pure()
     );
 
+    // Read a line from stdin. If some error occurr, this function aborts.
+    // If you want to handle errors, use `read_line(stdin)` instead.
+    input_line : IO String;
+    input_line = (
+        let res = *read_line(stdin).to_io;
+        if res.is_ok {
+            pure $ res.as_ok
+        } else {
+            let _ = *(eprintln $ res.as_err.to_string);
+            pure $ abort()
+        }
+    );
+
     // Open a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOResult ErrMsg IOHandle;
     open_file = |path, mode| (
@@ -513,19 +526,6 @@ namespace IO {
     read_line : IOHandle -> IOResult ErrMsg String;
     read_line = _read_line_inner(true);
 
-    // Read a line from stdin. If some error occurr, this function aborts.
-    // If you want to handle errors, use `read_line(stdin)` instead.
-    read_input_line : IO String;
-    read_input_line = (
-        let res = *read_line(stdin).to_io;
-        if res.is_ok {
-            pure $ res.as_ok
-        } else {
-            let _ = *(eprintln $ res.as_err.to_string);
-            pure $ abort()
-        }
-    );
-
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
     with_file : Path -> String -> (IOHandle -> IOResult ErrMsg a) -> IOResult ErrMsg a;
@@ -536,20 +536,20 @@ namespace IO {
         pure $ res
     );  
 
+    // Write a string into a file.
+    write_file : Path -> String -> IOResult ErrMsg ();
+    write_file = |path, content| with_file(path, "w", |handle| write_string(handle, content));
+
     // Write a string into an IOHandle.
-    write_content : IOHandle -> String -> IOResult ErrMsg ();
-    write_content = |handle, content| (
+    write_string : IOHandle -> String -> IOResult ErrMsg ();
+    write_string = |handle, content| (
         let res = content.borrow_c_str(|c_str| (
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle.@_file_ptr];
-            if res < 0_I32 { Result::err $ ErrMsg { msg : "Std::IO::write_content! failed!: some error occurred in fputs." } };
+            if res < 0_I32 { Result::err $ ErrMsg { msg : "Std::IO::write_string failed!: some error occurred in fputs." } };
             Result::ok()
         ));
         IOResult::from_result $ res
     );
-
-    // Write a string into a file.
-    write_file : Path -> String -> IOResult ErrMsg ();
-    write_file = |path, content| with_file(path, "w", |handle| write_content(handle, content));
 }
 
 impl IO : Functor {
