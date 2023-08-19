@@ -373,74 +373,10 @@ impl I64 : ToString {
 type IO a = unbox struct { _data : () -> a };
 
 namespace IO {
-    // Perform the I/O action. This may violate purity of Fix.
-    _unsafe_perform : IO a -> a;
-    _unsafe_perform = |io| (io.@_data)();
-
-    // Close a file.
-    close_file : IOHandle -> IO ();
-    close_file = |handle| (
-        IO { _data : |_|(
-            let _ = CALL_C[I32 fclose(Ptr), handle.@_file_ptr];
-            ()
-        ) }
-    );
-
-    // Open a file. The second argument is a mode string for `fopen` C function. 
-    open_file : Path -> String -> IOResult IOError IOHandle;
-    open_file = |path, mode| (
-        IOResult { _data  : IO { _data : |_|(
-            let path_str = path.to_string;
-            let res = path_str.borrow_c_str(|path_ptr|
-                mode.borrow_c_str(|mode_str|
-                    let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
-                    if file_ptr == nullptr { 
-                        Result::err $ IOError { msg : "failed to open a file: " + path_str }
-                    } else {
-                        Result::ok $ IOHandle { _file_ptr : file_ptr }
-                    }
-                )
-            );
-            res
-        ) }}
-    );
-
-    // Print a string to the standard output.
-    print : String -> IO ();
-    print = |str| (
-        IO { _data : |_| (
-            let _ = str.borrow_c_str(|c_ptr|
-                CALL_C[I32 printf(Ptr, ...), c_ptr]
-            );
-            ()
-        )}
-    );
-
-    // Print a string followed by a newline to the standard output.
-    println : String -> IO ();
-    println = |str| (
-        let _ = *print(str);
-        let _ = *print("\n");
-        pure()
-    );
-
-    // Read all characters from a IOHandle.
-    read_content : IOHandle -> IOResult IOError String;
-    read_content = read_line_inner(false);
-
-    // Raad all characters from a file.
-    read_file : Path -> IOResult IOError String;
-    read_file = |path| with_file(path, "r", read_content);
-
-    // Read characters from a IOHandle upto newline/carriage return or EOF.
-    // The returned string may include newline/carriage return at its end.
-    read_line : IOHandle -> IOResult IOError String;
-    read_line = read_line_inner(true);
-
     // Read characters from an IOHandle.
     // if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
-    read_line_inner : Bool -> IOHandle -> IOResult IOError String;
-    read_line_inner = |upto_newline, handle| (
+    _read_line_inner : Bool -> IOHandle -> IOResult IOError String;
+    _read_line_inner = |upto_newline, handle| (
         IOResult { _data : IO { _data : |_| (
             // Read strings and make iterators of strings (reversed).
             let strings_rev = loop(Iterator::empty, |strs|
@@ -485,6 +421,102 @@ namespace IO {
             let str = strings_rev.reverse.concat_iter;
             Result::ok(str)
         ) }}
+    );
+
+    // Perform the I/O action. This may violate purity of Fix.
+    _unsafe_perform : IO a -> a;
+    _unsafe_perform = |io| (io.@_data)();
+
+    // Close a file.
+    close_file : IOHandle -> IO ();
+    close_file = |handle| (
+        IO { _data : |_|(
+            let _ = CALL_C[I32 fclose(Ptr), handle.@_file_ptr];
+            ()
+        ) }
+    );
+
+    // Print a string to stderr.
+    eprint : String -> IO ();
+    eprint = |str| (
+        IO { _data : |_| (
+            let _ = str.borrow_c_str(|c_ptr|
+                CALL_C[I32 fprintf(Ptr, Ptr, ...), stdout.@_file_ptr, c_ptr]
+            );
+            ()
+        )}
+    );
+
+    // Print a string followed by a newline to stderr.
+    eprintln : String -> IO ();
+    eprintln = |str| (
+        let _ = *eprint(str);
+        let _ = *eprint("\n");
+        pure()
+    );
+
+    // Open a file. The second argument is a mode string for `fopen` C function. 
+    open_file : Path -> String -> IOResult IOError IOHandle;
+    open_file = |path, mode| (
+        IOResult { _data  : IO { _data : |_|(
+            let path_str = path.to_string;
+            let res = path_str.borrow_c_str(|path_ptr|
+                mode.borrow_c_str(|mode_str|
+                    let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
+                    if file_ptr == nullptr { 
+                        Result::err $ IOError { msg : "failed to open a file: " + path_str }
+                    } else {
+                        Result::ok $ IOHandle { _file_ptr : file_ptr }
+                    }
+                )
+            );
+            res
+        ) }}
+    );
+
+    // Print a string to stdout.
+    print : String -> IO ();
+    print = |str| (
+        IO { _data : |_| (
+            let _ = str.borrow_c_str(|c_ptr|
+                CALL_C[I32 printf(Ptr, ...), c_ptr]
+            );
+            ()
+        )}
+    );
+
+    // Print a string followed by a newline to stdout.
+    println : String -> IO ();
+    println = |str| (
+        let _ = *print(str);
+        let _ = *print("\n");
+        pure()
+    );
+
+    // Read all characters from a IOHandle.
+    read_content : IOHandle -> IOResult IOError String;
+    read_content = _read_line_inner(false);
+
+    // Raad all characters from a file.
+    read_file : Path -> IOResult IOError String;
+    read_file = |path| with_file(path, "r", read_content);
+
+    // Read characters from a IOHandle upto newline/carriage return or EOF.
+    // The returned string may include newline/carriage return at its end.
+    read_line : IOHandle -> IOResult IOError String;
+    read_line = _read_line_inner(true);
+
+    // Read a line from stdin. If some error occurr, this function aborts.
+    // If you want to handle errors, use `read_line(stdin)` instead.
+    read_input_line : IO String;
+    read_input_line = (
+        let res = *read_line(stdin).to_io;
+        if res.is_ok {
+            pure $ res.as_ok
+        } else {
+            let _ = *(eprintln $ res.as_err.to_string);
+            pure $ abort()
+        }
     );
 
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 

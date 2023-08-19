@@ -255,15 +255,18 @@
     - [Destructor](#destructor)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [IO](#io)
+      - [`_read_line_inner : Bool -> IOHandle -> IOResult IOError String`](#_read_line_inner--bool---iohandle---ioresult-ioerror-string)
       - [`_unsafe_perform : IO a -> a`](#_unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
+      - [`eprint : String -> IO ()`](#eprint--string---io-)
+      - [`eprintln : String -> IO ()`](#eprintln--string---io-)
       - [`open_file : Path -> String -> IOResult IOError IOHandle`](#open_file--path---string---ioresult-ioerror-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
       - [`read_content : IOHandle -> IOResult IOError String`](#read_content--iohandle---ioresult-ioerror-string)
       - [`read_file : Path -> IOResult IOError String`](#read_file--path---ioresult-ioerror-string)
       - [`read_line : IOHandle -> IOResult IOError String`](#read_line--iohandle---ioresult-ioerror-string)
-      - [`read_line_inner : Bool -> IOHandle -> IOResult IOError String`](#read_line_inner--bool---iohandle---ioresult-ioerror-string)
+      - [`read_line_input : IO String`](#read_line_input--io-string)
       - [`with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a`](#with_file--path---string---iohandle---ioresult-ioerror-a---ioresult-ioerror-a)
       - [`write_content : IOHandle -> String -> IOResult IOError ()`](#write_content--iohandle---string---ioresult-ioerror-)
       - [`write_file : Path -> String -> IOResult IOError ()`](#write_file--path---string---ioresult-ioerror-)
@@ -2006,6 +2009,11 @@ Make a destructor value.
 
 `IO a` is the type whose value represents an I/O action which returns a value of type `a`.
 
+#### `_read_line_inner : Bool -> IOHandle -> IOResult IOError String`
+
+Read characters from an IOHandle.
+if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
+
 #### `_unsafe_perform : IO a -> a`
 
 Perform the I/O action. This may violate purity of Fix.
@@ -2014,17 +2022,25 @@ Perform the I/O action. This may violate purity of Fix.
 
 Close a file.
 
+#### `eprint : String -> IO ()`
+
+Print a string to stderr.
+
+#### `eprintln : String -> IO ()`
+
+Print a string followed by a newline to stderr.
+
 #### `open_file : Path -> String -> IOResult IOError IOHandle`
 
 Open a file. The second argument is a mode string for `fopen` C function. 
 
 #### `print : String -> IO ()`
 
-Print a string to the standard output.
+Print a string to stdout.
 
 #### `println : String -> IO ()`
 
-Print a string followed by a newline to the standard output.
+Print a string followed by a newline to stdout.
 
 #### `read_content : IOHandle -> IOResult IOError String`
 
@@ -2038,21 +2054,10 @@ Raad all characters from a file.
 
 Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at its end.
 
-Example: 
-```
-module Main;
+#### `read_line_input : IO String`
 
-main : IO ();
-main = (
-    let Result::ok(str) = *read_line(stdin).to_io;
-    println(str)
-);
-```
-
-#### `read_line_inner : Bool -> IOHandle -> IOResult IOError String`
-
-Read characters from an IOHandle.
-if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
+Read a line from stdin. If some error occurr, this function aborts.
+If you want to handle errors, use `read_line(stdin)` instead.
 
 #### `with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a`
 
