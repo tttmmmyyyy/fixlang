@@ -1309,7 +1309,7 @@ pub fn test50_3() {
                 continue_m $ sum + n
             ));
             let _ = *println("");
-            let _ = assert_eq(|_|"case-loop_m", io_sum.__unsafe_perform, 5 * 6 / 2);
+            let _ = assert_eq(|_|"case-loop_m", io_sum._unsafe_perform, 5 * 6 / 2);
 
             pure()
         );

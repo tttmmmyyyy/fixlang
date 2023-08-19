@@ -375,15 +375,15 @@ pub fn make_std_mod() -> Program {
         fill_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set"),
         unsafe_set_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_set_length"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set_length"),
         unsafe_set_size_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "__unsafe_get"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_get"),
         unsafe_get_array(),
     );
     fix_module.add_global_value(

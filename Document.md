@@ -214,9 +214,9 @@
       - [`impl F64 : Zero`](#impl-f64--zero)
     - [Array](#array-1)
       - [`@ : I64 -> Array a -> a`](#--i64---array-a---a)
-      - [`__unsafe_set_length : I64 -> Array a -> Array a`](#__unsafe_set_length--i64---array-a---array-a)
-      - [`__unsafe_get : I64 -> Array a -> a`](#__unsafe_get--i64---array-a---a)
-      - [`__unsafe_set : I64 -> a -> Array a -> Array a`](#__unsafe_set--i64---a---array-a---array-a)
+      - [`_unsafe_set_length : I64 -> Array a -> Array a`](#_unsafe_set_length--i64---array-a---array-a)
+      - [`_unsafe_get : I64 -> Array a -> a`](#_unsafe_get--i64---array-a---a)
+      - [`_unsafe_set : I64 -> a -> Array a -> Array a`](#_unsafe_set--i64---a---array-a---array-a)
       - [`_get_ptr : Array a -> Ptr`](#_get_ptr--array-a---ptr)
       - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
       - [`act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a)
@@ -255,7 +255,7 @@
     - [Destructor](#destructor)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [IO](#io)
-      - [`__unsafe_perform : IO a -> a`](#__unsafe_perform--io-a---a)
+      - [`_unsafe_perform : IO a -> a`](#_unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
       - [`open_file : Path -> String -> IOResult IOError IOHandle`](#open_file--path---string---ioresult-ioerror-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
@@ -1844,13 +1844,13 @@ Methods:
 #### `@ : I64 -> Array a -> a`
 Returns an element of an array at an index.
 
-#### `__unsafe_set_length : I64 -> Array a -> Array a`
+#### `_unsafe_set_length : I64 -> Array a -> Array a`
 Updates the length of an array, without uniqueness checking or validation of the given length value.
 
-#### `__unsafe_get : I64 -> Array a -> a`
+#### `_unsafe_get : I64 -> Array a -> a`
 Gets a value from an array, without bounds checking and retaining the returned value.
 
-#### `__unsafe_set : I64 -> a -> Array a -> Array a`
+#### `_unsafe_set : I64 -> a -> Array a -> Array a`
 Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
 
 #### `_get_ptr : Array a -> Ptr`
@@ -2006,7 +2006,7 @@ Make a destructor value.
 
 `IO a` is the type whose value represents an I/O action which returns a value of type `a`.
 
-#### `__unsafe_perform : IO a -> a`
+#### `_unsafe_perform : IO a -> a`
 
 Perform the I/O action. This may violate purity of Fix.
 
