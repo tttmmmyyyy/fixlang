@@ -214,7 +214,7 @@
       - [`impl F64 : Zero`](#impl-f64--zero)
     - [Array](#array-1)
       - [`@ : I64 -> Array a -> a`](#--i64---array-a---a)
-      - [`_unsafe_set_length : I64 -> Array a -> Array a`](#_unsafe_set_length--i64---array-a---array-a)
+      - [`_unsafe_set_size : I64 -> Array a -> Array a`](#_unsafe_set_size--i64---array-a---array-a)
       - [`_unsafe_get : I64 -> Array a -> a`](#_unsafe_get--i64---array-a---a)
       - [`_unsafe_set : I64 -> a -> Array a -> Array a`](#_unsafe_set--i64---a---array-a---array-a)
       - [`_get_ptr : Array a -> Ptr`](#_get_ptr--array-a---ptr)
@@ -1853,7 +1853,7 @@ Methods:
 #### `@ : I64 -> Array a -> a`
 Returns an element of an array at an index.
 
-#### `_unsafe_set_length : I64 -> Array a -> Array a`
+#### `_unsafe_set_size : I64 -> Array a -> Array a`
 Updates the length of an array, without uniqueness checking or validation of the given length value.
 
 #### `_unsafe_get : I64 -> Array a -> a`

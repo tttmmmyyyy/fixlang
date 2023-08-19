@@ -99,7 +99,7 @@ namespace Array {
         let v1 = v1.reserve(len).force_unique;
         
         // Set length.
-        let v1 = v1._unsafe_set_length(len);
+        let v1 = v1._unsafe_set_size(len);
 
         // Copy elements of v2 to v1.
         loop((0, v1), |(idx, v1)|(
@@ -127,7 +127,7 @@ namespace Array {
         let v1 = v1.reserve(len).force_unique!;
         
         // Set length.
-        let v1 = v1._unsafe_set_length(len);
+        let v1 = v1._unsafe_set_size(len);
 
         // Copy elements of v2 to v1.
         loop((0, v1), |(idx, v1)|(
@@ -160,7 +160,7 @@ namespace Array {
     from_iter : Iterator a -> Array a;
     from_iter = |iter| (
         let len = iter.get_size;
-        let arr = Array::empty(len)._unsafe_set_length(len);
+        let arr = Array::empty(len)._unsafe_set_size(len);
         iter.fold((arr, 0), |(arr, idx), elem| (
             let arr = arr._unsafe_set(idx, elem);
             (arr, idx+1)
@@ -170,7 +170,7 @@ namespace Array {
     // Creates an array by a mapping function.
     from_map : I64 -> (I64 -> a) -> Array a;
     from_map = |size, map| (
-        let arr = Array::empty(size)._unsafe_set_length(size);
+        let arr = Array::empty(size)._unsafe_set_size(size);
         loop((0, arr), |(idx, arr)|(
             if idx == size {
                 break $ arr
@@ -208,7 +208,7 @@ namespace Array {
         if len == 0 { arr };
         let arr = arr.force_unique;
         let released_elem = arr._unsafe_get(len-1);
-        arr._unsafe_set_length(len-1)
+        arr._unsafe_set_size(len-1)
     );
 
     // Pop an element at the back of an array.
@@ -221,7 +221,7 @@ namespace Array {
         if len == 0 { arr };
         let arr = arr.force_unique!;
         let released_elem = arr._unsafe_get(len-1);
-        arr._unsafe_set_length(len-1)
+        arr._unsafe_set_size(len-1)
     );
 
     // Push an element to the back of an array.
@@ -233,7 +233,7 @@ namespace Array {
         } else {
             arr
         };
-        let arr = arr.force_unique._unsafe_set_length(len+1);
+        let arr = arr.force_unique._unsafe_set_size(len+1);
         arr._unsafe_set(len, e)
     );
 
@@ -248,7 +248,7 @@ namespace Array {
         } else {
             arr
         };
-        let arr = arr.force_unique!._unsafe_set_length(len+1);
+        let arr = arr.force_unique!._unsafe_set_size(len+1);
         arr._unsafe_set(len, e)
     );
 
@@ -267,7 +267,7 @@ namespace Array {
     reserve = |cap, arr| (
         if cap <= arr.get_capacity { arr };
         let len = arr.get_size;
-        let new = Array::empty(cap)._unsafe_set_length(len);
+        let new = Array::empty(cap)._unsafe_set_size(len);
         loop((0, new), |(idx, new)|(
             if idx == len {
                 break $ new
@@ -402,7 +402,7 @@ namespace IO {
                 if strlen == -1 { break $ strs };
 
                 // Create string.
-                let buf = buf._unsafe_set_length(strlen + 1);
+                let buf = buf._unsafe_set_size(strlen + 1);
                 let str = String { _data : buf };
                 let strs = strs.push_front(str);
 
@@ -557,7 +557,7 @@ namespace IO {
             let err = ErrMsg { msg : "Std::IO::read_n_bytes failed!: some error occurred in fread." };
             IOResult::from_result $ Result::err(err)
         };
-        let buf = buf._unsafe_set_length(len);
+        let buf = buf._unsafe_set_size(len);
         IOResult::from_result $ Result::ok(buf)
     );
 
@@ -1100,7 +1100,7 @@ namespace PunchedArray {
         let _ = assert(|_|"[PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
         let elm = arr._unsafe_get(idx);
         let dtor = |arr| (
-            let arr = arr._unsafe_set_length(0); // Avoid releaseing elements in the destructor of Array.
+            let arr = arr._unsafe_set_size(0); // Avoid releaseing elements in the destructor of Array.
             loop((arr, 0), |(arr, i)| (
                 if i == size { break $ () };
                 if i == idx { continue $ (arr, i+1) };
@@ -1180,7 +1180,7 @@ namespace String {
     from_c_str = |buf| (
         // Return length.
         let len = buf.borrow_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
-        let buf = buf._unsafe_set_length(len + 1);
+        let buf = buf._unsafe_set_size(len + 1);
         String { _data : buf }
     );
 
