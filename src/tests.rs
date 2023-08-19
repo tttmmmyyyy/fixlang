@@ -2792,7 +2792,7 @@ pub fn test107() {
 #[test]
 #[serial]
 pub fn test108() {
-    // Test write_file!, read_file!, read_line.
+    // Test write_file_string!, read_file_string!, read_line.
     let source = r#"
         module Main; import Debug;
 
@@ -2802,9 +2802,9 @@ pub fn test108() {
             let lines = ["Hello", "World!"];
             let content = Iterator::from_array(lines).intersperse("\n").concat_iter;
             do {
-                let _ = *write_file(file_path, content);
+                let _ = *write_file_string(file_path, content);
 
-                let read_content = *read_file(file_path);
+                let read_content = *read_file_string(file_path);
                 let _ = assert_eq(|_|"case 1", content, read_content);
 
                 let read_lines = *with_file(file_path, "r", |file| (
@@ -2819,6 +2819,31 @@ pub fn test108() {
     "#;
     run_source(&source, Configuration::develop_compiler());
     remove_file("test.txt").unwrap();
+}
+
+#[test]
+#[serial]
+pub fn test108_5() {
+    // Test write_file_bytes, read_file_bytes.
+    let source = r#"
+        module Main; import Debug;
+
+        main : IO ();
+        main = (
+            let file_path = Path::parse("test_bytes.dat").as_some;
+            let data = Array::from_map(1024 + 512, |n| n.to_U8);
+            do {
+                let _ = *write_file_bytes(file_path, data);
+
+                let read = *read_file_bytes(file_path);
+                let _ = assert_eq(|_|"case 1", data, read);
+
+                pure()
+            }.to_io.map(as_ok)
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+    remove_file("test_bytes.dat").unwrap();
 }
 
 #[test]

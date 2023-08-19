@@ -387,10 +387,11 @@ namespace IO {
         IOResult { _data : IO { _data : |_| (
             // Read strings and make iterators of strings (reversed).
             let strings_rev = loop(Iterator::empty, |strs|
-                let buf = Array::empty(1024); // NOTE: this number also appears at CALL_C[fgets].
+                let buf_size = 1024;
+                let buf = Array::empty(buf_size);                
                 let strlen = buf.borrow_ptr(|buf|
                     // Read characters to buf.
-                    let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, 1024_I32, handle.@_file_ptr];
+                    let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, buf_size.to_I32, handle.@_file_ptr];
                     if fgets_res == nullptr { -1 };
 
                     // Return length.
@@ -421,7 +422,7 @@ namespace IO {
             // Check if err occurred.
             let err = CALL_C[I32 ferror(Ptr), handle.@_file_ptr];
             if err != 0_I32 { 
-                let err = ErrMsg { msg : "Std::IO::read_line failed!: some error occurred in fgets." };
+                let err = ErrMsg { msg : "Std::IO::_read_line_inner failed!: some error occurred in fgets." };
                 Result::err(err)
             };
 
@@ -514,15 +515,53 @@ namespace IO {
     );
 
     // Raad all characters from a file.
-    read_file : Path -> IOResult ErrMsg String;
-    read_file = |path| with_file(path, "r", read_string);
+    read_file_string : Path -> IOResult ErrMsg String;
+    read_file_string = |path| with_file(path, "r", read_string);
+
+    // Read all bytes from a file.
+    read_file_bytes : Path -> IOResult ErrMsg (Array U8);
+    read_file_bytes = |path| with_file(path, "r", read_bytes);
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
     // The returned string may include newline/carriage return at its end.
     read_line : IOHandle -> IOResult ErrMsg String;
     read_line = _read_line_inner(true);
 
-    // Read all characters from a IOHandle.
+    // Read all bytes from an IOHandle.
+    read_bytes : IOHandle -> IOResult ErrMsg (Array U8);
+    read_bytes = |handle| (
+        // Get Iterator of Arrays.
+        let (iter, len) = *loop_m((Iterator::empty, 0), |(iter, len)| (
+            let bytes = *read_n_bytes(handle, 1024);
+            if bytes.is_empty {
+                break_m $ (iter.reverse, len)
+            } else {
+                continue_m $ (iter.push_front(bytes), len + bytes.get_size)
+            }
+        ));
+        // Concatenate bytes.
+        let res = Array::empty(len);
+        pure $ iter.fold(res, |res, bytes| res.append!(bytes))
+    );
+
+    // Read at most n bytes from an IOHandle.
+    read_n_bytes : IOHandle -> I64 -> IOResult ErrMsg (Array U8);
+    read_n_bytes = |handle, n| (
+        let buf = Array::empty(n);
+        let len = buf.borrow_ptr(|ptr| (
+            CALL_C[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle.@_file_ptr]
+        ));
+        // Check error.
+        let err = CALL_C[I32 ferror(Ptr), handle.@_file_ptr];
+        if err != 0_I32 { 
+            let err = ErrMsg { msg : "Std::IO::read_n_bytes failed!: some error occurred in fread." };
+            IOResult::from_result $ Result::err(err)
+        };
+        let buf = buf._unsafe_set_length(len);
+        IOResult::from_result $ Result::ok(buf)
+    );
+
+    // Read all characters from an IOHandle.
     read_string : IOHandle -> IOResult ErrMsg String;
     read_string = _read_line_inner(false);
 
@@ -534,11 +573,27 @@ namespace IO {
         let res = *action(handle);
         let _ = *IOResult::lift(close_file(handle));
         pure $ res
-    );  
+    );
+
+    // Write a byte array into an IOHandle.
+    write_bytes : IOHandle -> Array U8 -> IOResult ErrMsg ();
+    write_bytes = |handle, array| (
+        let res = array.borrow_ptr(|ptr| (
+            let n = array.get_size;
+            let res = CALL_C[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle.@_file_ptr];
+            if res < n { Result::err $ ErrMsg { msg : "Std::IO::write_bytes failed!: some error occurred in fwrite." } };
+            Result::ok()
+        ));
+        IOResult::from_result $ res
+    );
+
+    // Write a byte array into a file.
+    write_file_bytes : Path -> Array U8 -> IOResult ErrMsg ();
+    write_file_bytes = |path, content| with_file(path, "w", |handle| write_bytes(handle, content));
 
     // Write a string into a file.
-    write_file : Path -> String -> IOResult ErrMsg ();
-    write_file = |path, content| with_file(path, "w", |handle| write_string(handle, content));
+    write_file_string : Path -> String -> IOResult ErrMsg ();
+    write_file_string = |path, content| with_file(path, "w", |handle| write_string(handle, content));
 
     // Write a string into an IOHandle.
     write_string : IOHandle -> String -> IOResult ErrMsg ();

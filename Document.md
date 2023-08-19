@@ -266,11 +266,17 @@
       - [`open_file : Path -> String -> IOResult IOError IOHandle`](#open_file--path---string---ioresult-ioerror-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
+      - [`read_file_string : Path -> IOResult ErrMsg String`](#read_file_string--path---ioresult-errmsg-string)
+      - [`read_file_bytes : Path -> IOResult ErrMsg (Array U8)`](#read_file_bytes--path---ioresult-errmsg-array-u8)
       - [`read_file : Path -> IOResult IOError String`](#read_file--path---ioresult-ioerror-string)
       - [`read_line : IOHandle -> IOResult IOError String`](#read_line--iohandle---ioresult-ioerror-string)
+      - [`read_bytes : IOHandle -> IOResult ErrMsg (Array U8)`](#read_bytes--iohandle---ioresult-errmsg-array-u8)
+      - [`read_n_bytes : IOHandle -> I64 -> IOResult ErrMsg (Array U8)`](#read_n_bytes--iohandle---i64---ioresult-errmsg-array-u8)
       - [`read_string : IOHandle -> IOResult IOError String`](#read_string--iohandle---ioresult-ioerror-string)
       - [`with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a`](#with_file--path---string---iohandle---ioresult-ioerror-a---ioresult-ioerror-a)
-      - [`write_file : Path -> String -> IOResult IOError ()`](#write_file--path---string---ioresult-ioerror-)
+      - [`write_bytes : IOHandle -> Array U8 -> IOResult ErrMsg ()`](#write_bytes--iohandle---array-u8---ioresult-errmsg-)
+      - [`write_file_bytes : Path -> Array U8 -> IOResult ErrMsg ()`](#write_file_bytes--path---array-u8---ioresult-errmsg-)
+      - [`write_file_string : Path -> String -> IOResult IOError ()`](#write_file_string--path---string---ioresult-ioerror-)
       - [`write_string : IOHandle -> String -> IOResult IOError ()`](#write_string--iohandle---string---ioresult-ioerror-)
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
@@ -2057,6 +2063,14 @@ Print a string to stdout.
 
 Print a string followed by a newline to stdout.
 
+#### `read_file_string : Path -> IOResult ErrMsg String`
+
+Raad all characters from a file.
+
+#### `read_file_bytes : Path -> IOResult ErrMsg (Array U8)`
+
+Read all bytes from a file.
+
 #### `read_file : Path -> IOResult IOError String`
 
 Raad all characters from a file.
@@ -2064,6 +2078,14 @@ Raad all characters from a file.
 #### `read_line : IOHandle -> IOResult IOError String`
 
 Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at its end.
+
+#### `read_bytes : IOHandle -> IOResult ErrMsg (Array U8)`
+
+Read all bytes from an IOHandle.
+
+#### `read_n_bytes : IOHandle -> I64 -> IOResult ErrMsg (Array U8)`
+
+Read at most n bytes from an IOHandle.
 
 #### `read_string : IOHandle -> IOResult IOError String`
 
@@ -2074,7 +2096,15 @@ Read all characters from a IOHandle.
 Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
 The file handle will be closed automatically.
 
-#### `write_file : Path -> String -> IOResult IOError ()`
+#### `write_bytes : IOHandle -> Array U8 -> IOResult ErrMsg ()`
+
+Write a byte array into an IOHandle.
+
+#### `write_file_bytes : Path -> Array U8 -> IOResult ErrMsg ()`
+
+Write a byte array into a file.
+
+#### `write_file_string : Path -> String -> IOResult IOError ()`
 
 Write a string into a file.
 
