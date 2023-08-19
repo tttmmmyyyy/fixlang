@@ -58,7 +58,7 @@
     - [Unions](#unions-2)
   - [Calling C functions](#calling-c-functions)
 - [Module `Std`](#module-std)
-  - [Types](#types-1)
+  - [Types, related values and implementations](#types-related-values-and-implementations)
     - [Bool](#bool)
       - [`impl Bool : Eq`](#impl-bool--eq)
       - [`impl Bool : ToString`](#impl-bool--tostring)
@@ -350,13 +350,13 @@
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
       - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
-    - [`impl String : Add`](#impl-string--add)
-    - [`impl String : Eq`](#impl-string--eq)
-    - [`impl String : ToString`](#impl-string--tostring)
+      - [`impl String : Add`](#impl-string--add)
+      - [`impl String : Eq`](#impl-string--eq)
+      - [`impl String : ToString`](#impl-string--tostring)
     - [Tuple{N}](#tuplen)
       - [`impl [a : Eq, b : Eq] (a, b) : Eq`](#impl-a--eq-b--eq-a-b--eq)
       - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
-    - [()](#)
+    - [`()`](#)
       - [`impl () : Eq`](#impl---eq)
   - [Functions](#functions-1)
     - [`abort : Lazy a`](#abort--lazy-a)
@@ -1611,7 +1611,7 @@ Note that calling C function may break Fix's features such as immutability or me
 
 `Std` is a module which is implicitly imported so you don't need to write `import Std`.
 
-## Types
+## Types, related values and implementations
 
 ### Bool
 
@@ -2376,12 +2376,12 @@ Removes newlines and carriage returns at the end of the string.
 #### `strip_last_newlines : String -> String`
 Removes the last byte of a string while it satisifies the specified condition.
 
-### `impl String : Add`
+#### `impl String : Add`
 Add two strings by `String.concat`.
 
-### `impl String : Eq`
+#### `impl String : Eq`
 
-### `impl String : ToString`
+#### `impl String : ToString`
 Defined as an identity function.
 
 ### Tuple{N}
@@ -2390,7 +2390,7 @@ Defined as an identity function.
 
 #### `impl [a : ToString, b : ToString] (a, b) : ToString`
 
-### ()
+### `()`
 
 The unit type which has a unique value also written as `()`.
 
