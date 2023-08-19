@@ -2400,7 +2400,7 @@ Literals:
 
 ### `abort : Lazy a`
 
-Stops the execution of the program.
+Evaluating this value stops the execution of the program.
 
 ### `compose : (a -> b) -> (b -> c) -> a -> c`
 
