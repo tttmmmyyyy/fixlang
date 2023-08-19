@@ -12,7 +12,7 @@ pub fn test0() {
 
             main : IO ();
             main = (
-                let _ = assert_eq(|_|"", 5 + 3 * 8 / 5 + 7 % 3, 10);
+                let _ = assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 10);
                 pure()
             );
         "#;

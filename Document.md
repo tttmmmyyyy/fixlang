@@ -391,9 +391,12 @@
     - [ToU64](#tou64)
       - [`to_U64 : [a: ToU64] a -> U64`](#to_u64--a-tou64-a---u64)
 - [Module `Debug`](#module-debug)
+  - [`_debug_print_to_stream : IOHandle -> String -> ()`](#_debug_print_to_stream--iohandle---string---)
   - [`assert : Lazy String -> Bool -> ()`](#assert--lazy-string---bool---)
   - [`assert_eq : [a: Eq] Lazy String -> a -> a -> ()`](#assert_eq--a-eq-lazy-string---a---a---)
   - [`assert_unique! : Lazy String -> a -> a`](#assert_unique--lazy-string---a---a)
+  - [`debug_eprint : String -> ()`](#debug_eprint--string---)
+  - [`debug_eprintln : String -> ()`](#debug_eprintln--string---)
   - [`debug_print : String -> ()`](#debug_print--string---)
   - [`debug_println : String -> ()`](#debug_println--string---)
 - [Module `Hash`](#module-hash)
@@ -2560,19 +2563,33 @@ This is equivalent to `Monad::bind(|x|x)`.
 
 # Module `Debug`
 
+## `_debug_print_to_stream : IOHandle -> String -> ()`
+Prints a string to the specified stream and flushes the stream.
+
 ## `assert : Lazy String -> Bool -> ()`
+Asserts that a condition (boolean value) is true.
+If the assertion failed, prints a message to the stderr and aborts.
 
 ## `assert_eq : [a: Eq] Lazy String -> a -> a -> ()`
+Asserts that two values are equal.
+If the assertion failed, prints a message to the stderr and aborts.
 
 ## `assert_unique! : Lazy String -> a -> a`
-
-Expression `assert_unique!(msg, obj)` assets that `obj` is unique, and returns `obj` itself. If `obj` is shared by multiple names, `assert_unique!(msg, obj)` prints the `msg` to the standard output and aborts.
-
+Asserts that the given value is unique, and returns the given value.
+If the assertion failed, prints a message to the stderr and aborts.
 The main use of this function is to check whether a boxed value given as an argument is unique.
 
+## `debug_eprint : String -> ()`
+Prints a string to stderr and flushes.
+
+## `debug_eprintln : String -> ()`
+Prints a string followed by a newline to stderr and flushes.
+
 ## `debug_print : String -> ()`
+Prints a string to stdout and flushes.
 
 ## `debug_println : String -> ()`
+Prints a string followed by a newline to stdout and flushes.
 
 # Module `Hash`
 

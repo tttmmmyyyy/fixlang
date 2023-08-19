@@ -1,19 +1,37 @@
 module Debug;
 
+// Prints a string to the specified stream and flushes the stream.
+_debug_print_to_stream : IOHandle -> String -> ();
+_debug_print_to_stream = |hdl, msg| (
+    msg.borrow_c_str(|str| (
+        let hdl = hdl.@_file_ptr;
+        let _ = CALL_C[I32 fprintf(Ptr, Ptr, ...), hdl, str];
+        let _ = CALL_C[I32 fflush(Ptr), hdl];
+        ()
+    ))
+);
+
+// Asserts that a condition (boolean value) is true.
+// If the assertion failed, prints a message to the stderr and aborts.
 assert : Lazy String -> Bool -> ();
 assert = |msg, b| (
     if !b {
-        let u = debug_println("assertion failed!: ");
-        let u = debug_println(msg());
+        let u = debug_eprint("assertion failed!: ");
+        let u = debug_eprintln(msg());
         abort()
     } else {
         ()
     }
 );
 
+// Asserts that two values are equal.
+// If the assertion failed, prints a message to the stderr and aborts.
 assert_eq : [a: Eq] Lazy String -> a -> a -> ();
 assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
+// Asserts that the given value is unique, and returns the given value.
+// If the assertion failed, prints a message to the stderr and aborts.
+// The main use of this function is to check whether a boxed value given as an argument is unique.
 assert_unique! : Lazy String -> a -> a;
 assert_unique! = |msg, x| (
     let (unique, x) = x.unsafe_is_unique;
@@ -21,23 +39,18 @@ assert_unique! = |msg, x| (
     x
 );
 
-debug_print : String -> ();
-debug_print = |s| (
-    s.borrow_c_str(|ptr| (
-        let _ = CALL_C[I32 printf(Ptr, ...), ptr];
-        let _ = CALL_C[I32 fflush(Ptr), nullptr];
-        ()
-    ))
-);
+// Prints a string to stderr and flushes.
+debug_eprint : String -> ();
+debug_eprint = |msg| _debug_print_to_stream(stderr, msg);
 
+// Prints a string followed by a newline to stderr and flushes.
+debug_eprintln : String -> ();
+debug_eprintln = |msg| debug_eprint(msg + "\n");
+
+// Prints a string to stdout and flushes.
+debug_print : String -> ();
+debug_print = |msg| _debug_print_to_stream(stdout, msg);
+
+// Prints a string followed by a newline to stdout and flushes.
 debug_println : String -> ();
-debug_println = |s| (
-    let _ = s.borrow_c_str(|ptr| (
-        CALL_C[I32 printf(Ptr, ...), ptr]
-    ));
-    let _ = "\n".borrow_c_str(|ptr| (
-        CALL_C[I32 printf(Ptr, ...), ptr]
-    ));
-    let _ = CALL_C[I32 fflush(Ptr), nullptr];
-    ()
-);
+debug_println = |msg| debug_print(msg + "\n");
