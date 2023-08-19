@@ -254,6 +254,8 @@
       - [`impl Array : Monad`](#impl-array--monad)
     - [Destructor](#destructor)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
+    - [ErrMsg](#errmsg)
+      - [`impl ErrMsg : ToString`](#impl-errmsg--tostring)
     - [IO](#io)
       - [`_read_line_inner : Bool -> IOHandle -> IOResult IOError String`](#_read_line_inner--bool---iohandle---ioresult-ioerror-string)
       - [`_unsafe_perform : IO a -> a`](#_unsafe_perform--io-a---a)
@@ -272,8 +274,6 @@
       - [`write_file : Path -> String -> IOResult IOError ()`](#write_file--path---string---ioresult-ioerror-)
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
-    - [IO::IOError](#ioioerror)
-      - [`impl IOError : ToString`](#impl-ioerror--tostring)
     - [IO::IOHandle](#ioiohandle)
       - [`stderr : IOHandle`](#stderr--iohandle)
       - [`stdin : IOHandle`](#stdin--iohandle)
@@ -2005,6 +2005,16 @@ type Destructor a = box struct { value : a, dtor : a -> () };
 #### `make : a -> (a -> ()) -> Destructor a`
 Make a destructor value.
 
+### ErrMsg
+
+A wrapper type for error message. 
+
+```
+type ErrMsg = unbox struct { msg : String };
+```
+
+#### `impl ErrMsg : ToString`
+
 ### IO
 
 `IO a` is the type whose value represents an I/O action which returns a value of type `a`.
@@ -2075,18 +2085,6 @@ Write a string into a file.
 #### `impl IO : Functor`
 
 #### `impl IO : Monad`
-
-### IO::IOError
-
-A type for I/O error.
-
-```
-type IOError = unbox struct { msg : String };
-```
-
-#### `impl IOError : ToString`
-
-Returns the value of `msg` field.
 
 ### IO::IOHandle
 

@@ -362,6 +362,13 @@ namespace Destructor {
     make = |val, dtor| Destructor { value : val, dtor : dtor };
 }
 
+// A wrapper type for error message. 
+type ErrMsg = unbox struct { msg : String };
+
+impl ErrMsg : ToString {
+    to_string = @msg;
+}
+
 impl I32 : ToString {
     to_string = I32::_I32_to_string;
 }
@@ -375,7 +382,7 @@ type IO a = unbox struct { _data : () -> a };
 namespace IO {
     // Read characters from an IOHandle.
     // if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
-    _read_line_inner : Bool -> IOHandle -> IOResult IOError String;
+    _read_line_inner : Bool -> IOHandle -> IOResult ErrMsg String;
     _read_line_inner = |upto_newline, handle| (
         IOResult { _data : IO { _data : |_| (
             // Read strings and make iterators of strings (reversed).
@@ -414,7 +421,7 @@ namespace IO {
             // Check if err occurred.
             let err = CALL_C[I32 ferror(Ptr), handle.@_file_ptr];
             if err != 0_I32 { 
-                let err = IOError { msg : "Std::IO::read_line failed!: some error occurred in fgets." };
+                let err = ErrMsg { msg : "Std::IO::read_line failed!: some error occurred in fgets." };
                 Result::err(err)
             };
 
@@ -456,7 +463,7 @@ namespace IO {
     );
 
     // Open a file. The second argument is a mode string for `fopen` C function. 
-    open_file : Path -> String -> IOResult IOError IOHandle;
+    open_file : Path -> String -> IOResult ErrMsg IOHandle;
     open_file = |path, mode| (
         IOResult { _data  : IO { _data : |_|(
             let path_str = path.to_string;
@@ -464,7 +471,7 @@ namespace IO {
                 mode.borrow_c_str(|mode_str|
                     let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
                     if file_ptr == nullptr { 
-                        Result::err $ IOError { msg : "failed to open a file: " + path_str }
+                        Result::err $ ErrMsg { msg : "failed to open a file: " + path_str }
                     } else {
                         Result::ok $ IOHandle { _file_ptr : file_ptr }
                     }
@@ -494,16 +501,16 @@ namespace IO {
     );
 
     // Read all characters from a IOHandle.
-    read_content : IOHandle -> IOResult IOError String;
+    read_content : IOHandle -> IOResult ErrMsg String;
     read_content = _read_line_inner(false);
 
     // Raad all characters from a file.
-    read_file : Path -> IOResult IOError String;
+    read_file : Path -> IOResult ErrMsg String;
     read_file = |path| with_file(path, "r", read_content);
 
     // Read characters from a IOHandle upto newline/carriage return or EOF.
     // The returned string may include newline/carriage return at its end.
-    read_line : IOHandle -> IOResult IOError String;
+    read_line : IOHandle -> IOResult ErrMsg String;
     read_line = _read_line_inner(true);
 
     // Read a line from stdin. If some error occurr, this function aborts.
@@ -521,7 +528,7 @@ namespace IO {
 
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
-    with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a;
+    with_file : Path -> String -> (IOHandle -> IOResult ErrMsg a) -> IOResult ErrMsg a;
     with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
         let res = *action(handle);
@@ -530,18 +537,18 @@ namespace IO {
     );  
 
     // Write a string into an IOHandle.
-    write_content : IOHandle -> String -> IOResult IOError ();
+    write_content : IOHandle -> String -> IOResult ErrMsg ();
     write_content = |handle, content| (
         let res = content.borrow_c_str(|c_str| (
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle.@_file_ptr];
-            if res < 0_I32 { Result::err $ IOError { msg : "Std::IO::write_content! failed!: some error occurred in fputs." } };
+            if res < 0_I32 { Result::err $ ErrMsg { msg : "Std::IO::write_content! failed!: some error occurred in fputs." } };
             Result::ok()
         ));
         IOResult::from_result $ res
     );
 
     // Write a string into a file.
-    write_file : Path -> String -> IOResult IOError ();
+    write_file : Path -> String -> IOResult ErrMsg ();
     write_file = |path, content| with_file(path, "w", |handle| write_content(handle, content));
 }
 
@@ -559,18 +566,9 @@ impl IO : Monad {
     );
 }
 
-impl IOError : ToString {
-    to_string = |e| e.@msg;
-}
-
 namespace IO {
     // A handle type for read / write operations on files/stdin/stdout/stderr.
     type IOHandle = unbox struct { _file_ptr: Ptr };
-}
-
-namespace IO {
-    // A type for I/O error.
-    type IOError = unbox struct { msg : String };
 }
 
 namespace IO {
