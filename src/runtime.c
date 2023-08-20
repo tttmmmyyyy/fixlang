@@ -13,7 +13,7 @@ C functions / values for implementing Fix standard library.
 // Print message to stderr, and flush it.
 void fixruntime_eprint(const char *msg)
 {
-    fprintf(stderr, msg);
+    fprintf(stderr, "%s", msg);
     fflush(stderr);
 }
 
