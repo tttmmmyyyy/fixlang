@@ -29,7 +29,7 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
         fs::write(&runtime_c_path, include_str!("runtime.c"))
             .expect(&format!("Failed to generate runtime.c"));
         // Create library binary file.
-        Command::new("cc")
+        let output = Command::new("cc")
             .arg("-shared")
             .arg("-fpic")
             .arg("-o")
@@ -37,6 +37,13 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             .arg(runtime_c_path.to_str().unwrap())
             .output()
             .expect("Failed to run cc.");
+        if output.stderr.len() > 0 {
+            eprintln!(
+                "{:?}",
+                String::from_utf8(output.stderr)
+                    .unwrap_or("(failed to stringify error message of cc.)".to_string())
+            );
+        }
     }
     load_library_permanently(runtime_so_path.to_str().unwrap());
 
@@ -344,9 +351,13 @@ pub fn build_file(config: Configuration) {
             .arg("-c")
             .arg(runtime_c_path.to_str().unwrap())
             .output()
-            .expect("Failed to call cc.");
+            .expect("Failed to run cc.");
         if output.stderr.len() > 0 {
-            eprintln!("{:?}", String::from_utf8(output.stderr).unwrap());
+            eprintln!(
+                "{:?}",
+                String::from_utf8(output.stderr)
+                    .unwrap_or("(failed to stringify error message of cc.)".to_string())
+            );
         }
     }
 
@@ -357,8 +368,12 @@ pub fn build_file(config: Configuration) {
         .arg(obj_path.to_str().unwrap())
         .arg(runtime_obj_path.to_str().unwrap())
         .output()
-        .expect("Failed to call cc.");
+        .expect("Failed to run cc.");
     if output.stderr.len() > 0 {
-        eprintln!("{:?}", String::from_utf8(output.stderr).unwrap());
+        eprintln!(
+            "{:?}",
+            String::from_utf8(output.stderr)
+                .unwrap_or("(failed to stringify error message of cc.)".to_string())
+        );
     }
 }
