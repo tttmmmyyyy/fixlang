@@ -864,7 +864,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Printf Rust's &str.
-    pub fn printf(&self, string: &str) {
+    fn printf(&self, string: &str) {
         let string_ptr = self.builder().build_global_string_ptr(string, "rust_str");
         let string_ptr = string_ptr.as_pointer_value();
         self.call_runtime(RuntimeFunctions::Printf, &[string_ptr.into()]);

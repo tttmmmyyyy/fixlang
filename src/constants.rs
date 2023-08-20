@@ -31,3 +31,4 @@ pub const SETTER_SYMBOL: &str = "set_";
 pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 
 pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
+pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";

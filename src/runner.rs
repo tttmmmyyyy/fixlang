@@ -1,4 +1,5 @@
-use std::{env, fs::create_dir_all, path::PathBuf, process::Command, time::SystemTime};
+use build_time::build_time_utc;
+use std::{env, fs, fs::create_dir_all, path::PathBuf, process::Command, time::SystemTime};
 
 use either::Either;
 use inkwell::{
@@ -10,6 +11,7 @@ use inkwell::{
 use super::*;
 
 fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> i32 {
+    // If sanitize_memory, load `libfixsanitizer.so`.
     if config.sanitize_memory {
         let path = "./sanitizer/libfixsanitizer.so";
         let err = load_library_permanently(path);
@@ -17,6 +19,28 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             error_exit(&format!("Failed to load \"{}\".", path));
         }
     }
+    // Load runtime library.
+    let build_time_hash = format!("{:x}", md5::compute(build_time_utc!()));
+    let runtime_so_path =
+        PathBuf::from(INTERMEDIATE_PATH).join(format!("libfixruntime_{}.so", build_time_hash));
+    if !runtime_so_path.exists() {
+        let runtime_c_path = PathBuf::from(INTERMEDIATE_PATH).join("fixruntime.c");
+        fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
+        fs::write(&runtime_c_path, include_str!("runtime.c"))
+            .expect(&format!("Failed to generate runtime.c"));
+        // Create library binary file.
+        Command::new("cc")
+            .arg("-shared")
+            .arg("-fpic")
+            .arg("-o")
+            .arg(runtime_so_path.to_str().unwrap())
+            .arg(runtime_c_path.to_str().unwrap())
+            .output()
+            .expect("Failed to run cc.");
+    }
+    load_library_permanently(runtime_so_path.to_str().unwrap());
+
+    // Load dynamically linked libraries specified by user.
     for (lib_name, _) in &config.linked_libraries {
         let lib_name = format!("lib{}.so", lib_name);
         let err = load_library_permanently(&lib_name);
@@ -275,8 +299,11 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
 }
 
 pub fn build_file(config: Configuration) {
-    let obj_path = PathBuf::from("a.o");
+    let obj_path = PathBuf::from(INTERMEDIATE_PATH).join("a.o");
     let exec_path = PathBuf::from("a.out");
+
+    // Create intermediate directory.
+    fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
 
     let tm = get_target_machine(config.llvm_opt_level);
 
@@ -301,11 +328,30 @@ pub fn build_file(config: Configuration) {
         libs_opts.push(format!("-l{}", lib_name));
     }
 
-    let _link_res = Command::new("gcc")
+    // Build runtime.c to object file.
+    let build_time_hash = format!("{:x}", md5::compute(build_time_utc!()));
+    let runtime_obj_path =
+        PathBuf::from(INTERMEDIATE_PATH).join(format!("fixruntime_{}.o", build_time_hash));
+    if !runtime_obj_path.exists() {
+        let runtime_c_path = PathBuf::from(INTERMEDIATE_PATH).join("fixruntime.c");
+        fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
+        fs::write(&runtime_c_path, include_str!("runtime.c"))
+            .expect(&format!("Failed to generate runtime.c"));
+        // Create library binary file.
+        Command::new("cc")
+            .arg("-o")
+            .arg(runtime_obj_path.to_str().unwrap())
+            .arg(runtime_c_path.to_str().unwrap())
+            .output()
+            .expect("Failed to run cc.");
+    }
+
+    let _link_res = Command::new("cc")
         .args(libs_opts)
         .arg("-o")
         .arg(exec_path.to_str().unwrap())
         .arg(obj_path.to_str().unwrap())
+        .arg(runtime_obj_path.to_str().unwrap())
         .output()
-        .expect("Failed to run gcc.");
+        .expect("Failed to run cc.");
 }
