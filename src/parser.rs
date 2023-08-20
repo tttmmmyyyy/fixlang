@@ -1448,8 +1448,8 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
                     byte = buf[0];
                 } else {
                     let c = string.next().unwrap();
-                    if c == '\"' {
-                        byte = 34;
+                    if c == '\'' {
+                        byte = 39;
                     } else if c == '\\' {
                         byte = 92;
                     } else if c == 'n' {
@@ -1458,6 +1458,8 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
                         byte = 13;
                     } else if c == 't' {
                         byte = 9;
+                    } else if c == '0' {
+                        byte = 0;
                     } else if c == 'x' {
                         let mut code: u8 = 0;
                         for i in 0..2 {

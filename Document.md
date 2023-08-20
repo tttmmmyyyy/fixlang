@@ -1651,7 +1651,15 @@ Literals:
 - `{number}_U8`
     - Example: `-1_U8 == 255_U8`
 - `'{character}'`
-  - Example: `'A' == 65_U8`, `'\n' == 10_U8`, `'\x7f' == 127_U8`
+  - Example: 
+    - `'A'` for `65_U8`
+    - `'\0'` for `0_U8`
+    - `'\t'` for `9_U8`
+    - `'\r'` for `13_U8`
+    - `'\n'` for `10_U8`
+    - `'\\'` for `92_U8`
+    - `'\''` for `39_U8`
+    - `'\x7f'` for `127_U8`
 
 #### `maximum : U8`
 #### `minimum : U8`

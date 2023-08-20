@@ -2499,10 +2499,18 @@ pub fn test96() {
     // Test U8 literal
     let source = r#"
             module Main; import Debug;
-    
+            
             main : IO ();
             main = (
                 let _ = assert_eq(|_|"", -1_U8, 255_U8);
+                let _ = assert_eq(|_|"", 'A', 65_U8);
+                let _ = assert_eq(|_|"", '\0', 0_U8);
+                let _ = assert_eq(|_|"", '\t', 9_U8);
+                let _ = assert_eq(|_|"", '\r', 13_U8);
+                let _ = assert_eq(|_|"", '\n', 10_U8);
+                let _ = assert_eq(|_|"", '\\', 92_U8);
+                let _ = assert_eq(|_|"", '\'', 39_U8);
+                let _ = assert_eq(|_|"", '\x7f', 127_U8);
                 pure()
             );
         "#;
