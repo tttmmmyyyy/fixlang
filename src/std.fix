@@ -369,14 +369,6 @@ impl ErrMsg : ToString {
     to_string = @msg;
 }
 
-impl I32 : ToString {
-    to_string = I32::_I32_to_string;
-}
-
-impl I64 : ToString {
-    to_string = I64::_I64_to_string;
-}
-
 type IO a = unbox struct { _data : () -> a };
 
 namespace IO {
@@ -1175,6 +1167,10 @@ namespace String {
         String { _data : data }
     );
 
+    // Create an empty string, which is reserved for a length.
+    empty : I64 -> String;
+    empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
+
     // Create a string from C string (i.e., null-terminated byte array).
     from_c_str : Array U8 -> String;
     from_c_str = |buf| (
@@ -1401,23 +1397,73 @@ namespace F64 {
 // ToString implementations for fundamental types
 
 impl U8 : ToString {
-    to_string = U8::_U8_to_string;
+    to_string = |v| (
+        let data = Array::empty(4);
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_u8_to_str(Ptr, U8), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
 }
 
 impl U32 : ToString {
-    to_string = U32::_U32_to_string;
+    to_string = |v| (
+        let data = Array::empty(11);
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_u32_to_str(Ptr, U32), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
 }
 
 impl U64 : ToString {
-    to_string = U64::_U64_to_string;
+    to_string = |v| (
+        let data = Array::empty(20);
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_u64_to_str(Ptr, U64), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
+}
+
+impl I32 : ToString {
+    to_string = |v| (
+        let data = Array::empty(12);
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_i32_to_str(Ptr, I32), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
+}
+
+impl I64 : ToString {
+    to_string = |v| (
+        let data = Array::empty(21);
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_i64_to_str(Ptr, I64), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
 }
 
 impl F32 : ToString {
-    to_string = |f| f.to_F64.to_string;
+    to_string = |v| (
+        let data = Array::empty(50);
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_f32_to_str(Ptr, F32), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
 }
 
 impl F64 : ToString {
-    to_string = F64::_F64_to_string;
+    to_string = |v| (
+        let data = Array::empty(500);
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_f64_to_str(Ptr, F64), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
 }
 
 impl [a : ToString, b : ToString] (a, b) : ToString {

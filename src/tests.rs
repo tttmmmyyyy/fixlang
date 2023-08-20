@@ -1658,12 +1658,14 @@ pub fn test62() {
 #[serial]
 pub fn test63() {
     // Test I64 ToString.
+    // See also test98.
     let source = r#"
     module Main; import Debug;
 
     main : IO ();
     main = (
         let min = -9223372036854775808;
+        let _ = assert_eq(|_|"", min.to_string, "-9223372036854775808");
         println $ min.to_string
     );
     "#;

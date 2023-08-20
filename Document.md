@@ -349,6 +349,7 @@
       - [`borrow_c_str : (Ptr -> a) -> String -> a`](#borrow_c_str--ptr---a---string---a)
       - [`concat : String -> String -> String`](#concat--string---string---string)
       - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
+      - [`empty : I64 -> String`](#empty--i64---string)
       - [`from_c_str : Vector U8 -> String`](#from_c_str--vector-u8---string)
       - [`get_bytes : String -> Array U8`](#get_bytes--string---array-u8)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
@@ -1610,7 +1611,7 @@ main = (
 In `{c_function_signature}`, you need to specify type of return value and arguments. 
 
 - Use `Ptr` for pointers.
-- Use `U8`, `I32`, `U32`, `I64`, `U64` for integral types.
+- Use `U8`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64` for numeric types.
 - Use `...` for `va_arg`.
 - If return type is `void`, put `()` before the function name.
 
@@ -2376,6 +2377,9 @@ Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` 
 
 #### `concat_iter : Iterator String -> String`
 Concatenate an iterator of strings.
+
+#### `empty : I64 -> String`
+Create an empty string, which is reserved for a length.
 
 #### `from_c_str : Vector U8 -> String`
 Create a string from C string (i.e., null-terminated byte array).

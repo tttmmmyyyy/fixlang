@@ -35,7 +35,6 @@ use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
 use builtin::*;
-use c_config::*;
 use clap::ArgMatches;
 use clap::{App, AppSettings, Arg};
 use constants::*;

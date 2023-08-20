@@ -252,37 +252,6 @@ pub fn make_std_mod() -> Program {
     // Not
     fix_module.trait_env.add_instance(not_trait_instance_bool());
 
-    // Internal function of ToString for integral types.
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, U8_NAME], "_U8_to_string"),
-        number_to_string_function(make_u8_ty()),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, I32_NAME], "_I32_to_string"),
-        number_to_string_function(make_i32_ty()),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, U32_NAME], "_U32_to_string"),
-        number_to_string_function(make_u32_ty()),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, I64_NAME], "_I64_to_string"),
-        number_to_string_function(make_i64_ty()),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, U64_NAME], "_U64_to_string"),
-        number_to_string_function(make_u64_ty()),
-    );
-    // The following does not work correctly for some reason.
-    // fix_module.add_global_value(
-    //     FullName::from_strs(&[STD_NAME, F32_NAME], "_F32_to_string"),
-    //     number_to_string_function(make_f32_ty()),
-    // );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, F64_NAME], "_F64_to_string"),
-        number_to_string_function(make_f64_ty()),
-    );
-
     // Cast functions
     let integral_tys: &[Rc<TypeNode>] = &[
         make_u8_ty(),
