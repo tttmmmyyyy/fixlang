@@ -863,26 +863,16 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    // Printf Rust's &str.
-    fn printf(&self, string: &str) {
+    // Print Rust's &str to stderr.
+    fn eprint(&self, string: &str) {
         let string_ptr = self.builder().build_global_string_ptr(string, "rust_str");
         let string_ptr = string_ptr.as_pointer_value();
-        self.call_runtime(RuntimeFunctions::Printf, &[string_ptr.into()]);
+        self.call_runtime(RuntimeFunctions::Eprint, &[string_ptr.into()]);
     }
 
     // Panic with Rust's &str (i.e, print string and abort.)
     pub fn panic(&self, string: &str) {
-        self.printf(string);
-        // Flush
-        self.call_runtime(
-            RuntimeFunctions::Fflush,
-            &[self
-                .context
-                .i8_type()
-                .ptr_type(AddressSpace::from(0))
-                .const_null()
-                .into()],
-        );
+        self.eprint(string);
         self.call_runtime(RuntimeFunctions::Abort, &[]);
     }
 

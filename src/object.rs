@@ -236,7 +236,7 @@ impl ObjectFieldType {
         gc.builder()
             .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb);
         gc.builder().position_at_end(out_of_range_bb);
-        gc.panic("Index out of range!");
+        gc.panic("Index out of range!\n");
         gc.builder().build_unconditional_branch(in_range_bb);
         gc.builder().position_at_end(in_range_bb);
     }
@@ -439,7 +439,7 @@ impl ObjectFieldType {
         // Implement last unmatch bb.
         let last_unmatch_bb = last_unmatch_bb.unwrap();
         gc.builder().position_at_end(last_unmatch_bb);
-        gc.panic("all tags unmatch!"); // unreachable didn't work as I expected.
+        gc.panic("All union variants unmatch!\n"); // unreachable didn't work as I expected.
         gc.builder().build_unconditional_branch(end_bb);
 
         gc.builder().position_at_end(end_bb);
@@ -540,7 +540,7 @@ impl ObjectFieldType {
         gc.builder()
             .build_conditional_branch(is_tag_unmatch, unmatch_bb, match_bb);
         gc.builder().position_at_end(unmatch_bb);
-        gc.panic("tag unmatch.\n");
+        gc.panic("Union variant unmatch!\n");
         gc.builder().build_unconditional_branch(match_bb);
         gc.builder().position_at_end(match_bb);
     }

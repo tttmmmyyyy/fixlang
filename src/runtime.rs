@@ -3,9 +3,8 @@ use super::*;
 #[derive(Eq, Hash, PartialEq, Clone)]
 pub enum RuntimeFunctions {
     Abort,
-    Printf,
+    Eprint,
     Sprintf,
-    Fflush,
     ReportMalloc,
     ReportRetain,
     ReportRelease,
@@ -20,16 +19,15 @@ fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionV
     gc.module.add_function("abort", fn_ty, None)
 }
 
-fn build_printf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_eprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
 
-    let i32_type = context.i32_type();
     let i8_type = context.i8_type();
     let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::from(0));
 
-    let fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
-    let func = module.add_function("printf", fn_type, None);
+    let fn_type = context.void_type().fn_type(&[i8_ptr_type.into()], true);
+    let func = module.add_function("fixruntime_eprint", fn_type, None);
 
     func
 }
@@ -50,19 +48,6 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> Functio
         true,
     );
     let func = module.add_function("sprintf", fn_type, None);
-
-    func
-}
-
-fn build_fflush_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
-    let context = gc.context;
-    let module = gc.module;
-
-    let i32_type = context.i32_type();
-    let file_ptr_type = context.i8_type().ptr_type(AddressSpace::from(0));
-
-    let fn_type = i32_type.fn_type(&[file_ptr_type.into()], false);
-    let func = module.add_function("fflush", fn_type, None);
 
     func
 }
@@ -250,11 +235,9 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     gc.runtimes
         .insert(RuntimeFunctions::Abort, build_abort_function(gc));
     gc.runtimes
-        .insert(RuntimeFunctions::Printf, build_printf_function(gc));
+        .insert(RuntimeFunctions::Eprint, build_eprintf_function(gc));
     gc.runtimes
         .insert(RuntimeFunctions::Sprintf, build_sprintf_function(gc));
-    gc.runtimes
-        .insert(RuntimeFunctions::Fflush, build_fflush_function(gc));
     if gc.config.sanitize_memory {
         gc.runtimes.insert(
             RuntimeFunctions::ReportMalloc,

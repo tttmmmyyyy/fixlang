@@ -1759,7 +1759,7 @@ fn make_array_unique<'c, 'm>(
     gc.builder().position_at_end(shared_bb);
     if panic_if_shared {
         // In case of unique version, panic in this case.
-        gc.panic("an array is asserted as unique but is shared!\n");
+        gc.panic("An array is asserted as unique but is shared!\n");
     }
     // Allocate cloned array.
     let array_cap = array.load_field_nocap(gc, ARRAY_CAP_IDX).into_int_value();
@@ -2508,7 +2508,7 @@ fn make_struct_unique<'c, 'm>(
         if panic_if_shared {
             // In case of unique version, panic in this case.
             gc.panic(&format!(
-                "a struct object is asserted as unique but is shared!\n"
+                "A struct object is asserted as unique but is shared!\n"
             ));
         }
         let cloned_str = allocate_obj(str.ty.clone(), &vec![], None, gc, Some("cloned_str"));
