@@ -1,0 +1,9 @@
+module Main;
+
+main : IO ();
+main = (
+    let _ = "Hello Error!".borrow_c_str(|ptr| (
+        CALL_C[() fixruntime_eprint(Ptr), ptr]
+    ));
+    pure()
+);
