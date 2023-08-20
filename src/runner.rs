@@ -337,21 +337,28 @@ pub fn build_file(config: Configuration) {
         fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
         fs::write(&runtime_c_path, include_str!("runtime.c"))
             .expect(&format!("Failed to generate runtime.c"));
-        // Create library binary file.
-        Command::new("cc")
+        // Create library object file.
+        let output = Command::new("cc")
             .arg("-o")
             .arg(runtime_obj_path.to_str().unwrap())
+            .arg("-c")
             .arg(runtime_c_path.to_str().unwrap())
             .output()
-            .expect("Failed to run cc.");
+            .expect("Failed to call cc.");
+        if output.stderr.len() > 0 {
+            eprintln!("{:?}", String::from_utf8(output.stderr).unwrap());
+        }
     }
 
-    let _link_res = Command::new("cc")
+    let output = Command::new("cc")
         .args(libs_opts)
         .arg("-o")
         .arg(exec_path.to_str().unwrap())
         .arg(obj_path.to_str().unwrap())
         .arg(runtime_obj_path.to_str().unwrap())
         .output()
-        .expect("Failed to run cc.");
+        .expect("Failed to call cc.");
+    if output.stderr.len() > 0 {
+        eprintln!("{:?}", String::from_utf8(output.stderr).unwrap());
+    }
 }
