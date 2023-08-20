@@ -12,7 +12,6 @@ extern crate serde_pickle;
 
 mod ast;
 mod builtin;
-mod c_config;
 mod constants;
 mod generator;
 mod graph;

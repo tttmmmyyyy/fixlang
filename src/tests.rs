@@ -2543,7 +2543,7 @@ pub fn test97() {
 #[test]
 #[serial]
 pub fn test98() {
-    // Test to_string for integrals
+    // Test to_string, from_string for integrals
     let source = r#"
         module Main; import Debug;
 
@@ -2552,22 +2552,35 @@ pub fn test98() {
             // U8
             let _ = assert_eq(|_|"", 0_U8.to_string, "0");
             let _ = assert_eq(|_|"", 255_U8.to_string, "255");
+            let _ = assert_eq(|_|"", 255_U8, "255".from_string.as_ok);
             
             // I32
             let _ = assert_eq(|_|"", -2147483648_I32.to_string, "-2147483648");
             let _ = assert_eq(|_|"", 2147483647_I32.to_string, "2147483647");
+            let _ = assert_eq(|_|"", -2147483648_I32, "-2147483648".from_string.as_ok);
 
             // U32
             let _ = assert_eq(|_|"", 0_U32.to_string, "0");
             let _ = assert_eq(|_|"", 4294967295_U32.to_string, "4294967295");
+            let _ = assert_eq(|_|"", 4294967295_U32, "4294967295".from_string.as_ok);
 
             // I64
             let _ = assert_eq(|_|"", -9223372036854775808_I64.to_string, "-9223372036854775808");
             let _ = assert_eq(|_|"", 9223372036854775807_I64.to_string, "9223372036854775807");
+            let _ = assert_eq(|_|"", -9223372036854775808_I64, "-9223372036854775808".from_string.as_ok);
 
             // U64
             let _ = assert_eq(|_|"", 0_U64.to_string, "0");
             let _ = assert_eq(|_|"", 18446744073709551615_U64.to_string, "18446744073709551615");
+            let _ = assert_eq(|_|"", 18446744073709551615_U64, "18446744073709551615".from_string.as_ok);
+
+            // Cases from_string fails.
+
+            let res: Result ErrMsg I64 = "Hello World!".from_string;
+            let _ = assert(|_|"Case: from_string invalid format", res.is_err);
+
+            let res: Result ErrMsg I64 = "1844674407370955161518446744073709551615".from_string;
+            let _ = assert(|_|"Case: from_string out of range", res.is_err);
             
             pure()
         );
@@ -2902,7 +2915,7 @@ pub fn test109() {
 #[test]
 #[serial]
 pub fn test110() {
-    // Test basic float operations
+    // Test basic float operations, ToString, FromString
     let source = r#"
         module Main; import Debug;
 
@@ -2995,6 +3008,20 @@ pub fn test110() {
             let x = 3141.0;
             let y = 3141;            
             let _ = assert(|_|"case 21", x.to_I64 == y);
+
+            let x = 3.14;
+            let _ = assert_eq(|_|"case 22", x, x.to_string.from_string.as_ok);
+
+            let x = 3.14_F32;
+            let _ = assert_eq(|_|"case 23", x, x.to_string.from_string.as_ok);
+
+            // Cases from_string fails.
+            
+            let res: Result ErrMsg F64 = "Hello World!".from_string;
+            let _ = assert(|_|"Case: from_string invalid format", res.is_err);
+
+            let res: Result ErrMsg I64 = "9999999999999999999999999999999999999999999999999999".from_string;
+            let _ = assert(|_|"Case: from_string out of range", res.is_err);
 
             pure()
         );

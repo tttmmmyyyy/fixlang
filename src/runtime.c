@@ -7,6 +7,8 @@ C functions / values for implementing Fix standard library.
 #include <stdio.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <stdlib.h>
+#include <errno.h>
 
 // Print message to stderr, and flush it.
 void fixruntime_eprint(const char *msg)
@@ -48,4 +50,62 @@ void fixruntime_f32_to_str(char *buf, float v)
 void fixruntime_f64_to_str(char *buf, double v)
 {
     sprintf(buf, "%lf", v);
+}
+
+int64_t fixruntime_strtoll_10(const char *str)
+{
+    char *endptr;
+    errno = 0;
+    int64_t v = (int64_t)strtoll(str, &endptr, 10);
+    if (endptr == str || *endptr != '\0')
+    {
+        errno = EINVAL;
+    }
+    return v;
+}
+
+uint64_t fixruntime_strtoull_10(const char *str)
+{
+    char *endptr;
+    errno = 0;
+    uint64_t v = (uint64_t)strtoull(str, &endptr, 10);
+    if (endptr == str || *endptr != '\0')
+    {
+        errno = EINVAL;
+    }
+    return v;
+}
+
+double fixruntime_strtod(const char *str)
+{
+    char *endptr;
+    errno = 0;
+    double v = strtod(str, &endptr);
+    if (endptr == str || *endptr != '\0')
+    {
+        errno = EINVAL;
+    }
+    return v;
+}
+
+float fixruntime_strtof(const char *str)
+{
+    char *endptr;
+    errno = 0;
+    float v = strtof(str, &endptr);
+    if (endptr == str || *endptr != '\0')
+    {
+        errno = EINVAL;
+    }
+    return v;
+}
+
+uint8_t fixruntime_is_einval()
+{
+    return errno == EINVAL;
+}
+
+uint8_t fixruntime_is_erange()
+{
+    return errno == ERANGE;
 }

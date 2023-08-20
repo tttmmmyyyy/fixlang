@@ -78,6 +78,7 @@
       - [`to_F64 : U8 -> F64`](#to_f64--u8---f64)
       - [`impl U8 : Add`](#impl-u8--add)
       - [`impl U8 : Eq`](#impl-u8--eq)
+      - [`impl U8 : FromString`](#impl-u8--fromstring)
       - [`impl U8 : LessThan`](#impl-u8--lessthan)
       - [`impl U8 : LessThanOrEq`](#impl-u8--lessthanoreq)
       - [`impl U8 : Mul`](#impl-u8--mul)
@@ -103,6 +104,7 @@
       - [`to_F64 : I32 -> F64`](#to_f64--i32---f64)
       - [`impl I32 : Add`](#impl-i32--add)
       - [`impl I32 : Eq`](#impl-i32--eq)
+      - [`impl I32 : FromString`](#impl-i32--fromstring)
       - [`impl I32 : LessThan`](#impl-i32--lessthan)
       - [`impl I32 : LessThanOrEq`](#impl-i32--lessthanoreq)
       - [`impl I32 : Mul`](#impl-i32--mul)
@@ -127,6 +129,7 @@
       - [`to_F64 : U32 -> F64`](#to_f64--u32---f64)
       - [`impl U32 : Add`](#impl-u32--add)
       - [`impl U32 : Eq`](#impl-u32--eq)
+      - [`impl U32 : FromString`](#impl-u32--fromstring)
       - [`impl U32 : LessThan`](#impl-u32--lessthan)
       - [`impl U32 : LessThanOrEq`](#impl-u32--lessthanoreq)
       - [`impl U32 : Mul`](#impl-u32--mul)
@@ -152,6 +155,7 @@
       - [`to_F64 : I64 -> F64`](#to_f64--i64---f64)
       - [`impl I64 : Add`](#impl-i64--add)
       - [`impl I64 : Eq`](#impl-i64--eq)
+      - [`impl I64 : FromString`](#impl-i64--fromstring)
       - [`impl I64 : LessThan`](#impl-i64--lessthan)
       - [`impl I64 : LessThanOrEq`](#impl-i64--lessthanoreq)
       - [`impl I64 : Mul`](#impl-i64--mul)
@@ -176,6 +180,7 @@
       - [`to_F64 : U64 -> F64`](#to_f64--u64---f64)
       - [`impl U64 : Add`](#impl-u64--add)
       - [`impl U64 : Eq`](#impl-u64--eq)
+      - [`impl U64 : FromString`](#impl-u64--fromstring)
       - [`impl U64 : LessThan`](#impl-u64--lessthan)
       - [`impl U64 : LessThanOrEq`](#impl-u64--lessthanoreq)
       - [`impl U64 : Mul`](#impl-u64--mul)
@@ -192,6 +197,7 @@
       - [`impl F32 : Add`](#impl-f32--add)
       - [`impl F32 : Div`](#impl-f32--div)
       - [`impl F32 : Eq`](#impl-f32--eq)
+      - [`impl F32 : FromString`](#impl-f32--fromstring)
       - [`impl F32 : LessThan`](#impl-f32--lessthan)
       - [`impl F32 : LessThanOrEq`](#impl-f32--lessthanoreq)
       - [`impl F32 : Mul`](#impl-f32--mul)
@@ -206,6 +212,7 @@
       - [`impl F64 : Add`](#impl-f64--add)
       - [`impl F64 : Div`](#impl-f64--div)
       - [`impl F64 : Eq`](#impl-f64--eq)
+      - [`impl F64 : FromString`](#impl-f64--fromstring)
       - [`impl F64 : LessThan`](#impl-f64--lessthan)
       - [`impl F64 : LessThanOrEq`](#impl-f64--lessthanoreq)
       - [`impl F64 : Mul`](#impl-f64--mul)
@@ -255,6 +262,7 @@
     - [Destructor](#destructor)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [ErrMsg](#errmsg)
+      - [`make : String -> ErrMsg`](#make--string---errmsg)
       - [`impl ErrMsg : ToString`](#impl-errmsg--tostring)
     - [IO](#io)
       - [`_read_line_inner : Bool -> IOHandle -> IOResult IOError String`](#_read_line_inner--bool---iohandle---ioresult-ioerror-string)
@@ -376,6 +384,8 @@
     - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
     - [`unsafe_is_unique : a -> (Bool, a)`](#unsafe_is_unique--a---bool-a)
   - [Traits](#traits-1)
+    - [FromString](#fromstring)
+      - [(required) `from_string : [a : FromString] String -> Result ErrMsg a`](#required-from_string--a--fromstring-string---result-errmsg-a)
     - [Functor (\* -\> \*)](#functor----)
       - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
     - [LessThan](#lessthan)
@@ -1658,6 +1668,7 @@ Literals:
 #### `to_F64 : U8 -> F64`
 #### `impl U8 : Add`
 #### `impl U8 : Eq`
+#### `impl U8 : FromString`
 #### `impl U8 : LessThan`
 #### `impl U8 : LessThanOrEq`
 #### `impl U8 : Mul`
@@ -1691,6 +1702,7 @@ Literals:
 #### `to_F64 : I32 -> F64`
 #### `impl I32 : Add`
 #### `impl I32 : Eq`
+#### `impl I32 : FromString`
 #### `impl I32 : LessThan`
 #### `impl I32 : LessThanOrEq`
 #### `impl I32 : Mul`
@@ -1724,6 +1736,7 @@ Literals:
 #### `to_F64 : U32 -> F64`
 #### `impl U32 : Add`
 #### `impl U32 : Eq`
+#### `impl U32 : FromString`
 #### `impl U32 : LessThan`
 #### `impl U32 : LessThanOrEq`
 #### `impl U32 : Mul`
@@ -1759,6 +1772,7 @@ Literals:
 #### `to_F64 : I64 -> F64`
 #### `impl I64 : Add`
 #### `impl I64 : Eq`
+#### `impl I64 : FromString`
 #### `impl I64 : LessThan`
 #### `impl I64 : LessThanOrEq`
 #### `impl I64 : Mul`
@@ -1792,6 +1806,7 @@ Literals:
 #### `to_F64 : U64 -> F64`
 #### `impl U64 : Add`
 #### `impl U64 : Eq`
+#### `impl U64 : FromString`
 #### `impl U64 : LessThan`
 #### `impl U64 : LessThanOrEq`
 #### `impl U64 : Mul`
@@ -1814,6 +1829,7 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 #### `impl F32 : Add`
 #### `impl F32 : Div`
 #### `impl F32 : Eq`
+#### `impl F32 : FromString`
 #### `impl F32 : LessThan`
 #### `impl F32 : LessThanOrEq`
 #### `impl F32 : Mul`
@@ -1834,6 +1850,7 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 #### `impl F64 : Add`
 #### `impl F64 : Div`
 #### `impl F64 : Eq`
+#### `impl F64 : FromString`
 #### `impl F64 : LessThan`
 #### `impl F64 : LessThanOrEq`
 #### `impl F64 : Mul`
@@ -2019,6 +2036,8 @@ A wrapper type for error message.
 ```
 type ErrMsg = unbox struct { msg : String };
 ```
+
+#### `make : String -> ErrMsg`
 
 #### `impl ErrMsg : ToString`
 
@@ -2547,6 +2566,10 @@ main = (
 ```
 
 ## Traits
+
+### FromString
+
+#### (required) `from_string : [a : FromString] String -> Result ErrMsg a`
 
 ### Functor (* -> *)
 

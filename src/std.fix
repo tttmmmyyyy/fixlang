@@ -365,6 +365,11 @@ namespace Destructor {
 // A wrapper type for error message. 
 type ErrMsg = unbox struct { msg : String };
 
+namespace ErrMsg {
+    make : String -> ErrMsg;
+    make = |msg| ErrMsg { msg : msg };
+}
+
 impl ErrMsg : ToString {
     to_string = @msg;
 }
@@ -1342,6 +1347,10 @@ impl F64 : Zero {
 
 trait Additive = Add + Zero;
 
+trait a : FromString {
+    from_string : String -> Result ErrMsg a;
+}
+
 trait [f : *->*] f : Functor {
     map : (a -> b) -> f a -> f b;
 }
@@ -1394,7 +1403,7 @@ namespace F64 {
     abs = |f| if f < 0.0 { -f } else { f };
 }
 
-// ToString implementations for fundamental types
+// ToString, FromString implementations for fundamental types
 
 impl U8 : ToString {
     to_string = |v| (
@@ -1403,6 +1412,18 @@ impl U8 : ToString {
             CALL_C[() fixruntime_u8_to_str(Ptr, U8), ptr, v]
         ));
         String::from_c_str(data)
+    );
+}
+impl U8 : FromString {
+    from_string = |str| (
+        str.borrow_c_str(|c_str| (
+            let v = CALL_C[U64 fixruntime_strtoull_10(Ptr), c_str];
+            let err = CALL_C[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
+            let err = CALL_C[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
+            Result::ok(v.to_U8)
+        ))
     );
 }
 
@@ -1415,6 +1436,18 @@ impl U32 : ToString {
         String::from_c_str(data)
     );
 }
+impl U32 : FromString {
+    from_string = |str| (
+        str.borrow_c_str(|c_str| (
+            let v = CALL_C[U64 fixruntime_strtoull_10(Ptr), c_str];
+            let err = CALL_C[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
+            let err = CALL_C[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
+            Result::ok(v.to_U32)
+        ))
+    );
+}
 
 impl U64 : ToString {
     to_string = |v| (
@@ -1423,6 +1456,18 @@ impl U64 : ToString {
             CALL_C[() fixruntime_u64_to_str(Ptr, U64), ptr, v]
         ));
         String::from_c_str(data)
+    );
+}
+impl U64 : FromString {
+    from_string = |str| (
+        str.borrow_c_str(|c_str| (
+            let v = CALL_C[U64 fixruntime_strtoull_10(Ptr), c_str];
+            let err = CALL_C[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
+            let err = CALL_C[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
+            Result::ok(v)
+        ))
     );
 }
 
@@ -1435,6 +1480,18 @@ impl I32 : ToString {
         String::from_c_str(data)
     );
 }
+impl I32 : FromString {
+    from_string = |str| (
+        str.borrow_c_str(|c_str| (
+            let v = CALL_C[I64 fixruntime_strtoll_10(Ptr), c_str];
+            let err = CALL_C[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
+            let err = CALL_C[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
+            Result::ok(v.to_I32)
+        ))
+    );
+}
 
 impl I64 : ToString {
     to_string = |v| (
@@ -1443,6 +1500,18 @@ impl I64 : ToString {
             CALL_C[() fixruntime_i64_to_str(Ptr, I64), ptr, v]
         ));
         String::from_c_str(data)
+    );
+}
+impl I64 : FromString {
+    from_string = |str| (
+        str.borrow_c_str(|c_str| (
+            let v = CALL_C[I64 fixruntime_strtoll_10(Ptr), c_str];
+            let err = CALL_C[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
+            let err = CALL_C[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
+            Result::ok(v)
+        ))
     );
 }
 
@@ -1455,6 +1524,18 @@ impl F32 : ToString {
         String::from_c_str(data)
     );
 }
+impl F32 : FromString {
+    from_string = |str| (
+        str.borrow_c_str(|c_str| (
+            let v = CALL_C[F32 fixruntime_strtof(Ptr), c_str];
+            let err = CALL_C[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to number (invalid format): " + str) };
+            let err = CALL_C[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to number (out of range): " + str) };
+            Result::ok(v)
+        ))
+    );
+}
 
 impl F64 : ToString {
     to_string = |v| (
@@ -1463,6 +1544,18 @@ impl F64 : ToString {
             CALL_C[() fixruntime_f64_to_str(Ptr, F64), ptr, v]
         ));
         String::from_c_str(data)
+    );
+}
+impl F64 : FromString {
+    from_string = |str| (
+        str.borrow_c_str(|c_str| (
+            let v = CALL_C[F64 fixruntime_strtod(Ptr), c_str];
+            let err = CALL_C[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to number (invalid format): " + str) };
+            let err = CALL_C[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to number (out of range): " + str) };
+            Result::ok(v)
+        ))
     );
 }
 
