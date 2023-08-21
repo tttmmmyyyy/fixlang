@@ -9,6 +9,7 @@ C functions / values for implementing Fix standard library.
 #include <inttypes.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <ctype.h>
 
 // Print message to stderr, and flush it.
 void fixruntime_eprint(const char *msg)
@@ -56,6 +57,11 @@ int64_t fixruntime_strtoll_10(const char *str)
 {
     char *endptr;
     errno = 0;
+    if (isspace(*str))
+    {
+        errno = EINVAL;
+        return (int64_t)0;
+    }
     int64_t v = (int64_t)strtoll(str, &endptr, 10);
     if (endptr == str || *endptr != '\0')
     {
@@ -68,6 +74,11 @@ uint64_t fixruntime_strtoull_10(const char *str)
 {
     char *endptr;
     errno = 0;
+    if (isspace(*str))
+    {
+        errno = EINVAL;
+        return (int64_t)0;
+    }
     uint64_t v = (uint64_t)strtoull(str, &endptr, 10);
     if (endptr == str || *endptr != '\0')
     {
@@ -80,6 +91,11 @@ double fixruntime_strtod(const char *str)
 {
     char *endptr;
     errno = 0;
+    if (isspace(*str))
+    {
+        errno = EINVAL;
+        return (int64_t)0;
+    }
     double v = strtod(str, &endptr);
     if (endptr == str || *endptr != '\0')
     {
@@ -92,6 +108,11 @@ float fixruntime_strtof(const char *str)
 {
     char *endptr;
     errno = 0;
+    if (isspace(*str))
+    {
+        errno = EINVAL;
+        return (int64_t)0;
+    }
     float v = strtof(str, &endptr);
     if (endptr == str || *endptr != '\0')
     {

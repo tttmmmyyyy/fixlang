@@ -2577,6 +2577,10 @@ main = (
 
 ### FromString
 
+`a : FromString` states that strings can be parsed to create a value of type `a`.
+
+NOTE: For primitive types of Fix, `FromString` is implemented using `strto**` functions of C, but they do not accept whitespace prefix or suffix.
+
 #### (required) `from_string : [a : FromString] String -> Result ErrMsg a`
 
 ### Functor (* -> *)

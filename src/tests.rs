@@ -2587,6 +2587,9 @@ pub fn test98() {
             let res: Result ErrMsg I64 = "Hello World!".from_string;
             let _ = assert(|_|"Case: from_string invalid format", res.is_err);
 
+            let res: Result ErrMsg I64 = " 42".from_string;
+            let _ = assert(|_|"Case: from_string invalid format (whitespace)", res.is_err);
+
             let res: Result ErrMsg I64 = "1844674407370955161518446744073709551615".from_string;
             let _ = assert(|_|"Case: from_string out of range", res.is_err);
             
@@ -3027,6 +3030,9 @@ pub fn test110() {
             
             let res: Result ErrMsg F64 = "Hello World!".from_string;
             let _ = assert(|_|"Case: from_string invalid format", res.is_err);
+
+            let res: Result ErrMsg F64 = " 3.14".from_string;
+            let _ = assert(|_|"Case: from_string invalid format (whitespace)", res.is_err);
 
             let res: Result ErrMsg I64 = "9999999999999999999999999999999999999999999999999999".from_string;
             let _ = assert(|_|"Case: from_string out of range", res.is_err);
