@@ -21,7 +21,7 @@ namespace Array {
         let (vec, buffer) = vec._sort_range_using_buffer(buffer, former_begin, former_end, less_than);
         let (vec, buffer) = vec._sort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
         // Merge former and latter to buffer.
-        let buffer = buffer.reduce_length(0);
+        let buffer = buffer.truncate(0);
         let former_pos = former_begin;
         let latter_pos = latter_begin;
         let buffer = loop((former_pos, latter_pos, buffer), |(former_pos, latter_pos, buffer)|(
@@ -252,15 +252,6 @@ namespace Array {
         arr._unsafe_set(len, e)
     );
 
-    // Reduce the length of an array.
-    reduce_length : I64 -> Array a -> Array a;
-    reduce_length = |length, vec| (
-        loop(vec, |vec|(
-            if length >= vec.get_size { break $ vec };
-            continue $ vec.pop_back
-        ))
-    );
-
     // Reserves the memory region for an array.
     // TODO: change to more optimized implementation.
     reserve : I64 -> Array a -> Array a;
@@ -289,6 +280,16 @@ namespace Array {
     // Convert an array to an iterator.
     to_iter : Array a -> Iterator a;
     to_iter = Iterator::from_array;
+
+    // Truncate an array, keeping the given number of first elements.
+    // `truncante(len, arr)` does nothing if `len >= arr.get_size`.
+    truncate : I64 -> Array a -> Array a;
+    truncate = |length, vec| (
+        loop(vec, |vec|(
+            if length >= vec.get_size { break $ vec };
+            continue $ vec.pop_back
+        ))
+    );
 }
 
 impl [a : Eq] Array a : Eq {

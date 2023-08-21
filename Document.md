@@ -250,12 +250,12 @@
       - [`push_back : a -> Array a -> Array a`](#push_back--a---array-a---array-a)
       - [`push_back! : a -> Array a -> Array a`](#push_back--a---array-a---array-a-1)
       - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
-      - [`reduce_length : I64 -> Array a -> Array a`](#reduce_length--i64---array-a---array-a)
       - [`reserve : I64 -> Array a -> Array a`](#reserve--i64---array-a---array-a)
       - [`set : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a)
       - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
       - [`to_iter : Array a -> Iterator a`](#to_iter--array-a---iterator-a)
+      - [`truncate : I64 -> Array a -> Array a`](#truncate--i64---array-a---array-a)
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
       - [`impl Array : Functor`](#impl-array--functor)
       - [`impl Array : Monad`](#impl-array--monad)
@@ -1997,9 +1997,6 @@ Note that, when the capacity of `arr` is equal to its size, `arr.push_back!(e)` 
 #### `range : I64 -> I64 -> Iterator I64`
 Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
 
-#### `reduce_length : I64 -> Array a -> Array a`
-Reduce the length of an array.
-
 #### `reserve : I64 -> Array a -> Array a`
 Reserves the memory region for an array.
 
@@ -2016,6 +2013,10 @@ Sort elements in an array by "less than" comparator.
 
 #### `to_iter : Array a -> Iterator a`
 Convert an array to an iterator.
+
+#### `truncate : I64 -> Array a -> Array a`
+Truncate an array, keeping the given number of first elements.
+`truncante(len, arr)` does nothing if `len >= arr.get_size`.
 
 #### `impl [a : Eq] Array a : Eq`
 
