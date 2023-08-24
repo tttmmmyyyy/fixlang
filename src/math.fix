@@ -2,6 +2,57 @@ module Math;
 
 import Debug;
 
+// Calculate arc cosine of the argument.
+// This is wrapper of C's acos.
+acos : F64 -> F64;
+acos = |x| CALL_C[F64 acos(F64), x];
+
+// Calculate arc sine of the argument.
+// This is wrapper of C's asin.
+asin : F64 -> F64;
+asin = |x| CALL_C[F64 asin(F64), x];
+
+// Calculate arc tangent of the argument.
+// This is wrapper of C's atan.
+atan : F64 -> F64;
+atan = |x| CALL_C[F64 atan(F64), x];
+
+// Calculate arc tangent of y/x for argument x, y.
+// This is wrapper of C's atan2.
+atan2 : F64 -> F64 -> F64;
+atan2 = |x, y| CALL_C[F64 atan(F64, F64), x, y];
+
+// Calculate the smallest integral value not less than the argument.
+// This is wrapper of C's ceil.
+ceil : F64 -> F64;
+ceil = |x| CALL_C[F64 ceil(F64, F64), x];
+
+// Calculate the cosine of the argument.
+// This is wrapper of C's cos.
+cos : F64 -> F64;
+cos = |x| CALL_C[F64 cos(F64), x];
+
+// Calculate the hyperbolic cosine of the argument.
+// This is wrapper of C's cosh.
+cosh : F64 -> F64;
+cosh = |x| CALL_C[F64 cosh(F64), x];
+
+// Calculate the natural exponential of the argument.
+// This is wrapper of C's exp.
+exp : F64 -> F64;
+exp = |x| CALL_C[F64 exp(F64), x];
+
+// Calculate the largest integral value not greater than the argument.
+// This is wrapper of C's floor.
+floor : F64 -> F64;
+floor = |x| CALL_C[F64 floor(F64), x];
+
+// Calculate the floating point remainder of division. 
+// Note that `x.fmod(y)` calculates the remainder of dividing x by y.
+// This is wrapper of C's fmod, swapped the arguments.
+fmod : F64 -> F64;
+fmod = |y, x| CALL_C[F64 fmod(F64, F64), x, y];
+
 // Calculate table (2-dimensional array) of binomial coefficients.
 // `binomial_coefficients(m)` evaluates to an array of arrays `table` where `table.@(n).@(r)` is the binomial coefficient "binom(n, r)" for 0 <= n <= m and 0 <= r <= n.
 // Here `m` has to be less than or equal to 66 to avoid overflow.
