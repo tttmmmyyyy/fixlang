@@ -1,4 +1,5 @@
 use build_time::build_time_utc;
+use regex::Regex;
 use std::{env, fs, fs::create_dir_all, path::PathBuf, process::Command, time::SystemTime};
 
 use either::Either;
@@ -29,7 +30,7 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
         fs::write(&runtime_c_path, include_str!("runtime.c"))
             .expect(&format!("Failed to generate runtime.c"));
         // Create library binary file.
-        let output = Command::new("cc")
+        let output = Command::new("gcc")
             .arg("-shared")
             .arg("-fpic")
             .arg("-o")
@@ -49,18 +50,47 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
 
     // Load dynamically linked libraries specified by user.
     for (lib_name, _) in &config.linked_libraries {
-        let lib_name = format!("lib{}.so", lib_name);
-        let err = load_library_permanently(&lib_name);
-        if err {
-            error_exit(&format!("Failed to load \"{}\".", lib_name));
-        }
+        search_and_load_dynamic_library(lib_name);
     }
+    // Execute main function.
     unsafe {
         let func = ee
             .get_function::<unsafe extern "C" fn() -> i32>("main")
             .unwrap();
         func.call()
     }
+}
+
+// Search path of libabc.so.* for given string "abc" and load it.
+fn search_and_load_dynamic_library(name: &str) {
+    // Call "gcc -Wl,-t -o temp -labc", filter stdout to get paths to file "libabc + string such as 'so' or 'so.6'", and find ELF file among them.
+    let output = Command::new("gcc")
+        .arg("-Wl,-t")
+        .arg("-o")
+        .arg(SEARCH_DYNAMIC_LIBRARY_TEMP_FILE)
+        .arg(format!("-l{}", name))
+        .output()
+        .expect("Failed to run gcc.");
+    let trace = String::from_utf8(output.stdout);
+    if trace.is_err() {
+        error_exit("Failed to parse stdout from gcc as UTF8.");
+    }
+    let trace = trace.unwrap();
+    for path in Regex::new(&format!(r"[^\(\)\s]*lib{}\.[^\(\)\s]*", name))
+        .unwrap()
+        .find_iter(&trace)
+    {
+        let path = path.as_str();
+        let file = File::open(path);
+        if file.is_err() {
+            continue;
+        }
+        if !load_library_permanently(path) {
+            continue;
+        }
+        return;
+    }
+    error_exit(&format!("Cannot load library `{}`.", name))
 }
 
 fn build_module<'c>(
@@ -194,12 +224,12 @@ fn build_module<'c>(
 }
 
 #[allow(dead_code)]
-pub fn run_source(source: &str, config: Configuration) -> i32 {
+pub fn run_source(source: &str, mut config: Configuration) -> i32 {
     let mut target_mod = make_std_mod();
 
     let source_mod = parse_source(source, "{filename unspecified}");
     target_mod.link(source_mod);
-    target_mod.resolve_imports();
+    target_mod.resolve_imports(&mut config);
 
     run_module(target_mod, config)
 }
@@ -263,7 +293,7 @@ where
     res
 }
 
-pub fn load_file(config: &Configuration) -> Program {
+pub fn load_file(config: &mut Configuration) -> Program {
     // Link all modules specified in source_files.
     let mut target_mod = make_std_mod();
     for file_path in &config.source_files {
@@ -272,12 +302,12 @@ pub fn load_file(config: &Configuration) -> Program {
         fix_mod.set_last_update(fix_mod.get_name_if_single_module(), last_modified);
         target_mod.link(fix_mod);
     }
-    target_mod.resolve_imports();
+    target_mod.resolve_imports(config);
     target_mod
 }
 
-pub fn run_file(config: Configuration) -> i32 {
-    run_module(load_file(&config), config)
+pub fn run_file(mut config: Configuration) -> i32 {
+    run_module(load_file(&mut config), config)
 }
 
 fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
@@ -305,7 +335,7 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
     }
 }
 
-pub fn build_file(config: Configuration) {
+pub fn build_file(mut config: Configuration) {
     let obj_path = PathBuf::from(INTERMEDIATE_PATH).join("a.o");
     let exec_path = PathBuf::from("a.out");
 
@@ -314,7 +344,7 @@ pub fn build_file(config: Configuration) {
 
     let tm = get_target_machine(config.llvm_opt_level);
 
-    let fix_mod = load_file(&config);
+    let fix_mod = load_file(&mut config);
 
     let ctx = Context::create();
     let module = ctx.create_module("Main");
@@ -345,35 +375,35 @@ pub fn build_file(config: Configuration) {
         fs::write(&runtime_c_path, include_str!("runtime.c"))
             .expect(&format!("Failed to generate runtime.c"));
         // Create library object file.
-        let output = Command::new("cc")
+        let output = Command::new("gcc")
             .arg("-o")
             .arg(runtime_obj_path.to_str().unwrap())
             .arg("-c")
             .arg(runtime_c_path.to_str().unwrap())
             .output()
-            .expect("Failed to run cc.");
+            .expect("Failed to run gcc.");
         if output.stderr.len() > 0 {
             eprintln!(
                 "{:?}",
                 String::from_utf8(output.stderr)
-                    .unwrap_or("(failed to stringify error message of cc.)".to_string())
+                    .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
             );
         }
     }
 
-    let output = Command::new("cc")
+    let output = Command::new("gcc")
         .args(libs_opts)
         .arg("-o")
         .arg(exec_path.to_str().unwrap())
         .arg(obj_path.to_str().unwrap())
         .arg(runtime_obj_path.to_str().unwrap())
         .output()
-        .expect("Failed to run cc.");
+        .expect("Failed to run gcc.");
     if output.stderr.len() > 0 {
         eprintln!(
             "{:?}",
             String::from_utf8(output.stderr)
-                .unwrap_or("(failed to stringify error message of cc.)".to_string())
+                .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
         );
     }
 }

@@ -6,6 +6,7 @@ extern crate pest_derive;
 extern crate serial_test;
 extern crate build_time;
 extern crate chrono;
+extern crate regex;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_pickle;
@@ -123,6 +124,13 @@ impl Configuration {
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
         }
+    }
+
+    // Add dynamically linked library.
+    // To link libabc.so, provide library name "abc".
+    pub fn add_dyanmic_library(&mut self, name: &str) {
+        self.linked_libraries
+            .push((name.to_string(), LinkType::Dynamic));
     }
 }
 

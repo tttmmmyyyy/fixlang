@@ -1258,7 +1258,9 @@ impl Program {
         }
     }
 
-    pub fn resolve_imports(&mut self) {
+    // Link built-in modules following unsolved import statements.
+    // This function may mutate config to add dynamically linked libraries.
+    pub fn resolve_imports(&mut self, config: &mut Configuration) {
         while self.unresolved_imports.len() > 0 {
             let import = self.unresolved_imports.pop().unwrap();
 
@@ -1269,15 +1271,28 @@ impl Program {
 
             let mut imported = false;
             // Search for bulit-in modules.
-            for (mod_name, source_content, file_name) in [
-                ("Debug", include_str!("../debug.fix"), "debug.fix"),
-                ("Hash", include_str!("../hash.fix"), "hash.fix"),
-                ("HashMap", include_str!("../hashmap.fix"), "hashmap.fix"),
-                ("HashSet", include_str!("../hashset.fix"), "hashset.fix"),
-                ("Math", include_str!("../math.fix"), "math.fix"),
+            for (mod_name, source_content, file_name, native_library) in [
+                ("Debug", include_str!("../debug.fix"), "debug.fix", None),
+                ("Hash", include_str!("../hash.fix"), "hash.fix", None),
+                (
+                    "HashMap",
+                    include_str!("../hashmap.fix"),
+                    "hashmap.fix",
+                    None,
+                ),
+                (
+                    "HashSet",
+                    include_str!("../hashset.fix"),
+                    "hashset.fix",
+                    None,
+                ),
+                ("Math", include_str!("../math.fix"), "math.fix", Some("m")), // link libm
             ] {
                 if import.target_module == mod_name {
                     self.link(parse_source(source_content, file_name));
+                    if let Some(lib_name) = native_library {
+                        config.add_dyanmic_library(lib_name);
+                    }
                     imported = true;
                     break;
                 }

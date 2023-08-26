@@ -3472,6 +3472,9 @@ pub fn test121() {
             ];
             let _ = assert_eq(|_|"case binomial_coefficients-2", binomial_coefficients(1), binom);
 
+            // libm functions
+            let _ = assert(|_|"case acos", (acos(0.2) - 1.369438406004566).abs < 1.0e-8);
+
             pure()
         );
     "#;
