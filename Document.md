@@ -457,11 +457,32 @@
   - [`reserve : [k : HashKey] I64 -> HashSet k -> HashSet k`](#reserve--k--hashkey-i64---hashset-k---hashset-k)
   - [`to_iter : HashSet k -> Iterator k`](#to_iter--hashset-k---iterator-k)
 - [Module `Math`](#module-math)
-  - [`binomial_coefficients : I64 -> Array (Array I64)`](#binomial_coefficients--i64---array-array-i64)
   - [`_gcd_nonneg : I64 -> I64 -> I64`](#_gcd_nonneg--i64---i64---i64)
+  - [`acos : F64 -> F64`](#acos--f64---f64)
+  - [`asin : F64 -> F64`](#asin--f64---f64)
+  - [`atan : F64 -> F64`](#atan--f64---f64)
+  - [`atan2 : F64 -> F64 -> F64`](#atan2--f64---f64---f64)
+  - [`binomial_coefficients : I64 -> Array (Array I64)`](#binomial_coefficients--i64---array-array-i64)
+  - [`ceil : F64 -> F64`](#ceil--f64---f64)
+  - [`cos : F64 -> F64`](#cos--f64---f64)
+  - [`cosh : F64 -> F64`](#cosh--f64---f64)
+  - [`exp : F64 -> F64`](#exp--f64---f64)
+  - [`floor : F64 -> F64`](#floor--f64---f64)
+  - [`fmod : F64 -> F64 -> F64`](#fmod--f64---f64---f64)
+  - [`frexp : F64 -> (F64, I32)`](#frexp--f64---f64-i32)
   - [`gcd : I64 -> I64 -> I64`](#gcd--i64---i64---i64)
+  - [`ldexp : I32 -> F64 -> F64`](#ldexp--i32---f64---f64)
+  - [`log : F64 -> F64`](#log--f64---f64)
+  - [`log10 : F64 -> F64`](#log10--f64---f64)
+  - [`modf : F64 -> (F64, F64)`](#modf--f64---f64-f64)
   - [`pi32 : F32`](#pi32--f32)
   - [`pi64 : F64`](#pi64--f64)
+  - [`pow : F64 -> F64 -> F64`](#pow--f64---f64---f64)
+  - [`sin : F64 -> F64`](#sin--f64---f64)
+  - [`sinh : F64 -> F64`](#sinh--f64---f64)
+  - [`sqrt : F64 -> F64`](#sqrt--f64---f64)
+  - [`tan : F64 -> F64`](#tan--f64---f64)
+  - [`tanh : F64 -> F64`](#tanh--f64---f64)
 - [Operators](#operators)
 
 
@@ -2769,23 +2790,109 @@ Convert a HashSet into an iterator.
 
 # Module `Math`
 
+## `_gcd_nonneg : I64 -> I64 -> I64`
+Calculate greatest common divisors of two non-negative integers. 
+
+## `acos : F64 -> F64`
+Calculate arc cosine of the argument.
+This is wrapper of C's acos.
+
+## `asin : F64 -> F64`
+Calculate arc sine of the argument.
+This is wrapper of C's asin.
+
+## `atan : F64 -> F64`
+Calculate arc tangent of the argument.
+This is wrapper of C's atan.
+
+## `atan2 : F64 -> F64 -> F64`
+Calculate arc tangent of y/x for argument x, y.
+This is wrapper of C's atan2.
+
 ## `binomial_coefficients : I64 -> Array (Array I64)`
 Calculate table (2-dimensional array) of binomial coefficients.
 `binomial_coefficients(m)` evaluates to an array of arrays `table` where `table.@(n).@(r)` is the binomial coefficient "binom(n, r)" for 0 <= n <= m and 0 <= r <= n.
 Here `m` has to be less than or equal to 66 to avoid overflow.
 
-## `_gcd_nonneg : I64 -> I64 -> I64`
-Calculate greatest common divisors of two non-negative integers. 
+## `ceil : F64 -> F64`
+Calculate the smallest integral value not less than the argument.
+This is wrapper of C's ceil.
+
+## `cos : F64 -> F64`
+Calculate the cosine of the argument.
+This is wrapper of C's cos.
+
+## `cosh : F64 -> F64`
+Calculate the hyperbolic cosine of the argument.
+This is wrapper of C's cosh.
+
+## `exp : F64 -> F64`
+Calculate the natural exponential of the argument.
+This is wrapper of C's exp.
+
+## `floor : F64 -> F64`
+Calculate the largest integral value not greater than the argument.
+This is wrapper of C's floor.
+
+## `fmod : F64 -> F64 -> F64`
+Calculate the floating point remainder of division. 
+`x.fmod(y)` evaluates to the remainder of dividing x by y.
+This is wrapper of C's fmod.
+
+## `frexp : F64 -> (F64, I32)`
+Split a floating point number to normalized fraction and an exponent.
+This is wrapper of C's frexp. 
 
 ## `gcd : I64 -> I64 -> I64`
 Calculate greatest common divisor of two integers. `gcd(0, 0)` returns `0`.
 NOTE: currently, this function does not support `I64::minimum`.
+
+## `ldexp : I32 -> F64 -> F64`
+Multiply a floating point number by power of two.
+This is wrapper of C's ldexp. 
+
+## `log : F64 -> F64`
+Calculate natural logarithm.
+This is wrapper of C's log. 
+
+## `log10 : F64 -> F64`
+Calculate base-10 logarithm.
+This is wrapper of C's log10. 
+
+## `modf : F64 -> (F64, F64)`
+Convert a floating pointer number into the pair of fractional part and integral part.
+This is wrapper of C's modf.
 
 ## `pi32 : F32`
 Pi as `F32`
 
 ## `pi64 : F64`
 Pi as `F64`
+
+## `pow : F64 -> F64 -> F64`
+Power function.
+`x.pow(y)` evaluates to x^y.
+This is wrapper of C's pow.
+
+## `sin : F64 -> F64`
+Calculate the sine of the argument.
+This is wrapper of C's sin.
+
+## `sinh : F64 -> F64`
+Calculate the hyperbolic sine of the argument.
+This is wrapper of C's sinh.
+
+## `sqrt : F64 -> F64`
+Calculate square root of the argument.
+This is wrapper of C's sqrt.
+
+## `tan : F64 -> F64`
+Calculate the tangent of the argument.
+This is wrapper of C's tan.
+
+## `tanh : F64 -> F64`
+Calculate the hyperbolic tangent of the argument.
+This is wrapper of C's tanh.
 
 # Operators
 

@@ -3474,6 +3474,28 @@ pub fn test121() {
 
             // libm functions
             let _ = assert(|_|"case acos", (acos(0.2) - 1.369438406004566).abs < 1.0e-8);
+            let _ = assert(|_|"case asin", (asin(0.2) - 0.2013579207903308).abs < 1.0e-8);
+            let _ = assert(|_|"case atan", (atan(0.2) - 0.19739555984988078).abs < 1.0e-8);            
+            let _ = assert(|_|"case atan2", (atan2(0.2, 0.5) - 0.3805063771123649).abs < 1.0e-8);
+            let _ = assert(|_|"case ceil", (ceil(1.9) - 2.0).abs < 1.0e-8);
+            let _ = assert(|_|"case cos", (cos(0.2) - 0.9800665778412416).abs < 1.0e-8);
+            let _ = assert(|_|"case cosh", (cosh(0.2) - 1.020066755619076).abs < 1.0e-8);
+            let _ = assert(|_|"case exp", (exp(0.2) - 1.2214027581601699).abs < 1.0e-8);
+            let _ = assert(|_|"case floor", (floor(1.2) - 1.0).abs < 1.0e-8);
+            let _ = assert(|_|"case fmod", (2.0.fmod(1.2) - 0.8).abs < 1.0e-8);
+            let _ = assert(|_|"case frexp 1", (frexp(2560.0).@0 - 0.625).abs < 1.0e-8);
+            let _ = assert(|_|"case frexp 2", (frexp(2560.0).@1 - 12_I32).abs == 0_I32);
+            let _ = assert(|_|"case ldexp", (3.14.ldexp(2_I32) - 12.56).abs < 1.0e-8);
+            let _ = assert(|_|"case log", (log(0.2) - -1.6094379124341003).abs < 1.0e-8);
+            let _ = assert(|_|"case log10", (log10(0.2) - -0.6989700043360187).abs < 1.0e-8);
+            let _ = assert(|_|"case modf 1", (modf(3.14).@0 - 0.14).abs < 1.0e-8);
+            let _ = assert(|_|"case modf 2", (modf(3.14).@1 - 3.0).abs < 1.0e-8);
+            let _ = assert(|_|"case pow", (3.14.pow(2.72) - 22.472357891492628).abs < 1.0e-8);
+            let _ = assert(|_|"case sin", (sin(0.2) - 0.19866933079506122).abs < 1.0e-8);
+            let _ = assert(|_|"case sinh", (sinh(0.2) - 0.20133600254109402).abs < 1.0e-8);
+            let _ = assert(|_|"case sqrt", (sqrt(0.2) - 0.4472135954999579).abs < 1.0e-8);
+            let _ = assert(|_|"case tan", (tan(0.2) - 0.2027100355086725).abs < 1.0e-8);
+            let _ = assert(|_|"case tanh", (tanh(0.2) - 0.197375320224904).abs < 1.0e-8);
 
             pure()
         );

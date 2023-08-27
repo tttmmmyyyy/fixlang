@@ -399,7 +399,6 @@ pub fn make_std_mod() -> Program {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
     );
-
     // Debug
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "abort"), abort_function());
 
