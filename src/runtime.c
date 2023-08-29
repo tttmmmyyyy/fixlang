@@ -18,6 +18,64 @@ void fixruntime_eprint(const char *msg)
     fflush(stderr);
 }
 
+void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
+{
+    *buf = v;
+}
+void fixruntime_u32_to_bytes(uint32_t *buf, uint32_t v)
+{
+    *buf = v;
+}
+void fixruntime_u64_to_bytes(uint64_t *buf, uint64_t v)
+{
+    *buf = v;
+}
+void fixruntime_i32_to_bytes(int32_t *buf, int32_t v)
+{
+    *buf = v;
+}
+void fixruntime_i64_to_bytes(int64_t *buf, int64_t v)
+{
+    *buf = v;
+}
+void fixruntime_f32_to_bytes(float *buf, float v)
+{
+    *buf = v;
+}
+void fixruntime_f64_to_bytes(double *buf, double v)
+{
+    *buf = v;
+}
+
+uint8_t fixruntime_u8_from_bytes(uint8_t *buf)
+{
+    return *buf;
+}
+uint32_t fixruntime_u32_from_bytes(uint32_t *buf)
+{
+    return *buf;
+}
+uint64_t fixruntime_u64_from_bytes(uint64_t *buf)
+{
+    return *buf;
+}
+int32_t fixruntime_i32_from_bytes(int32_t *buf)
+{
+    return *buf;
+}
+int64_t fixruntime_i64_from_bytes(int64_t *buf)
+{
+    return *buf;
+}
+float fixruntime_f32_from_bytes(float *buf)
+{
+    return *buf;
+}
+double fixruntime_f64_from_bytes(double *buf)
+{
+    return *buf;
+}
+
 void fixruntime_u8_to_str(char *buf, uint8_t v)
 {
     sprintf(buf, "%" PRIu8, v);

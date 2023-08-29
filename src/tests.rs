@@ -4016,6 +4016,62 @@ pub fn test128() {
 
 #[test]
 #[serial]
+pub fn test129() {
+    // Test ToBytes/FromBytes
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        main : IO ();
+        main = (
+            // U8
+            let case = "U8";
+            let n = 1;
+            let x = 127_U8;
+            let _ = assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            let y : Result ErrMsg U8 = Array::fill(n-1, 127_U8).from_bytes;
+            let _ = assert(|_|case + " 2", y.is_err);
+
+            // U32
+            let case = "U32";
+            let n = 4;
+            let x = 90123456_U32;
+            let _ = assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            let y : Result ErrMsg U32 = Array::fill(n-1, 127_U8).from_bytes;
+            let _ = assert(|_|case + " 2", y.is_err);
+
+            // I32
+            let case = "I32";
+            let n = 4;
+            let x = -12345678_I32;
+            let _ = assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            let y : Result ErrMsg I32 = Array::fill(n-1, 127_U8).from_bytes;
+            let _ = assert(|_|case + " 2", y.is_err);
+
+            // U64
+            let case = "U64";
+            let n = 8;
+            let x = 123456789012345678_U64;
+            let _ = assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            let y : Result ErrMsg U64 = Array::fill(n-1, 127_U8).from_bytes;
+            let _ = assert(|_|case + " 2", y.is_err);
+
+            // I64
+            let case = "I64";
+            let n = 8;
+            let x = 123456789012345678_I64;
+            let _ = assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            let y : Result ErrMsg I64 = Array::fill(n-1, 127_U8).from_bytes;
+            let _ = assert(|_|case + " 2", y.is_err);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();

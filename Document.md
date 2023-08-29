@@ -78,6 +78,7 @@
       - [`to_F64 : U8 -> F64`](#to_f64--u8---f64)
       - [`impl U8 : Add`](#impl-u8--add)
       - [`impl U8 : Eq`](#impl-u8--eq)
+      - [`impl U8 : FromBytes`](#impl-u8--frombytes)
       - [`impl U8 : FromString`](#impl-u8--fromstring)
       - [`impl U8 : LessThan`](#impl-u8--lessthan)
       - [`impl U8 : LessThanOrEq`](#impl-u8--lessthanoreq)
@@ -85,6 +86,7 @@
       - [`impl U8 : Neg`](#impl-u8--neg)
       - [`impl U8 : Rem`](#impl-u8--rem)
       - [`impl U8 : Sub`](#impl-u8--sub)
+      - [`impl U8 : ToBytes`](#impl-u8--tobytes)
       - [`impl U8 : ToString`](#impl-u8--tostring)
       - [`impl U8 : Zero`](#impl-u8--zero)
     - [I32](#i32)
@@ -104,6 +106,7 @@
       - [`to_F64 : I32 -> F64`](#to_f64--i32---f64)
       - [`impl I32 : Add`](#impl-i32--add)
       - [`impl I32 : Eq`](#impl-i32--eq)
+      - [`impl I32 : FromBytes`](#impl-i32--frombytes)
       - [`impl I32 : FromString`](#impl-i32--fromstring)
       - [`impl I32 : LessThan`](#impl-i32--lessthan)
       - [`impl I32 : LessThanOrEq`](#impl-i32--lessthanoreq)
@@ -111,6 +114,7 @@
       - [`impl I32 : Neg`](#impl-i32--neg)
       - [`impl I32 : Rem`](#impl-i32--rem)
       - [`impl I32 : Sub`](#impl-i32--sub)
+      - [`impl I32 : ToBytes`](#impl-i32--tobytes)
       - [`impl I32 : ToString`](#impl-i32--tostring)
       - [`impl I32 : Zero`](#impl-i32--zero)
     - [U32](#u32)
@@ -129,6 +133,7 @@
       - [`to_F64 : U32 -> F64`](#to_f64--u32---f64)
       - [`impl U32 : Add`](#impl-u32--add)
       - [`impl U32 : Eq`](#impl-u32--eq)
+      - [`impl U32 : FromBytes`](#impl-u32--frombytes)
       - [`impl U32 : FromString`](#impl-u32--fromstring)
       - [`impl U32 : LessThan`](#impl-u32--lessthan)
       - [`impl U32 : LessThanOrEq`](#impl-u32--lessthanoreq)
@@ -136,6 +141,7 @@
       - [`impl U32 : Neg`](#impl-u32--neg)
       - [`impl U32 : Rem`](#impl-u32--rem)
       - [`impl U32 : Sub`](#impl-u32--sub)
+      - [`impl U32 : ToBytes`](#impl-u32--tobytes)
       - [`impl U32 : ToString`](#impl-u32--tostring)
       - [`impl U32 : Zero`](#impl-u32--zero)
     - [I64](#i64)
@@ -155,6 +161,7 @@
       - [`to_F64 : I64 -> F64`](#to_f64--i64---f64)
       - [`impl I64 : Add`](#impl-i64--add)
       - [`impl I64 : Eq`](#impl-i64--eq)
+      - [`impl I64 : FromBytes`](#impl-i64--frombytes)
       - [`impl I64 : FromString`](#impl-i64--fromstring)
       - [`impl I64 : LessThan`](#impl-i64--lessthan)
       - [`impl I64 : LessThanOrEq`](#impl-i64--lessthanoreq)
@@ -162,6 +169,7 @@
       - [`impl I64 : Neg`](#impl-i64--neg)
       - [`impl I64 : Rem`](#impl-i64--rem)
       - [`impl I64 : Sub`](#impl-i64--sub)
+      - [`impl I64 : ToBytes`](#impl-i64--tobytes)
       - [`impl I64 : ToString`](#impl-i64--tostring)
       - [`impl I64 : Zero`](#impl-i64--zero)
     - [U64](#u64)
@@ -180,6 +188,7 @@
       - [`to_F64 : U64 -> F64`](#to_f64--u64---f64)
       - [`impl U64 : Add`](#impl-u64--add)
       - [`impl U64 : Eq`](#impl-u64--eq)
+      - [`impl U64 : FromBytes`](#impl-u64--frombytes)
       - [`impl U64 : FromString`](#impl-u64--fromstring)
       - [`impl U64 : LessThan`](#impl-u64--lessthan)
       - [`impl U64 : LessThanOrEq`](#impl-u64--lessthanoreq)
@@ -187,6 +196,7 @@
       - [`impl U64 : Neg`](#impl-u64--neg)
       - [`impl U64 : Rem`](#impl-u64--rem)
       - [`impl U64 : Sub`](#impl-u64--sub)
+      - [`impl U64 : ToBytes`](#impl-u64--tobytes)
       - [`impl U64 : ToString`](#impl-u64--tostring)
       - [`impl U64 : Zero`](#impl-u64--zero)
     - [F32](#f32)
@@ -197,11 +207,13 @@
       - [`impl F32 : Add`](#impl-f32--add)
       - [`impl F32 : Div`](#impl-f32--div)
       - [`impl F32 : Eq`](#impl-f32--eq)
+      - [`impl F32 : FromBytes`](#impl-f32--frombytes)
       - [`impl F32 : FromString`](#impl-f32--fromstring)
       - [`impl F32 : LessThan`](#impl-f32--lessthan)
       - [`impl F32 : LessThanOrEq`](#impl-f32--lessthanoreq)
       - [`impl F32 : Mul`](#impl-f32--mul)
       - [`impl F32 : Sub`](#impl-f32--sub)
+      - [`impl F32 : ToBytes`](#impl-f32--tobytes)
       - [`impl F32 : ToString`](#impl-f32--tostring)
       - [`impl F32 : Zero`](#impl-f32--zero)
     - [F64](#f64)
@@ -212,11 +224,13 @@
       - [`impl F64 : Add`](#impl-f64--add)
       - [`impl F64 : Div`](#impl-f64--div)
       - [`impl F64 : Eq`](#impl-f64--eq)
+      - [`impl F64 : FromBytes`](#impl-f64--frombytes)
       - [`impl F64 : FromString`](#impl-f64--fromstring)
       - [`impl F64 : LessThan`](#impl-f64--lessthan)
       - [`impl F64 : LessThanOrEq`](#impl-f64--lessthanoreq)
       - [`impl F64 : Mul`](#impl-f64--mul)
       - [`impl F64 : Sub`](#impl-f64--sub)
+      - [`impl F64 : ToBytes`](#impl-f64--tobytes)
       - [`impl F64 : ToString`](#impl-f64--tostring)
       - [`impl F64 : Zero`](#impl-f64--zero)
     - [Array](#array-1)
@@ -384,32 +398,26 @@
     - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
     - [`unsafe_is_unique : a -> (Bool, a)`](#unsafe_is_unique--a---bool-a)
   - [Traits](#traits-1)
+    - [FromBytes](#frombytes)
+      - [`from_bytes : [a : FromBytes] Array U8 -> Result ErrMsg a`](#from_bytes--a--frombytes-array-u8---result-errmsg-a)
     - [FromString](#fromstring)
-      - [(required) `from_string : [a : FromString] String -> Result ErrMsg a`](#required-from_string--a--fromstring-string---result-errmsg-a)
+      - [`from_string : [a : FromString] String -> Result ErrMsg a`](#from_string--a--fromstring-string---result-errmsg-a)
     - [Functor (\* -\> \*)](#functor----)
-      - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
+      - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
     - [LessThan](#lessthan)
-      - [(required) `less_than : [a : LessThan] a -> a -> a`](#required-less_than--a--lessthan-a---a---a)
+      - [`less_than : [a : LessThan] a -> a -> a`](#less_than--a--lessthan-a---a---a)
       - [`max : [a : LessThan] a -> a -> a`](#max--a--lessthan-a---a---a)
       - [`min : [a : LessThan] a -> a -> a`](#min--a--lessthan-a---a---a)
     - [LessThanOrEq](#lessthanoreq)
-      - [(required) `less_than_or_eq : [a : LessThanOrEq] a -> a -> a`](#required-less_than_or_eq--a--lessthanoreq-a---a---a)
+      - [`less_than_or_eq : [a : LessThanOrEq] a -> a -> a`](#less_than_or_eq--a--lessthanoreq-a---a---a)
     - [Monad (\* -\> \*)](#monad----)
       - [(required) `bind : [m : Monad] (a -> m b) -> m a -> m b`](#required-bind--m--monad-a---m-b---m-a---m-b)
       - [(required) `pure : [m : Monad] a -> m a`](#required-pure--m--monad-a---m-a)
       - [`flatten : [m : Monad] m (m a) -> a`](#flatten--m--monad-m-m-a---a)
+    - [ToBytes](#tobytes)
+      - [`to_bytes : [a : ToBytes] a -> Array U8`](#to_bytes--a--tobytes-a---array-u8)
     - [ToString](#tostring)
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
-    - [ToI32](#toi32)
-      - [`to_I32 : [a: ToI32] a -> I32`](#to_i32--a-toi32-a---i32)
-    - [ToI64](#toi64)
-      - [`to_I64 : [a: ToI64] a -> I64`](#to_i64--a-toi64-a---i64)
-    - [ToU8](#tou8)
-      - [`to_U8 : [a: ToU8] a -> U8`](#to_u8--a-tou8-a---u8)
-    - [ToU32](#tou32)
-      - [`to_U32 : [a: ToU32] a -> U32`](#to_u32--a-tou32-a---u32)
-    - [ToU64](#tou64)
-      - [`to_U64 : [a: ToU64] a -> U64`](#to_u64--a-tou64-a---u64)
 - [Module `Debug`](#module-debug)
   - [`_debug_print_to_stream : IOHandle -> String -> ()`](#_debug_print_to_stream--iohandle---string---)
   - [`assert : Lazy String -> Bool -> ()`](#assert--lazy-string---bool---)
@@ -1697,6 +1705,7 @@ Literals:
 #### `to_F64 : U8 -> F64`
 #### `impl U8 : Add`
 #### `impl U8 : Eq`
+#### `impl U8 : FromBytes`
 #### `impl U8 : FromString`
 #### `impl U8 : LessThan`
 #### `impl U8 : LessThanOrEq`
@@ -1704,6 +1713,7 @@ Literals:
 #### `impl U8 : Neg`
 #### `impl U8 : Rem`
 #### `impl U8 : Sub`
+#### `impl U8 : ToBytes`
 #### `impl U8 : ToString`
 #### `impl U8 : Zero`
 
@@ -1731,6 +1741,7 @@ Literals:
 #### `to_F64 : I32 -> F64`
 #### `impl I32 : Add`
 #### `impl I32 : Eq`
+#### `impl I32 : FromBytes`
 #### `impl I32 : FromString`
 #### `impl I32 : LessThan`
 #### `impl I32 : LessThanOrEq`
@@ -1738,6 +1749,7 @@ Literals:
 #### `impl I32 : Neg`
 #### `impl I32 : Rem`
 #### `impl I32 : Sub`
+#### `impl I32 : ToBytes`
 #### `impl I32 : ToString`
 #### `impl I32 : Zero`
 
@@ -1765,6 +1777,7 @@ Literals:
 #### `to_F64 : U32 -> F64`
 #### `impl U32 : Add`
 #### `impl U32 : Eq`
+#### `impl U32 : FromBytes`
 #### `impl U32 : FromString`
 #### `impl U32 : LessThan`
 #### `impl U32 : LessThanOrEq`
@@ -1772,6 +1785,7 @@ Literals:
 #### `impl U32 : Neg`
 #### `impl U32 : Rem`
 #### `impl U32 : Sub`
+#### `impl U32 : ToBytes`
 #### `impl U32 : ToString`
 #### `impl U32 : Zero`
 
@@ -1801,6 +1815,7 @@ Literals:
 #### `to_F64 : I64 -> F64`
 #### `impl I64 : Add`
 #### `impl I64 : Eq`
+#### `impl I64 : FromBytes`
 #### `impl I64 : FromString`
 #### `impl I64 : LessThan`
 #### `impl I64 : LessThanOrEq`
@@ -1808,6 +1823,7 @@ Literals:
 #### `impl I64 : Neg`
 #### `impl I64 : Rem`
 #### `impl I64 : Sub`
+#### `impl I64 : ToBytes`
 #### `impl I64 : ToString`
 #### `impl I64 : Zero`
 
@@ -1835,6 +1851,7 @@ Literals:
 #### `to_F64 : U64 -> F64`
 #### `impl U64 : Add`
 #### `impl U64 : Eq`
+#### `impl U64 : FromBytes`
 #### `impl U64 : FromString`
 #### `impl U64 : LessThan`
 #### `impl U64 : LessThanOrEq`
@@ -1842,6 +1859,7 @@ Literals:
 #### `impl U64 : Neg`
 #### `impl U64 : Rem`
 #### `impl U64 : Sub`
+#### `impl U64 : ToBytes`
 #### `impl U64 : ToString`
 #### `impl U64 : Zero`
 
@@ -1858,11 +1876,13 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 #### `impl F32 : Add`
 #### `impl F32 : Div`
 #### `impl F32 : Eq`
+#### `impl F32 : FromBytes`
 #### `impl F32 : FromString`
 #### `impl F32 : LessThan`
 #### `impl F32 : LessThanOrEq`
 #### `impl F32 : Mul`
 #### `impl F32 : Sub`
+#### `impl F32 : ToBytes`
 #### `impl F32 : ToString`
 #### `impl F32 : Zero`
 
@@ -1879,11 +1899,13 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 #### `impl F64 : Add`
 #### `impl F64 : Div`
 #### `impl F64 : Eq`
+#### `impl F64 : FromBytes`
 #### `impl F64 : FromString`
 #### `impl F64 : LessThan`
 #### `impl F64 : LessThanOrEq`
 #### `impl F64 : Mul`
 #### `impl F64 : Sub`
+#### `impl F64 : ToBytes`
 #### `impl F64 : ToString`
 #### `impl F64 : Zero`
 
@@ -2597,21 +2619,29 @@ main = (
 
 ## Traits
 
+### FromBytes
+
+`a : FromBytes` states that a byte array can be parsed to create a value of type `a`.
+
+NOTE: For primitive types of Fix, `FromBytes` is implemented as bitwise casting.
+
+#### `from_bytes : [a : FromBytes] Array U8 -> Result ErrMsg a`
+
 ### FromString
 
 `a : FromString` states that strings can be parsed to create a value of type `a`.
 
 NOTE: For primitive types of Fix, `FromString` is implemented using `strto**` functions of C, but they do not accept whitespace prefix or suffix.
 
-#### (required) `from_string : [a : FromString] String -> Result ErrMsg a`
+#### `from_string : [a : FromString] String -> Result ErrMsg a`
 
 ### Functor (* -> *)
 
-#### (required) `map : [f : Functor] (a -> b) -> f a -> f b`
+#### `map : [f : Functor] (a -> b) -> f a -> f b`
 
 ### LessThan
 
-#### (required) `less_than : [a : LessThan] a -> a -> a`
+#### `less_than : [a : LessThan] a -> a -> a`
 
 #### `max : [a : LessThan] a -> a -> a`
 
@@ -2619,7 +2649,7 @@ NOTE: For primitive types of Fix, `FromString` is implemented using `strto**` fu
 
 ### LessThanOrEq
 
-#### (required) `less_than_or_eq : [a : LessThanOrEq] a -> a -> a`
+#### `less_than_or_eq : [a : LessThanOrEq] a -> a -> a`
 
 ### Monad (* -> *)
 
@@ -2631,29 +2661,13 @@ NOTE: For primitive types of Fix, `FromString` is implemented using `strto**` fu
 
 This is equivalent to `Monad::bind(|x|x)`.
 
+### ToBytes
+
+#### `to_bytes : [a : ToBytes] a -> Array U8`
+
 ### ToString
 
 #### `to_string : [a: ToString] a -> String`
-
-### ToI32
-
-#### `to_I32 : [a: ToI32] a -> I32`
-
-### ToI64
-
-#### `to_I64 : [a: ToI64] a -> I64`
-
-### ToU8
-
-#### `to_U8 : [a: ToU8] a -> U8`
-
-### ToU32
-
-#### `to_U32 : [a: ToU32] a -> U32`
-
-### ToU64
-
-#### `to_U64 : [a: ToU64] a -> U64`
 
 # Module `Debug`
 
