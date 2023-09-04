@@ -1416,17 +1416,15 @@ namespace F64 {
 
 impl U8 : ToBytes {
     to_bytes = |v| (
-        let data = Array::fill(1, 0_U8);
-        let _ = data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_u8_to_bytes(Ptr, U8), ptr, v]
-        ));
+        let data = Array::empty(1)._unsafe_set_size(1);
+        let _ = CALL_C[() fixruntime_u8_to_bytes(Ptr, U8), data._get_ptr, v];
         data
     );
 }
 impl U8 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size < 1 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " is too short to be interpreted as U8."
+        if bs.get_size != 1 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U8."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
@@ -1455,17 +1453,15 @@ impl U8 : FromString {
 
 impl U32 : ToBytes {
     to_bytes = |v| (
-        let data = Array::fill(4, 0_U8);
-        let _ = data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v]
-        ));
+        let data = Array::empty(4)._unsafe_set_size(4);
+        let _ = CALL_C[() fixruntime_u32_to_bytes(Ptr, U32), data._get_ptr, v];
         data
     );
 }
 impl U32 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size < 4 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " is too short to be interpreted as U32."
+        if bs.get_size != 4 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U32."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
@@ -1494,17 +1490,15 @@ impl U32 : FromString {
 
 impl U64 : ToBytes {
     to_bytes = |v| (
-        let data = Array::fill(8, 0_U8);
-        let _ = data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v]
-        ));
+        let data = Array::empty(8)._unsafe_set_size(8);
+        let _ = CALL_C[() fixruntime_u64_to_bytes(Ptr, U64), data._get_ptr, v];
         data
     );
 }
 impl U64 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size < 8 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " is too short to be interpreted as U64."
+        if bs.get_size != 8 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U64."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
@@ -1533,17 +1527,15 @@ impl U64 : FromString {
 
 impl I32 : ToBytes {
     to_bytes = |v| (
-        let data = Array::fill(4, 0_U8);
-        let _ = data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_i32_to_bytes(Ptr, I32), ptr, v]
-        ));
+        let data = Array::empty(4)._unsafe_set_size(4);
+        let _ = CALL_C[() fixruntime_i32_to_bytes(Ptr, I32), data._get_ptr, v];
         data
     );
 }
 impl I32 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size < 4 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " is too short to be interpreted as I32."
+        if bs.get_size != 4 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I32."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I32 fixruntime_i32_from_bytes(Ptr), ptr])
     );
@@ -1572,17 +1564,15 @@ impl I32 : FromString {
 
 impl I64 : ToBytes {
     to_bytes = |v| (
-        let data = Array::fill(8, 0_U8);
-        let _ = data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_i64_to_bytes(Ptr, I64), ptr, v]
-        ));
+        let data = Array::empty(8)._unsafe_set_size(8);
+        let _ = CALL_C[() fixruntime_i64_to_bytes(Ptr, I64), data._get_ptr, v];
         data
     );
 }
 impl I64 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size < 8 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " is too short to be interpreted as I64."
+        if bs.get_size != 8 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I64."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I64 fixruntime_i64_from_bytes(Ptr), ptr])
     );
@@ -1611,17 +1601,15 @@ impl I64 : FromString {
 
 impl F32 : ToBytes {
     to_bytes = |v| (
-        let data = Array::fill(4, 0_U8);
-        let _ = data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_f32_to_bytes(Ptr, F32), ptr, v]
-        ));
+        let data = Array::empty(4)._unsafe_set_size(4);
+        let _ = CALL_C[() fixruntime_f32_to_bytes(Ptr, F32), data._get_ptr, v];
         data
     );
 }
 impl F32 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size < 4 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " is too short to be interpreted as F32."
+        if bs.get_size != 4 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F32."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[F32 fixruntime_f32_from_bytes(Ptr), ptr])
     );
@@ -1650,17 +1638,15 @@ impl F32 : FromString {
 
 impl F64 : ToBytes {
     to_bytes = |v| (
-        let data = Array::fill(8, 0_U8);
-        let _ = data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_f64_to_bytes(Ptr, F64), ptr, v]
-        ));
+        let data = Array::empty(8)._unsafe_set_size(8);
+        let _ = CALL_C[() fixruntime_f64_to_bytes(Ptr, F64), data._get_ptr, v];
         data
     );
 }
 impl F64 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size < 8 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " is too short to be interpreted as F64."
+        if bs.get_size != 8 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F64."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[F64 fixruntime_f64_from_bytes(Ptr), ptr])
     );
