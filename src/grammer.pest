@@ -3,7 +3,9 @@ sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
 keywords = _{ ("let" | "in" | "if" | "else" | "do" | "true" | "false" | "type" | "trait" | "impl") ~ sep+ }
 
-in_of_let = { "in" | ";" }
+semicolon = _{ ";" | "\n" }
+
+in_of_let = { "in" | semicolon }
 
 eq_of_let = { "=" }
 
@@ -59,9 +61,9 @@ expr_var = { (namespace ~ "::")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
-else_of_if = _{ ";" | "else" }
+else_of_if = _{ semicolon | "else" }
 
-else_of_if_with_space = _{ ";" | ("else" ~ sep) }
+else_of_if_with_space = _{ semicolon | ("else" ~ sep) }
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" ~ sep* ~ ((else_of_if ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}") | (else_of_if_with_space ~ sep* ~ expr)) }
 
@@ -184,7 +186,7 @@ type_field_name = { !keywords ~ var_head ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_defn = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn | type_alias_defn) ~ sep* ~ ";" }
+type_defn = { "type" ~ sep+ ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn | type_alias_defn) ~ sep* ~ semicolon }
 
 comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* }
 
@@ -206,32 +208,32 @@ trait_fullname = { capital_fullname }
 
 trait_defn = { "trait" ~ sep+ ~ predicates? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 
-trait_member_defn = { trait_member_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
+trait_member_defn = { trait_member_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
 
 trait_member_name = _{ var }
 
 // === Trait implementations ===
 trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
 
-trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
+trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
 
 // === Trait aliases ===
-trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ ";" }
+trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ semicolon }
 
 // === Global names === 
-global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ";" }
+global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
 
-global_name_defn = { var ~ sep+ ~ "=" ~ sep* ~ expr ~ sep* ~ ";" }
+global_name_defn = { var ~ sep+ ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
 
 // === Import statements === 
-import_statement = { "import" ~ sep+ ~ module_name ~ sep* ~ ";" }
+import_statement = { "import" ~ sep+ ~ module_name ~ sep* ~ semicolon }
 
 // === Module ===
 module_name_head = _{ ASCII_ALPHA_UPPER }
 module_name_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 module_name = { module_name_head ~ module_name_char* }
 
-module_defn = { "module" ~ sep+ ~ namespace ~ sep* ~ ";" }
+module_defn = { "module" ~ sep+ ~ namespace ~ sep* ~ semicolon }
 
 global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_alias_defn }
 
