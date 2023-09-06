@@ -5,8 +5,6 @@ keywords = _{ ("let" | "in" | "if" | "else" | "do" | "true" | "false" | "type" |
 
 in_of_let = { "in" | ";" }
 
-else_of_inline_if = _{ "else" | ";" }
-
 eq_of_let = { "=" }
 
 // Characters that can be used in value names, field names.
