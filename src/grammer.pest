@@ -3,7 +3,7 @@ sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
 keywords = _{ ("let" | "in" | "if" | "else" | "do" | "true" | "false" | "type" | "trait" | "impl") ~ sep+ }
 
-semicolon = _{ ";" | "\n" }
+semicolon = _{ ";" }
 
 in_of_let = { "in" | semicolon }
 
