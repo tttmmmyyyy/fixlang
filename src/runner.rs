@@ -22,8 +22,17 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
     }
     // Load runtime library.
     let build_time_hash = format!("{:x}", md5::compute(build_time_utc!()));
-    let runtime_so_path =
-        PathBuf::from(INTERMEDIATE_PATH).join(format!("libfixruntime_{}.so", build_time_hash));
+    // Libraries specified by user will be linked to libfixruntime, so we include them to libfixruntime.*.so for implementing cache correctly.
+    let linked_libs_list = config
+        .linked_libraries
+        .iter()
+        .map(|(s, _)| s.clone())
+        .collect::<Vec<_>>()
+        .join("_");
+    let runtime_so_path = PathBuf::from(INTERMEDIATE_PATH).join(format!(
+        "libfixruntime.{}.{}.so",
+        linked_libs_list, build_time_hash
+    ));
     if !runtime_so_path.exists() {
         let runtime_c_path = PathBuf::from(INTERMEDIATE_PATH).join("fixruntime.c");
         fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
@@ -52,11 +61,6 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
     }
     load_library_permanently(runtime_so_path.to_str().unwrap());
 
-    // // Load dynamically linked libraries specified by user.
-    // for (lib_name, _) in &config.linked_libraries {
-    //     search_and_load_dynamic_library(lib_name);
-    // }
-    // Execute main function.
     unsafe {
         let func = ee
             .get_function::<unsafe extern "C" fn() -> i32>("main")
