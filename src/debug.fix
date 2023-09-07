@@ -1,4 +1,6 @@
 module Debug;
+// Collection of functions for debugging.
+// This module contains fucntions violating purity, e.g., printing string to stdio without IO monad.
 
 // Prints a string to the specified stream and flushes the stream.
 _debug_print_to_stream : IOHandle -> String -> ();

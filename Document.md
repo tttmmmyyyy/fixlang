@@ -2681,6 +2681,8 @@ This is equivalent to `Monad::bind(|x|x)`.
 #### `to_string : [a: ToString] a -> String`
 
 # Module `Debug`
+Collection of functions for debugging.
+This module contains fucntions violating purity, e.g., printing string to stdio without IO monad.
 
 ## `_debug_print_to_stream : IOHandle -> String -> ()`
 Prints a string to the specified stream and flushes the stream.
