@@ -1287,6 +1287,7 @@ impl Program {
                     None,
                 ),
                 ("Math", include_str!("../math.fix"), "math.fix", Some("m")), // link libm
+                ("Time", include_str!("../time.fix"), "time.fix", None),
             ] {
                 if import.target_module == mod_name {
                     self.link(parse_source(source_content, file_name));

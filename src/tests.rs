@@ -4072,6 +4072,46 @@ pub fn test129() {
 
 #[test]
 #[serial]
+pub fn test130() {
+    // Test Time module
+    let source = r#"
+        module Main; 
+        import Debug;
+        import Time;
+
+        weeks : Array String;
+        weeks = ["Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"];
+
+        dt_to_string : DateTime -> String;
+        dt_to_string = |dt| (
+            dt.@year.to_string + "/" + dt.@month.to_string + "/" + dt.@day_in_month.to_string + " (" + weeks.@(dt.@day_in_week.to_I64) + ") " + 
+            dt.@hour.to_string + ":" + dt.@min.to_string + ":" + 
+            (dt.@sec.to_F64 + 1.0e-6 * dt.@microsec.to_F64).to_string + 
+            ", dst = " + 
+            if dt.@is_dst.is_none { "none" } else { dt.@is_dst.as_some.to_string }
+        );
+
+        main : IO ();
+        main = (
+            let now = *get_now;
+            let _ = *(println $ "now = " + now.to_F64.to_string);
+            let utc = now.to_utc.as_ok;
+            let _ = *(println $ "UTC: " + dt_to_string(utc));
+            let loc = *now.to_local.to_io.map(as_ok);
+            let _ = *(println $ "Loc: " + dt_to_string(loc));
+            let now_from_utc = Time::from_utc(utc).as_ok;
+            let now_from_loc = *Time::from_local(loc).to_io.map(as_ok);
+            let _ = assert(|_|"diff utc", (now.to_F64 - now_from_utc.to_F64).abs < 0.1);
+            let _ = assert(|_|"diff loc", (now.to_F64 - now_from_loc.to_F64).abs < 0.1);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();
