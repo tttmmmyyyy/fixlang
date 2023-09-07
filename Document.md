@@ -2926,16 +2926,16 @@ This is wrapper of C's tanh.
 ## `type Time`
 
 The type that represents time by the number of seconds and micro seconds elapsed since the unix epoch.
-This struct has two fields, `sec: I64` and `microsec: U32`.
+This struct has two fields, `sec: I64` and `nanosec: U32`.
 ```
-type Time = unbox struct { sec : I64, microsec : U32 };
+type Time = unbox struct { sec : I64, nanosec : U32 };
 ```
 
 ## `type DateTime`
 The type to represent date and time.
 ```
 type DateTime = unbox struct {
-    microsec : U32, // [0-99999]
+    nanosec : U32, // [0-99999]
     sec : U8, // [0-61]
     min : U8, // [0-59]
     hour : U8, // [0-23]

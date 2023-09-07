@@ -30,14 +30,18 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
         fs::write(&runtime_c_path, include_str!("runtime.c"))
             .expect(&format!("Failed to generate runtime.c"));
         // Create library binary file.
-        let output = Command::new("gcc")
+        let mut com = Command::new("gcc");
+        let mut com = com
             .arg("-shared")
             .arg("-fpic")
             .arg("-o")
             .arg(runtime_so_path.to_str().unwrap())
-            .arg(runtime_c_path.to_str().unwrap())
-            .output()
-            .expect("Failed to run cc.");
+            .arg(runtime_c_path.to_str().unwrap());
+        // Load dynamically linked libraries specified by user.
+        for (lib_name, _) in &config.linked_libraries {
+            com = com.arg(format!("-l{}", lib_name));
+        }
+        let output = com.output().expect("Failed to run cc.");
         if output.stderr.len() > 0 {
             eprintln!(
                 "{:?}",
@@ -48,10 +52,10 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
     }
     load_library_permanently(runtime_so_path.to_str().unwrap());
 
-    // Load dynamically linked libraries specified by user.
-    for (lib_name, _) in &config.linked_libraries {
-        search_and_load_dynamic_library(lib_name);
-    }
+    // // Load dynamically linked libraries specified by user.
+    // for (lib_name, _) in &config.linked_libraries {
+    //     search_and_load_dynamic_library(lib_name);
+    // }
     // Execute main function.
     unsafe {
         let func = ee
@@ -62,6 +66,8 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
 }
 
 // Search path of libabc.so.* for given string "abc" and load it.
+// NOTE: this function is not currently used because it fails to load librt.so in ubuntu.
+#[allow(unused)]
 fn search_and_load_dynamic_library(name: &str) {
     // Call "gcc -Wl,-t -o temp -labc", filter stdout to get paths to file "libabc + string such as 'so' or 'so.6'", and find ELF file among them.
     let output = Command::new("gcc")

@@ -181,12 +181,12 @@ float fixruntime_strtof(const char *str)
     return v;
 }
 
-void fixruntime_gettimeofday(int64_t *ret)
+void fixruntime_clock_gettime(int64_t *ret)
 {
-    struct timeval tv;
-    int res = gettimeofday(&tv, NULL);
-    ret[0] = (int64_t)tv.tv_sec;
-    ret[1] = (int64_t)tv.tv_usec;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ret[0] = (int64_t)ts.tv_sec;
+    ret[1] = (int64_t)ts.tv_nsec;
 }
 void fixruntime_gmlocaltime(uint8_t is_local, uint64_t sec, int64_t *ret)
 {

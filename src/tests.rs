@@ -4086,7 +4086,7 @@ pub fn test130() {
         dt_to_string = |dt| (
             dt.@year.to_string + "/" + dt.@month.to_string + "/" + dt.@day_in_month.to_string + " (" + weeks.@(dt.@day_in_week.to_I64) + ") " + 
             dt.@hour.to_string + ":" + dt.@min.to_string + ":" + 
-            (dt.@sec.to_F64 + 1.0e-6 * dt.@microsec.to_F64).to_string + 
+            (dt.@sec.to_F64 + 1.0e-9 * dt.@nanosec.to_F64).to_string + 
             ", dst = " + 
             if dt.@is_dst.is_none { "none" } else { dt.@is_dst.as_some.to_string }
         );
@@ -4094,7 +4094,7 @@ pub fn test130() {
         main : IO ();
         main = (
             let now = *get_now;
-            let _ = *(println $ "now = " + now.to_F64.to_string);
+            let _ = *(println $ "now.sec = " + now.@sec.to_string + ", now.nanosec = " + now.@nanosec.to_string);
             let utc = now.to_utc.as_ok;
             let _ = *(println $ "UTC: " + dt_to_string(utc));
             let loc = *now.to_local.to_io.map(as_ok);

@@ -1,12 +1,12 @@
 module Time;
 
 // The type that represents time by the number of seconds and micro seconds elapsed since the unix epoch.
-// This struct has two fields, `sec: I64` and `microsec: U32`.
-type Time = unbox struct { sec : I64, microsec : U32 };
+// This struct has two fields, `sec: I64` and `nanosec: U32`.
+type Time = unbox struct { sec : I64, nanosec : U32 };
 
 // The type to represent date and time.
 type DateTime = unbox struct {
-    microsec : U32, // [0-99999]
+    nanosec : U32, // [0-999999999]
     sec : U8, // [0-61]
     min : U8, // [0-59]
     hour : U8, // [0-23]
@@ -46,7 +46,7 @@ _datetime_to_time_inner = |is_local, dt| (
     if sec == -1 {
         Result::err $ ErrMsg::make $ "Some error (maybe overflow) occurred."
     } else {
-        Result::ok $ Time { sec : sec, microsec : dt.@microsec }
+        Result::ok $ Time { sec : sec, nanosec : dt.@nanosec }
     }
 );
 
@@ -54,14 +54,14 @@ _datetime_to_time_inner = |is_local, dt| (
 // `_time_to_datetime_inner(false)` returns utc datetime, and `_time_to_datetime_inner(true)` returns local datetime.
 // Note that "local time" depends on timezone, so this function is violating purity.
 _time_to_datetime_inner : Bool -> Time -> Result ErrMsg DateTime;
-_time_to_datetime_inner = |is_local, Time {sec: s, microsec : ms}| (
+_time_to_datetime_inner = |is_local, Time {sec: s, nanosec : ns}| (
     let buf : Array I64 = Array::empty(10)._unsafe_set_size(10); // sec, min, hour, mday, mon, year(-1900), wday, yday, isdst, is_error.
     let _ = CALL_C[() fixruntime_gmlocaltime(U8, I64, Ptr), if is_local { 1_U8 } else { 0_U8 }, s, buf._get_ptr];
     if buf.@(8) == 1 {
         Result::err $ ErrMsg::make $ "Some error (maybe overflow) occurred."
     } else {
         Result::ok $ DateTime {
-            microsec : ms,
+            nanosec : ns,
             sec : buf.@(0).to_U8,
             min : buf.@(1).to_U8,
             hour : buf.@(2).to_U8,
@@ -91,13 +91,13 @@ from_utc = _datetime_to_time_inner(false);
 get_now : IO Time;
 get_now = (
     let buf: Array I64 = Array::empty(2)._unsafe_set_size(2); // sec, usec.
-    let _ = CALL_C[() fixruntime_gettimeofday(Ptr), buf._get_ptr];
-    pure $ Time { sec : buf.@(0), microsec : buf.@(1).to_U32 }
+    let _ = CALL_C[() fixruntime_clock_gettime(Ptr), buf._get_ptr];
+    pure $ Time { sec : buf.@(0), nanosec : buf.@(1).to_U32 }
 );
 
 // Convert time to 64-bit floating value.
 to_F64 : Time -> F64;
-to_F64 = |Time { sec : s, microsec : ms }| s.to_F64 + ms.to_F64 * 1.0e-6;
+to_F64 = |Time { sec : s, nanosec : ns }| s.to_F64 + ns.to_F64 * 1.0e-9;
 
 // Convert time to local time.
 // This function depends on timezone, so it returns `IOResult` value.
