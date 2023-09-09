@@ -30,7 +30,7 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
     - In macOS, llvmenv installs llvm to "~/Library/Application Support/llvmenv/12.0.1", but llvm-sys currently doesn't understand path with a whitespace correctly, so you need to copy/move "12.0.1" directory to another path.
 - Set LLVM_SYS_120_PREFIX variable to the directory to which llvm installed.
 - `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
-- `cargo install --path .`. Then the compiler command `fix` will be installed to `~/.cargo/bin`.
+- `cargo install --locked --path .`. Then the compiler command `fix` will be installed to `~/.cargo/bin`.
 
 ## Usage
 
