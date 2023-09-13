@@ -5,7 +5,7 @@ use super::*;
 
 pub const FIX_NAME: &str = "fix";
 
-const STD_SOURCE: &str = include_str!("std.fix");
+const STD_SOURCE: &str = include_str!("fix/std.fix");
 
 pub fn make_std_mod() -> Program {
     let mut fix_module = parse_source(STD_SOURCE, "std.fix");

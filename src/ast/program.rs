@@ -1272,25 +1272,30 @@ impl Program {
             let mut imported = false;
             // Search for bulit-in modules.
             for (mod_name, source_content, file_name, native_library) in [
-                ("Debug", include_str!("../debug.fix"), "debug.fix", None),
-                ("Hash", include_str!("../hash.fix"), "hash.fix", None),
+                ("Debug", include_str!("../fix/debug.fix"), "debug.fix", None),
+                ("Hash", include_str!("../fix/hash.fix"), "hash.fix", None),
                 (
                     "HashMap",
-                    include_str!("../hashmap.fix"),
+                    include_str!("../fix/hashmap.fix"),
                     "hashmap.fix",
                     None,
                 ),
                 (
                     "HashSet",
-                    include_str!("../hashset.fix"),
+                    include_str!("../fix/hashset.fix"),
                     "hashset.fix",
                     None,
                 ),
-                ("Math", include_str!("../math.fix"), "math.fix", Some("m")),
-                ("Time", include_str!("../time.fix"), "time.fix", None),
+                (
+                    "Math",
+                    include_str!("../fix/math.fix"),
+                    "math.fix",
+                    Some("m"),
+                ),
+                ("Time", include_str!("../fix/time.fix"), "time.fix", None),
                 (
                     "Character",
-                    include_str!("../character.fix"),
+                    include_str!("../fix/character.fix"),
                     "character.fix",
                     None,
                 ),
