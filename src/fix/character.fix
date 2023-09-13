@@ -38,7 +38,7 @@ is_xdigit : U8 -> Bool;
 is_xdigit = |c| CALL_C[I32 isxdigit(I32), c.to_I32] > 0_I32;
 
 to_lower : U8 -> U8;
-to_lower = |c| CALL_C[I32 is_tolower(I32), c.to_I32].to_U8;
+to_lower = |c| CALL_C[I32 tolower(I32), c.to_I32].to_U8;
 
 to_upper : U8 -> U8;
-to_upper = |c| CALL_C[I32 is_toupper(I32), c.to_I32].to_U8;
+to_upper = |c| CALL_C[I32 toupper(I32), c.to_I32].to_U8;

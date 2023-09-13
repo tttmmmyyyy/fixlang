@@ -4200,6 +4200,16 @@ pub fn test131() {
             let _ = assert_eq(|_|"is_xdigit 4", is_xdigit('x'), false);
             let _ = assert_eq(|_|"is_xdigit 5", is_xdigit('+'), false);
 
+            // to_lower
+            let _ = assert_eq(|_|"to_lower 1", to_lower('A'), 'a');
+            let _ = assert_eq(|_|"to_lower 2", to_lower('a'), 'a');
+            let _ = assert_eq(|_|"to_lower 3", to_lower('+'), '+');
+
+            // to_upper
+            let _ = assert_eq(|_|"to_upper 1", to_upper('A'), 'A');
+            let _ = assert_eq(|_|"to_upper 2", to_upper('a'), 'A');
+            let _ = assert_eq(|_|"to_upper 3", to_upper('+'), '+');
+
             pure()
         );
     "#;
