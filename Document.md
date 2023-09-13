@@ -418,6 +418,21 @@
       - [`to_bytes : [a : ToBytes] a -> Array U8`](#to_bytes--a--tobytes-a---array-u8)
     - [ToString](#tostring)
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
+- [Module `Character`](#module-character)
+  - [`is_alnum : U8 -> Bool`](#is_alnum--u8---bool)
+  - [`is_alpha : U8 -> Bool`](#is_alpha--u8---bool)
+  - [`is_blank : U8 -> Bool`](#is_blank--u8---bool)
+  - [`is_cntrl : U8 -> Bool`](#is_cntrl--u8---bool)
+  - [`is_digit : U8 -> Bool`](#is_digit--u8---bool)
+  - [`is_graph : U8 -> Bool`](#is_graph--u8---bool)
+  - [`is_lower : U8 -> Bool`](#is_lower--u8---bool)
+  - [`is_print : U8 -> Bool`](#is_print--u8---bool)
+  - [`is_punct : U8 -> Bool`](#is_punct--u8---bool)
+  - [`is_space : U8 -> Bool`](#is_space--u8---bool)
+  - [`is_upper : U8 -> Bool`](#is_upper--u8---bool)
+  - [`is_xdigit : U8 -> Bool`](#is_xdigit--u8---bool)
+  - [`to_lower : U8 -> U8`](#to_lower--u8---u8)
+  - [`to_upper : U8 -> U8`](#to_upper--u8---u8)
 - [Module `Debug`](#module-debug)
   - [`_debug_print_to_stream : IOHandle -> String -> ()`](#_debug_print_to_stream--iohandle---string---)
   - [`assert : Lazy String -> Bool -> ()`](#assert--lazy-string---bool---)
@@ -2679,6 +2694,37 @@ This is equivalent to `Monad::bind(|x|x)`.
 ### ToString
 
 #### `to_string : [a: ToString] a -> String`
+
+# Module `Character`
+This module provides wrapper functions of C functions defined in ctypes.h.
+
+## `is_alnum : U8 -> Bool`
+
+## `is_alpha : U8 -> Bool`
+
+## `is_blank : U8 -> Bool`
+
+## `is_cntrl : U8 -> Bool`
+
+## `is_digit : U8 -> Bool`
+
+## `is_graph : U8 -> Bool`
+
+## `is_lower : U8 -> Bool`
+
+## `is_print : U8 -> Bool`
+
+## `is_punct : U8 -> Bool`
+
+## `is_space : U8 -> Bool`
+
+## `is_upper : U8 -> Bool`
+
+## `is_xdigit : U8 -> Bool`
+
+## `to_lower : U8 -> U8`
+
+## `to_upper : U8 -> U8`
 
 # Module `Debug`
 Collection of functions for debugging.

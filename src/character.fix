@@ -1,0 +1,44 @@
+module Character;
+// This module provides wrapper functions of C functions defined in ctypes.h.
+
+is_alnum : U8 -> Bool;
+is_alnum = |c| CALL_C[I32 isalnum(I32), c.to_I32] > 0_I32;
+
+is_alpha : U8 -> Bool;
+is_alpha = |c| CALL_C[I32 isalpha(I32), c.to_I32] > 0_I32;
+
+is_blank : U8 -> Bool;
+is_blank = |c| CALL_C[I32 isblank(I32), c.to_I32] > 0_I32;
+
+is_cntrl : U8 -> Bool;
+is_cntrl = |c| CALL_C[I32 iscntrl(I32), c.to_I32] > 0_I32;
+
+is_digit : U8 -> Bool;
+is_digit = |c| CALL_C[I32 isdigit(I32), c.to_I32] > 0_I32;
+
+is_graph : U8 -> Bool;
+is_graph = |c| CALL_C[I32 isgraph(I32), c.to_I32] > 0_I32;
+
+is_lower : U8 -> Bool;
+is_lower = |c| CALL_C[I32 islower(I32), c.to_I32] > 0_I32;
+
+is_print : U8 -> Bool;
+is_print = |c| CALL_C[I32 isprint(I32), c.to_I32] > 0_I32;
+
+is_punct : U8 -> Bool;
+is_punct = |c| CALL_C[I32 ispunct(I32), c.to_I32] > 0_I32;
+
+is_space : U8 -> Bool;
+is_space = |c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32;
+
+is_upper : U8 -> Bool;
+is_upper = |c| CALL_C[I32 isupper(I32), c.to_I32] > 0_I32;
+
+is_xdigit : U8 -> Bool;
+is_xdigit = |c| CALL_C[I32 isxdigit(I32), c.to_I32] > 0_I32;
+
+to_lower : U8 -> U8;
+to_lower = |c| CALL_C[I32 is_tolower(I32), c.to_I32].to_U8;
+
+to_upper : U8 -> U8;
+to_upper = |c| CALL_C[I32 is_toupper(I32), c.to_I32].to_U8;

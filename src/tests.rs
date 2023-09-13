@@ -4112,6 +4112,102 @@ pub fn test130() {
 
 #[test]
 #[serial]
+pub fn test131() {
+    // Test Character module
+    let source = r#"
+        module Main; 
+        import Debug;
+        import Character;
+
+        main : IO ();
+        main = (
+            // is_alnum
+            let _ = assert_eq(|_|"is_alnum", is_alnum('A'), true);
+            let _ = assert_eq(|_|"is_alnum", is_alnum('0'), true);
+            let _ = assert_eq(|_|"is_alnum", is_alnum('+'), false);
+        
+            // is_alpha
+            let _ = assert_eq(|_|"is_alpha", is_alpha('A'), true);
+            let _ = assert_eq(|_|"is_alpha", is_alpha('0'), false);
+            let _ = assert_eq(|_|"is_alpha", is_alpha('+'), false);
+        
+            // is_blank
+            let _ = assert_eq(|_|"is_blank 1", is_blank('A'), false);
+            let _ = assert_eq(|_|"is_blank 2", is_blank('0'), false);
+            let _ = assert_eq(|_|"is_blank 3", is_blank(' '), true);
+            let _ = assert_eq(|_|"is_blank 4", is_blank('\t'), true);
+            let _ = assert_eq(|_|"is_blank 5", is_blank('\n'), false);
+            let _ = assert_eq(|_|"is_blank 6", is_blank('\r'), false);
+        
+            // is_cntrl
+            let _ = assert_eq(|_|"is_cntrl", is_cntrl('A'), false);
+            let _ = assert_eq(|_|"is_cntrl", is_cntrl('0'), false);
+            let _ = assert_eq(|_|"is_cntrl", is_cntrl('\0'), true);
+            let _ = assert_eq(|_|"is_cntrl", is_cntrl('\t'), true);
+            let _ = assert_eq(|_|"is_cntrl", is_cntrl('\n'), true);
+            let _ = assert_eq(|_|"is_cntrl", is_cntrl('\r'), true);
+        
+            // is_digit
+            let _ = assert_eq(|_|"is_digit", is_digit('0'), true);
+            let _ = assert_eq(|_|"is_digit", is_digit('9'), true);
+            let _ = assert_eq(|_|"is_digit", is_digit('+'), false);
+        
+            // is_graph
+            let _ = assert_eq(|_|"is_graph", is_graph('A'), true);
+            let _ = assert_eq(|_|"is_graph", is_graph('0'), true);
+            let _ = assert_eq(|_|"is_graph", is_graph(' '), false);
+            let _ = assert_eq(|_|"is_graph", is_graph('\n'), false);
+            let _ = assert_eq(|_|"is_graph", is_graph('\t'), false);
+            let _ = assert_eq(|_|"is_graph", is_graph('\0'), false);
+        
+            // is_lower
+            let _ = assert_eq(|_|"is_lower", is_lower('a'), true);
+            let _ = assert_eq(|_|"is_lower", is_lower('A'), false);
+            let _ = assert_eq(|_|"is_lower", is_lower('+'), false);
+        
+            // is_print
+            let _ = assert_eq(|_|"is_print", is_print('A'), true);
+            let _ = assert_eq(|_|"is_print", is_print('0'), true);
+            let _ = assert_eq(|_|"is_print", is_print(' '), true);
+            let _ = assert_eq(|_|"is_print", is_print('\n'), false);
+            let _ = assert_eq(|_|"is_print", is_print('\t'), false);
+            let _ = assert_eq(|_|"is_print", is_print('\0'), false);
+        
+            // is_punct
+            let _ = assert_eq(|_|"is_punct 1", is_punct('.'), true);
+            let _ = assert_eq(|_|"is_punct 2", is_punct(','), true);
+            let _ = assert_eq(|_|"is_punct 3", is_punct('+'), true);
+            let _ = assert_eq(|_|"is_punct 4", is_punct('A'), false);
+            let _ = assert_eq(|_|"is_punct 5", is_punct('0'), false);
+        
+            // is_space
+            let _ = assert_eq(|_|"is_space", is_space(' '), true);
+            let _ = assert_eq(|_|"is_space", is_space('\t'), true);
+            let _ = assert_eq(|_|"is_space", is_space('\n'), true);
+            let _ = assert_eq(|_|"is_space", is_space('\r'), true);
+            let _ = assert_eq(|_|"is_space", is_space('A'), false);
+            let _ = assert_eq(|_|"is_space", is_space('0'), false);
+        
+            // is_upper
+            let _ = assert_eq(|_|"is_upper", is_upper('A'), true);
+            let _ = assert_eq(|_|"is_upper", is_upper('a'), false);
+            let _ = assert_eq(|_|"is_upper", is_upper('+'), false);
+        
+            // is_xdigit
+            let _ = assert_eq(|_|"is_xdigit 1", is_xdigit('A'), true);
+            let _ = assert_eq(|_|"is_xdigit 2", is_xdigit('a'), true);
+            let _ = assert_eq(|_|"is_xdigit 3", is_xdigit('0'), true);
+            let _ = assert_eq(|_|"is_xdigit 4", is_xdigit('x'), false);
+            let _ = assert_eq(|_|"is_xdigit 5", is_xdigit('+'), false);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();
