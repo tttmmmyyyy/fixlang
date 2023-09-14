@@ -4226,7 +4226,7 @@ pub fn test132() {
 
         main : IO ();
         main = (
-            let (r, t) = consumed_time_while_void(|_| (
+            let (r, t) = consumed_time_while_lazy(|_| (
                 loop((0, 0), |(i, sum)| if i == 1000000000 { break $ sum } else { continue $ (i + 1, sum + i) })
             ));
             let _ = debug_println("loop time : " + t.to_string + ", sum : " + r.to_string);

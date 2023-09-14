@@ -63,9 +63,9 @@ consumed_time_while_io = |io| (
     )}
 );
 
-// Get clocks (cpu time) elapsed while executing a function that takes a unit as an argument.
-consumed_time_while_void : (() -> a) -> (a, F64);
-consumed_time_while_void = |f| consumed_time_while(f, ());
+// Get clocks (cpu time) elapsed while evaluating a lazy value.
+consumed_time_while_lazy : Lazy a -> (a, F64);
+consumed_time_while_lazy = |l| consumed_time_while(l, ());
 
 // Prints a string to stderr and flushes.
 debug_eprint : String -> ();
