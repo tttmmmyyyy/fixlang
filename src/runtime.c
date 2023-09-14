@@ -236,6 +236,14 @@ int64_t fixruntime_timegmlocal(uint8_t is_local, int64_t *data)
     }
     return (int64_t)ret;
 }
+int64_t fixruntime_clock()
+{
+    return (int64_t)clock();
+}
+double fixruntime_clocks_to_sec(int64_t clocks)
+{
+    return (double)(clock_t)clocks / CLOCKS_PER_SEC;
+}
 
 uint8_t fixruntime_is_einval()
 {

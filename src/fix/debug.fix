@@ -41,6 +41,32 @@ assert_unique! = |msg, x| (
     x
 );
 
+// Get clocks (cpu time) elapsed while executing a function.
+consumed_time_while : (a -> b) -> a -> (b, F64);
+consumed_time_while = |f, x| (
+    let s = CALL_C[I64 fixruntime_clock()];
+    let r = f(x);
+    let t = CALL_C[I64 fixruntime_clock()];
+    let t = CALL_C[F64 fixruntime_clocks_to_sec(I64), t - s];
+    (r, t)
+);
+
+// Get clocks (cpu time) elapsed while executing an I/O action.
+consumed_time_while_io : IO a -> IO (a, F64);
+consumed_time_while_io = |io| (
+    IO { _data : |_| (
+        let s = CALL_C[I64 fixruntime_clock()];
+        let r = io._unsafe_perform;
+        let t = CALL_C[I64 fixruntime_clock()];
+        let t = CALL_C[F64 fixruntime_clocks_to_sec(I64), t - s];
+        (r, t)
+    )}
+);
+
+// Get clocks (cpu time) elapsed while executing a function that takes a unit as an argument.
+consumed_time_while_void : (() -> a) -> (a, F64);
+consumed_time_while_void = |f| consumed_time_while(f, ());
+
 // Prints a string to stderr and flushes.
 debug_eprint : String -> ();
 debug_eprint = |msg| _debug_print_to_stream(stderr, msg);

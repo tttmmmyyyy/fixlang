@@ -438,6 +438,9 @@
   - [`assert : Lazy String -> Bool -> ()`](#assert--lazy-string---bool---)
   - [`assert_eq : [a: Eq] Lazy String -> a -> a -> ()`](#assert_eq--a-eq-lazy-string---a---a---)
   - [`assert_unique! : Lazy String -> a -> a`](#assert_unique--lazy-string---a---a)
+  - [`consumed_time_while : (a -> b) -> a -> (b, F64)`](#consumed_time_while--a---b---a---b-f64)
+  - [`consumed_time_while_io : IO a -> IO (a, F64)`](#consumed_time_while_io--io-a---io-a-f64)
+  - [`consumed_time_while_void : (() -> a) -> (a, F64)`](#consumed_time_while_void-----a---a-f64)
   - [`debug_eprint : String -> ()`](#debug_eprint--string---)
   - [`debug_eprintln : String -> ()`](#debug_eprintln--string---)
   - [`debug_print : String -> ()`](#debug_print--string---)
@@ -2745,6 +2748,15 @@ If the assertion failed, prints a message to the stderr and aborts.
 Asserts that the given value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts.
 The main use of this function is to check whether a boxed value given as an argument is unique.
+
+## `consumed_time_while : (a -> b) -> a -> (b, F64)`
+Get clocks (cpu time) elapsed while executing a function.
+
+## `consumed_time_while_io : IO a -> IO (a, F64)`
+Get clocks (cpu time) elapsed while executing an I/O action.
+
+## `consumed_time_while_void : (() -> a) -> (a, F64)`
+Get clocks (cpu time) elapsed while executing a function that takes a unit as an argument.
 
 ## `debug_eprint : String -> ()`
 Prints a string to stderr and flushes.

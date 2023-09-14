@@ -4218,6 +4218,36 @@ pub fn test131() {
 
 #[test]
 #[serial]
+pub fn test132() {
+    // Test Debug module
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        main : IO ();
+        main = (
+            let (r, t) = consumed_time_while_void(|_| (
+                loop((0, 0), |(i, sum)| if i == 1000000000 { break $ sum } else { continue $ (i + 1, sum + i) })
+            ));
+            let _ = debug_println("loop time : " + t.to_string + ", sum : " + r.to_string);
+
+            let (_, t) = *consumed_time_while_io(
+                let file_path = Path::parse("test.txt").as_some;
+                let _ = *write_file_string(file_path, "Hello World!").to_io.map(as_ok);
+                let read_content = *read_file_string(file_path).to_io.map(as_ok);
+                println $ read_content
+            );
+            let _ = debug_println("write/read/println time : " + t.to_string);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+    remove_file("test.txt").unwrap();
+}
+
+#[test]
+#[serial]
 pub fn test_run_examples() {
     // Run all "*.fix" files in "examples" directory.
     let paths = fs::read_dir("./examples").unwrap();
