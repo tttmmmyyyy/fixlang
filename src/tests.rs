@@ -3314,16 +3314,16 @@ pub fn test116() {
             };
 
             // Dtor in dtor
-            let dtor2 = Destructor { 
+            let dtor3 = Destructor { 
                 value : 2, 
                 dtor : |val| (
-                    debug_println("dtor2 destructed. val: " + val.to_string)
+                    debug_println("dtor3 destructed. val: " + val.to_string)
                 )
             };
-            let dtor3 = Destructor { 
-                value : dtor2, 
+            let dtor2 = Destructor { 
+                value : dtor3, 
                 dtor : |val| (
-                    debug_println("dtor3 destructed. val.@value: " + val.@value.to_string)
+                    debug_println("dtor2 destructed. val.@value: " + val.@value.to_string)
                 )
             };
 

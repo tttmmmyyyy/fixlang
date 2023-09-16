@@ -1638,11 +1638,23 @@ fn make_array_unique<'c, 'm>(
     let original_array_ptr = array.ptr(gc);
 
     // Get refcnt.
-    let refcnt = {
+    let refcnt_ptr = {
         let array_ptr = array.ptr(gc);
-        gc.load_obj_field(array_ptr, control_block_type(gc), 0)
-            .into_int_value()
+        gc.get_refcnt_ptr(array_ptr)
     };
+    let refcnt = gc
+        .builder()
+        .build_load(refcnt_ptr, "refcnt_in_make_array_unique")
+        .into_int_value();
+    // Make load operation into acquire atomic.
+    // NOTE: Acquire is necessary only for the case refcnt == 1.
+    // We do not separate acquire atomic load into relaxed atomic load + require fence (after branch),
+    // because we assume that in many cases this functions is called with refcnt == 1.
+    refcnt
+        .as_instruction_value()
+        .unwrap()
+        .set_atomic_ordering(inkwell::AtomicOrdering::Acquire)
+        .expect("set_atomic_ordering in make_array_unique failed");
 
     // Add shared / cont bbs.
     let current_bb = gc.builder().get_insert_block().unwrap();
