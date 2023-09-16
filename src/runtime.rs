@@ -122,7 +122,7 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
             inkwell::AtomicRMWBinOp::Add,
             ptr_to_refcnt,
             refcnt_type(gc.context).const_int(1, false),
-            inkwell::AtomicOrdering::Release,
+            inkwell::AtomicOrdering::Monotonic,
         )
         .unwrap();
 
