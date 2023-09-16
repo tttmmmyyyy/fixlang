@@ -3274,11 +3274,20 @@ impl InlineLLVMIsUniqueFunctionBody {
         // Get whether argument is unique.
         let is_unique = if obj.is_box(gc.type_env()) {
             // Get refcnt.
-            let refcnt = {
-                let obj_ptr = obj.ptr(gc);
-                gc.load_obj_field(obj_ptr, control_block_type(gc), 0)
-                    .into_int_value()
+            let refcnt_ptr = {
+                let array_ptr: PointerValue<'_> = obj.ptr(gc);
+                gc.get_refcnt_ptr(array_ptr)
             };
+            let refcnt = gc
+                .builder()
+                .build_load(refcnt_ptr, "refcnt_in_is_unique")
+                .into_int_value();
+            // Make load operation into relaxed atomic.
+            refcnt
+                .as_instruction_value()
+                .unwrap()
+                .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
+                .expect("set_atomic_ordering in refcnt_in_is_unique failed");
 
             // Check if obj is unique.
             let one = refcnt_type(gc.context).const_int(1, false);
