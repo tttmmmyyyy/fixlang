@@ -116,27 +116,27 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
     // Get pointer to / value of reference counter.
     let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
     let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_obj);
-    let refcnt = gc
+    let old_refcnt = gc
         .builder()
-        .build_load(ptr_to_refcnt, "refcnt")
-        .into_int_value();
+        .build_atomicrmw(
+            inkwell::AtomicRMWBinOp::Add,
+            ptr_to_refcnt,
+            refcnt_type(gc.context).const_int(1, false),
+            inkwell::AtomicOrdering::Release,
+        )
+        .unwrap();
 
     // Report retain to sanitizer.
     if gc.config.sanitize_memory {
         let obj_id = gc.get_obj_id(ptr_to_obj);
         gc.call_runtime(
             RuntimeFunctions::ReportRetain,
-            &[ptr_to_obj.into(), obj_id.into(), refcnt.into()],
+            &[ptr_to_obj.into(), obj_id.into(), old_refcnt.into()],
         );
     }
 
-    // Increment refcnt.
-    let one = context.i64_type().const_int(1, false);
-    let refcnt = gc.builder().build_int_nuw_add(refcnt, one, "refcnt");
-    gc.builder().build_store(ptr_to_refcnt, refcnt);
     gc.builder().build_return(None);
     retain_func
-    // TOOD: use atomic_rmw
 }
 
 fn build_release_boxed_function<'c, 'm, 'b>(
