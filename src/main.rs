@@ -99,6 +99,8 @@ pub struct Configuration {
     llvm_opt_level: OptimizationLevel,
     // Linked libraries
     linked_libraries: Vec<(String, LinkType)>,
+    // Make reference counting atomic.
+    atomic_refcnt: bool,
 }
 
 impl Configuration {
@@ -111,6 +113,7 @@ impl Configuration {
             preretain_global: true,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
+            atomic_refcnt: false,
         }
     }
 
@@ -123,6 +126,7 @@ impl Configuration {
             preretain_global: false,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
+            atomic_refcnt: false,
         }
     }
 

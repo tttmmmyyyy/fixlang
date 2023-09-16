@@ -1646,15 +1646,17 @@ fn make_array_unique<'c, 'm>(
         .builder()
         .build_load(refcnt_ptr, "refcnt_in_make_array_unique")
         .into_int_value();
-    // Make load operation into acquire atomic.
-    // NOTE: Acquire is necessary only for the case refcnt == 1.
-    // We do not separate acquire atomic load into relaxed atomic load + require fence (after branch),
-    // because we assume that in many cases this functions is called with refcnt == 1.
-    refcnt
-        .as_instruction_value()
-        .unwrap()
-        .set_atomic_ordering(inkwell::AtomicOrdering::Acquire)
-        .expect("set_atomic_ordering in make_array_unique failed");
+    if gc.config.atomic_refcnt {
+        // Make load operation into acquire atomic.
+        // NOTE: Acquire is necessary only for the case refcnt == 1.
+        // We do not separate acquire atomic load into relaxed atomic load + require fence (after branch),
+        // because we assume that in many cases this functions is called with refcnt == 1.
+        refcnt
+            .as_instruction_value()
+            .unwrap()
+            .set_atomic_ordering(inkwell::AtomicOrdering::Acquire)
+            .expect("set_atomic_ordering in make_array_unique failed");
+    }
 
     // Add shared / cont bbs.
     let current_bb = gc.builder().get_insert_block().unwrap();
@@ -2406,15 +2408,17 @@ fn make_struct_unique<'c, 'm>(
             .builder()
             .build_load(refcnt_ptr, "refcnt_in_make_struct_unique")
             .into_int_value();
-        // Make load operation into acquire atomic.
-        // NOTE: Acquire is necessary only for the case refcnt == 1.
-        // We do not separate acquire atomic load into relaxed atomic load + require fence (after branch),
-        // because we assume that in many cases this functions is called with refcnt == 1.
-        refcnt
-            .as_instruction_value()
-            .unwrap()
-            .set_atomic_ordering(inkwell::AtomicOrdering::Acquire)
-            .expect("set_atomic_ordering in make_struct_unique failed");
+        if gc.config.atomic_refcnt {
+            // Make load operation into acquire atomic.
+            // NOTE: Acquire is necessary only for the case refcnt == 1.
+            // We do not separate acquire atomic load into relaxed atomic load + require fence (after branch),
+            // because we assume that in many cases this functions is called with refcnt == 1.
+            refcnt
+                .as_instruction_value()
+                .unwrap()
+                .set_atomic_ordering(inkwell::AtomicOrdering::Acquire)
+                .expect("set_atomic_ordering in make_struct_unique failed");
+        }
 
         // Add shared / cont bbs.
         let current_bb = gc.builder().get_insert_block().unwrap();
@@ -3282,12 +3286,14 @@ impl InlineLLVMIsUniqueFunctionBody {
                 .builder()
                 .build_load(refcnt_ptr, "refcnt_in_is_unique")
                 .into_int_value();
-            // Make load operation into relaxed atomic.
-            refcnt
-                .as_instruction_value()
-                .unwrap()
-                .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
-                .expect("set_atomic_ordering in refcnt_in_is_unique failed");
+            if gc.config.atomic_refcnt {
+                // Make load operation into relaxed atomic.
+                refcnt
+                    .as_instruction_value()
+                    .unwrap()
+                    .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
+                    .expect("set_atomic_ordering in refcnt_in_is_unique failed");
+            }
 
             // Check if obj is unique.
             let one = refcnt_type(gc.context).const_int(1, false);

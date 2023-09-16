@@ -118,15 +118,27 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
     let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_obj);
 
     // Increment refcnt.
-    let old_refcnt = gc
-        .builder()
-        .build_atomicrmw(
-            inkwell::AtomicRMWBinOp::Add,
-            ptr_to_refcnt,
-            refcnt_type(gc.context).const_int(1, false),
-            inkwell::AtomicOrdering::Monotonic,
-        )
-        .unwrap();
+    let old_refcnt = {
+        if gc.config.atomic_refcnt {
+            gc.builder()
+                .build_atomicrmw(
+                    inkwell::AtomicRMWBinOp::Add,
+                    ptr_to_refcnt,
+                    refcnt_type(gc.context).const_int(1, false),
+                    inkwell::AtomicOrdering::Monotonic,
+                )
+                .unwrap()
+        } else {
+            let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
+            let refcnt = gc.builder().build_int_nsw_add(
+                old_refcnt,
+                refcnt_type(gc.context).const_int(1, false).into(),
+                "",
+            );
+            gc.builder().build_store(ptr_to_refcnt, refcnt);
+            old_refcnt
+        }
+    };
 
     // Report retain to sanitizer.
     if gc.config.sanitize_memory {
@@ -163,15 +175,27 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_obj);
 
     // Recrement refcnt.
-    let old_refcnt = gc
-        .builder()
-        .build_atomicrmw(
-            inkwell::AtomicRMWBinOp::Sub,
-            ptr_to_refcnt,
-            refcnt_type(gc.context).const_int(1, false),
-            inkwell::AtomicOrdering::Release,
-        )
-        .unwrap();
+    let old_refcnt = {
+        if gc.config.atomic_refcnt {
+            gc.builder()
+                .build_atomicrmw(
+                    inkwell::AtomicRMWBinOp::Sub,
+                    ptr_to_refcnt,
+                    refcnt_type(gc.context).const_int(1, false),
+                    inkwell::AtomicOrdering::Release,
+                )
+                .unwrap()
+        } else {
+            let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
+            let refcnt = gc.builder().build_int_nsw_sub(
+                old_refcnt,
+                refcnt_type(gc.context).const_int(1, false).into(),
+                "",
+            );
+            gc.builder().build_store(ptr_to_refcnt, refcnt);
+            old_refcnt
+        }
+    };
 
     // Report release to sanitizer.
     if gc.config.sanitize_memory {
