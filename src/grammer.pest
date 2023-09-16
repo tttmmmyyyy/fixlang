@@ -1,7 +1,7 @@
 // === Basic rules ===
 sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
-keywords = _{ ("let" | "in" | "if" | "else" | "do" | "true" | "false" | "type" | "trait" | "impl") ~ sep+ }
+keywords = _{ ("let" | "eval" | "in" | "if" | "else" | "do" | "true" | "false" | "type" | "trait" | "impl") ~ sep+ }
 
 semicolon = _{ ";" }
 
@@ -61,6 +61,8 @@ expr_var = { (namespace ~ "::")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
+expr_eval = { "eval" ~ sep+ ~ expr ~ semicolon ~ sep* ~ expr }
+
 else_of_if = _{ semicolon | "else" }
 
 else_of_if_with_space = _{ semicolon | ("else" ~ sep) }
@@ -77,7 +79,7 @@ expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)*)? ~ sep* ~ ")" }
 expr_make_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ sep* ~ "}" }
 
 // nlr = non left recursive
-expr_nlr = { expr_lit | expr_var | expr_let | expr_if | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
+expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
 
 // List of arguments. Can be an empty list.
 arg_list = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }

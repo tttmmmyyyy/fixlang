@@ -1113,6 +1113,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, msc: &mut DoContext, src: &SourceFile) -> Rc
         Rule::expr_lit => parse_expr_lit(pair, msc, src),
         Rule::expr_var => parse_expr_var(pair, src),
         Rule::expr_let => parse_expr_let(pair, msc, src),
+        Rule::expr_eval => parse_expr_eval(pair, msc, src),
         Rule::expr_if => parse_expr_if(pair, msc, src),
         Rule::expr_do => parse_expr_do(pair, msc, src),
         Rule::expr_lam => parse_expr_lam(pair, msc, src),
@@ -1171,6 +1172,16 @@ fn parse_expr_let(expr: Pair<Rule>, msc: &mut DoContext, src: &SourceFile) -> Rc
     let bound = parse_expr(pairs.next().unwrap(), msc, src);
     let _in_of_let = pairs.next().unwrap();
     let val = parse_expr_with_new_do(pairs.next().unwrap(), src);
+    expr_let(pat, bound, val, Some(span))
+}
+
+fn parse_expr_eval(pair: Pair<Rule>, msc: &mut DoContext, src: &SourceFile) -> Rc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_eval);
+    let span = Span::from_pair(&src, &pair);
+    let mut pairs = pair.into_inner();
+    let bound = parse_expr(pairs.next().unwrap(), msc, src);
+    let val = parse_expr_with_new_do(pairs.next().unwrap(), src);
+    let pat = PatternNode::make_var(var_local(EVAL_VAR_NAME), None);
     expr_let(pat, bound, val, Some(span))
 }
 
@@ -1656,6 +1667,13 @@ fn parse_import_statement(
 }
 
 fn rule_to_string(r: &Rule) -> String {
+    fn join_by_or(tokens: &[&str]) -> String {
+        tokens
+            .iter()
+            .map(|s| "`".to_string() + s + "`")
+            .collect::<Vec<_>>()
+            .join(" or ")
+    }
     match r {
         Rule::EOI => "end-of-input".to_string(),
         Rule::expr_number_lit => "integer or floating number".to_string(),
@@ -1666,11 +1684,13 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::eq_of_let => "`=`".to_string(),
         Rule::type_expr => "type".to_string(),
         Rule::arg_list => "arguments".to_string(),
-        Rule::operator_mul => "*".to_string(),
-        Rule::operator_plus => "+".to_string(),
-        Rule::operator_and => "&&".to_string(),
-        Rule::operator_or => "||".to_string(),
+        Rule::operator_mul => "`*`".to_string(),
+        Rule::operator_plus => "`+`".to_string(),
+        Rule::operator_and => "`&&`".to_string(),
+        Rule::operator_or => "`||`".to_string(),
         Rule::type_nlr => "type".to_string(),
+        Rule::operator_composition => join_by_or(&["<<", ">>"]),
+        Rule::operator_cmp => join_by_or(&["==", "!=", "<=", ">=", "<", ">"]),
         _ => format!("{:?}", r),
     }
 }
@@ -1678,6 +1698,7 @@ fn rule_to_string(r: &Rule) -> String {
 fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> String {
     let mut msg: String = Default::default();
 
+    #[allow(unused)]
     let mut suggestion: Option<String> = None;
 
     // Show error content.
@@ -1705,17 +1726,6 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> String {
                     msg += " and ";
                 }
                 msg += ".";
-            }
-            if suggestion.is_none()
-                && positives
-                    .iter()
-                    .find(|rule| **rule == Rule::arg_list)
-                    .is_some()
-            {
-                suggestion = Some(
-                    "Expression ended unexpectedly. Maybe forgot semicolon after definition?"
-                        .to_string(),
-                )
             }
         }
         pest::error::ErrorVariant::CustomError { message: _ } => unreachable!(),

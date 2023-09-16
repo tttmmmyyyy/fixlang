@@ -38,6 +38,7 @@
   - [Modules and import statements](#modules-and-import-statements)
   - [Namespaces and overloading](#namespaces-and-overloading)
   - [Recursion](#recursion)
+  - [`eval` syntax](#eval-syntax)
   - [Type annotation](#type-annotation)
   - [Pattern matching](#pattern-matching)
   - [Traits](#traits)
@@ -1314,6 +1315,31 @@ main = print $ fib(30).to_string; // 832040
 [Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCmZpYiA6IEk2NCAtPiBJNjQ7DQpmaWIgPSB8bnwgKA0KICAgIGlmIG4gPT0gMCB7DQogICAgICAgIDANCiAgICB9IGVsc2UgaWYgbiA9PSAxIHsNCiAgICAgICAgMQ0KICAgIH0gZWxzZSB7DQogICAgICAgIGZpYihuLTEpICsgZmliKG4tMikNCiAgICB9DQopOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gcHJpbnQgJCBmaWIoMzApLnRvX3N0cmluZzsgLy8gODMyMDQw)
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
+
+## `eval` syntax
+
+An expression `eval {expression_0}; {expression_1}` evaluates both of `{expression_0}` and `{expression_1}`, and returns value of `{expression_1}`.
+
+Since Fix is functional, only evaluating an expression and ignoring the result has no effect in most cases. The use-cases of `eval` are as follows:
+
+- Calling functions in `Debug` module, such as `assert : Lazy String -> Bool -> ()` or `debug_println : String -> ()`. 
+- Sequentially calling I/O functions. 
+
+Example: 
+
+```
+module Main;
+
+main : IO ();
+main = (
+    eval assert(|_|"1 is not 2!", 1 == 2);
+    eval *print("Contradiction: ");
+    eval *println("1 is equal to 2!");
+    pure()
+);
+```
+
+For detail of `*` operator in front of `print` and `println`, see [Monads](#monads). 
 
 ## Type annotation
 

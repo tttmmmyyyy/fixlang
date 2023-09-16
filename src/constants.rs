@@ -22,6 +22,7 @@ pub const MAIN_FUNCTION_NAME: &str = "main";
 pub const MAIN_MODULE_NAME: &str = "Main";
 
 pub const ARG_NAME: &str = "%arg";
+pub const EVAL_VAR_NAME: &str = "%eval_var";
 pub const FUNPTR_NAME: &str = "%FunPtr";
 pub const DYNAMIC_OBJECT_NAME: &str = "%DynamicObject";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "%";
