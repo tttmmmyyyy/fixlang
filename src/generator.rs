@@ -764,6 +764,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 .builder()
                 .build_load(ptr_refcnt, "refcnt_for_call_dtor")
                 .into_int_value();
+            // Make load operation into relaxed atomic.
+            refcnt
+                .as_instruction_value()
+                .unwrap()
+                .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
+                .expect("set_atomic_ordering failed");
+
             let is_refcnt_one = self.builder().build_int_compare(
                 IntPredicate::EQ,
                 refcnt,
@@ -783,6 +790,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // If refcnt is none, call dtor.
             self.builder().position_at_end(call_dtor_bb);
+            // Create acquire fence.
+            self.builder()
+                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
             let value = ObjectFieldType::get_struct_field_noclone(
                 self,
                 obj,
