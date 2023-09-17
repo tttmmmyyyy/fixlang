@@ -1320,7 +1320,7 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 An expression `eval {expression_0}; {expression_1}` evaluates both of `{expression_0}` and `{expression_1}`, and returns value of `{expression_1}`.
 
-Since Fix is functional, only evaluating an expression and ignoring the result has no effect in most cases. The use-cases of `eval` are as follows:
+Since Fix is functional, only evaluating an expression and ignoring the result has no effect in most cases. Typical use-cases of `eval` are as follows:
 
 - Calling functions in `Debug` module, such as `assert : Lazy String -> Bool -> ()` or `debug_println : String -> ()`. 
 - Sequentially calling I/O functions. 
