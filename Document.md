@@ -1320,9 +1320,11 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 
 An expression `eval {expression_0}; {expression_1}` evaluates both of `{expression_0}` and `{expression_1}`, and returns value of `{expression_1}`.
 
-Since Fix is functional, only evaluating an expression and ignoring the result has no effect in most cases. Typical use-cases of `eval` are as follows:
+Since Fix is functional, only evaluating an expression and ignoring the result has no effect in most cases. 
+Typical use-cases of `eval` are to call functions which return `()` to get side-effects.
 
 - Calling functions in `Debug` module, such as `assert : Lazy String -> Bool -> ()` or `debug_println : String -> ()`. 
+- Calling C functions by CALL_C. 
 - Sequentially calling I/O functions. 
 
 Example: 
@@ -1334,13 +1336,14 @@ import Debug;
 main : IO ();
 main = (
     eval assert(|_|"1 is not 2!", 1 == 2);
-    eval *print("Contradiction: ");
+    eval "Contradiction: ".borrow_c_str(|ptr| CALL_C[I32 printf(Ptr, ...), ptr]);
     eval *println("1 is equal to 2!");
     pure()
 );
 ```
 
 For detail of `*` operator in front of `print` and `println`, see [Monads](#monads). 
+For CALL_C, see [Calling C functions](#calling-c-functions).
 
 ## Type annotation
 
