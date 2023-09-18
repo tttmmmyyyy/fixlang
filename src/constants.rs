@@ -38,31 +38,26 @@ pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const SEARCH_DYNAMIC_LIBRARY_TEMP_FILE: &str = ".fixlang/search_dl_temp";
 
 pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<&str>)] = &[
-    ("Debug", include_str!("./fix/debug.fix"), "debug.fix", None),
-    ("Hash", include_str!("./fix/hash.fix"), "hash.fix", None),
+    ("Debug", include_str!("./fix/debug.fix"), "debug", None),
+    ("Hash", include_str!("./fix/hash.fix"), "hash", None),
     (
         "HashMap",
         include_str!("./fix/hashmap.fix"),
-        "hashmap.fix",
+        "hashmap",
         None,
     ),
     (
         "HashSet",
         include_str!("./fix/hashset.fix"),
-        "hashset.fix",
+        "hashset",
         None,
     ),
-    (
-        "Math",
-        include_str!("./fix/math.fix"),
-        "math.fix",
-        Some("m"),
-    ),
+    ("Math", include_str!("./fix/math.fix"), "math", Some("m")),
     ("Time", include_str!("./fix/time.fix"), "time.fix", None),
     (
         "Character",
         include_str!("./fix/character.fix"),
-        "character.fix",
+        "character",
         None,
     ),
 ];

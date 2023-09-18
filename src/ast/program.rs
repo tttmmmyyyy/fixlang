@@ -1,5 +1,6 @@
 use std::time::SystemTime;
 
+use build_time::build_time_utc;
 use chrono::{DateTime, Utc};
 
 use inkwell::module::Linkage;
@@ -1273,7 +1274,11 @@ impl Program {
             // Search for bulit-in modules.
             for (mod_name, source_content, file_name, native_library) in STANDARD_LIBRARIES {
                 if import.target_module == *mod_name {
-                    self.link(parse_source(source_content, file_name));
+                    self.link(parse_source_temporary_file(
+                        source_content,
+                        file_name,
+                        &format!("{:x}", md5::compute(build_time_utc!())),
+                    ));
                     if let Some(lib_name) = native_library {
                         config.add_dyanmic_library(lib_name);
                     }

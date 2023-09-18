@@ -5,3 +5,5 @@
 /examples/*.o
 .fixlang
 a.out
+before_opt.ll
+after_opt.ll

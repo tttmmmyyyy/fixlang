@@ -1037,36 +1037,34 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let lam_ty = lam.ty.clone().unwrap();
         let lam_fn_ty = lambda_function_type(&lam_ty, self);
         let lam_fn = self.module.add_function(
-            &format!("lambda_{}", lam_ty.to_string_normalize()),
+            &format!("Lambda {}", lam_ty.to_string_normalize()),
             lam_fn_ty,
             Some(Linkage::Internal),
         );
         if let Some((di_builder, di_compile_unit)) = self.debug_info.as_ref() {
             if let Some(span) = lam.source.as_ref() {
-                if span.input.has_string() {
-                    let debug_info_scope = di_compile_unit.as_debug_info_scope();
-                    let line_no = span.start_line_no();
-                    let subroutine_type = di_builder.create_subroutine_type(
-                        self.create_di_file(&span.input),
-                        None, // TODO
-                        &[],  // TODO
-                        0,
-                    );
-                    let func_scope = di_builder.create_function(
-                        debug_info_scope,
-                        "NA",
-                        None,
-                        di_compile_unit.get_file(),
-                        line_no as u32,
-                        subroutine_type,
-                        true,
-                        true,
-                        line_no as u32,
-                        0,
-                        false,
-                    );
-                    lam_fn.set_subprogram(func_scope);
-                }
+                let debug_info_scope = di_compile_unit.as_debug_info_scope();
+                let line_no = span.start_line_no();
+                let subroutine_type = di_builder.create_subroutine_type(
+                    self.create_di_file(&span.input),
+                    None, // TODO
+                    &[],  // TODO
+                    0,
+                );
+                let func_scope = di_builder.create_function(
+                    debug_info_scope,
+                    "NA",
+                    None,
+                    di_compile_unit.get_file(),
+                    line_no as u32,
+                    subroutine_type,
+                    true,
+                    true,
+                    line_no as u32,
+                    0,
+                    false,
+                );
+                lam_fn.set_subprogram(func_scope);
             }
         }
         lam_fn

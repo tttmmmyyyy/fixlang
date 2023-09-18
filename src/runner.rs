@@ -1,4 +1,5 @@
 use build_time::build_time_utc;
+use chrono::{DateTime, Utc};
 use regex::Regex;
 use std::{env, fs, fs::create_dir_all, path::PathBuf, process::Command, time::SystemTime};
 
@@ -161,6 +162,7 @@ fn build_module<'c>(
 
     // Create GenerationContext.
     let debug_mode = config.debug_mode;
+    let emit_llvm = config.debug_mode;
     let mut gc = GenerationContext::new(&context, &module, target, config, fix_mod.type_env());
 
     // In debug mode, create debug infos.
@@ -218,7 +220,9 @@ fn build_module<'c>(
     gc.finalize_di();
 
     // Print LLVM bitcode to file
-    // module.print_to_file("main.ll").unwrap();
+    if emit_llvm {
+        module.print_to_file("before_opt.ll").unwrap();
+    }
 
     // Run optimization
     let passmgr = PassManager::create(());
@@ -241,14 +245,20 @@ fn build_module<'c>(
         panic!("LLVM verify failed!");
     }
 
+    // Print LLVM bitcode to file
+    if emit_llvm {
+        module.print_to_file("after_opt.ll").unwrap();
+    }
+
     gc.target
 }
 
 #[allow(dead_code)]
 pub fn run_source(source: &str, mut config: Configuration) -> i32 {
     let mut target_mod = make_std_mod();
-
-    let source_mod = parse_source(source, "{filename unspecified}");
+    let datetime: DateTime<Utc> = SystemTime::now().into();
+    let file_hash = format!("{:x}", md5::compute(datetime.to_rfc3339()));
+    let source_mod = parse_source_temporary_file(source, "main_run", &file_hash);
     target_mod.link(source_mod);
     target_mod.resolve_imports(&mut config);
 

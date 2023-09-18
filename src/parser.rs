@@ -27,17 +27,6 @@ impl SourceFile {
         }
     }
 
-    pub fn has_string(&self) -> bool {
-        if self.string.is_some() {
-            true
-        } else {
-            match read_file(&PathBuf::from(self.file_path.clone())) {
-                Ok(_) => true,
-                Err(_) => false,
-            }
-        }
-    }
-
     pub fn get_file_dir(&self) -> String {
         PathBuf::from(&self.file_path)
             .parent()
@@ -209,6 +198,14 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
         None => rhs.clone(),
         Some(s) => rhs.clone().map(|t| s.unite(&t)),
     }
+}
+
+pub fn parse_source_temporary_file(source: &str, file_name: &str, hash: &str) -> Program {
+    let full_name = temporary_source_name(file_name, hash);
+    if !check_temporary_source(file_name, hash) {
+        save_temporary_source(source, file_name, hash);
+    }
+    parse_source(source, &full_name)
 }
 
 pub fn parse_source(source: &str, file_name: &str) -> Program {

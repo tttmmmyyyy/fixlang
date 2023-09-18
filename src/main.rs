@@ -103,6 +103,8 @@ pub struct Configuration {
     debug_mode: bool,
     // Perform uncurrying optimization.
     uncurry_optimization: bool,
+    // Is emit llvm?
+    emit_llvm: bool,
 }
 
 impl Configuration {
@@ -117,6 +119,7 @@ impl Configuration {
             linked_libraries: vec![],
             atomic_refcnt: false,
             debug_mode: false,
+            emit_llvm: false,
         }
     }
 
@@ -131,6 +134,7 @@ impl Configuration {
             linked_libraries: vec![],
             atomic_refcnt: false,
             debug_mode: false,
+            emit_llvm: false,
         }
     }
 
@@ -163,16 +167,22 @@ fn main() {
         .long("debug")
         .short('D')
         .takes_value(false)
-        .help("Skip optimization and create debug info");
+        .help("Skip optimization and create debug info.");
+    let emit_llvm = Arg::new("emit-llvm")
+        .long("emit-llvm")
+        .takes_value(false)
+        .help("Emit llvm ir file.");
     let run_subc = App::new("run")
         .arg(source_file.clone())
         .arg(dynamic_link_library.clone())
-        .arg(debug_mode.clone());
+        .arg(debug_mode.clone())
+        .arg(emit_llvm.clone());
     let build_subc = App::new("build")
         .arg(source_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
-        .arg(debug_mode.clone());
+        .arg(debug_mode.clone())
+        .arg(emit_llvm.clone());
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -208,6 +218,7 @@ fn main() {
         config.source_files = read_source_files_options(m);
         config.linked_libraries = read_library_options(m);
         config.debug_mode = m.contains_id("debug-mode");
+        config.emit_llvm = m.contains_id("emit-llvm");
         config.uncurry_optimization = !config.debug_mode;
         config
     }
