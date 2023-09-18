@@ -34,6 +34,7 @@ pub static CAP_NAME: &str = "#CAP";
 pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 
 pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
+pub const DOT_FIXLANG: &str = ".fixlang";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const SEARCH_DYNAMIC_LIBRARY_TEMP_FILE: &str = ".fixlang/search_dl_temp";
 

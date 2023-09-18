@@ -43,7 +43,7 @@ pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
 
 pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
     let file_name = temporary_source_name(file_name, hash);
-    PathBuf::from(INTERMEDIATE_PATH).join(file_name)
+    PathBuf::from(DOT_FIXLANG).join(file_name)
 }
 
 pub fn check_temporary_source(file_name: &str, hash: &str) -> bool {
@@ -52,6 +52,6 @@ pub fn check_temporary_source(file_name: &str, hash: &str) -> bool {
 
 pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) {
     let path = temporary_source_path(file_name, hash);
-    fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
+    fs::create_dir_all(DOT_FIXLANG).expect("Failed to create .fixlang directory.");
     fs::write(path, source).expect(&format!("Failed to generate temporary file {}", file_name));
 }
