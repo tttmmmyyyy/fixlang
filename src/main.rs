@@ -101,6 +101,8 @@ pub struct Configuration {
     linked_libraries: Vec<(String, LinkType)>,
     // Make reference counting atomic.
     atomic_refcnt: bool,
+    // Skip optimization and create debug info
+    debug_mode: bool,
 }
 
 impl Configuration {
@@ -114,6 +116,7 @@ impl Configuration {
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
             atomic_refcnt: false,
+            debug_mode: false,
         }
     }
 
@@ -127,6 +130,7 @@ impl Configuration {
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
             atomic_refcnt: false,
+            debug_mode: false,
         }
     }
 
@@ -147,19 +151,28 @@ fn main() {
         .required(true);
     let static_link_library = Arg::new("static-link-library")
         .long("static-link")
+        .short('s')
         .action(clap::ArgAction::Append)
         .help("Add statically linked library. For example, give \"abc\" to link \"libabc.so\".");
     let dynamic_link_library = Arg::new("dynamic-link-library")
         .long("dynamic-link")
+        .short('d')
         .action(clap::ArgAction::Append)
         .help("Add dynamically linked library. For example, give \"abc\" to link \"libabc.so\".");
+    let debug_mode = Arg::new("debug-mode")
+        .long("debug")
+        .short('D')
+        .takes_value(false)
+        .help("Skip optimization and create debug info");
     let run_subc = App::new("run")
         .arg(source_file.clone())
-        .arg(dynamic_link_library.clone());
+        .arg(dynamic_link_library.clone())
+        .arg(debug_mode.clone());
     let build_subc = App::new("build")
         .arg(source_file.clone())
         .arg(static_link_library.clone())
-        .arg(dynamic_link_library.clone());
+        .arg(dynamic_link_library.clone())
+        .arg(debug_mode.clone());
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -194,6 +207,7 @@ fn main() {
         let mut config = Configuration::release();
         config.source_files = read_source_files_options(m);
         config.linked_libraries = read_library_options(m);
+        config.debug_mode = m.contains_id("debug-mode");
         config
     }
 
