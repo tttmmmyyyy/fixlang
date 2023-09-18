@@ -218,7 +218,7 @@ fn build_module<'c>(
     gc.finalize_di();
 
     // Print LLVM bitcode to file
-    module.print_to_file("main.ll").unwrap();
+    // module.print_to_file("main.ll").unwrap();
 
     // Run optimization
     let passmgr = PassManager::create(());
