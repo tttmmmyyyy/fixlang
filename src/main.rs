@@ -90,8 +90,6 @@ pub struct Configuration {
     // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
     // Requires shared library sanitizer/libfixsanitizer.so.
     sanitize_memory: bool,
-    // Perform uncurrying optimization.
-    uncurry_optimization: bool,
     // If true, pre-retain global object (i.e., set refcnt to large value) at its construction
     // and do not retain global object thereafter.
     preretain_global: bool,
@@ -101,8 +99,10 @@ pub struct Configuration {
     linked_libraries: Vec<(String, LinkType)>,
     // Make reference counting atomic.
     atomic_refcnt: bool,
-    // Skip optimization and create debug info
+    // Skip optimization and create debug info.
     debug_mode: bool,
+    // Perform uncurrying optimization.
+    uncurry_optimization: bool,
 }
 
 impl Configuration {
@@ -208,6 +208,7 @@ fn main() {
         config.source_files = read_source_files_options(m);
         config.linked_libraries = read_library_options(m);
         config.debug_mode = m.contains_id("debug-mode");
+        config.uncurry_optimization = !config.debug_mode;
         config
     }
 
