@@ -1245,7 +1245,6 @@ impl FullName {
         NameSpace { names }
     }
 
-    #[allow(dead_code)]
     pub fn module(&self) -> Name {
         self.namespace.module()
     }

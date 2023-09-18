@@ -111,7 +111,7 @@ impl Configuration {
         Configuration {
             source_files: vec![],
             sanitize_memory: false,
-            uncurry_optimization: true,
+            uncurry_optimization: true, // determined by debug_mode
             preretain_global: true,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],

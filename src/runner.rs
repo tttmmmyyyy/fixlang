@@ -160,7 +160,13 @@ fn build_module<'c>(
     }
 
     // Create GenerationContext.
+    let debug_mode = config.debug_mode;
     let mut gc = GenerationContext::new(&context, &module, target, config, fix_mod.type_env());
+
+    // In debug mode, create debug infos.
+    if debug_mode {
+        gc.create_debug_info();
+    }
 
     // Build runtime functions.
     build_runtime(&mut gc);
@@ -208,14 +214,19 @@ fn build_module<'c>(
     gc.builder()
         .build_return(Some(&gc.context.i32_type().const_int(0, false)));
 
+    // If debug inf generated, finalize it.
+    gc.finalize_di();
+
     // Print LLVM bitcode to file
-    // module.print_to_file("main.ll").unwrap();
+    module.print_to_file("main.ll").unwrap();
 
     // Run optimization
     let passmgr = PassManager::create(());
 
     passmgr.add_verifier_pass();
-    add_passes(&passmgr);
+    if !debug_mode {
+        add_passes(&passmgr);
+    }
 
     passmgr.run_on(module);
     unsafe {

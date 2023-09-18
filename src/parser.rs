@@ -13,15 +13,33 @@ use super::*;
 pub struct SourceFile {
     #[serde(skip)]
     string: Option<Rc<String>>,
-    file_name: String,
+    file_path: String,
 }
 
 impl SourceFile {
     pub fn string(&self) -> String {
         match &self.string {
             Some(s) => s.as_str().to_string(),
-            None => read_file(&PathBuf::from(self.file_name.clone())).0,
+            None => read_file(&PathBuf::from(self.file_path.clone())).0,
         }
+    }
+
+    pub fn get_file_dir(&self) -> String {
+        PathBuf::from(&self.file_path)
+            .parent()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
+    }
+
+    pub fn get_file_name(&self) -> String {
+        PathBuf::from(&self.file_path)
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
     }
 }
 
@@ -78,6 +96,13 @@ impl Span {
         Some(lhs.clone().unwrap().unite(rhs.as_ref().unwrap()))
     }
 
+    // Get line number of start.
+    pub fn start_line_no(&self) -> usize {
+        let source_string = self.input.string();
+        let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
+        span.start_pos().line_col().0
+    }
+
     // Show source codes around this span.
     pub fn to_string(&self) -> String {
         let source_string = self.input.string();
@@ -96,7 +121,7 @@ impl Span {
             span.start_pos().line_col().1,
             span.end_pos().line_col().0,
             span.end_pos().line_col().1,
-            self.input.file_name
+            self.input.file_path
         );
         ret += &(" ".repeat(linenum_str_size) + " | " + "\n");
         for line_span in span.lines_span() {
@@ -175,7 +200,7 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 pub fn parse_source(source: &str, file_name: &str) -> Program {
     let source_file = SourceFile {
         string: Some(Rc::new(source.to_string())),
-        file_name: file_name.to_string(),
+        file_path: file_name.to_string(),
     };
     let file = FixParser::parse(Rule::file, source);
     let file = match file {

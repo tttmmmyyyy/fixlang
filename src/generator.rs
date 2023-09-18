@@ -6,6 +6,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use either::Either;
 use inkwell::{
+    debug_info::{AsDIScope, DICompileUnit, DIFile, DebugInfoBuilder},
     execution_engine::ExecutionEngine,
     intrinsics::Intrinsic,
     module::Linkage,
@@ -273,6 +274,7 @@ pub struct GenerationContext<'c, 'm> {
     pub module: &'m Module<'c>,
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
+    debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
     pub global: HashMap<FullName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typeresolver: TypeResolver,
@@ -374,6 +376,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             module,
             builders: Rc::new(RefCell::new(vec![Rc::new(ctx.create_builder())])),
             scope: Rc::new(RefCell::new(vec![Default::default()])),
+            debug_info: Default::default(),
             global: Default::default(),
             runtimes: Default::default(),
             typeresolver: Default::default(),
@@ -383,6 +386,35 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             config,
         };
         ret
+    }
+
+    // Create debug info builders and compilation units.
+    pub fn create_debug_info(&mut self) {
+        let debug_metadata_version = self.context.i32_type().const_int(3, false);
+        self.module.add_basic_value_flag(
+            "Debug Info Version",
+            inkwell::module::FlagBehavior::Warning,
+            debug_metadata_version,
+        );
+
+        let (dib, dicu) = self.module.create_debug_info_builder(
+            true,
+            inkwell::debug_info::DWARFSourceLanguage::C,
+            "NA",
+            "NA",
+            "fix",
+            false,
+            "",
+            0,
+            "",
+            inkwell::debug_info::DWARFEmissionKind::Full,
+            0,
+            false,
+            false,
+            "",
+            "",
+        );
+        self.debug_info = Some((dib, dicu));
     }
 
     // Get builder.
@@ -1009,6 +1041,32 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             lam_fn_ty,
             Some(Linkage::Internal),
         );
+        if let Some((di_builder, di_compile_unit)) = self.debug_info.as_ref() {
+            if let Some(span) = lam.source.as_ref() {
+                let debug_info_scope = di_compile_unit.as_debug_info_scope();
+                let line_no = span.start_line_no();
+                let subroutine_type = di_builder.create_subroutine_type(
+                    self.create_di_file(&span.input),
+                    None, // TODO
+                    &[],  // TODO
+                    3,
+                );
+                let func_scope = di_builder.create_function(
+                    debug_info_scope,
+                    "NA",
+                    None,
+                    di_compile_unit.get_file(),
+                    line_no as u32,
+                    subroutine_type,
+                    true,
+                    true,
+                    line_no as u32,
+                    3,
+                    false,
+                );
+                lam_fn.set_subprogram(func_scope);
+            }
+        }
         lam_fn
     }
 
@@ -1019,6 +1077,26 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         lam_fn: FunctionValue<'c>,
         cap_vars: Option<Vec<(FullName, Rc<TypeNode>)>>,
     ) {
+        if self.has_di() {
+            if let Some(span) = &lam.source {
+                // let func_scope = lam_fn.get_subprogram().unwrap();
+                // let lexical_block = self.get_di_builder().create_lexical_block(
+                //     func_scope.as_debug_info_scope(),
+                //     self.create_di_file(&span.input),
+                //     0, // TODO
+                //     0, // TODO
+                // );
+                // let loc = self.get_di_builder().create_debug_location(
+                //     self.context,
+                //     0, // TODO
+                //     0, // TODO
+                //     lexical_block.as_debug_info_scope(),
+                //     None,
+                // );
+                // self.builder().set_current_debug_location(self.context, loc);
+            }
+        }
+
         let lam_ty = lam.ty.clone().unwrap();
         let (args, body) = lam.destructure_lam();
         let cap_vars = if cap_vars.is_some() {
@@ -1532,10 +1610,35 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         array
     }
+
+    pub fn has_di(&self) -> bool {
+        self.debug_info.is_some()
+    }
+
+    // Get current debug info builder.
+    pub fn get_di_builder(&self) -> &DebugInfoBuilder {
+        &self.debug_info.as_ref().unwrap().0
+    }
+
+    // Get current debug info compilation unit.
+    #[allow(unused)]
+    pub fn get_di_compile_unit(&self) -> &DICompileUnit {
+        &self.debug_info.as_ref().unwrap().1
+    }
+
+    // Finalize all debug infos.
+    pub fn finalize_di(&self) {
+        if self.has_di() {
+            self.get_di_builder().finalize();
+        }
+    }
+
+    pub fn create_di_file(&self, src: &SourceFile) -> DIFile {
+        self.get_di_builder()
+            .create_file(&src.get_file_name(), &src.get_file_dir())
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
     ty.ptr_type(AddressSpace::from(0))
 }
-
-pub static CAP_NAME: &str = "%CAP";
