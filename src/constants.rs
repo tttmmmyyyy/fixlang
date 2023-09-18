@@ -36,3 +36,33 @@ pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const SEARCH_DYNAMIC_LIBRARY_TEMP_FILE: &str = ".fixlang/search_dl_temp";
+
+pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<&str>)] = &[
+    ("Debug", include_str!("./fix/debug.fix"), "debug.fix", None),
+    ("Hash", include_str!("./fix/hash.fix"), "hash.fix", None),
+    (
+        "HashMap",
+        include_str!("./fix/hashmap.fix"),
+        "hashmap.fix",
+        None,
+    ),
+    (
+        "HashSet",
+        include_str!("./fix/hashset.fix"),
+        "hashset.fix",
+        None,
+    ),
+    (
+        "Math",
+        include_str!("./fix/math.fix"),
+        "math.fix",
+        Some("m"),
+    ),
+    ("Time", include_str!("./fix/time.fix"), "time.fix", None),
+    (
+        "Character",
+        include_str!("./fix/character.fix"),
+        "character.fix",
+        None,
+    ),
+];

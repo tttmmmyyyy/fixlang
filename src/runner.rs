@@ -266,15 +266,15 @@ pub fn run_module(fix_mod: Program, config: Configuration) -> i32 {
 }
 
 // Return file content and last modified.
-pub fn read_file(path: &Path) -> (String, UpdateDate) {
+pub fn read_file(path: &Path) -> Result<(String, UpdateDate), String> {
     let display = path.display();
     let mut file = match File::open(&path) {
-        Err(why) => panic!("Couldn't open {}: {}", display, why),
+        Err(why) => return Err(format!("Couldn't open {}: {}", display, why)),
         Ok(file) => file,
     };
     let mut s = String::new();
     match file.read_to_string(&mut s) {
-        Err(why) => panic!("Couldn't read {}: {}", display, why),
+        Err(why) => return Err(format!("Couldn't read {}: {}", display, why)),
         Ok(_) => (),
     }
     let last_modified: Option<UpdateDate> = match file.metadata() {
@@ -294,7 +294,7 @@ pub fn read_file(path: &Path) -> (String, UpdateDate) {
         println!("Build cache for {} will be ignored", display);
     }
     let last_modified = last_modified.unwrap_or(UpdateDate(SystemTime::now().into()));
-    (s, last_modified)
+    Ok((s, last_modified))
 }
 
 // Create a directory if it doesn't exist, and return its path.
@@ -318,7 +318,12 @@ pub fn load_file(config: &mut Configuration) -> Program {
     // Link all modules specified in source_files.
     let mut target_mod = make_std_mod();
     for file_path in &config.source_files {
-        let (content, last_modified) = read_file(file_path);
+        let (content, last_modified) = match read_file(file_path) {
+            Ok(p) => p,
+            Err(e) => {
+                panic!("{}", e)
+            }
+        };
         let mut fix_mod = parse_source(&content, file_path.to_str().unwrap());
         fix_mod.set_last_update(fix_mod.get_name_if_single_module(), last_modified);
         target_mod.link(fix_mod);

@@ -20,7 +20,21 @@ impl SourceFile {
     pub fn string(&self) -> String {
         match &self.string {
             Some(s) => s.as_str().to_string(),
-            None => read_file(&PathBuf::from(self.file_path.clone())).0,
+            None => match read_file(&PathBuf::from(self.file_path.clone())) {
+                Ok((s, _)) => s,
+                Err(e) => panic!("{}", e),
+            },
+        }
+    }
+
+    pub fn has_string(&self) -> bool {
+        if self.string.is_some() {
+            true
+        } else {
+            match read_file(&PathBuf::from(self.file_path.clone())) {
+                Ok(_) => true,
+                Err(_) => false,
+            }
         }
     }
 

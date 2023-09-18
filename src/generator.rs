@@ -1043,28 +1043,30 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
         if let Some((di_builder, di_compile_unit)) = self.debug_info.as_ref() {
             if let Some(span) = lam.source.as_ref() {
-                let debug_info_scope = di_compile_unit.as_debug_info_scope();
-                let line_no = span.start_line_no();
-                let subroutine_type = di_builder.create_subroutine_type(
-                    self.create_di_file(&span.input),
-                    None, // TODO
-                    &[],  // TODO
-                    3,
-                );
-                let func_scope = di_builder.create_function(
-                    debug_info_scope,
-                    "NA",
-                    None,
-                    di_compile_unit.get_file(),
-                    line_no as u32,
-                    subroutine_type,
-                    true,
-                    true,
-                    line_no as u32,
-                    3,
-                    false,
-                );
-                lam_fn.set_subprogram(func_scope);
+                if span.input.has_string() {
+                    let debug_info_scope = di_compile_unit.as_debug_info_scope();
+                    let line_no = span.start_line_no();
+                    let subroutine_type = di_builder.create_subroutine_type(
+                        self.create_di_file(&span.input),
+                        None, // TODO
+                        &[],  // TODO
+                        0,
+                    );
+                    let func_scope = di_builder.create_function(
+                        debug_info_scope,
+                        "NA",
+                        None,
+                        di_compile_unit.get_file(),
+                        line_no as u32,
+                        subroutine_type,
+                        true,
+                        true,
+                        line_no as u32,
+                        0,
+                        false,
+                    );
+                    lam_fn.set_subprogram(func_scope);
+                }
             }
         }
         lam_fn
@@ -1077,32 +1079,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         lam_fn: FunctionValue<'c>,
         cap_vars: Option<Vec<(FullName, Rc<TypeNode>)>>,
     ) {
-        if self.has_di() {
-            if let Some(span) = &lam.source {
-                // let func_scope = lam_fn.get_subprogram().unwrap();
-                // let lexical_block = self.get_di_builder().create_lexical_block(
-                //     func_scope.as_debug_info_scope(),
-                //     self.create_di_file(&span.input),
-                //     0, // TODO
-                //     0, // TODO
-                // );
-                // let loc = self.get_di_builder().create_debug_location(
-                //     self.context,
-                //     0, // TODO
-                //     0, // TODO
-                //     lexical_block.as_debug_info_scope(),
-                //     None,
-                // );
-                // self.builder().set_current_debug_location(self.context, loc);
-            }
-        }
-
         let lam_ty = lam.ty.clone().unwrap();
         let (args, body) = lam.destructure_lam();
         let cap_vars = if cap_vars.is_some() {
             cap_vars.unwrap()
         } else {
-            self.calculate_captured_vars_of_lambda(lam)
+            self.calculate_captured_vars_of_lambda(lam.clone())
         };
         let cap_tys = cap_vars
             .iter()
@@ -1113,6 +1095,28 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let _builder_guard = self.push_builder();
         let bb = self.context.append_basic_block(lam_fn, "entry");
         self.builder().position_at_end(bb);
+
+        // Generate debug info
+        if self.has_di() {
+            if let Some(span) = &lam.source {
+                if let Some(scope) = lam_fn.get_subprogram() {
+                    let lexical_block = self.get_di_builder().create_lexical_block(
+                        scope.as_debug_info_scope(),
+                        self.create_di_file(&span.input),
+                        0, // TODO
+                        0, // TODO
+                    );
+                    let loc = self.get_di_builder().create_debug_location(
+                        self.context,
+                        0, // TODO
+                        0, // TODO
+                        lexical_block.as_debug_info_scope(),
+                        None,
+                    );
+                    self.builder().set_current_debug_location(self.context, loc);
+                }
+            }
+        }
 
         // Create new scope
         let _scope_guard = self.push_scope();
