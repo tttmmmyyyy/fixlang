@@ -201,11 +201,13 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 }
 
 pub fn parse_source_temporary_file(source: &str, file_name: &str, hash: &str) -> Program {
-    let full_name = temporary_source_name(file_name, hash);
     if !check_temporary_source(file_name, hash) {
         save_temporary_source(source, file_name, hash);
     }
-    parse_source(source, &full_name)
+    parse_source(
+        source,
+        temporary_source_path(file_name, hash).to_str().unwrap(),
+    )
 }
 
 pub fn parse_source(source: &str, file_name: &str) -> Program {
