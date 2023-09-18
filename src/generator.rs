@@ -1053,7 +1053,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 );
                 let func_scope = di_builder.create_function(
                     debug_info_scope,
-                    "NA",
+                    lam_fn.get_name().to_str().unwrap(),
                     None,
                     self.create_di_file(&span.input),
                     line_no as u32,
