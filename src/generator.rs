@@ -1055,7 +1055,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     debug_info_scope,
                     "NA",
                     None,
-                    di_compile_unit.get_file(),
+                    self.create_di_file(&span.input),
                     line_no as u32,
                     subroutine_type,
                     true,

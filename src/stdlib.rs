@@ -8,7 +8,11 @@ pub const FIX_NAME: &str = "fix";
 const STD_SOURCE: &str = include_str!("fix/std.fix");
 
 pub fn make_std_mod() -> Program {
-    let mut fix_module = parse_source(STD_SOURCE, "std.fix");
+    let mut fix_module = parse_source_temporary_file(
+        STD_SOURCE,
+        "std",
+        &format!("{:x}", md5::compute(build_time_utc!())),
+    );
     fix_module.set_last_update(
         STD_NAME.to_string(),
         UpdateDate(
