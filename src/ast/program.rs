@@ -3,7 +3,7 @@ use std::time::SystemTime;
 use build_time::build_time_utc;
 use chrono::{DateTime, Utc};
 
-use inkwell::module::Linkage;
+use inkwell::{debug_info::AsDIScope, module::Linkage};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
@@ -574,6 +574,12 @@ impl Program {
                         gc.module
                             .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
 
+                    // Create debug info subprgoram
+                    if gc.has_di() && sym.expr.as_ref().unwrap().source.is_some() {
+                        let span = sym.expr.as_ref().unwrap().source.as_ref().unwrap();
+                        acc_fn.set_subprogram(gc.create_debug_subprogram(&acc_fn_name, span));
+                    }
+
                     // Register the accessor function to gc.
                     gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
 
@@ -604,6 +610,22 @@ impl Program {
                 let init_flag = init_flag.unwrap();
                 let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
                 gc.builder().position_at_end(entry_bb);
+
+                // Push debug info scope.
+                let _di_scope_guard: Option<PopDebugScopeGuard<'_>> =
+                    if gc.has_di() && acc_fn.get_subprogram().is_some() {
+                        let subprogram = acc_fn.get_subprogram().unwrap();
+                        Some(gc.push_debug_scope(subprogram.as_debug_info_scope()))
+                    } else {
+                        None
+                    };
+
+                // Set debug location.
+                if gc.has_di() && sym.expr.as_deref().unwrap().source.is_some() {
+                    let span = sym.expr.as_ref().unwrap().source.as_ref().unwrap();
+                    gc.set_debug_location(span);
+                }
+
                 let flag = gc
                     .builder()
                     .build_load(init_flag, "load_init_flag")
