@@ -1040,7 +1040,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let lam_ty = lam.ty.clone().unwrap();
         let lam_fn_ty = lambda_function_type(&lam_ty, self);
         let lam_fn = self.module.add_function(
-            &format!("Lambda {}", lam_ty.to_string_normalize()),
+            &format!("c[{}]", lam_ty.to_string_normalize()),
             lam_fn_ty,
             Some(Linkage::Internal),
         );
