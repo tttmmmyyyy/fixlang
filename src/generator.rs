@@ -6,7 +6,7 @@ use std::{cell::RefCell, env, rc::Rc};
 
 use either::Either;
 use inkwell::{
-    debug_info::{AsDIScope, DICompileUnit, DIFile, DebugInfoBuilder},
+    debug_info::{AsDIScope, DICompileUnit, DIFile, DIScope, DISubprogram, DebugInfoBuilder},
     execution_engine::ExecutionEngine,
     intrinsics::Intrinsic,
     module::Linkage,
@@ -275,6 +275,7 @@ pub struct GenerationContext<'c, 'm> {
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
     debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
+    debug_scope: Rc<RefCell<Vec<DIScope<'c>>>>,
     pub global: HashMap<FullName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typeresolver: TypeResolver,
@@ -299,6 +300,16 @@ pub struct PopScopeGuard<'c> {
 }
 
 impl<'c> Drop for PopScopeGuard<'c> {
+    fn drop(&mut self) {
+        self.scope.borrow_mut().pop();
+    }
+}
+
+pub struct PopDebugScopeGuard<'c> {
+    scope: Rc<RefCell<Vec<DIScope<'c>>>>,
+}
+
+impl<'c> Drop for PopDebugScopeGuard<'c> {
     fn drop(&mut self) {
         self.scope.borrow_mut().pop();
     }
@@ -376,6 +387,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             module,
             builders: Rc::new(RefCell::new(vec![Rc::new(ctx.create_builder())])),
             scope: Rc::new(RefCell::new(vec![Default::default()])),
+            debug_scope: Rc::new(RefCell::new(vec![])),
             debug_info: Default::default(),
             global: Default::default(),
             runtimes: Default::default(),
@@ -417,6 +429,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             "",
             "",
         );
+        self.debug_scope
+            .borrow_mut()
+            .push(dicu.as_debug_info_scope());
         self.debug_info = Some((dib, dicu));
     }
 
@@ -467,6 +482,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         PopScopeGuard {
             scope: self.scope.clone(),
         }
+    }
+
+    // Push a new debug scope.
+    pub fn push_debug_scope(&mut self, scope: DIScope<'c>) -> PopDebugScopeGuard<'c> {
+        self.debug_scope.borrow_mut().push(scope);
+        PopDebugScopeGuard {
+            scope: self.debug_scope.clone(),
+        }
+    }
+
+    // Get a top debug scope.
+    pub fn debug_scope(&self) -> DIScope<'c> {
+        self.debug_scope.borrow().last().unwrap().clone()
     }
 
     // Get the value of a variable.
@@ -1044,33 +1072,51 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             lam_fn_ty,
             Some(Linkage::Internal),
         );
-        if let Some((di_builder, di_compile_unit)) = self.debug_info.as_ref() {
-            if let Some(span) = lam.source.as_ref() {
-                let debug_info_scope = di_compile_unit.as_debug_info_scope();
-                let line_no = span.start_line_no();
-                let subroutine_type = di_builder.create_subroutine_type(
-                    self.create_di_file(&span.input),
-                    None, // TODO
-                    &[],  // TODO
-                    0,
-                );
-                let func_scope = di_builder.create_function(
-                    debug_info_scope,
-                    lam_fn.get_name().to_str().unwrap(),
-                    None,
-                    self.create_di_file(&span.input),
-                    line_no as u32,
-                    subroutine_type,
-                    true,
-                    true,
-                    line_no as u32,
-                    0,
-                    false,
-                );
-                lam_fn.set_subprogram(func_scope);
-            }
+        // Create and set debug info subprogram.
+        if self.has_di() && lam.source.is_some() {
+            let span = lam.source.as_ref().unwrap();
+            let fn_name = lam_fn.get_name().to_str().unwrap();
+            lam_fn.set_subprogram(self.create_debug_subprogram(fn_name, span));
         }
         lam_fn
+    }
+
+    // Create debug info subprogram.
+    pub fn create_debug_subprogram(&self, fn_name: &str, span: &Span) -> DISubprogram {
+        let (di_builder, di_compile_unit) = self.debug_info.as_ref().unwrap();
+        let line_no = span.start_line_no();
+        let subroutine_type = di_builder.create_subroutine_type(
+            self.create_di_file(&span.input),
+            None, // TODO
+            &[],  // TODO
+            0,
+        );
+        di_builder.create_function(
+            di_compile_unit.as_debug_info_scope(),
+            fn_name,
+            None,
+            self.create_di_file(&span.input),
+            line_no as u32,
+            subroutine_type,
+            true,
+            true,
+            line_no as u32,
+            0,
+            false,
+        )
+    }
+
+    // Emit debug location
+    pub fn set_debug_location(&self, span: &Span) {
+        let (line, col) = span.start_line_col();
+        let loc = self.get_di_builder().create_debug_location(
+            self.context,
+            line as u32,
+            col as u32,
+            self.debug_scope(),
+            None,
+        );
+        self.builder().set_current_debug_location(self.context, loc);
     }
 
     // Implement function of lambda expression
@@ -1097,29 +1143,28 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let bb = self.context.append_basic_block(lam_fn, "entry");
         self.builder().position_at_end(bb);
 
-        // Generate debug info
-        if self.has_di() && lam.source.is_some() && lam_fn.get_subprogram().is_some() {
-            let span = lam.source.as_ref().unwrap();
+        // Push debug info scope.
+        let _di_scope_guard = if self.has_di() && lam_fn.get_subprogram().is_some() {
             let subprogram = lam_fn.get_subprogram().unwrap();
-            let (line, col) = span.start_line_col();
-            let lexical_block = self.get_di_builder().create_lexical_block(
-                subprogram.as_debug_info_scope(),
-                self.create_di_file(&span.input),
-                line as u32,
-                col as u32,
-            );
-            let loc = self.get_di_builder().create_debug_location(
-                self.context,
-                line as u32,
-                col as u32,
-                lexical_block.as_debug_info_scope(),
-                None,
-            );
-            self.builder().set_current_debug_location(self.context, loc);
-        }
+            // I don't understand the necessity to create lexical scope:
+            // let lexical_block = self.get_di_builder().create_lexical_block(
+            //     subprogram.as_debug_info_scope(),
+            //     self.create_di_file(&span.input),
+            //     line as u32,
+            //     col as u32,
+            // );
+            Some(self.push_debug_scope(subprogram.as_debug_info_scope()))
+        } else {
+            None
+        };
 
         // Create new scope
         let _scope_guard = self.push_scope();
+
+        // Set debug location.
+        if self.has_di() && lam.source.is_some() {
+            self.set_debug_location(lam.source.as_ref().unwrap());
+        }
 
         // Push argments on scope.
         let mut arg_objs = vec![];
