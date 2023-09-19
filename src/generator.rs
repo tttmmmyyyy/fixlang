@@ -1098,26 +1098,24 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().position_at_end(bb);
 
         // Generate debug info
-        if self.has_di() {
-            if let Some(span) = &lam.source {
-                if let Some(scope) = lam_fn.get_subprogram() {
-                    let (line, col) = span.start_line_col();
-                    let lexical_block = self.get_di_builder().create_lexical_block(
-                        scope.as_debug_info_scope(),
-                        self.create_di_file(&span.input),
-                        line as u32,
-                        col as u32,
-                    );
-                    let loc = self.get_di_builder().create_debug_location(
-                        self.context,
-                        line as u32,
-                        col as u32,
-                        lexical_block.as_debug_info_scope(),
-                        None,
-                    );
-                    self.builder().set_current_debug_location(self.context, loc);
-                }
-            }
+        if self.has_di() && lam.source.is_some() && lam_fn.get_subprogram().is_some() {
+            let span = lam.source.as_ref().unwrap();
+            let subprogram = lam_fn.get_subprogram().unwrap();
+            let (line, col) = span.start_line_col();
+            let lexical_block = self.get_di_builder().create_lexical_block(
+                subprogram.as_debug_info_scope(),
+                self.create_di_file(&span.input),
+                line as u32,
+                col as u32,
+            );
+            let loc = self.get_di_builder().create_debug_location(
+                self.context,
+                line as u32,
+                col as u32,
+                lexical_block.as_debug_info_scope(),
+                None,
+            );
+            self.builder().set_current_debug_location(self.context, loc);
         }
 
         // Create new scope
