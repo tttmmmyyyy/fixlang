@@ -2,7 +2,7 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, env, rc::Rc};
 
 use either::Either;
 use inkwell::{
@@ -396,12 +396,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             inkwell::module::FlagBehavior::Warning,
             debug_metadata_version,
         );
-
+        let cur_dir = match env::current_dir() {
+            Err(why) => panic!("Failed to get current directory: {}", why),
+            Ok(dir) => dir,
+        };
         let (dib, dicu) = self.module.create_debug_info_builder(
             true,
             inkwell::debug_info::DWARFSourceLanguage::C,
             "NA",
-            "NA",
+            cur_dir.to_str().unwrap(),
             "fix",
             false,
             "",
@@ -1098,16 +1101,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if self.has_di() {
             if let Some(span) = &lam.source {
                 if let Some(scope) = lam_fn.get_subprogram() {
+                    let (line, col) = span.start_line_col();
                     let lexical_block = self.get_di_builder().create_lexical_block(
                         scope.as_debug_info_scope(),
                         self.create_di_file(&span.input),
-                        0, // TODO
-                        0, // TODO
+                        line as u32,
+                        col as u32,
                     );
                     let loc = self.get_di_builder().create_debug_location(
                         self.context,
-                        0, // TODO
-                        0, // TODO
+                        line as u32,
+                        col as u32,
                         lexical_block.as_debug_info_scope(),
                         None,
                     );

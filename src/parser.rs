@@ -101,9 +101,14 @@ impl Span {
 
     // Get line number of start.
     pub fn start_line_no(&self) -> usize {
+        self.start_line_col().0
+    }
+
+    // Get line and column number of start.
+    pub fn start_line_col(&self) -> (usize, usize) {
         let source_string = self.input.string();
         let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
-        span.start_pos().line_col().0
+        span.start_pos().line_col()
     }
 
     // Show source codes around this span.

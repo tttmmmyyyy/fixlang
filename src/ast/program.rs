@@ -551,9 +551,9 @@ impl Program {
                     gc.add_global_object(name.clone(), lam_fn, obj_ty.clone());
                     (None, None, lam_fn, sym.clone(), obj_ty)
                 } else {
-                    let flag_name = format!("InitFlag{}", name.to_string());
-                    let global_var_name = format!("GlobalVar{}", name.to_string());
-                    let acc_fn_name = format!("Get{}", name.to_string());
+                    let flag_name = format!("InitFlag#{}", name.to_string());
+                    let global_var_name = format!("GlobalVar#{}", name.to_string());
+                    let acc_fn_name = format!("Get#{}", name.to_string());
 
                     let obj_embed_ty = obj_ty.get_embedded_type(gc, &vec![]);
 
