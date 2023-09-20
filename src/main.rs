@@ -220,6 +220,11 @@ fn main() {
         config.debug_mode = m.contains_id("debug-mode");
         config.emit_llvm = m.contains_id("emit-llvm");
         config.uncurry_optimization = !config.debug_mode;
+        config.llvm_opt_level = if config.debug_mode {
+            OptimizationLevel::None
+        } else {
+            OptimizationLevel::Default
+        };
         config
     }
 

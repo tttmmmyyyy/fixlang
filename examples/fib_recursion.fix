@@ -1,15 +1,37 @@
 module Main;
+import Debug;
 
 fib : I64 -> I64;
 fib = |n| (
-    if n == 0 {
-        0
+    if n >= 2 {
+        fib(n-1) 
+        + 
+        fib(n-2)        
     } else if n == 1 {
         1
     } else {
-        fib(n-1) + fib(n-2)
+        fib2(5)
     }
 );
 
+fib2 : I64 -> I64;
+fib2 = |n| (
+    if n == 0 {
+        f()
+    } else if n == 1 {
+        1
+    } else {
+        fib2(n-1) 
+        + 
+        fib2(n-2)
+    }
+);
+
+f : () -> I64;
+f = |x| g(x);
+
+g : () -> I64;
+g = |x| 5 + abort();
+
 main : IO ();
-main = print $ fib(30).to_string; // 832040
+main = print $ fib(5).to_string; // 832040
