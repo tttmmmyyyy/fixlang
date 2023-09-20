@@ -230,13 +230,13 @@ impl ObjectFieldType {
         let curr_func = curr_bb.get_parent().unwrap();
         let is_out_of_range =
             gc.builder()
-                .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_ramge");
+                .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_range");
         let out_of_range_bb = gc.context.append_basic_block(curr_func, "out_of_range_bb");
         let in_range_bb = gc.context.append_basic_block(curr_func, "in_range_bb");
         gc.builder()
             .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb);
         gc.builder().position_at_end(out_of_range_bb);
-        gc.panic("Index out of range!\n");
+        gc.panic("Index out of range.\n");
         gc.builder().build_unconditional_branch(in_range_bb);
         gc.builder().position_at_end(in_range_bb);
     }

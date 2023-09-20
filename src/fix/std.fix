@@ -1095,7 +1095,7 @@ namespace PunchedArray {
     punch! = |idx, arr| (
         let arr = arr.assert_unique!(|_|"[PunchedArray::punch!] Called on a shared array.");
         let size = arr.get_size;
-        let _ = assert(|_|"[PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
+        let _ = assert(|_|"[PunchedArray::punch!] Index out of range.", 0 <= idx && idx < size);
         let elm = arr._unsafe_get(idx);
         let dtor = |arr| (
             let arr = arr._unsafe_set_size(0); // Avoid releaseing elements in the destructor of Array.
