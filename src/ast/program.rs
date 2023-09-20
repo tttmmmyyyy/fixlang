@@ -621,7 +621,9 @@ impl Program {
                     };
 
                 // Set debug location.
-                if gc.has_di() && sym.expr.as_deref().unwrap().source.is_some() {
+                let push_debug_location =
+                    gc.has_di() && sym.expr.as_deref().unwrap().source.is_some();
+                if push_debug_location {
                     let span = sym.expr.as_ref().unwrap().source.as_ref().unwrap();
                     gc.push_debug_location(span);
                 }
@@ -690,7 +692,7 @@ impl Program {
                 gc.builder().build_return(Some(&ret));
 
                 // Pop debug location.
-                if gc.has_di() {
+                if push_debug_location {
                     gc.pop_debug_location();
                 }
             }

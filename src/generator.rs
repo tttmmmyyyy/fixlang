@@ -984,7 +984,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             expr.set_inferred_type(self.typeresolver.substitute_type(&expr.ty.clone().unwrap()));
         assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
 
-        if self.has_di() && expr.source.is_some() {
+        let push_debug_loc = self.has_di() && expr.source.is_some();
+        if push_debug_loc {
             self.push_debug_location(expr.source.as_ref().unwrap())
         };
 
@@ -1008,7 +1009,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         };
 
-        if self.has_di() {
+        if push_debug_loc {
             self.pop_debug_location();
         }
 
@@ -1195,7 +1196,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let _scope_guard = self.push_scope();
 
         // Set debug location.
-        if self.has_di() && lam.source.is_some() {
+        let push_debug_loc = self.has_di() && lam.source.is_some();
+        if push_debug_loc {
             self.push_debug_location(lam.source.as_ref().unwrap());
         }
 
@@ -1278,7 +1280,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
 
         // Pop debug location.
-        if self.has_di() {
+        if push_debug_loc {
             self.pop_debug_location();
         }
     }
