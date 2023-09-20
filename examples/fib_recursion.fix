@@ -15,6 +15,6 @@ fib = |n| (
 main : IO ();
 main = (
     let ans = fib(30);
-    eval assert_eq(|_|"", ans, 832040);
+    eval assert_eq(|_|"fib(30) is not 832040!", ans, 832040);
     print $ ans.to_string
 );
