@@ -276,6 +276,7 @@ pub struct GenerationContext<'c, 'm> {
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
     debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
     debug_scope: Rc<RefCell<Vec<DIScope<'c>>>>,
+    pub debug_location: Vec<Span>, // current debug location
     pub global: HashMap<FullName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typeresolver: TypeResolver,
@@ -317,7 +318,11 @@ impl<'c> Drop for PopDebugScopeGuard<'c> {
 
 impl<'c, 'm> GenerationContext<'c, 'm> {
     // Build alloca at current function's entry bb.
-    pub fn build_alloca_at_entry<T: BasicType<'c>>(&self, ty: T, name: &str) -> PointerValue<'c> {
+    pub fn build_alloca_at_entry<T: BasicType<'c>>(
+        &mut self,
+        ty: T,
+        name: &str,
+    ) -> PointerValue<'c> {
         let current_bb = self.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let first_bb = current_func.get_first_basic_block().unwrap();
@@ -327,6 +332,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         let ptr = self.builder().build_alloca(ty, name);
         self.builder().position_at_end(current_bb);
+        self.set_debug_location();
         ptr
     }
 
@@ -389,6 +395,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             scope: Rc::new(RefCell::new(vec![Default::default()])),
             debug_scope: Rc::new(RefCell::new(vec![])),
             debug_info: Default::default(),
+            debug_location: vec![],
             global: Default::default(),
             runtimes: Default::default(),
             typeresolver: Default::default(),
@@ -705,6 +712,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
             }
             call_args.push(rvo_ptr.into());
+
             let ret = self.builder().build_call(func, &call_args, "call_lambda");
             ret.set_tail_call(true);
             rvo
@@ -975,6 +983,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let expr =
             expr.set_inferred_type(self.typeresolver.substitute_type(&expr.ty.clone().unwrap()));
         assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
+
+        if self.has_di() && expr.source.is_some() {
+            self.push_debug_location(expr.source.as_ref().unwrap())
+        };
+
         let mut ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone(), rvo),
             Expr::LLVM(lit) => self.eval_llvm(lit.clone(), expr.ty.clone().unwrap().clone(), rvo),
@@ -994,6 +1007,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.eval_call_c(&expr, fun_name, ret_ty, param_tys, *is_var_args, args, rvo)
             }
         };
+
+        if self.has_di() {
+            self.pop_debug_location();
+        }
+
         ret.ty = expr.ty.clone().unwrap();
         ret
     }
@@ -1106,9 +1124,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         )
     }
 
-    // Emit debug location
-    pub fn set_debug_location(&self, span: &Span) {
+    // Push debug location
+    pub fn push_debug_location(&mut self, span: &Span) {
         let (line, col) = span.start_line_col();
+        self.debug_location.push(span.clone());
         let loc = self.get_di_builder().create_debug_location(
             self.context,
             line as u32,
@@ -1117,6 +1136,27 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             None,
         );
         self.builder().set_current_debug_location(self.context, loc);
+    }
+
+    // set debug location
+    pub fn set_debug_location(&mut self) {
+        if let Some(span) = self.debug_location.last() {
+            let (line, col) = span.start_line_col();
+            let loc = self.get_di_builder().create_debug_location(
+                self.context,
+                line as u32,
+                col as u32,
+                self.debug_scope(),
+                None,
+            );
+            self.builder().set_current_debug_location(self.context, loc);
+        }
+    }
+
+    // Pop debug location.
+    pub fn pop_debug_location(&mut self) {
+        self.debug_location.pop();
+        self.set_debug_location();
     }
 
     // Implement function of lambda expression
@@ -1146,13 +1186,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Push debug info scope.
         let _di_scope_guard = if self.has_di() && lam_fn.get_subprogram().is_some() {
             let subprogram = lam_fn.get_subprogram().unwrap();
-            // I don't understand the necessity to create lexical scope:
-            // let lexical_block = self.get_di_builder().create_lexical_block(
-            //     subprogram.as_debug_info_scope(),
-            //     self.create_di_file(&span.input),
-            //     line as u32,
-            //     col as u32,
-            // );
             Some(self.push_debug_scope(subprogram.as_debug_info_scope()))
         } else {
             None
@@ -1163,7 +1196,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Set debug location.
         if self.has_di() && lam.source.is_some() {
-            self.set_debug_location(lam.source.as_ref().unwrap());
+            self.push_debug_location(lam.source.as_ref().unwrap());
         }
 
         // Push argments on scope.
@@ -1242,6 +1275,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().build_return(None);
         } else {
             self.builder().build_return(Some(&val.value(self)));
+        }
+
+        // Pop debug location.
+        if self.has_di() {
+            self.pop_debug_location();
         }
     }
 

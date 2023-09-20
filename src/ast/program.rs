@@ -623,7 +623,7 @@ impl Program {
                 // Set debug location.
                 if gc.has_di() && sym.expr.as_deref().unwrap().source.is_some() {
                     let span = sym.expr.as_ref().unwrap().source.as_ref().unwrap();
-                    gc.set_debug_location(span);
+                    gc.push_debug_location(span);
                 }
 
                 let flag = gc
@@ -688,6 +688,11 @@ impl Program {
                 };
                 let ret = gc.cast_pointer(ret, ptr_to_object_type(gc.context));
                 gc.builder().build_return(Some(&ret));
+
+                // Pop debug location.
+                if gc.has_di() {
+                    gc.pop_debug_location();
+                }
             }
         }
     }
