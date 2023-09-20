@@ -165,7 +165,7 @@ fn main() {
         .help("Add dynamically linked library. For example, give \"abc\" to link \"libabc.so\".");
     let debug_mode = Arg::new("debug-mode")
         .long("debug")
-        .short('D')
+        .short('g')
         .takes_value(false)
         .help("Skip optimization and create debug info.");
     let emit_llvm = Arg::new("emit-llvm")
