@@ -276,7 +276,7 @@ pub struct GenerationContext<'c, 'm> {
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
     debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
     debug_scope: Rc<RefCell<Vec<DIScope<'c>>>>,
-    pub debug_location: Vec<Span>, // current debug location
+    debug_location: Vec<Span>, // current debug location
     pub global: HashMap<FullName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typeresolver: TypeResolver,
@@ -332,7 +332,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         let ptr = self.builder().build_alloca(ty, name);
         self.builder().position_at_end(current_bb);
-        self.set_debug_location();
+        self.set_debug_location(None);
         ptr
     }
 
@@ -436,9 +436,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             "",
             "",
         );
-        self.debug_scope
-            .borrow_mut()
-            .push(dicu.as_debug_info_scope());
         self.debug_info = Some((dib, dicu));
     }
 
@@ -500,8 +497,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get a top debug scope.
-    pub fn debug_scope(&self) -> DIScope<'c> {
-        self.debug_scope.borrow().last().unwrap().clone()
+    pub fn debug_scope(&self) -> Option<DIScope<'c>> {
+        self.debug_scope.borrow().last().cloned()
     }
 
     // Get the value of a variable.
@@ -1127,37 +1124,36 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Push debug location
     pub fn push_debug_location(&mut self, span: &Span) {
-        let (line, col) = span.start_line_col();
         self.debug_location.push(span.clone());
-        let loc = self.get_di_builder().create_debug_location(
-            self.context,
-            line as u32,
-            col as u32,
-            self.debug_scope(),
-            None,
-        );
-        self.builder().set_current_debug_location(self.context, loc);
-    }
-
-    // set debug location
-    pub fn set_debug_location(&mut self) {
-        if let Some(span) = self.debug_location.last() {
-            let (line, col) = span.start_line_col();
-            let loc = self.get_di_builder().create_debug_location(
-                self.context,
-                line as u32,
-                col as u32,
-                self.debug_scope(),
-                None,
-            );
-            self.builder().set_current_debug_location(self.context, loc);
-        }
+        self.set_debug_location(Some(span));
     }
 
     // Pop debug location.
     pub fn pop_debug_location(&mut self) {
         self.debug_location.pop();
-        self.set_debug_location();
+        self.set_debug_location(None);
+    }
+
+    // Set debug location
+    pub fn set_debug_location(&mut self, span: Option<&Span>) {
+        let span = if span.is_some() {
+            span
+        } else {
+            self.debug_location.last()
+        };
+        if span.is_some() && self.debug_scope().is_some() {
+            let span = span.unwrap();
+            let debug_scope = self.debug_scope().unwrap();
+            let (line, col) = span.start_line_col();
+            let loc = self.get_di_builder().create_debug_location(
+                self.context,
+                line as u32,
+                col as u32,
+                debug_scope,
+                None,
+            );
+            self.builder().set_current_debug_location(self.context, loc);
+        }
     }
 
     // Implement function of lambda expression

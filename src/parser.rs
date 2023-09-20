@@ -185,13 +185,15 @@ impl DoContext {
                 operand: monad,
                 result_var: var,
             } = self.monads.pop().unwrap();
-            expr = expr_abs(vec![var], expr, None);
+            let bind_arg_src = expr.source.clone();
+            expr = expr_abs(vec![var], expr, bind_arg_src.clone());
             let bind_function = expr_var(
                 FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME),
                 Some(operator_src),
             );
-            expr = expr_app(bind_function, vec![expr], None);
-            expr = expr_app(expr, vec![monad], None)
+            expr = expr_app(bind_function, vec![expr], bind_arg_src.clone());
+            let src = Span::unite_opt(&bind_arg_src, &monad.source);
+            expr = expr_app(expr, vec![monad], src)
                 .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
         }
         expr
