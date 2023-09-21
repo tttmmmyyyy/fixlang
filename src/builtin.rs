@@ -3194,7 +3194,7 @@ pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
                     loop_body_name: LOOP_BODY_NAME.to_string(),
                 }),
                 vec![initial_state_name, loop_body_name],
-                format!("loop {} {}", INITIAL_STATE_NAME, LOOP_BODY_NAME),
+                format!("loop({}, {})", INITIAL_STATE_NAME, LOOP_BODY_NAME),
                 type_tyvar_star(B_NAME),
                 None,
             ),

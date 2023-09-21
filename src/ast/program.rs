@@ -612,20 +612,17 @@ impl Program {
                 gc.builder().position_at_end(entry_bb);
 
                 // Push debug info scope.
-                let _di_scope_guard: Option<PopDebugScopeGuard<'_>> =
-                    if gc.has_di() && acc_fn.get_subprogram().is_some() {
-                        let subprogram = acc_fn.get_subprogram().unwrap();
-                        Some(gc.push_debug_scope(subprogram.as_debug_info_scope()))
-                    } else {
-                        None
-                    };
+                let _di_scope_guard: Option<PopDebugScopeGuard<'_>> = if gc.has_di() {
+                    Some(gc.push_debug_scope(
+                        acc_fn.get_subprogram().map(|sp| sp.as_debug_info_scope()),
+                    ))
+                } else {
+                    None
+                };
 
                 // Set debug location.
-                let push_debug_location =
-                    gc.has_di() && sym.expr.as_deref().unwrap().source.is_some();
-                if push_debug_location {
-                    let span = sym.expr.as_ref().unwrap().source.as_ref().unwrap();
-                    gc.push_debug_location(span);
+                if gc.has_di() {
+                    gc.push_debug_location(sym.expr.as_ref().unwrap().source.clone());
                 }
 
                 let flag = gc
@@ -692,7 +689,7 @@ impl Program {
                 gc.builder().build_return(Some(&ret));
 
                 // Pop debug location.
-                if push_debug_location {
+                if gc.has_di() {
                     gc.pop_debug_location();
                 }
             }

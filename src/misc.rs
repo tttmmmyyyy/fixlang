@@ -55,3 +55,10 @@ pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) {
     fs::create_dir_all(DOT_FIXLANG).expect("Failed to create .fixlang directory.");
     fs::write(path, source).expect(&format!("Failed to generate temporary file {}", file_name));
 }
+
+pub fn flatten_opt<T>(o: Option<Option<T>>) -> Option<T> {
+    match o {
+        Some(o) => o,
+        None => None,
+    }
+}

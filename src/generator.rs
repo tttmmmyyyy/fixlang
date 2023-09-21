@@ -275,8 +275,8 @@ pub struct GenerationContext<'c, 'm> {
     builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
     scope: Rc<RefCell<Vec<Scope<'c>>>>,
     debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
-    debug_scope: Rc<RefCell<Vec<DIScope<'c>>>>,
-    debug_location: Vec<Span>, // current debug location
+    debug_scope: Rc<RefCell<Vec<Option<DIScope<'c>>>>>, // None implies that currently generating codes for function whose source is unknown.
+    debug_location: Vec<Option<Span>>, // None implies that currently generating codes for function whose source is unknown.
     pub global: HashMap<FullName, Variable<'c>>,
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typeresolver: TypeResolver,
@@ -307,7 +307,7 @@ impl<'c> Drop for PopScopeGuard<'c> {
 }
 
 pub struct PopDebugScopeGuard<'c> {
-    scope: Rc<RefCell<Vec<DIScope<'c>>>>,
+    scope: Rc<RefCell<Vec<Option<DIScope<'c>>>>>,
 }
 
 impl<'c> Drop for PopDebugScopeGuard<'c> {
@@ -332,7 +332,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         let ptr = self.builder().build_alloca(ty, name);
         self.builder().position_at_end(current_bb);
-        self.set_debug_location(None);
+        self.reset_debug_location();
         ptr
     }
 
@@ -489,7 +489,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Push a new debug scope.
-    pub fn push_debug_scope(&mut self, scope: DIScope<'c>) -> PopDebugScopeGuard<'c> {
+    pub fn push_debug_scope(&mut self, scope: Option<DIScope<'c>>) -> PopDebugScopeGuard<'c> {
         self.debug_scope.borrow_mut().push(scope);
         PopDebugScopeGuard {
             scope: self.debug_scope.clone(),
@@ -498,7 +498,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Get a top debug scope.
     pub fn debug_scope(&self) -> Option<DIScope<'c>> {
-        self.debug_scope.borrow().last().cloned()
+        flatten_opt(self.debug_scope.borrow().last().cloned())
     }
 
     // Get the value of a variable.
@@ -981,9 +981,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             expr.set_inferred_type(self.typeresolver.substitute_type(&expr.ty.clone().unwrap()));
         assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
 
-        let push_debug_loc = self.has_di() && expr.source.is_some();
-        if push_debug_loc {
-            self.push_debug_location(expr.source.as_ref().unwrap())
+        if self.has_di() {
+            self.push_debug_location(expr.source.clone())
         };
 
         let mut ret = match &*expr.expr {
@@ -1006,7 +1005,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         };
 
-        if push_debug_loc {
+        if self.has_di() {
             self.pop_debug_location();
         }
 
@@ -1084,7 +1083,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let lam_ty = lam.ty.clone().unwrap();
         let lam_fn_ty = lambda_function_type(&lam_ty, self);
         let lam_fn = self.module.add_function(
-            &format!("[{}]", lam_ty.to_string_normalize()),
+            &format!("closure[{}]", lam_ty.to_string_normalize()),
             lam_fn_ty,
             Some(Linkage::Internal),
         );
@@ -1123,24 +1122,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Push debug location
-    pub fn push_debug_location(&mut self, span: &Span) {
+    pub fn push_debug_location(&mut self, span: Option<Span>) {
         self.debug_location.push(span.clone());
-        self.set_debug_location(Some(span));
+        self.set_debug_location(span);
     }
 
     // Pop debug location.
     pub fn pop_debug_location(&mut self) {
         self.debug_location.pop();
-        self.set_debug_location(None);
+        self.reset_debug_location();
     }
 
     // Set debug location
-    pub fn set_debug_location(&mut self, span: Option<&Span>) {
-        let span = if span.is_some() {
-            span
-        } else {
-            self.debug_location.last()
-        };
+    pub fn set_debug_location(&mut self, span: Option<Span>) {
         if span.is_some() && self.debug_scope().is_some() {
             let span = span.unwrap();
             let debug_scope = self.debug_scope().unwrap();
@@ -1153,7 +1147,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 None,
             );
             self.builder().set_current_debug_location(self.context, loc);
+        } else {
+            self.builder().unset_current_debug_location();
         }
+    }
+
+    pub fn reset_debug_location(&mut self) {
+        self.set_debug_location(flatten_opt(self.debug_location.last().cloned()));
     }
 
     // Implement function of lambda expression
@@ -1181,9 +1181,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().position_at_end(bb);
 
         // Push debug info scope.
-        let _di_scope_guard = if self.has_di() && lam_fn.get_subprogram().is_some() {
-            let subprogram = lam_fn.get_subprogram().unwrap();
-            Some(self.push_debug_scope(subprogram.as_debug_info_scope()))
+        let _di_scope_guard = if self.has_di() {
+            let subprogram = lam_fn.get_subprogram();
+            Some(self.push_debug_scope(subprogram.map(|sub| sub.as_debug_info_scope())))
         } else {
             None
         };
@@ -1192,9 +1192,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let _scope_guard = self.push_scope();
 
         // Set debug location.
-        let push_debug_loc = self.has_di() && lam.source.is_some();
-        if push_debug_loc {
-            self.push_debug_location(lam.source.as_ref().unwrap());
+        if self.has_di() {
+            self.push_debug_location(lam.source.clone());
         }
 
         // Push argments on scope.
@@ -1276,7 +1275,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
 
         // Pop debug location.
-        if push_debug_loc {
+        if self.has_di() {
             self.pop_debug_location();
         }
     }
