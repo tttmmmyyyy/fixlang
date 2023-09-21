@@ -491,6 +491,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Push a new debug scope.
     pub fn push_debug_scope(&mut self, scope: Option<DIScope<'c>>) -> PopDebugScopeGuard<'c> {
         self.debug_scope.borrow_mut().push(scope);
+        self.push_debug_location(None);
         PopDebugScopeGuard {
             scope: self.debug_scope.clone(),
         }
@@ -1138,18 +1139,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if span.is_some() && self.debug_scope().is_some() {
             let span = span.unwrap();
             let debug_scope = self.debug_scope().unwrap();
-            let lexical_block = self.get_di_builder().create_lexical_block(
-                debug_scope,
-                self.create_di_file(&span.input),
-                0,
-                0,
-            );
             let (line, col) = span.start_line_col();
             let loc = self.get_di_builder().create_debug_location(
                 self.context,
                 line as u32,
                 col as u32,
-                lexical_block.as_debug_info_scope(),
+                debug_scope,
                 None,
             );
             self.builder().set_current_debug_location(self.context, loc);
@@ -1196,11 +1191,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Create new scope
         let _scope_guard = self.push_scope();
-
-        // Set debug location.
-        if self.has_di() {
-            self.push_debug_location(lam.source.clone());
-        }
 
         // Push argments on scope.
         let mut arg_objs = vec![];
@@ -1278,11 +1268,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().build_return(None);
         } else {
             self.builder().build_return(Some(&val.value(self)));
-        }
-
-        // Pop debug location.
-        if self.has_di() {
-            self.pop_debug_location();
         }
     }
 

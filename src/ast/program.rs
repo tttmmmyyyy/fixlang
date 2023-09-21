@@ -620,11 +620,6 @@ impl Program {
                     None
                 };
 
-                // Set debug location.
-                if gc.has_di() {
-                    gc.push_debug_location(sym.expr.as_ref().unwrap().source.clone());
-                }
-
                 let flag = gc
                     .builder()
                     .build_load(init_flag, "load_init_flag")
@@ -687,11 +682,6 @@ impl Program {
                 };
                 let ret = gc.cast_pointer(ret, ptr_to_object_type(gc.context));
                 gc.builder().build_return(Some(&ret));
-
-                // Pop debug location.
-                if gc.has_di() {
-                    gc.pop_debug_location();
-                }
             }
         }
     }
