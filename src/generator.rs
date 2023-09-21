@@ -1138,12 +1138,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if span.is_some() && self.debug_scope().is_some() {
             let span = span.unwrap();
             let debug_scope = self.debug_scope().unwrap();
+            let lexical_block = self.get_di_builder().create_lexical_block(
+                debug_scope,
+                self.create_di_file(&span.input),
+                0,
+                0,
+            );
             let (line, col) = span.start_line_col();
             let loc = self.get_di_builder().create_debug_location(
                 self.context,
                 line as u32,
                 col as u32,
-                debug_scope,
+                lexical_block.as_debug_info_scope(),
                 None,
             );
             self.builder().set_current_debug_location(self.context, loc);
