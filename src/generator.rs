@@ -1243,6 +1243,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let cap_obj = Object::create_from_value(cap_val, cap_ty.clone(), self);
                 self.retain(cap_obj.clone());
                 self.scope_push(cap_name, &cap_obj);
+                // Create local variable for debug info.
+                if self.has_di() {
+                    self.create_debug_local_variable(&cap_name.to_string(), &cap_obj);
+                }
             }
         }
 
@@ -1377,6 +1381,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.scope_push(var_name, &obj);
             } else {
                 self.release(obj.clone());
+            }
+            // Create local variable for debug info.
+            if self.has_di() {
+                self.create_debug_local_variable(&var_name.to_string(), &obj);
             }
         }
         let val_code = self.eval_expr(val.clone(), rvo);
@@ -1716,6 +1724,32 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             self.get_di_builder().create_file("<unknown source>", "")
         }
+    }
+
+    pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
+        let ptr = obj.ptr(self);
+        let ty = self
+            .get_di_builder()
+            .create_basic_type("<unknown type>", 64, DW_ATE_SIGNED, 0)
+            .unwrap()
+            .as_type();
+        let loc_var = self.get_di_builder().create_auto_variable(
+            self.debug_scope().unwrap(),
+            &name.to_string(),
+            self.create_di_file(None), // TODO: give more good source location.
+            0, // TODO: give more good source location. Should show defined location?
+            ty,
+            true,
+            0,
+            0, // TODO: What is this?
+        );
+        self.get_di_builder().insert_declare_at_end(
+            ptr,
+            Some(loc_var),
+            None,
+            self.builder().get_current_debug_location().unwrap(),
+            self.builder().get_insert_block().unwrap(),
+        );
     }
 }
 

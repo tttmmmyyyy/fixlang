@@ -62,3 +62,18 @@ pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<&str>)] = &[
         None,
     ),
 ];
+
+#[allow(unused)]
+pub const DW_ATE_ADDRESS: u32 = 1;
+#[allow(unused)]
+pub const DW_ATE_BOOLEAN: u32 = 2;
+#[allow(unused)]
+pub const DW_ATE_FLOAT: u32 = 4;
+#[allow(unused)]
+pub const DW_ATE_SIGNED: u32 = 5;
+#[allow(unused)]
+pub const DW_ATE_SIGNED_CHAR: u32 = 6;
+#[allow(unused)]
+pub const DW_ATE_UNSIGNED: u32 = 7;
+#[allow(unused)]
+pub const DW_ATE_UNSINGED_CHAR: u32 = 8;
