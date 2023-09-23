@@ -1333,8 +1333,31 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
         let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
 
         let mut elements = vec![];
-        for field in &obj_type.field_types {
-            elements.push(field.to_debug_type(gc))
+        for (i, field) in obj_type.field_types.iter().enumerate() {
+            let elemet_ty = field.to_basic_type(gc);
+            let element_di_ty = field.to_debug_type(gc);
+            let size_in_bits = gc.target_data().get_bit_size(&elemet_ty);
+            let align_in_bits = gc.target_data().get_abi_alignment(&elemet_ty) * 8;
+            let offset_in_bits = gc
+                .target_data()
+                .offset_of_element(&str_type, i as u32)
+                .unwrap()
+                * 8;
+            let mem_ty = gc
+                .get_di_builder()
+                .create_member_type(
+                    gc.get_di_compile_unit().as_debug_info_scope(),
+                    "member",
+                    gc.create_di_file(None), // TODO
+                    0,                       // TODO
+                    size_in_bits,
+                    align_in_bits,
+                    offset_in_bits,
+                    0,
+                    element_di_ty,
+                )
+                .as_type();
+            elements.push(mem_ty);
         }
 
         gc.get_di_builder()
