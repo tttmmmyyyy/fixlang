@@ -712,7 +712,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             call_args.push(rvo_ptr.into());
 
             let ret = self.builder().build_call(func, &call_args, "call_lambda");
-            ret.set_tail_call(true);
+            ret.set_tail_call(!self.has_di());
             rvo
         } else {
             // If return type is boxed,
@@ -728,7 +728,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
 
             let ret = self.builder().build_call(func, &call_args, "call_lambda");
-            ret.set_tail_call(true);
+            ret.set_tail_call(!self.has_di());
             let ret = ret.try_as_basic_value().unwrap_left();
             Object::create_from_value(ret, ret_ty, self)
         }
