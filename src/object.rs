@@ -1312,6 +1312,19 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
     let obj_type = get_object_type(&ty, &vec![], gc.type_env());
     if obj_type.field_types.len() == 1 {
         // Primitive case
+        if ty.toplevel_tycon().unwrap().is_boolean() {
+            return gc
+                .get_di_builder()
+                .create_basic_type(
+                    &format!("{}::{}", STD_NAME, BOOL_NAME),
+                    8,
+                    DW_ATE_BOOLEAN,
+                    0,
+                )
+                .unwrap()
+                .as_type();
+        }
+        // Do not wrap the element type into struct type.
         obj_type.field_types[0].to_debug_type(gc)
     } else {
         // NOTE: Myabe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.

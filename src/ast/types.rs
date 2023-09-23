@@ -198,6 +198,10 @@ impl TyCon {
             _ => unreachable!(),
         }
     }
+
+    pub fn is_boolean(self: &TyCon) -> bool {
+        return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
+    }
 }
 
 // Information of type constructor.
