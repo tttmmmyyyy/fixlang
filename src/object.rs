@@ -1,5 +1,6 @@
 use inkwell::{
     basic_block::BasicBlock,
+    debug_info::{AsDIScope, DIType},
     module::Linkage,
     types::{BasicMetadataTypeEnum, BasicType},
 };
@@ -63,6 +64,97 @@ impl ObjectFieldType {
                     .i64_type()
                     .array_type(num_of_i64 as u32)
                     .as_basic_type_enum()
+            }
+        }
+    }
+
+    pub fn to_debug_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
+        match self {
+            ObjectFieldType::ControlBlock => todo!(),
+            ObjectFieldType::DtorFunction => todo!(),
+            ObjectFieldType::LambdaFunction(_) => todo!(),
+            ObjectFieldType::Ptr => {
+                let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+                let size_in_bits = gc.target_data().get_bit_size(&ptr_ty);
+                gc.get_di_builder()
+                    .create_basic_type("Std::Ptr", size_in_bits, DW_ATE_ADDRESS, 0)
+                    .unwrap()
+                    .as_type()
+            }
+            ObjectFieldType::I8 => gc
+                .get_di_builder()
+                .create_basic_type("Std::I8", 8, DW_ATE_SIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::I32 => gc
+                .get_di_builder()
+                .create_basic_type("Std::I32", 32, DW_ATE_SIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::U32 => gc
+                .get_di_builder()
+                .create_basic_type("Std::U32", 32, DW_ATE_UNSIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::I64 => gc
+                .get_di_builder()
+                .create_basic_type("Std::I64", 64, DW_ATE_SIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::U64 => gc
+                .get_di_builder()
+                .create_basic_type("Std::U64", 64, DW_ATE_UNSIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::F32 => gc
+                .get_di_builder()
+                .create_basic_type("Std::F32", 32, DW_ATE_FLOAT, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::F64 => gc
+                .get_di_builder()
+                .create_basic_type("Std::F64", 64, DW_ATE_FLOAT, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::SubObject(ty) => ty_to_debug_struct_ty(ty.clone(), gc),
+            ObjectFieldType::UnionBuf(tys) => {
+                let basic_ty = self.to_basic_type(gc);
+                let size_in_bits = gc.target_data().get_bit_size(&basic_ty);
+                let align_in_bits = gc.target_data().get_abi_alignment(&basic_ty) * 8;
+
+                let mut elements = vec![];
+                for ty in tys {
+                    elements.push(ty_to_debug_struct_ty(ty.clone(), gc));
+                }
+
+                gc.get_di_builder()
+                    .create_union_type(
+                        gc.get_di_compile_unit().as_debug_info_scope(),
+                        "union",
+                        gc.create_di_file(None),
+                        0,
+                        size_in_bits,
+                        align_in_bits,
+                        0,
+                        &elements,
+                        0,
+                        "",
+                    )
+                    .as_type()
+            }
+            ObjectFieldType::UnionTag => gc
+                .get_di_builder()
+                .create_basic_type("union_tag", 8, DW_ATE_UNSIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::Array(elem_ty) => {
+                let basic_ty = self.to_basic_type(gc);
+                let size_in_bits = gc.target_data().get_bit_size(&basic_ty);
+                let align_in_bits = gc.target_data().get_abi_alignment(&basic_ty) * 8;
+                let inner_type = ty_to_debug_struct_ty(elem_ty.clone(), gc);
+                gc.get_di_builder()
+                    .create_array_type(inner_type, size_in_bits, align_in_bits, &[])
+                    .as_type()
             }
         }
     }
@@ -1145,6 +1237,73 @@ pub fn create_dtor<'c, 'm>(
             } else {
                 Some(func)
             }
+        }
+    }
+}
+
+pub fn ty_to_debug_embedded_ty<'c, 'm>(
+    ty: Rc<TypeNode>,
+    gc: &mut GenerationContext<'c, 'm>,
+) -> DIType<'c> {
+    let debug_str_ty = ty_to_debug_struct_ty(ty.clone(), gc);
+    if ty.is_box(&gc.type_env()) {
+        let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+        let size_in_bits = gc.target_data().get_bit_size(&ptr_ty);
+        let align_in_bits = gc.target_data().get_abi_alignment(&ptr_ty) * 8;
+        gc.get_di_builder()
+            .create_pointer_type(
+                "pointer",
+                debug_str_ty,
+                size_in_bits,
+                align_in_bits,
+                AddressSpace::from(0),
+            )
+            .as_type()
+    } else {
+        debug_str_ty
+    }
+}
+
+pub fn ty_to_debug_struct_ty<'c, 'm>(
+    ty: Rc<TypeNode>,
+    gc: &mut GenerationContext<'c, 'm>,
+) -> DIType<'c> {
+    let name = &ty.to_string();
+    let tycon_var = ty.toplevel_tycon_info(gc.type_env()).variant;
+    let obj_type = get_object_type(&ty, &vec![], gc.type_env());
+    match tycon_var {
+        TyConVariant::Primitive => {
+            assert!(obj_type.field_types.len() == 1);
+            obj_type.field_types[0].to_debug_type(gc)
+        }
+        TyConVariant::DynamicObject => todo!(),
+        _ => {
+            // NOTE: Myabe we should use llvm's DataLayout::getStructLayout, but it seems that the function isn't wrapped in llvm-sys.
+            let str_type = obj_type.to_struct_type(gc);
+            let size_in_bits = gc.target_data().get_bit_size(&str_type);
+            let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
+
+            let mut elements = vec![];
+            for field in &obj_type.field_types {
+                elements.push(field.to_debug_type(gc))
+            }
+
+            gc.get_di_builder()
+                .create_struct_type(
+                    gc.get_di_compile_unit().as_debug_info_scope(),
+                    name,
+                    gc.create_di_file(None), // TODO
+                    0,                       // TODO
+                    size_in_bits,
+                    align_in_bits,
+                    0,
+                    None,
+                    &elements,
+                    0,
+                    None,
+                    name,
+                )
+                .as_type()
         }
     }
 }

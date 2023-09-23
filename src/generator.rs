@@ -6,7 +6,9 @@ use std::{cell::RefCell, env, rc::Rc};
 
 use either::Either;
 use inkwell::{
-    debug_info::{AsDIScope, DICompileUnit, DIFile, DIScope, DISubprogram, DebugInfoBuilder},
+    debug_info::{
+        AsDIScope, DICompileUnit, DIFile, DIScope, DISubprogram, DIType, DebugInfoBuilder,
+    },
     execution_engine::ExecutionEngine,
     intrinsics::Intrinsic,
     module::Linkage,
@@ -119,6 +121,10 @@ impl<'c> Object<'c> {
             let str_ty = self.struct_ty(gc);
             gc.cast_pointer(self.ptr, ptr_type(str_ty))
         }
+    }
+
+    pub fn debug_embedded_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
+        ty_to_debug_embedded_ty(self.ty.clone(), gc)
     }
 
     pub fn struct_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
@@ -1700,13 +1706,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get current debug info builder.
-    pub fn get_di_builder(&self) -> &DebugInfoBuilder {
+    pub fn get_di_builder(&self) -> &DebugInfoBuilder<'c> {
         &self.debug_info.as_ref().unwrap().0
     }
 
     // Get current debug info compilation unit.
     #[allow(unused)]
-    pub fn get_di_compile_unit(&self) -> &DICompileUnit {
+    pub fn get_di_compile_unit(&self) -> &DICompileUnit<'c> {
         &self.debug_info.as_ref().unwrap().1
     }
 
@@ -1728,17 +1734,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
         let ptr = obj.ptr(self);
-        let ty = self
-            .get_di_builder()
-            .create_basic_type("<unknown type>", 64, DW_ATE_SIGNED, 0)
-            .unwrap()
-            .as_type();
+
+        let embed_ty = obj.debug_embedded_ty(self);
         let loc_var = self.get_di_builder().create_auto_variable(
             self.debug_scope().unwrap(),
             &name.to_string(),
             self.create_di_file(None), // TODO: give more good source location.
             0, // TODO: give more good source location. Should show defined location?
-            ty,
+            embed_ty,
             true,
             0,
             0, // TODO: What is this?
