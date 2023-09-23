@@ -1,6 +1,6 @@
 use inkwell::{
     basic_block::BasicBlock,
-    debug_info::{AsDIScope, DIType},
+    debug_info::{AsDIScope, DIType, DebugInfoBuilder},
     module::Linkage,
     types::{BasicMetadataTypeEnum, BasicType},
 };
@@ -70,17 +70,10 @@ impl ObjectFieldType {
 
     pub fn to_debug_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
         match self {
-            ObjectFieldType::ControlBlock => todo!(),
-            ObjectFieldType::DtorFunction => todo!(),
-            ObjectFieldType::LambdaFunction(_) => todo!(),
-            ObjectFieldType::Ptr => {
-                let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
-                let size_in_bits = gc.target_data().get_bit_size(&ptr_ty);
-                gc.get_di_builder()
-                    .create_basic_type("Std::Ptr", size_in_bits, DW_ATE_ADDRESS, 0)
-                    .unwrap()
-                    .as_type()
-            }
+            ObjectFieldType::ControlBlock => control_block_di_type(gc),
+            ObjectFieldType::DtorFunction => ptr_di_type("<ptr to dtor func>", gc),
+            ObjectFieldType::LambdaFunction(_) => ptr_di_type("<ptr to func>", gc),
+            ObjectFieldType::Ptr => ptr_di_type("Std::Ptr", gc),
             ObjectFieldType::I8 => gc
                 .get_di_builder()
                 .create_basic_type("Std::I8", 8, DW_ATE_SIGNED, 0)
@@ -130,7 +123,7 @@ impl ObjectFieldType {
                 gc.get_di_builder()
                     .create_union_type(
                         gc.get_di_compile_unit().as_debug_info_scope(),
-                        "union",
+                        "<union>",
                         gc.create_di_file(None),
                         0,
                         size_in_bits,
@@ -144,7 +137,7 @@ impl ObjectFieldType {
             }
             ObjectFieldType::UnionTag => gc
                 .get_di_builder()
-                .create_basic_type("union_tag", 8, DW_ATE_UNSIGNED, 0)
+                .create_basic_type("<union tag>", 8, DW_ATE_UNSIGNED, 0)
                 .unwrap()
                 .as_type(),
             ObjectFieldType::Array(elem_ty) => {
@@ -817,12 +810,26 @@ pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
     context.i64_type()
 }
 
+pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
+    builder
+        .create_basic_type("<refcnt>", 64, DW_ATE_UNSIGNED, 0)
+        .unwrap()
+        .as_type()
+}
+
 fn _ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     refcnt_type(context).ptr_type(AddressSpace::from(0))
 }
 
 pub fn obj_id_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
     context.i64_type()
+}
+
+pub fn obj_id_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
+    builder
+        .create_basic_type("<object id>", 64, DW_ATE_UNSIGNED, 0)
+        .unwrap()
+        .as_type()
 }
 
 pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
@@ -847,8 +854,48 @@ pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<
     gc.context.struct_type(&fields, false)
 }
 
+pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
+    let str_type = control_block_type(gc).ptr_type(AddressSpace::from(0));
+    let size_in_bits = gc.target_data().get_bit_size(&str_type);
+    let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
+
+    let di_builder = gc.get_di_builder();
+
+    let mut elements = vec![refcnt_di_type(di_builder)];
+    if gc.config.sanitize_memory {
+        elements.push(obj_id_di_type(di_builder));
+    }
+
+    let name = "<ctrl block>";
+    gc.get_di_builder()
+        .create_struct_type(
+            gc.get_di_compile_unit().as_debug_info_scope(),
+            name,
+            gc.create_di_file(None), // TODO
+            0,                       // TODO
+            size_in_bits,
+            align_in_bits,
+            0,
+            None,
+            &elements,
+            0,
+            None,
+            name,
+        )
+        .as_type()
+}
+
 pub fn ptr_to_control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> PointerType<'c> {
     control_block_type(gc).ptr_type(AddressSpace::from(0))
+}
+
+pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
+    let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+    let size_in_bits = gc.target_data().get_bit_size(&ptr_ty);
+    gc.get_di_builder()
+        .create_basic_type(name, size_in_bits, DW_ATE_ADDRESS, 0)
+        .unwrap()
+        .as_type()
 }
 
 pub fn lambda_function_type<'c, 'm>(
@@ -879,13 +926,6 @@ pub fn lambda_function_type<'c, 'm>(
     }
 }
 
-pub const CLOSURE_FUNPTR_IDX: u32 = 0;
-pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
-pub const ARRAY_LEN_IDX: u32 = 1/* ControlBlock */;
-pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
-pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
-pub const DYNAMIC_OBJ_DTOR_IDX: u32 = 1/* ControlBlock */;
-pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_DTOR_IDX + 1;
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
@@ -1276,9 +1316,8 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
             assert!(obj_type.field_types.len() == 1);
             obj_type.field_types[0].to_debug_type(gc)
         }
-        TyConVariant::DynamicObject => todo!(),
         _ => {
-            // NOTE: Myabe we should use llvm's DataLayout::getStructLayout, but it seems that the function isn't wrapped in llvm-sys.
+            // NOTE: Myabe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
             let str_type = obj_type.to_struct_type(gc);
             let size_in_bits = gc.target_data().get_bit_size(&str_type);
             let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;

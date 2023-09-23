@@ -29,9 +29,17 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const GETTER_SYMBOL: &str = "@";
 pub const SETTER_SYMBOL: &str = "set_";
 
-pub static CAP_NAME: &str = "#CAP";
+pub const CAP_NAME: &str = "#CAP";
 
 pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
+
+pub const CLOSURE_FUNPTR_IDX: u32 = 0;
+pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
+pub const ARRAY_LEN_IDX: u32 = 1/* ControlBlock */;
+pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
+pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
+pub const DYNAMIC_OBJ_DTOR_IDX: u32 = 1/* ControlBlock */;
+pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_DTOR_IDX + 1;
 
 pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const DOT_FIXLANG: &str = ".fixlang";
