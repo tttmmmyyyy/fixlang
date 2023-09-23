@@ -1309,40 +1309,36 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
 ) -> DIType<'c> {
     let name = &ty.to_string();
-    let tycon_var = ty.toplevel_tycon_info(gc.type_env()).variant;
     let obj_type = get_object_type(&ty, &vec![], gc.type_env());
-    match tycon_var {
-        TyConVariant::Primitive => {
-            assert!(obj_type.field_types.len() == 1);
-            obj_type.field_types[0].to_debug_type(gc)
-        }
-        _ => {
-            // NOTE: Myabe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
-            let str_type = obj_type.to_struct_type(gc);
-            let size_in_bits = gc.target_data().get_bit_size(&str_type);
-            let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
+    if obj_type.field_types.len() == 1 {
+        // Primitive case
+        obj_type.field_types[0].to_debug_type(gc)
+    } else {
+        // NOTE: Myabe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
+        let str_type = obj_type.to_struct_type(gc);
+        let size_in_bits = gc.target_data().get_bit_size(&str_type);
+        let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
 
-            let mut elements = vec![];
-            for field in &obj_type.field_types {
-                elements.push(field.to_debug_type(gc))
-            }
-
-            gc.get_di_builder()
-                .create_struct_type(
-                    gc.get_di_compile_unit().as_debug_info_scope(),
-                    name,
-                    gc.create_di_file(None), // TODO
-                    0,                       // TODO
-                    size_in_bits,
-                    align_in_bits,
-                    0,
-                    None,
-                    &elements,
-                    0,
-                    None,
-                    name,
-                )
-                .as_type()
+        let mut elements = vec![];
+        for field in &obj_type.field_types {
+            elements.push(field.to_debug_type(gc))
         }
+
+        gc.get_di_builder()
+            .create_struct_type(
+                gc.get_di_compile_unit().as_debug_info_scope(),
+                name,
+                gc.create_di_file(None), // TODO
+                0,                       // TODO
+                size_in_bits,
+                align_in_bits,
+                0,
+                None,
+                &elements,
+                0,
+                None,
+                name,
+            )
+            .as_type()
     }
 }
