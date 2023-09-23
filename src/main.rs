@@ -167,7 +167,7 @@ fn main() {
         .long("debug")
         .short('g')
         .takes_value(false)
-        .help("Skip optimization and create debug info.");
+        .help("Omit any optimization and generate debugging information. \nNote that tail recursion optimization is not performed, so even tail recursion may result in a stack overflow.");
     let emit_llvm = Arg::new("emit-llvm")
         .long("emit-llvm")
         .takes_value(false)
