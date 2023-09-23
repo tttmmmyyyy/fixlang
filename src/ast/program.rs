@@ -575,9 +575,11 @@ impl Program {
                             .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
 
                     // Create debug info subprgoram
-                    if gc.has_di() && sym.expr.as_ref().unwrap().source.is_some() {
-                        let span = sym.expr.as_ref().unwrap().source.as_ref().unwrap();
-                        acc_fn.set_subprogram(gc.create_debug_subprogram(&acc_fn_name, span));
+                    if gc.has_di() {
+                        acc_fn.set_subprogram(gc.create_debug_subprogram(
+                            &acc_fn_name,
+                            sym.expr.as_ref().unwrap().source.clone(),
+                        ));
                     }
 
                     // Register the accessor function to gc.

@@ -1089,29 +1089,28 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Some(Linkage::Internal),
         );
         // Create and set debug info subprogram.
-        if self.has_di() && lam.source.is_some() {
-            let span = lam.source.as_ref().unwrap();
+        if self.has_di() {
             let fn_name = lam_fn.get_name().to_str().unwrap();
-            lam_fn.set_subprogram(self.create_debug_subprogram(fn_name, span));
+            lam_fn.set_subprogram(self.create_debug_subprogram(fn_name, lam.source.clone()));
         }
         lam_fn
     }
 
     // Create debug info subprogram.
-    pub fn create_debug_subprogram(&self, fn_name: &str, span: &Span) -> DISubprogram {
+    pub fn create_debug_subprogram(&self, fn_name: &str, span: Option<Span>) -> DISubprogram {
         let (di_builder, di_compile_unit) = self.debug_info.as_ref().unwrap();
-        let line_no = span.start_line_no();
-        let subroutine_type = di_builder.create_subroutine_type(
-            self.create_di_file(&span.input),
-            None, // TODO
-            &[],  // TODO
-            0,
-        );
+        let line_no = if let Some(span) = span.as_ref() {
+            span.start_line_no()
+        } else {
+            0
+        };
+        let file = self.create_di_file(span.map(|s| s.input));
+        let subroutine_type = di_builder.create_subroutine_type(file, None, &[], 0);
         di_builder.create_function(
             di_compile_unit.as_debug_info_scope(),
             fn_name,
             None,
-            self.create_di_file(&span.input),
+            file,
             line_no as u32,
             subroutine_type,
             true,
@@ -1136,10 +1135,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Set debug location
     pub fn set_debug_location(&mut self, span: Option<Span>) {
-        if span.is_some() && self.debug_scope().is_some() {
-            let span = span.unwrap();
-            let debug_scope = self.debug_scope().unwrap();
-            let (line, col) = span.start_line_col();
+        if let Some(debug_scope) = self.debug_scope() {
+            let (line, col) = if let Some(span) = span.as_ref() {
+                span.start_line_col()
+            } else {
+                (0, 0)
+            };
             let loc = self.get_di_builder().create_debug_location(
                 self.context,
                 line as u32,
@@ -1708,9 +1709,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    pub fn create_di_file(&self, src: &SourceFile) -> DIFile {
-        self.get_di_builder()
-            .create_file(&src.get_file_name(), &src.get_file_dir())
+    pub fn create_di_file(&self, src: Option<SourceFile>) -> DIFile {
+        if let Some(src) = src {
+            self.get_di_builder()
+                .create_file(&src.get_file_name(), &src.get_file_dir())
+        } else {
+            self.get_di_builder().create_file("<unknown source>", "")
+        }
     }
 }
 
