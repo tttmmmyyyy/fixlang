@@ -1723,7 +1723,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    pub fn create_di_file(&self, src: Option<SourceFile>) -> DIFile {
+    pub fn create_di_file(&self, src: Option<SourceFile>) -> DIFile<'c> {
         if let Some(src) = src {
             self.get_di_builder()
                 .create_file(&src.get_file_name(), &src.get_file_dir())
