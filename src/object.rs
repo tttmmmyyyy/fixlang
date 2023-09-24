@@ -855,18 +855,52 @@ pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<
 }
 
 pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
-    let str_type = control_block_type(gc).ptr_type(AddressSpace::from(0));
-    let size_in_bits = gc.target_data().get_bit_size(&str_type);
-    let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
+    let str_type = control_block_type(gc);
 
-    let di_builder = gc.get_di_builder();
-
-    let mut elements = vec![refcnt_di_type(di_builder)];
+    let refcnt_ty = refcnt_type(gc.context);
+    let refcnt_size_in_bits = gc.target_data().get_bit_size(&refcnt_ty);
+    let refcnt_align_in_bits = gc.target_data().get_abi_alignment(&refcnt_ty) * 8;
+    let refcnt_offset_in_bits = gc.target_data().offset_of_element(&str_type, 0).unwrap();
+    let refcnt_member = gc
+        .get_di_builder()
+        .create_member_type(
+            gc.get_di_compile_unit().as_debug_info_scope(),
+            "<refcnt>",
+            gc.create_di_file(None),
+            0,
+            refcnt_size_in_bits,
+            refcnt_align_in_bits,
+            refcnt_offset_in_bits,
+            0,
+            refcnt_di_type(gc.get_di_builder()),
+        )
+        .as_type();
+    let mut elements = vec![refcnt_member];
     if gc.config.sanitize_memory {
-        elements.push(obj_id_di_type(di_builder));
+        let obj_id_ty = refcnt_type(gc.context);
+        let obj_id_size_in_bits = gc.target_data().get_bit_size(&obj_id_ty);
+        let obj_id_align_in_bits = gc.target_data().get_abi_alignment(&obj_id_ty) * 8;
+        let obj_id_offset_in_bits = gc.target_data().offset_of_element(&str_type, 1).unwrap();
+        let obj_id_member = gc
+            .get_di_builder()
+            .create_member_type(
+                gc.get_di_compile_unit().as_debug_info_scope(),
+                "<object id>",
+                gc.create_di_file(None),
+                0,
+                obj_id_size_in_bits,
+                obj_id_align_in_bits,
+                obj_id_offset_in_bits,
+                0,
+                obj_id_di_type(gc.get_di_builder()),
+            )
+            .as_type();
+        elements.push(obj_id_member);
     }
 
     let name = "<ctrl block>";
+    let size_in_bits = gc.target_data().get_bit_size(&str_type);
+    let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
     gc.get_di_builder()
         .create_struct_type(
             gc.get_di_compile_unit().as_debug_info_scope(),
