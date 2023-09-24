@@ -1733,7 +1733,16 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
-        let ptr = obj.ptr(self);
+        let storage = if obj.is_unbox(self.type_env()) {
+            obj.ptr(self)
+        } else {
+            // In boxed case, push ptr onto stack.
+            let ptr = obj.ptr(self);
+            let storage =
+                self.build_alloca_at_entry(ptr.get_type(), "alloca@create_debug_local_variable");
+            self.builder().build_store(storage, ptr);
+            storage
+        };
 
         let embed_ty = obj.debug_embedded_ty(self);
         let loc_var = self.get_di_builder().create_auto_variable(
@@ -1747,7 +1756,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             0, // TODO: What is this?
         );
         self.get_di_builder().insert_declare_at_end(
-            ptr,
+            storage,
             Some(loc_var),
             None,
             self.builder().get_current_debug_location().unwrap(),

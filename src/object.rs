@@ -905,8 +905,8 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DITy
         .create_struct_type(
             gc.get_di_compile_unit().as_debug_info_scope(),
             name,
-            gc.create_di_file(None), // TODO
-            0,                       // TODO
+            gc.create_di_file(None),
+            0,
             size_in_bits,
             align_in_bits,
             0,
