@@ -72,7 +72,7 @@ impl ObjectFieldType {
         match self {
             ObjectFieldType::ControlBlock => control_block_di_type(gc),
             ObjectFieldType::DtorFunction => ptr_di_type("<ptr to dtor func>", gc),
-            ObjectFieldType::LambdaFunction(_) => ptr_di_type("<ptr to func>", gc),
+            ObjectFieldType::LambdaFunction(_) => ptr_di_type("<ptr to closure func>", gc),
             ObjectFieldType::Ptr => ptr_di_type("Std::Ptr", gc),
             ObjectFieldType::I8 => gc
                 .get_di_builder()
@@ -123,7 +123,7 @@ impl ObjectFieldType {
                 gc.get_di_builder()
                     .create_union_type(
                         gc.get_di_compile_unit().as_debug_info_scope(),
-                        "<union>",
+                        "<union value>",
                         gc.create_di_file(None),
                         0,
                         size_in_bits,
@@ -1332,10 +1332,44 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
         let size_in_bits = gc.target_data().get_bit_size(&str_type);
         let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
 
+        let mut subelement_names = vec![];
+        if !ty.is_closure() {
+            let tc_info = ty.toplevel_tycon_info(gc.type_env());
+            subelement_names = tc_info
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .collect();
+        }
+
         let mut elements = vec![];
         for (i, field) in obj_type.field_types.iter().enumerate() {
-            let elemet_ty = field.to_basic_type(gc);
+            let member_name = match field {
+                ObjectFieldType::SubObject(ty) => {
+                    if !subelement_names.is_empty() {
+                        subelement_names.remove(0)
+                    } else {
+                        format!("<sub element of type {}>", ty.to_string())
+                    }
+                }
+                ObjectFieldType::ControlBlock => "<ctrl block>".to_string(),
+                ObjectFieldType::DtorFunction => "<ptr to dtor function>".to_string(),
+                ObjectFieldType::LambdaFunction(_) => "<ptr to lambda function>".to_string(),
+                ObjectFieldType::Ptr => "<Ptr member>".to_string(),
+                ObjectFieldType::I8 => "<I8 member>".to_string(),
+                ObjectFieldType::I32 => "<I32 member>".to_string(),
+                ObjectFieldType::U32 => "<U32 member>".to_string(),
+                ObjectFieldType::I64 => "<I64 member>".to_string(),
+                ObjectFieldType::U64 => "<U64 member>".to_string(),
+                ObjectFieldType::F32 => "<F32 member>".to_string(),
+                ObjectFieldType::F64 => "<F64 member>".to_string(),
+                ObjectFieldType::UnionBuf(_) => "<union value>".to_string(),
+                ObjectFieldType::UnionTag => "<union tag>".to_string(),
+                ObjectFieldType::Array(_) => "<array>".to_string(),
+            };
+
             let element_di_ty = field.to_debug_type(gc);
+            let elemet_ty = field.to_basic_type(gc);
             let size_in_bits = gc.target_data().get_bit_size(&elemet_ty);
             let align_in_bits = gc.target_data().get_abi_alignment(&elemet_ty) * 8;
             let offset_in_bits = gc
@@ -1347,7 +1381,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
                 .get_di_builder()
                 .create_member_type(
                     gc.get_di_compile_unit().as_debug_info_scope(),
-                    "member",
+                    &member_name,
                     gc.create_di_file(None), // TODO
                     0,                       // TODO
                     size_in_bits,
