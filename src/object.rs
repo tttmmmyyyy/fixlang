@@ -116,8 +116,27 @@ impl ObjectFieldType {
                 let align_in_bits = gc.target_data().get_abi_alignment(&basic_ty) * 8;
 
                 let mut elements = vec![];
-                for ty in tys {
-                    elements.push(ty_to_debug_embedded_ty(ty.clone(), gc));
+                for (i, ty) in tys.iter().enumerate() {
+                    let variant_ty = ty.get_embedded_type(gc, &vec![]);
+                    let variant_debug_ty = ty_to_debug_embedded_ty(ty.clone(), gc);
+                    let size_in_bits = gc.target_data().get_bit_size(&variant_ty);
+                    let align_in_bits = gc.target_data().get_abi_alignment(&variant_ty) * 8;
+                    let offset_in_bits = 0; // Union buffer has alignment 8.
+                    let mem_ty = gc
+                        .get_di_builder()
+                        .create_member_type(
+                            gc.get_di_compile_unit().as_debug_info_scope(),
+                            &format!("<union variant {}>", i),
+                            gc.create_di_file(None),
+                            0,
+                            size_in_bits,
+                            align_in_bits,
+                            offset_in_bits,
+                            0,
+                            variant_debug_ty,
+                        )
+                        .as_type();
+                    elements.push(mem_ty);
                 }
 
                 gc.get_di_builder()
