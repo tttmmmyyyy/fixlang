@@ -45,7 +45,7 @@ impl ObjectFieldType {
             ObjectFieldType::U64 => gc.context.i64_type().into(),
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
-            ObjectFieldType::Array(_) => gc.context.i64_type().into(),
+            ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut size = 0;
@@ -728,6 +728,7 @@ impl ObjectType {
                     // This is for:
                     // - to get the pointer to the first element by gep of this struct type.
                     // - used in implementation of size_of method.
+                    // - in to_debug_type function.
                     fields.push(
                         ty.get_object_type(&vec![], gc.type_env())
                             .to_embedded_type(gc)

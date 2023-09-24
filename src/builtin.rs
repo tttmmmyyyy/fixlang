@@ -1570,7 +1570,7 @@ impl InlineLLVMArrayGetBody {
         ty: &Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array = gc.get_var(&self.arr_name).ptr.get(gc);
         let len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
@@ -2081,7 +2081,7 @@ impl InlineLLVMArrayGetSizeBody {
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let arr_name = FullName::local(&self.arr_name);
-        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
         let len = array_obj
             .load_field_nocap(gc, ARRAY_LEN_IDX)
@@ -2136,7 +2136,7 @@ impl InlineLLVMArrayGetCapacityBody {
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let arr_name = FullName::local(&self.arr_name);
-        // Array = [ControlBlock, PtrToArrayField], and ArrayField = [Size, PtrToBuffer].
+        // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
         let len = array_obj
             .load_field_nocap(gc, ARRAY_CAP_IDX)
