@@ -141,12 +141,90 @@ impl ObjectFieldType {
                 .unwrap()
                 .as_type(),
             ObjectFieldType::Array(elem_ty) => {
-                let basic_ty = self.to_basic_type(gc);
-                let size_in_bits = gc.target_data().get_bit_size(&basic_ty);
-                let align_in_bits = gc.target_data().get_abi_alignment(&basic_ty) * 8;
-                let inner_type = ty_to_debug_struct_ty(elem_ty.clone(), gc);
+                // struct_ty = [capacity, element0]
+                let struct_ty = ObjectType {
+                    field_types: vec![self.clone()],
+                    is_unbox: false,
+                }
+                .to_struct_type(gc);
+
+                // Create element type for capacity field.
+                let capacity_ty = self.to_basic_type(gc);
+                let capacity_debug_ty = ObjectFieldType::I64.to_debug_type(gc);
+                let capacity_size_in_bits = gc.target_data().get_bit_size(&capacity_ty);
+                let capacity_align_in_bits = gc.target_data().get_abi_alignment(&capacity_ty) * 8;
+                let capacity_offset_in_bits = gc
+                    .target_data()
+                    .offset_of_element(&struct_ty, ARRAY_CAP_IDX - ARRAY_CAP_IDX)
+                    .unwrap()
+                    * 8;
+                let capacity_member_ty = gc
+                    .get_di_builder()
+                    .create_member_type(
+                        gc.get_di_compile_unit().as_debug_info_scope(),
+                        "<array capacity>",
+                        gc.create_di_file(None),
+                        0,
+                        capacity_size_in_bits,
+                        capacity_align_in_bits,
+                        capacity_offset_in_bits as u64,
+                        0,
+                        capacity_debug_ty,
+                    )
+                    .as_type();
+
+                // Create element type for buffer field.
+                let element_ty =
+                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_struct_type(gc);
+                let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
+                let element_size_in_bits = gc.target_data().get_bit_size(&element_ty);
+                let element_align_in_bits = gc.target_data().get_abi_alignment(&element_ty) * 8;
+                let element_offset_in_bits = gc
+                    .target_data()
+                    .offset_of_element(&struct_ty, ARRAY_BUF_IDX - ARRAY_CAP_IDX)
+                    .unwrap()
+                    * 8;
+                let element_array_ty = gc
+                    .get_di_builder()
+                    .create_array_type(
+                        element_debug_ty,
+                        element_size_in_bits,
+                        element_align_in_bits,
+                        &[0..32], // ???
+                    )
+                    .as_type();
+                let element_member_ty = gc
+                    .get_di_builder()
+                    .create_member_type(
+                        gc.get_di_compile_unit().as_debug_info_scope(),
+                        "<array elements>",
+                        gc.create_di_file(None),
+                        0,
+                        element_size_in_bits,
+                        element_align_in_bits,
+                        element_offset_in_bits as u64,
+                        0,
+                        element_array_ty,
+                    )
+                    .as_type();
+
+                let size_in_bits = gc.target_data().get_bit_size(&struct_ty);
+                let align_in_bits = gc.target_data().get_abi_alignment(&struct_ty) * 8;
                 gc.get_di_builder()
-                    .create_array_type(inner_type, size_in_bits, align_in_bits, &[])
+                    .create_struct_type(
+                        gc.get_di_compile_unit().as_debug_info_scope(),
+                        "<array buffer>",
+                        gc.create_di_file(None),
+                        0,
+                        size_in_bits,
+                        align_in_bits,
+                        0,
+                        None,
+                        &[capacity_member_ty, element_member_ty],
+                        0,
+                        None,
+                        &format!("<array buffer of element type `{}`>", elem_ty.to_string()),
+                    )
                     .as_type()
             }
         }
@@ -1420,8 +1498,8 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
                 .create_member_type(
                     gc.get_di_compile_unit().as_debug_info_scope(),
                     &member_name,
-                    gc.create_di_file(None), // TODO
-                    0,                       // TODO
+                    gc.create_di_file(None),
+                    0,
                     size_in_bits,
                     align_in_bits,
                     offset_in_bits,
@@ -1436,8 +1514,8 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
             .create_struct_type(
                 gc.get_di_compile_unit().as_debug_info_scope(),
                 name,
-                gc.create_di_file(None), // TODO
-                0,                       // TODO
+                gc.create_di_file(None),
+                0,
                 size_in_bits,
                 align_in_bits,
                 0,
