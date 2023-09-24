@@ -34,8 +34,11 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 
 ## Usage
 
-- You can run the source file (with extension ".fix") by `fix run -f {source-file}`.
-- If you want to build executable binary, run `fix build -f {source-file}.`.
+- You can run the source file (with extension ".fix") by `fix run -f {source-files}`.
+- If you want to build executable binary, run `fix build -f {source-files}.`.
+- For more details, see `fix help`, `fix build --help` or `fix run --help`.
+- Running `fix build` with `-g` option generates executable binary with DWARF debugging information. Then you can debug the binary by lldb, gdb or other GUI debuggers such as [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb). 
+  - Note that in VSCode you cannot put a breakpoint in `*.fix` files by default.
 
 ## Tutorial / references
 

@@ -1464,7 +1464,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
                     if !subelement_names.is_empty() {
                         subelement_names.remove(0)
                     } else {
-                        format!("<sub element of type {}>", ty.to_string())
+                        format!("<subelement of type {}>", ty.to_string())
                     }
                 }
                 ObjectFieldType::ControlBlock => "<control block>".to_string(),

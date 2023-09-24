@@ -150,6 +150,7 @@ fn main() {
     let source_file = Arg::new("source-files")
         .long("file")
         .short('f')
+        .help("Source files to be compiled and linked. Exactly one file of them must define `Main` module and `main : IO ()`.")
         .multiple_values(true)
         .takes_value(true)
         .required(true);

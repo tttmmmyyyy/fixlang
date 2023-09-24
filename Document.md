@@ -58,6 +58,8 @@
     - [Structs](#structs-2)
     - [Unions](#unions-2)
   - [Calling C functions](#calling-c-functions)
+- [Tips](#tips)
+  - [How to debug Fix program](#how-to-debug-fix-program)
 - [Module `Std`](#module-std)
   - [Types, related values and implementations](#types-related-values-and-implementations)
     - [Bool](#bool)
@@ -1714,6 +1716,14 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 - If return type is `void`, put `()` before the function name.
 
 Note that calling C function may break Fix's features such as immutability or memory safety. Use this feature carefully.
+
+# Tips 
+
+## How to debug Fix program
+
+Running `fix build` with `-g` option generates executable binary with DWARF debugging information. Then you can debug the binary by lldb, gdb or other GUI debuggers such as [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb). 
+
+In VSCode, you cannot put a breakpoint in *.fix files by default. As a workaround, open "Preferences" and turn "Allow Breakpoints Everywhere" ON.
 
 # Module `Std`
 
