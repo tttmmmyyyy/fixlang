@@ -1725,6 +1725,10 @@ Running `fix build` with `-g` option generates executable binary with DWARF debu
 
 In VSCode, you cannot put a breakpoint in *.fix files by default. As a workaround, open "Preferences" and turn "Allow Breakpoints Everywhere" ON.
 
+There are some notes on debugging Fix program:
+- Unlike other languages, Fix does not release local variables at the end of their scope, but at the last point of use. So if you break after the last use of a local variable, the debugger may show you an invalid value.
+- Currently, we are not able to tell the debugger the size of an array which is determined at run time. So we are always setting the array size to 32. You cannot show elements indexed after 32, and if the array is shorter than 32, invalid values are shown.
+
 # Module `Std`
 
 `Std` is a module which is implicitly imported so you don't need to write `import Std`.
