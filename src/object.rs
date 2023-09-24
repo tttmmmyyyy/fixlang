@@ -150,7 +150,13 @@ impl ObjectFieldType {
                         0,
                         &elements,
                         0,
-                        "",
+                        &format!(
+                            "<union value {}>",
+                            tys.iter()
+                                .map(|ty| ty.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
                     )
                     .as_type()
             }
@@ -242,7 +248,7 @@ impl ObjectFieldType {
                         &[capacity_member_ty, element_member_ty],
                         0,
                         None,
-                        &format!("<array buffer of element type `{}`>", elem_ty.to_string()),
+                        &format!("<array buffer of `{}`>", elem_ty.to_string()),
                     )
                     .as_type()
             }
