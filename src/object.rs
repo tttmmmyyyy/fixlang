@@ -1423,7 +1423,9 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
 ) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
-    if obj_type.field_types.len() == 1 {
+    let is_primitive = !ty.is_closure()
+        && ty.toplevel_tycon_info(gc.type_env()).variant == TyConVariant::Primitive;
+    if is_primitive {
         // Primitive case
         if ty.toplevel_tycon().unwrap().is_boolean() {
             return gc
