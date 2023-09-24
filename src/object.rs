@@ -898,7 +898,7 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DITy
         elements.push(obj_id_member);
     }
 
-    let name = "<ctrl block>";
+    let name = "<control block>";
     let size_in_bits = gc.target_data().get_bit_size(&str_type);
     let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
     gc.get_di_builder()
@@ -1378,7 +1378,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
 
         let mut elements = vec![];
         for (i, field) in obj_type.field_types.iter().enumerate() {
-            let member_name = match field {
+            let mut member_name = match field {
                 ObjectFieldType::SubObject(ty) => {
                     if !subelement_names.is_empty() {
                         subelement_names.remove(0)
@@ -1386,7 +1386,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
                         format!("<sub element of type {}>", ty.to_string())
                     }
                 }
-                ObjectFieldType::ControlBlock => "<ctrl block>".to_string(),
+                ObjectFieldType::ControlBlock => "<control block>".to_string(),
                 ObjectFieldType::DtorFunction => "<ptr to dtor function>".to_string(),
                 ObjectFieldType::LambdaFunction(_) => "<ptr to lambda function>".to_string(),
                 ObjectFieldType::Ptr => "<Ptr member>".to_string(),
@@ -1401,6 +1401,9 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
                 ObjectFieldType::UnionTag => "<union tag>".to_string(),
                 ObjectFieldType::Array(_) => "<array>".to_string(),
             };
+            if ty.is_array() && i as u32 == ARRAY_LEN_IDX {
+                member_name = "<array size>".to_string();
+            }
 
             let element_di_ty = field.to_debug_type(gc);
             let elemet_ty = field.to_basic_type(gc);
