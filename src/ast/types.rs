@@ -693,7 +693,7 @@ impl TypeNode {
         capture: &Vec<Rc<TypeNode>>,
         type_env: &TypeEnv,
     ) -> ObjectType {
-        get_object_type(self, capture, type_env)
+        ty_to_object_ty(self, capture, type_env)
     }
 
     pub fn get_struct_type<'c, 'm>(

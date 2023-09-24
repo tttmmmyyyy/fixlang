@@ -129,7 +129,7 @@ impl<'c> Object<'c> {
 
     pub fn struct_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
         assert!(!self.is_funptr());
-        get_object_type(&self.ty, &vec![], gc.type_env()).to_struct_type(gc)
+        ty_to_object_ty(&self.ty, &vec![], gc.type_env()).to_struct_type(gc)
     }
 
     pub fn load_nocap<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
@@ -778,7 +778,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.builder().position_at_end(cont_bb.unwrap());
             }
         } else {
-            let obj_type = get_object_type(&obj.ty, &vec![], self.type_env());
+            let obj_type = ty_to_object_ty(&obj.ty, &vec![], self.type_env());
             let struct_type = obj_type.to_struct_type(self);
             let ptr = obj.ptr(self);
             let ptr = self.cast_pointer(ptr, ptr_type(struct_type));

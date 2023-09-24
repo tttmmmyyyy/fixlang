@@ -35,7 +35,7 @@ impl ObjectFieldType {
                 .ptr_type(AddressSpace::from(0))
                 .into(),
             ObjectFieldType::SubObject(ty) => {
-                get_object_type(ty, &vec![], gc.type_env()).to_embedded_type(gc)
+                ty_to_object_ty(ty, &vec![], gc.type_env()).to_embedded_type(gc)
             }
             ObjectFieldType::Ptr => gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
@@ -50,7 +50,7 @@ impl ObjectFieldType {
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut size = 0;
                 for field_ty in field_tys {
-                    let struct_ty = get_object_type(
+                    let struct_ty = ty_to_object_ty(
                         field_ty,
                         &vec![], /* captured list desn't effect sizeof */
                         gc.type_env(),
@@ -968,7 +968,7 @@ pub fn struct_field_idx(is_unbox: bool) -> u32 {
     }
 }
 
-pub fn get_object_type(
+pub fn ty_to_object_ty(
     ty: &Rc<TypeNode>,
     capture: &Vec<Rc<TypeNode>>,
     type_env: &TypeEnv,
@@ -1231,7 +1231,7 @@ pub fn create_dtor<'c, 'm>(
         }
         None => {
             // Define dtor function.
-            let object_type = get_object_type(ty, capture, gc.type_env());
+            let object_type = ty_to_object_ty(ty, capture, gc.type_env());
             let struct_type = object_type.to_struct_type(gc);
             let func_type = dtor_type(gc.context);
             let func = gc
@@ -1326,7 +1326,7 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
         let align_in_bits = gc.target_data().get_abi_alignment(&ptr_ty) * 8;
         gc.get_di_builder()
             .create_pointer_type(
-                "pointer",
+                "<pointer to boxed value>",
                 debug_str_ty,
                 size_in_bits,
                 align_in_bits,
@@ -1343,7 +1343,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
 ) -> DIType<'c> {
     let name = &ty.to_string();
-    let obj_type = get_object_type(&ty, &vec![], gc.type_env());
+    let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
     if obj_type.field_types.len() == 1 {
         // Primitive case
         if ty.toplevel_tycon().unwrap().is_boolean() {
