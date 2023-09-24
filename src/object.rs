@@ -109,7 +109,7 @@ impl ObjectFieldType {
                 .create_basic_type("Std::F64", 64, DW_ATE_FLOAT, 0)
                 .unwrap()
                 .as_type(),
-            ObjectFieldType::SubObject(ty) => ty_to_debug_struct_ty(ty.clone(), gc),
+            ObjectFieldType::SubObject(ty) => ty_to_debug_embedded_ty(ty.clone(), gc),
             ObjectFieldType::UnionBuf(tys) => {
                 let basic_ty = self.to_basic_type(gc);
                 let size_in_bits = gc.target_data().get_bit_size(&basic_ty);
@@ -117,7 +117,7 @@ impl ObjectFieldType {
 
                 let mut elements = vec![];
                 for ty in tys {
-                    elements.push(ty_to_debug_struct_ty(ty.clone(), gc));
+                    elements.push(ty_to_debug_embedded_ty(ty.clone(), gc));
                 }
 
                 gc.get_di_builder()
@@ -175,7 +175,7 @@ impl ObjectFieldType {
 
                 // Create element type for buffer field.
                 let element_ty =
-                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_struct_type(gc);
+                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc);
                 let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
                 let element_size_in_bits = gc.target_data().get_bit_size(&element_ty);
                 let element_align_in_bits = gc.target_data().get_abi_alignment(&element_ty) * 8;
@@ -1442,7 +1442,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
         // Do not wrap the element type into struct type.
         obj_type.field_types[0].to_debug_type(gc)
     } else {
-        // NOTE: Myabe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
+        // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
         let str_type = obj_type.to_struct_type(gc);
         let size_in_bits = gc.target_data().get_bit_size(&str_type);
         let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
