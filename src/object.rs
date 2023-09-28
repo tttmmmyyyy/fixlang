@@ -138,11 +138,17 @@ impl ObjectFieldType {
                         .as_type();
                     elements.push(mem_ty);
                 }
-
+                let name = &format!(
+                    "<union value {}>",
+                    tys.iter()
+                        .map(|ty| ty.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
                 gc.get_di_builder()
                     .create_union_type(
                         gc.get_di_compile_unit().as_debug_info_scope(),
-                        "<union value>",
+                        &name,
                         gc.create_di_file(None),
                         0,
                         size_in_bits,
@@ -150,13 +156,7 @@ impl ObjectFieldType {
                         0,
                         &elements,
                         0,
-                        &format!(
-                            "<union value {}>",
-                            tys.iter()
-                                .map(|ty| ty.to_string())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ),
+                        &name,
                     )
                     .as_type()
             }
