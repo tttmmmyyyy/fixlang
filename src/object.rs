@@ -145,6 +145,7 @@ impl ObjectFieldType {
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
+                // It seems that the second parameter of create_union_type (`name`, not `unique_id`) should vary depending on the element type, at least for lldb.
                 gc.get_di_builder()
                     .create_union_type(
                         gc.get_di_compile_unit().as_debug_info_scope(),
@@ -235,10 +236,12 @@ impl ObjectFieldType {
 
                 let size_in_bits = gc.target_data().get_bit_size(&struct_ty);
                 let align_in_bits = gc.target_data().get_abi_alignment(&struct_ty) * 8;
+                let name = format!("<array buffer of `{}`>", elem_ty.to_string());
+                // It seems that the second parameter of create_struct_type (`name`, not `unique_id`) should vary depending on the element type, at least for lldb.
                 gc.get_di_builder()
                     .create_struct_type(
                         gc.get_di_compile_unit().as_debug_info_scope(),
-                        "<array buffer>",
+                        &name,
                         gc.create_di_file(None),
                         0,
                         size_in_bits,
@@ -248,7 +251,7 @@ impl ObjectFieldType {
                         &[capacity_member_ty, element_member_ty],
                         0,
                         None,
-                        &format!("<array buffer of `{}`>", elem_ty.to_string()),
+                        &name,
                     )
                     .as_type()
             }
