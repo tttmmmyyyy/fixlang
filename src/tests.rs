@@ -682,7 +682,7 @@ pub fn test33() {
     // Test struct declaration and new, mod.
     let source = r#"
         module Main; import Debug;
-        type I64Bool = struct {x: I64, y: Bool};
+        type I64Bool = box struct {x: I64, y: Bool};
 
         main : IO ();
         main = (
@@ -721,8 +721,8 @@ pub fn test34() {
     let source = r#"
         module Main; import Debug;        
         
-        type OtherStruct = struct {y: I64, x: Bool};
-        type I64Bool = struct {x: I64, y: Bool};
+        type OtherStruct = box struct {y: I64, x: Bool};
+        type I64Bool = box struct {x: I64, y: Bool};
 
         main : IO ();
         main = (
@@ -742,8 +742,8 @@ pub fn test35() {
     let source = r#"
         module Main; import Debug;
 
-        type A = struct {x: I64, y: Bool};
-        type B = struct {x: Bool, y: I64};
+        type A = box struct {x: I64, y: Bool};
+        type B = box struct {x: Bool, y: I64};
             
         main : IO ();
         main = (
@@ -764,8 +764,8 @@ pub fn test36() {
     let source = r#"
         module Main; import Debug;
 
-        type A = struct {x: B};
-        type B = struct {x: I64};
+        type A = box struct {x: B};
+        type B = box struct {x: I64};
             
         main : IO ();
         main = (
@@ -786,8 +786,8 @@ pub fn test37() {
     let source = r#"
         module Main; import Debug;
 
-        type A = struct {x: B};
-        type B = struct {x: I64};
+        type A = box struct {x: B};
+        type B = box struct {x: I64};
 
         main : IO ();
         main = (
@@ -808,8 +808,8 @@ pub fn test37_5() {
     let source = r#"
         module Main; import Debug;
 
-        type A = struct {x: B};
-        type B = struct {x: I64};
+        type A = box struct {x: B};
+        type B = box struct {x: I64};
 
         main : IO ();
         main = (
@@ -830,8 +830,8 @@ pub fn test38() {
     let source = r#"
         module Main; import Debug;
 
-        type A = struct {x: B};
-        type B = struct {x: I64};
+        type A = box struct {x: B};
+        type B = box struct {x: I64};
 
         main : IO ();
         main = (    
@@ -853,8 +853,8 @@ pub fn test39() {
     let source = r#"
         module Main; import Debug;
 
-        type A = struct {x: B};
-        type B = struct {x: I64};
+        type A = box struct {x: B};
+        type B = box struct {x: I64};
         
         main : IO ();
         main = (
@@ -876,8 +876,8 @@ pub fn test40() {
     let source = r#"
         module Main; import Debug;
 
-        type A = struct {x: B};
-        type B = struct {x: I64};
+        type A = box struct {x: B};
+        type B = box struct {x: I64};
         
         main : IO ();
         main = (
@@ -1212,7 +1212,7 @@ pub fn test48() {
     let source = r#"
         module Main; import Debug;
 
-        type Vec a = struct {data: Array a};
+        type Vec a = box struct {data: Array a};
 
         main : IO ();
         main = (
@@ -1830,12 +1830,12 @@ pub fn test67() {
 //     let source = r#"
 //     module Main; import Debug;
 
-//     type Struct = struct {uni: Union, value: I64};
+//     type Struct = box struct {uni: Union, value: I64};
 //     type Union = union {left: (I64, String), right: Bool};
 
 //     main : IO ();
 //     main = (
-//         let u = Struct {uni: Union::left((42, "truth")), value: 13};
+//         let u = box struct {uni: Union::left((42, "truth")), value: 13};
 //         let Struct { uni: Union::left((truth, string)), value: val } = u;
 //         let u = assert_eq(|_|"", truth, 42);
 //         let u = assert_eq(|_|"", val, 13);
@@ -1875,7 +1875,7 @@ pub fn test73() {
     let source = r#"
     module Main; import Debug;
 
-    type I64Bool = struct {x: I64, y: Bool};
+    type I64Bool = box struct {x: I64, y: Bool};
 
     main : IO ();
     main = (
@@ -3380,12 +3380,12 @@ pub fn test119() {
         module Main; import Debug;
 
         namespace A {
-            type S = struct { data : () };
+            type S = box struct { data : () };
             type U = union { data : () };
         }
 
         namespace B {
-            type S = struct { data : () };
+            type S = box struct { data : () };
             type U = union { data : () };
         }
 
@@ -3910,7 +3910,7 @@ pub fn test127() {
 
         // Using trait alias as precondition of trait implementation.
 
-        type Vector2 a = struct { x : a, y : a };
+        type Vector2 a = box struct { x : a, y : a };
         impl [a : Additive] Vector2 a : Zero {
             zero = Vector2 { x : Zero::zero, y : Zero::zero };
         }
@@ -3982,7 +3982,7 @@ pub fn test128() {
         greet = |name| "My name is " + name;
 
         // Type alias in type definition.
-        type Person = struct { name : Name };
+        type Person = box struct { name : Name };
 
         // Type alias in definition of trait.
         trait a : Named {
