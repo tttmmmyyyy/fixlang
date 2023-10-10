@@ -174,11 +174,13 @@ fn main() {
         .takes_value(false)
         .help("Emit llvm ir file.");
     let run_subc = App::new("run")
+        .about("Executes a Fix program.")
         .arg(source_file.clone())
         .arg(dynamic_link_library.clone())
         .arg(debug_mode.clone())
         .arg(emit_llvm.clone());
     let build_subc = App::new("build")
+        .about("Builds an executable binary from source files.")
         .arg(source_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
