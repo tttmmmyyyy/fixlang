@@ -184,11 +184,13 @@ fn main() {
         .arg(dynamic_link_library.clone())
         .arg(debug_mode.clone())
         .arg(emit_llvm.clone());
+    let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
         .subcommand(run_subc)
-        .subcommand(build_subc);
+        .subcommand(build_subc)
+        .subcommand(clean_subc);
 
     fn read_source_files_options(m: &ArgMatches) -> Vec<PathBuf> {
         m.get_many::<String>("source-files")
@@ -235,6 +237,9 @@ fn main() {
         }
         Some(("build", m)) => {
             build_file(create_config_from_matches(m));
+        }
+        Some(("clean", _m)) => {
+            clean_command();
         }
         _ => eprintln!("Unknown command!"),
     }
