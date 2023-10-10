@@ -2,7 +2,7 @@ module HashMap;
 
 import Hash;
 
-type HashMap k v = struct { _table : Array (Array (Option (k, v))), _size : I64 };
+type HashMap k v = unbox struct { _table : Array (Array (Option (k, v))), _size : I64 };
 
 // Find the place where an element with a key is stored.
 // Returns pair of (index in hash table, index in bucket).

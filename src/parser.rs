@@ -654,7 +654,7 @@ fn parse_struct_defn(pair: Pair<Rule>, src: &SourceFile) -> TypeDeclValue {
     assert_eq!(pair.as_rule(), Rule::struct_defn);
     let mut pairs = pair.into_inner();
     let mut fields: Vec<Field> = Vec::new();
-    let mut is_unbox = false; // Default value
+    let mut is_unbox = true; // Default value
     if pairs.peek().unwrap().as_rule() == Rule::box_or_unbox {
         is_unbox = parse_box_unbox(pairs.next().unwrap(), src);
     }

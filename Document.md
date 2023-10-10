@@ -1673,16 +1673,16 @@ The unit type `()` is unboxed.
 
 ### Structs
 
-Structs are boxed by default because they are assumed to have many fields. To define unboxed struct type, write `unbox` specifier before `struct`.
+Structs are unboxed by default. To define boxed struct type, write `box` specifier before `struct`.
 
 Example:
 ```
-type Product = unbox struct { price: I64, sold: Bool };
+type Product = box struct { price: I64, sold: Bool };
 ```
 
 ### Unions
 
-Unions are unboxed by default because they only contains a single value at a time. To define boxed union type, write `box` specifier before `struct`.
+Unions are unboxed by default. To define boxed union type, write `box` specifier before `struct`.
 
 ```
 type Weight = box union { pound: I64, kilograms: I64 };
