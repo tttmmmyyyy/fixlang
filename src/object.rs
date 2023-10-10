@@ -216,7 +216,7 @@ impl ObjectFieldType {
                         element_debug_ty,
                         element_size_in_bits,
                         element_align_in_bits,
-                        &[0..32], // ???
+                        &[0..100],
                     )
                     .as_type();
                 let element_member_ty = gc
