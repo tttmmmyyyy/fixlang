@@ -485,14 +485,35 @@ impl TypeNode {
 
     // Remove type aliases in a type.
     pub fn resolve_type_aliases(self: &Rc<TypeNode>, env: &TypeEnv) -> Rc<TypeNode> {
+        self.resolve_type_aliases_inner(env, vec![], &self.to_string_normalize())
+    }
+
+    // Remove type aliases in a type.
+    // * `path`, `entry_typename` - Arguments to detect circular aliasing.
+    fn resolve_type_aliases_inner(
+        self: &Rc<TypeNode>,
+        env: &TypeEnv,
+        mut path: Vec<String>,
+        entry_typename: &str,
+    ) -> Rc<TypeNode> {
         // First, treat the case where top-level type constructor is a type alias.
+        // As an example, consider type alias `type Lazy a = () -> a`. Then `Lazy Bool` should be resolved to `() -> Bool`.
         let app_seq = self.flatten_type_application();
         let toplevel_ty = &app_seq[0];
         match &toplevel_ty.ty {
             Type::TyCon(tc) => {
                 if let Some(ta) = env.aliases.get(&tc) {
+                    // Check recursive aliasing.
+                    if path.contains(&tc.name.to_string()) {
+                        error_exit(&format!(
+                            "Cannot resolve type aliasing in `{}`. There is circular aliasing.",
+                            entry_typename
+                        ))
+                    }
+                    path.push(tc.name.to_string());
+
+                    // When the type alias is not fully applied, raise error.
                     if app_seq.len() - 1 < ta.tyvars.len() {
-                        // When the type alias is not fully applied, raise error.
                         error_exit_with_src(
                             &format!(
                                 "Cannot resolve type alias `{}` in `{}`",
@@ -502,6 +523,7 @@ impl TypeNode {
                             toplevel_ty.get_source(),
                         )
                     }
+
                     // Resolve alias and calculate type application.
                     let mut s = Substitution::default();
                     let mut src: Option<Span> = toplevel_ty.get_source().clone();
@@ -512,13 +534,15 @@ impl TypeNode {
                         s.add_substitution(&Substitution::single(&param, arg));
                     }
                     let resolved = s.substitute_type(&ta.value);
+
+                    // Set source for `resolved`.
                     let mut resolved = resolved.set_source(src);
                     for i in (ta.tyvars.len() + 1)..app_seq.len() {
                         let arg = app_seq[i].clone();
                         let src = Span::unite_opt(resolved.get_source(), arg.get_source());
                         resolved = type_tyapp(resolved, arg).set_source(src);
                     }
-                    return resolved.resolve_type_aliases(env);
+                    return resolved.resolve_type_aliases_inner(env, path, entry_typename);
                 }
             }
             _ => {}
@@ -527,12 +551,12 @@ impl TypeNode {
         match &self.ty {
             Type::TyVar(_) => self.clone(),
             Type::FunTy(dom_ty, codom_ty) => self
-                .set_funty_src(dom_ty.resolve_type_aliases(env))
-                .set_funty_dst(codom_ty.resolve_type_aliases(env)),
+                .set_funty_src(dom_ty.resolve_type_aliases_inner(env, path.clone(), entry_typename))
+                .set_funty_dst(codom_ty.resolve_type_aliases_inner(env, path, entry_typename)),
             Type::TyCon(_) => self.clone(),
             Type::TyApp(fun_ty, arg_ty) => self
-                .set_tyapp_fun(fun_ty.resolve_type_aliases(env))
-                .set_tyapp_arg(arg_ty.resolve_type_aliases(env)),
+                .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(env, path.clone(), entry_typename))
+                .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(env, path, entry_typename)),
         }
     }
 
