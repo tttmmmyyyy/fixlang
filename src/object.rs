@@ -27,16 +27,21 @@ pub enum ObjectFieldType {
 }
 
 impl ObjectFieldType {
-    pub fn to_basic_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> BasicTypeEnum<'c> {
+    // Convert ObjectType to inkwell's BasicTypeEnum.
+    // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
+    pub fn to_basic_type<'c, 'm>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        unboxed_path: Vec<String>,
+    ) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
             ObjectFieldType::DtorFunction => ptr_to_dtor_type(gc.context).into(),
             ObjectFieldType::LambdaFunction(ty) => lambda_function_type(ty, gc)
                 .ptr_type(AddressSpace::from(0))
                 .into(),
-            ObjectFieldType::SubObject(ty) => {
-                ty_to_object_ty(ty, &vec![], gc.type_env()).to_embedded_type(gc)
-            }
+            ObjectFieldType::SubObject(ty) => ty_to_object_ty(ty, &vec![], gc.type_env())
+                .to_embedded_type(gc, unboxed_path.clone()),
             ObjectFieldType::Ptr => gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
             ObjectFieldType::I32 => gc.context.i32_type().into(),
@@ -55,7 +60,7 @@ impl ObjectFieldType {
                         &vec![], /* captured list desn't effect sizeof */
                         gc.type_env(),
                     )
-                    .to_embedded_type(gc);
+                    .to_embedded_type(gc, unboxed_path.clone());
                     size = size.max(gc.sizeof(&struct_ty));
                 }
                 // Force align 8
@@ -111,7 +116,7 @@ impl ObjectFieldType {
                 .as_type(),
             ObjectFieldType::SubObject(ty) => ty_to_debug_embedded_ty(ty.clone(), gc),
             ObjectFieldType::UnionBuf(tys) => {
-                let basic_ty = self.to_basic_type(gc);
+                let basic_ty = self.to_basic_type(gc, vec![]);
                 let size_in_bits = gc.target_data().get_bit_size(&basic_ty);
                 let align_in_bits = gc.target_data().get_abi_alignment(&basic_ty) * 8;
 
@@ -171,11 +176,12 @@ impl ObjectFieldType {
                 let struct_ty = ObjectType {
                     field_types: vec![self.clone()],
                     is_unbox: false,
+                    name: "N/A".to_string(),
                 }
-                .to_struct_type(gc);
+                .to_struct_type(gc, vec![]);
 
                 // Create element type for capacity field.
-                let capacity_ty = self.to_basic_type(gc);
+                let capacity_ty = self.to_basic_type(gc, vec![]);
                 let capacity_debug_ty = ObjectFieldType::I64.to_debug_type(gc);
                 let capacity_size_in_bits = gc.target_data().get_bit_size(&capacity_ty);
                 let capacity_align_in_bits = gc.target_data().get_abi_alignment(&capacity_ty) * 8;
@@ -201,7 +207,7 @@ impl ObjectFieldType {
 
                 // Create element type for buffer field.
                 let element_ty =
-                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc);
+                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc, vec![]);
                 let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
                 let element_size_in_bits = gc.target_data().get_bit_size(&element_ty);
                 let element_align_in_bits = gc.target_data().get_abi_alignment(&element_ty) * 8;
@@ -589,7 +595,7 @@ impl ObjectFieldType {
                 .context
                 .append_basic_block(curr_func, &format!("unmatch_tag{}", i));
             let expect_tag_val = ObjectFieldType::UnionTag
-                .to_basic_type(gc)
+                .to_basic_type(gc, vec![])
                 .into_int_type()
                 .const_int(i as u64, false);
             let is_match = gc.builder().build_int_compare(
@@ -818,13 +824,30 @@ impl ObjectFieldType {
 pub struct ObjectType {
     pub field_types: Vec<ObjectFieldType>,
     pub is_unbox: bool,
+    pub name: Name,
 }
 
 impl ObjectType {
-    pub fn to_struct_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
+    // Convert ObjectType to inkwell's StructType.
+    // * `unboxed_path` - When unboxed types are used recursively in each definition, this function can fall into infinite recursion. `unboxed_path` is an argument to detect this infinite loop and to generate a good error message. When you call to_struct_type from outside, specify an empty Vec. When to_struct_type calls itself (possibly via another function), unboxed_path contains the sequence of unboxed types that to_struct_type has been called on so far.
+    pub fn to_struct_type<'c, 'm>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        mut unboxed_path: Vec<String>,
+    ) -> StructType<'c> {
+        if self.is_unbox {
+            if unboxed_path.contains(&self.name) {
+                // There is a loop of unboxed types.
+                error_exit(&format!("Cannot determine the layout of type `{}`. There are circular definitions by unboxed types. Please change some types to boxed.", &self.name));
+            }
+            unboxed_path.push(self.name.clone());
+        } else {
+            unboxed_path.clear();
+        }
+
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
         for (i, field_type) in self.field_types.iter().enumerate() {
-            fields.push(field_type.to_basic_type(gc));
+            fields.push(field_type.to_basic_type(gc, unboxed_path.clone()));
             match field_type {
                 ObjectFieldType::Array(ty) => {
                     assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
@@ -837,7 +860,7 @@ impl ObjectType {
                     // - in to_debug_type function.
                     fields.push(
                         ty.get_object_type(&vec![], gc.type_env())
-                            .to_embedded_type(gc)
+                            .to_embedded_type(gc, unboxed_path.clone())
                             .into(),
                     );
                 }
@@ -862,10 +885,10 @@ impl ObjectType {
             };
             let elem_sizeof = elem_ty
                 .get_object_type(&vec![], gc.type_env())
-                .to_struct_type(gc)
+                .to_struct_type(gc, vec![])
                 .size_of()
                 .unwrap();
-            let struct_ty = self.to_struct_type(gc);
+            let struct_ty = self.to_struct_type(gc, vec![]);
             let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
             let size = array_size.unwrap();
             let size = gc
@@ -894,18 +917,20 @@ impl ObjectType {
                     .build_int_add(ptr_to_first_elem, elems_size, "size_with_elems");
             return size_with_elems;
         } else {
-            self.to_struct_type(gc).size_of().unwrap()
+            self.to_struct_type(gc, vec![]).size_of().unwrap()
         }
     }
 
     // Get type used when this object is embedded.
     // i.e., for unboxed type, a pointer; for unboxed type, a struct.
+    // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
     pub fn to_embedded_type<'c, 'm>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
+        unboxed_path: Vec<String>,
     ) -> BasicTypeEnum<'c> {
         if self.is_unbox {
-            let str_ty = self.to_struct_type(gc);
+            let str_ty = self.to_struct_type(gc, unboxed_path);
             str_ty.into()
         } else {
             ptr_to_object_type(gc.context).into()
@@ -1085,6 +1110,7 @@ pub fn ty_to_object_ty(
     let mut ret = ObjectType {
         field_types: vec![],
         is_unbox: true,
+        name: ty.to_string_normalize(),
     };
     if ty.is_closure() {
         assert!(capture.is_empty());
@@ -1202,7 +1228,7 @@ pub fn allocate_obj<'c, 'm>(
     assert!(array_cap.is_some() == ty.is_array());
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
-    let struct_type = object_type.to_struct_type(gc);
+    let struct_type = object_type.to_struct_type(gc, vec![]);
 
     // Allocate object
     let ptr_to_obj = if ty.is_array() {
@@ -1339,7 +1365,7 @@ pub fn create_dtor<'c, 'm>(
         None => {
             // Define dtor function.
             let object_type = ty_to_object_ty(ty, capture, gc.type_env());
-            let struct_type = object_type.to_struct_type(gc);
+            let struct_type = object_type.to_struct_type(gc, vec![]);
             let func_type = dtor_type(gc.context);
             let func = gc
                 .module
@@ -1471,7 +1497,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
         obj_type.field_types[0].to_debug_type(gc)
     } else {
         // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
-        let str_type = obj_type.to_struct_type(gc);
+        let str_type = obj_type.to_struct_type(gc, vec![]);
         let size_in_bits = gc.target_data().get_bit_size(&str_type);
         let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
 
@@ -1515,7 +1541,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
             }
 
             let element_di_ty = field.to_debug_type(gc);
-            let elemet_ty = field.to_basic_type(gc);
+            let elemet_ty = field.to_basic_type(gc, vec![]);
             let size_in_bits = gc.target_data().get_bit_size(&elemet_ty);
             let align_in_bits = gc.target_data().get_abi_alignment(&elemet_ty) * 8;
             let offset_in_bits = gc

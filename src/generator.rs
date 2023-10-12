@@ -129,7 +129,7 @@ impl<'c> Object<'c> {
 
     pub fn struct_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
         assert!(!self.is_funptr());
-        ty_to_object_ty(&self.ty, &vec![], gc.type_env()).to_struct_type(gc)
+        ty_to_object_ty(&self.ty, &vec![], gc.type_env()).to_struct_type(gc, vec![])
     }
 
     pub fn load_nocap<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
@@ -779,7 +779,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         } else {
             let obj_type = ty_to_object_ty(&obj.ty, &vec![], self.type_env());
-            let struct_type = obj_type.to_struct_type(self);
+            let struct_type = obj_type.to_struct_type(self, vec![]);
             let ptr = obj.ptr(self);
             let ptr = self.cast_pointer(ptr, ptr_type(struct_type));
             let mut union_tag: Option<IntValue<'c>> = None;
@@ -1238,7 +1238,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Push captured objects on scope.
         if lam_ty.is_closure() {
             let cap_obj_ty = make_dynamic_object_ty().get_object_type(&cap_tys, self.type_env());
-            let cap_obj_str_ty = cap_obj_ty.to_struct_type(self);
+            let cap_obj_str_ty = cap_obj_ty.to_struct_type(self, vec![]);
 
             for (i, (cap_name, cap_ty)) in cap_vars.iter().enumerate() {
                 let cap_val = self.load_obj_field(
@@ -1338,7 +1338,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // Get struct type of cap_obj.
                 let cap_obj_str_ty = dynamic_obj_ty
                     .get_object_type(&cap_tys, self.type_env())
-                    .to_struct_type(self);
+                    .to_struct_type(self, vec![]);
 
                 // Set captured objects to cap_obj.
                 for (i, (cap_name, _cap_ty)) in cap_vars.iter().enumerate() {
@@ -1456,7 +1456,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     .unwrap();
                 let field_ty = obj.ty.field_types(self.type_env())[field_idx].clone();
                 let expect_tag_value = ObjectFieldType::UnionTag
-                    .to_basic_type(self)
+                    .to_basic_type(self, vec![])
                     .into_int_type()
                     .const_int(field_idx as u64, false);
                 ObjectFieldType::panic_if_union_tag_unmatch(self, obj.clone(), expect_tag_value);
