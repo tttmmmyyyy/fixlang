@@ -1,7 +1,14 @@
 use build_time::build_time_utc;
 use chrono::{DateTime, Utc};
 use regex::Regex;
-use std::{env, fs, fs::create_dir_all, path::PathBuf, process::Command, time::SystemTime};
+use std::{
+    env,
+    fs::create_dir_all,
+    fs::{self, remove_dir_all},
+    path::PathBuf,
+    process::Command,
+    time::SystemTime,
+};
 
 use either::Either;
 use inkwell::{
@@ -443,4 +450,10 @@ pub fn build_file(mut config: Configuration) {
                 .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
         );
     }
+}
+
+// A function implementing `fix clean` command.
+pub fn clean_command() {
+    // Delete `.fixlang` directory.
+    remove_dir_all(DOT_FIXLANG).expect(&format!("Failed to remove `{}` directory.", DOT_FIXLANG));
 }

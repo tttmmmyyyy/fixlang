@@ -2015,7 +2015,9 @@ impl InlineLLVMArrayGetPtrBody {
 
         // Get pointer
         let ptr = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-        let ptr_ty = ObjectFieldType::Ptr.to_basic_type(gc).into_pointer_type();
+        let ptr_ty = ObjectFieldType::Ptr
+            .to_basic_type(gc, vec![])
+            .into_pointer_type();
         let ptr = gc.cast_pointer(ptr, ptr_ty);
 
         // Release array
@@ -2612,7 +2614,7 @@ impl InlineLLVMMakeUnionBody {
 
         // Set tag value.
         let tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc)
+            .to_basic_type(gc, vec![])
             .into_int_type()
             .const_int(self.field_idx as u64, false);
         obj.store_field_nocap(gc, 0 + offset, tag_value);
@@ -2745,7 +2747,7 @@ impl InlineLLVMUnionAsBody {
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc)
+            .to_basic_type(gc, vec![])
             .into_int_type()
             .const_int(self.field_idx as u64, false);
 
@@ -2838,7 +2840,7 @@ impl InlineLLVMUnionIsBody {
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc)
+            .to_basic_type(gc, vec![])
             .into_int_type()
             .const_int(self.field_idx as u64, false);
 
@@ -2934,7 +2936,7 @@ impl InlineLLVMUnionModBody {
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc)
+            .to_basic_type(gc, vec![])
             .into_int_type()
             .const_int(self.field_idx as u64, false);
 
@@ -3090,7 +3092,7 @@ impl InlineLLVMLoopFunctionBody {
 
         // Prepare constant.
         let cont_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc)
+            .to_basic_type(gc, vec![])
             .into_int_type()
             .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
 
@@ -3263,7 +3265,9 @@ impl InlineLLVMIsUniqueFunctionBody {
         ret_ty: &Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let bool_ty = ObjectFieldType::I8
+            .to_basic_type(gc, vec![])
+            .into_int_type();
 
         // Get argument
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
@@ -3517,7 +3521,9 @@ impl InlineLLVMIntEqBody {
                 .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
         let value = gc.builder().build_int_z_extend(
             value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8
+                .to_basic_type(gc, vec![])
+                .into_int_type(),
             "eq",
         );
         let obj = if rvo.is_none() {
@@ -3575,7 +3581,9 @@ impl InlineLLVMPtrEqBody {
         );
         let value = gc.builder().build_int_z_extend(
             value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8
+                .to_basic_type(gc, vec![])
+                .into_int_type(),
             "eq_of_int",
         );
         let obj = if rvo.is_none() {
@@ -3630,7 +3638,9 @@ impl InlineLLVMFloatEqBody {
         );
         let value = gc.builder().build_int_z_extend(
             value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8
+                .to_basic_type(gc, vec![])
+                .into_int_type(),
             "eq_of_float",
         );
         let obj = if rvo.is_none() {
@@ -3707,7 +3717,9 @@ impl InlineLLVMIntLessThanBody {
         );
         let value = gc.builder().build_int_z_extend(
             value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8
+                .to_basic_type(gc, vec![])
+                .into_int_type(),
             LESS_THAN_TRAIT_LT_NAME,
         );
         let obj = if rvo.is_none() {
@@ -3762,7 +3774,9 @@ impl InlineLLVMFloatLessThanBody {
         );
         let value = gc.builder().build_int_z_extend(
             value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8
+                .to_basic_type(gc, vec![])
+                .into_int_type(),
             LESS_THAN_TRAIT_LT_NAME,
         );
         let obj = if rvo.is_none() {
@@ -3840,7 +3854,9 @@ impl InlineLLVMIntLessThanOrEqBody {
         );
         let value = gc.builder().build_int_z_extend(
             value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8
+                .to_basic_type(gc, vec![])
+                .into_int_type(),
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
         let obj = if rvo.is_none() {
@@ -3895,7 +3911,9 @@ impl InlineLLVMFloatLessThanOrEqBody {
         );
         let value = gc.builder().build_int_z_extend(
             value,
-            ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+            ObjectFieldType::I8
+                .to_basic_type(gc, vec![])
+                .into_int_type(),
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
         let obj = if rvo.is_none() {
@@ -4566,7 +4584,9 @@ impl InlineLLVMBoolNegBody {
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
         let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
         gc.release(rhs);
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let bool_ty = ObjectFieldType::I8
+            .to_basic_type(gc, vec![])
+            .into_int_type();
         let false_val = bool_ty.const_zero();
         let value =
             gc.builder()

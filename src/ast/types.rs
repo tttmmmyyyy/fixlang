@@ -702,7 +702,7 @@ impl TypeNode {
         capture: &Vec<Rc<TypeNode>>,
     ) -> StructType<'c> {
         self.get_object_type(capture, gc.type_env())
-            .to_struct_type(gc)
+            .to_struct_type(gc, vec![])
     }
 
     pub fn get_embedded_type<'c, 'm>(
@@ -711,7 +711,7 @@ impl TypeNode {
         capture: &Vec<Rc<TypeNode>>,
     ) -> BasicTypeEnum<'c> {
         self.get_object_type(capture, gc.type_env())
-            .to_embedded_type(gc)
+            .to_embedded_type(gc, vec![])
     }
 }
 

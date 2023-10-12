@@ -160,7 +160,9 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     let func_type = void_type.fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
-            ObjectFieldType::DtorFunction.to_basic_type(gc).into(),
+            ObjectFieldType::DtorFunction
+                .to_basic_type(gc, vec![])
+                .into(),
         ],
         false,
     );
