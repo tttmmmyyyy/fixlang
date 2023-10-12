@@ -65,6 +65,7 @@ impl<T> Graph<T> {
     // Find a loop.
     // If this function finds a loop a(1) -> a(2) -> ... -> a(n) -> a(1), it returns vec![a(1), a(2), ... , a(n)].
     // If there is no loop in the graph, this function returns an empty Vec.
+    #[allow(dead_code)]
     pub fn find_loop(&self) -> Vec<usize> {
         fn visit<T>(
             pos: usize,
