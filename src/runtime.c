@@ -11,7 +11,31 @@ C functions / values for implementing Fix standard library.
 #include <errno.h>
 #include <ctype.h>
 #include <time.h>
+#ifndef __MINGW32__
 #include <sys/time.h>
+#endif  // __MINGW32__
+
+#ifdef __MINGW32__
+#define timegm _mkgmtime
+
+struct tm* localtime_r(const time_t* timer, struct tm* buf)
+{
+    if (localtime_s(buf, timer))
+    {
+        return NULL;
+    }
+    return buf;
+}
+
+struct tm* gmtime_r(const time_t* timer, struct tm* buf)
+{
+    if (gmtime_s(buf, timer))
+    {
+        return NULL;
+    }
+    return buf;
+}
+#endif  // __MINGW32__
 
 // Print message to stderr, and flush it.
 void fixruntime_eprint(const char *msg)

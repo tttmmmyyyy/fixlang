@@ -386,7 +386,11 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
 
 pub fn build_file(mut config: Configuration) {
     let obj_path = PathBuf::from(INTERMEDIATE_PATH).join("a.o");
-    let exec_path = PathBuf::from("a.out");
+    let exec_path = PathBuf::from(if env::consts::OS != "windows" {
+        "a.out"
+    } else {
+        "a.exe"
+    });
 
     // Create intermediate directory.
     fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
