@@ -401,6 +401,7 @@
     - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
     - [`unsafe_is_unique : a -> (Bool, a)`](#unsafe_is_unique--a---bool-a)
   - [Traits](#traits-1)
+    - [Additive](#additive)
     - [FromBytes](#frombytes)
       - [`from_bytes : [a : FromBytes] Array U8 -> Result ErrMsg a`](#from_bytes--a--frombytes-array-u8---result-errmsg-a)
     - [FromString](#fromstring)
@@ -2691,6 +2692,14 @@ main = (
 ```
 
 ## Traits
+
+### Additive
+
+`Additive` is a trait alias defined as follows:
+
+```
+trait Additive = Add + Zero;
+```
 
 ### FromBytes
 

@@ -2557,11 +2557,26 @@ pub fn test98() {
 
         main : IO ();
         main = (
+            // I8
+            eval assert_eq(|_|"I8 1", -128_I8.to_string, "-128");
+            eval assert_eq(|_|"I8 2", 127_I8.to_string, "127");
+            eval assert_eq(|_|"I8 3", -128_I8, "-128".from_string.as_ok);
+
             // U8
             eval assert_eq(|_|"", 0_U8.to_string, "0");
             eval assert_eq(|_|"", 255_U8.to_string, "255");
             eval assert_eq(|_|"", 255_U8, "255".from_string.as_ok);
-            
+
+            // I16
+            eval assert_eq(|_|"I16 1", -32768_I16.to_string, "-32768");
+            eval assert_eq(|_|"I16 2", 32767_I16.to_string, "32767");
+            eval assert_eq(|_|"I16 3", -32768_I16, "-32768".from_string.as_ok);
+
+            // U16
+            eval assert_eq(|_|"", 0_U16.to_string, "0");
+            eval assert_eq(|_|"", 65535_U16.to_string, "65535");
+            eval assert_eq(|_|"", 65535_U16, "65535".from_string.as_ok);
+
             // I32
             eval assert_eq(|_|"", -2147483648_I32.to_string, "-2147483648");
             eval assert_eq(|_|"", 2147483647_I32.to_string, "2147483647");
@@ -4032,6 +4047,30 @@ pub fn test129() {
             let y : Result ErrMsg U8 = Array::fill(n-1, 127_U8).from_bytes;
             eval assert(|_|case + " 2", y.is_err);
 
+            // I8
+            let case = "I8";
+            let n = 1;
+            let x = 127_U8;
+            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            let y : Result ErrMsg I8 = Array::fill(n-1, 127_U8).from_bytes;
+            eval assert(|_|case + " 2", y.is_err);
+
+            // U16
+            let case = "U16";
+            let n = 2;
+            let x = 65535_U16;
+            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            // let y : Result ErrMsg U16 = Array::fill(n-1, 127_U8).from_bytes;
+            // eval assert(|_|case + " 2", y.is_err);
+
+            // I16
+            // let case = "I16";
+            // let n = 2;
+            // let x = -32768_I16;
+            // eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            // let y : Result ErrMsg I16 = Array::fill(n-1, 127_U8).from_bytes;
+            // eval assert(|_|case + " 2", y.is_err);
+
             // U32
             let case = "U32";
             let n = 4;
@@ -4062,6 +4101,22 @@ pub fn test129() {
             let x = 123456789012345678_I64;
             eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg I64 = Array::fill(n-1, 127_U8).from_bytes;
+            eval assert(|_|case + " 2", y.is_err);
+
+            // F32
+            let case = "F32";
+            let n = 4;
+            let x = 3.14_F32;
+            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            let y : Result ErrMsg F32 = Array::fill(n-1, 127_U8).from_bytes;
+            eval assert(|_|case + " 2", y.is_err);
+
+            // F64
+            let case = "F64";
+            let n = 8;
+            let x = 3.14_F64;
+            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            let y : Result ErrMsg F64 = Array::fill(n-1, 127_U8).from_bytes;
             eval assert(|_|case + " 2", y.is_err);
 
             pure()

@@ -29,7 +29,7 @@ expr_number_lit = { number_lit_body ~ ("_" ~ number_lit_type)? }
 
 number_lit_body = { "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )? }
 
-number_lit_type = { "U8" | "I32" | "U32" | "I64" | "U64" | "F32" | "F64" }
+number_lit_type = { "I8" | "U8" | "I16" | "U16" | "I32" | "U32" | "I64" | "U64" | "F32" | "F64" }
 
 expr_nullptr_lit = { "nullptr" }
 
@@ -252,17 +252,10 @@ ffi_c_fun_char = _{ !("(") ~ ANY }
 
 ffi_c_fun_name = { ffi_c_fun_char+ }
 
-ffi_c_fun_ty = { ffi_c_ty_unit | ffi_c_ty_ptr | ffi_c_ty_u8 | ffi_c_ty_i32 | ffi_c_ty_u32 | ffi_c_ty_i64 | ffi_c_ty_u64 | ffi_c_ty_f32 | ffi_c_ty_f64 }
+ffi_c_fun_ty = { ffi_c_ty_unit | ffi_c_ty_ptr | number_lit_type }
 
 ffi_c_ty_unit = _{ "()" }
 ffi_c_ty_ptr = _{ "Ptr" }
-ffi_c_ty_u8 = _{ "U8" }
-ffi_c_ty_i32 = _{ "I32" }
-ffi_c_ty_u32 = _{ "U32" }
-ffi_c_ty_i64 = _{ "I64" }
-ffi_c_ty_u64 = _{ "U64" }
-ffi_c_ty_f32 = _{ "F32" }
-ffi_c_ty_f64 = _{ "F64" }
 
 ffi_param_tys = { (ffi_c_fun_ty ~ (sep* ~ "," ~ sep* ~ ffi_c_fun_ty)*) | "" }
 

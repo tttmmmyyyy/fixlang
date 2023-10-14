@@ -1362,26 +1362,12 @@ fn parse_expr_number_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
     let is_float = val_str.contains(".");
     let ty = match pairs.next() {
         Some(pair) => {
+            // Type of literal is explicitly specified.
             assert_eq!(pair.as_rule(), Rule::number_lit_type);
-            if pair.as_str() == "U8" {
-                make_u8_ty()
-            } else if pair.as_str() == "I32" {
-                make_i32_ty()
-            } else if pair.as_str() == "U32" {
-                make_u32_ty()
-            } else if pair.as_str() == "I64" {
-                make_i64_ty()
-            } else if pair.as_str() == "U64" {
-                make_u64_ty()
-            } else if pair.as_str() == "F32" {
-                make_f32_ty()
-            } else if pair.as_str() == "F64" {
-                make_f64_ty()
-            } else {
-                unreachable!()
-            }
+            make_numeric_ty(pair.as_str()).unwrap()
         }
         None => {
+            // Type of literal is implicit.
             if is_float {
                 make_f64_ty()
             } else {

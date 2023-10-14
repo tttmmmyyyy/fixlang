@@ -154,13 +154,13 @@ impl TyCon {
         if self.name == make_tuple_name(0) {
             return None;
         }
-        if self.name.name == U8_NAME {
-            return Some(ctx.i8_type().as_basic_type_enum());
-        }
         if self.name.name == I8_NAME {
             return Some(ctx.i8_type().as_basic_type_enum());
         }
-        if self.name.name == U16_NAME {
+        if self.name.name == U8_NAME {
+            return Some(ctx.i8_type().as_basic_type_enum());
+        }
+        if self.name.name == I16_NAME {
             return Some(ctx.i16_type().as_basic_type_enum());
         }
         if self.name.name == U16_NAME {

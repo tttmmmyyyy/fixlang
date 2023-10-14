@@ -46,228 +46,135 @@ pub fn make_std_mod() -> Program {
 
     // Trait instances
 
-    // Eq
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_ptr(make_ptr_ty()));
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_int(make_u64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_float(make_f32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_float(make_f64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(eq_trait_instance_int(make_bool_ty()));
-
-    // Add
-    fix_module
-        .trait_env
-        .add_instance(add_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(add_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(add_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(add_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(add_trait_instance_int(make_u64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(add_trait_instance_float(make_f32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(add_trait_instance_float(make_f64_ty()));
-
-    // Sub
-    fix_module
-        .trait_env
-        .add_instance(subtract_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(subtract_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(subtract_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(subtract_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(subtract_trait_instance_int(make_u64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(subtract_trait_instance_float(make_f32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(subtract_trait_instance_float(make_f64_ty()));
-
-    // Neg
-    fix_module
-        .trait_env
-        .add_instance(negate_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(negate_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(negate_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(negate_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(negate_trait_instance_int(make_u64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(negate_trait_instance_float(make_f32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(negate_trait_instance_float(make_f64_ty()));
-
-    // Mul
-    fix_module
-        .trait_env
-        .add_instance(multiply_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(multiply_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(multiply_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(multiply_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(multiply_trait_instance_int(make_u64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(multiply_trait_instance_float(make_f32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(multiply_trait_instance_float(make_f64_ty()));
-
-    // Div
-    fix_module
-        .trait_env
-        .add_instance(divide_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(divide_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(divide_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(divide_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(divide_trait_instance_int(make_u64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(divide_trait_instance_float(make_f32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(divide_trait_instance_float(make_f64_ty()));
-
-    // Rem
-    fix_module
-        .trait_env
-        .add_instance(remainder_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(remainder_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(remainder_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(remainder_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(remainder_trait_instance_int(make_u64_ty()));
-
-    // LessThan
-    fix_module
-        .trait_env
-        .add_instance(less_than_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_trait_instance_int(make_u64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_trait_instance_float(make_f32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_trait_instance_float(make_f64_ty()));
-
-    // LessThanOrEq
-    fix_module
-        .trait_env
-        .add_instance(less_than_or_equal_to_trait_instance_int(make_u8_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_or_equal_to_trait_instance_int(make_i32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_or_equal_to_trait_instance_int(make_u32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_or_equal_to_trait_instance_int(make_i64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_or_equal_to_trait_instance_int(make_u64_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_or_equal_to_trait_instance_float(make_f32_ty()));
-    fix_module
-        .trait_env
-        .add_instance(less_than_or_equal_to_trait_instance_float(make_f64_ty()));
-
-    // Not
-    fix_module.trait_env.add_instance(not_trait_instance_bool());
-
-    // Cast functions
-    let integral_tys: &[Rc<TypeNode>] = &[
+    let integral_types = &[
+        make_i8_ty(),
         make_u8_ty(),
+        make_i16_ty(),
+        make_u16_ty(),
         make_i32_ty(),
         make_u32_ty(),
         make_i64_ty(),
         make_u64_ty(),
     ];
-    let float_tys: &[Rc<TypeNode>] = &[make_f32_ty(), make_f64_ty()];
+    let float_types = &[make_f32_ty(), make_f64_ty()];
+
+    // Eq
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(eq_trait_instance_int(ty.clone()));
+    }
+    for ty in float_types {
+        fix_module
+            .trait_env
+            .add_instance(eq_trait_instance_float(ty.clone()));
+    }
+    fix_module
+        .trait_env
+        .add_instance(eq_trait_instance_int(make_bool_ty()));
+    fix_module
+        .trait_env
+        .add_instance(eq_trait_instance_ptr(make_ptr_ty()));
+
+    // Add
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(add_trait_instance_int(ty.clone()));
+    }
+    for ty in float_types {
+        fix_module
+            .trait_env
+            .add_instance(add_trait_instance_float(ty.clone()));
+    }
+
+    // Sub
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(subtract_trait_instance_int(ty.clone()));
+    }
+    for ty in float_types {
+        fix_module
+            .trait_env
+            .add_instance(subtract_trait_instance_float(ty.clone()));
+    }
+
+    // Neg
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(negate_trait_instance_int(ty.clone()));
+    }
+    for ty in float_types {
+        fix_module
+            .trait_env
+            .add_instance(negate_trait_instance_float(ty.clone()));
+    }
+
+    // Mul
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(multiply_trait_instance_int(ty.clone()));
+    }
+    for ty in float_types {
+        fix_module
+            .trait_env
+            .add_instance(multiply_trait_instance_float(ty.clone()));
+    }
+
+    // Div
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(divide_trait_instance_int(ty.clone()));
+    }
+    for ty in float_types {
+        fix_module
+            .trait_env
+            .add_instance(divide_trait_instance_float(ty.clone()));
+    }
+
+    // Rem
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(remainder_trait_instance_int(ty.clone()));
+    }
+
+    // LessThan
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(less_than_trait_instance_int(ty.clone()));
+    }
+    for ty in float_types {
+        fix_module
+            .trait_env
+            .add_instance(less_than_trait_instance_float(ty.clone()));
+    }
+
+    // LessThanOrEq
+    for ty in integral_types {
+        fix_module
+            .trait_env
+            .add_instance(less_than_or_equal_to_trait_instance_int(ty.clone()));
+    }
+    for ty in float_types {
+        fix_module
+            .trait_env
+            .add_instance(less_than_or_equal_to_trait_instance_float(ty.clone()));
+    }
+
+    // Not
+    fix_module.trait_env.add_instance(not_trait_instance_bool());
+
+    // Cast functions
+
     // Cast function between integral types.
-    for from in integral_tys {
-        for to in integral_tys {
+    for from in integral_types {
+        for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             fix_module.add_global_value(
@@ -277,8 +184,8 @@ pub fn make_std_mod() -> Program {
         }
     }
     // Cast function between float types.
-    for from in float_tys {
-        for to in float_tys {
+    for from in float_types {
+        for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             fix_module.add_global_value(
@@ -288,8 +195,8 @@ pub fn make_std_mod() -> Program {
         }
     }
     // Cast from integers to float types.
-    for from in integral_tys {
-        for to in float_tys {
+    for from in integral_types {
+        for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             fix_module.add_global_value(
@@ -299,8 +206,8 @@ pub fn make_std_mod() -> Program {
         }
     }
     // Cast from float types to integers.
-    for from in float_tys {
-        for to in integral_tys {
+    for from in float_types {
+        for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             fix_module.add_global_value(
@@ -310,7 +217,7 @@ pub fn make_std_mod() -> Program {
         }
     }
     // Bit operations
-    for int_ty in integral_tys {
+    for int_ty in integral_types {
         let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
         fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_left"),

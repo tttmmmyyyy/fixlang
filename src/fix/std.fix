@@ -1281,6 +1281,17 @@ loop_m = |s, f| (
 
 // Constants
 
+namespace I8 {
+    maximum : I8;
+    maximum = 127_I8;
+
+    minimum : I8;
+    minimum = -128_I8;
+}
+impl I8 : Zero {
+    zero = 0_I8;
+}
+
 namespace U8 {
     maximum : U8;
     maximum = 255_U8;
@@ -1290,6 +1301,28 @@ namespace U8 {
 }
 impl U8 : Zero {
     zero = 0_U8;
+}
+
+namespace I16 {
+    maximum : I16;
+    maximum = 32767_I16;
+
+    minimum : I16;
+    minimum = -32768_I16;
+}
+impl I16 : Zero {
+    zero = 0_I16;
+}
+
+namespace U16 {
+    maximum : U16;
+    maximum = 65535_U16;
+
+    minimum : U16;
+    minimum = 0_U16;
+}
+impl U16 : Zero {
+    zero = 0_U16;
 }
 
 namespace I32 {
@@ -1392,6 +1425,16 @@ trait a : Zero {
 
 // Abs
 
+namespace I8 {
+    abs : I8 -> I8;
+    abs = |f| if f < 0_I8 { -f } else { f };
+}
+
+namespace I16 {
+    abs : I16 -> I16;
+    abs = |f| if f < 0_I16 { -f } else { f };
+}
+
 namespace I32 {
     abs : I32 -> I32;
     abs = |f| if f < 0_I32 { -f } else { f };
@@ -1431,7 +1474,7 @@ impl U8 : FromBytes {
 }
 impl U8 : ToString {
     to_string = |v| (
-        let data = Array::empty(4);
+        let data = Array::empty(4); // len(255) + 1
         let _ = data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u8_to_str(Ptr, U8), ptr, v]
         ));
@@ -1439,16 +1482,35 @@ impl U8 : ToString {
     );
 }
 impl U8 : FromString {
-    from_string = |str| (
-        str.borrow_c_str(|c_str| (
-            let v = CALL_C[U64 fixruntime_strtoull_10(Ptr), c_str];
-            let err = CALL_C[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
-            let err = CALL_C[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
-            Result::ok(v.to_U8)
-        ))
+    from_string = |str| str.from_string.map(U64::to_U8);
+}
+
+impl U16 : ToBytes {
+    to_bytes = |v| (
+        let data = Array::empty(2)._unsafe_set_size(2);
+        let _ = CALL_C[() fixruntime_u16_to_bytes(Ptr, U16), data._get_ptr, v];
+        data
     );
+}
+impl U16 : FromBytes {
+    from_bytes = |bs| (
+        if bs.get_size != 2 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U16."
+        };
+        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U16 fixruntime_u16_from_bytes(Ptr), ptr])
+    );
+}
+impl U16 : ToString {
+    to_string = |v| (
+        let data = Array::empty(6); // len(65535) + 1
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_u16_to_str(Ptr, U16), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
+}
+impl U16 : FromString {
+    from_string = |str| str.from_string.map(U64::to_U16);
 }
 
 impl U32 : ToBytes {
@@ -1476,16 +1538,7 @@ impl U32 : ToString {
     );
 }
 impl U32 : FromString {
-    from_string = |str| (
-        str.borrow_c_str(|c_str| (
-            let v = CALL_C[U64 fixruntime_strtoull_10(Ptr), c_str];
-            let err = CALL_C[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
-            let err = CALL_C[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
-            Result::ok(v.to_U32)
-        ))
-    );
+    from_string = |str| str.from_string.map(U64::to_U32);
 }
 
 impl U64 : ToBytes {
@@ -1525,10 +1578,66 @@ impl U64 : FromString {
     );
 }
 
+impl I8 : ToBytes {
+    to_bytes = |v| (
+        let data = Array::empty(1)._unsafe_set_size(1);
+        let _ = CALL_C[() fixruntime_u8_to_bytes(Ptr, I8), data._get_ptr, v];
+        data
+    );
+}
+impl I8 : FromBytes {
+    from_bytes = |bs| (
+        if bs.get_size != 1 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I8."
+        };
+        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I8 fixruntime_u8_from_bytes(Ptr), ptr])
+    );
+}
+impl I8 : ToString {
+    to_string = |v| (
+        let data = Array::empty(5); // len(-128) + 1
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_i8_to_str(Ptr, I8), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
+}
+impl I8 : FromString {
+    from_string = |str| str.from_string.map(I64::to_I8);
+}
+
+impl I16 : ToBytes {
+    to_bytes = |v| (
+        let data = Array::empty(2)._unsafe_set_size(2);
+        let _ = CALL_C[() fixruntime_u16_to_bytes(Ptr, I16), data._get_ptr, v];
+        data
+    );
+}
+impl I16 : FromBytes {
+    from_bytes = |bs| (
+        if bs.get_size != 2 {
+            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I16."
+        };
+        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I16 fixruntime_u16_from_bytes(Ptr), ptr])
+    );
+}
+impl I16 : ToString {
+    to_string = |v| (
+        let data = Array::empty(7); // len(-32768) + 1
+        let _ = data.borrow_ptr(|ptr| (
+            CALL_C[() fixruntime_i16_to_str(Ptr, I16), ptr, v]
+        ));
+        String::from_c_str(data)
+    );
+}
+impl I16 : FromString {
+    from_string = |str| str.from_string.map(I64::to_I16);
+}
+
 impl I32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        let _ = CALL_C[() fixruntime_i32_to_bytes(Ptr, I32), data._get_ptr, v];
+        let _ = CALL_C[() fixruntime_u32_to_bytes(Ptr, I32), data._get_ptr, v];
         data
     );
 }
@@ -1537,7 +1646,7 @@ impl I32 : FromBytes {
         if bs.get_size != 4 {
             Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I32."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I32 fixruntime_i32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
 }
 impl I32 : ToString {
@@ -1550,22 +1659,13 @@ impl I32 : ToString {
     );
 }
 impl I32 : FromString {
-    from_string = |str| (
-        str.borrow_c_str(|c_str| (
-            let v = CALL_C[I64 fixruntime_strtoll_10(Ptr), c_str];
-            let err = CALL_C[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
-            let err = CALL_C[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
-            Result::ok(v.to_I32)
-        ))
-    );
+    from_string = |str| str.from_string.map(I64::to_I32);
 }
 
 impl I64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        let _ = CALL_C[() fixruntime_i64_to_bytes(Ptr, I64), data._get_ptr, v];
+        let _ = CALL_C[() fixruntime_u64_to_bytes(Ptr, I64), data._get_ptr, v];
         data
     );
 }
@@ -1574,7 +1674,7 @@ impl I64 : FromBytes {
         if bs.get_size != 8 {
             Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I64."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I64 fixruntime_i64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
 }
 impl I64 : ToString {

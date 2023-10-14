@@ -13,12 +13,12 @@ C functions / values for implementing Fix standard library.
 #include <time.h>
 #ifndef __MINGW32__
 #include <sys/time.h>
-#endif  // __MINGW32__
+#endif // __MINGW32__
 
 #ifdef __MINGW32__
 #define timegm _mkgmtime
 
-struct tm* localtime_r(const time_t* timer, struct tm* buf)
+struct tm *localtime_r(const time_t *timer, struct tm *buf)
 {
     if (localtime_s(buf, timer))
     {
@@ -27,7 +27,7 @@ struct tm* localtime_r(const time_t* timer, struct tm* buf)
     return buf;
 }
 
-struct tm* gmtime_r(const time_t* timer, struct tm* buf)
+struct tm *gmtime_r(const time_t *timer, struct tm *buf)
 {
     if (gmtime_s(buf, timer))
     {
@@ -35,7 +35,7 @@ struct tm* gmtime_r(const time_t* timer, struct tm* buf)
     }
     return buf;
 }
-#endif  // __MINGW32__
+#endif // __MINGW32__
 
 // Print message to stderr, and flush it.
 void fixruntime_eprint(const char *msg)
@@ -48,19 +48,15 @@ void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
 {
     *buf = v;
 }
+void fixruntime_u16_to_bytes(uint16_t *buf, uint16_t v)
+{
+    *buf = v;
+}
 void fixruntime_u32_to_bytes(uint32_t *buf, uint32_t v)
 {
     *buf = v;
 }
 void fixruntime_u64_to_bytes(uint64_t *buf, uint64_t v)
-{
-    *buf = v;
-}
-void fixruntime_i32_to_bytes(int32_t *buf, int32_t v)
-{
-    *buf = v;
-}
-void fixruntime_i64_to_bytes(int64_t *buf, int64_t v)
 {
     *buf = v;
 }
@@ -77,19 +73,15 @@ uint8_t fixruntime_u8_from_bytes(uint8_t *buf)
 {
     return *buf;
 }
+uint16_t fixruntime_u16_from_bytes(uint16_t *buf)
+{
+    return *buf;
+}
 uint32_t fixruntime_u32_from_bytes(uint32_t *buf)
 {
     return *buf;
 }
 uint64_t fixruntime_u64_from_bytes(uint64_t *buf)
-{
-    return *buf;
-}
-int32_t fixruntime_i32_from_bytes(int32_t *buf)
-{
-    return *buf;
-}
-int64_t fixruntime_i64_from_bytes(int64_t *buf)
 {
     return *buf;
 }
@@ -102,11 +94,22 @@ double fixruntime_f64_from_bytes(double *buf)
     return *buf;
 }
 
+void fixruntime_i8_to_str(char *buf, int8_t v)
+{
+    sprintf(buf, "%" PRId8, v);
+}
 void fixruntime_u8_to_str(char *buf, uint8_t v)
 {
     sprintf(buf, "%" PRIu8, v);
 }
-
+void fixruntime_i16_to_str(char *buf, int16_t v)
+{
+    sprintf(buf, "%" PRId16, v);
+}
+void fixruntime_u16_to_str(char *buf, uint16_t v)
+{
+    sprintf(buf, "%" PRIu16, v);
+}
 void fixruntime_u32_to_str(char *buf, uint32_t v)
 {
     sprintf(buf, "%" PRIu32, v);

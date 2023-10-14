@@ -323,6 +323,49 @@ pub fn make_loop_result_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
 }
 
+// Get integral types from its name.
+pub fn make_integral_ty(name: &str) -> Option<Rc<TypeNode>> {
+    if name == I8_NAME {
+        Some(make_i8_ty())
+    } else if name == U8_NAME {
+        Some(make_u8_ty())
+    } else if name == I16_NAME {
+        Some(make_i16_ty())
+    } else if name == U16_NAME {
+        Some(make_u16_ty())
+    } else if name == I32_NAME {
+        Some(make_i32_ty())
+    } else if name == U32_NAME {
+        Some(make_u32_ty())
+    } else if name == I64_NAME {
+        Some(make_i64_ty())
+    } else if name == U64_NAME {
+        Some(make_u64_ty())
+    } else {
+        None
+    }
+}
+
+// Get floating types from its name.
+pub fn make_floating_ty(name: &str) -> Option<Rc<TypeNode>> {
+    if name == F32_NAME {
+        Some(make_f32_ty())
+    } else if name == F64_NAME {
+        Some(make_f64_ty())
+    } else {
+        None
+    }
+}
+
+// Get numeric types from its name.
+pub fn make_numeric_ty(name: &str) -> Option<Rc<TypeNode>> {
+    let int_opt = make_integral_ty(name);
+    if int_opt.is_some() {
+        return int_opt;
+    }
+    make_floating_ty(name)
+}
+
 // Get dynamic object type.
 pub fn make_dynamic_object_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(
