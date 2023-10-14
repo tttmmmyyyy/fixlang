@@ -1,5 +1,7 @@
 use std::fs::{self, remove_file};
 
+use rand::Rng;
+
 use super::*;
 
 // Tests should run sequentially, since OBJECT_TABLE in libfixsanitizer.so is shared between tests and check_leak() asserts OBJECT_TABLE is empty.
@@ -2618,21 +2620,55 @@ pub fn test98() {
 #[serial]
 pub fn test99() {
     // Test cast between integral types.
-    let source = r#"
-        module Main; import Debug;
+    let seed: [u8; 32] = [232; 32];
+    let mut rng: rand::rngs::StdRng = rand::SeedableRng::from_seed(seed);
+    let mut cases: Vec<String> = vec![];
+    let tys = &[
+        I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME,
+    ];
+    fn cast(num: i64, ty: &str) -> i64 {
+        match ty {
+            I8_NAME => (num as i8) as i64,
+            U8_NAME => (num as u8) as i64,
+            I16_NAME => (num as i16) as i64,
+            U16_NAME => (num as u16) as i64,
+            I32_NAME => (num as i32) as i64,
+            U32_NAME => (num as u32) as i64,
+            I64_NAME => num,
+            U64_NAME => (num as u64) as i64,
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+    for ty1 in tys {
+        for ty2 in tys {
+            let num = rng.gen::<i64>();
+            let num1 = cast(num, ty1);
+            let num2 = cast(num1, ty2);
 
-        main : IO ();
-        main = (
-            eval assert_eq(|_|"case 1", -2147483648_I32.to_I64, -2147483648_I64);
-            eval assert_eq(|_|"case 2", 2147483647_I32.to_I64, 2147483647_I64);
-            eval assert_eq(|_|"case 3", -10000000000_I64.to_I32, -10000000000_I32);
-            eval assert_eq(|_|"case 4", 10000000000_I64.to_I32, 10000000000_I32);
-            eval assert_eq(|_|"case 5", -10000000000_I32.to_U8, -10000000000_U8);
-            eval assert_eq(|_|"case 6", 255_U8.to_I32, 255_I32);
-            eval assert_eq(|_|"case 7", -1_I32.to_U8, -1_U8);
-            pure()
-        );
-    "#;
+            let lhs = format!("{}_{}.to_{}", num1, ty1, ty2);
+            let rhs = format!("{}_{}", num2, ty2);
+            let msg = format!(
+                r#""{} != {}, lhs=" + {}.to_string + ", rhs=" + {}.to_string"#,
+                lhs, rhs, lhs, rhs
+            );
+            let case = format!("eval assert_eq(|_|{}, {}, {});", msg, lhs, rhs);
+            cases.push(case);
+        }
+    }
+    let source = format!(
+        r#"
+            module Main; import Debug;
+    
+            main : IO ();
+            main = (
+                {}
+                pure()
+            );
+        "#,
+        cases.join("\n")
+    );
     run_source(&source, Configuration::develop_compiler());
 }
 
