@@ -168,12 +168,16 @@ fn build_module<'c>(
     }
 
     // Create GenerationContext.
-    let debug_mode = config.debug_mode;
-    let emit_llvm = config.debug_mode;
-    let mut gc = GenerationContext::new(&context, &module, target, config, fix_mod.type_env());
+    let mut gc = GenerationContext::new(
+        &context,
+        &module,
+        target,
+        config.clone(),
+        fix_mod.type_env(),
+    );
 
     // In debug mode, create debug infos.
-    if debug_mode {
+    if config.debug_mode {
         gc.create_debug_info();
     }
 
@@ -227,15 +231,16 @@ fn build_module<'c>(
     gc.finalize_di();
 
     // Print LLVM bitcode to file
-    if emit_llvm {
-        module.print_to_file("before_opt.ll").unwrap();
+    if config.emit_llvm {
+        let path = config.get_output_llvm_ir_path(true);
+        module.print_to_file(path).unwrap();
     }
 
     // Run optimization
     let passmgr = PassManager::create(());
 
     passmgr.add_verifier_pass();
-    if !debug_mode {
+    if !config.debug_mode {
         add_passes(&passmgr);
     }
 
@@ -253,8 +258,9 @@ fn build_module<'c>(
     }
 
     // Print LLVM bitcode to file
-    if emit_llvm {
-        module.print_to_file("after_opt.ll").unwrap();
+    if config.emit_llvm {
+        let path = config.get_output_llvm_ir_path(false);
+        module.print_to_file(path).unwrap();
     }
 
     gc.target

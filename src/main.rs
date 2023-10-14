@@ -13,6 +13,7 @@ extern crate serde_pickle;
 
 mod ast;
 mod builtin;
+mod configuration;
 mod constants;
 mod generator;
 mod graph;
@@ -37,6 +38,7 @@ use ast::types::*;
 use builtin::*;
 use clap::ArgMatches;
 use clap::{App, AppSettings, Arg};
+use configuration::*;
 use constants::*;
 use generator::*;
 use graph::*;
@@ -69,83 +71,6 @@ use stdlib::*;
 use typecheck::*;
 use uncurry_optimization::*;
 
-// Max number of arguments of function pointer lambda.
-pub const FUNPTR_ARGS_MAX: u32 = 100;
-// Max tuple size.
-// This affects on compilation time heavily. We should make tuple generation on-demand in a future.
-pub const TUPLE_SIZE_MAX: u32 = 4;
-// Is tuple unboxed?
-pub const TUPLE_UNBOX: bool = true;
-
-#[derive(Clone, Copy)]
-pub enum LinkType {
-    Static,
-    Dynamic,
-}
-
-#[derive(Clone)]
-pub struct Configuration {
-    // Source files.
-    source_files: Vec<PathBuf>,
-    // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
-    // Requires shared library sanitizer/libfixsanitizer.so.
-    sanitize_memory: bool,
-    // If true, pre-retain global object (i.e., set refcnt to large value) at its construction
-    // and do not retain global object thereafter.
-    preretain_global: bool,
-    // LLVM optimization level.
-    llvm_opt_level: OptimizationLevel,
-    // Linked libraries
-    linked_libraries: Vec<(String, LinkType)>,
-    // Make reference counting atomic.
-    atomic_refcnt: bool,
-    // Skip optimization and create debug info.
-    debug_mode: bool,
-    // Perform uncurrying optimization.
-    uncurry_optimization: bool,
-    // Is emit llvm?
-    emit_llvm: bool,
-}
-
-impl Configuration {
-    // Configuration for release build.
-    pub fn release() -> Configuration {
-        Configuration {
-            source_files: vec![],
-            sanitize_memory: false,
-            uncurry_optimization: true, // determined by debug_mode
-            preretain_global: true,
-            llvm_opt_level: OptimizationLevel::Default,
-            linked_libraries: vec![],
-            atomic_refcnt: false,
-            debug_mode: false,
-            emit_llvm: false,
-        }
-    }
-
-    // Usual configuration for compiler development
-    pub fn develop_compiler() -> Configuration {
-        Configuration {
-            source_files: vec![],
-            sanitize_memory: true,
-            uncurry_optimization: true,
-            preretain_global: false,
-            llvm_opt_level: OptimizationLevel::Default,
-            linked_libraries: vec![],
-            atomic_refcnt: false,
-            debug_mode: false,
-            emit_llvm: false,
-        }
-    }
-
-    // Add dynamically linked library.
-    // To link libabc.so, provide library name "abc".
-    pub fn add_dyanmic_library(&mut self, name: &str) {
-        self.linked_libraries
-            .push((name.to_string(), LinkType::Dynamic));
-    }
-}
-
 fn main() {
     let source_file = Arg::new("source-files")
         .long("file")
@@ -172,16 +97,23 @@ fn main() {
     let emit_llvm = Arg::new("emit-llvm")
         .long("emit-llvm")
         .takes_value(false)
-        .help("Emit llvm ir file.");
+        .help("Emit LLVM-IR file.");
+    let output_file = Arg::new("output-file")
+        .long("output")
+        .short('o')
+        .takes_value(true)
+        .help("Path to output file.");
     let run_subc = App::new("run")
         .about("Executes a Fix program.")
         .arg(source_file.clone())
+        .arg(output_file.clone())
         .arg(dynamic_link_library.clone())
         .arg(debug_mode.clone())
         .arg(emit_llvm.clone());
     let build_subc = App::new("build")
         .about("Builds an executable binary from source files.")
         .arg(source_file.clone())
+        .arg(output_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
         .arg(debug_mode.clone())
@@ -199,6 +131,10 @@ fn main() {
             .unwrap()
             .map(|s| PathBuf::from(s))
             .collect()
+    }
+
+    fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
+        m.get_one::<String>("output-file").map(|s| PathBuf::from(s))
     }
 
     fn read_library_options(m: &ArgMatches) -> Vec<(String, LinkType)> {
@@ -221,6 +157,7 @@ fn main() {
     fn create_config_from_matches(m: &ArgMatches) -> Configuration {
         let mut config = Configuration::release();
         config.source_files = read_source_files_options(m);
+        config.out_file_path = read_output_file_option(m);
         config.linked_libraries = read_library_options(m);
         config.debug_mode = m.contains_id("debug-mode");
         config.emit_llvm = m.contains_id("emit-llvm");

@@ -85,3 +85,11 @@ pub const DW_ATE_SIGNED_CHAR: u32 = 6;
 pub const DW_ATE_UNSIGNED: u32 = 7;
 #[allow(unused)]
 pub const DW_ATE_UNSINGED_CHAR: u32 = 8;
+
+// Max number of arguments of function pointer lambda.
+pub const FUNPTR_ARGS_MAX: u32 = 100;
+// Max tuple size.
+// This affects on compilation time heavily. We should make tuple generation on-demand in a future.
+pub const TUPLE_SIZE_MAX: u32 = 4;
+// Is tuple unboxed?
+pub const TUPLE_UNBOX: bool = true;
