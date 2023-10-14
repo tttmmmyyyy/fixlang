@@ -1022,6 +1022,7 @@ pub fn cast_int_to_float_function(
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastFloatToIntBody {
     from_name: String,
+    is_signed: bool,
 }
 
 impl InlineLLVMCastFloatToIntBody {
@@ -1045,11 +1046,19 @@ impl InlineLLVMCastFloatToIntBody {
             .into_int_type();
 
         // Perform cast.
-        let to_val = gc.builder().build_float_to_signed_int(
-            from_val,
-            to_int,
-            "float_to_signed_int@cast_float_to_int_function",
-        );
+        let to_val = if self.is_signed {
+            gc.builder().build_float_to_signed_int(
+                from_val,
+                to_int,
+                "float_to_signed_int@cast_float_to_int_function",
+            )
+        } else {
+            gc.builder().build_float_to_unsigned_int(
+                from_val,
+                to_int,
+                "float_to_unsigned_int@cast_float_to_int_function",
+            )
+        };
 
         // Return result.
         let obj = if rvo.is_some() {
@@ -1074,6 +1083,7 @@ pub fn cast_float_to_int_function(
     to: Rc<TypeNode>,
 ) -> (Rc<ExprNode>, Rc<Scheme>) {
     const FROM_NAME: &str = "from";
+    let is_signed = to.toplevel_tycon().unwrap().is_singned_intger();
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1085,6 +1095,7 @@ pub fn cast_float_to_int_function(
         expr_llvm(
             LLVMGenerator::CastFloatToIntBody(InlineLLVMCastFloatToIntBody {
                 from_name: FROM_NAME.to_string(),
+                is_signed,
             }),
             vec![FullName::local(FROM_NAME)],
             format!(
