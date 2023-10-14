@@ -157,6 +157,15 @@ impl TyCon {
         if self.name.name == U8_NAME {
             return Some(ctx.i8_type().as_basic_type_enum());
         }
+        if self.name.name == I8_NAME {
+            return Some(ctx.i8_type().as_basic_type_enum());
+        }
+        if self.name.name == U16_NAME {
+            return Some(ctx.i16_type().as_basic_type_enum());
+        }
+        if self.name.name == U16_NAME {
+            return Some(ctx.i16_type().as_basic_type_enum());
+        }
         if self.name.name == I32_NAME {
             return Some(ctx.i32_type().as_basic_type_enum());
         }
@@ -191,8 +200,11 @@ impl TyCon {
         }
         match self.name.name.as_str() {
             U8_NAME => false,
+            U16_NAME => false,
             U32_NAME => false,
             U64_NAME => false,
+            I8_NAME => true,
+            I16_NAME => true,
             I32_NAME => true,
             I64_NAME => true,
             _ => unreachable!(),

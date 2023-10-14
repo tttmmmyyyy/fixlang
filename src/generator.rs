@@ -790,6 +790,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Ptr => {}
                     ObjectFieldType::I8 => {}
+                    ObjectFieldType::U8 => {}
+                    ObjectFieldType::I16 => {}
+                    ObjectFieldType::U16 => {}
                     ObjectFieldType::I32 => {}
                     ObjectFieldType::U32 => {}
                     ObjectFieldType::I64 => {}

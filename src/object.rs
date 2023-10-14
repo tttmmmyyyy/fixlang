@@ -14,6 +14,9 @@ pub enum ObjectFieldType {
     LambdaFunction(Rc<TypeNode>), // Specify type of lambda
     Ptr,
     I8,
+    U8,
+    I16,
+    U16,
     I32,
     U32,
     I64,
@@ -44,6 +47,9 @@ impl ObjectFieldType {
                 .to_embedded_type(gc, unboxed_path.clone()),
             ObjectFieldType::Ptr => gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
+            ObjectFieldType::U8 => gc.context.i8_type().into(),
+            ObjectFieldType::I16 => gc.context.i16_type().into(),
+            ObjectFieldType::U16 => gc.context.i16_type().into(),
             ObjectFieldType::I32 => gc.context.i32_type().into(),
             ObjectFieldType::U32 => gc.context.i32_type().into(),
             ObjectFieldType::I64 => gc.context.i64_type().into(),
@@ -82,6 +88,21 @@ impl ObjectFieldType {
             ObjectFieldType::I8 => gc
                 .get_di_builder()
                 .create_basic_type("Std::I8", 8, DW_ATE_SIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::U8 => gc
+                .get_di_builder()
+                .create_basic_type("Std::U8", 8, DW_ATE_UNSIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::I16 => gc
+                .get_di_builder()
+                .create_basic_type("Std::I16", 16, DW_ATE_SIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::U16 => gc
+                .get_di_builder()
+                .create_basic_type("Std::U16", 16, DW_ATE_UNSIGNED, 0)
                 .unwrap()
                 .as_type(),
             ObjectFieldType::I32 => gc
@@ -1135,9 +1156,15 @@ pub fn ty_to_object_ty(
                 if ty == &make_ptr_ty() {
                     ret.field_types.push(ObjectFieldType::Ptr);
                 } else if ty == &make_bool_ty() {
+                    ret.field_types.push(ObjectFieldType::U8);
+                } else if ty == &make_i8_ty() {
                     ret.field_types.push(ObjectFieldType::I8);
                 } else if ty == &make_u8_ty() {
-                    ret.field_types.push(ObjectFieldType::I8);
+                    ret.field_types.push(ObjectFieldType::U8);
+                } else if ty == &make_i16_ty() {
+                    ret.field_types.push(ObjectFieldType::I16);
+                } else if ty == &make_u16_ty() {
+                    ret.field_types.push(ObjectFieldType::U16);
                 } else if ty == &make_i32_ty() {
                     ret.field_types.push(ObjectFieldType::I32);
                 } else if ty == &make_u32_ty() {
@@ -1297,6 +1324,9 @@ pub fn allocate_obj<'c, 'm>(
             }
             ObjectFieldType::Ptr => {}
             ObjectFieldType::I8 => {}
+            ObjectFieldType::U8 => {}
+            ObjectFieldType::I16 => {}
+            ObjectFieldType::U16 => {}
             ObjectFieldType::I32 => {}
             ObjectFieldType::U32 => {}
             ObjectFieldType::I64 => {}
@@ -1406,6 +1436,9 @@ pub fn create_dtor<'c, 'm>(
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Ptr => {}
                     ObjectFieldType::I8 => {}
+                    ObjectFieldType::U8 => {}
+                    ObjectFieldType::I16 => {}
+                    ObjectFieldType::U16 => {}
                     ObjectFieldType::I32 => {}
                     ObjectFieldType::U32 => {}
                     ObjectFieldType::I64 => {}
@@ -1526,6 +1559,9 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
                 ObjectFieldType::LambdaFunction(_) => "<ptr to lambda function>".to_string(),
                 ObjectFieldType::Ptr => "<Ptr member>".to_string(),
                 ObjectFieldType::I8 => "<I8 member>".to_string(),
+                ObjectFieldType::U8 => "<U8 member>".to_string(),
+                ObjectFieldType::I16 => "<I16 member>".to_string(),
+                ObjectFieldType::U16 => "<U16 member>".to_string(),
                 ObjectFieldType::I32 => "<I32 member>".to_string(),
                 ObjectFieldType::U32 => "<U32 member>".to_string(),
                 ObjectFieldType::I64 => "<I64 member>".to_string(),

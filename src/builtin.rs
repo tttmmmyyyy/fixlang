@@ -28,6 +28,39 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
         },
     );
     ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], I8_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+            source: None,
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], U16_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+            source: None,
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], I16_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+            source: None,
+        },
+    );
+    ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], I32_NAME)),
         TyConInfo {
             kind: kind_star(),
@@ -223,6 +256,21 @@ pub fn make_ptr_ty() -> Rc<TypeNode> {
 // Get U8 type.
 pub fn make_u8_ty() -> Rc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U8_NAME)))
+}
+
+// Get I8 type.
+pub fn make_i8_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I8_NAME)))
+}
+
+// Get U16 type.
+pub fn make_u16_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U16_NAME)))
+}
+
+// Get I16 type.
+pub fn make_i16_ty() -> Rc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I16_NAME)))
 }
 
 // Get I32 type.
