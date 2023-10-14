@@ -233,7 +233,9 @@ fn build_module<'c>(
     // Print LLVM bitcode to file
     if config.emit_llvm {
         let path = config.get_output_llvm_ir_path(true);
-        module.print_to_file(path).unwrap();
+        if let Err(e) = module.print_to_file(path) {
+            error_exit(&format!("Failed to emit llvm: {}", e.to_string()));
+        }
     }
 
     // Run optimization
@@ -260,7 +262,9 @@ fn build_module<'c>(
     // Print LLVM bitcode to file
     if config.emit_llvm {
         let path = config.get_output_llvm_ir_path(false);
-        module.print_to_file(path).unwrap();
+        if let Err(e) = module.print_to_file(path) {
+            error_exit(&format!("Failed to emit llvm: {}", e.to_string()));
+        }
     }
 
     gc.target
@@ -386,11 +390,7 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
 
 pub fn build_file(mut config: Configuration) {
     let obj_path = PathBuf::from(INTERMEDIATE_PATH).join("a.o");
-    let exec_path = PathBuf::from(if env::consts::OS != "windows" {
-        "a.out"
-    } else {
-        "a.exe"
-    });
+    let exec_path = config.get_output_executable_file_path();
 
     // Create intermediate directory.
     fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");

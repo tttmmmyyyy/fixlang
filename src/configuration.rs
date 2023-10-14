@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use inkwell::OptimizationLevel;
 
@@ -102,6 +102,17 @@ impl Configuration {
                     out_file_path
                 }
             }
+        }
+    }
+
+    pub fn get_output_executable_file_path(&self) -> PathBuf {
+        match &self.out_file_path {
+            None => PathBuf::from(if env::consts::OS != "windows" {
+                "a.out"
+            } else {
+                "a.exe"
+            }),
+            Some(out_file_path) => out_file_path.clone(),
         }
     }
 }
