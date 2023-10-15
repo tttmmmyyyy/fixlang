@@ -1,0 +1,39 @@
+module Main;
+import HashSet;
+import Debug;
+
+main : IO ();
+main = (
+    let n = 1000000;
+
+    // Insert integers in [0, n) to HashSet.
+    let (mp, insert_time) = consumed_time_while_lazy(|_|(
+        let mp = HashSet::empty(n);
+        loop((mp, 0), |(mp, i)| (
+            if i == n { break $ mp };
+            let mp = mp.insert(i);
+            continue $ (mp, i+1)
+        ))
+    ));
+
+    eval *("Insert : " + insert_time.to_string + " secs").println;
+
+    // Search n integers from HashSet.
+    let ((), search_time) = consumed_time_while_lazy(|_|(
+        loop(0, |i| (
+            if i == n { break $ () };
+            eval if i % 2 == 0 { 
+                assert(|_|"mp not cotains " + i.to_string, mp.contains(i))
+            } else {
+                assert(|_|"mp contains " + i.to_string, !mp.contains(i+n))
+            };
+            continue $ i + 1
+        ))
+    ));
+
+    eval *("Search : " + search_time.to_string + " secs").println;
+
+    eval *("Total : " + (insert_time + search_time).to_string + " secs").println;
+
+    pure()
+);
