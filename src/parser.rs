@@ -1379,7 +1379,10 @@ fn parse_expr_number_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
         let val = val_str.parse::<f64>();
         if val.is_err() {
             error_exit_with_src(
-                "A literal string `{}` cannot be parsed as a floating number.",
+                &format!(
+                    "A literal string `{}` cannot be parsed as a floating number.",
+                    val_str
+                ),
                 &Some(span),
             )
         }
@@ -1389,7 +1392,10 @@ fn parse_expr_number_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
         let val = val_str.parse::<i128>();
         if val.is_err() {
             error_exit_with_src(
-                "A literal string `{}` cannot be parsed as an integer.",
+                &format!(
+                    "A literal string `{}` cannot be parsed as an integer.",
+                    val_str
+                ),
                 &Some(span),
             )
         }
