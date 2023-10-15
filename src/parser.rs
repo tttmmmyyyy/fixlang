@@ -1331,7 +1331,16 @@ fn parse_expr_call_c(pair: Pair<Rule>, msc: &mut DoContext, src: &SourceFile) ->
         } else {
             false
         };
-    let args = pairs.map(|pair| parse_expr(pair, msc, src)).collect();
+    let args: Vec<_> = pairs.map(|pair| parse_expr(pair, msc, src)).collect();
+
+    // Validate number of arguments.
+    if args.len() < param_tys.len() || (!is_var_args && args.len() > param_tys.len()) {
+        error_exit_with_src(
+            "Wrong number of arguments in CALL_C expression.",
+            &Some(span),
+        );
+    }
+
     expr_call_c(fun_name, ret_ty, param_tys, is_var_args, args, Some(span))
 }
 
