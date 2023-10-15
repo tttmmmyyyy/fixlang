@@ -2672,6 +2672,72 @@ pub fn test99() {
 
 #[test]
 #[serial]
+pub fn test99_5() {
+    // Test cast float to integral types.
+    let source = r#"
+        module Main; import Debug;
+
+        main : IO ();
+        main = (
+            eval assert_eq(|_|"", -3.14_F32.to_I8, -3_I8);
+            eval assert_eq(|_|"", 3.14_F32.to_U8, 3_U8);
+            eval assert_eq(|_|"", -3.14_F32.to_I16, -3_I16);
+            eval assert_eq(|_|"", 3.14_F32.to_U16, 3_U16);
+            eval assert_eq(|_|"", -3.14_F32.to_I32, -3_I32);
+            eval assert_eq(|_|"", 3.14_F32.to_U32, 3_U32);
+            eval assert_eq(|_|"", -3.14_F32.to_I64, -3_I64);
+            eval assert_eq(|_|"", 3.14_F32.to_U64, 3_U64);
+
+            eval assert_eq(|_|"", -3.14_F64.to_I8, -3_I8);
+            eval assert_eq(|_|"", 3.14_F64.to_U8, 3_U8);
+            eval assert_eq(|_|"", -3.14_F64.to_I16, -3_I16);
+            eval assert_eq(|_|"", 3.14_F64.to_U16, 3_U16);
+            eval assert_eq(|_|"", -3.14_F64.to_I32, -3_I32);
+            eval assert_eq(|_|"", 3.14_F64.to_U32, 3_U32);
+            eval assert_eq(|_|"", -3.14_F64.to_I64, -3_I64);
+            eval assert_eq(|_|"", 3.14_F64.to_U64, 3_U64);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test99_51() {
+    // Test cast integral to float types.
+    let source = r#"
+        module Main; import Debug;
+
+        main : IO ();
+        main = (
+            eval assert_eq(|_|"", -123_I8.to_F32, -123.0_F32);
+            eval assert_eq(|_|"", 123_U8.to_F32, 123.0_F32);
+            eval assert_eq(|_|"", -123_I16.to_F32, -123.0_F32);
+            eval assert_eq(|_|"", 123_U16.to_F32, 123.0_F32);
+            eval assert_eq(|_|"", -123_I32.to_F32, -123.0_F32);
+            eval assert_eq(|_|"", 123_U32.to_F32, 123.0_F32);
+            eval assert_eq(|_|"", -123_I64.to_F32, -123.0_F32);
+            eval assert_eq(|_|"", 123_U64.to_F32, 123.0_F32);
+
+            eval assert_eq(|_|"", -123_I8.to_F64, -123.0);
+            eval assert_eq(|_|"", 123_U8.to_F64, 123.0);
+            eval assert_eq(|_|"", -123_I16.to_F64, -123.0);
+            eval assert_eq(|_|"", 123_U16.to_F64, 123.0);
+            eval assert_eq(|_|"", -123_I32.to_F64, -123.0);
+            eval assert_eq(|_|"", 123_U32.to_F64, 123.0);
+            eval assert_eq(|_|"", -123_I64.to_F64, -123.0);
+            eval assert_eq(|_|"", 123_U64.to_F64, 123.0);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test100() {
     // Test u8 literal
     let source = r#"
@@ -2975,7 +3041,7 @@ pub fn test109() {
 #[test]
 #[serial]
 pub fn test110() {
-    // Test basic float operations, ToString, FromString
+    // Test basic float operations, cast between floats, ToString, FromString
     let source = r#"
         module Main; import Debug;
 
@@ -3054,12 +3120,20 @@ pub fn test110() {
             eval assert(|_|"case 18", x >= y);
 
             let x = 3.1415_F32;
+            let y = 3.1415_F32;
+            eval assert(|_|"case 19.1", x.to_F32 == y);
+
+            let x = 3.1415;
             let y = 3.1415;
-            eval assert(|_|"case 19", (x.to_F64 - y) < 1.0e-4);
+            eval assert(|_|"case 19.1", x.to_F64 == y);
+
+            let x = 3.1415_F32;
+            let y = 3.1415;
+            eval assert(|_|"case 19.3", (x.to_F64 - y) < 1.0e-4);
 
             let x = 3.1415;
             let y = 3.1415_F32;
-            eval assert(|_|"case 19", (x.to_F32 - y) < 1.0e-4_F32);
+            eval assert(|_|"case 19.4", (x.to_F32 - y) < 1.0e-4_F32);
 
             let x = 3141;
             let y = 3141.0;
@@ -4337,7 +4411,33 @@ pub fn test132() {
 
 #[test]
 #[serial]
-pub fn test133() {
+pub fn test_signed_integral_abs() {
+    let source = r#"
+        module Main; import Debug;
+
+        main : IO ();
+        main = (
+            eval assert_eq(|_|"", -123_I8.abs, 123_I8);
+            eval assert_eq(|_|"", 123_I8.abs, 123_I8);
+
+            eval assert_eq(|_|"", -123_I16.abs, 123_I16);
+            eval assert_eq(|_|"", 123_I16.abs, 123_I16);
+
+            eval assert_eq(|_|"", -123_I32.abs, 123_I32);
+            eval assert_eq(|_|"", 123_I32.abs, 123_I32);
+
+            eval assert_eq(|_|"", -123.abs, 123);
+            eval assert_eq(|_|"", 123.abs, 123);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
     let g = Graph::new((0..3).collect());
