@@ -135,9 +135,23 @@ void fixruntime_f32_to_str(char *buf, float v)
     sprintf(buf, "%f", v);
 }
 
+void fixruntime_f32_to_str_precision(char *buf, float v, uint8_t precision)
+{
+    char specifier[7]; // len(%.255f) + 1
+    sprintf(specifier, "%%.%" PRIu8 "f", precision);
+    sprintf(buf, specifier, v);
+}
+
 void fixruntime_f64_to_str(char *buf, double v)
 {
     sprintf(buf, "%lf", v);
+}
+
+void fixruntime_f64_to_str_precision(char *buf, double v, uint8_t precision)
+{
+    char specifier[8]; // len(%.255lf) + 1
+    sprintf(specifier, "%%.%" PRIu8 "lf", precision);
+    sprintf(buf, specifier, v);
 }
 
 int64_t fixruntime_strtoll_10(const char *str)

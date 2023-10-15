@@ -3041,7 +3041,7 @@ pub fn test109() {
 #[test]
 #[serial]
 pub fn test110() {
-    // Test basic float operations, cast between floats, ToString, FromString
+    // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
         module Main; import Debug;
 
@@ -4428,6 +4428,28 @@ pub fn test_signed_integral_abs() {
 
             eval assert_eq(|_|"", -123.abs, 123);
             eval assert_eq(|_|"", 123.abs, 123);
+
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_float_to_string_precision() {
+    let source = r#"
+        module Main; import Debug;
+
+        main : IO ();
+        main = (
+            let x = 3.14_F32;
+            eval assert_eq(|_|"case to_string_precision F32 0", x.to_string_precision(0_U8), "3");
+            eval assert_eq(|_|"case to_string_precision F32 255", x.to_string_precision(255_U8), "3.140000104904174804687500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+
+            let x = -3.14;
+            eval assert_eq(|_|"case to_string_precision F64 0", x.to_string_precision(0_U8), "-3");
+            eval assert_eq(|_|"case to_string_precision F64 255", x.to_string_precision(255_U8), "-3.140000000000000124344978758017532527446746826171875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
             pure()
         );
