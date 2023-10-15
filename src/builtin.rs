@@ -762,7 +762,8 @@ pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastIntegralBody {
     from_name: String,
-    is_signed: bool,
+    is_source_signed: bool,
+    is_target_signed: bool,
 }
 
 impl InlineLLVMCastIntegralBody {
@@ -789,8 +790,8 @@ impl InlineLLVMCastIntegralBody {
         let to_val = gc.builder().build_int_cast_sign_flag(
             from_val,
             to_int,
-            self.is_signed,
-            "int_cast_sign_flag@cast_between_integral_function",
+            self.is_source_signed,
+            "build_int_cast_sign_flag@cast_between_integral_function",
         );
 
         // Return result.
@@ -816,8 +817,8 @@ pub fn cast_between_integral_function(
     to: Rc<TypeNode>,
 ) -> (Rc<ExprNode>, Rc<Scheme>) {
     const FROM_NAME: &str = "from";
-    let is_signed = from.toplevel_tycon().unwrap().is_singned_intger()
-        && to.toplevel_tycon().unwrap().is_singned_intger();
+    let is_source_signed = from.toplevel_tycon().unwrap().is_singned_intger();
+    let is_target_signed = to.toplevel_tycon().unwrap().is_singned_intger();
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -828,7 +829,8 @@ pub fn cast_between_integral_function(
         expr_llvm(
             LLVMGenerator::CastIntegralBody(InlineLLVMCastIntegralBody {
                 from_name: FROM_NAME.to_string(),
-                is_signed,
+                is_target_signed,
+                is_source_signed,
             }),
             vec![FullName::local(FROM_NAME)],
             format!(

@@ -2620,8 +2620,7 @@ pub fn test98() {
 #[serial]
 pub fn test99() {
     // Test cast between integral types.
-    let seed: [u8; 32] = [232; 32];
-    let mut rng: rand::rngs::StdRng = rand::SeedableRng::from_seed(seed);
+    let mut rng = rand::thread_rng();
     let mut cases: Vec<String> = vec![];
     let tys = &[
         I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME,
@@ -2646,7 +2645,6 @@ pub fn test99() {
             let num = rng.gen::<i64>();
             let num1 = cast(num, ty1);
             let num2 = cast(num1, ty2);
-
             let lhs = format!("{}_{}.to_{}", num1, ty1, ty2);
             let rhs = format!("{}_{}", num2, ty2);
             let msg = format!(
