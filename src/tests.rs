@@ -4459,6 +4459,48 @@ pub fn test_float_to_string_precision() {
 
 #[test]
 #[serial]
+pub fn test_float_to_string_exp() {
+    let source = r#"
+        module Main; import Debug;
+
+        main : IO ();
+        main = (
+            let x = 123.45_F32;
+            eval assert_eq(|_|"case to_string_exp F32", x.to_string_exp, "1.234500e+02");
+
+            let x = -123.45_F64;
+            eval assert_eq(|_|"case to_string_exp F64", x.to_string_exp, "-1.234500e+02");
+        
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_float_to_string_exp_precision() {
+    let source = r#"
+        module Main; import Debug;
+
+        main : IO ();
+        main = (
+            let x = 123.45_F32;
+            eval assert_eq(|_|"", x.to_string_exp_precision(0_U8), "1e+02");
+            eval assert_eq(|_|"", x.to_string_exp_precision(255_U8), "1.234499969482421875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e+02");
+
+            let x = -123.45_F64;
+            eval assert_eq(|_|"", x.to_string_exp_precision(0_U8), "-1e+02");
+            eval assert_eq(|_|"", x.to_string_exp_precision(255_U8), "-1.234500000000000028421709430404007434844970703125000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e+02");
+        
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 

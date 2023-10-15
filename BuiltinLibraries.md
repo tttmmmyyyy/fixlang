@@ -266,6 +266,8 @@
       - [`to_U64 : F32 -> U64`](#to_u64--f32---u64)
       - [`to_F32 : F32 -> F32`](#to_f32--f32---f32)
       - [`to_F64 : F32 -> F64`](#to_f64--f32---f64)
+      - [`to_string_exp : F32 -> String`](#to_string_exp--f32---string)
+      - [`to_string_exp_precision : U8 -> F32 -> String`](#to_string_exp_precision--u8---f32---string)
       - [`to_string_precision : U8 -> F32 -> String`](#to_string_precision--u8---f32---string)
       - [`impl F32 : Add`](#impl-f32--add)
       - [`impl F32 : Div`](#impl-f32--div)
@@ -291,6 +293,8 @@
       - [`to_U64 : F64 -> U64`](#to_u64--f64---u64)
       - [`to_F32 : F64 -> F32`](#to_f32--f64---f32)
       - [`to_F64 : F64 -> F64`](#to_f64--f64---f64)
+      - [`to_string_exp : F64 -> String`](#to_string_exp--f64---string)
+      - [`to_string_exp_precision : U8 -> F64 -> String`](#to_string_exp_precision--u8---f64---string)
       - [`to_string_precision : U8 -> F64 -> String`](#to_string_precision--u8---f64---string)
       - [`impl F64 : Add`](#impl-f64--add)
       - [`impl F64 : Div`](#impl-f64--div)
@@ -957,6 +961,12 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 #### `to_U64 : F32 -> U64`
 #### `to_F32 : F32 -> F32`
 #### `to_F64 : F32 -> F64`
+#### `to_string_exp : F32 -> String`
+Convert a floating number to a string of exponential form.
+
+#### `to_string_exp_precision : U8 -> F32 -> String`
+Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
+
 #### `to_string_precision : U8 -> F32 -> String`
 Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
@@ -990,6 +1000,12 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 #### `to_U64 : F64 -> U64`
 #### `to_F32 : F64 -> F32`
 #### `to_F64 : F64 -> F64`
+#### `to_string_exp : F64 -> String`
+Convert a floating number to a string of exponential form.
+
+#### `to_string_exp_precision : U8 -> F64 -> String`
+Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
+
 #### `to_string_precision : U8 -> F64 -> String`
 Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
