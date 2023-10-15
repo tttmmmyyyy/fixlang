@@ -766,7 +766,7 @@ impl TypeCheckContext {
                 }
                 ei
             }
-            Expr::CallC(_, ret_ty, param_tys, _, args) => {
+            Expr::CallC(_, ret_ty, param_tys, is_va_args, args) => {
                 let ret_ty = type_tycon(ret_ty);
                 if !self.unify(&ty, &ret_ty) {
                     error_exit_with_src(
@@ -784,7 +784,13 @@ impl TypeCheckContext {
                     .collect::<Vec<_>>();
                 let mut ei = ei.clone();
                 for (i, e) in args.iter().enumerate() {
-                    let e = self.unify_type_of_expr(e, param_tys[i].clone());
+                    let expect_ty = if i < param_tys.len() {
+                        param_tys[i].clone()
+                    } else {
+                        assert!(is_va_args);
+                        type_tyvar_star(&self.new_tyvar())
+                    };
+                    let e = self.unify_type_of_expr(e, expect_ty);
                     ei = ei.set_call_c_arg(e, i);
                 }
                 ei

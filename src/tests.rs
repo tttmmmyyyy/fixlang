@@ -2437,15 +2437,15 @@ pub fn test93() {
 
 #[test]
 #[serial]
-pub fn test94() {
+pub fn test_call_c() {
     // Test FFI
     let source = r#"
             module Main; import Debug;
     
             main : IO ();
             main = (
-                eval "Hello C function!\n".borrow_c_str(|ptr|
-                    CALL_C[I32 printf(Ptr, ...), ptr]
+                eval "Hello C function! Number = %d\n".borrow_c_str(|ptr|
+                    CALL_C[I32 printf(Ptr, ...), ptr, 42]
                 );
                 pure()
             );
