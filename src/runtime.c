@@ -4,16 +4,18 @@ C functions / values for implementing Fix standard library.
 - When running program by `fix build`, then this source file will be compiled into object file and linked to the binary.
 */
 
+#include <ctype.h>
+#include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <inttypes.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <ctype.h>
-#include <time.h>
+#include <string.h>
 #ifndef __MINGW32__
 #include <sys/time.h>
 #endif // __MINGW32__
+#include <time.h>
+#include <unistd.h>
 
 #ifdef __MINGW32__
 #define timegm _mkgmtime
@@ -301,10 +303,12 @@ int64_t fixruntime_timegmlocal(uint8_t is_local, int64_t *data)
     }
     return (int64_t)ret;
 }
+
 int64_t fixruntime_clock()
 {
     return (int64_t)clock();
 }
+
 double fixruntime_clocks_to_sec(int64_t clocks)
 {
     return (double)(clock_t)clocks / CLOCKS_PER_SEC;
@@ -318,4 +322,77 @@ uint8_t fixruntime_is_einval()
 uint8_t fixruntime_is_erange()
 {
     return errno == ERANGE;
+}
+
+// Fork child process and launch process by execvp.
+// `error_buf` - If no error occurrs, error_buf will be set to pointing NULL.
+//               Otherwise, error_buf will be set to pointing to null-terminated error string. In this case, the caller should free the string buffer.
+// `streams` - If succceeds, streams[0], streams[1] and streams[2] are set FILE handles that are piped to stdio, stdout and stderr of child process.
+void fixruntime_fork_execvp(const char *program_path, const char *argv[], char **out_error, FILE *out_streams[], int64_t *out_pid)
+{
+    *out_error = NULL;
+
+    int pipes[3][2]; // in, out, err
+
+    for (int i = 0; i < 3; i++)
+    {
+        if (pipe(pipes[i]))
+        {
+            // Failed creating pipes.
+            for (int j = 0; j < i; j++)
+            {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            const char *msg = "Failed to create pipe.";
+            *out_error = (char *)malloc(sizeof(char) * (strlen(msg) + 1));
+            strcpy(*out_error, msg);
+
+            return;
+        }
+    }
+    pid_t pid = fork();
+    if (!pid)
+    {
+        // In child process,
+
+        dup2(pipes[0][0], 0); // stdin
+        dup2(pipes[1][1], 1); // stdout
+        dup2(pipes[2][1], 2); // stderr
+
+        for (int i = 0; i < 3; i++)
+        {
+            close(pipes[i][0]);
+            close(pipes[i][1]);
+        }
+
+        execvp(program_path, argv);
+
+        // When execvp fails,
+    }
+    else
+    { // In parent process,
+        if (pid < 0)
+        {
+            // Failed creating process.
+
+            const char *msg = "Failed to create child process.";
+            *out_error = (char *)malloc(sizeof(char) * (strlen(msg) + 1));
+            strcpy(*out_error, msg);
+
+            return;
+        }
+        close(pipes[0][0]);
+        close(pipes[1][1]);
+        close(pipes[2][1]);
+
+        out_streams[0] = pipes[0][1];
+        out_streams[1] = pipes[1][0];
+        out_streams[2] = pipes[2][0];
+
+        *out_pid = (int64_t)pid;
+
+        return;
+    }
 }
