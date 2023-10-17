@@ -401,12 +401,12 @@ void fixruntime_fork_execvp(const char *program_path, const char *argv[], char *
 // Wait termination of child process specified.
 // * `timeout` - NULL or pointing to the timeout value (in seconds).
 // * `out_is_timeout` - Set to 1 when return by timeout, or set to 0 otherwise. Should not be NULL when `timeout` is not NULL.
+// * `out_wait_failed` - Set to 1 when waiting child process failed, or set to 0 otherwise.
 // * `out_exit_status` - The exit status of child process is stored to the address specified this argument. This value should be used only when `*out_exit_status_available == 1`.
 // * `out_exit_status_available` - Set to 1 when exit status is available, or set to 0 otherwise.
 // * `out_stop_signal` - The signal number which caused the termination of the child process. This value should be used only when `*out_stop_signal_available == 1`.
 // * `out_stop_signal_available` - Set to 1 when the stop signal number is available, or set to 0 otherwise.
-// * `out_wait_failed` - Set to 1 when waiting child process failed, or set to 0 otherwise.
-void fixruntime_wait_subprocess(int64_t pid, double *timeout, uint8_t *out_is_timeout, uint8_t *out_exit_status, uint8_t *out_exit_status_available, uint8_t *out_stop_signal, uint8_t *out_stop_signal_available, uint8_t *out_wait_failed)
+void fixruntime_wait_subprocess(int64_t pid, double *timeout, uint8_t *out_is_timeout, uint8_t *out_wait_failed, uint8_t *out_exit_status, uint8_t *out_exit_status_available, uint8_t *out_stop_signal, uint8_t *out_stop_signal_available)
 {
     int wait_status;
     pid_t wait_return;
