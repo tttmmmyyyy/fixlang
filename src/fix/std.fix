@@ -1151,6 +1151,17 @@ namespace String {
     _get_c_str : String -> Ptr;
     _get_c_str = |s| s.@_data._get_ptr;
 
+    // Create a `String` from a pointer to null-terminated C string.
+    // If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+    _unsafe_from_c_str_ptr : Ptr -> String;
+    _unsafe_from_c_str_ptr = |ptr| (
+        let len = CALL_C[I64 strlen(Ptr), ptr];
+        let buf_len = len + 1;
+        let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
+        eval CALL_C[Ptr memcpy(Ptr, Ptr, I64), buf._get_ptr, ptr, buf_len];
+        String { _data : buf }
+    );
+
     // Call a function with a null-terminated C string.
     borrow_c_str : (Ptr -> a) -> String -> a;
     borrow_c_str = |f, str| str.@_data.borrow_ptr(f);
