@@ -325,9 +325,9 @@ uint8_t fixruntime_is_erange()
 }
 
 // Fork child process and launch process by execvp.
-// `error_buf` - If no error occurrs, error_buf will be set to pointing NULL.
-//               Otherwise, error_buf will be set to pointing to null-terminated error string. In this case, the caller should free the string buffer.
-// `streams` - If succceeds, streams[0], streams[1] and streams[2] are set FILE handles that are piped to stdio, stdout and stderr of child process.
+// * `error_buf` - If no error occurrs, error_buf will be set to pointing NULL.
+//                 Otherwise, error_buf will be set to pointing to null-terminated error string. In this case, the caller should free the string buffer.
+// * `streams` - If succceeds, streams[0], streams[1] and streams[2] are set FILE handles that are piped to stdio, stdout and stderr of child process.
 void fixruntime_fork_execvp(const char *program_path, const char *argv[], char **out_error, FILE *out_streams[], int64_t *out_pid)
 {
     *out_error = NULL;
@@ -369,7 +369,8 @@ void fixruntime_fork_execvp(const char *program_path, const char *argv[], char *
 
         execvp(program_path, argv);
 
-        // When execvp fails,
+        // If execvp fails,
+        exit(1);
     }
     else
     { // In parent process,
@@ -394,5 +395,70 @@ void fixruntime_fork_execvp(const char *program_path, const char *argv[], char *
         *out_pid = (int64_t)pid;
 
         return;
+    }
+}
+
+// Wait termination of child process specified.
+// * `timeout` - NULL or pointing to the timeout value (in seconds).
+// * `out_is_timeout` - Set to 1 when return by timeout, or set to 0 otherwise. Should not be NULL when `timeout` is not NULL.
+// * `out_exit_status` - The exit status of child process is stored to the address specified this argument. This value should be used only when `*out_exit_status_available == 1`.
+// * `out_exit_status_available` - Set to 1 when exit status is available, or set to 0 otherwise.
+// * `out_stop_signal` - The signal number which caused the termination of the child process. This value should be used only when `*out_stop_signal_available == 1`.
+// * `out_stop_signal_available` - Set to 1 when the stop signal number is available, or set to 0 otherwise.
+// * `out_wait_failed` - Set to 1 when waiting child process failed, or set to 0 otherwise.
+void fixruntime_wait_subprocess(int64_t pid, double *timeout, uint8_t *out_is_timeout, uint8_t *out_exit_status, uint8_t *out_exit_status_available, uint8_t *out_stop_signal, uint8_t *out_stop_signal_available, uint8_t *out_wait_failed)
+{
+    int wait_status;
+    pid_t wait_return;
+    struct timespec start;
+    double start_f;
+    struct timespec now;
+    double now_f;
+
+    *out_is_timeout = 0;
+    *out_exit_status_available = 0;
+    *out_stop_signal_available = 0;
+    *out_wait_failed = 0;
+
+    if (timeout == NULL)
+    {
+        wait_return = waitpid((pid_t)pid, &wait_status, 0);
+    }
+    else
+    {
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        start_f = (double)start.tv_sec + (double)start.tv_nsec / 1e9;
+        while (1)
+        {
+            // TODO: fix busy wait (using threads?)
+            wait_return = waitpid((pid_t)pid, &wait_status, WNOHANG);
+            if (wait_return != 0)
+            {
+                break;
+            }
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            now_f = (double)now.tv_sec + (double)now.tv_nsec / 1e9;
+            if (now_f - start_f >= *timeout)
+            {
+                *out_is_timeout = 1;
+                break;
+            }
+        }
+    }
+    if (wait_return == -1)
+    {
+        *out_wait_failed = 1;
+        return;
+    }
+    *out_exit_status_available = (uint8_t)(WIFEXITED(wait_status) != 0);
+    if (*out_exit_status_available)
+    {
+        *out_exit_status = (uint8_t)WEXITSTATUS(wait_status);
+    }
+
+    *out_stop_signal_available = (uint8_t)(WIFSIGNALED(wait_status) != 0);
+    if (*out_stop_signal_available)
+    {
+        *out_stop_signal = (uint8_t)WSTOPSIG(wait_status);
     }
 }
