@@ -4501,6 +4501,24 @@ pub fn test_float_to_string_exp_precision() {
 
 #[test]
 #[serial]
+pub fn test_string_unsafe_from_c_str_ptr() {
+    let source = r#"
+        module Main;
+        import Debug;
+
+        main : IO ();
+        main = (
+            let src = "Hello World!";
+            let cpy = src.borrow_c_str(String::_unsafe_from_c_str_ptr);
+            eval assert_eq(|_|"", src, cpy);
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 

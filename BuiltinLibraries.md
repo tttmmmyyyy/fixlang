@@ -442,6 +442,7 @@
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl Result e : Monad`](#impl-result-e--monad)
     - [String](#string)
+      - [`_unsafe_from_c_str_ptr : Ptr -> String`](#_unsafe_from_c_str_ptr--ptr---string)
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
       - [`borrow_c_str : (Ptr -> a) -> String -> a`](#borrow_c_str--ptr---a---string---a)
       - [`concat : String -> String -> String`](#concat--string---string---string)
@@ -1547,6 +1548,10 @@ Returns the containing value if the value is ok, or otherwise aborts.
 ### String
 
 The type of strings.
+
+#### `_unsafe_from_c_str_ptr : Ptr -> String`
+Create a `String` from a pointer to null-terminated C string.
+If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
 
 #### `_get_c_str : String -> Ptr`
 Get the null-terminated C string.
