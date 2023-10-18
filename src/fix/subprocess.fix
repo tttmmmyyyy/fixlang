@@ -1,0 +1,62 @@
+module Subprocess;
+
+type ExitStatus = box union { 
+    exit : U8,
+    wait_failed : (),
+    timeout : (),
+    signaled : U8,
+    unknown : ()
+};
+
+// `run_stream(com, args, wait_timeout, worker)` executes a command specified by `com_args`.
+// 
+// * `com : String` - The path to the program to run.
+// * `args: Array String` - The arguments to be passed to `com`.
+// * `wait_timeout: Option F64` - After `worker` returns, `run_stream` waits for the exit of the command. If `some(t)` is specified for `wait_timeout`, `run_stream` waits up to `t` seconds for the command to exit.
+// * `worker : (IOHandle, IOHandle, IOHandle) -> IO a` - `worker` receives `IOHandle`s to the standard input, output and error of the running command.
+// * Return value of the I/O action is a pair of type `(a, ExitStatus)`, where the first component is the one `worker` I/O action has returned.
+run_stream : String -> Array String -> Option F64 -> ((IOHandle, IOHandle, IOHandle) -> IO a) -> IOResult ErrMsg (a, ExitStatus) ;
+run_stream = |com, args, wait_timeout, worker| (
+    // Prolong lifetime of `args` so that elements will not be released.
+    args.borrow_ptr(|_| args.map(_get_c_str).borrow_ptr(|args: Ptr| com.borrow_c_str(|com : Ptr| (
+        // Execute command.
+        let out_error : Array Ptr = Array::fill(1)._unsafe_set_size(1);
+        let out_streams : Array IOHandle = Array::fill(3)._unsafe_set_size(3);
+        let out_pid : Array I64 = Array::fill(1)._unsafe_set_size(1);
+        eval CALL_C[() fixruntime_fork_execvp(com, args, out_error._get_ptr, out_streams._get_ptr, out_pid._get_ptr)];
+        if out_error.@(0) != nullptr {
+            // Some error occurred.
+            let msg_ptr = out_error.@(0);
+            let err_msg = String::_unsafe_from_c_str_ptr(msg_ptr);
+            eval CALL_C[() free(Ptr), msg_ptr];
+            IOResult::err $ ErrMsg::make $ err_msg
+        };
+        let handles = (out_streams.@(0), out_streams.@(1), out_streams.@(2));
+        let pid = out_pid.@(0);
+        let worker_res = *worker(handles).lift;
+
+        // Wait for subprocess.
+        let timeout = timeout.map_or(-1.0, max(0.0)); // none() -> -1.0, negative value -> 0.0, posotive value -> as is.
+        let out_is_timeout : Array U8 = Array::fill(1)._unsafe_set_size(1);
+        let out_wait_failed : Array U8 = Array::fill(1)._unsafe_set_size(1);
+        let out_exit_status : Array U8 = Array::fill(1)._unsafe_set_size(1);
+        let out_exit_status_available : Array U8 = Array::fill(1)._unsafe_set_size(1);
+        let out_stop_signal : Array U8 = Array::fill(1)._unsafe_set_size(1);
+        let out_stop_signal_available : Array U8 = Array::fill(1)._unsafe_set_size(1);
+        eval CALL_C[() fixruntime_wait_subprocess(I64, F64, Ptr, Ptr, Ptr, Ptr, Ptr), pid, timeout, 
+            out_wait_failed._get_ptr, out_exit_status._get_ptr, out_exit_status_available._get_ptr, out_stop_signal._get_ptr, out_stop_signal_available._get_ptr
+        ];
+        let exit_status = if out_wait_failed.@(0) == 1_U8 { 
+            ExitStatus::wait_failed()
+        } else if out_is_timeout.@(0) == 1_U8 {
+            ExitStatus::timeout()
+        } else if out_exit_status_available.@(0) == 1_U8 {
+            ExitStatus::exit(out_exit_status.@(0))
+        } else if out_stop_signal_available.@(0) == 1_U8 {
+            ExitStatus::signaled(out_stop_signal.@(0))
+        } else {
+            ExitStatus::unknown()
+        }
+        IOResult::ok $ (worker_res, exit_status)
+    ))))
+);

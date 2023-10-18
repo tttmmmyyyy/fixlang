@@ -72,6 +72,12 @@ pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<&str>)] = &[
         "character",
         None,
     ),
+    (
+        "Subprocess",
+        include_str!("./fix/subprocess.fix"),
+        "subprocess",
+        None,
+    ),
 ];
 
 #[allow(unused)]
