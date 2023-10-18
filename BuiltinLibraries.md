@@ -382,8 +382,10 @@
       - [`stdin : IOHandle`](#stdin--iohandle)
       - [`stdout : IOHandle`](#stdout--iohandle)
     - [IO::IOResult](#ioioresult)
+      - [`err : e -> IOResult e a`](#err--e---ioresult-e-a)
       - [`from_result : Result e a -> IOResult e a`](#from_result--result-e-a---ioresult-e-a)
       - [`lift : IO a -> IOResult e a`](#lift--io-a---ioresult-e-a)
+      - [`ok : a -> IOResult e a`](#ok--a---ioresult-e-a)
       - [`to_io : IOResult e a -> IO (Result e a)`](#to_io--ioresult-e-a---io-result-e-a)
       - [`impl IOResult e : Functor`](#impl-ioresult-e--functor)
       - [`impl IOResult e : Monad`](#impl-ioresult-e--monad)
@@ -1326,16 +1328,19 @@ The type of I/O actions which may fail.
 type IOResult e a = unbox struct { _data : IO (Result e a) };
 ```
 
-#### `from_result : Result e a -> IOResult e a`
+#### `err : e -> IOResult e a`
+Create an error value.
 
+#### `from_result : Result e a -> IOResult e a`
 Create a constant IOResult from a Result value.
 
 #### `lift : IO a -> IOResult e a`
-
 Lift an IO action to a successful IOResult.
 
-#### `to_io : IOResult e a -> IO (Result e a)`
+#### `ok : a -> IOResult e a`
+Create an OK value.
 
+#### `to_io : IOResult e a -> IO (Result e a)`
 Convert an IOResult to an IO action.
 
 #### `impl IOResult e : Functor`

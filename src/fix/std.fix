@@ -629,6 +629,10 @@ namespace IO {
 }
 
 namespace IO::IOResult {
+    // Create an error value.
+    err : e -> IOResult e a;
+    err = |v| from_result $ Result::err(e);
+
     // Create a constant IOResult from a Result value.
     from_result : Result e a -> IOResult e a;
     from_result = |res| IOResult { _data : pure(res) };
@@ -636,6 +640,10 @@ namespace IO::IOResult {
     // Lift an IO action to a successful IOResult.
     lift : IO a -> IOResult e a;
     lift = |io| IOResult { _data : io.map(pure) };
+
+    // Create an OK value.
+    ok : a -> IOResult e a;
+    ok = |v| pure(a).lift;
 
     // Convert to an IO value.
     to_io : IOResult e a -> IO (Result e a);
