@@ -4519,6 +4519,25 @@ pub fn test_string_unsafe_from_c_str_ptr() {
 
 #[test]
 #[serial]
+pub fn test_subprocess_run_stream() {
+    let source = r#"
+        module Main;
+        import Debug;
+        import Subprocess;
+
+        main : IO ();
+        main = (
+            let (file_list, exit_status) = (*run_stream("ls", ["-l"], Option::some(10.0)/* timeout */, |(stdin, stdout, stderr)| stdin.read_string.to_io.map(as_ok)).to_io).as_ok;
+            eval *file_list.println;
+            eval *("exit_status : " + exit_status.as_exit.to_string).println;
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
