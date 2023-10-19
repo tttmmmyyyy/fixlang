@@ -407,7 +407,13 @@ void fixruntime_fork_execvp(const char *program_path, char *const argv[], char *
 // * `out_exit_status_available` - Set to 1 when exit status is available, or set to 0 otherwise.
 // * `out_stop_signal` - The signal number which caused the termination of the child process. This value should be used only when `*out_stop_signal_available == 1`.
 // * `out_stop_signal_available` - Set to 1 when the stop signal number is available, or set to 0 otherwise.
-void fixruntime_wait_subprocess(int64_t pid, double timeout, uint8_t *out_is_timeout, uint8_t *out_wait_failed, uint8_t *out_exit_status, uint8_t *out_exit_status_available, uint8_t *out_stop_signal, uint8_t *out_stop_signal_available)
+void fixruntime_wait_subprocess(int64_t pid, double timeout,
+                                uint8_t *out_is_timeout,
+                                uint8_t *out_wait_failed,
+                                uint8_t *out_exit_status,
+                                uint8_t *out_exit_status_available,
+                                uint8_t *out_stop_signal,
+                                uint8_t *out_stop_signal_available)
 {
     int wait_status;
     pid_t wait_return;
@@ -451,15 +457,16 @@ void fixruntime_wait_subprocess(int64_t pid, double timeout, uint8_t *out_is_tim
         *out_wait_failed = 1;
         return;
     }
-    *out_exit_status_available = (uint8_t)(WIFEXITED(wait_status) != 0);
-    if (*out_exit_status_available)
+    if (WIFEXITED(wait_status))
     {
+        *out_exit_status_available = 1;
         *out_exit_status = (uint8_t)WEXITSTATUS(wait_status);
+        return;
     }
-
-    *out_stop_signal_available = (uint8_t)(WIFSIGNALED(wait_status) != 0);
-    if (*out_stop_signal_available)
+    if (WIFSIGNALED(wait_status))
     {
+        *out_stop_signal_available = 1;
         *out_stop_signal = (uint8_t)WSTOPSIG(wait_status);
+        return;
     }
 }

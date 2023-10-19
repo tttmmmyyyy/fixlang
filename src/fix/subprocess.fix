@@ -1,4 +1,5 @@
 module Subprocess;
+import Debug;
 
 type ExitStatus = box union { 
     exit : U8,
@@ -8,17 +9,18 @@ type ExitStatus = box union {
     unknown : ()
 };
 
-// `run_stream(com, args, wait_timeout, worker)` executes a command specified by `com_args`.
+// `run_with_stream(com, args, wait_timeout, worker)` executes a command specified by `com_args`.
 // 
 // * `com : String` - The path to the program to run.
 // * `args: Array String` - The arguments to be passed to `com`.
-// * `wait_timeout: Option F64` - After `worker` returns, `run_stream` waits for the exit of the command. If `some(t)` is specified for `wait_timeout`, `run_stream` waits up to `t` seconds for the command to exit.
+// * `wait_timeout: Option F64` - After `worker` returns, this function waits for the exit of the command. If `some(t)` is specified for `wait_timeout`, this function waits up to `t` seconds for the command to exit.
 // * `worker : (IOHandle, IOHandle, IOHandle) -> IO a` - `worker` receives `IOHandle`s to the standard input, output and error of the running command.
 // * Return value of the I/O action is a pair of type `(a, ExitStatus)`, where the first component is the one `worker` I/O action has returned.
-run_stream : String -> Array String -> Option F64 -> ((IOHandle, IOHandle, IOHandle) -> IO a) -> IOResult ErrMsg (a, ExitStatus) ;
-run_stream = |com, args, wait_timeout, worker| (
-    // Prolong lifetime of `args` so that elements will not be released.
-    args.borrow_ptr(|_| args.map(_get_c_str).borrow_ptr(|args: Ptr| com.borrow_c_str(|com : Ptr| (
+run_with_stream : String -> Array String -> Option F64 -> ((IOHandle, IOHandle, IOHandle) -> IO a) -> IOResult ErrMsg (a, ExitStatus);
+run_with_stream = |com, args, wait_timeout, worker| (
+    // Convert `args : Array String` to `Array Ptr`, and prolong lifetime so that elements will not be released.
+    // Also, add NULL terminator to `args`.
+    args.borrow_ptr(|_| args.map(_get_c_str).push_back(nullptr).borrow_ptr(|args: Ptr| com.borrow_c_str(|com : Ptr| (
         // Execute command.
         let out_error : Array Ptr = Array::empty(1)._unsafe_set_size(1);
         let out_streams : Array IOHandle = Array::empty(3)._unsafe_set_size(3);
@@ -34,6 +36,9 @@ run_stream = |com, args, wait_timeout, worker| (
         let handles = (out_streams.@(0), out_streams.@(1), out_streams.@(2));
         let pid = out_pid.@(0);
         let worker_res = *worker(handles).lift;
+        eval *handles.@0.close_file.lift;
+        eval *handles.@1.close_file.lift;
+        eval *handles.@2.close_file.lift;
 
         // Wait for subprocess.
         let timeout = wait_timeout.map_or(-1.0, max(0.0)); // none() -> -1.0, negative value -> 0.0, posotive value -> as is.
@@ -43,8 +48,11 @@ run_stream = |com, args, wait_timeout, worker| (
         let out_exit_status_available : Array U8 = Array::empty(1)._unsafe_set_size(1);
         let out_stop_signal : Array U8 = Array::empty(1)._unsafe_set_size(1);
         let out_stop_signal_available : Array U8 = Array::empty(1)._unsafe_set_size(1);
-        eval CALL_C[() fixruntime_wait_subprocess(I64, F64, Ptr, Ptr, Ptr, Ptr, Ptr), pid, timeout, 
-            out_wait_failed._get_ptr, out_exit_status._get_ptr, out_exit_status_available._get_ptr, out_stop_signal._get_ptr, out_stop_signal_available._get_ptr
+        eval CALL_C[() fixruntime_wait_subprocess(I64, F64, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr), pid, timeout, 
+            out_is_timeout._get_ptr,
+            out_wait_failed._get_ptr, 
+            out_exit_status._get_ptr, out_exit_status_available._get_ptr, 
+            out_stop_signal._get_ptr, out_stop_signal_available._get_ptr
         ];
         let exit_status = if out_wait_failed.@(0) == 1_U8 { 
             ExitStatus::wait_failed()
