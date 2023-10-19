@@ -470,3 +470,48 @@ void fixruntime_wait_subprocess(int64_t pid, double timeout,
         return;
     }
 }
+
+// File handle resistant to being closed multiple times.
+typedef struct
+{
+    FILE *file;
+} IOHandle;
+
+IOHandle *fixruntime_iohandle_create(FILE *file)
+{
+    IOHandle *handle = (IOHandle *)malloc(sizeof(IOHandle));
+    handle->file = file;
+
+    return handle;
+}
+
+FILE *fixruntime_iohandle_get_file(IOHandle *handle)
+{
+    // FILE *file;
+    // __atomic_load(&handle->file, &file, __ATOMIC_SEQ_CST);
+    // return file;
+
+    return handle->file;
+}
+
+void fixruntime_iohandle_close(IOHandle *handle)
+{
+    // FILE *file;
+    // FILE *new_val = NULL;
+    // __atomic_exchange(&handle->file, &new_val, &file, __ATOMIC_SEQ_CST);
+    // if (file)
+    // {
+    //     fclose(file);
+    // }
+
+    if (handle->file)
+    {
+        fclose(handle->file);
+        handle->file = NULL;
+    }
+}
+
+void fixruntime_iohandle_delete(IOHandle *handle)
+{
+    free(handle);
+}

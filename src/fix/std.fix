@@ -389,7 +389,7 @@ namespace IO {
                 let buf = Array::empty(buf_size);                
                 let strlen = buf.borrow_ptr(|buf|
                     // Read characters to buf.
-                    let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, buf_size.to_I32, handle.@_file_ptr];
+                    let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, buf_size.to_I32, handle._file_ptr];
                     if fgets_res == nullptr { -1 };
 
                     // Return length.
@@ -418,7 +418,7 @@ namespace IO {
             );
 
             // Check if err occurred.
-            let err = CALL_C[I32 ferror(Ptr), handle.@_file_ptr];
+            let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
             if err != 0_I32 { 
                 let err = ErrMsg { msg : "Std::IO::_read_line_inner failed!: some error occurred in fgets." };
                 Result::err(err)
@@ -436,10 +436,7 @@ namespace IO {
     // Close a file.
     close_file : IOHandle -> IO ();
     close_file = |handle| (
-        IO { _data : |_|(
-            let _ = CALL_C[I32 fclose(Ptr), handle.@_file_ptr];
-            ()
-        ) }
+        IO { _data : |_| IOHandle::_unsafe_close(handle) }
     );
 
     // Print a string to stderr.
@@ -447,7 +444,7 @@ namespace IO {
     eprint = |str| (
         IO { _data : |_| (
             let _ = str.borrow_c_str(|c_ptr|
-                CALL_C[I32 fprintf(Ptr, Ptr, ...), stdout.@_file_ptr, c_ptr]
+                CALL_C[I32 fprintf(Ptr, Ptr, ...), stdout._file_ptr, c_ptr]
             );
             ()
         )}
@@ -485,7 +482,7 @@ namespace IO {
                     if file_ptr == nullptr { 
                         Result::err $ ErrMsg { msg : "failed to open a file: " + path_str }
                     } else {
-                        Result::ok $ IOHandle { _file_ptr : file_ptr }
+                        Result::ok $ IOHandle::from_file_ptr $ file_ptr
                     }
                 )
             );
@@ -547,10 +544,10 @@ namespace IO {
     read_n_bytes = |handle, n| (
         let buf = Array::empty(n);
         let len = buf.borrow_ptr(|ptr| (
-            CALL_C[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle.@_file_ptr]
+            CALL_C[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr]
         ));
         // Check error.
-        let err = CALL_C[I32 ferror(Ptr), handle.@_file_ptr];
+        let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
         if err != 0_I32 { 
             let err = ErrMsg { msg : "Std::IO::read_n_bytes failed!: some error occurred in fread." };
             IOResult::from_result $ Result::err(err)
@@ -569,7 +566,7 @@ namespace IO {
     with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
         let res = *action(handle);
-        let _ = *IOResult::lift(close_file(handle));
+        eval *IOResult::lift(close_file(handle));
         pure $ res
     );
 
@@ -578,7 +575,7 @@ namespace IO {
     write_bytes = |handle, array| (
         let res = array.borrow_ptr(|ptr| (
             let n = array.get_size;
-            let res = CALL_C[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle.@_file_ptr];
+            let res = CALL_C[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr];
             if res < n { Result::err $ ErrMsg { msg : "Std::IO::write_bytes failed!: some error occurred in fwrite." } };
             Result::ok()
         ));
@@ -597,7 +594,7 @@ namespace IO {
     write_string : IOHandle -> String -> IOResult ErrMsg ();
     write_string = |handle, content| (
         let res = content.borrow_c_str(|c_str| (
-            let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle.@_file_ptr];
+            let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr];
             if res < 0_I32 { Result::err $ ErrMsg { msg : "Std::IO::write_string failed!: some error occurred in fputs." } };
             Result::ok()
         ));
@@ -620,8 +617,32 @@ impl IO : Monad {
 }
 
 namespace IO {
-    // A handle type for read / write operations on files/stdin/stdout/stderr.
-    type IOHandle = unbox struct { _file_ptr: Ptr };
+    // A handle type for read / write operations on files, stdin, stdout, stderr.
+    // You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`. 
+    // Unlike C, closing an `IOHandle` value which had been already closed is safe and does nothing.
+    type IOHandle = unbox struct { _data : Destructor Ptr };
+
+    namespace IOHandle {
+        // Get pointer to C's `FILE` value from an `IOHandle`
+        // DO NOT call `fclose` on the pointer returned by this function.
+        // To close an `IOHandle`, use `IO::close_file`.
+        _file_ptr : IOHandle -> Ptr;
+        _file_ptr = |handle| CALL_C[Ptr fixruntime_iohandle_get_file(Ptr), handle.@_data.@value];
+
+        // Close an `IOHandle`. 
+        // This is an I/O action not wrapped by `IO`; to close an `IOHandle` in a good manner, use `IO::close_file`.
+        _unsafe_close : IOHandle -> ();
+        _unsafe_close = |handle| CALL_C[() fixruntime_iohandle_close(Ptr), handle.@_data.@value];
+
+        // Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
+        // DO NOT create two `IOHandle`s from a single file pointer.
+        from_file_ptr : Ptr -> IOHandle;
+        from_file_ptr = |file_ptr| (
+            let handle_ptr = CALL_C[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
+            let dtor = |handle_ptr| CALL_C[() fixruntime_iohandle_delete(Ptr), handle_ptr];
+            IOHandle { _data : Destructor::make(handle_ptr, dtor) }
+        );
+    }
 }
 
 namespace IO {
@@ -669,21 +690,21 @@ namespace IO::IOHandle {
     stderr : IOHandle;
     stderr = (
         let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
-        IOHandle { _file_ptr: ptr } 
+        IOHandle::from_file_ptr $ ptr
     );
 
     // The handle for standard input.
     stdin : IOHandle;
     stdin = (
         let ptr = "r".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
-        IOHandle { _file_ptr: ptr } 
+        IOHandle::from_file_ptr $ ptr
     );
 
     // The handle for standard output.
     stdout : IOHandle;
     stdout = (
         let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
-        IOHandle { _file_ptr: ptr } 
+        IOHandle::from_file_ptr $ ptr
     );
 }
 

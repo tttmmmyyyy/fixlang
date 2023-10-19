@@ -6,7 +6,7 @@ module Debug;
 _debug_print_to_stream : IOHandle -> String -> ();
 _debug_print_to_stream = |hdl, msg| (
     msg.borrow_c_str(|str| (
-        let hdl = hdl.@_file_ptr;
+        let hdl = hdl._file_ptr;
         let _ = CALL_C[I32 fprintf(Ptr, Ptr, ...), hdl, str];
         let _ = CALL_C[I32 fflush(Ptr), hdl];
         ()
