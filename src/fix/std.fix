@@ -446,6 +446,7 @@ namespace IO {
     _unsafe_perform = |io| (io.@_data)();
 
     // Close a file.
+    // Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
     close_file : IOHandle -> IO ();
     close_file = |handle| (
         IO { _data : |_| IOHandle::_unsafe_close(handle) }
@@ -636,7 +637,7 @@ impl IO : Monad {
 namespace IO {
     // A handle type for read / write operations on files, stdin, stdout, stderr.
     // You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`. 
-    // Unlike C, closing an `IOHandle` value which had been already closed is safe and does nothing.
+    // Also there are global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
     type IOHandle = unbox struct { _data : Destructor Ptr };
 }
 

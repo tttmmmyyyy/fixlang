@@ -1225,90 +1225,70 @@ type ErrMsg = unbox struct { msg : String };
 `IO a` is the type whose value represents an I/O action which returns a value of type `a`.
 
 #### `_read_line_inner : Bool -> IOHandle -> IOResult IOError String`
-
 Read characters from an IOHandle.
 if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
 
 #### `_unsafe_perform : IO a -> a`
-
 Perform the I/O action. This may violate purity of Fix.
 
 #### `close_file : IOHandle -> IO ()`
-
 Close a file.
+Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
 
 #### `eprint : String -> IO ()`
-
 Print a string to stderr.
 
 #### `eprintln : String -> IO ()`
-
 Print a string followed by a newline to stderr.
 
 #### `input_line : IO String`
-
 Read a line from stdin. If some error occurr, this function aborts.
 If you want to handle errors, use `read_line(stdin)` instead.
 
 #### `open_file : Path -> String -> IOResult IOError IOHandle`
-
 Open a file. The second argument is a mode string for `fopen` C function. 
 
 #### `print : String -> IO ()`
-
 Print a string to stdout.
 
 #### `println : String -> IO ()`
-
 Print a string followed by a newline to stdout.
 
 #### `read_file_string : Path -> IOResult ErrMsg String`
-
 Raad all characters from a file.
 
 #### `read_file_bytes : Path -> IOResult ErrMsg (Array U8)`
-
 Read all bytes from a file.
 
 #### `read_file : Path -> IOResult IOError String`
-
 Raad all characters from a file.
 
 #### `read_line : IOHandle -> IOResult IOError String`
-
 Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at its end.
 
 #### `read_bytes : IOHandle -> IOResult ErrMsg (Array U8)`
-
 Read all bytes from an IOHandle.
 
 #### `read_n_bytes : IOHandle -> I64 -> IOResult ErrMsg (Array U8)`
-
 Read at most n bytes from an IOHandle.
 
 #### `read_string : IOHandle -> IOResult IOError String`
-
 Read all characters from a IOHandle.
 
 #### `with_file : Path -> String -> (IOHandle -> IOResult IOError a) -> IOResult IOError a`
-
 Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
 The file handle will be closed automatically.
 
 #### `write_bytes : IOHandle -> Array U8 -> IOResult ErrMsg ()`
-
 Write a byte array into an IOHandle.
 
 #### `write_file_bytes : Path -> Array U8 -> IOResult ErrMsg ()`
-
 Write a byte array into a file.
 
 #### `write_file_string : Path -> String -> IOResult IOError ()`
-
 Write a string into a file.
 
 #### `write_string : IOHandle -> String -> IOResult IOError ()`
-
 Write a string into an IOHandle.
 
 #### `impl IO : Functor`
@@ -1316,8 +1296,9 @@ Write a string into an IOHandle.
 #### `impl IO : Monad`
 
 ### IO::IOHandle
-
-A handle type for read / write operations on files/stdin/stdout/stderr.
+A handle type for read / write operations on files, stdin, stdout, stderr.
+You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`. 
+Also there are global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
 
 #### `_file_ptr : IOHandle -> Ptr`.
 Get pointer to C's `FILE` value from an `IOHandle`
