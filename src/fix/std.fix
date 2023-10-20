@@ -479,6 +479,8 @@ namespace IO {
             let res = path_str.borrow_c_str(|path_ptr|
                 mode.borrow_c_str(|mode_str|
                     let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
+                    // eval debug_println("open_file ptr:");
+                    // eval CALL_C[() print_ptr(Ptr), file_ptr];
                     if file_ptr == nullptr { 
                         Result::err $ ErrMsg { msg : "failed to open a file: " + path_str }
                     } else {
@@ -594,6 +596,9 @@ namespace IO {
     write_string : IOHandle -> String -> IOResult ErrMsg ();
     write_string = |handle, content| (
         let res = content.borrow_c_str(|c_str| (
+            let file_ptr = handle._file_ptr;
+            // eval debug_println("open_file ptr:");
+            // eval CALL_C[() print_ptr(Ptr), file_ptr];
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr];
             if res < 0_I32 { Result::err $ ErrMsg { msg : "Std::IO::write_string failed!: some error occurred in fputs." } };
             Result::ok()
@@ -632,7 +637,11 @@ namespace IO {
         // Close an `IOHandle`. 
         // This is an I/O action not wrapped by `IO`; to close an `IOHandle` in a good manner, use `IO::close_file`.
         _unsafe_close : IOHandle -> ();
-        _unsafe_close = |handle| CALL_C[() fixruntime_iohandle_close(Ptr), handle.@_data.@value];
+        _unsafe_close = |handle| (
+            eval CALL_C[() fixruntime_iohandle_close(Ptr), handle.@_data.@value];
+            eval handle; // Prolong lifetime of handle
+            ()
+        );
 
         // Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
         // DO NOT create two `IOHandle`s from a single file pointer.

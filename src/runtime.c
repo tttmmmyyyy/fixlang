@@ -482,36 +482,51 @@ IOHandle *fixruntime_iohandle_create(FILE *file)
     IOHandle *handle = (IOHandle *)malloc(sizeof(IOHandle));
     handle->file = file;
 
+    // printf("fixruntime_iohandle_create handle = %X, file = %X\n", handle, handle->file);
+    // fflush(stdout);
+
     return handle;
 }
 
 FILE *fixruntime_iohandle_get_file(IOHandle *handle)
 {
-    // FILE *file;
-    // __atomic_load(&handle->file, &file, __ATOMIC_SEQ_CST);
-    // return file;
+    FILE *file;
+    __atomic_load(&handle->file, &file, __ATOMIC_SEQ_CST);
+    return file;
 
-    return handle->file;
+    // return handle->file;
 }
 
 void fixruntime_iohandle_close(IOHandle *handle)
 {
-    // FILE *file;
-    // FILE *new_val = NULL;
-    // __atomic_exchange(&handle->file, &new_val, &file, __ATOMIC_SEQ_CST);
-    // if (file)
-    // {
-    //     fclose(file);
-    // }
-
-    if (handle->file)
+    FILE *file;
+    FILE *new_val = NULL;
+    __atomic_exchange(&handle->file, &new_val, &file, __ATOMIC_SEQ_CST);
+    if (file)
     {
-        fclose(handle->file);
-        handle->file = NULL;
+        fclose(file);
     }
+
+    // printf("fixruntime_iohandle_close handle = %X, file = %X\n", handle, handle->file);
+    // fflush(stdout);
+
+    // if (handle->file)
+    // {
+    //     fclose(handle->file);
+    //     handle->file = NULL;
+    // }
 }
 
 void fixruntime_iohandle_delete(IOHandle *handle)
 {
+    // printf("fixruntime_iohandle_delete handle = %X, file = %X\n", handle, handle->file);
+    // fflush(stdout);
+
     free(handle);
 }
+
+// void print_ptr(void *ptr)
+// {
+//     printf("print_ptr %X\n", ptr);
+//     fflush(stdout);
+// }
