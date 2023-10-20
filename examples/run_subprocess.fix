@@ -4,24 +4,16 @@ import Subprocess;
 
 main : IO ();
 main = (
-    let res = *run_with_stream("/usr/bin/ls", ["ls", "-l", "-r"], Option::some(10.0)/* timeout */, |(stdin, stdout, stderr)| (
-        let read_res = *stdout.read_string.to_io;
-        let read_res = read_res.as_ok;
-        println $ read_res
-    )).to_io;
-    let (_, exit_status) = res.as_ok;
+    eval *println("Run \"/usr/bin/ls -l -r\":");
+    let ((output, error), exit_status) = (*run_string("/usr/bin/ls", ["/usr/bin/ls", "-l", "-r"], "").to_io).as_ok;
+    eval *println(output);
     eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
 
-    // TODO: the next example will start to work after I fix double fclose problem.
-    // let res = *run_with_stream("/usr/bin/bash", ["bash"], Option::some(10.0)/* timeout */, |(stdin, stdout, stderr)| (
-    //     eval (*write_string(stdin, "echo reading stderr ok >&2\n").to_io).as_ok;
-    //     eval *stdin.close_file; // Send EOF
-    //     let res = (*read_string(stderr).to_io).as_ok;
-    //     pure $ res
-    // )).to_io;
-    // let (file_list, exit_status) = res.as_ok;
-    // eval *file_list.println;
-    // eval *("Exit status: " + exit_status.as_exit.to_string).println;
+    eval *println("Run \"/usr/bin/sed s/w/W/\" and write \"Hello world!\" to the standard input:");
+    let ((output, error), exit_status) = (*run_string("/usr/bin/sed", ["/usr/bin/sed", "s/w/W/"], "Hello world!").to_io).as_ok;
+    eval assert_eq(|_|"", output, "Hello World!");
+    eval *println(output);
+    eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
 
     pure()
 );

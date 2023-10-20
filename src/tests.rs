@@ -4528,7 +4528,7 @@ pub fn test_subprocess_run_stream() {
     main : IO ();
     main = (
         eval *println("Run \"/usr/bin/ls -l -r\".");
-        let res = *run_with_stream("/usr/bin/ls", ["/usr/bin/ls", "-l", "-r"], Option::none()/* timeout */, |(stdin, stdout, stderr)| (
+        let res = *run_with_stream("/usr/bin/ls", ["/usr/bin/ls", "-l", "-r"], |(stdin, stdout, stderr)| (
             let output = (*read_string(stdout).to_io).as_ok; // Read standard output of the command.
             println $ output
         )).to_io;
@@ -4536,7 +4536,7 @@ pub fn test_subprocess_run_stream() {
         eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
     
         eval *println("Run \"/usr/bin/sed s/w/W/\" and write \"Hello world!\" to the standard input.");
-        let res = *run_with_stream("/usr/bin/sed", ["/usr/bin/sed", "s/w/W/"], Option::none()/* timeout */, |(stdin, stdout, stderr)| (
+        let res = *run_with_stream("/usr/bin/sed", ["/usr/bin/sed", "s/w/W/"], |(stdin, stdout, stderr)| (
             eval (*write_string(stdin, "Hello world!").to_io).as_ok;
             eval *close_file(stdin); // Send EOF.
             let output = (*read_string(stdout).to_io).as_ok; // Read standard output of the command.
@@ -4545,12 +4545,12 @@ pub fn test_subprocess_run_stream() {
         let (_, exit_status) = res.as_ok;
         eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
     
-        eval *println("Run \"sleep 2/\" with 1 sec as timeout.");
-        let res = *run_with_stream("/usr/bin/sleep", ["/usr/bin/sleep", "2"], Option::some(1.0)/* timeout */, |(stdin, stdout, stderr)| (
-            pure()
-        )).to_io;
-        let (_, exit_status) = res.as_ok;
-        eval assert_eq(|_|"", exit_status.is_timeout, true);
+        // eval *println("Run \"sleep 2/\" with 1 sec as timeout.");
+        // let res = *run_with_stream("/usr/bin/sleep", ["/usr/bin/sleep", "2"], |(stdin, stdout, stderr)| (
+        //     pure()
+        // )).to_io;
+        // let (_, exit_status) = res.as_ok;
+        // eval assert_eq(|_|"", exit_status.is_timeout, true);
     
         pure()
     );

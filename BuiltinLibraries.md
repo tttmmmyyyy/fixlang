@@ -592,6 +592,10 @@
   - [`sqrt : F64 -> F64`](#sqrt--f64---f64)
   - [`tan : F64 -> F64`](#tan--f64---f64)
   - [`tanh : F64 -> F64`](#tanh--f64---f64)
+- [module `Subprocess`](#module-subprocess)
+  - [`type ExitStatus`](#type-exitstatus)
+  - [`run_string : String -> Array String -> String -> IOResult ErrMsg ((String, String), ExitStatus)`](#run_string--string---array-string---string---ioresult-errmsg-string-string-exitstatus)
+  - [`run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IO a) -> IOResult ErrMsg (a, ExitStatus)`](#run_with_stream--string---array-string---iohandle-iohandle-iohandle---io-a---ioresult-errmsg-a-exitstatus)
 - [module `Time`](#module-time)
   - [`type Time`](#type-time)
   - [`type DateTime`](#type-datetime)
@@ -2082,6 +2086,30 @@ This is wrapper of C's tan.
 ## `tanh : F64 -> F64`
 Calculate the hyperbolic tangent of the argument.
 This is wrapper of C's tanh.
+
+# module `Subprocess`
+
+## `type ExitStatus`
+
+This type represents the exit status of a subprocess.
+This type is the union of following variants:
+* `exit : U8` - Means that the subprocess successfully exited (i.e., the main function returned or `exit()` was called) and stores the exit status code.
+* `signaled : U8` - Means that the subprocess was terminated by a signal and stores the signal number which caused the termination.
+* `wait_failed : ()` - Means that the `run*` function failed to wait the subprocess to exit.
+
+## `run_string : String -> Array String -> String -> IOResult ErrMsg ((String, String), ExitStatus)`
+
+`run_string(com, args, input)` executes a command specified by `com` with arguments `args`, and writes `input` to the standard input of the running command.
+The result of `run` are standard output / error strings from the command and an `ExitStatus` value.
+
+## `run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IO a) -> IOResult ErrMsg (a, ExitStatus)`
+
+`run_with_stream(com, args, worker)` executes a command specified by `com` with arguments `args`. 
+The function `worker` receives three `IOHandle`s which are piped to the stdin, stdout and stderr of the running command.
+The result of `run_with_stream` is the value returned by `worker` paired with an `ExitStatus` value.
+* `com : String` - The path to the program to run.
+* `args: Array String` - The arguments to be passed to `com`.
+* `worker : (IOHandle, IOHandle, IOHandle) -> IO a` - Receives three `IOHandle`s which are piped to stdin, stdout and stderr of the running command.
 
 # module `Time`
 
