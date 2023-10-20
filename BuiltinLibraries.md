@@ -1705,7 +1705,7 @@ main : IO ();
 main = (
     loop_m(0, |i| (
         if i == 3 { break_m $ () };
-        let _ = *println("Hello World! (" + i.to_string + ")");
+        eval *println("Hello World! (" + i.to_string + ")");
         continue_m $ i + 1
     ))
 );
