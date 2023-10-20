@@ -481,22 +481,18 @@ IOHandle *fixruntime_iohandle_create(FILE *file)
 {
     IOHandle *handle = (IOHandle *)malloc(sizeof(IOHandle));
     handle->file = file;
-
-    // printf("fixruntime_iohandle_create handle = %X, file = %X\n", handle, handle->file);
-    // fflush(stdout);
-
     return handle;
 }
-
+void fixruntime_iohandle_delete(IOHandle *handle)
+{
+    free(handle);
+}
 FILE *fixruntime_iohandle_get_file(IOHandle *handle)
 {
     FILE *file;
     __atomic_load(&handle->file, &file, __ATOMIC_SEQ_CST);
     return file;
-
-    // return handle->file;
 }
-
 void fixruntime_iohandle_close(IOHandle *handle)
 {
     FILE *file;
@@ -506,27 +502,4 @@ void fixruntime_iohandle_close(IOHandle *handle)
     {
         fclose(file);
     }
-
-    // printf("fixruntime_iohandle_close handle = %X, file = %X\n", handle, handle->file);
-    // fflush(stdout);
-
-    // if (handle->file)
-    // {
-    //     fclose(handle->file);
-    //     handle->file = NULL;
-    // }
 }
-
-void fixruntime_iohandle_delete(IOHandle *handle)
-{
-    // printf("fixruntime_iohandle_delete handle = %X, file = %X\n", handle, handle->file);
-    // fflush(stdout);
-
-    free(handle);
-}
-
-// void print_ptr(void *ptr)
-// {
-//     printf("print_ptr %X\n", ptr);
-//     fflush(stdout);
-// }
