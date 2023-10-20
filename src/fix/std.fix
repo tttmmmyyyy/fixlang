@@ -358,6 +358,18 @@ impl Bool : ToString {
 type Destructor a = box struct { value : a, dtor : a -> () };
 
 namespace Destructor {
+    // Borrow the internal value.
+    // `borrow(worker, dtor)` calls `worker` on the internal value captured by `dtor`, and returns the value returned by `worker`.
+    // If you try to extract the value by `dtor.@_value` from `dtor : Destructor a` and this expression is the last use of `dtor`, 
+    // then you get a value after the destructor function is called. 
+    // On the other hand, in `borrow(worker, dtor)`, `worker` will be called before the destructor is called.
+    borrow : (a -> b) -> Destructor a -> b;
+    borrow = |worker, dtor| (
+        let res = worker(dtor.@value);
+        eval dtor; // Prolong lifetime of `dtor`.
+        res
+    );
+
     // Make a destructor value.
     make : a -> (a -> ()) -> Destructor a;
     make = |val, dtor| Destructor { value : val, dtor : dtor };
@@ -638,8 +650,7 @@ namespace IO {
         // This is an I/O action not wrapped by `IO`; to close an `IOHandle` in a good manner, use `IO::close_file`.
         _unsafe_close : IOHandle -> ();
         _unsafe_close = |handle| (
-            eval CALL_C[() fixruntime_iohandle_close(Ptr), handle.@_data.@value];
-            eval handle; // Prolong lifetime of handle
+            eval handle.@_data.borrow(|handle_ptr| CALL_C[() fixruntime_iohandle_close(Ptr), handle_ptr]);
             ()
         );
 

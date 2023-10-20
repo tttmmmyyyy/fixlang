@@ -349,6 +349,7 @@
       - [`impl Array : Functor`](#impl-array--functor)
       - [`impl Array : Monad`](#impl-array--monad)
     - [Destructor](#destructor)
+      - [`borrow : (a -> b) -> Destructor a -> b`](#borrow--a---b---destructor-a---b)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [ErrMsg](#errmsg)
       - [`make : String -> ErrMsg`](#make--string---errmsg)
@@ -1193,6 +1194,13 @@ This type is useful to manage resources allocated by C function.
 ```
 type Destructor a = box struct { value : a, dtor : a -> () };
 ```
+
+#### `borrow : (a -> b) -> Destructor a -> b`
+Borrow the internal value.
+`borrow(worker, dtor)` calls `worker` on the internal value captured by `dtor`, and returns the value returned by `worker`.
+If you try to extract the value by `dtor.@_value` from `dtor : Destructor a` and this expression is the last use of `dtor`, 
+then you get a value after the destructor function is called. 
+On the other hand, in `borrow(worker, dtor)`, `worker` will be called before the destructor is called.
 
 #### `make : a -> (a -> ()) -> Destructor a`
 Make a destructor value.
