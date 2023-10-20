@@ -379,6 +379,9 @@
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
     - [IO::IOHandle](#ioiohandle)
+      - [`_file_ptr : IOHandle -> Ptr`.](#_file_ptr--iohandle---ptr)
+      - [`_unsafe_close : IOHandle -> ()`](#_unsafe_close--iohandle---)
+    - [`from_file_ptr : Ptr -> IOHandle`](#from_file_ptr--ptr---iohandle)
       - [`stderr : IOHandle`](#stderr--iohandle)
       - [`stdin : IOHandle`](#stdin--iohandle)
       - [`stdout : IOHandle`](#stdout--iohandle)
@@ -1316,16 +1319,26 @@ Write a string into an IOHandle.
 
 A handle type for read / write operations on files/stdin/stdout/stderr.
 
-#### `stderr : IOHandle`
+#### `_file_ptr : IOHandle -> Ptr`.
+Get pointer to C's `FILE` value from an `IOHandle`
+DO NOT call `fclose` on the pointer returned by this function.
+To close an `IOHandle`, use `IO::close_file`.
 
+#### `_unsafe_close : IOHandle -> ()`
+Close an `IOHandle`. 
+This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
+
+### `from_file_ptr : Ptr -> IOHandle`
+Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
+DO NOT create two `IOHandle`s from a single file pointer.
+
+#### `stderr : IOHandle`
 The handle for standard error.
 
 #### `stdin : IOHandle`
-
 The handle for standard input.    
 
 #### `stdout : IOHandle`
-
 The handle for standard output.
 
 ### IO::IOResult

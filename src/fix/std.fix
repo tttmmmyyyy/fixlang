@@ -638,31 +638,52 @@ namespace IO {
     // You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`. 
     // Unlike C, closing an `IOHandle` value which had been already closed is safe and does nothing.
     type IOHandle = unbox struct { _data : Destructor Ptr };
+}
 
-    namespace IOHandle {
-        // Get pointer to C's `FILE` value from an `IOHandle`
-        // DO NOT call `fclose` on the pointer returned by this function.
-        // To close an `IOHandle`, use `IO::close_file`.
-        _file_ptr : IOHandle -> Ptr;
-        _file_ptr = |handle| CALL_C[Ptr fixruntime_iohandle_get_file(Ptr), handle.@_data.@value];
+namespace IO::IOHandle {
+    // Get pointer to C's `FILE` value from an `IOHandle`.
+    // DO NOT call `fclose` on the pointer returned by this function.
+    // To close an `IOHandle`, use `IO::close_file`.
+    _file_ptr : IOHandle -> Ptr;
+    _file_ptr = |handle| CALL_C[Ptr fixruntime_iohandle_get_file(Ptr), handle.@_data.@value];
 
-        // Close an `IOHandle`. 
-        // This is an I/O action not wrapped by `IO`; to close an `IOHandle` in a good manner, use `IO::close_file`.
-        _unsafe_close : IOHandle -> ();
-        _unsafe_close = |handle| (
-            eval handle.@_data.borrow(|handle_ptr| CALL_C[() fixruntime_iohandle_close(Ptr), handle_ptr]);
-            ()
-        );
+    // Close an `IOHandle`. 
+    // This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
+    _unsafe_close : IOHandle -> ();
+    _unsafe_close = |handle| (
+        eval handle.@_data.borrow(|handle_ptr| CALL_C[() fixruntime_iohandle_close(Ptr), handle_ptr]);
+        ()
+    );
 
-        // Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
-        // DO NOT create two `IOHandle`s from a single file pointer.
-        from_file_ptr : Ptr -> IOHandle;
-        from_file_ptr = |file_ptr| (
-            let handle_ptr = CALL_C[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
-            let dtor = |handle_ptr| CALL_C[() fixruntime_iohandle_delete(Ptr), handle_ptr];
-            IOHandle { _data : Destructor::make(handle_ptr, dtor) }
-        );
-    }
+    // Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
+    // DO NOT create two `IOHandle`s from a single file pointer.
+    from_file_ptr : Ptr -> IOHandle;
+    from_file_ptr = |file_ptr| (
+        let handle_ptr = CALL_C[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
+        let dtor = |handle_ptr| CALL_C[() fixruntime_iohandle_delete(Ptr), handle_ptr];
+        IOHandle { _data : Destructor::make(handle_ptr, dtor) }
+    );
+
+    // The handle for standard error.
+    stderr : IOHandle;
+    stderr = (
+        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
+        IOHandle::from_file_ptr $ ptr
+    );
+
+    // The handle for standard input.
+    stdin : IOHandle;
+    stdin = (
+        let ptr = "r".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
+        IOHandle::from_file_ptr $ ptr
+    );
+
+    // The handle for standard output.
+    stdout : IOHandle;
+    stdout = (
+        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
+        IOHandle::from_file_ptr $ ptr
+    );
 }
 
 namespace IO {
@@ -702,30 +723,6 @@ impl IOResult e : Monad {
         if res.is_err { pure $ Result::err $ res.as_err };
         f(res.as_ok).@_data
     }};
-}
-
-namespace IO::IOHandle {
-
-    // The handle for standard error.
-    stderr : IOHandle;
-    stderr = (
-        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
-    );
-
-    // The handle for standard input.
-    stdin : IOHandle;
-    stdin = (
-        let ptr = "r".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
-    );
-
-    // The handle for standard output.
-    stdout : IOHandle;
-    stdout = (
-        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
-    );
 }
 
 // Iterator (a.k.a lazy list)
