@@ -4,6 +4,9 @@ import Subprocess;
 
 main : IO ();
 main = (
+    // Subprocess::run_string(com, args, input) executes a command specified by `com` with arguments `args`, and writes `input` to the standard input of the running command.
+    // For more detail, see https://github.com/tttmmmyyyy/fixlang/blob/main/BuiltinLibraries.md#subprocess
+
     eval *println("Run \"/usr/bin/ls -l -r\":");
     let ((output, error), exit_status) = (*run_string("/usr/bin/ls", ["/usr/bin/ls", "-l", "-r"], "").to_io).as_ok;
     eval *println(output);
