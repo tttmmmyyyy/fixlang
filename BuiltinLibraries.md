@@ -362,6 +362,8 @@
       - [`eprintln : String -> IO ()`](#eprintln--string---io-)
       - [`input_line : IO String`](#input_line--io-string)
       - [`is_eof : IOHandle -> IO Bool`](#is_eof--iohandle---io-bool)
+      - [`loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s`](#loop_lines--iohandle---s---s---string---loopresult-s-s---ioresult-errmsg-s)
+      - [`loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s`](#loop_lines_file--path---s---s---string---loopresult-s-s---ioresult-errmsg-s)
       - [`open_file : Path -> String -> IOResult ErrMsg IOHandle`](#open_file--path---string---ioresult-errmsg-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
@@ -464,6 +466,7 @@
       - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
       - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
+      - [`rstrip : String -> String`](#rstrip--string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
       - [`impl String : Add`](#impl-string--add)
       - [`impl String : Eq`](#impl-string--eq)
@@ -1253,6 +1256,17 @@ If you want to handle errors, use `read_line(stdin)` instead.
 #### `is_eof : IOHandle -> IO Bool`
 Check if an `IOHandle` reached to the EOF.
 
+#### `loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s`
+Loop on lines read from an `IOHandle`.
+`loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
+The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
+When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
+Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::rstrip`.
+
+#### `loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s`
+Loop on lines read from a file.
+For details, see comment for `loop_lines`.
+
 #### `open_file : Path -> String -> IOResult ErrMsg IOHandle`
 Open a file. The second argument is a mode string for `fopen` C function. 
 
@@ -1614,6 +1628,9 @@ If the string is empty, this function does nothing.
 
 #### `strip_last_bytes : (Byte -> Bool) -> String -> String`
 Removes newlines and carriage returns at the end of the string.
+
+#### `rstrip : String -> String`
+Removing trailing whitespace characters.
 
 #### `strip_last_newlines : String -> String`
 Removes the last byte of a string while it satisifies the specified condition.

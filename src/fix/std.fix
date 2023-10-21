@@ -488,6 +488,30 @@ namespace IO {
     is_eof : IOHandle -> IO Bool;
     is_eof = |handle| pure $ CALL_C[I32 feof(Ptr), handle._file_ptr] != 0_I32;
 
+    // Loop on lines read from an `IOHandle`.
+    // `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
+    // The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
+    // When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
+    // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::rstrip`.
+    loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s;
+    loop_lines = |handle, state, worker| (
+        if *is_eof(handle).lift {
+            pure $ state
+        };
+        let line = *read_line(handle);
+        let res = worker(state, line);
+        if res.is_break {
+            pure $ res.as_break
+        };
+        let next_state = res.as_continue;
+        loop_lines(handle, next_state, worker)
+    );
+
+    // Loop on lines read from a file.
+    // For details, see comment for `loop_lines`.
+    loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s;
+    loop_lines_file = |path, state, worker| with_file(path, "r", |handle| loop_lines(handle, state, worker));
+
     // Open a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOResult ErrMsg IOHandle;
     open_file = |path, mode| (
@@ -1288,6 +1312,10 @@ namespace String {
         if s.is_empty { s };
         s.mod__data(|bytes| bytes.pop_back.pop_back.push_back(0_U8))
     );
+
+    // Removing trailing whitespace characters.
+    rstrip : String -> String;
+    rstrip = strip_last_bytes(is_space);
 
     // Removes the last byte of a string while it satisifies the specified condition.
     strip_last_bytes : (U8 -> Bool) -> String -> String;
