@@ -899,9 +899,9 @@ main = (
     let y : I64 = 42; // Type annotation on let-binding.
     let f = |v : I64| v * 3; // Type annotation on a variable of function.
     
-    let _ = *(println $ x.to_string);
-    let _ = *(println $ y.to_string);
-    let _ = *(println $ f(14).to_string);
+    eval *(println $ x.to_string);
+    eval *(println $ y.to_string);
+    eval *(println $ f(14).to_string);
 
     pure()
 );
@@ -1238,7 +1238,7 @@ Example:
 ```
 main : IO ();
 main = (
-    let _ = "Hello C function!\n".borrow_c_str(|ptr|
+    eval "Hello C function!\n".borrow_c_str(|ptr|
         CALL_C[I32 printf(Ptr, ...), ptr]
     );
     pure()

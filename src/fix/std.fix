@@ -141,7 +141,7 @@ namespace Array {
     borrow_ptr : (Ptr -> b) -> Array a -> b;
     borrow_ptr = |f, arr| (
         let res = f(arr._get_ptr);
-        let _ = arr; // Use array after calling f
+        eval arr; // Use array after calling f
         res
     );
 
@@ -535,7 +535,7 @@ namespace IO {
     print : String -> IO ();
     print = |str| (
         IO { _data : |_| (
-            let _ = str.borrow_c_str(|c_ptr|
+            eval str.borrow_c_str(|c_ptr|
                 CALL_C[I32 printf(Ptr, ...), c_ptr]
             );
             ()
@@ -545,8 +545,8 @@ namespace IO {
     // Print a string followed by a newline to stdout.
     println : String -> IO ();
     println = |str| (
-        let _ = *print(str);
-        let _ = *print("\n");
+        eval *print(str);
+        eval *print("\n");
         pure()
     );
 
@@ -1172,14 +1172,14 @@ namespace PunchedArray {
     punch! = |idx, arr| (
         let arr = arr.assert_unique!(|_|"[PunchedArray::punch!] Called on a shared array.");
         let size = arr.get_size;
-        let _ = assert(|_|"[PunchedArray::punch!] Index out of range.", 0 <= idx && idx < size);
+        eval assert(|_|"[PunchedArray::punch!] Index out of range.", 0 <= idx && idx < size);
         let elm = arr._unsafe_get(idx);
         let dtor = |arr| (
             let arr = arr._unsafe_set_size(0); // Avoid releaseing elements in the destructor of Array.
             loop((arr, 0), |(arr, i)| (
                 if i == size { break $ () };
                 if i == idx { continue $ (arr, i+1) };
-                let _ = arr._unsafe_get(i); // Release the element.
+                eval arr._unsafe_get(i); // Release the element.
                 continue $ (arr, i+1)
             ))
         );
@@ -1552,7 +1552,7 @@ namespace F64 {
 impl U8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_set_size(1);
-        let _ = CALL_C[() fixruntime_u8_to_bytes(Ptr, U8), data._get_ptr, v];
+        eval CALL_C[() fixruntime_u8_to_bytes(Ptr, U8), data._get_ptr, v];
         data
     );
 }
@@ -1567,7 +1567,7 @@ impl U8 : FromBytes {
 impl U8 : ToString {
     to_string = |v| (
         let data = Array::empty(4); // len(255) + 1
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u8_to_str(Ptr, U8), ptr, v]
         ));
         String::from_c_str(data)
@@ -1580,7 +1580,7 @@ impl U8 : FromString {
 impl U16 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(2)._unsafe_set_size(2);
-        let _ = CALL_C[() fixruntime_u16_to_bytes(Ptr, U16), data._get_ptr, v];
+        eval CALL_C[() fixruntime_u16_to_bytes(Ptr, U16), data._get_ptr, v];
         data
     );
 }
@@ -1595,7 +1595,7 @@ impl U16 : FromBytes {
 impl U16 : ToString {
     to_string = |v| (
         let data = Array::empty(6); // len(65535) + 1
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u16_to_str(Ptr, U16), ptr, v]
         ));
         String::from_c_str(data)
@@ -1608,7 +1608,7 @@ impl U16 : FromString {
 impl U32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        let _ = CALL_C[() fixruntime_u32_to_bytes(Ptr, U32), data._get_ptr, v];
+        eval CALL_C[() fixruntime_u32_to_bytes(Ptr, U32), data._get_ptr, v];
         data
     );
 }
@@ -1623,7 +1623,7 @@ impl U32 : FromBytes {
 impl U32 : ToString {
     to_string = |v| (
         let data = Array::empty(11);
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u32_to_str(Ptr, U32), ptr, v]
         ));
         String::from_c_str(data)
@@ -1636,7 +1636,7 @@ impl U32 : FromString {
 impl U64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        let _ = CALL_C[() fixruntime_u64_to_bytes(Ptr, U64), data._get_ptr, v];
+        eval CALL_C[() fixruntime_u64_to_bytes(Ptr, U64), data._get_ptr, v];
         data
     );
 }
@@ -1651,7 +1651,7 @@ impl U64 : FromBytes {
 impl U64 : ToString {
     to_string = |v| (
         let data = Array::empty(20);
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u64_to_str(Ptr, U64), ptr, v]
         ));
         String::from_c_str(data)
@@ -1673,7 +1673,7 @@ impl U64 : FromString {
 impl I8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_set_size(1);
-        let _ = CALL_C[() fixruntime_u8_to_bytes(Ptr, I8), data._get_ptr, v];
+        eval CALL_C[() fixruntime_u8_to_bytes(Ptr, I8), data._get_ptr, v];
         data
     );
 }
@@ -1688,7 +1688,7 @@ impl I8 : FromBytes {
 impl I8 : ToString {
     to_string = |v| (
         let data = Array::empty(5); // len(-128) + 1
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i8_to_str(Ptr, I8), ptr, v]
         ));
         String::from_c_str(data)
@@ -1701,7 +1701,7 @@ impl I8 : FromString {
 impl I16 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(2)._unsafe_set_size(2);
-        let _ = CALL_C[() fixruntime_u16_to_bytes(Ptr, I16), data._get_ptr, v];
+        eval CALL_C[() fixruntime_u16_to_bytes(Ptr, I16), data._get_ptr, v];
         data
     );
 }
@@ -1716,7 +1716,7 @@ impl I16 : FromBytes {
 impl I16 : ToString {
     to_string = |v| (
         let data = Array::empty(7); // len(-32768) + 1
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i16_to_str(Ptr, I16), ptr, v]
         ));
         String::from_c_str(data)
@@ -1729,7 +1729,7 @@ impl I16 : FromString {
 impl I32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        let _ = CALL_C[() fixruntime_u32_to_bytes(Ptr, I32), data._get_ptr, v];
+        eval CALL_C[() fixruntime_u32_to_bytes(Ptr, I32), data._get_ptr, v];
         data
     );
 }
@@ -1744,7 +1744,7 @@ impl I32 : FromBytes {
 impl I32 : ToString {
     to_string = |v| (
         let data = Array::empty(12);
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i32_to_str(Ptr, I32), ptr, v]
         ));
         String::from_c_str(data)
@@ -1757,7 +1757,7 @@ impl I32 : FromString {
 impl I64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        let _ = CALL_C[() fixruntime_u64_to_bytes(Ptr, I64), data._get_ptr, v];
+        eval CALL_C[() fixruntime_u64_to_bytes(Ptr, I64), data._get_ptr, v];
         data
     );
 }
@@ -1772,7 +1772,7 @@ impl I64 : FromBytes {
 impl I64 : ToString {
     to_string = |v| (
         let data = Array::empty(21);
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i64_to_str(Ptr, I64), ptr, v]
         ));
         String::from_c_str(data)
@@ -1794,7 +1794,7 @@ impl I64 : FromString {
 impl F32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        let _ = CALL_C[() fixruntime_f32_to_bytes(Ptr, F32), data._get_ptr, v];
+        eval CALL_C[() fixruntime_f32_to_bytes(Ptr, F32), data._get_ptr, v];
         data
     );
 }
@@ -1854,7 +1854,7 @@ impl F32 : FromString {
 impl F64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        let _ = CALL_C[() fixruntime_f64_to_bytes(Ptr, F64), data._get_ptr, v];
+        eval CALL_C[() fixruntime_f64_to_bytes(Ptr, F64), data._get_ptr, v];
         data
     );
 }
@@ -1869,7 +1869,7 @@ impl F64 : FromBytes {
 impl F64 : ToString {
     to_string = |v| (
         let data = Array::empty(500);
-        let _ = data.borrow_ptr(|ptr| (
+        eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_f64_to_str(Ptr, F64), ptr, v]
         ));
         String::from_c_str(data)

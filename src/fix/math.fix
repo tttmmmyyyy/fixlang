@@ -36,7 +36,7 @@ atan2 = |x, y| CALL_C[F64 atan2(F64, F64), x, y];
 // Here `m` has to be less than or equal to 66 to avoid overflow.
 binomial_coefficients : I64 -> Array (Array I64);
 binomial_coefficients = |m| (
-    let _ = assert(|_|"[binomial_coefficients] The argument must be non-negative and less than or equal to 66.", 0 <= m && m <= 66);
+    eval assert(|_|"[binomial_coefficients] The argument must be non-negative and less than or equal to 66.", 0 <= m && m <= 66);
     let size = m + 1;
     let arr = Iterator::range(0, size).fold(Array::empty(size), |arr, n| arr.push_back!(Array::fill(n+1, 0)));
     let arr = arr.(mod!(0) $ set!(0) $ 1);
