@@ -391,7 +391,7 @@ type IO a = unbox struct { _data : () -> a };
 
 namespace IO {
     // Read characters from an IOHandle.
-    // if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
+    // If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
     _read_line_inner : Bool -> IOHandle -> IOResult ErrMsg String;
     _read_line_inner = |upto_newline, handle| (
         IOResult { _data : IO { _data : |_| (
@@ -420,9 +420,9 @@ namespace IO {
                 if strlen == 0 { break $ strs };
 
                 if upto_newline {
-                    // If the last character is \n or \r, break.
+                    // If the last character is \n, break.
                     let last_byte = buf.@(strlen-1);
-                    if last_byte == '\n' || last_byte == '\r' { break $ strs };
+                    if last_byte == '\n' { break $ strs };
                     continue $ strs
                 } else {
                     continue $ strs
@@ -534,8 +534,8 @@ namespace IO {
     read_file_bytes : Path -> IOResult ErrMsg (Array U8);
     read_file_bytes = |path| with_file(path, "r", read_bytes);
 
-    // Read characters from a IOHandle upto newline/carriage return or EOF.
-    // The returned string may include newline/carriage return at its end.
+    // Read characters from a IOHandle upto newline or EOF.
+    // The returned string may include newline at its end.
     read_line : IOHandle -> IOResult ErrMsg String;
     read_line = _read_line_inner(true);
 

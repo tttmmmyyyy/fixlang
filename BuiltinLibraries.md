@@ -1231,7 +1231,7 @@ type ErrMsg = unbox struct { msg : String };
 
 #### `_read_line_inner : Bool -> IOHandle -> IOResult ErrMsg String`
 Read characters from an IOHandle.
-if the first argument `upto_newline` is true, this function reads a file upto newline/carriage return or EOF.
+If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
 
 #### `_unsafe_perform : IO a -> a`
 Perform the I/O action. This may violate purity of Fix.
@@ -1272,7 +1272,8 @@ Read all bytes from a file.
 Raad all characters from a file.
 
 #### `read_line : IOHandle -> IOResult ErrMsg String`
-Read characters from a IOHandle upto newline/carriage return or EOF. The returned string may include newline/carriage return at its end.
+Read characters from a IOHandle upto newline or EOF.
+The returned string may include newline at its end.
 
 #### `read_bytes : IOHandle -> IOResult ErrMsg (Array U8)`
 Read all bytes from an IOHandle.
