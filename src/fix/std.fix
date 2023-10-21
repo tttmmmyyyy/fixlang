@@ -657,8 +657,6 @@ namespace IO {
     write_string = |handle, content| (
         let res = content.borrow_c_str(|c_str| (
             let file_ptr = handle._file_ptr;
-            // eval debug_println("open_file ptr:");
-            // eval CALL_C[() print_ptr(Ptr), file_ptr];
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr];
             if res < 0_I32 { Result::err $ ErrMsg { msg : "Std::IO::write_string failed!: some error occurred in fputs." } };
             Result::ok()
