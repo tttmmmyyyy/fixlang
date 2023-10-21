@@ -486,7 +486,7 @@ namespace IO {
 
     // Check if an `IOHandle` reached to the EOF.
     is_eof : IOHandle -> IO Bool;
-    is_eof = |handle| pure $ CALL_C[I32 foef(Ptr), handle._file_ptr] != 0_I32;
+    is_eof = |handle| pure $ CALL_C[I32 feof(Ptr), handle._file_ptr] != 0_I32;
 
     // Open a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOResult ErrMsg IOHandle;
@@ -496,8 +496,6 @@ namespace IO {
             let res = path_str.borrow_c_str(|path_ptr|
                 mode.borrow_c_str(|mode_str|
                     let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
-                    // eval debug_println("open_file ptr:");
-                    // eval CALL_C[() print_ptr(Ptr), file_ptr];
                     if file_ptr == nullptr { 
                         Result::err $ ErrMsg { msg : "failed to open a file: " + path_str }
                     } else {
