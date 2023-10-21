@@ -447,7 +447,7 @@ namespace IO {
     eprint : String -> IO ();
     eprint = |str| (
         IO { _data : |_| (
-            let _ = str.borrow_c_str(|c_ptr|
+            eval str.borrow_c_str(|c_ptr|
                 CALL_C[I32 fprintf(Ptr, Ptr, ...), stdout._file_ptr, c_ptr]
             );
             ()
@@ -457,8 +457,8 @@ namespace IO {
     // Print a string followed by a newline to stderr.
     eprintln : String -> IO ();
     eprintln = |str| (
-        let _ = *eprint(str);
-        let _ = *eprint("\n");
+        eval *eprint(str);
+        eval *eprint("\n");
         pure()
     );
 
@@ -468,8 +468,8 @@ namespace IO {
 
     // Exit the program with an error message and an error code.
     // The error message is written to the standard error output.
-    exit_with_msg : I64 -> String  -> IO a;
-    exit_with_msg = |code, msg| eval eprintln(msg); exit(code);
+    exit_with_msg : I64 -> String -> IO a;
+    exit_with_msg = |code, msg| eval *eprintln(msg); exit(code);
 
     // Read a line from stdin. If some error occurr, this function aborts.
     // If you want to handle errors, use `read_line(stdin)` instead.
@@ -479,7 +479,7 @@ namespace IO {
         if res.is_ok {
             pure $ res.as_ok
         } else {
-            let _ = *(eprintln $ res.as_err.to_string);
+            eval *(eprintln $ res.as_err.to_string);
             pure $ abort()
         }
     );

@@ -1,0 +1,27 @@
+module Main;
+import Debug;
+
+main : IO ();
+main = (
+    let file_path = Path::parse("test.txt").as_some;
+
+    do {
+        // Write a `String` to a file.
+        eval *write_file_string(file_path, ["0", "1", "2", "X", "3", "4"].to_iter.join("\n"));
+
+        // Process each line of a file.
+        let sum = *loop_lines_file(file_path, 0, |cnt, line| (
+            // Sum up the number while the line can be parsed as an integer.
+            let parse_res = from_string(line.rstrip); // Remove the trailing newline ("\n") and parse as `I64`.
+            if parse_res.is_ok {
+                let res = parse_res.as_ok;
+                continue $ cnt + res
+            } else {
+                break $ cnt
+            }
+        ));
+        
+        eval assert_eq(|_|"", sum, 0 + 1 + 2);
+        println("sum : " + sum.to_string).lift
+    }.try(exit_with_msg(1)) // If some IO error occurred, print the error message and exits the program.
+);

@@ -4586,26 +4586,35 @@ pub fn test_loop_lines_file() {
     let source = r#"
     module Main;
     import Debug;
+
+    sum_up_while : Path -> IOFail I64;
+    sum_up_while = |file_path| (
+        // Process lines of a file.
+        loop_lines_file(file_path, 0, |cnt, line| (
+            // Sum up the number while line can be parsed as an integer.
+            let parse_res = from_string(line.rstrip); // Remove the trailing newline ("\n") and parse as `I64`.
+            if parse_res.is_ok {
+                let res = parse_res.as_ok;
+                continue $ cnt + res
+            } else {
+                break $ cnt
+            }
+        ))
+    );
     
     main : IO ();
     main = (
+        let file_path = Path::parse("test.txt").as_some;
         do {
-            // Prepare a file.
-            let file_path = Path::parse("test.txt").as_some;
-            eval *write_file_string(file_path, "0\n1\n2\nX\n3\n4");
+            eval *write_file_string(file_path, ["0", "1", "2", "X", "3", "4"].to_iter.join("\n"));
+            eval assert_eq(|_|"", *sum_up_while(file_path), 0 + 1 + 2);
 
-            let sum = *loop_lines_file(file_path, 0, |cnt, line| (
-                // Sum up while line can be parsed as an integer.
-                let parse_res = from_string(line.rstrip);
-                if parse_res.is_ok {
-                    let res = parse_res.as_ok;
-                    continue $ cnt + res
-                } else {
-                    break $ cnt
-                }
-            ));
+            eval *write_file_string(file_path, ["0", "1", "2", "3", "4"].to_iter.join("\n"));
+            eval assert_eq(|_|"", *sum_up_while(file_path), 0 + 1 + 2 + 3 + 4);
 
-            eval assert_eq(|_|"", sum, 0 + 1 + 2);
+            eval *write_file_string(file_path, [].to_iter.join("\n"));
+            eval assert_eq(|_|"", *sum_up_while(file_path), 0);
+
             pure()
         }.try(exit_with_msg(1))
     );
@@ -4680,6 +4689,7 @@ pub fn test_run_examples() {
         let mut config = Configuration::develop_compiler();
         config.source_files.push(path);
         run_file(config);
+        remove_file("test.txt").unwrap_or(());
     }
 
     // Run import example.
@@ -4694,6 +4704,7 @@ pub fn test_run_examples() {
         config.source_files.push(path);
     }
     run_file(config);
+    remove_file("test.txt").unwrap_or(());
 }
 
 #[test]
