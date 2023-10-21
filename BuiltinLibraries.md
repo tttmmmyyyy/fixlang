@@ -374,6 +374,9 @@
       - [`read_bytes : IOHandle -> IOResult ErrMsg (Array U8)`](#read_bytes--iohandle---ioresult-errmsg-array-u8)
       - [`read_n_bytes : IOHandle -> I64 -> IOResult ErrMsg (Array U8)`](#read_n_bytes--iohandle---i64---ioresult-errmsg-array-u8)
       - [`read_string : IOHandle -> IOResult ErrMsg String`](#read_string--iohandle---ioresult-errmsg-string)
+      - [`stderr : IOHandle`](#stderr--iohandle)
+      - [`stdin : IOHandle`](#stdin--iohandle)
+      - [`stdout : IOHandle`](#stdout--iohandle)
       - [`with_file : Path -> String -> (IOHandle -> IOResult ErrMsg a) -> IOResult ErrMsg a`](#with_file--path---string---iohandle---ioresult-errmsg-a---ioresult-errmsg-a)
       - [`write_bytes : IOHandle -> Array U8 -> IOResult ErrMsg ()`](#write_bytes--iohandle---array-u8---ioresult-errmsg-)
       - [`write_file_bytes : Path -> Array U8 -> IOResult ErrMsg ()`](#write_file_bytes--path---array-u8---ioresult-errmsg-)
@@ -385,9 +388,6 @@
       - [`_file_ptr : IOHandle -> Ptr`.](#_file_ptr--iohandle---ptr)
       - [`_unsafe_close : IOHandle -> ()`](#_unsafe_close--iohandle---)
     - [`from_file_ptr : Ptr -> IOHandle`](#from_file_ptr--ptr---iohandle)
-      - [`stderr : IOHandle`](#stderr--iohandle)
-      - [`stdin : IOHandle`](#stdin--iohandle)
-      - [`stdout : IOHandle`](#stdout--iohandle)
     - [IO::IOResult](#ioioresult)
       - [`err : e -> IOResult e a`](#err--e---ioresult-e-a)
       - [`from_result : Result e a -> IOResult e a`](#from_result--result-e-a---ioresult-e-a)
@@ -1298,6 +1298,15 @@ Read at most n bytes from an IOHandle.
 #### `read_string : IOHandle -> IOResult ErrMsg String`
 Read all characters from a IOHandle.
 
+#### `stderr : IOHandle`
+The handle for standard error.
+
+#### `stdin : IOHandle`
+The handle for standard input.    
+
+#### `stdout : IOHandle`
+The handle for standard output.
+
 #### `with_file : Path -> String -> (IOHandle -> IOResult ErrMsg a) -> IOResult ErrMsg a`
 Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
 The file handle will be closed automatically.
@@ -1335,15 +1344,6 @@ This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual cas
 ### `from_file_ptr : Ptr -> IOHandle`
 Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
 DO NOT create two `IOHandle`s from a single file pointer.
-
-#### `stderr : IOHandle`
-The handle for standard error.
-
-#### `stdin : IOHandle`
-The handle for standard input.    
-
-#### `stdout : IOHandle`
-The handle for standard output.
 
 ### IO::IOResult
 

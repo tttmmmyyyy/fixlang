@@ -601,6 +601,27 @@ namespace IO {
     read_string : IOHandle -> IOResult ErrMsg String;
     read_string = _read_line_inner(false);
 
+    // The handle for standard error.
+    stderr : IOHandle;
+    stderr = (
+        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
+        IOHandle::from_file_ptr $ ptr
+    );
+
+    // The handle for standard input.
+    stdin : IOHandle;
+    stdin = (
+        let ptr = "r".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
+        IOHandle::from_file_ptr $ ptr
+    );
+
+    // The handle for standard output.
+    stdout : IOHandle;
+    stdout = (
+        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
+        IOHandle::from_file_ptr $ ptr
+    );
+
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
     with_file : Path -> String -> (IOHandle -> IOResult ErrMsg a) -> IOResult ErrMsg a;
@@ -691,27 +712,6 @@ namespace IO::IOHandle {
         let handle_ptr = CALL_C[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
         let dtor = |handle_ptr| CALL_C[() fixruntime_iohandle_delete(Ptr), handle_ptr];
         IOHandle { _data : Destructor::make(handle_ptr, dtor) }
-    );
-
-    // The handle for standard error.
-    stderr : IOHandle;
-    stderr = (
-        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
-    );
-
-    // The handle for standard input.
-    stdin : IOHandle;
-    stdin = (
-        let ptr = "r".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
-    );
-
-    // The handle for standard output.
-    stdout : IOHandle;
-    stdout = (
-        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
     );
 }
 
