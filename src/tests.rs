@@ -2964,6 +2964,40 @@ pub fn test108() {
 
 #[test]
 #[serial]
+pub fn test_is_eof() {
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        main : IO ();
+        main = (
+            let file_path = Path::parse("test.txt").as_some;
+            let content = "Hello World!";
+            let res = *do {
+                eval *write_file_string(file_path, content);
+
+                let read_content = *with_file(file_path, "r", |file| (
+                    let content = *read_string(file);
+                    let is_eof = *is_eof(file).lift;
+                    eval assert(|_|"file hs not reached to EOF!", is_eof);
+                    pure $ content
+                ));
+            
+                eval assert_eq(|_|"read_content != content", content, read_content);
+
+                pure()
+            }.to_io;
+            
+            eval assert(|_|"", res.is_ok);
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+    remove_file("test.txt").unwrap();
+}
+
+#[test]
+#[serial]
 pub fn test108_5() {
     // Test write_file_bytes, read_file_bytes.
     let source = r#"
@@ -4527,8 +4561,8 @@ pub fn test_subprocess_run_stream() {
     
     main : IO ();
     main = (
-        eval *println("Run \"/usr/bin/ls -l -r\".");
-        let res = *run_with_stream("/usr/bin/ls", ["/usr/bin/ls", "-l", "-r"], |(stdin, stdout, stderr)| (
+        eval *println("Run \"/bin/ls -l -r\".");
+        let res = *run_with_stream("/bin/ls", ["/bin/ls", "-l", "-r"], |(stdin, stdout, stderr)| (
             let output = (*read_string(stdout).to_io).as_ok; // Read standard output of the command.
             println $ output
         )).to_io;

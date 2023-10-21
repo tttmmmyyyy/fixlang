@@ -484,6 +484,10 @@ namespace IO {
         }
     );
 
+    // Check if an `IOHandle` reached to the EOF.
+    is_eof : IOHandle -> IO Bool;
+    is_eof = |handle| pure $ CALL_C[I32 foef(Ptr), handle._file_ptr] != 0_I32;
+
     // Open a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOResult ErrMsg IOHandle;
     open_file = |path, mode| (
@@ -646,7 +650,9 @@ namespace IO::IOHandle {
     // DO NOT call `fclose` on the pointer returned by this function.
     // To close an `IOHandle`, use `IO::close_file`.
     _file_ptr : IOHandle -> Ptr;
-    _file_ptr = |handle| CALL_C[Ptr fixruntime_iohandle_get_file(Ptr), handle.@_data.@value];
+    _file_ptr = |handle| handle.@_data.borrow(|handle_ptr| 
+        CALL_C[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]
+    );
 
     // Close an `IOHandle`. 
     // This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
