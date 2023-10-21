@@ -352,50 +352,49 @@
       - [`borrow : (a -> b) -> Destructor a -> b`](#borrow--a---b---destructor-a---b)
       - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [ErrMsg](#errmsg)
-      - [`make : String -> ErrMsg`](#make--string---errmsg)
-      - [`impl ErrMsg : ToString`](#impl-errmsg--tostring)
     - [IO](#io)
-      - [`_read_line_inner : Bool -> IOHandle -> IOResult ErrMsg String`](#_read_line_inner--bool---iohandle---ioresult-errmsg-string)
+      - [`_read_line_inner : Bool -> IOHandle -> IOFail ErrMsg String`](#_read_line_inner--bool---iohandle---iofail-errmsg-string)
       - [`_unsafe_perform : IO a -> a`](#_unsafe_perform--io-a---a)
       - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
       - [`eprint : String -> IO ()`](#eprint--string---io-)
       - [`eprintln : String -> IO ()`](#eprintln--string---io-)
+      - [`exit : I64 -> IO a`](#exit--i64---io-a)
+      - [`exit_with_msg : I64 -> String -> IO a`](#exit_with_msg--i64---string---io-a)
       - [`input_line : IO String`](#input_line--io-string)
       - [`is_eof : IOHandle -> IO Bool`](#is_eof--iohandle---io-bool)
-      - [`loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s`](#loop_lines--iohandle---s---s---string---loopresult-s-s---ioresult-errmsg-s)
-      - [`loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s`](#loop_lines_file--path---s---s---string---loopresult-s-s---ioresult-errmsg-s)
-      - [`open_file : Path -> String -> IOResult ErrMsg IOHandle`](#open_file--path---string---ioresult-errmsg-iohandle)
+      - [`loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s`](#loop_lines--iohandle---s---s---string---loopresult-s-s---iofail-s)
+      - [`loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s`](#loop_lines_file--path---s---s---string---loopresult-s-s---iofail-s)
+      - [`open_file : Path -> String -> IOFail IOHandle`](#open_file--path---string---iofail-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
-      - [`read_file_string : Path -> IOResult ErrMsg String`](#read_file_string--path---ioresult-errmsg-string)
-      - [`read_file_bytes : Path -> IOResult ErrMsg (Array U8)`](#read_file_bytes--path---ioresult-errmsg-array-u8)
-      - [`read_file : Path -> IOResult ErrMsg String`](#read_file--path---ioresult-errmsg-string)
-      - [`read_line : IOHandle -> IOResult ErrMsg String`](#read_line--iohandle---ioresult-errmsg-string)
-      - [`read_bytes : IOHandle -> IOResult ErrMsg (Array U8)`](#read_bytes--iohandle---ioresult-errmsg-array-u8)
-      - [`read_n_bytes : IOHandle -> I64 -> IOResult ErrMsg (Array U8)`](#read_n_bytes--iohandle---i64---ioresult-errmsg-array-u8)
-      - [`read_string : IOHandle -> IOResult ErrMsg String`](#read_string--iohandle---ioresult-errmsg-string)
+      - [`read_file_string : Path -> IOFail String`](#read_file_string--path---iofail-string)
+      - [`read_file_bytes : Path -> IOFail (Array U8)`](#read_file_bytes--path---iofail-array-u8)
+      - [`read_line : IOHandle -> IOFail String`](#read_line--iohandle---iofail-string)
+      - [`read_bytes : IOHandle -> IOFail (Array U8)`](#read_bytes--iohandle---iofail-array-u8)
+      - [`read_n_bytes : IOHandle -> I64 -> IOFail (Array U8)`](#read_n_bytes--iohandle---i64---iofail-array-u8)
+      - [`read_string : IOHandle -> IOFail String`](#read_string--iohandle---iofail-string)
       - [`stderr : IOHandle`](#stderr--iohandle)
       - [`stdin : IOHandle`](#stdin--iohandle)
       - [`stdout : IOHandle`](#stdout--iohandle)
-      - [`with_file : Path -> String -> (IOHandle -> IOResult ErrMsg a) -> IOResult ErrMsg a`](#with_file--path---string---iohandle---ioresult-errmsg-a---ioresult-errmsg-a)
-      - [`write_bytes : IOHandle -> Array U8 -> IOResult ErrMsg ()`](#write_bytes--iohandle---array-u8---ioresult-errmsg-)
-      - [`write_file_bytes : Path -> Array U8 -> IOResult ErrMsg ()`](#write_file_bytes--path---array-u8---ioresult-errmsg-)
-      - [`write_file_string : Path -> String -> IOResult ErrMsg ()`](#write_file_string--path---string---ioresult-errmsg-)
-      - [`write_string : IOHandle -> String -> IOResult ErrMsg ()`](#write_string--iohandle---string---ioresult-errmsg-)
+      - [`with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a`](#with_file--path---string---iohandle---iofail-a---iofail-a)
+      - [`write_bytes : IOHandle -> Array U8 -> IOFail ()`](#write_bytes--iohandle---array-u8---iofail-)
+      - [`write_file_bytes : Path -> Array U8 -> IOFail ()`](#write_file_bytes--path---array-u8---iofail-)
+      - [`write_file_string : Path -> String -> IOFail ()`](#write_file_string--path---string---iofail-)
+      - [`write_string : IOHandle -> String -> IOFail ()`](#write_string--iohandle---string---iofail-)
       - [`impl IO : Functor`](#impl-io--functor)
       - [`impl IO : Monad`](#impl-io--monad)
     - [IO::IOHandle](#ioiohandle)
       - [`_file_ptr : IOHandle -> Ptr`.](#_file_ptr--iohandle---ptr)
       - [`_unsafe_close : IOHandle -> ()`](#_unsafe_close--iohandle---)
     - [`from_file_ptr : Ptr -> IOHandle`](#from_file_ptr--ptr---iohandle)
-    - [IO::IOResult](#ioioresult)
-      - [`err : e -> IOResult e a`](#err--e---ioresult-e-a)
-      - [`from_result : Result e a -> IOResult e a`](#from_result--result-e-a---ioresult-e-a)
-      - [`lift : IO a -> IOResult e a`](#lift--io-a---ioresult-e-a)
-      - [`ok : a -> IOResult e a`](#ok--a---ioresult-e-a)
-      - [`to_io : IOResult e a -> IO (Result e a)`](#to_io--ioresult-e-a---io-result-e-a)
-      - [`impl IOResult e : Functor`](#impl-ioresult-e--functor)
-      - [`impl IOResult e : Monad`](#impl-ioresult-e--monad)
+    - [IO::IOFail](#ioiofail)
+      - [`from_result : Result ErrMsg a -> IOFail a`](#from_result--result-errmsg-a---iofail-a)
+      - [`lift : IO a -> IOFail a`](#lift--io-a---iofail-a)
+      - [`throw : ErrMsg -> IOFail a`](#throw--errmsg---iofail-a)
+      - [`to_result : IOFail a -> IO (Result ErrMsg a)`](#to_result--iofail-a---io-result-errmsg-a)
+      - [`try : (ErrMsg -> IO a) -> IOFail a -> IO a`](#try--errmsg---io-a---iofail-a---io-a)
+      - [`impl IOFail : Functor`](#impl-iofail--functor)
+      - [`impl IOFail : Monad`](#impl-iofail--monad)
     - [Iterator](#iterator)
       - [`_flatten : Iterator (Iterator a) -> Iterator a`](#_flatten--iterator-iterator-a---iterator-a)
       - [`advance : Iterator a -> Option (a, Iterator a)`](#advance--iterator-a---option-a-iterator-a)
@@ -598,8 +597,8 @@
   - [`tanh : F64 -> F64`](#tanh--f64---f64)
 - [module `Subprocess`](#module-subprocess)
   - [`type ExitStatus`](#type-exitstatus)
-  - [`run_string : String -> Array String -> String -> IOResult ErrMsg ((String, String), ExitStatus)`](#run_string--string---array-string---string---ioresult-errmsg-string-string-exitstatus)
-  - [`run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IO a) -> IOResult ErrMsg (a, ExitStatus)`](#run_with_stream--string---array-string---iohandle-iohandle-iohandle---io-a---ioresult-errmsg-a-exitstatus)
+  - [`run_string : String -> Array String -> String -> IOFail ((String, String), ExitStatus)`](#run_string--string---array-string---string---iofail-string-string-exitstatus)
+  - [`run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IOFail a) -> IOFail (a, ExitStatus)`](#run_with_stream--string---array-string---iohandle-iohandle-iohandle---iofail-a---iofail-a-exitstatus)
 - [module `Time`](#module-time)
   - [`type Time`](#type-time)
   - [`type DateTime`](#type-datetime)
@@ -1218,21 +1217,17 @@ Make a destructor value.
 
 ### ErrMsg
 
-A wrapper type for error message. 
+A type (alias) for error message. 
 
 ```
-type ErrMsg = unbox struct { msg : String };
+type ErrMsg = String;
 ```
-
-#### `make : String -> ErrMsg`
-
-#### `impl ErrMsg : ToString`
 
 ### IO
 
 `IO a` is the type whose value represents an I/O action which returns a value of type `a`.
 
-#### `_read_line_inner : Bool -> IOHandle -> IOResult ErrMsg String`
+#### `_read_line_inner : Bool -> IOHandle -> IOFail ErrMsg String`
 Read characters from an IOHandle.
 If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
 
@@ -1249,6 +1244,13 @@ Print a string to stderr.
 #### `eprintln : String -> IO ()`
 Print a string followed by a newline to stderr.
 
+#### `exit : I64 -> IO a`
+Exit the program with an error code.
+
+#### `exit_with_msg : I64 -> String -> IO a`
+Exit the program with an error message and an error code.
+The error message is written to the standard error output.
+
 #### `input_line : IO String`
 Read a line from stdin. If some error occurr, this function aborts.
 If you want to handle errors, use `read_line(stdin)` instead.
@@ -1256,18 +1258,18 @@ If you want to handle errors, use `read_line(stdin)` instead.
 #### `is_eof : IOHandle -> IO Bool`
 Check if an `IOHandle` reached to the EOF.
 
-#### `loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s`
+#### `loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s`
 Loop on lines read from an `IOHandle`.
 `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
 The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
 When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
 Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::rstrip`.
 
-#### `loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s`
+#### `loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s`
 Loop on lines read from a file.
 For details, see comment for `loop_lines`.
 
-#### `open_file : Path -> String -> IOResult ErrMsg IOHandle`
+#### `open_file : Path -> String -> IOFail IOHandle`
 Open a file. The second argument is a mode string for `fopen` C function. 
 
 #### `print : String -> IO ()`
@@ -1276,26 +1278,23 @@ Print a string to stdout.
 #### `println : String -> IO ()`
 Print a string followed by a newline to stdout.
 
-#### `read_file_string : Path -> IOResult ErrMsg String`
+#### `read_file_string : Path -> IOFail String`
 Raad all characters from a file.
 
-#### `read_file_bytes : Path -> IOResult ErrMsg (Array U8)`
+#### `read_file_bytes : Path -> IOFail (Array U8)`
 Read all bytes from a file.
 
-#### `read_file : Path -> IOResult ErrMsg String`
-Raad all characters from a file.
-
-#### `read_line : IOHandle -> IOResult ErrMsg String`
+#### `read_line : IOHandle -> IOFail String`
 Read characters from a IOHandle upto newline or EOF.
 The returned string may include newline at its end.
 
-#### `read_bytes : IOHandle -> IOResult ErrMsg (Array U8)`
+#### `read_bytes : IOHandle -> IOFail (Array U8)`
 Read all bytes from an IOHandle.
 
-#### `read_n_bytes : IOHandle -> I64 -> IOResult ErrMsg (Array U8)`
+#### `read_n_bytes : IOHandle -> I64 -> IOFail (Array U8)`
 Read at most n bytes from an IOHandle.
 
-#### `read_string : IOHandle -> IOResult ErrMsg String`
+#### `read_string : IOHandle -> IOFail String`
 Read all characters from a IOHandle.
 
 #### `stderr : IOHandle`
@@ -1307,20 +1306,20 @@ The handle for standard input.
 #### `stdout : IOHandle`
 The handle for standard output.
 
-#### `with_file : Path -> String -> (IOHandle -> IOResult ErrMsg a) -> IOResult ErrMsg a`
+#### `with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a`
 Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
 The file handle will be closed automatically.
 
-#### `write_bytes : IOHandle -> Array U8 -> IOResult ErrMsg ()`
+#### `write_bytes : IOHandle -> Array U8 -> IOFail ()`
 Write a byte array into an IOHandle.
 
-#### `write_file_bytes : Path -> Array U8 -> IOResult ErrMsg ()`
+#### `write_file_bytes : Path -> Array U8 -> IOFail ()`
 Write a byte array into a file.
 
-#### `write_file_string : Path -> String -> IOResult ErrMsg ()`
+#### `write_file_string : Path -> String -> IOFail ()`
 Write a string into a file.
 
-#### `write_string : IOHandle -> String -> IOResult ErrMsg ()`
+#### `write_string : IOHandle -> String -> IOFail ()`
 Write a string into an IOHandle.
 
 #### `impl IO : Functor`
@@ -1345,32 +1344,32 @@ This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual cas
 Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
 DO NOT create two `IOHandle`s from a single file pointer.
 
-### IO::IOResult
+### IO::IOFail
 
-The type of I/O actions which may fail.
+The type for I/O actions which may fail.
 
 ```
-type IOResult e a = unbox struct { _data : IO (Result e a) };
+type IOFail a = unbox struct { _data : IO (Result ErrMsg a) };
 ```
 
-#### `err : e -> IOResult e a`
-Create an error value.
+#### `from_result : Result ErrMsg a -> IOFail a`
+Create an pure `IOFail` value from a `Result` value.
 
-#### `from_result : Result e a -> IOResult e a`
-Create a constant IOResult from a Result value.
+#### `lift : IO a -> IOFail a`
+Lift an `IO` action to a successful `IOFail` action.
 
-#### `lift : IO a -> IOResult e a`
-Lift an IO action to a successful IOResult.
+#### `throw : ErrMsg -> IOFail a`
+Create an error `IOFail` action.
 
-#### `ok : a -> IOResult e a`
-Create an OK value.
+#### `to_result : IOFail a -> IO (Result ErrMsg a)`
+Convert an `IOFail` to an `Result` value (wrapped by `IO`).
 
-#### `to_io : IOResult e a -> IO (Result e a)`
-Convert an IOResult to an IO action.
+#### `try : (ErrMsg -> IO a) -> IOFail a -> IO a`
+Convert an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
 
-#### `impl IOResult e : Functor`
+#### `impl IOFail : Functor`
 
-#### `impl IOResult e : Monad`
+#### `impl IOFail : Monad`
 
 ### Iterator
 
@@ -2112,26 +2111,23 @@ This is wrapper of C's tanh.
 # module `Subprocess`
 
 ## `type ExitStatus`
-
 This type represents the exit status of a subprocess.
 This type is the union of following variants:
 * `exit : U8` - Means that the subprocess successfully exited (i.e., the main function returned or `exit()` was called) and stores the exit status code.
 * `signaled : U8` - Means that the subprocess was terminated by a signal and stores the signal number which caused the termination.
 * `wait_failed : ()` - Means that the `run*` function failed to wait the subprocess to exit.
 
-## `run_string : String -> Array String -> String -> IOResult ErrMsg ((String, String), ExitStatus)`
-
+## `run_string : String -> Array String -> String -> IOFail ((String, String), ExitStatus)`
 `run_string(com, args, input)` executes a command specified by `com` with arguments `args`, and writes `input` to the standard input of the running command.
 The result is the pair of standard output and standard error, and an `ExitStatus` value.
 
-## `run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IO a) -> IOResult ErrMsg (a, ExitStatus)`
-
+## `run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IOFail a) -> IOFail (a, ExitStatus)`
 `run_with_stream(com, args, worker)` executes a command specified by `com` with arguments `args`. 
 The function `worker` receives three `IOHandle`s which are piped to the stdin, stdout and stderr of the running command.
 The result is the value returned by `worker` paired with an `ExitStatus` value.
 * `com : String` - The path to the program to run.
 * `args: Array String` - The arguments to be passed to `com`.
-* `worker : (IOHandle, IOHandle, IOHandle) -> IO a` - Receives three `IOHandle`s which are piped to stdin, stdout and stderr of the running command.
+* `worker : (IOHandle, IOHandle, IOHandle) -> IOFail a` - Receives three `IOHandle`s which are piped to stdin, stdout and stderr of the running command.
 
 # module `Time`
 

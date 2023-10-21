@@ -44,7 +44,7 @@ _datetime_to_time_inner = |is_local, dt| (
     ];
     let sec = buf.borrow_ptr(|ptr| CALL_C[I64 fixruntime_timegmlocal(U8, Ptr), if is_local { 1_U8 } else { 0_U8 }, ptr]);
     if sec == -1 {
-        Result::err $ ErrMsg::make $ "Some error (maybe overflow) occurred."
+        Result::err $ "An error (maybe overflow) occurred."
     } else {
         Result::ok $ Time { sec : sec, nanosec : dt.@nanosec }
     }
@@ -58,7 +58,7 @@ _time_to_datetime_inner = |is_local, Time {sec: s, nanosec : ns}| (
     let buf : Array I64 = Array::empty(10)._unsafe_set_size(10); // sec, min, hour, mday, mon, year(-1900), wday, yday, isdst, is_error.
     let _ = CALL_C[() fixruntime_gmlocaltime(U8, I64, Ptr), if is_local { 1_U8 } else { 0_U8 }, s, buf._get_ptr];
     if buf.@(8) == 1 {
-        Result::err $ ErrMsg::make $ "Some error (maybe overflow) occurred."
+        Result::err $ "An error (maybe overflow) occurred."
     } else {
         Result::ok $ DateTime {
             nanosec : ns,
@@ -79,9 +79,9 @@ _time_to_datetime_inner = |is_local, Time {sec: s, nanosec : ns}| (
 );
 
 // Convert local datetime to time.
-// This function depends on timezone, so it returns `IOResult` value.
-from_local : DateTime -> IOResult ErrMsg Time;
-from_local = |dt| IOResult::from_result $ _datetime_to_time_inner(true, dt);
+// This function depends on timezone, so it returns `IOFail` value.
+from_local : DateTime -> IOFail Time;
+from_local = |dt| IOFail::from_result $ _datetime_to_time_inner(true, dt);
 
 // Convert UTC datetime to time.
 from_utc : DateTime -> Result ErrMsg Time;
@@ -100,9 +100,9 @@ to_F64 : Time -> F64;
 to_F64 = |Time { sec : s, nanosec : ns }| s.to_F64 + ns.to_F64 * 1.0e-9;
 
 // Convert time to local time.
-// This function depends on timezone, so it returns `IOResult` value.
-to_local : Time -> IOResult ErrMsg DateTime;
-to_local = |t| IOResult::from_result $ _time_to_datetime_inner(true, t);
+// This function depends on timezone, so it returns `IOFail` value.
+to_local : Time -> IOFail DateTime;
+to_local = |t| IOFail::from_result $ _time_to_datetime_inner(true, t);
 
 // Convert time to UTC datetime.
 to_utc : Time -> Result ErrMsg DateTime;

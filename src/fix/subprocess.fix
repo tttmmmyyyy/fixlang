@@ -14,17 +14,13 @@ type ExitStatus = box union {
 
 // `run_string(com, args, input)` executes a command specified by `com` with arguments `args`, and writes `input` to the standard input of the running command.
 // The result is the pair of standard output and standard error, and an `ExitStatus` value.
-run_string : String -> Array String -> String -> IOResult ErrMsg ((String, String), ExitStatus);
+run_string : String -> Array String -> String -> IOFail ((String, String), ExitStatus);
 run_string = |com, args, input| (
-    let (res : Result ErrMsg (String, String), status : ExitStatus) = *run_with_stream(com, args, |(stdin, stdout, stderr)| (
-        do { // of type `IOResult ErrMsg a`.
-            eval *write_string(stdin, input);
-            eval *close_file(stdin).lift; // Send EOF.
-            pure $ (*read_string(stdout), *read_string(stderr))
-        }.to_io
-    ));
-    let res : Result ErrMsg ((String, String), ExitStatus) = res.map(|s2| (s2, status));
-    IOResult::from_result(res)
+    run_with_stream(com, args, |(stdin, stdout, stderr)| (
+        eval *write_string(stdin, input);
+        eval *close_file(stdin).lift; // Send EOF.
+        pure $ (*read_string(stdout), *read_string(stderr))
+    ))
 );
 
 // `run_with_stream(com, args, worker)` executes a command specified by `com` with arguments `args`. 
@@ -32,8 +28,8 @@ run_string = |com, args, input| (
 // The result is the value returned by `worker` paired with an `ExitStatus` value.
 // * `com : String` - The path to the program to run.
 // * `args: Array String` - The arguments to be passed to `com`.
-// * `worker : (IOHandle, IOHandle, IOHandle) -> IO a` - Receives three `IOHandle`s which are piped to stdin, stdout and stderr of the running command.
-run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IO a) -> IOResult ErrMsg (a, ExitStatus);
+// * `worker : (IOHandle, IOHandle, IOHandle) -> IOFail a` - Receives three `IOHandle`s which are piped to stdin, stdout and stderr of the running command.
+run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IOFail a) -> IOFail (a, ExitStatus);
 run_with_stream = |com, args, worker| (
     // Convert `args : Array String` to `Array Ptr`, and prolong lifetime so that elements will not be released.
     // Also, add NULL terminator to `args`.
@@ -48,7 +44,7 @@ run_with_stream = |com, args, worker| (
             let msg_ptr = out_error.@(0);
             let err_msg = String::_unsafe_from_c_str_ptr(msg_ptr);
             eval CALL_C[() free(Ptr), msg_ptr];
-            IOResult::err $ ErrMsg::make $ err_msg
+            IOFail::throw $ err_msg
         };
         let handles = (
             IOHandle::from_file_ptr(out_files.@(0)),
@@ -56,7 +52,7 @@ run_with_stream = |com, args, worker| (
             IOHandle::from_file_ptr(out_files.@(2))
         );
         let pid = out_pid.@(0);
-        let worker_res = *worker(handles).lift;
+        let worker_res = *worker(handles);
         eval *handles.@0.close_file.lift;
         eval *handles.@1.close_file.lift;
         eval *handles.@2.close_file.lift;
@@ -84,6 +80,6 @@ run_with_stream = |com, args, worker| (
         } else {
             ExitStatus::wait_failed()
         };
-        IOResult::ok $ (worker_res, exit_status)
+        pure $ (worker_res, exit_status)
     ))))
 );

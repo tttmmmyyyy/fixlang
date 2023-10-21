@@ -375,26 +375,17 @@ namespace Destructor {
     make = |val, dtor| Destructor { value : val, dtor : dtor };
 }
 
-// A wrapper type for error message. 
-type ErrMsg = unbox struct { msg : String };
-
-namespace ErrMsg {
-    make : String -> ErrMsg;
-    make = |msg| ErrMsg { msg : msg };
-}
-
-impl ErrMsg : ToString {
-    to_string = @msg;
-}
+// A type (alias) for error message. 
+type ErrMsg = String;
 
 type IO a = unbox struct { _data : () -> a };
 
 namespace IO {
     // Read characters from an IOHandle.
     // If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
-    _read_line_inner : Bool -> IOHandle -> IOResult ErrMsg String;
+    _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
-        IOResult { _data : IO { _data : |_| (
+        IOFail { _data : IO { _data : |_| (
             // Read strings and make iterators of strings (reversed).
             let strings_rev = loop(Iterator::empty, |strs|
                 let buf_size = 1024;
@@ -432,7 +423,7 @@ namespace IO {
             // Check if err occurred.
             let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
             if err != 0_I32 { 
-                let err = ErrMsg { msg : "Std::IO::_read_line_inner failed!: an error occurred in fgets." };
+                let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
                 Result::err(err)
             };
 
@@ -471,6 +462,15 @@ namespace IO {
         pure()
     );
 
+    // Exit the program with an error code.
+    exit : I64 -> IO a;
+    exit = |code| IO { _data : |_| eval CALL_C[() exit(I32), code.to_I32]; abort() };
+
+    // Exit the program with an error message and an error code.
+    // The error message is written to the standard error output.
+    exit_with_msg : I64 -> String  -> IO a;
+    exit_with_msg = |code, msg| eval eprintln(msg); exit(code);
+
     // Read a line from stdin. If some error occurr, this function aborts.
     // If you want to handle errors, use `read_line(stdin)` instead.
     input_line : IO String;
@@ -493,7 +493,7 @@ namespace IO {
     // The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
     // When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
     // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::rstrip`.
-    loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s;
+    loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s;
     loop_lines = |handle, state, worker| (
         if *is_eof(handle).lift {
             pure $ state
@@ -509,19 +509,19 @@ namespace IO {
 
     // Loop on lines read from a file.
     // For details, see comment for `loop_lines`.
-    loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOResult ErrMsg s;
+    loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s;
     loop_lines_file = |path, state, worker| with_file(path, "r", |handle| loop_lines(handle, state, worker));
 
     // Open a file. The second argument is a mode string for `fopen` C function. 
-    open_file : Path -> String -> IOResult ErrMsg IOHandle;
+    open_file : Path -> String -> IOFail IOHandle;
     open_file = |path, mode| (
-        IOResult { _data  : IO { _data : |_|(
+        IOFail { _data  : IO { _data : |_|(
             let path_str = path.to_string;
             let res = path_str.borrow_c_str(|path_ptr|
                 mode.borrow_c_str(|mode_str|
                     let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
                     if file_ptr == nullptr { 
-                        Result::err $ ErrMsg { msg : "failed to open a file: " + path_str }
+                        Result::err $ "failed to open a file: " + path_str
                     } else {
                         Result::ok $ IOHandle::from_file_ptr $ file_ptr
                     }
@@ -551,20 +551,20 @@ namespace IO {
     );
 
     // Raad all characters from a file.
-    read_file_string : Path -> IOResult ErrMsg String;
+    read_file_string : Path -> IOFail String;
     read_file_string = |path| with_file(path, "r", read_string);
 
     // Read all bytes from a file.
-    read_file_bytes : Path -> IOResult ErrMsg (Array U8);
+    read_file_bytes : Path -> IOFail (Array U8);
     read_file_bytes = |path| with_file(path, "r", read_bytes);
 
     // Read characters from a IOHandle upto newline or EOF.
     // The returned string may include newline at its end.
-    read_line : IOHandle -> IOResult ErrMsg String;
+    read_line : IOHandle -> IOFail String;
     read_line = _read_line_inner(true);
 
     // Read all bytes from an IOHandle.
-    read_bytes : IOHandle -> IOResult ErrMsg (Array U8);
+    read_bytes : IOHandle -> IOFail (Array U8);
     read_bytes = |handle| (
         // Get Iterator of Arrays.
         let (iter, len) = *loop_m((Iterator::empty, 0), |(iter, len)| (
@@ -581,7 +581,7 @@ namespace IO {
     );
 
     // Read at most n bytes from an IOHandle.
-    read_n_bytes : IOHandle -> I64 -> IOResult ErrMsg (Array U8);
+    read_n_bytes : IOHandle -> I64 -> IOFail (Array U8);
     read_n_bytes = |handle, n| (
         let buf = Array::empty(n);
         let len = buf.borrow_ptr(|ptr| (
@@ -590,15 +590,15 @@ namespace IO {
         // Check error.
         let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
         if err != 0_I32 { 
-            let err = ErrMsg { msg : "Std::IO::read_n_bytes failed!: some error occurred in fread." };
-            IOResult::from_result $ Result::err(err)
+            let err = "Std::IO::read_n_bytes failed!: some error occurred in fread.";
+            IOFail::from_result $ Result::err(err)
         };
         let buf = buf._unsafe_set_size(len);
-        IOResult::from_result $ Result::ok(buf)
+        IOFail::from_result $ Result::ok(buf)
     );
 
     // Read all characters from an IOHandle.
-    read_string : IOHandle -> IOResult ErrMsg String;
+    read_string : IOHandle -> IOFail String;
     read_string = _read_line_inner(false);
 
     // The handle for standard error.
@@ -624,44 +624,44 @@ namespace IO {
 
     // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // The file handle will be closed automatically.
-    with_file : Path -> String -> (IOHandle -> IOResult ErrMsg a) -> IOResult ErrMsg a;
+    with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a;
     with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
         let res = *action(handle);
-        eval *IOResult::lift(close_file(handle));
+        eval *IOFail::lift(close_file(handle));
         pure $ res
     );
 
     // Write a byte array into an IOHandle.
-    write_bytes : IOHandle -> Array U8 -> IOResult ErrMsg ();
+    write_bytes : IOHandle -> Array U8 -> IOFail ();
     write_bytes = |handle, array| (
         let res = array.borrow_ptr(|ptr| (
             let n = array.get_size;
             let res = CALL_C[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr];
-            if res < n { Result::err $ ErrMsg { msg : "Std::IO::write_bytes failed!: some error occurred in fwrite." } };
+            if res < n { Result::err $ "Std::IO::write_bytes failed!: some error occurred in fwrite." };
             Result::ok()
         ));
-        IOResult::from_result $ res
+        IOFail::from_result $ res
     );
 
     // Write a byte array into a file.
-    write_file_bytes : Path -> Array U8 -> IOResult ErrMsg ();
+    write_file_bytes : Path -> Array U8 -> IOFail ();
     write_file_bytes = |path, content| with_file(path, "w", |handle| write_bytes(handle, content));
 
     // Write a string into a file.
-    write_file_string : Path -> String -> IOResult ErrMsg ();
+    write_file_string : Path -> String -> IOFail ();
     write_file_string = |path, content| with_file(path, "w", |handle| write_string(handle, content));
 
     // Write a string into an IOHandle.
-    write_string : IOHandle -> String -> IOResult ErrMsg ();
+    write_string : IOHandle -> String -> IOFail ();
     write_string = |handle, content| (
         let res = content.borrow_c_str(|c_str| (
             let file_ptr = handle._file_ptr;
             let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr];
-            if res < 0_I32 { Result::err $ ErrMsg { msg : "Std::IO::write_string failed!: some error occurred in fputs." } };
+            if res < 0_I32 { Result::err $ "Std::IO::write_string failed!: some error occurred in fputs." };
             Result::ok()
         ));
-        IOResult::from_result $ res
+        IOFail::from_result $ res
     );
 }
 
@@ -714,39 +714,43 @@ namespace IO::IOHandle {
 }
 
 namespace IO {
-    type IOResult e a = unbox struct { _data : IO (Result e a) };
+    // The type for I/O actions which may fail.
+    type IOFail a = unbox struct { _data : IO (Result ErrMsg a) };
 }
 
-namespace IO::IOResult {
-    // Create an error value.
-    err : e -> IOResult e a;
-    err = |e| from_result $ Result::err(e);
+namespace IO::IOFail {
+    // Create an pure `IOFail` value from a `Result` value.
+    from_result : Result ErrMsg a -> IOFail a;
+    from_result = |res| IOFail { _data : pure(res) };
 
-    // Create a constant IOResult from a Result value.
-    from_result : Result e a -> IOResult e a;
-    from_result = |res| IOResult { _data : pure(res) };
+    // Lift an `IO` action to a successful `IOFail` action.
+    lift : IO a -> IOFail a;
+    lift = |io| IOFail { _data : io.map(pure) };
 
-    // Lift an IO action to a successful IOResult.
-    lift : IO a -> IOResult e a;
-    lift = |io| IOResult { _data : io.map(pure) };
+    // Create an error `IOFail` action.
+    throw : ErrMsg -> IOFail a;
+    throw = |e| from_result $ Result::err(e);
 
-    // Create an OK value.
-    ok : a -> IOResult e a;
-    ok = |a| pure(a).lift;
+    // Convert an `IOFail` to an `Result` value (wrapped by `IO`).
+    to_result : IOFail a -> IO (Result ErrMsg a);
+    to_result = @_data;
 
-    // Convert to an IO value.
-    to_io : IOResult e a -> IO (Result e a);
-    to_io = @_data;
+    // Convert an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
+    try : (ErrMsg -> IO a) -> IOFail a -> IO a;
+    try = |catch, iof| (
+        let res = *iof.to_result;
+        if res.is_ok { pure $ res.as_ok } else { catch(res.as_err) }
+    );
 }
 
-impl IOResult e : Functor {
-    map = |f, ior| ior.mod__data(map(map(f)));
+impl IOFail : Functor {
+    map = |f, iof| iof.mod__data(map(map(f)));
 }
 
-impl IOResult e : Monad {
-    pure = |v| IOResult { _data : pure(pure(v)) };
-    bind = |f, ior| IOResult { _data : do {
-        let res = *ior.@_data;
+impl IOFail : Monad {
+    pure = |v| IOFail { _data : pure(pure(v)) };
+    bind = |f, iof| IOFail { _data : do {
+        let res = *iof.@_data;
         if res.is_err { pure $ Result::err $ res.as_err };
         f(res.as_ok).@_data
     }};
@@ -1555,7 +1559,7 @@ impl U8 : ToBytes {
 impl U8 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 1 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U8."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U8."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
@@ -1583,7 +1587,7 @@ impl U16 : ToBytes {
 impl U16 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 2 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U16."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U16."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
@@ -1611,7 +1615,7 @@ impl U32 : ToBytes {
 impl U32 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 4 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U32."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U32."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
@@ -1639,7 +1643,7 @@ impl U64 : ToBytes {
 impl U64 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 8 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U64."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U64."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
@@ -1658,9 +1662,9 @@ impl U64 : FromString {
         str.borrow_c_str(|c_str| (
             let v = CALL_C[U64 fixruntime_strtoull_10(Ptr), c_str];
             let err = CALL_C[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
+            if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str) };
             let err = CALL_C[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
+            if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str) };
             Result::ok(v)
         ))
     );
@@ -1676,7 +1680,7 @@ impl I8 : ToBytes {
 impl I8 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 1 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I8."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I8."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
@@ -1704,7 +1708,7 @@ impl I16 : ToBytes {
 impl I16 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 2 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I16."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I16."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
@@ -1732,7 +1736,7 @@ impl I32 : ToBytes {
 impl I32 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 4 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I32."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I32."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
@@ -1760,7 +1764,7 @@ impl I64 : ToBytes {
 impl I64 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 8 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I64."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I64."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
@@ -1779,9 +1783,9 @@ impl I64 : FromString {
         str.borrow_c_str(|c_str| (
             let v = CALL_C[I64 fixruntime_strtoll_10(Ptr), c_str];
             let err = CALL_C[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (invalid format): " + str) };
+            if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str) };
             let err = CALL_C[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to integer (out of range): " + str) };
+            if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str) };
             Result::ok(v)
         ))
     );
@@ -1797,7 +1801,7 @@ impl F32 : ToBytes {
 impl F32 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 4 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F32."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F32."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[F32 fixruntime_f32_from_bytes(Ptr), ptr])
     );
@@ -1839,9 +1843,9 @@ impl F32 : FromString {
         str.borrow_c_str(|c_str| (
             let v = CALL_C[F32 fixruntime_strtof(Ptr), c_str];
             let err = CALL_C[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to number (invalid format): " + str) };
+            if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
             let err = CALL_C[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to number (out of range): " + str) };
+            if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
             Result::ok(v)
         ))
     );
@@ -1857,7 +1861,7 @@ impl F64 : ToBytes {
 impl F64 : FromBytes {
     from_bytes = |bs| (
         if bs.get_size != 8 {
-            Result::err $ ErrMsg::make $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F64."
+            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F64."
         };
         Result::ok $ bs.borrow_ptr(|ptr| CALL_C[F64 fixruntime_f64_from_bytes(Ptr), ptr])
     );
@@ -1901,9 +1905,9 @@ impl F64 : FromString {
         str.borrow_c_str(|c_str| (
             let v = CALL_C[F64 fixruntime_strtod(Ptr), c_str];
             let err = CALL_C[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to number (invalid format): " + str) };
+            if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
             let err = CALL_C[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err(ErrMsg::make $ "Failed to convert string to number (out of range): " + str) };
+            if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
             Result::ok(v)
         ))
     );

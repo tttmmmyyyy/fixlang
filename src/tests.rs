@@ -2955,7 +2955,7 @@ pub fn test108() {
                 eval assert_eq(|_|"case 3", read_lines.@(1), lines.@(1));
 
                 pure()
-            }.to_io.map(as_ok)
+            }.try(exit_with_msg(1))
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
@@ -2973,7 +2973,7 @@ pub fn test_is_eof() {
         main = (
             let file_path = Path::parse("test.txt").as_some;
             let content = "Hello World!";
-            let res = *do {
+            do {
                 eval *write_file_string(file_path, content);
 
                 let read_content = *with_file(file_path, "r", |file| (
@@ -2986,10 +2986,7 @@ pub fn test_is_eof() {
                 eval assert_eq(|_|"read_content != content", content, read_content);
 
                 pure()
-            }.to_io;
-
-            eval assert(|_|"", res.is_ok);
-            pure()
+            }.try(exit_with_msg(1))
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
@@ -3014,7 +3011,7 @@ pub fn test108_5() {
                 eval assert_eq(|_|"case 1", data, read);
 
                 pure()
-            }.to_io.map(as_ok)
+            }.try(exit_with_msg(1))
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
@@ -4294,10 +4291,10 @@ pub fn test130() {
             eval *(println $ "now.sec = " + now.@sec.to_string + ", now.nanosec = " + now.@nanosec.to_string);
             let utc = now.to_utc.as_ok;
             eval *(println $ "UTC: " + dt_to_string(utc));
-            let loc = *now.to_local.to_io.map(as_ok);
+            let loc = *now.to_local.try(exit_with_msg(1));
             eval *(println $ "Loc: " + dt_to_string(loc));
             let now_from_utc = Time::from_utc(utc).as_ok;
-            let now_from_loc = *Time::from_local(loc).to_io.map(as_ok);
+            let now_from_loc = *Time::from_local(loc).try(exit_with_msg(1));
             eval assert(|_|"diff utc", (now.to_F64 - now_from_utc.to_F64).abs < 0.1);
             eval assert(|_|"diff loc", (now.to_F64 - now_from_loc.to_F64).abs < 0.1);
 
@@ -4430,8 +4427,8 @@ pub fn test132() {
 
             let (_, t) = *consumed_time_while_io(
                 let file_path = Path::parse("test.txt").as_some;
-                eval *write_file_string(file_path, "Hello World!").to_io.map(as_ok);
-                let read_content = *read_file_string(file_path).to_io.map(as_ok);
+                eval *write_file_string(file_path, "Hello World!").try(exit_with_msg(1));
+                let read_content = *read_file_string(file_path).try(exit_with_msg(1));
                 println $ read_content
             );
             eval debug_println("write/read/println time : " + t.to_string);
