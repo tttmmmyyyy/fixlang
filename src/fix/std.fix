@@ -432,7 +432,7 @@ namespace IO {
             // Check if err occurred.
             let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
             if err != 0_I32 { 
-                let err = ErrMsg { msg : "Std::IO::_read_line_inner failed!: some error occurred in fgets." };
+                let err = ErrMsg { msg : "Std::IO::_read_line_inner failed!: an error occurred in fgets." };
                 Result::err(err)
             };
 
