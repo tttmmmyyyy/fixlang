@@ -361,6 +361,7 @@
       - [`eprint : String -> IO ()`](#eprint--string---io-)
       - [`eprintln : String -> IO ()`](#eprintln--string---io-)
       - [`input_line : IO String`](#input_line--io-string)
+      - [`is_eof : IOHandle -> IO Bool`](#is_eof--iohandle---io-bool)
       - [`open_file : Path -> String -> IOResult IOError IOHandle`](#open_file--path---string---ioresult-ioerror-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
@@ -1248,6 +1249,9 @@ Print a string followed by a newline to stderr.
 #### `input_line : IO String`
 Read a line from stdin. If some error occurr, this function aborts.
 If you want to handle errors, use `read_line(stdin)` instead.
+
+#### `is_eof : IOHandle -> IO Bool`
+Check if an `IOHandle` reached to the EOF.
 
 #### `open_file : Path -> String -> IOResult IOError IOHandle`
 Open a file. The second argument is a mode string for `fopen` C function. 
