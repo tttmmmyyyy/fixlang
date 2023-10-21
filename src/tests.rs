@@ -2979,7 +2979,7 @@ pub fn test_is_eof() {
                 let read_content = *with_file(file_path, "r", |file| (
                     let content = *read_string(file);
                     let is_eof = *is_eof(file).lift;
-                    eval assert(|_|"file hs not reached to EOF!", is_eof);
+                    eval assert(|_|"file had not reached to EOF!", is_eof);
                     pure $ content
                 ));
             
@@ -2987,7 +2987,7 @@ pub fn test_is_eof() {
 
                 pure()
             }.to_io;
-            
+
             eval assert(|_|"", res.is_ok);
             pure()
         );
