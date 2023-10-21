@@ -4582,6 +4582,40 @@ pub fn test_subprocess_run_stream() {
 
 #[test]
 #[serial]
+pub fn test_loop_lines_file() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        do {
+            // Prepare a file.
+            let file_path = Path::parse("test.txt").as_some;
+            eval *write_file_string(file_path, "0\n1\n2\nX\n3\n4");
+
+            let sum = *loop_lines_file(file_path, 0, |cnt, line| (
+                // Sum up while line can be parsed as an integer.
+                let parse_res = from_string(line.rstrip);
+                if parse_res.is_ok {
+                    let res = parse_res.as_ok;
+                    continue $ cnt + res
+                } else {
+                    break $ cnt
+                }
+            ));
+
+            eval assert_eq(|_|"", sum, 0 + 1 + 2);
+            pure()
+        }.try(exit_with_msg(1))
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+    remove_file("test.txt").unwrap();
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
