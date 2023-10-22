@@ -331,6 +331,7 @@
       - [`get_first : Array a -> Option a`](#get_first--array-a---option-a)
       - [`get_last : Array a -> Option a`](#get_last--array-a---option-a)
       - [`get_size : Array a -> I64`](#get_size--array-a---i64)
+      - [`get_sub : I64 -> I64 -> Array a -> Array a`](#get_sub--i64---i64---array-a---array-a)
       - [`is_empty : Array a -> Bool`](#is_empty--array-a---bool)
       - [`mod : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a)
       - [`mod! : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a-1)
@@ -1132,6 +1133,11 @@ Get the last element of an array. Returns none if the array is empty.
 
 #### `get_size : Array a -> I64`
 Returns the length of an array.
+
+#### `get_sub : I64 -> I64 -> Array a -> Array a`
+`arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`, 
+More precisely, let `N` denote the the size of the `arr`. 
+Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
 
 #### `is_empty : Array a -> Bool`
 Returns if the array is empty or not.

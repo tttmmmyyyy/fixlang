@@ -196,6 +196,26 @@ namespace Array {
         Option::some $ arr.@(len - 1)
     );
 
+    // `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`, 
+    // More precisely, let `N` denote the the size of the `arr`. 
+    // Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
+    get_sub : I64 -> I64 -> Array a -> Array a;
+    get_sub = |s, e, arr| (
+        if arr.is_empty { arr };
+        let len = arr.get_size;
+        let s = (s % len + len) % len;
+        let e = (e % len + len) % len;
+        let n = if e >= s { e - s } else { e + len - s };
+        let res = Array::empty(n);
+        loop((s, res), |(i, res)| (
+            if i == e { break $ res };
+            let res = res.push_back(arr.@(i));
+            let i = i + 1;
+            let i = if i >= len { 0 } else { i };
+            continue $ (i, res)
+        ))
+    );
+
     // Returns if the array is empty
     is_empty : Array a -> Bool;
     is_empty = |arr| ( arr.get_size == 0 );

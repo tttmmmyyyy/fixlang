@@ -4625,6 +4625,41 @@ pub fn test_loop_lines_file() {
 
 #[test]
 #[serial]
+pub fn test_array_get_sub() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        // Unboxed case
+        let arr = [0, 1, 2, 3, 4];
+        eval assert_eq(|_|"", arr.get_sub(2, 4), [2, 3]);
+        eval assert_eq(|_|"", arr.get_sub(0, 0), []);
+        eval assert_eq(|_|"", arr.get_sub(3, 1), [3, 4, 0]);
+        eval assert_eq(|_|"", arr.get_sub(1, -1), [1, 2, 3]);
+    
+        let arr : Array I64 = [];
+        eval assert_eq(|_|"", arr.get_sub(2, 4), []);
+    
+        // Boxed case
+        let arr = [[0], [1], [2], [3], [4]];
+        eval assert_eq(|_|"", arr.get_sub(2, 4), [[2], [3]]);
+        eval assert_eq(|_|"", arr.get_sub(0, 0), []);
+        eval assert_eq(|_|"", arr.get_sub(3, 1), [[3], [4], [0]]);
+        eval assert_eq(|_|"", arr.get_sub(1, -1), [[1], [2], [3]]);
+    
+        let arr : Array (Array I64) = [];
+        eval assert_eq(|_|"", arr.get_sub(2, 4), []);
+    
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
