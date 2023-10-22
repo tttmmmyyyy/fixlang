@@ -1644,10 +1644,10 @@ If the string is empty, this function does nothing.
 Removing trailing whitespace characters.
 
 #### `strip_last_bytes : (Byte -> Bool) -> String -> String`
-Removes newlines and carriage returns at the end of the string.
+Removes the last byte of a string while it satisifies the specified condition.
 
 #### `strip_last_newlines : String -> String`
-Removes the last byte of a string while it satisifies the specified condition.
+Removes newlines and carriage returns at the end of the string.
 
 #### `impl String : Add`
 Add two strings by `String.concat`.
