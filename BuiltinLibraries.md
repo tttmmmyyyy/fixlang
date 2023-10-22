@@ -467,9 +467,11 @@
       - [`is_empty : String -> Bool`](#is_empty--string---bool)
       - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
-      - [`strip_last : String -> String`](#strip_last--string---string)
-      - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
+      - [`strip_first_bytes : (U8 -> Bool) -> String -> String`](#strip_first_bytes--u8---bool---string---string)
+      - [`strip_first_spaces : String -> String`](#strip_first_spaces--string---string)
+      - [`strip_last_bytes : (U8 -> Bool) -> String -> String`](#strip_last_bytes--u8---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
+      - [`strip_last_spaces : String -> String`](#strip_last_spaces--string---string)
       - [`impl String : Add`](#impl-string--add)
       - [`impl String : Eq`](#impl-string--eq)
       - [`impl String : ToString`](#impl-string--tostring)
@@ -1640,14 +1642,20 @@ Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
 Removes the last byte.
 If the string is empty, this function does nothing.
 
-#### `strip_last : String -> String`
-Removing trailing whitespace characters.
+#### `strip_first_bytes : (U8 -> Bool) -> String -> String`
+Removes the first byte of a string while it satisifies the specified condition.
 
-#### `strip_last_bytes : (Byte -> Bool) -> String -> String`
+#### `strip_first_spaces : String -> String`
+Removing leading whitespace characters.
+
+#### `strip_last_bytes : (U8 -> Bool) -> String -> String`
 Removes the last byte of a string while it satisifies the specified condition.
 
 #### `strip_last_newlines : String -> String`
 Removes newlines and carriage returns at the end of the string.
+
+#### `strip_last_spaces : String -> String`
+Removing trailing whitespace characters.
 
 #### `impl String : Add`
 Add two strings by `String.concat`.

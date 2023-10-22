@@ -4683,6 +4683,28 @@ pub fn test_string_get_sub() {
 
 #[test]
 #[serial]
+pub fn test_string_strip_first_spaces() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", "".strip_first_spaces, "");
+        eval assert_eq(|_|"", "Hello".strip_first_spaces, "Hello");
+        eval assert_eq(|_|"", " Hello".strip_first_spaces, "Hello");
+        eval assert_eq(|_|"", " \tHello".strip_first_spaces, "Hello");
+        eval assert_eq(|_|"", " ".strip_first_spaces, "");
+        eval assert_eq(|_|"", "  ".strip_first_spaces, "");
+    
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 

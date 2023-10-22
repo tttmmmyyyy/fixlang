@@ -1346,9 +1346,22 @@ namespace String {
         s.mod__data(|bytes| bytes.pop_back.pop_back.push_back(0_U8))
     );
 
-    // Removing trailing whitespace characters.
-    strip_last : String -> String;
-    strip_last = strip_last_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
+    // Removes the first byte of a string while it satisifies the specified condition.
+    strip_first_bytes : (U8 -> Bool) -> String -> String;
+    strip_first_bytes = |cond, str| (
+        let len = str.get_size;
+        let bytes = str.get_bytes;
+        let n = loop(0, |i| (
+            if i == len { break $ i };
+            if !cond(bytes.@(i)) { break $ i };
+            continue $ i + 1
+        ));
+        if n == 0 { str } else { str.get_sub(n, 0) }
+    );
+
+    // Removing leading whitespace characters.
+    strip_first_spaces : String -> String;
+    strip_first_spaces = strip_first_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
 
     // Removes the last byte of a string while it satisifies the specified condition.
     strip_last_bytes : (U8 -> Bool) -> String -> String;
@@ -1367,6 +1380,9 @@ namespace String {
     strip_last_newlines : String -> String;
     strip_last_newlines = strip_last_bytes(|c| c == '\n' || c == '\r');
 
+    // Removing trailing whitespace characters.
+    strip_last_spaces : String -> String;
+    strip_last_spaces = strip_last_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
 }
 
 impl String : Add {
