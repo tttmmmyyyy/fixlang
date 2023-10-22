@@ -467,8 +467,8 @@
       - [`is_empty : String -> Bool`](#is_empty--string---bool)
       - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
+      - [`strip_last : String -> String`](#strip_last--string---string)
       - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
-      - [`rstrip : String -> String`](#rstrip--string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
       - [`impl String : Add`](#impl-string--add)
       - [`impl String : Eq`](#impl-string--eq)
@@ -1640,11 +1640,11 @@ Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
 Removes the last byte.
 If the string is empty, this function does nothing.
 
+#### `strip_last : String -> String`
+Removing trailing whitespace characters.
+
 #### `strip_last_bytes : (Byte -> Bool) -> String -> String`
 Removes newlines and carriage returns at the end of the string.
-
-#### `rstrip : String -> String`
-Removing trailing whitespace characters.
 
 #### `strip_last_newlines : String -> String`
 Removes the last byte of a string while it satisifies the specified condition.

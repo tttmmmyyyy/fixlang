@@ -1347,8 +1347,8 @@ namespace String {
     );
 
     // Removing trailing whitespace characters.
-    rstrip : String -> String;
-    rstrip = strip_last_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
+    strip_last : String -> String;
+    strip_last = strip_last_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
 
     // Removes the last byte of a string while it satisifies the specified condition.
     strip_last_bytes : (U8 -> Bool) -> String -> String;
