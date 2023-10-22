@@ -4,6 +4,24 @@ import Debug;
 
 namespace Array {
 
+    // A function like `get_sub`, but behaves as if the size of the array is the specified value, 
+    // and has a parameter to specify additional capacity of the returned `Array`.
+    _get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
+    _get_sub_size_asif = |len, additional_capacity, s, e, arr| (
+        if len == 0 { arr };
+        let s = (s % len + len) % len;
+        let e = (e % len + len) % len;
+        let n = if e >= s { e - s } else { e + len - s };
+        let res = Array::empty(n + additional_capacity);
+        loop((s, res), |(i, res)| (
+            if i == e { break $ res };
+            let res = res.push_back(arr.@(i));
+            let i = i + 1;
+            let i = if i >= len { 0 } else { i };
+            continue $ (i, res)
+        ))
+    );
+
     // Sort elements in a range of a vector by "less than" comparator.
     // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
     _sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
@@ -200,21 +218,7 @@ namespace Array {
     // More precisely, let `N` denote the the size of the `arr`. 
     // Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
     get_sub : I64 -> I64 -> Array a -> Array a;
-    get_sub = |s, e, arr| (
-        if arr.is_empty { arr };
-        let len = arr.get_size;
-        let s = (s % len + len) % len;
-        let e = (e % len + len) % len;
-        let n = if e >= s { e - s } else { e + len - s };
-        let res = Array::empty(n);
-        loop((s, res), |(i, res)| (
-            if i == e { break $ res };
-            let res = res.push_back(arr.@(i));
-            let i = i + 1;
-            let i = if i >= len { 0 } else { i };
-            continue $ (i, res)
-        ))
-    );
+    get_sub = |s, e, arr| arr._get_sub_size_asif(arr.get_size, 0, s, e);
 
     // Returns if the array is empty
     is_empty : Array a -> Bool;
@@ -1316,6 +1320,13 @@ namespace String {
     // Get the length of a string.
     get_size : String -> I64;
     get_size = |s| s.@_data.get_size - 1; // exclude null terminator
+
+    // `String` version of `Array::get_sub`.
+    get_sub : I64 -> I64 -> String -> String;
+    get_sub = |s, e, str| (
+        let len = str.get_size;
+        String::from_c_str $ str.get_bytes._get_sub_size_asif(len, 1, s, e).push_back('\0')
+    );
 
     // Returns if the string is empty or not.
     is_empty : String -> Bool;

@@ -4660,6 +4660,29 @@ pub fn test_array_get_sub() {
 
 #[test]
 #[serial]
+pub fn test_string_get_sub() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let str = "Hello";
+        eval assert_eq(|_|"", str.get_sub(2, 4), "ll");
+        eval assert_eq(|_|"", str.get_sub(0, 0), "");
+        eval assert_eq(|_|"", str.get_sub(3, 1), "loH");
+        eval assert_eq(|_|"", str.get_sub(1, -1), "ell");
+    
+        eval assert_eq(|_|"", "".get_sub(2, 4), "");
+    
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 

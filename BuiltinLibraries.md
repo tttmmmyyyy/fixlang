@@ -310,6 +310,7 @@
       - [`impl F64 : Zero`](#impl-f64--zero)
     - [Array](#array)
       - [`@ : I64 -> Array a -> a`](#--i64---array-a---a)
+      - [`_get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a`](#_get_sub_size_asif--i64---i64---i64---i64---array-a---array-a)
       - [`_unsafe_set_size : I64 -> Array a -> Array a`](#_unsafe_set_size--i64---array-a---array-a)
       - [`_unsafe_get : I64 -> Array a -> a`](#_unsafe_get--i64---array-a---a)
       - [`_unsafe_set : I64 -> a -> Array a -> Array a`](#_unsafe_set--i64---a---array-a---array-a)
@@ -462,6 +463,7 @@
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
       - [`get_size : String -> I64`](#get_size--string---i64)
+      - [`get_sub : I64 -> I64 -> String -> String`](#get_sub--i64---i64---string---string)
       - [`is_empty : String -> Bool`](#is_empty--string---bool)
       - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
@@ -1050,6 +1052,10 @@ Methods:
 #### `@ : I64 -> Array a -> a`
 Returns an element of an array at an index.
 
+#### `_get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a`
+A function like `get_sub`, but behaves as if the size of the array is the specified value,
+and has a parameter to specify additional capacity of the returned `Array`.
+
 #### `_unsafe_set_size : I64 -> Array a -> Array a`
 Updates the length of an array, without uniqueness checking or validation of the given length value.
 
@@ -1619,6 +1625,9 @@ Get the last byte of a string. Returns none if the string is empty.
 
 #### `get_size : String -> I64`
 Returns the length of the string.
+
+#### `get_sub : I64 -> I64 -> String -> String`
+`String` version of `Array::get_sub`.
 
 #### `is_empty : String -> Bool`
 Returns if the string is empty or not.
