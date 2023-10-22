@@ -338,7 +338,6 @@
       - [`pop_back! : Array a -> Array a`](#pop_back--array-a---array-a-1)
       - [`push_back : a -> Array a -> Array a`](#push_back--a---array-a---array-a)
       - [`push_back! : a -> Array a -> Array a`](#push_back--a---array-a---array-a-1)
-      - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
       - [`reserve : I64 -> Array a -> Array a`](#reserve--i64---array-a---array-a)
       - [`set : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a)
       - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
@@ -417,6 +416,7 @@
       - [`loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`](#loop_iter--b---b---a---loopresult-b-b---iterator-a---b)
       - [`loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`](#loop_iter_m--m--monad-b---b---a---m-loopresult-b-b---iterator-a---m-b)
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
+      - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`subsequences : Iterator a -> Iterator (Iterator a)`](#subsequences--iterator-a---iterator-iterator-a)
       - [`sum : [a : Additive] Iterator a -> a`](#sum--a--additive-iterator-a---a)
@@ -1164,9 +1164,6 @@ Push an element to the back of an array.
 This function panics if elements must be cloned due to the given array being shared. 
 Note that, when the capacity of `arr` is equal to its size, `arr.push_back!(e)` will not panic even if `arr` is shared because in this case cloning elements is inevitable whether or not `arr` is shared.
 
-#### `range : I64 -> I64 -> Iterator I64`
-Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
-
 #### `reserve : I64 -> Array a -> Array a`
 Reserves the memory region for an array.
 
@@ -1446,6 +1443,9 @@ Loop by monadic action along an iterator. At each iteration step, you can choose
 
 #### `push_front : a -> Iterator a -> Iterator a`
 Push an element to an iterator.
+
+#### `range : I64 -> I64 -> Iterator I64`
+Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
 
 #### `reverse : Iterator a -> Iterator a`
 Reverse an iterator.
