@@ -452,13 +452,13 @@
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl Result e : Monad`](#impl-result-e--monad)
     - [String](#string)
+      - [`_unsafe_from_c_str : Array U8 -> String`](#_unsafe_from_c_str--array-u8---string)
       - [`_unsafe_from_c_str_ptr : Ptr -> String`](#_unsafe_from_c_str_ptr--ptr---string)
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
       - [`borrow_c_str : (Ptr -> a) -> String -> a`](#borrow_c_str--ptr---a---string---a)
       - [`concat : String -> String -> String`](#concat--string---string---string)
       - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
       - [`empty : I64 -> String`](#empty--i64---string)
-      - [`from_c_str : Vector U8 -> String`](#from_c_str--vector-u8---string)
       - [`get_bytes : String -> Array U8`](#get_bytes--string---array-u8)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
@@ -1593,6 +1593,10 @@ Returns the containing value if the value is ok, or otherwise aborts.
 
 The type of strings.
 
+#### `_unsafe_from_c_str : Array U8 -> String`
+Create a string from C string (i.e., null-terminated byte array).
+If the byte array doesn't include `\0`, this function causes undefined behavior.
+
 #### `_unsafe_from_c_str_ptr : Ptr -> String`
 Create a `String` from a pointer to null-terminated C string.
 If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
@@ -1613,9 +1617,6 @@ Concatenate an iterator of strings.
 
 #### `empty : I64 -> String`
 Create an empty string, which is reserved for a length.
-
-#### `from_c_str : Vector U8 -> String`
-Create a string from C string (i.e., null-terminated byte array).
 
 #### `get_bytes : String -> Array U8`
 Get the byte array of a string, containing null-terminator.

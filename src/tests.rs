@@ -3496,7 +3496,7 @@ pub fn test117() {
 
         main : IO ();
         main = (
-            let str = String::from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
+            let str = String::_unsafe_from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
             eval assert_eq(|_|"case 1", str, "ABC");
             eval assert_eq(|_|"case 2", str.get_size, 3);
             pure()

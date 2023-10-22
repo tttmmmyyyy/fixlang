@@ -1252,6 +1252,16 @@ namespace String {
     _get_c_str : String -> Ptr;
     _get_c_str = |s| s.@_data._get_ptr;
 
+    // Create a string from C string (i.e., null-terminated byte array).
+    // If the byte array doesn't include `\0`, this function causes undefined behavior.
+    _unsafe_from_c_str : Array U8 -> String;
+    _unsafe_from_c_str = |buf| (
+        // Return length.
+        let len = buf.borrow_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
+        let buf = buf._unsafe_set_size(len + 1);
+        String { _data : buf }
+    );
+
     // Create a `String` from a pointer to null-terminated C string.
     // If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
     _unsafe_from_c_str_ptr : Ptr -> String;
@@ -1288,15 +1298,6 @@ namespace String {
     // Create an empty string, which is reserved for a length.
     empty : I64 -> String;
     empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
-
-    // Create a string from C string (i.e., null-terminated byte array).
-    from_c_str : Array U8 -> String;
-    from_c_str = |buf| (
-        // Return length.
-        let len = buf.borrow_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
-        let buf = buf._unsafe_set_size(len + 1);
-        String { _data : buf }
-    );
 
     // Get the byte array of a string, containing null-terminator.
     get_bytes : String -> Array U8;
@@ -1621,7 +1622,7 @@ impl U8 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u8_to_str(Ptr, U8), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl U8 : FromString {
@@ -1649,7 +1650,7 @@ impl U16 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u16_to_str(Ptr, U16), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl U16 : FromString {
@@ -1677,7 +1678,7 @@ impl U32 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u32_to_str(Ptr, U32), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl U32 : FromString {
@@ -1705,7 +1706,7 @@ impl U64 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u64_to_str(Ptr, U64), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl U64 : FromString {
@@ -1742,7 +1743,7 @@ impl I8 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i8_to_str(Ptr, I8), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl I8 : FromString {
@@ -1770,7 +1771,7 @@ impl I16 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i16_to_str(Ptr, I16), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl I16 : FromString {
@@ -1798,7 +1799,7 @@ impl I32 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i32_to_str(Ptr, I32), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl I32 : FromString {
@@ -1826,7 +1827,7 @@ impl I64 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i64_to_str(Ptr, I64), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl I64 : FromString {
@@ -1861,7 +1862,7 @@ impl F32 : ToString {
     to_string = |v| (
         let data = Array::empty(50);
         eval CALL_C[() fixruntime_f32_to_str(Ptr, F32), data._get_ptr, v];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 namespace F32 {
@@ -1870,7 +1871,7 @@ namespace F32 {
     to_string_exp = |v| (
         let data = Array::empty(50);
         eval CALL_C[() fixruntime_f32_to_str_exp(Ptr, F32), data._get_ptr, v];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 
     // Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
@@ -1878,7 +1879,7 @@ namespace F32 {
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
         eval CALL_C[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), data._get_ptr, v, prec];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 
     // Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
@@ -1886,7 +1887,7 @@ namespace F32 {
     to_string_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
         eval CALL_C[() fixruntime_f32_to_str_precision(Ptr, F32, U8), data._get_ptr, v, prec];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl F32 : FromString {
@@ -1923,7 +1924,7 @@ impl F64 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_f64_to_str(Ptr, F64), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 namespace F64 {
@@ -1932,7 +1933,7 @@ namespace F64 {
     to_string_exp = |v| (
         let data = Array::empty(500);
         eval CALL_C[() fixruntime_f64_to_str_exp(Ptr, F64), data._get_ptr, v];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 
     // Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
@@ -1940,7 +1941,7 @@ namespace F64 {
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
         eval CALL_C[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), data._get_ptr, v, prec];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 
     // Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
@@ -1948,7 +1949,7 @@ namespace F64 {
     to_string_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
         eval CALL_C[() fixruntime_f64_to_str_precision(Ptr, F64, U8), data._get_ptr, v, prec];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl F64 : FromString {
