@@ -1383,6 +1383,10 @@ namespace String {
     // Removing trailing whitespace characters.
     strip_last_spaces : String -> String;
     strip_last_spaces = strip_last_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
+
+    // Strip leading and trailing whitespace characters.
+    strip_spaces : String -> String;
+    strip_spaces = |s| s.strip_last_spaces.strip_first_spaces;
 }
 
 impl String : Add {

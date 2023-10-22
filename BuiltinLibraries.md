@@ -472,6 +472,7 @@
       - [`strip_last_bytes : (U8 -> Bool) -> String -> String`](#strip_last_bytes--u8---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
       - [`strip_last_spaces : String -> String`](#strip_last_spaces--string---string)
+      - [`strip_spaces : String -> String`](#strip_spaces--string---string)
       - [`impl String : Add`](#impl-string--add)
       - [`impl String : Eq`](#impl-string--eq)
       - [`impl String : ToString`](#impl-string--tostring)
@@ -1656,6 +1657,9 @@ Removes newlines and carriage returns at the end of the string.
 
 #### `strip_last_spaces : String -> String`
 Removing trailing whitespace characters.
+
+#### `strip_spaces : String -> String`
+Strip leading and trailing whitespace characters.
 
 #### `impl String : Add`
 Add two strings by `String.concat`.
