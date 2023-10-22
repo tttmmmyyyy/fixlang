@@ -4592,7 +4592,7 @@ pub fn test_loop_lines_file() {
         // Process lines of a file.
         loop_lines_file(file_path, 0, |cnt, line| (
             // Sum up the number while line can be parsed as an integer.
-            let parse_res = from_string(line.rstrip); // Remove the trailing newline ("\n") and parse as `I64`.
+            let parse_res = from_string(line.strip_last_spaces); // Remove the trailing newline ("\n") and parse as `I64`.
             if parse_res.is_ok {
                 let res = parse_res.as_ok;
                 continue $ cnt + res

@@ -1275,7 +1275,7 @@ Loop on lines read from an `IOHandle`.
 `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
 The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
 When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
-Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::rstrip`.
+Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
 #### `loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s`
 Loop on lines read from a file.
