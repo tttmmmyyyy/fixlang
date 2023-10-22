@@ -1326,7 +1326,7 @@ namespace String {
     get_sub : I64 -> I64 -> String -> String;
     get_sub = |s, e, str| (
         let len = str.get_size;
-        String::from_c_str $ str.get_bytes._get_sub_size_asif(len, 1, s, e).push_back('\0')
+        String::_unsafe_from_c_str $ str.get_bytes._get_sub_size_asif(len, 1, s, e).push_back('\0')
     );
 
     // Returns if the string is empty or not.
