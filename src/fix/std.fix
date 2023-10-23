@@ -531,10 +531,21 @@ namespace IO {
         loop_lines(handle, next_state, worker)
     );
 
-    // Loop on lines read from a file.
-    // For details, see comment for `loop_lines`.
-    loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s;
-    loop_lines_file = |path, state, worker| with_file(path, "r", |handle| loop_lines(handle, state, worker));
+    // Loop on lines read from an `IOHandle`.
+    // Similar to `loop_lines`, but the worker function can perform an IO action.
+    loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s;
+    loop_lines_io = |handle, state, worker| (
+        if *is_eof(handle).lift {
+            pure $ state
+        };
+        let line = *read_line(handle);
+        let res = *worker(state, line);
+        if res.is_break {
+            pure $ res.as_break
+        };
+        let next_state = res.as_continue;
+        loop_lines_io(handle, next_state, worker)
+    );
 
     // Open a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOFail IOHandle;

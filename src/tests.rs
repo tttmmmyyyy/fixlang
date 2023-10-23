@@ -4582,7 +4582,7 @@ pub fn test_subprocess_run_stream() {
 
 #[test]
 #[serial]
-pub fn test_loop_lines_file() {
+pub fn test_loop_lines() {
     let source = r#"
     module Main;
     import Debug;
@@ -4590,15 +4590,17 @@ pub fn test_loop_lines_file() {
     sum_up_while : Path -> IOFail I64;
     sum_up_while = |file_path| (
         // Process lines of a file.
-        loop_lines_file(file_path, 0, |cnt, line| (
-            // Sum up the number while line can be parsed as an integer.
-            let parse_res = from_string(line.strip_last_spaces); // Remove the trailing newline ("\n") and parse as `I64`.
-            if parse_res.is_ok {
-                let res = parse_res.as_ok;
-                continue $ cnt + res
-            } else {
-                break $ cnt
-            }
+        with_file(file_path, "r", |file| (
+            loop_lines(file, 0, |cnt, line| (
+                // Sum up the number while line can be parsed as an integer.
+                let parse_res = from_string(line.strip_last_spaces); // Remove the trailing newline ("\n") and parse as `I64`.
+                if parse_res.is_ok {
+                    let res = parse_res.as_ok;
+                    continue $ cnt + res
+                } else {
+                    break $ cnt
+                }
+            ))
         ))
     );
     
@@ -4701,6 +4703,42 @@ pub fn test_string_strip_first_spaces() {
     );
     "#;
     run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_loop_lines_io() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let content1 = "Hello\nWorld!";
+        let file1 = Path::parse("test1.txt").as_some;
+        let file2 = Path::parse("test2.txt").as_some;
+        do {
+            eval *write_file_string(file1, content1);
+
+            eval *with_file(file1, "r", |file1| (
+                with_file(file2, "w", |file2| (
+                    loop_lines_io(file1, (), |_, line| (
+                        continue_m $ *write_string(file2, line)
+                    ))
+                ))
+            ));
+
+            let content2 = *read_file_string(file2);
+
+            eval assert_eq(|_|"", content2, content1);
+
+            pure()
+        }.try(exit_with_msg(1))
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+    remove_file("test1.txt").unwrap();
+    remove_file("test2.txt").unwrap();
 }
 
 #[test]

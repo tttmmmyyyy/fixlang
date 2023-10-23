@@ -364,7 +364,7 @@
       - [`input_line : IO String`](#input_line--io-string)
       - [`is_eof : IOHandle -> IO Bool`](#is_eof--iohandle---io-bool)
       - [`loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s`](#loop_lines--iohandle---s---s---string---loopresult-s-s---iofail-s)
-      - [`loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s`](#loop_lines_file--path---s---s---string---loopresult-s-s---iofail-s)
+      - [`loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s`](#loop_lines_io--iohandle---s---s---string---iofail-loopresult-s-s---iofail-s)
       - [`open_file : Path -> String -> IOFail IOHandle`](#open_file--path---string---iofail-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
@@ -1277,9 +1277,9 @@ The function `worker` should return an updated state as `LoopResult` value, i.e.
 When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
 Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
-#### `loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s`
-Loop on lines read from a file.
-For details, see comment for `loop_lines`.
+#### `loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s`
+Loop on lines read from an `IOHandle`.
+Similar to `loop_lines`, but the worker function can perform an IO action.
 
 #### `open_file : Path -> String -> IOFail IOHandle`
 Open a file. The second argument is a mode string for `fopen` C function. 
