@@ -545,7 +545,7 @@ namespace IO {
                 mode.borrow_c_str(|mode_str|
                     let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
                     if file_ptr == nullptr { 
-                        Result::err $ "failed to open a file: " + path_str
+                        Result::err $ "Failed to open a file: " + path_str
                     } else {
                         Result::ok $ IOHandle::from_file_ptr $ file_ptr
                     }
