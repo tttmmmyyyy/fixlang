@@ -1310,10 +1310,13 @@ namespace String {
     empty : I64 -> String;
     empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
 
-    // `str.find(token)` finds the first index where `token` appears in `str`.
-    find : String -> String -> Option I64;
-    find = |tok, str| (
-        let pos = CALL_C[Ptr strstr(Ptr, Ptr), str._get_c_str, tok._get_c_str];
+    // `str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
+    // Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
+    // `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
+    find : String -> I64 -> String -> Option I64;
+    find = |tok, start, str| (
+        let start = min(start, str.get_size);
+        let pos = CALL_C[Ptr strstr(Ptr, Ptr), str._get_c_str.add_offset(start), tok._get_c_str];
         eval tok; // Prolong lifetime.
         if pos == nullptr {
             Option::none()
@@ -1623,8 +1626,12 @@ namespace F64 {
     abs = |f| if f < 0.0 { -f } else { f };
 }
 
-// Ptr basic operations
+// `Ptr` basic operations.
 namespace Ptr {
+    // Add an offset to a pointer.
+    add_offset : I64 -> Ptr -> Ptr;
+    add_offset = |off, ptr| CALL_C[Ptr fixruntime_ptr_add_offset(Ptr, I64), ptr, off];
+
     // Subtract two pointers.
     // Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
     subtract_ptr : Ptr -> Ptr -> I64;

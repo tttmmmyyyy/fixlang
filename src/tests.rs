@@ -4750,12 +4750,29 @@ pub fn test_string_find() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"", "abcdef".find("bc"), Option::some(1));
-        eval assert_eq(|_|"", "abcdef".find("ef"), Option::some(4));
-        eval assert_eq(|_|"", "abcdef".find("xyz"), Option::none());
-        eval assert_eq(|_|"", "abcdef".find(""), Option::some(0));
-        eval assert_eq(|_|"", "".find("xyz"), Option::none());
-        eval assert_eq(|_|"", "".find(""), Option::some(0));
+        eval assert_eq(|_|"1", "abcdef".find("ab", 0), Option::some(0));
+        eval assert_eq(|_|"2", "abcdef".find("bc", 0), Option::some(1));
+        eval assert_eq(|_|"3", "abcdef".find("ef", 0), Option::some(4));
+        eval assert_eq(|_|"4", "abcdef".find("xyz", 0), Option::none());
+        eval assert_eq(|_|"5", "abcdef".find("", 0), Option::some(0));
+        eval assert_eq(|_|"6", "".find("xyz", 0), Option::none());
+        eval assert_eq(|_|"7", "".find("", 0), Option::some(0));
+
+        eval assert_eq(|_|"8", "abcdef".find("ab", 1), Option::none());
+        eval assert_eq(|_|"9", "abcdef".find("bc", 1), Option::some(1));
+        eval assert_eq(|_|"10", "abcdef".find("ef", 1), Option::some(4));
+        eval assert_eq(|_|"11", "abcdef".find("xyz", 1), Option::none());
+        eval assert_eq(|_|"12", "abcdef".find("", 1), Option::some(1));
+        eval assert_eq(|_|"13", "".find("xyz", 1), Option::none());
+        eval assert_eq(|_|"14", "".find("", 1), Option::some(0));
+
+        eval assert_eq(|_|"15", "abcdef".find("ab", 7), Option::none());
+        eval assert_eq(|_|"16", "abcdef".find("bc", 7), Option::none());
+        eval assert_eq(|_|"17", "abcdef".find("ef", 7), Option::none());
+        eval assert_eq(|_|"18", "abcdef".find("xyz", 7), Option::none());
+        eval assert_eq(|_|"19", "abcdef".find("", 7), Option::some(6));
+        eval assert_eq(|_|"20", "".find("xyz", 7), Option::none());
+        eval assert_eq(|_|"21", "".find("", 7), Option::some(0));
 
         pure()
     );

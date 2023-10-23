@@ -444,6 +444,7 @@
       - [`parse : String -> Option Path`](#parse--string---option-path)
       - [`impl Path : ToString`](#impl-path--tostring)
     - [Ptr](#ptr)
+      - [`add_offset : I64 -> Ptr -> Ptr`](#add_offset--i64---ptr---ptr)
       - [`subtract_ptr : Ptr -> Ptr -> I64`](#subtract_ptr--ptr---ptr---i64)
       - [`impl Ptr : Eq`](#impl-ptr--eq)
     - [PunchedArray](#punchedarray)
@@ -460,7 +461,7 @@
       - [`concat : String -> String -> String`](#concat--string---string---string)
       - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
       - [`empty : I64 -> String`](#empty--i64---string)
-      - [`find : String -> String -> Option I64`](#find--string---string---option-i64)
+      - [`find : String -> I64 -> String -> Option I64`](#find--string---i64---string---option-i64)
       - [`get_bytes : String -> Array U8`](#get_bytes--string---array-u8)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
@@ -1558,6 +1559,9 @@ Literals:
 - `nullptr`
     - The null pointer.
 
+#### `add_offset : I64 -> Ptr -> Ptr`
+Add an offset to a pointer.
+
 #### `subtract_ptr : Ptr -> Ptr -> I64`
 Subtract two pointers.
 Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
@@ -1624,8 +1628,10 @@ Concatenate an iterator of strings.
 #### `empty : I64 -> String`
 Create an empty string, which is reserved for a length.
 
-#### `find : String -> String -> Option I64`
-`str.find(token)` finds the first index where `token` appears in `str`.
+#### `find : String -> I64 -> String -> Option I64`
+`str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
+Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
+`str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
 
 #### `get_bytes : String -> Array U8`
 Get the byte array of a string, containing null-terminator.

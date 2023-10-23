@@ -13,6 +13,7 @@ pub enum RuntimeFunctions {
     RetainBoxedObject,
     ReleaseBoxedObject,
     SubtractPtr,
+    PtrAddOffset,
 }
 
 fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -287,6 +288,34 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(
     func
 }
 
+fn build_ptr_add_offset_function<'c, 'm, 'b>(
+    gc: &mut GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+    let i64_ty = gc.context.i64_type();
+    let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+    let func = gc
+        .module
+        .add_function("fixruntime_ptr_add_offset", fn_ty, None);
+    let bb = gc.context.append_basic_block(func, "entry");
+    let _builder_guard = gc.push_builder();
+
+    gc.builder().position_at_end(bb);
+    let ptr = func.get_first_param().unwrap().into_pointer_value();
+    let off = func.get_nth_param(1).unwrap().into_int_value();
+    let ptr = gc
+        .builder()
+        .build_ptr_to_int(ptr, i64_ty, "ptr_to_int@fixruntime_ptr_add_offset");
+    let ptr = gc
+        .builder()
+        .build_int_add(ptr, off, "add@fixruntime_ptr_add_offset");
+    let ptr = gc
+        .builder()
+        .build_int_to_ptr(ptr, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset");
+    gc.builder().build_return(Some(&ptr));
+    func
+}
+
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     gc.runtimes
         .insert(RuntimeFunctions::Abort, build_abort_function(gc));
@@ -312,13 +341,16 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
         gc.runtimes
             .insert(RuntimeFunctions::CheckLeak, build_check_leak_function(gc));
     }
-    let subtract_ptr_func = build_subtract_ptr_function(gc);
-    gc.runtimes
-        .insert(RuntimeFunctions::SubtractPtr, subtract_ptr_func);
     let retain_func = build_retain_boxed_function(gc);
     gc.runtimes
         .insert(RuntimeFunctions::RetainBoxedObject, retain_func);
     let release_func = build_release_boxed_function(gc);
     gc.runtimes
         .insert(RuntimeFunctions::ReleaseBoxedObject, release_func);
+    let subtract_ptr_func = build_subtract_ptr_function(gc);
+    gc.runtimes
+        .insert(RuntimeFunctions::SubtractPtr, subtract_ptr_func);
+    let ptr_add_offset_func = build_ptr_add_offset_function(gc);
+    gc.runtimes
+        .insert(RuntimeFunctions::PtrAddOffset, ptr_add_offset_func);
 }
