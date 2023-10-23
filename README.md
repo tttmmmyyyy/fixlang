@@ -24,7 +24,7 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 - No memory leaks by reference counting garbage collection and acyclic heap.(*)
 - Calling C function by `CALL_C` expression.
 
-*Unless you call C functions by FFI, use functions starts from `_unsafe` or functions for debugging such as `debug_println`.
+(*) Unless you call C functions by FFI, use functions starts from `_unsafe` or functions for debugging such as `debug_println`.
 
 ## Planned features
 
