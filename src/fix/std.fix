@@ -1374,6 +1374,23 @@ namespace String {
         s.mod__data(|bytes| bytes.pop_back.pop_back.push_back(0_U8))
     );
 
+    // `str.split(sep)` splits `str` by `sep` into an iterator.
+    // - If `sep` is empty, this function returns an infinite sequence of ""s.
+    // - If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
+    split : String -> String -> Iterator String;
+    split = |sep, str| (
+        let n = str.get_size;
+        let m = sep.get_size;
+        generate(0, |idx| (
+            if idx == -1 { Option::none() };
+            if idx == n { Option::some $ ("", -1) };
+            let opt_idx = str.find(sep, idx);
+            if opt_idx.is_none { Option::some $ (str.get_sub(idx, 0), -1) };
+            let idx2 = opt_idx.as_some;
+            Option::some $ (str.get_sub(idx, idx2), idx2 + m)
+        ))
+    );
+
     // Removes the first byte of a string while it satisifies the specified condition.
     strip_first_bytes : (U8 -> Bool) -> String -> String;
     strip_first_bytes = |cond, str| (

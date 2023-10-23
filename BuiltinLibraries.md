@@ -470,6 +470,7 @@
       - [`is_empty : String -> Bool`](#is_empty--string---bool)
       - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
+      - [`split : String -> String -> Iterator String`](#split--string---string---iterator-string)
       - [`strip_first_bytes : (U8 -> Bool) -> String -> String`](#strip_first_bytes--u8---bool---string---string)
       - [`strip_first_spaces : String -> String`](#strip_first_spaces--string---string)
       - [`strip_last_bytes : (U8 -> Bool) -> String -> String`](#strip_last_bytes--u8---bool---string---string)
@@ -1658,6 +1659,11 @@ Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
 #### `pop_back_byte : String -> String`
 Removes the last byte.
 If the string is empty, this function does nothing.
+
+#### `split : String -> String -> Iterator String`
+`str.split(sep)` splits `str` by `sep` into an iterator.
+- If `sep` is empty, this function returns an infinite sequence of ""s.
+- If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
 
 #### `strip_first_bytes : (U8 -> Bool) -> String -> String`
 Removes the first byte of a string while it satisifies the specified condition.

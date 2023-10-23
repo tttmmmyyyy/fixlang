@@ -4782,6 +4782,28 @@ pub fn test_string_find() {
 
 #[test]
 #[serial]
+pub fn test_string_split() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"1", "--ab---cde----".split("--").to_array, ["", "ab", "-cde", "", ""]);
+        eval assert_eq(|_|"2", "ab---cde----".split("--").to_array, ["ab", "-cde", "", ""]);
+        eval assert_eq(|_|"3", "--ab---cde".split("--").to_array, ["", "ab", "-cde"]);
+        eval assert_eq(|_|"3", "ab---cde".split("--").to_array, ["ab", "-cde"]);
+        eval assert_eq(|_|"4", "--".split("--").to_array, ["", ""]);
+        eval assert_eq(|_|"5", "".split("--").to_array, [""]);
+
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
