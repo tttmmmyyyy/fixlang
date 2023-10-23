@@ -15,16 +15,16 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 ## Features
 
 - Functional.
-  - All functions are pure.[^1]
+  - All functions are pure.(*)
   - Partial application.
   - Higher-kinded types that allows functions and monads.
 - Familiar syntax.
   - Calling function by `f(x)`, `obj.method(arg)`, creating closures by `|arg| body`.
   - Convenient built-in `loop`, `continue` and `break` functions which allow you to write loop without recursion.
-- No memory leaks by reference counting garbage collection and acyclic heap.[^1]
+- No memory leaks by reference counting garbage collection and acyclic heap.(*)
 - Calling C function by `CALL_C` expression.
 
-[^1] Unless you call C functions by FFI, use functions starts from `_unsafe` or functions for debugging such as `debug_println`.
+*Unless you call C functions by FFI, use functions starts from `_unsafe` or functions for debugging such as `debug_println`.
 
 ## Planned features
 
