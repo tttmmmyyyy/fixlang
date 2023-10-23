@@ -1045,6 +1045,7 @@ pub enum LLVMGenerator {
     IntDivBody(InlineLLVMIntDivBody),
     FloatDivBody(InlineLLVMFloatDivBody),
     IntRemBody(InlineLLVMIntRemBody),
+    SubtractPtrBody(InlineLLVMSubtractPtrBody),
 }
 // XX(InlineLLVMXX)
 
@@ -1109,6 +1110,7 @@ impl LLVMGenerator {
             LLVMGenerator::IntDivBody(x) => x.generate(gc, ty, rvo),
             LLVMGenerator::FloatDivBody(x) => x.generate(gc, ty, rvo),
             LLVMGenerator::IntRemBody(x) => x.generate(gc, ty, rvo),
+            LLVMGenerator::SubtractPtrBody(x) => x.generate(gc, ty, rvo),
         }
     }
 }

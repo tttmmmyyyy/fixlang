@@ -4743,6 +4743,28 @@ pub fn test_loop_lines_io() {
 
 #[test]
 #[serial]
+pub fn test_string_find() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", "abcdef".find("bc"), Option::some(1));
+        eval assert_eq(|_|"", "abcdef".find("ef"), Option::some(4));
+        eval assert_eq(|_|"", "abcdef".find("xyz"), Option::none());
+        eval assert_eq(|_|"", "abcdef".find(""), Option::some(0));
+        eval assert_eq(|_|"", "".find("xyz"), Option::none());
+        eval assert_eq(|_|"", "".find(""), Option::some(0));
+
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 

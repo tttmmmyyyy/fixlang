@@ -3459,6 +3459,77 @@ pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMSubtractPtrBody {
+    x_name: String,
+    y_name: String,
+}
+
+impl InlineLLVMSubtractPtrBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ret_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Get argument
+        let x = gc.get_var(&FullName::local(&self.x_name)).ptr.get(gc);
+        let x = x
+            .load_field_nocap(gc, 0)
+            .as_basic_value_enum()
+            .into_pointer_value();
+        let y = gc.get_var(&FullName::local(&self.y_name)).ptr.get(gc);
+        let y = y
+            .load_field_nocap(gc, 0)
+            .as_basic_value_enum()
+            .into_pointer_value();
+        let diff = gc.builder().build_ptr_diff(x, y, "ptr_diff@subtract_ptr");
+
+        // Prepare returned object.
+        let ret = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@subtract_ptr"))
+        };
+
+        // Store the result.
+        ret.store_field_nocap(gc, 0, diff);
+
+        ret
+    }
+}
+
+pub fn subtract_ptr_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const X_NAME: &str = "x";
+    const Y_NAME: &str = "y";
+    let ptr_type = make_ptr_ty();
+    let i64_type = make_i64_ty();
+    let scm = Scheme::generalize(
+        HashMap::default(),
+        vec![],
+        type_fun(ptr_type.clone(), type_fun(ptr_type, i64_type.clone())),
+    );
+    let expr = expr_abs(
+        vec![var_local(Y_NAME)],
+        expr_abs(
+            vec![var_local(X_NAME)],
+            expr_llvm(
+                LLVMGenerator::SubtractPtrBody(InlineLLVMSubtractPtrBody {
+                    x_name: X_NAME.to_string(),
+                    y_name: Y_NAME.to_string(),
+                }),
+                vec![FullName::local(X_NAME), FullName::local(Y_NAME)],
+                format!("subtract_ptr({}, {})", Y_NAME, X_NAME),
+                i64_type,
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
 pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
     const TYVAR_NAME: &str = "a";
     let kind = kind_star();

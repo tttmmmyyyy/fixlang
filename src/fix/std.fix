@@ -1310,6 +1310,19 @@ namespace String {
     empty : I64 -> String;
     empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
 
+    // `str.find(token)` finds the first index where `token` appears in `str`.
+    find : String -> String -> Option I64;
+    find = |tok, str| (
+        let pos = CALL_C[Ptr strstr(Ptr, Ptr), str._get_c_str, tok._get_c_str];
+        eval tok; // Prolong lifetime.
+        if pos == nullptr {
+            Option::none()
+        };
+        let pos = pos.subtract_ptr(str._get_c_str);
+        eval str; // Prolong lifetimes.
+        Option::some(pos)
+    );
+
     // Get the byte array of a string, containing null-terminator.
     get_bytes : String -> Array U8;
     get_bytes = @_data;

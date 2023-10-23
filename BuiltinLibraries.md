@@ -444,6 +444,7 @@
       - [`parse : String -> Option Path`](#parse--string---option-path)
       - [`impl Path : ToString`](#impl-path--tostring)
     - [Ptr](#ptr)
+      - [`subtract_ptr : Ptr -> Ptr -> I64`](#subtract_ptr--ptr---ptr---i64)
       - [`impl Ptr : Eq`](#impl-ptr--eq)
     - [PunchedArray](#punchedarray)
       - [`plug_in! : a -> PunchedArray a -> Array a`](#plug_in--a---punchedarray-a---array-a)
@@ -459,6 +460,7 @@
       - [`concat : String -> String -> String`](#concat--string---string---string)
       - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
       - [`empty : I64 -> String`](#empty--i64---string)
+      - [`find : String -> String -> Option I64`](#find--string---string---option-i64)
       - [`get_bytes : String -> Array U8`](#get_bytes--string---array-u8)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
@@ -1556,6 +1558,10 @@ Literals:
 - `nullptr`
     - The null pointer.
 
+#### `subtract_ptr : Ptr -> Ptr -> I64`
+Subtract two pointers.
+Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
+
 #### `impl Ptr : Eq`
 
 ### PunchedArray
@@ -1617,6 +1623,9 @@ Concatenate an iterator of strings.
 
 #### `empty : I64 -> String`
 Create an empty string, which is reserved for a length.
+
+#### `find : String -> String -> Option I64`
+`str.find(token)` finds the first index where `token` appears in `str`.
 
 #### `get_bytes : String -> Array U8`
 Get the byte array of a string, containing null-terminator.
