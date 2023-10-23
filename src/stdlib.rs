@@ -248,11 +248,6 @@ pub fn make_std_mod() -> Program {
         FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),
     );
-    // NOTE: Maybe can we define i64 fixruntime_sub_ptr(void* lhs, void* rhs) by LLVM and implement `subtract_ptr` by CALL_C?
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PTR_NAME], "subtract_ptr"),
-        subtract_ptr_function(),
-    );
 
     // Array
     fix_module.add_global_value(

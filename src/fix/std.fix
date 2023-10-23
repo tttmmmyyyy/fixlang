@@ -1623,6 +1623,14 @@ namespace F64 {
     abs = |f| if f < 0.0 { -f } else { f };
 }
 
+// Ptr basic operations
+namespace Ptr {
+    // Subtract two pointers.
+    // Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
+    subtract_ptr : Ptr -> Ptr -> I64;
+    subtract_ptr = |rhs, lhs| CALL_C[I64 fixruntime_subtract_ptr(Ptr, Ptr), lhs, rhs];
+}
+
 // ToString, FromString implementations for fundamental types
 
 impl U8 : ToBytes {
