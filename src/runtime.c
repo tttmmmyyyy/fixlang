@@ -99,7 +99,7 @@ double fixruntime_f64_from_bytes(double *buf)
 
 void fixruntime_ptr_to_str(char *buf, void *v)
 {
-    sprintf(buf, "%016x", v);
+    sprintf(buf, "%016" PRIxPTR, v);
 }
 void fixruntime_i8_to_str(char *buf, int8_t v)
 {
