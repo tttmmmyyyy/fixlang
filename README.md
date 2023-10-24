@@ -29,6 +29,12 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 
 ## Install (macOS / WSL)
 
+### Install pre-built binary
+
+Go to [Releases](https://github.com/tttmmmyyyy/fixlang/releases/) and download pre-built binary.
+
+### Install from source
+
 - Install [Rust](https://www.rust-lang.org/tools/install).
 - Install llvm12.0.1. It is recommended to use [llvmemv](https://crates.io/crates/llvmenv).
     - In macOS, llvmenv installs llvm to "~/Library/Application Support/llvmenv/12.0.1", but llvm-sys currently doesn't understand path with a whitespace correctly, so you need to copy/move "12.0.1" directory to another path.
