@@ -4558,15 +4558,15 @@ pub fn test_subprocess_run_stream() {
     
     main : IO ();
     main = (
-        eval *println("Run \"/bin/ls -l -r\".");
-        let (_, exit_status) = *run_with_stream("/bin/ls", ["/bin/ls", "-l", "-r"], |(stdin, stdout, stderr)| (
+        eval *println("Run \"ls -l -r\".");
+        let (_, exit_status) = *run_with_stream("ls", ["ls", "-l", "-r"], |(stdin, stdout, stderr)| (
             let output = *read_string(stdout); // Read standard output of the command.
             println(output).lift
         )).try(exit_with_msg(1));
         eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
     
-        eval *println("Run \"/usr/bin/sed s/w/W/\" and write \"Hello world!\" to the standard input.");
-        let (_, exit_status) = *run_with_stream("/usr/bin/sed", ["/usr/bin/sed", "s/w/W/"], |(stdin, stdout, stderr)| (
+        eval *println("Run \"sed s/w/W/\" and write \"Hello world!\" to the standard input.");
+        let (_, exit_status) = *run_with_stream("sed", ["/usr/bin/sed", "s/w/W/"], |(stdin, stdout, stderr)| (
             eval *write_string(stdin, "Hello world!");
             eval *close_file(stdin).lift; // Send EOF.
             let output = *read_string(stdout); // Read standard output of the command.
