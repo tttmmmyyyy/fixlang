@@ -446,6 +446,7 @@ pub fn build_file(mut config: Configuration) {
 
     let output = Command::new("gcc")
         .args(libs_opts)
+        .arg("-Wno-unused-command-line-argument") 
         .arg("-no-pie")
         .arg("-o")
         .arg(exec_path.to_str().unwrap())
