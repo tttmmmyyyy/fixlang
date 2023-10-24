@@ -18,6 +18,7 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
   - All functions are pure.(*)
   - Partial application.
   - Higher-kinded types that allows functions and monads.
+  - Algebraic data types: structs and unions.
 - Familiar syntax.
   - Calling function by `f(x)`, `obj.method(arg)`, creating closures by `|arg| body`.
   - Convenient built-in `loop`, `continue` and `break` functions which allow you to write loop without recursion.
@@ -27,6 +28,9 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 (*) Unless you call C functions by FFI, use functions starts from `_unsafe` or functions for debugging such as `debug_println`.
 
 ## Planned features
+
+- Threading support.
+- Associated type synonyms.
 
 ## Examples
 
