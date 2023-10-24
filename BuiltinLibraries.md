@@ -1,6 +1,7 @@
 # Table of contents
 
 - [Table of contents](#table-of-contents)
+- [NOTE](#note)
 - [Module `Std`](#module-std)
   - [Types, related values and implementations](#types-related-values-and-implementations)
     - [Bool](#bool)
@@ -310,6 +311,7 @@
       - [`impl F64 : Zero`](#impl-f64--zero)
     - [Array](#array)
       - [`@ : I64 -> Array a -> a`](#--i64---array-a---a)
+      - [`_get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a`](#_get_sub_size_asif--i64---i64---i64---i64---array-a---array-a)
       - [`_unsafe_set_size : I64 -> Array a -> Array a`](#_unsafe_set_size--i64---array-a---array-a)
       - [`_unsafe_get : I64 -> Array a -> a`](#_unsafe_get--i64---array-a---a)
       - [`_unsafe_set : I64 -> a -> Array a -> Array a`](#_unsafe_set--i64---a---array-a---array-a)
@@ -331,6 +333,7 @@
       - [`get_first : Array a -> Option a`](#get_first--array-a---option-a)
       - [`get_last : Array a -> Option a`](#get_last--array-a---option-a)
       - [`get_size : Array a -> I64`](#get_size--array-a---i64)
+      - [`get_sub : I64 -> I64 -> Array a -> Array a`](#get_sub--i64---i64---array-a---array-a)
       - [`is_empty : Array a -> Bool`](#is_empty--array-a---bool)
       - [`mod : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a)
       - [`mod! : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a-1)
@@ -338,7 +341,6 @@
       - [`pop_back! : Array a -> Array a`](#pop_back--array-a---array-a-1)
       - [`push_back : a -> Array a -> Array a`](#push_back--a---array-a---array-a)
       - [`push_back! : a -> Array a -> Array a`](#push_back--a---array-a---array-a-1)
-      - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
       - [`reserve : I64 -> Array a -> Array a`](#reserve--i64---array-a---array-a)
       - [`set : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a)
       - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
@@ -363,7 +365,7 @@
       - [`input_line : IO String`](#input_line--io-string)
       - [`is_eof : IOHandle -> IO Bool`](#is_eof--iohandle---io-bool)
       - [`loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s`](#loop_lines--iohandle---s---s---string---loopresult-s-s---iofail-s)
-      - [`loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s`](#loop_lines_file--path---s---s---string---loopresult-s-s---iofail-s)
+      - [`loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s`](#loop_lines_io--iohandle---s---s---string---iofail-loopresult-s-s---iofail-s)
       - [`open_file : Path -> String -> IOFail IOHandle`](#open_file--path---string---iofail-iohandle)
       - [`print : String -> IO ()`](#print--string---io-)
       - [`println : String -> IO ()`](#println--string---io-)
@@ -417,6 +419,7 @@
       - [`loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`](#loop_iter--b---b---a---loopresult-b-b---iterator-a---b)
       - [`loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`](#loop_iter_m--m--monad-b---b---a---m-loopresult-b-b---iterator-a---m-b)
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
+      - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
       - [`subsequences : Iterator a -> Iterator (Iterator a)`](#subsequences--iterator-a---iterator-iterator-a)
       - [`sum : [a : Additive] Iterator a -> a`](#sum--a--additive-iterator-a---a)
@@ -442,7 +445,10 @@
       - [`parse : String -> Option Path`](#parse--string---option-path)
       - [`impl Path : ToString`](#impl-path--tostring)
     - [Ptr](#ptr)
+      - [`add_offset : I64 -> Ptr -> Ptr`](#add_offset--i64---ptr---ptr)
+      - [`subtract_ptr : Ptr -> Ptr -> I64`](#subtract_ptr--ptr---ptr---i64)
       - [`impl Ptr : Eq`](#impl-ptr--eq)
+      - [`impl Ptr : ToString`](#impl-ptr--tostring)
     - [PunchedArray](#punchedarray)
       - [`plug_in! : a -> PunchedArray a -> Array a`](#plug_in--a---punchedarray-a---array-a)
       - [`punch! : I64 -> Array a -> (PunchedArray a, a)`](#punch--i64---array-a---punchedarray-a-a)
@@ -450,23 +456,29 @@
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl Result e : Monad`](#impl-result-e--monad)
     - [String](#string)
+      - [`_unsafe_from_c_str : Array U8 -> String`](#_unsafe_from_c_str--array-u8---string)
       - [`_unsafe_from_c_str_ptr : Ptr -> String`](#_unsafe_from_c_str_ptr--ptr---string)
       - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
       - [`borrow_c_str : (Ptr -> a) -> String -> a`](#borrow_c_str--ptr---a---string---a)
       - [`concat : String -> String -> String`](#concat--string---string---string)
       - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
       - [`empty : I64 -> String`](#empty--i64---string)
-      - [`from_c_str : Vector U8 -> String`](#from_c_str--vector-u8---string)
+      - [`find : String -> I64 -> String -> Option I64`](#find--string---i64---string---option-i64)
       - [`get_bytes : String -> Array U8`](#get_bytes--string---array-u8)
       - [`get_first_byte : String -> Option Byte`](#get_first_byte--string---option-byte)
       - [`get_last_byte : String -> Option Byte`](#get_last_byte--string---option-byte)
       - [`get_size : String -> I64`](#get_size--string---i64)
+      - [`get_sub : I64 -> I64 -> String -> String`](#get_sub--i64---i64---string---string)
       - [`is_empty : String -> Bool`](#is_empty--string---bool)
       - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
       - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
-      - [`strip_last_bytes : (Byte -> Bool) -> String -> String`](#strip_last_bytes--byte---bool---string---string)
-      - [`rstrip : String -> String`](#rstrip--string---string)
+      - [`split : String -> String -> Iterator String`](#split--string---string---iterator-string)
+      - [`strip_first_bytes : (U8 -> Bool) -> String -> String`](#strip_first_bytes--u8---bool---string---string)
+      - [`strip_first_spaces : String -> String`](#strip_first_spaces--string---string)
+      - [`strip_last_bytes : (U8 -> Bool) -> String -> String`](#strip_last_bytes--u8---bool---string---string)
       - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
+      - [`strip_last_spaces : String -> String`](#strip_last_spaces--string---string)
+      - [`strip_spaces : String -> String`](#strip_spaces--string---string)
       - [`impl String : Add`](#impl-string--add)
       - [`impl String : Eq`](#impl-string--eq)
       - [`impl String : ToString`](#impl-string--tostring)
@@ -611,6 +623,9 @@
   - [`to_local : Time -> IOResult ErrMsg DateTime`](#to_local--time---ioresult-errmsg-datetime)
   - [`to_utc : Time -> Result ErrMsg DateTime`](#to_utc--time---result-errmsg-datetime)
 
+# NOTE
+
+Built-in libraries of Fix is currently growing, and destructive changes are made frequently.
 
 # Module `Std`
 
@@ -1049,6 +1064,10 @@ Methods:
 #### `@ : I64 -> Array a -> a`
 Returns an element of an array at an index.
 
+#### `_get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a`
+A function like `get_sub`, but behaves as if the size of the array is the specified value,
+and has a parameter to specify additional capacity of the returned `Array`.
+
 #### `_unsafe_set_size : I64 -> Array a -> Array a`
 Updates the length of an array, without uniqueness checking or validation of the given length value.
 
@@ -1133,6 +1152,11 @@ Get the last element of an array. Returns none if the array is empty.
 #### `get_size : Array a -> I64`
 Returns the length of an array.
 
+#### `get_sub : I64 -> I64 -> Array a -> Array a`
+`arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`, 
+More precisely, let `N` denote the the size of the `arr`. 
+Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
+
 #### `is_empty : Array a -> Bool`
 Returns if the array is empty or not.
 
@@ -1163,9 +1187,6 @@ Push an element to the back of an array.
 Push an element to the back of an array.
 This function panics if elements must be cloned due to the given array being shared. 
 Note that, when the capacity of `arr` is equal to its size, `arr.push_back!(e)` will not panic even if `arr` is shared because in this case cloning elements is inevitable whether or not `arr` is shared.
-
-#### `range : I64 -> I64 -> Iterator I64`
-Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
 
 #### `reserve : I64 -> Array a -> Array a`
 Reserves the memory region for an array.
@@ -1263,11 +1284,11 @@ Loop on lines read from an `IOHandle`.
 `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
 The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
 When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
-Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::rstrip`.
+Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
-#### `loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s`
-Loop on lines read from a file.
-For details, see comment for `loop_lines`.
+#### `loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s`
+Loop on lines read from an `IOHandle`.
+Similar to `loop_lines`, but the worker function can perform an IO action.
 
 #### `open_file : Path -> String -> IOFail IOHandle`
 Open a file. The second argument is a mode string for `fopen` C function. 
@@ -1447,6 +1468,9 @@ Loop by monadic action along an iterator. At each iteration step, you can choose
 #### `push_front : a -> Iterator a -> Iterator a`
 Push an element to an iterator.
 
+#### `range : I64 -> I64 -> Iterator I64`
+Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
+
 #### `reverse : Iterator a -> Iterator a`
 Reverse an iterator.
 
@@ -1541,7 +1565,15 @@ Literals:
 - `nullptr`
     - The null pointer.
 
+#### `add_offset : I64 -> Ptr -> Ptr`
+Add an offset to a pointer.
+
+#### `subtract_ptr : Ptr -> Ptr -> I64`
+Subtract two pointers.
+Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
+
 #### `impl Ptr : Eq`
+#### `impl Ptr : ToString`
 
 ### PunchedArray
 The type of punched arrays. A punched array is an array from which a certain element has been removed.
@@ -1578,6 +1610,10 @@ Returns the containing value if the value is ok, or otherwise aborts.
 
 The type of strings.
 
+#### `_unsafe_from_c_str : Array U8 -> String`
+Create a string from C string (i.e., null-terminated byte array).
+If the byte array doesn't include `\0`, this function causes undefined behavior.
+
 #### `_unsafe_from_c_str_ptr : Ptr -> String`
 Create a `String` from a pointer to null-terminated C string.
 If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
@@ -1599,8 +1635,10 @@ Concatenate an iterator of strings.
 #### `empty : I64 -> String`
 Create an empty string, which is reserved for a length.
 
-#### `from_c_str : Vector U8 -> String`
-Create a string from C string (i.e., null-terminated byte array).
+#### `find : String -> I64 -> String -> Option I64`
+`str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
+Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
+`str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
 
 #### `get_bytes : String -> Array U8`
 Get the byte array of a string, containing null-terminator.
@@ -1614,6 +1652,9 @@ Get the last byte of a string. Returns none if the string is empty.
 #### `get_size : String -> I64`
 Returns the length of the string.
 
+#### `get_sub : I64 -> I64 -> String -> String`
+`String` version of `Array::get_sub`.
+
 #### `is_empty : String -> Bool`
 Returns if the string is empty or not.
 
@@ -1625,14 +1666,28 @@ Example: `Iterator::from_array(["a", "b", "c"]).join(", ") == "a, b, c"`
 Removes the last byte.
 If the string is empty, this function does nothing.
 
-#### `strip_last_bytes : (Byte -> Bool) -> String -> String`
-Removes newlines and carriage returns at the end of the string.
+#### `split : String -> String -> Iterator String`
+`str.split(sep)` splits `str` by `sep` into an iterator.
+- If `sep` is empty, this function returns an infinite sequence of ""s.
+- If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
 
-#### `rstrip : String -> String`
-Removing trailing whitespace characters.
+#### `strip_first_bytes : (U8 -> Bool) -> String -> String`
+Removes the first byte of a string while it satisifies the specified condition.
+
+#### `strip_first_spaces : String -> String`
+Removing leading whitespace characters.
+
+#### `strip_last_bytes : (U8 -> Bool) -> String -> String`
+Removes the last byte of a string while it satisifies the specified condition.
 
 #### `strip_last_newlines : String -> String`
-Removes the last byte of a string while it satisifies the specified condition.
+Removes newlines and carriage returns at the end of the string.
+
+#### `strip_last_spaces : String -> String`
+Removing trailing whitespace characters.
+
+#### `strip_spaces : String -> String`
+Strip leading and trailing whitespace characters.
 
 #### `impl String : Add`
 Add two strings by `String.concat`.

@@ -47,6 +47,7 @@ void fixruntime_eprint(const char *msg)
     fflush(stderr);
 }
 
+// NOTE: Maybe should we define following functions by LLVM to better optimization opportunity?
 void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
 {
     *buf = v;
@@ -71,7 +72,6 @@ void fixruntime_f64_to_bytes(double *buf, double v)
 {
     *buf = v;
 }
-
 uint8_t fixruntime_u8_from_bytes(uint8_t *buf)
 {
     return *buf;
@@ -97,6 +97,10 @@ double fixruntime_f64_from_bytes(double *buf)
     return *buf;
 }
 
+void fixruntime_ptr_to_str(char *buf, void *v)
+{
+    sprintf(buf, "%016x", v);
+}
 void fixruntime_i8_to_str(char *buf, int8_t v)
 {
     sprintf(buf, "%" PRId8, v);

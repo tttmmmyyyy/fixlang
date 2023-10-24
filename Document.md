@@ -96,6 +96,7 @@ main = (
     println $ Iterator::from_array(fib).map(to_string).join(", ")
 );
 ```
+[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCmNhbGNfZmliIDogSTY0IC0%2BIEFycmF5IEk2NDsNCmNhbGNfZmliID0gfG58ICgNCiAgICBsZXQgYXJyID0gQXJyYXk6OmZpbGwobiwgMCk7DQogICAgbGV0IGFyciA9IGFyci5zZXQhKDAsIDEpOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0ISgxLCAxKTsNCiAgICBsZXQgYXJyID0gbG9vcCgoMiwgYXJyKSwgfChpZHgsIGFycil8DQogICAgICAgIGlmIGlkeCA9PSBhcnIuZ2V0X3NpemUgew0KICAgICAgICAgICAgYnJlYWsgJCBhcnINCiAgICAgICAgfSBlbHNlIHsNCiAgICAgICAgICAgIGxldCB4ID0gYXJyLkAoaWR4LTEpOw0KICAgICAgICAgICAgbGV0IHkgPSBhcnIuQChpZHgtMik7DQogICAgICAgICAgICBsZXQgYXJyID0gYXJyLnNldCEoaWR4LCB4K3kpOw0KICAgICAgICAgICAgY29udGludWUgJCAoaWR4KzEsIGFycikNCiAgICAgICAgfQ0KICAgICk7DQogICAgYXJyDQopOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBmaWIgPSBjYWxjX2ZpYigzMCk7DQogICAgcHJpbnRsbiAkIEl0ZXJhdG9yOjpmcm9tX2FycmF5KGZpYikubWFwKHRvX3N0cmluZykuam9pbigiLCAiKQ0KKTs%3D)
 
 If you save the above program to a file "main.fix" and run `fix run -f main.fix`, it prints 
 
@@ -880,6 +881,7 @@ main = (
     pure()
 );
 ```
+[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/?src2=bW9kdWxlIE1haW47DQppbXBvcnQgRGVidWc7DQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgZXZhbCBhc3NlcnQofF98IjEgaXMgbm90IDIhIiwgMSA9PSAyKTsNCiAgICBldmFsICJDb250cmFkaWN0aW9uOiAiLmJvcnJvd19jX3N0cih8cHRyfCBDQUxMX0NbSTMyIHByaW50ZihQdHIsIC4uLiksIHB0cl0pOw0KICAgIGV2YWwgKnByaW50bG4oIjEgaXMgZXF1YWwgdG8gMiEiKTsNCiAgICBwdXJlKCkNCik7)
 
 For detail of `*` operator in front of `print` and `println`, see [Monads](#monads). 
 For CALL_C, see [Calling C functions](#calling-c-functions).

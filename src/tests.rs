@@ -3496,7 +3496,7 @@ pub fn test117() {
 
         main : IO ();
         main = (
-            let str = String::from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
+            let str = String::_unsafe_from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
             eval assert_eq(|_|"case 1", str, "ABC");
             eval assert_eq(|_|"case 2", str.get_size, 3);
             pure()
@@ -4582,7 +4582,7 @@ pub fn test_subprocess_run_stream() {
 
 #[test]
 #[serial]
-pub fn test_loop_lines_file() {
+pub fn test_loop_lines() {
     let source = r#"
     module Main;
     import Debug;
@@ -4590,15 +4590,17 @@ pub fn test_loop_lines_file() {
     sum_up_while : Path -> IOFail I64;
     sum_up_while = |file_path| (
         // Process lines of a file.
-        loop_lines_file(file_path, 0, |cnt, line| (
-            // Sum up the number while line can be parsed as an integer.
-            let parse_res = from_string(line.rstrip); // Remove the trailing newline ("\n") and parse as `I64`.
-            if parse_res.is_ok {
-                let res = parse_res.as_ok;
-                continue $ cnt + res
-            } else {
-                break $ cnt
-            }
+        with_file(file_path, "r", |file| (
+            loop_lines(file, 0, |cnt, line| (
+                // Sum up the number while line can be parsed as an integer.
+                let parse_res = from_string(line.strip_last_spaces); // Remove the trailing newline ("\n") and parse as `I64`.
+                if parse_res.is_ok {
+                    let res = parse_res.as_ok;
+                    continue $ cnt + res
+                } else {
+                    break $ cnt
+                }
+            ))
         ))
     );
     
@@ -4621,6 +4623,200 @@ pub fn test_loop_lines_file() {
     "#;
     run_source(&source, Configuration::develop_compiler());
     remove_file("test.txt").unwrap();
+}
+
+#[test]
+#[serial]
+pub fn test_array_get_sub() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        // Unboxed case
+        let arr = [0, 1, 2, 3, 4];
+        eval assert_eq(|_|"", arr.get_sub(2, 4), [2, 3]);
+        eval assert_eq(|_|"", arr.get_sub(0, 0), []);
+        eval assert_eq(|_|"", arr.get_sub(3, 1), [3, 4, 0]);
+        eval assert_eq(|_|"", arr.get_sub(1, -1), [1, 2, 3]);
+    
+        let arr : Array I64 = [];
+        eval assert_eq(|_|"", arr.get_sub(2, 4), []);
+    
+        // Boxed case
+        let arr = [[0], [1], [2], [3], [4]];
+        eval assert_eq(|_|"", arr.get_sub(2, 4), [[2], [3]]);
+        eval assert_eq(|_|"", arr.get_sub(0, 0), []);
+        eval assert_eq(|_|"", arr.get_sub(3, 1), [[3], [4], [0]]);
+        eval assert_eq(|_|"", arr.get_sub(1, -1), [[1], [2], [3]]);
+    
+        let arr : Array (Array I64) = [];
+        eval assert_eq(|_|"", arr.get_sub(2, 4), []);
+    
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_string_get_sub() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let str = "Hello";
+        eval assert_eq(|_|"", str.get_sub(2, 4), "ll");
+        eval assert_eq(|_|"", str.get_sub(0, 0), "");
+        eval assert_eq(|_|"", str.get_sub(3, 1), "loH");
+        eval assert_eq(|_|"", str.get_sub(1, -1), "ell");
+    
+        eval assert_eq(|_|"", "".get_sub(2, 4), "");
+    
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_string_strip_first_spaces() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", "".strip_first_spaces, "");
+        eval assert_eq(|_|"", "Hello".strip_first_spaces, "Hello");
+        eval assert_eq(|_|"", " Hello".strip_first_spaces, "Hello");
+        eval assert_eq(|_|"", " \tHello".strip_first_spaces, "Hello");
+        eval assert_eq(|_|"", " ".strip_first_spaces, "");
+        eval assert_eq(|_|"", "  ".strip_first_spaces, "");
+    
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_loop_lines_io() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let content1 = "Hello\nWorld!";
+        let file1 = Path::parse("test1.txt").as_some;
+        let file2 = Path::parse("test2.txt").as_some;
+        do {
+            eval *write_file_string(file1, content1);
+
+            eval *with_file(file1, "r", |file1| (
+                with_file(file2, "w", |file2| (
+                    loop_lines_io(file1, (), |_, line| (
+                        continue_m $ *write_string(file2, line)
+                    ))
+                ))
+            ));
+
+            let content2 = *read_file_string(file2);
+
+            eval assert_eq(|_|"", content2, content1);
+
+            pure()
+        }.try(exit_with_msg(1))
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+    remove_file("test1.txt").unwrap();
+    remove_file("test2.txt").unwrap();
+}
+
+#[test]
+#[serial]
+pub fn test_string_find() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"1", "abcdef".find("ab", 0), Option::some(0));
+        eval assert_eq(|_|"2", "abcdef".find("bc", 0), Option::some(1));
+        eval assert_eq(|_|"3", "abcdef".find("ef", 0), Option::some(4));
+        eval assert_eq(|_|"4", "abcdef".find("xyz", 0), Option::none());
+        eval assert_eq(|_|"5", "abcdef".find("", 0), Option::some(0));
+        eval assert_eq(|_|"6", "".find("xyz", 0), Option::none());
+        eval assert_eq(|_|"7", "".find("", 0), Option::some(0));
+
+        eval assert_eq(|_|"8", "abcdef".find("ab", 1), Option::none());
+        eval assert_eq(|_|"9", "abcdef".find("bc", 1), Option::some(1));
+        eval assert_eq(|_|"10", "abcdef".find("ef", 1), Option::some(4));
+        eval assert_eq(|_|"11", "abcdef".find("xyz", 1), Option::none());
+        eval assert_eq(|_|"12", "abcdef".find("", 1), Option::some(1));
+        eval assert_eq(|_|"13", "".find("xyz", 1), Option::none());
+        eval assert_eq(|_|"14", "".find("", 1), Option::some(0));
+
+        eval assert_eq(|_|"15", "abcdef".find("ab", 7), Option::none());
+        eval assert_eq(|_|"16", "abcdef".find("bc", 7), Option::none());
+        eval assert_eq(|_|"17", "abcdef".find("ef", 7), Option::none());
+        eval assert_eq(|_|"18", "abcdef".find("xyz", 7), Option::none());
+        eval assert_eq(|_|"19", "abcdef".find("", 7), Option::some(6));
+        eval assert_eq(|_|"20", "".find("xyz", 7), Option::none());
+        eval assert_eq(|_|"21", "".find("", 7), Option::some(0));
+
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_string_split() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"1", "--ab---cde----".split("--").to_array, ["", "ab", "-cde", "", ""]);
+        eval assert_eq(|_|"2", "ab---cde----".split("--").to_array, ["ab", "-cde", "", ""]);
+        eval assert_eq(|_|"3", "--ab---cde".split("--").to_array, ["", "ab", "-cde"]);
+        eval assert_eq(|_|"3", "ab---cde".split("--").to_array, ["ab", "-cde"]);
+        eval assert_eq(|_|"4", "--".split("--").to_array, ["", ""]);
+        eval assert_eq(|_|"5", "".split("--").to_array, [""]);
+
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_ptr_to_string() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", nullptr.add_offset(3134905646).to_string, "00000000badadd2e");
+
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
 }
 
 #[test]

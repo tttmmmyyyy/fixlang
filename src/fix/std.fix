@@ -4,6 +4,24 @@ import Debug;
 
 namespace Array {
 
+    // A function like `get_sub`, but behaves as if the size of the array is the specified value, 
+    // and has a parameter to specify additional capacity of the returned `Array`.
+    _get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
+    _get_sub_size_asif = |len, additional_capacity, s, e, arr| (
+        if len == 0 { arr };
+        let s = (s % len + len) % len;
+        let e = (e % len + len) % len;
+        let n = if e >= s { e - s } else { e + len - s };
+        let res = Array::empty(n + additional_capacity);
+        loop((s, res), |(i, res)| (
+            if i == e { break $ res };
+            let res = res.push_back(arr.@(i));
+            let i = i + 1;
+            let i = if i >= len { 0 } else { i };
+            continue $ (i, res)
+        ))
+    );
+
     // Sort elements in a range of a vector by "less than" comparator.
     // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
     _sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
@@ -195,6 +213,12 @@ namespace Array {
         if len == 0 { Option::none() };
         Option::some $ arr.@(len - 1)
     );
+
+    // `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`, 
+    // More precisely, let `N` denote the the size of the `arr`. 
+    // Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
+    get_sub : I64 -> I64 -> Array a -> Array a;
+    get_sub = |s, e, arr| arr._get_sub_size_asif(arr.get_size, 0, s, e);
 
     // Returns if the array is empty
     is_empty : Array a -> Bool;
@@ -492,7 +516,7 @@ namespace IO {
     // `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
     // The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
     // When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
-    // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::rstrip`.
+    // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
     loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s;
     loop_lines = |handle, state, worker| (
         if *is_eof(handle).lift {
@@ -507,10 +531,21 @@ namespace IO {
         loop_lines(handle, next_state, worker)
     );
 
-    // Loop on lines read from a file.
-    // For details, see comment for `loop_lines`.
-    loop_lines_file : Path -> s -> (s -> String -> LoopResult s s) -> IOFail s;
-    loop_lines_file = |path, state, worker| with_file(path, "r", |handle| loop_lines(handle, state, worker));
+    // Loop on lines read from an `IOHandle`.
+    // Similar to `loop_lines`, but the worker function can perform an IO action.
+    loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s;
+    loop_lines_io = |handle, state, worker| (
+        if *is_eof(handle).lift {
+            pure $ state
+        };
+        let line = *read_line(handle);
+        let res = *worker(state, line);
+        if res.is_break {
+            pure $ res.as_break
+        };
+        let next_state = res.as_continue;
+        loop_lines_io(handle, next_state, worker)
+    );
 
     // Open a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOFail IOHandle;
@@ -521,7 +556,7 @@ namespace IO {
                 mode.borrow_c_str(|mode_str|
                     let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
                     if file_ptr == nullptr { 
-                        Result::err $ "failed to open a file: " + path_str
+                        Result::err $ "Failed to open a file: " + path_str
                     } else {
                         Result::ok $ IOHandle::from_file_ptr $ file_ptr
                     }
@@ -946,6 +981,15 @@ namespace Iterator {
         )
     );
 
+    // Push an elemnt to an iterator.
+    push_front : a -> Iterator a -> Iterator a;
+    push_front = |elem, iter| (
+        let next = |_| (
+            some $ (elem, iter)
+        );
+        Iterator { next: next }     
+    );
+
     // Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
     range : I64 -> I64 -> Iterator I64;
     range = |a, b| (
@@ -957,15 +1001,6 @@ namespace Iterator {
             }
         );
         Iterator { next: next }
-    );
-
-    // Push an elemnt to an iterator.
-    push_front : a -> Iterator a -> Iterator a;
-    push_front = |elem, iter| (
-        let next = |_| (
-            some $ (elem, iter)
-        );
-        Iterator { next: next }     
     );
 
     // Reverse an iterator.
@@ -1228,6 +1263,16 @@ namespace String {
     _get_c_str : String -> Ptr;
     _get_c_str = |s| s.@_data._get_ptr;
 
+    // Create a string from C string (i.e., null-terminated byte array).
+    // If the byte array doesn't include `\0`, this function causes undefined behavior.
+    _unsafe_from_c_str : Array U8 -> String;
+    _unsafe_from_c_str = |buf| (
+        // Return length.
+        let len = buf.borrow_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
+        let buf = buf._unsafe_set_size(len + 1);
+        String { _data : buf }
+    );
+
     // Create a `String` from a pointer to null-terminated C string.
     // If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
     _unsafe_from_c_str_ptr : Ptr -> String;
@@ -1265,13 +1310,20 @@ namespace String {
     empty : I64 -> String;
     empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
 
-    // Create a string from C string (i.e., null-terminated byte array).
-    from_c_str : Array U8 -> String;
-    from_c_str = |buf| (
-        // Return length.
-        let len = buf.borrow_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
-        let buf = buf._unsafe_set_size(len + 1);
-        String { _data : buf }
+    // `str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
+    // Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
+    // `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
+    find : String -> I64 -> String -> Option I64;
+    find = |tok, start, str| (
+        let start = min(start, str.get_size);
+        let pos = CALL_C[Ptr strstr(Ptr, Ptr), str._get_c_str.add_offset(start), tok._get_c_str];
+        eval tok; // Prolong lifetime.
+        if pos == nullptr {
+            Option::none()
+        };
+        let pos = pos.subtract_ptr(str._get_c_str);
+        eval str; // Prolong lifetimes.
+        Option::some(pos)
     );
 
     // Get the byte array of a string, containing null-terminator.
@@ -1297,6 +1349,13 @@ namespace String {
     get_size : String -> I64;
     get_size = |s| s.@_data.get_size - 1; // exclude null terminator
 
+    // `String` version of `Array::get_sub`.
+    get_sub : I64 -> I64 -> String -> String;
+    get_sub = |s, e, str| (
+        let len = str.get_size;
+        String::_unsafe_from_c_str $ str.get_bytes._get_sub_size_asif(len, 1, s, e).push_back('\0')
+    );
+
     // Returns if the string is empty or not.
     is_empty : String -> Bool;
     is_empty = |s| s.get_size == 0;
@@ -1315,9 +1374,39 @@ namespace String {
         s.mod__data(|bytes| bytes.pop_back.pop_back.push_back(0_U8))
     );
 
-    // Removing trailing whitespace characters.
-    rstrip : String -> String;
-    rstrip = strip_last_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
+    // `str.split(sep)` splits `str` by `sep` into an iterator.
+    // - If `sep` is empty, this function returns an infinite sequence of ""s.
+    // - If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
+    split : String -> String -> Iterator String;
+    split = |sep, str| (
+        let n = str.get_size;
+        let m = sep.get_size;
+        generate(0, |idx| (
+            if idx == -1 { Option::none() };
+            if idx == n { Option::some $ ("", -1) };
+            let opt_idx = str.find(sep, idx);
+            if opt_idx.is_none { Option::some $ (str.get_sub(idx, 0), -1) };
+            let idx2 = opt_idx.as_some;
+            Option::some $ (str.get_sub(idx, idx2), idx2 + m)
+        ))
+    );
+
+    // Removes the first byte of a string while it satisifies the specified condition.
+    strip_first_bytes : (U8 -> Bool) -> String -> String;
+    strip_first_bytes = |cond, str| (
+        let len = str.get_size;
+        let bytes = str.get_bytes;
+        let n = loop(0, |i| (
+            if i == len { break $ i };
+            if !cond(bytes.@(i)) { break $ i };
+            continue $ i + 1
+        ));
+        if n == 0 { str } else { str.get_sub(n, 0) }
+    );
+
+    // Removing leading whitespace characters.
+    strip_first_spaces : String -> String;
+    strip_first_spaces = strip_first_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
 
     // Removes the last byte of a string while it satisifies the specified condition.
     strip_last_bytes : (U8 -> Bool) -> String -> String;
@@ -1336,6 +1425,13 @@ namespace String {
     strip_last_newlines : String -> String;
     strip_last_newlines = strip_last_bytes(|c| c == '\n' || c == '\r');
 
+    // Removing trailing whitespace characters.
+    strip_last_spaces : String -> String;
+    strip_last_spaces = strip_last_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
+
+    // Strip leading and trailing whitespace characters.
+    strip_spaces : String -> String;
+    strip_spaces = |s| s.strip_last_spaces.strip_first_spaces;
 }
 
 impl String : Add {
@@ -1547,8 +1643,27 @@ namespace F64 {
     abs = |f| if f < 0.0 { -f } else { f };
 }
 
+// `Ptr` basic operations.
+namespace Ptr {
+    // Add an offset to a pointer.
+    add_offset : I64 -> Ptr -> Ptr;
+    add_offset = |off, ptr| CALL_C[Ptr fixruntime_ptr_add_offset(Ptr, I64), ptr, off];
+
+    // Subtract two pointers.
+    // Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
+    subtract_ptr : Ptr -> Ptr -> I64;
+    subtract_ptr = |rhs, lhs| CALL_C[I64 fixruntime_subtract_ptr(Ptr, Ptr), lhs, rhs];
+}
+
 // ToString, FromString implementations for fundamental types
 
+impl Ptr : ToString {
+    to_string = |v| (
+        let data = Array::empty(9);
+        eval CALL_C[() fixruntime_ptr_to_str(Ptr, Ptr), data._get_ptr, v];
+        String::_unsafe_from_c_str(data)
+    );
+}
 impl U8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_set_size(1);
@@ -1570,7 +1685,7 @@ impl U8 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u8_to_str(Ptr, U8), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl U8 : FromString {
@@ -1598,7 +1713,7 @@ impl U16 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u16_to_str(Ptr, U16), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl U16 : FromString {
@@ -1626,7 +1741,7 @@ impl U32 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u32_to_str(Ptr, U32), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl U32 : FromString {
@@ -1654,7 +1769,7 @@ impl U64 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u64_to_str(Ptr, U64), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl U64 : FromString {
@@ -1691,7 +1806,7 @@ impl I8 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i8_to_str(Ptr, I8), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl I8 : FromString {
@@ -1719,7 +1834,7 @@ impl I16 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i16_to_str(Ptr, I16), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl I16 : FromString {
@@ -1747,7 +1862,7 @@ impl I32 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i32_to_str(Ptr, I32), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl I32 : FromString {
@@ -1775,7 +1890,7 @@ impl I64 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_i64_to_str(Ptr, I64), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl I64 : FromString {
@@ -1810,7 +1925,7 @@ impl F32 : ToString {
     to_string = |v| (
         let data = Array::empty(50);
         eval CALL_C[() fixruntime_f32_to_str(Ptr, F32), data._get_ptr, v];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 namespace F32 {
@@ -1819,7 +1934,7 @@ namespace F32 {
     to_string_exp = |v| (
         let data = Array::empty(50);
         eval CALL_C[() fixruntime_f32_to_str_exp(Ptr, F32), data._get_ptr, v];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 
     // Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
@@ -1827,7 +1942,7 @@ namespace F32 {
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
         eval CALL_C[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), data._get_ptr, v, prec];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 
     // Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
@@ -1835,7 +1950,7 @@ namespace F32 {
     to_string_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
         eval CALL_C[() fixruntime_f32_to_str_precision(Ptr, F32, U8), data._get_ptr, v, prec];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl F32 : FromString {
@@ -1872,7 +1987,7 @@ impl F64 : ToString {
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_f64_to_str(Ptr, F64), ptr, v]
         ));
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 namespace F64 {
@@ -1881,7 +1996,7 @@ namespace F64 {
     to_string_exp = |v| (
         let data = Array::empty(500);
         eval CALL_C[() fixruntime_f64_to_str_exp(Ptr, F64), data._get_ptr, v];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 
     // Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
@@ -1889,7 +2004,7 @@ namespace F64 {
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
         eval CALL_C[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), data._get_ptr, v, prec];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 
     // Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
@@ -1897,7 +2012,7 @@ namespace F64 {
     to_string_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
         eval CALL_C[() fixruntime_f64_to_str_precision(Ptr, F64, U8), data._get_ptr, v, prec];
-        String::from_c_str(data)
+        String::_unsafe_from_c_str(data)
     );
 }
 impl F64 : FromString {
