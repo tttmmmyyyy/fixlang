@@ -880,6 +880,7 @@ main = (
     pure()
 );
 ```
+[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/?src2=bW9kdWxlIE1haW47DQppbXBvcnQgRGVidWc7DQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgZXZhbCBhc3NlcnQofF98IjEgaXMgbm90IDIhIiwgMSA9PSAyKTsNCiAgICBldmFsICJDb250cmFkaWN0aW9uOiAiLmJvcnJvd19jX3N0cih8cHRyfCBDQUxMX0NbSTMyIHByaW50ZihQdHIsIC4uLiksIHB0cl0pOw0KICAgIGV2YWwgKnByaW50bG4oIjEgaXMgZXF1YWwgdG8gMiEiKTsNCiAgICBwdXJlKCkNCik7)
 
 For detail of `*` operator in front of `print` and `println`, see [Monads](#monads). 
 For CALL_C, see [Calling C functions](#calling-c-functions).
