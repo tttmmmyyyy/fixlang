@@ -4804,6 +4804,23 @@ pub fn test_string_split() {
 
 #[test]
 #[serial]
+pub fn test_ptr_to_string() {
+    let source = r#"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", nullptr.add_offset(3134905646).to_string, "00000000badadd2e");
+
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
