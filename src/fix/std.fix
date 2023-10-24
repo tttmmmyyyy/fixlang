@@ -1657,6 +1657,13 @@ namespace Ptr {
 
 // ToString, FromString implementations for fundamental types
 
+impl Ptr : ToString {
+    to_string = |v| (
+        let data = Array::empty(9);
+        eval CALL_C[() fixruntime_ptr_to_str(Ptr, Ptr), data._get_ptr, v];
+        String::_unsafe_from_c_str(data)
+    );
+}
 impl U8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_set_size(1);
