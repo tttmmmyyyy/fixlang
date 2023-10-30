@@ -507,7 +507,7 @@ namespace IO {
         };
         let line = read_line(handle).to_result._unsafe_perform;
         if line.is_err {
-            IOFail::from_result(Result::err(line_res.as_err))
+            IOFail::from_result(Result::err(line.as_err))
         };
         let line = line.as_ok;
         let res = worker(state, line);
