@@ -482,7 +482,7 @@ namespace IO {
     // If you want to handle errors, use `read_line(stdin)` instead.
     input_line : IO String;
     input_line = (
-        let res = *read_line(stdin).to_io;
+        let res = *read_line(stdin).to_result;
         if res.is_ok {
             pure $ res.as_ok
         } else {
