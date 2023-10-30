@@ -410,49 +410,32 @@ namespace IO {
     _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
         IOFail { _data : IO { _data : |_| (
-            // Read strings and make iterators of strings (reversed).
-            let strings_rev = loop(Iterator::empty, |strs|
+            loop("", |str|
                 let buf_size = 1024;
-                let buf = Array::empty(buf_size);                
-                let strlen = buf.borrow_ptr(|buf|
-                    // Read characters to buf.
-                    let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, buf_size.to_I32, handle._file_ptr];
-                    if fgets_res == nullptr { -1 };
-
-                    // Return length.
-                    let strlen = CALL_C[I64 strlen(Ptr), buf];
-                    strlen
-                );
-                // If reached to EOF (or error), break.
-                if strlen == -1 { break $ strs };
-
-                // Create string.
+                let buf = Array::empty(buf_size);
+                let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, handle._file_ptr];
+                if fgets_res == nullptr { 
+                    let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
+                    if err != 0_I32 { 
+                        let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
+                        break $ Result::err(err)
+                    } else {
+                        break $ Result::ok(str)
+                    }
+                };
+                let strlen = CALL_C[I64 strlen(Ptr), buf._get_ptr];
                 let buf = buf._unsafe_set_size(strlen + 1);
-                let str = String { _data : buf };
-                let strs = strs.push_front(str);
-
-                // If no character is read, break.
-                if strlen == 0 { break $ strs };
-
+                let read = String { _data : buf };
+                let str = str + read;
                 if upto_newline {
                     // If the last character is \n, break.
                     let last_byte = buf.@(strlen-1);
-                    if last_byte == '\n' { break $ strs };
-                    continue $ strs
+                    if last_byte == '\n' { break $ Result::ok(str) };
+                    continue $ str
                 } else {
-                    continue $ strs
+                    continue $ str
                 }
-            );
-
-            // Check if err occurred.
-            let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
-            if err != 0_I32 { 
-                let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
-                Result::err(err)
-            };
-
-            let str = strings_rev.reverse.concat_iter;
-            Result::ok(str)
+            )
         ) }}
     );
 
@@ -499,7 +482,7 @@ namespace IO {
     // If you want to handle errors, use `read_line(stdin)` instead.
     input_line : IO String;
     input_line = (
-        let res = *read_line(stdin).to_io;
+        let res = *read_line(stdin).to_result;
         if res.is_ok {
             pure $ res.as_ok
         } else {
@@ -519,10 +502,14 @@ namespace IO {
     // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
     loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s;
     loop_lines = |handle, state, worker| (
-        if *is_eof(handle).lift {
+        if is_eof(handle)._unsafe_perform {
             pure $ state
         };
-        let line = *read_line(handle);
+        let line = read_line(handle).to_result._unsafe_perform;
+        if line.is_err {
+            IOFail::from_result(Result::err(line.as_err))
+        };
+        let line = line.as_ok;
         let res = worker(state, line);
         if res.is_break {
             pure $ res.as_break
@@ -535,11 +522,19 @@ namespace IO {
     // Similar to `loop_lines`, but the worker function can perform an IO action.
     loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s;
     loop_lines_io = |handle, state, worker| (
-        if *is_eof(handle).lift {
+        if is_eof(handle)._unsafe_perform {
             pure $ state
         };
-        let line = *read_line(handle);
-        let res = *worker(state, line);
+        let line = read_line(handle).to_result._unsafe_perform;
+        if line.is_err {
+            IOFail::from_result(Result::err(line.as_err))
+        };
+        let line = line.as_ok;
+        let res = worker(state, line).to_result._unsafe_perform;
+        if res.is_err {
+            IOFail::from_result(Result::err(res.as_err))
+        };
+        let res = res.as_ok;
         if res.is_break {
             pure $ res.as_break
         };
