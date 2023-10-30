@@ -502,10 +502,14 @@ namespace IO {
     // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
     loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s;
     loop_lines = |handle, state, worker| (
-        if *is_eof(handle).lift {
+        if is_eof(handle)._unsafe_perform {
             pure $ state
         };
-        let line = *read_line(handle);
+        let line = read_line(handle).to_result._unsafe_perform;
+        if line.is_err {
+            IOFail::from_result(Result::err(line_res.as_err))
+        };
+        let line = line.as_ok;
         let res = worker(state, line);
         if res.is_break {
             pure $ res.as_break
@@ -518,11 +522,19 @@ namespace IO {
     // Similar to `loop_lines`, but the worker function can perform an IO action.
     loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s;
     loop_lines_io = |handle, state, worker| (
-        if *is_eof(handle).lift {
+        if is_eof(handle)._unsafe_perform {
             pure $ state
         };
-        let line = *read_line(handle);
-        let res = *worker(state, line);
+        let line = read_line(handle).to_result._unsafe_perform;
+        if line.is_err {
+            IOFail::from_result(Result::err(line.as_err))
+        };
+        let line = line.as_ok;
+        let res = worker(state, line).to_result._unsafe_perform;
+        if res.is_err {
+            IOFail::from_result(Result::err(res.as_err))
+        };
+        let res = res.as_ok;
         if res.is_break {
             pure $ res.as_break
         };
