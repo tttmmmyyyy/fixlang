@@ -7,3 +7,4 @@
 a.out
 before_opt.ll
 after_opt.ll
+benchmark/data_copied.csv
