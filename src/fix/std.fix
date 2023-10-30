@@ -410,49 +410,32 @@ namespace IO {
     _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
         IOFail { _data : IO { _data : |_| (
-            // Read strings and make iterators of strings (reversed).
-            let strings_rev = loop(Iterator::empty, |strs|
+            loop("", |str|
                 let buf_size = 1024;
-                let buf = Array::empty(buf_size);                
-                let strlen = buf.borrow_ptr(|buf|
-                    // Read characters to buf.
-                    let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf, buf_size.to_I32, handle._file_ptr];
-                    if fgets_res == nullptr { -1 };
-
-                    // Return length.
-                    let strlen = CALL_C[I64 strlen(Ptr), buf];
-                    strlen
-                );
-                // If reached to EOF (or error), break.
-                if strlen == -1 { break $ strs };
-
-                // Create string.
+                let buf = Array::empty(buf_size);
+                let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, handle._file_ptr];
+                if fgets_res == nullptr { 
+                    let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
+                    if err != 0_I32 { 
+                        let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
+                        break $ Result::err(err)
+                    } else {
+                        break $ Result::ok(str)
+                    }
+                };
+                let strlen = CALL_C[I64 strlen(Ptr), buf._get_ptr];
                 let buf = buf._unsafe_set_size(strlen + 1);
-                let str = String { _data : buf };
-                let strs = strs.push_front(str);
-
-                // If no character is read, break.
-                if strlen == 0 { break $ strs };
-
+                let read = String { _data : buf };
+                let str = str + read;
                 if upto_newline {
                     // If the last character is \n, break.
                     let last_byte = buf.@(strlen-1);
-                    if last_byte == '\n' { break $ strs };
-                    continue $ strs
+                    if last_byte == '\n' { break $ Result::ok(str) };
+                    continue $ str
                 } else {
-                    continue $ strs
+                    continue $ str
                 }
-            );
-
-            // Check if err occurred.
-            let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
-            if err != 0_I32 { 
-                let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
-                Result::err(err)
-            };
-
-            let str = strings_rev.reverse.concat_iter;
-            Result::ok(str)
+            )
         ) }}
     );
 
