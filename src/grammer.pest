@@ -1,7 +1,7 @@
 // === Basic rules ===
 sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
-keywords = _{ ("let" | "eval" | "in" | "if" | "else" | "do" | "true" | "false" | "type" | "trait" | "impl") ~ sep+ }
+keywords = _{ ("let" | "eval" | "in" | "if" | "else" | "do" | "type" | "trait" | "impl") ~ sep+ }
 
 semicolon = _{ ";" }
 
@@ -31,9 +31,11 @@ number_lit_body = { "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ( "e" ~ ("+" |
 
 number_lit_type = { "I8" | "U8" | "I16" | "U16" | "I32" | "U32" | "I64" | "U64" | "F32" | "F64" }
 
-expr_nullptr_lit = { "nullptr" }
+// Since "nullptr_val" should be parsed as a variable name, not as literal, "~ !var_char" is necessary.
+expr_nullptr_lit = { "nullptr" ~ !var_char }
 
-expr_bool_lit = { "true" | "false" }
+// Since "nullptr_val" should be parsed as a variable name, not as literal, "~ !var_char" is necessary.
+expr_bool_lit = { ("true" | "false") ~ !var_char }
 
 expr_array_lit = { "[" ~ (sep* ~ expr ~ sep* ~ ("," ~ sep* ~ expr)*)? ~ sep* ~ "]" }
 

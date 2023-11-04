@@ -8,7 +8,7 @@ use super::*;
 #[test]
 #[serial]
 pub fn test0() {
-    let source = r#"
+    let source = r#"    
             module Main; 
             import Debug;
 
@@ -4773,6 +4773,36 @@ pub fn test_string_find() {
         eval assert_eq(|_|"19", "abcdef".find("", 7), Option::some(6));
         eval assert_eq(|_|"20", "".find("xyz", 7), Option::none());
         eval assert_eq(|_|"21", "".find("", 7), Option::some(0));
+
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test_names_literal_prefix() {
+    let source = r#"
+    module Main;
+    import Debug;
+
+    true_global_val : I64;
+    true_global_val = 42;
+
+    false_global_val : I64;
+    false_global_val = 0;
+
+    nullptr_global_val : I64;
+    nullptr_global_val = 0;
+    
+    main : IO ();
+    main = (
+        let true_local_num = 42;
+        let false_local_num = 0;
+        let nullptr_local_num = 0;
+
+        eval assert_eq(|_|"", true_global_val + false_global_val + nullptr_global_val + true_local_num + false_local_num + nullptr_local_num, 42 + 42);
 
         pure()
     );
