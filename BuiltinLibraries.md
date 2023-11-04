@@ -1,6 +1,7 @@
 # Table of contents
 
 - [Table of contents](#table-of-contents)
+- [NOTE](#note)
 - [Module `Std`](#module-std)
   - [Types, related values and implementations](#types-related-values-and-implementations)
     - [Bool](#bool)
@@ -622,6 +623,9 @@
   - [`to_local : Time -> IOResult ErrMsg DateTime`](#to_local--time---ioresult-errmsg-datetime)
   - [`to_utc : Time -> Result ErrMsg DateTime`](#to_utc--time---result-errmsg-datetime)
 
+# NOTE
+
+Built-in libraries of Fix is currently growing, and destructive changes are made frequently.
 
 # Module `Std`
 

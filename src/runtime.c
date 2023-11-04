@@ -97,9 +97,9 @@ double fixruntime_f64_from_bytes(double *buf)
     return *buf;
 }
 
-void fixruntime_ptr_to_str(char *buf, void *v)
+void fixruntime_ptr_to_str(char *buf, uint64_t ptr) // To avoid warning, we use uint64_t instead of void*.
 {
-    sprintf(buf, "%016x", v);
+    sprintf(buf, "%016" PRIx64, ptr);
 }
 void fixruntime_i8_to_str(char *buf, int8_t v)
 {

@@ -3071,7 +3071,7 @@ pub fn test109() {
 
 #[test]
 #[serial]
-pub fn test110() {
+pub fn test110a() {
     // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
         module Main; import Debug;
@@ -3129,6 +3129,21 @@ pub fn test110() {
             let z = 1.1557_F32;
             eval assert(|_|"case 13", (x / y - z).abs < 1.0e-4_F32);
 
+            pure()
+        );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
+pub fn test110b() {
+    // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
+    let source = r#"
+        module Main; import Debug;
+
+        main : IO ();
+        main = (
             let x = 3.1415;
             let y = 2.7183;
             let z = 1.1557;
@@ -4558,15 +4573,15 @@ pub fn test_subprocess_run_stream() {
     
     main : IO ();
     main = (
-        eval *println("Run \"/bin/ls -l -r\".");
-        let (_, exit_status) = *run_with_stream("/bin/ls", ["/bin/ls", "-l", "-r"], |(stdin, stdout, stderr)| (
+        eval *println("Run \"ls -l -r\".");
+        let (_, exit_status) = *run_with_stream("ls", ["ls", "-l", "-r"], |(stdin, stdout, stderr)| (
             let output = *read_string(stdout); // Read standard output of the command.
             println(output).lift
         )).try(exit_with_msg(1));
         eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
     
-        eval *println("Run \"/usr/bin/sed s/w/W/\" and write \"Hello world!\" to the standard input.");
-        let (_, exit_status) = *run_with_stream("/usr/bin/sed", ["/usr/bin/sed", "s/w/W/"], |(stdin, stdout, stderr)| (
+        eval *println("Run \"sed s/w/W/\" and write \"Hello world!\" to the standard input.");
+        let (_, exit_status) = *run_with_stream("sed", ["/usr/bin/sed", "s/w/W/"], |(stdin, stdout, stderr)| (
             eval *write_string(stdin, "Hello world!");
             eval *close_file(stdin).lift; // Send EOF.
             let output = *read_string(stdout); // Read standard output of the command.
