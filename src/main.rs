@@ -32,6 +32,7 @@ mod uncurry_optimization;
 
 use ast::expr::*;
 use ast::import::*;
+use ast::name::*;
 use ast::program::*;
 use ast::traits::*;
 use ast::typedecl::*;

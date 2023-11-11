@@ -1,3 +1,5 @@
+pub const NAMESPACE_SEPARATOR: &str = "::";
+
 pub const STD_NAME: &str = "Std";
 pub const IO_NAME: &str = "IO";
 pub const PTR_NAME: &str = "Ptr";
