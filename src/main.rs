@@ -32,6 +32,7 @@ mod uncurry_optimization;
 
 use ast::expr::*;
 use ast::import::*;
+use ast::inline_llvm::*;
 use ast::name::*;
 use ast::pattern::*;
 use ast::program::*;
