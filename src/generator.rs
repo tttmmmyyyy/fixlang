@@ -868,7 +868,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder()
                 .build_conditional_branch(is_refcnt_one, call_dtor_bb, cont_bb);
 
-            // If refcnt is none, call dtor.
+            // If refcnt is one, call dtor.
             self.builder().position_at_end(call_dtor_bb);
             if self.config.atomic_refcnt {
                 // Create acquire fence.
