@@ -21,6 +21,7 @@ impl<T> Graph<T> {
 
     // Sort topologically nodes.
     // Returns None if the graph has a loop.
+    #[allow(dead_code)]
     pub fn sort_topologically(&self) -> Option<Vec<usize>> {
         // Nodes sorted topologically.
         let mut sorted: Vec<usize> = vec![];
