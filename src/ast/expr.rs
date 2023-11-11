@@ -1346,7 +1346,7 @@ pub fn expr_call_c(
     Rc::new(Expr::CallC(fun_name, ret_ty, param_tys, is_va_args, args)).into_expr_info(src)
 }
 
-// TODO: use persistent binary search tree as ExprAuxInfo to avoid O(n^2) complexity of calculate_free_vars.
+// TODO: Use persistent binary search tree avoid O(n^2) complexity of calculate_free_vars?
 pub fn calculate_free_vars(ei: Rc<ExprNode>) -> Rc<ExprNode> {
     match &*ei.expr {
         Expr::Var(var) => {
@@ -1381,7 +1381,7 @@ pub fn calculate_free_vars(ei: Rc<ExprNode>) -> Rc<ExprNode> {
             ei.set_lam_body(body).set_free_vars(free_vars)
         }
         Expr::Let(pat, bound, val) => {
-            // NOTE: Our Let is non-recursive let, i.e.,
+            // NOTE: Our let is non-recursive let, i.e.,
             // "let x = f x in g x" is equal to "let y = f x in g y",
             // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
             let bound = calculate_free_vars(bound.clone());
