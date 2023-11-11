@@ -17,9 +17,6 @@ pub struct Configuration {
     // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
     // Requires shared library sanitizer/libfixsanitizer.so.
     pub sanitize_memory: bool,
-    // If true, pre-retain global object (i.e., set refcnt to large value) at its construction
-    // and do not retain global object thereafter.
-    pub preretain_global: bool,
     // LLVM optimization level.
     pub llvm_opt_level: OptimizationLevel,
     // Linked libraries
@@ -43,7 +40,6 @@ impl Configuration {
             source_files: vec![],
             sanitize_memory: false,
             uncurry_optimization: true, // determined by debug_mode
-            preretain_global: true,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
             atomic_refcnt: false,
@@ -58,9 +54,8 @@ impl Configuration {
     pub fn develop_compiler() -> Configuration {
         Configuration {
             source_files: vec![],
-            sanitize_memory: true,
+            sanitize_memory: false, // NOTE: Currently, global values are detected as leaked by memory sanitizer, so disable it.
             uncurry_optimization: true,
-            preretain_global: false,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
             atomic_refcnt: false,

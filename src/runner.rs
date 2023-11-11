@@ -210,16 +210,6 @@ fn build_module<'c>(
 
     // Perform leak check
     if gc.config.sanitize_memory {
-        // Deallocate all global objects.
-        let mut global_names = vec![];
-        for (name, _) in &gc.global {
-            global_names.push(name.clone());
-        }
-        for name in global_names {
-            let obj = gc.get_var(&name).ptr.get(&gc);
-            gc.release(obj);
-        }
-
         gc.call_runtime(RuntimeFunctions::CheckLeak, &[]);
     }
 
@@ -446,7 +436,7 @@ pub fn build_file(mut config: Configuration) {
 
     let output = Command::new("gcc")
         .args(libs_opts)
-        .arg("-Wno-unused-command-line-argument") 
+        .arg("-Wno-unused-command-line-argument")
         .arg("-no-pie")
         .arg("-o")
         .arg(exec_path.to_str().unwrap())
