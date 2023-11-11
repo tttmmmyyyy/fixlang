@@ -178,7 +178,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     let ptr_to_obj = release_func.get_first_param().unwrap().into_pointer_value();
     let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_obj);
 
-    // Recrement refcnt.
+    // Decrement refcnt.
     let old_refcnt = {
         if gc.config.atomic_refcnt {
             gc.builder()
