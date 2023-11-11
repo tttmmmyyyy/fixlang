@@ -19,6 +19,47 @@ impl<T> Graph<T> {
         }
     }
 
+    // Sort topologically nodes.
+    // Returns None if the graph has a loop.
+    pub fn sort_topologically(&self) -> Option<Vec<usize>> {
+        // Nodes sorted topologically.
+        let mut sorted: Vec<usize> = vec![];
+
+        // Clong the graph to remove edges.
+        let mut edges = self.edges.clone();
+
+        // Collect nodes with no incoming edge.
+        let mut no_incoming_edge: Vec<usize> = vec![];
+        for i in 0..edges.len() {
+            if edges[i].is_empty() {
+                no_incoming_edge.push(i);
+            }
+        }
+
+        while !no_incoming_edge.is_empty() {
+            // Pick a node with no incoming edge.
+            let node = no_incoming_edge.pop().unwrap();
+            sorted.push(node);
+
+            // Remove edges from the node.
+            for to in edges[node].clone() {
+                edges[to].remove(node);
+                if edges[to].is_empty() {
+                    no_incoming_edge.push(to);
+                }
+            }
+        }
+
+        // Detect a loop.
+        for i in 0..edges.len() {
+            if !edges[i].is_empty() {
+                return None;
+            }
+        }
+
+        Some(sorted)
+    }
+
     // Create a graph from a set of elements.
     // Returns a map from element to a node.
     pub fn from_set(elems: HashSet<T>) -> (Self, HashMap<T, usize>)
