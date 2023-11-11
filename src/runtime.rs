@@ -230,9 +230,9 @@ fn build_release_boxed_function<'c, 'm, 'b>(
                 .build_conditional_branch(is_refcnt_negative, then_bb, cont_bb);
             gc.builder().position_at_end(then_bb);
             gc.builder().build_return(None);
+            gc.builder().position_at_end(cont_bb);
 
             // Decrement refcnt.
-            gc.builder().position_at_end(cont_bb);
             let refcnt = gc.builder().build_int_nsw_sub(
                 old_refcnt,
                 refcnt_type(gc.context).const_int(1, false).into(),
