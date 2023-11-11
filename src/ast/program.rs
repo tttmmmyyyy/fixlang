@@ -651,11 +651,9 @@ impl Program {
                 // When the object is boxed, mark it as global.
                 // TODO: do the same thing to all boxed objects reachable from obj.
                 if obj.is_box(gc.type_env()) {
-                    // Set refcnt to a negative value.
+                    // Set refcnt to a negative value 13835058055282163712 = (2^64 + 2^63) / 2.
                     let obj_ptr = obj.ptr(gc);
                     let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-
-                    // 13835058055282163712 = (2^64 + 2^63) / 2
                     let nagative = refcnt_type(gc.context).const_int(13835058055282163712, false);
                     gc.builder().build_store(ptr_to_refcnt, nagative);
                 }

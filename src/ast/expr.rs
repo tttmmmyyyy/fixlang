@@ -476,6 +476,64 @@ impl ExprNode {
             }
         }
     }
+
+    // Calculates the set of global values that has to be initialized before evaluating this expression.
+    // If a global value `g` is used only in the body of a lambda expression, then `g` is not included in the result.
+    pub fn depending_global_values(self: &Rc<ExprNode>) -> HashSet<FullName> {
+        // Filter out local variables.
+        fn filter_out_local(names: HashSet<FullName>) -> HashSet<FullName> {
+            names.into_iter().filter(|name| !name.is_local()).collect()
+        }
+
+        match &*self.expr {
+            Expr::Var(var) => filter_out_local(vec![var.name.clone()].into_iter().collect()),
+            Expr::LLVM(lit) => filter_out_local(lit.free_vars.clone().into_iter().collect()),
+            Expr::App(func, args) => {
+                let mut free_vars = func.depending_global_values();
+                for arg in args {
+                    free_vars.extend(arg.depending_global_values());
+                }
+                free_vars
+            }
+            Expr::Lam(_, _) => HashSet::default(),
+            Expr::Let(_, bound, val) => {
+                // NOTE: Our let is non-recursive let, i.e.,
+                // "let x = f x in g x" is equal to "let y = f x in g y",
+                // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
+                let mut free_vars = bound.depending_global_values();
+                free_vars.extend(val.depending_global_values());
+                free_vars
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                let mut free_vars = cond.depending_global_values();
+                free_vars.extend(then_expr.depending_global_values());
+                free_vars.extend(else_expr.depending_global_values());
+                free_vars
+            }
+            Expr::TyAnno(e, _) => e.depending_global_values(),
+            Expr::MakeStruct(_, fields) => {
+                let mut free_vars = HashSet::default();
+                for (_, field_expr) in fields {
+                    free_vars.extend(field_expr.depending_global_values());
+                }
+                free_vars
+            }
+            Expr::ArrayLit(elems) => {
+                let mut free_vars = HashSet::default();
+                for elem in elems {
+                    free_vars.extend(elem.depending_global_values());
+                }
+                free_vars
+            }
+            Expr::CallC(_, _, _, _, args) => {
+                let mut free_vars: HashSet<FullName> = Default::default();
+                for (_, e) in args.iter().enumerate() {
+                    free_vars.extend(e.depending_global_values());
+                }
+                free_vars
+            }
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
