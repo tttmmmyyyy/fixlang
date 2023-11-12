@@ -951,8 +951,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     // Argument of dtor function is i8*, even when the object is unboxed.
                     let ptr = obj.ptr(self);
                     let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
-                    self.builder()
-                        .build_call(dtor, &[ptr.into()], "dtor_of_unboxed");
+                    self.builder().build_call(
+                        dtor,
+                        &[
+                            ptr.into(),
+                            ptr_to_object_type(self.context).const_null().into(),
+                        ],
+                        "dtor_of_unboxed",
+                    );
                 }
                 None => {}
             }
