@@ -31,6 +31,8 @@ pub struct Configuration {
     pub emit_llvm: bool,
     // Output file name.
     pub out_file_path: Option<PathBuf>,
+    // Use threads.
+    pub threaded: bool,
 }
 
 impl Configuration {
@@ -46,6 +48,7 @@ impl Configuration {
             debug_mode: false,
             emit_llvm: false,
             out_file_path: None,
+            threaded: false,
         }
     }
 
@@ -62,6 +65,7 @@ impl Configuration {
             debug_mode: false,
             emit_llvm: false,
             out_file_path: None,
+            threaded: false,
         }
     }
 

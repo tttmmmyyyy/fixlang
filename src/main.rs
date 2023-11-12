@@ -102,6 +102,10 @@ fn main() {
         .long("emit-llvm")
         .takes_value(false)
         .help("Emit LLVM-IR file.");
+    let threaded = Arg::new("threaded")
+        .long("threaded")
+        .takes_value(false)
+        .help("Enable multi-threading. Turning this option ON increases overhead, it is recommended keeping this option OFF for single-threaded programs.");
     let output_file = Arg::new("output-file")
         .long("output")
         .short('o')
@@ -113,7 +117,8 @@ fn main() {
         .arg(output_file.clone())
         .arg(dynamic_link_library.clone())
         .arg(debug_mode.clone())
-        .arg(emit_llvm.clone());
+        .arg(emit_llvm.clone())
+        .arg(threaded.clone());
     let build_subc = App::new("build")
         .about("Builds an executable binary from source files.")
         .arg(source_file.clone())
@@ -121,7 +126,8 @@ fn main() {
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
         .arg(debug_mode.clone())
-        .arg(emit_llvm.clone());
+        .arg(emit_llvm.clone())
+        .arg(threaded.clone());
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
     let app = App::new("Fix-lang")
         .bin_name("fix")
@@ -165,6 +171,7 @@ fn main() {
         config.linked_libraries = read_library_options(m);
         config.debug_mode = m.contains_id("debug-mode");
         config.emit_llvm = m.contains_id("emit-llvm");
+        config.threaded = m.contains_id("threaded");
         config.uncurry_optimization = !config.debug_mode;
         config.llvm_opt_level = if config.debug_mode {
             OptimizationLevel::None
