@@ -1,4 +1,5 @@
 extern crate rustc_version;
+use core::panic;
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::sync::Mutex;
@@ -49,7 +50,7 @@ pub extern "C" fn report_malloc(address: *const i8, name: *const i8) -> i64 {
 
 #[no_mangle]
 // Mark an object as global.
-pub extern "C" fn mark_as_global(obj_id: i64) -> () {
+pub extern "C" fn report_mark_global(obj_id: i64) -> () {
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_table.contains_key(&obj_id),
@@ -81,17 +82,21 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
         obj_id
     );
     let info = object_table.get_mut(&obj_id).unwrap();
-    if !info.is_global {
+    if info.is_global {
+        panic!(
+            "[Sanitizer] A global object of id={} is retained! refcnt=({} -> {}), addr={:#X}, code = {}",
+            obj_id,
+            refcnt,
+            refcnt + 1,
+            address as usize,
+            info.code
+        );
+    } else {
         assert_eq!(
             info.refcnt, refcnt,
             "[Sanitizer] The refcnt of object id={} in report_retain mismatch! reported={}, sanitizer={}",
             obj_id, refcnt, info.refcnt
         );
-    } else if refcnt != info.refcnt {
-        if VERBOSE {
-            println!("[Sanitizer] The refcnt of object id={} in report_retain mismatch but it is global. reported={}, sanitizer={}",
-            obj_id, refcnt, info.refcnt)
-        }
     }
     info.refcnt += 1;
     if VERBOSE {
@@ -121,18 +126,22 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
         obj_id
     );
     let info = object_info.get_mut(&obj_id).unwrap();
-    if !info.is_global {
+    if info.is_global {
+        panic!(
+            "[Sanitizer] A global object id={} is released! refcnt=({} -> {}), addr={:#X}, code = {}",
+            obj_id,
+            refcnt,
+            refcnt - 1,
+            address as usize,
+            info.code
+        );
+    } else {
         assert_eq!(
             info.refcnt, refcnt,
             "[Sanitizer] The refcnt of object id={} in report_release mismatch! reported={}, sanitizer={}",
             obj_id, refcnt, info.refcnt
         );
         info.refcnt -= 1;
-    } else if refcnt != info.refcnt {
-        if VERBOSE {
-            println!("[Sanitizer] The refcnt of object id={} in report_retain mismatch but it is global. reported={}, sanitizer={}",
-            obj_id, refcnt, info.refcnt)
-        }
     }
     if VERBOSE {
         println!(
@@ -171,6 +180,13 @@ pub extern "C" fn check_leak() -> () {
                 "[Sanitizer] Object id={} is leaked. refcnt={}, addr={:#X}, code = {}",
                 id, info.refcnt, info.addr, info.code
             );
+        } else {
+            if VERBOSE {
+                println!(
+                    "[Sanitizer] Object id={} is leaked, but it is marked as global. refcnt={}, addr={:#X}, code = {}",
+                    id, info.refcnt, info.addr, info.code
+                );
+            }
         }
     }
     if leak {

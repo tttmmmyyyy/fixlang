@@ -54,7 +54,7 @@ impl Configuration {
     pub fn develop_compiler() -> Configuration {
         Configuration {
             source_files: vec![],
-            sanitize_memory: false, // NOTE: Currently, global values are detected as leaked by memory sanitizer, so disable it.
+            sanitize_memory: true,
             uncurry_optimization: true,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],

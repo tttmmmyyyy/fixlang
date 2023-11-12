@@ -648,15 +648,9 @@ impl Program {
                 // Execute expression.
                 let obj = gc.eval_expr(sym.expr.unwrap().clone(), rvo.clone());
 
-                // When the object is boxed, mark it as global.
-                // TODO: do the same thing to all boxed objects reachable from obj.
-                if obj.is_box(gc.type_env()) {
-                    // Set refcnt to a negative value 13835058055282163712 = (2^64 + 2^63) / 2.
-                    let obj_ptr = obj.ptr(gc);
-                    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-                    let nagative = refcnt_type(gc.context).const_int(13835058055282163712, false);
-                    gc.builder().build_store(ptr_to_refcnt, nagative);
-                }
+                // Mark the object and all object reachable from it as global.
+                gc.mark_global(obj.clone());
+
                 // If we didn't rvo, then store the result to global_ptr.
                 if rvo.is_none() {
                     let obj_val = obj.value(gc);
@@ -667,12 +661,6 @@ impl Program {
                 gc.builder()
                     .build_store(init_flag, gc.context.i8_type().const_int(1, false));
 
-                if gc.config.sanitize_memory && obj.is_box(gc.type_env()) {
-                    // Mark this object as global.
-                    let ptr = obj.ptr(gc);
-                    let obj_id = gc.get_obj_id(ptr);
-                    gc.call_runtime(RuntimeFunctions::MarkGlobal, &[obj_id.into()]);
-                }
                 gc.builder().build_unconditional_branch(end_bb);
 
                 // Return object.

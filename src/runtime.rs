@@ -8,10 +8,11 @@ pub enum RuntimeFunctions {
     ReportMalloc,
     ReportRetain,
     ReportRelease,
-    MarkGlobal,
+    ReportMarkGlobal,
     CheckLeak,
     RetainBoxedObject,
     ReleaseBoxedObject,
+    MarkGlobalBoxedObject,
     SubtractPtr,
     PtrAddOffset,
 }
@@ -89,12 +90,12 @@ fn build_report_release_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Func
     gc.module.add_function("report_release", fn_ty, None)
 }
 
-fn build_mark_global_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_report_mark_global_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let fn_ty = gc
         .context
         .void_type()
         .fn_type(&[obj_id_type(gc.context).into()], false);
-    gc.module.add_function("mark_as_global", fn_ty, None)
+    gc.module.add_function("report_mark_global", fn_ty, None)
 }
 
 fn build_check_leak_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -183,7 +184,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     let func_type = void_type.fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
-            ObjectFieldType::DtorFunction
+            ObjectFieldType::TraverseFunction
                 .to_basic_type(gc, vec![])
                 .into(),
         ],
@@ -292,8 +293,12 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     // Call dtor and jump to free_bb
     gc.builder().position_at_end(call_dtor_bb);
     let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
-    gc.builder()
-        .build_call(dtor_func, &[ptr_to_obj.into()], "call_dtor");
+    let null_ptr = ptr_to_object_type(gc.context).const_null();
+    gc.builder().build_call(
+        dtor_func,
+        &[ptr_to_obj.into(), null_ptr.into()],
+        "call_dtor",
+    );
     gc.builder().build_unconditional_branch(free_bb);
 
     // free.
@@ -306,6 +311,74 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     gc.builder().build_return(None);
 
     release_func
+}
+
+fn build_mark_global_boxed_object_function<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    let void_type = gc.context.void_type();
+    let func_type = void_type.fn_type(
+        &[
+            ptr_to_object_type(gc.context).into(),
+            ObjectFieldType::TraverseFunction
+                .to_basic_type(gc, vec![])
+                .into(),
+        ],
+        false,
+    );
+    let mark_func = gc.module.add_function("mark_global", func_type, None);
+    let bb = gc.context.append_basic_block(mark_func, "entry");
+
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(bb);
+
+    // Get pointer to / value of reference counter.
+    let ptr_to_obj = mark_func.get_first_param().unwrap().into_pointer_value();
+
+    // Get pointer to traverser function.
+    let ptr_to_traverser = mark_func.get_nth_param(1).unwrap().into_pointer_value();
+
+    // If traverser is null, then skip calling traverser.
+    let mark_self_global_bb = gc.context.append_basic_block(mark_func, "mark_self_global");
+    let call_traverser_bb = gc.context.append_basic_block(mark_func, "call_traverser");
+    let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
+    let is_traverser_null = gc.builder().build_int_compare(
+        IntPredicate::EQ,
+        gc.builder()
+            .build_ptr_to_int(ptr_to_traverser, ptr_int_ty, "ptr_to_traverser"),
+        ptr_int_ty.const_zero(),
+        "is_traverser_null",
+    );
+    gc.builder().build_conditional_branch(
+        is_traverser_null,
+        mark_self_global_bb,
+        call_traverser_bb,
+    );
+
+    // Call traverser to mark all subobjects as global .
+    gc.builder().position_at_end(call_traverser_bb);
+    let dtor_func = CallableValue::try_from(ptr_to_traverser).unwrap();
+    let one_ptr = gc.object_ptr_one();
+    gc.builder().build_call(
+        dtor_func,
+        &[ptr_to_obj.into(), one_ptr.into()],
+        "call_traverser_for_mark",
+    );
+    gc.builder().build_unconditional_branch(mark_self_global_bb);
+
+    // Mark the object itself as global.
+    gc.builder().position_at_end(mark_self_global_bb);
+    gc.mark_global_one(ptr_to_obj);
+
+    // Report mark global to sanitizer.
+    if gc.config.sanitize_memory {
+        let obj_id = gc.get_obj_id(ptr_to_obj);
+        gc.call_runtime(RuntimeFunctions::ReportMarkGlobal, &[obj_id.into()]);
+    }
+
+    gc.builder().build_return(None);
+
+    mark_func
 }
 
 fn build_subtract_ptr_function<'c, 'm, 'b>(
@@ -381,9 +454,11 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
             build_report_release_function(gc),
         );
         gc.runtimes
-            .insert(RuntimeFunctions::MarkGlobal, build_mark_global_function(gc));
-        gc.runtimes
             .insert(RuntimeFunctions::CheckLeak, build_check_leak_function(gc));
+        gc.runtimes.insert(
+            RuntimeFunctions::ReportMarkGlobal,
+            build_report_mark_global_function(gc),
+        );
     }
     let retain_func = build_retain_boxed_function(gc);
     gc.runtimes
@@ -391,6 +466,9 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     let release_func = build_release_boxed_function(gc);
     gc.runtimes
         .insert(RuntimeFunctions::ReleaseBoxedObject, release_func);
+    let mark_func = build_mark_global_boxed_object_function(gc);
+    gc.runtimes
+        .insert(RuntimeFunctions::MarkGlobalBoxedObject, mark_func);
     let subtract_ptr_func = build_subtract_ptr_function(gc);
     gc.runtimes
         .insert(RuntimeFunctions::SubtractPtr, subtract_ptr_func);

@@ -187,8 +187,11 @@ impl<'c> Object<'c> {
         gc.store_obj_field(self.ptr, struct_ty, field_idx, val)
     }
 
-    // Get function pointer to destructor.
-    pub fn get_dtor_ptr_boxed<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
+    // Get function pointer to traverser.
+    pub fn get_traverser_ptr_boxed<'m>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+    ) -> PointerValue<'c> {
         assert!(self.is_box(gc.type_env()));
         assert!(!self.is_funptr());
         if self.ty.is_dynamic() {
@@ -778,6 +781,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.builder().position_at_end(cont_bb.unwrap());
             }
         } else {
+            // When the object is unboxed,
             let obj_type = ty_to_object_ty(&obj.ty, &vec![], self.type_env());
             let struct_type = obj_type.to_struct_type(self, vec![]);
             let ptr = obj.ptr(self);
@@ -786,7 +790,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             for (i, ft) in obj_type.field_types.iter().enumerate() {
                 match ft {
                     ObjectFieldType::ControlBlock => unreachable!(),
-                    ObjectFieldType::DtorFunction => unreachable!(),
+                    ObjectFieldType::TraverseFunction => unreachable!(),
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Ptr => {}
                     ObjectFieldType::I8 => {}
@@ -895,7 +899,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         let ptr = obj.ptr(self);
         let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
-        let dtor = obj.get_dtor_ptr_boxed(self);
+        let dtor = obj.get_traverser_ptr_boxed(self);
         self.call_runtime(
             RuntimeFunctions::ReleaseBoxedObject,
             &[ptr.into(), dtor.into()],
@@ -953,6 +957,84 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 None => {}
             }
         }
+    }
+
+    // Set object's refcnt to a negative value to indicate that the object is reachable from global and should not be retained or released.
+    pub fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
+        let ptr_refcnt = self.get_refcnt_ptr(ptr);
+        // 13835058055282163712 = (2^64 + 2^63) / 2
+        let refcnt = refcnt_type(self.context).const_int(13835058055282163712, false);
+        self.builder().build_store(ptr_refcnt, refcnt);
+    }
+
+    // Set all refcnts of objects reachable from `obj` to a negative value to indicate that the object is reachable from global and should not be retained or released.
+    pub fn mark_global(&mut self, obj: Object<'c>) {
+        if obj.is_box(self.type_env()) {
+            let cont_bb = if obj.is_dynamic_object() {
+                // Dynamic object can be null, so build null checking.
+
+                // Append basic blocks.
+                let current_bb = self.builder().get_insert_block().unwrap();
+                let current_func = current_bb.get_parent().unwrap();
+                let nonnull_bb = self
+                    .context
+                    .append_basic_block(current_func, "nonnull@mark_global");
+                let cont_bb = self
+                    .context
+                    .append_basic_block(current_func, "cont@mark_global");
+
+                // Branch to nonnull_bb if object is not null.
+                let is_null = obj.is_null(self);
+                self.builder()
+                    .build_conditional_branch(is_null, cont_bb, nonnull_bb);
+
+                // Implement nonnull_bb.
+                self.builder().position_at_end(nonnull_bb);
+
+                Some(cont_bb)
+            } else {
+                None
+            };
+
+            let ptr = obj.ptr(self);
+            let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
+            let traverser = obj.get_traverser_ptr_boxed(self);
+            self.call_runtime(
+                RuntimeFunctions::MarkGlobalBoxedObject,
+                &[ptr.into(), traverser.into()],
+            );
+
+            if obj.is_dynamic_object() {
+                // Dynamic object can be null, so build null checking.
+                self.builder().build_unconditional_branch(cont_bb.unwrap());
+                self.builder().position_at_end(cont_bb.unwrap());
+            }
+        } else if obj.is_funptr() {
+            // Nothing to do.
+        } else {
+            match obj.get_traverser_unboxed(self) {
+                Some(traverser) => {
+                    // Argument of traverser function is i8*, even when the object is unboxed.
+                    let ptr = obj.ptr(self);
+                    let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
+                    let one_ptr = self.object_ptr_one();
+                    self.builder().build_call(
+                        traverser,
+                        &[ptr.into(), one_ptr.into()],
+                        "dtor_of_unboxed",
+                    );
+                }
+                None => {}
+            }
+        }
+    }
+
+    // Create a pointer to object whose value is 1.
+    pub fn object_ptr_one(&mut self) -> PointerValue<'c> {
+        let ptr_int_ty = self.context.ptr_sized_int_type(self.target_data(), None);
+        let one_ptr = ptr_int_ty.const_int(1, false);
+        self.builder()
+            .build_int_to_ptr(one_ptr, ptr_to_object_type(self.context), "object_ptr_one")
     }
 
     // Print Rust's &str to stderr.

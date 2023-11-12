@@ -477,8 +477,8 @@ impl ExprNode {
         }
     }
 
-    // Calculates the set of global values that has to be initialized before evaluating this expression.
     // If a global value `g` is used only in the body of a lambda expression, then `g` is not included in the result.
+    #[allow(dead_code)]
     pub fn depending_global_values(self: &Rc<ExprNode>) -> HashSet<FullName> {
         // Filter out local variables.
         fn filter_out_local(names: HashSet<FullName>) -> HashSet<FullName> {
