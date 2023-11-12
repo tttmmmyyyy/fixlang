@@ -664,6 +664,7 @@ impl Program {
                     );
                     // The end block of the accessor function.
                     let end_bb = gc.context.append_basic_block(acc_fn, "end_bb");
+                    gc.builder().build_unconditional_branch(end_bb);
 
                     // The entry block for the initialization function.
                     let init_bb = gc.context.append_basic_block(init_fn, "init_bb");
