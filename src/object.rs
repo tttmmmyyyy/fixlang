@@ -1351,7 +1351,7 @@ pub fn allocate_obj<'c, 'm>(
                     .builder()
                     .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_dtor_field")
                     .unwrap();
-                let dtor = get_dtor_ptr(&ty, capture, gc);
+                let dtor = get_traverser_ptr(&ty, capture, gc);
                 gc.builder().build_store(ptr_to_dtor_field, dtor);
             }
             ObjectFieldType::UnionBuf(_) => {}
@@ -1362,18 +1362,18 @@ pub fn allocate_obj<'c, 'm>(
     Object::new(ptr_to_obj, ty)
 }
 
-pub fn get_dtor_ptr<'c, 'm>(
+pub fn get_traverser_ptr<'c, 'm>(
     ty: &Rc<TypeNode>,
     capture: &Vec<Rc<TypeNode>>, // used in destructor of lambda
     gc: &mut GenerationContext<'c, 'm>,
 ) -> PointerValue<'c> {
-    match create_dtor(ty, capture, gc) {
+    match create_traverser(ty, capture, gc) {
         Some(fv) => fv.as_global_value().as_pointer_value(),
         None => ptr_to_dtor_type(gc.context).const_null(),
     }
 }
 
-pub fn create_dtor<'c, 'm>(
+pub fn create_traverser<'c, 'm>(
     ty: &Rc<TypeNode>,
     capture: &Vec<Rc<TypeNode>>, // used in destructor of dynamic object.
     gc: &mut GenerationContext<'c, 'm>,

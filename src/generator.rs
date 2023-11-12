@@ -195,18 +195,18 @@ impl<'c> Object<'c> {
             self.load_field_nocap(gc, DYNAMIC_OBJ_DTOR_IDX)
                 .into_pointer_value()
         } else {
-            get_dtor_ptr(&self.ty, &vec![], gc)
+            get_traverser_ptr(&self.ty, &vec![], gc)
         }
     }
 
-    // Get dtor function.
-    pub fn get_dtor_unboxed<'m>(
+    // Get traverser function.
+    pub fn get_traverser_unboxed<'m>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
     ) -> Option<FunctionValue<'c>> {
         assert!(self.is_unbox(gc.type_env()));
         assert!(!self.is_funptr());
-        create_dtor(&self.ty, &vec![], gc)
+        create_traverser(&self.ty, &vec![], gc)
     }
 
     // Check if the pointer is null.
@@ -942,7 +942,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else if obj.is_funptr() {
             // Nothing to do.
         } else {
-            match obj.get_dtor_unboxed(self) {
+            match obj.get_traverser_unboxed(self) {
                 Some(dtor) => {
                     // Argument of dtor function is i8*, even when the object is unboxed.
                     let ptr = obj.ptr(self);
