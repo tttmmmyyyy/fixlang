@@ -268,8 +268,10 @@ fn build_release_boxed_function<'c, 'm, 'b>(
 
     // If refcnt is zero, try to call dtor and free object.
     gc.builder().position_at_end(then_bb);
-    gc.builder()
-        .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+    if gc.config.atomic_refcnt {
+        gc.builder()
+            .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+    }
 
     let ptr_to_dtor = release_func.get_nth_param(1).unwrap().into_pointer_value();
 
