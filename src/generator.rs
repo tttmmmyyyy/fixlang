@@ -989,12 +989,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     #[allow(dead_code)]
-    pub fn mark_as_shared(&mut self, ptr: PointerValue<'c>) {
+    pub fn mark_as_threaded(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_SHARED` to `ptr_refcnt_state`.
         self.builder().build_store(
             ptr_refcnt_state,
-            refcnt_state_type(self.context).const_int(REFCNT_STATE_SHARED as u64, false),
+            refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
         );
     }
 

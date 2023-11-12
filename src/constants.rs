@@ -50,7 +50,7 @@ pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_DTOR_IDX + 1;
 
 // REFCNT_STATE_* values are stored to a field of the control block of each boxed object.
 pub const REFCNT_STATE_LOCAL: u8 = 0; // This is local object in the sense that it is not shared with other threads but should be released since it is not global.
-pub const REFCNT_STATE_SHARED: u8 = 1; // This is shared object and should be released or retained atomically.
+pub const REFCNT_STATE_THREADED: u8 = 1; // This object is shared between multiple threads and should be released or retained atomically.
 pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not be released or retained.
 
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
