@@ -616,7 +616,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     pub fn get_refcnt_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         let ptr_control_block = self.get_control_block_ptr(obj);
         self.builder()
-            .build_struct_gep(ptr_control_block, 0, "ptr_to_refcnt")
+            .build_struct_gep(ptr_control_block, CTRL_BLK_REFCNT_IDX, "ptr_to_refcnt")
+            .unwrap()
+    }
+
+    // Get pointer to state of reference counter of a given object.
+    pub fn get_refcnt_state_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
+        let ptr_control_block = self.get_control_block_ptr(obj);
+        self.builder()
+            .build_struct_gep(
+                ptr_control_block,
+                CTRL_BLK_REFCNT_STATE_IDX,
+                "ptr_to_refcnt_state",
+            )
             .unwrap()
     }
 
@@ -950,7 +962,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 Some(dtor) => {
                     // Argument of dtor function is i8*, even when the object is unboxed.
                     let ptr = obj.ptr(self);
-                    let ptr: PointerValue<'_> = self.cast_pointer(ptr, ptr_to_object_type(self.context));
+                    let ptr: PointerValue<'_> =
+                        self.cast_pointer(ptr, ptr_to_object_type(self.context));
                     self.builder().build_call(
                         dtor,
                         &[
@@ -965,12 +978,34 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    // Set object's refcnt to a negative value to indicate that the object is reachable from global and should not be retained or released.
+    #[allow(dead_code)]
+    pub fn mark_as_local(&mut self, ptr: PointerValue<'c>) {
+        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
+        // Store `REFCNT_STATE_LOCAL` to `ptr_refcnt_state`.
+        self.builder().build_store(
+            ptr_refcnt_state,
+            refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+        );
+    }
+
+    #[allow(dead_code)]
+    pub fn mark_as_shared(&mut self, ptr: PointerValue<'c>) {
+        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
+        // Store `REFCNT_STATE_SHARED` to `ptr_refcnt_state`.
+        self.builder().build_store(
+            ptr_refcnt_state,
+            refcnt_state_type(self.context).const_int(REFCNT_STATE_SHARED as u64, false),
+        );
+    }
+
+    // Mark object as global so that it will not be retained or released.
     pub fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
-        let ptr_refcnt = self.get_refcnt_ptr(ptr);
-        // 13835058055282163712 = (2^64 + 2^63) / 2
-        let refcnt = refcnt_type(self.context).const_int(13835058055282163712, false);
-        self.builder().build_store(ptr_refcnt, refcnt);
+        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
+        // Store `REFCNT_STATE_GLOBAL` to `ptr_refcnt_state`.
+        self.builder().build_store(
+            ptr_refcnt_state,
+            refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+        );
     }
 
     // Set all refcnts of objects reachable from `obj` to a negative value to indicate that the object is reachable from global and should not be retained or released.
@@ -1059,7 +1094,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Get object id of a object
     pub fn get_obj_id(&self, ptr_to_obj: PointerValue<'c>) -> IntValue<'c> {
         assert!(self.config.sanitize_memory);
-        self.load_obj_field(ptr_to_obj, control_block_type(self), 1)
+        self.load_obj_field(ptr_to_obj, control_block_type(self), CTRL_BLK_OBJ_ID_IDX)
             .into_int_value()
     }
 

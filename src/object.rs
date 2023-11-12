@@ -1010,8 +1010,10 @@ pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
         .as_type()
 }
 
-fn _ptr_to_refcnt_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    refcnt_type(context).ptr_type(AddressSpace::from(0))
+// State for reference counting.
+// Values of this fields are REFCNT_STATE_* constants.
+pub fn refcnt_state_type<'c>(context: &'c Context) -> IntType<'c> {
+    context.i8_type()
 }
 
 pub fn obj_id_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
@@ -1044,8 +1046,13 @@ fn ptr_to_traverser_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
 }
 
 pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
-    let mut fields = vec![refcnt_type(gc.context).into()];
+    let mut fields = vec![];
+    assert_eq!(fields.len(), CTRL_BLK_REFCNT_IDX as usize);
+    fields.push(refcnt_type(gc.context).into());
+    assert_eq!(fields.len(), CTRL_BLK_REFCNT_STATE_IDX as usize);
+    fields.push(refcnt_state_type(gc.context).into());
     if gc.config.sanitize_memory {
+        assert_eq!(fields.len(), CTRL_BLK_OBJ_ID_IDX as usize);
         fields.push(obj_id_type(gc.context).into())
     }
     gc.context.struct_type(&fields, false)
@@ -1340,16 +1347,18 @@ pub fn allocate_obj<'c, 'm>(
         object_id = obj_id.try_as_basic_value().unwrap_left().into_int_value();
     }
 
-    // Initialize refcnt and dtor field.
+    // Initialize refcnt, refcnt_state and traverser for dynamic object.
     for (i, ft) in object_type.field_types.iter().enumerate() {
         match ft {
             ObjectFieldType::ControlBlock => {
                 assert_eq!(i, 0);
-                // Set refcnt one.
+                // Get pointer to control block.
                 let ptr_to_control_block = gc
                     .builder()
                     .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_control_block")
                     .unwrap();
+
+                // Initialize the reference counter 1.
                 let ptr_to_refcnt = gc
                     .builder()
                     .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
@@ -1357,11 +1366,25 @@ pub fn allocate_obj<'c, 'm>(
                 gc.builder()
                     .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
 
+                // Initialize the reference counter state to REFCNT_STATE_LOCAL.
+                let ptr_to_refcnt_state = gc
+                    .builder()
+                    .build_struct_gep(ptr_to_control_block, 1, "ptr_to_refcnt_state")
+                    .unwrap();
+                gc.builder().build_store(
+                    ptr_to_refcnt_state,
+                    refcnt_state_type(context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                );
+
                 // If sanitize memory, set object id.
                 if gc.config.sanitize_memory {
                     let ptr_to_obj_id = gc
                         .builder()
-                        .build_struct_gep(ptr_to_control_block, 1, "ptr_to_obj_id")
+                        .build_struct_gep(
+                            ptr_to_control_block,
+                            CTRL_BLK_OBJ_ID_IDX,
+                            "ptr_to_obj_id",
+                        )
                         .unwrap();
                     gc.builder().build_store(ptr_to_obj_id, object_id);
                 }

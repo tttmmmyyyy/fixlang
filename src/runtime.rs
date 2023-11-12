@@ -133,28 +133,31 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
                 )
                 .unwrap()
         } else {
-            let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
-
-            // If old_refcnt is negative as signed integer, the object is reachable from global, and should not be retained, so nothing to do here.
-            let is_refcnt_negative = gc.builder().build_int_compare(
-                inkwell::IntPredicate::SLT,
-                old_refcnt,
-                refcnt_type(gc.context).const_zero(),
-                "is_refcnt_negative",
+            // If the reference counter state is global, then the object is reachable from global, and should not be retained, so nothing to do here.
+            let refcnt_state = gc
+                .builder()
+                .build_load(gc.get_refcnt_state_ptr(ptr_to_obj), "refcnt_state")
+                .into_int_value();
+            let is_refcnt_state_global = gc.builder().build_int_compare(
+                inkwell::IntPredicate::EQ,
+                refcnt_state,
+                refcnt_state_type(gc.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+                "is_refcnt_state_global",
             );
             let then_bb = gc
                 .context
-                .append_basic_block(retain_func, "refcnt_negative@retain_obj");
+                .append_basic_block(retain_func, "refcnt_state_global@retain_obj");
             let cont_bb = gc
                 .context
-                .append_basic_block(retain_func, "refcnt_non_negative@retain_obj");
+                .append_basic_block(retain_func, "refcnt_state_non_global@retain_obj");
             gc.builder()
-                .build_conditional_branch(is_refcnt_negative, then_bb, cont_bb);
+                .build_conditional_branch(is_refcnt_state_global, then_bb, cont_bb);
             gc.builder().position_at_end(then_bb);
             gc.builder().build_return(None);
             gc.builder().position_at_end(cont_bb);
 
             // Increment refcnt.
+            let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
             let refcnt = gc.builder().build_int_nsw_add(
                 old_refcnt,
                 refcnt_type(gc.context).const_int(1, false).into(),
@@ -213,28 +216,31 @@ fn build_release_boxed_function<'c, 'm, 'b>(
                 )
                 .unwrap()
         } else {
-            let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
-
-            // If old_refcnt is negative as signed integer, the object is reachable from global, and should not be released, so nothing to do here.
-            let is_refcnt_negative = gc.builder().build_int_compare(
-                inkwell::IntPredicate::SLT,
-                old_refcnt,
-                refcnt_type(gc.context).const_zero(),
-                "is_refcnt_negative",
+            // If the reference counter state is global, then the object is reachable from global, and should not be retained, so nothing to do here.
+            let refcnt_state = gc
+                .builder()
+                .build_load(gc.get_refcnt_state_ptr(ptr_to_obj), "refcnt_state")
+                .into_int_value();
+            let is_refcnt_state_global = gc.builder().build_int_compare(
+                inkwell::IntPredicate::EQ,
+                refcnt_state,
+                refcnt_state_type(gc.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+                "is_refcnt_state_global",
             );
             let then_bb = gc
                 .context
-                .append_basic_block(release_func, "refcnt_negative@release_obj");
+                .append_basic_block(release_func, "refcnt_state_global@release_obj");
             let cont_bb = gc
                 .context
-                .append_basic_block(release_func, "refcnt_non_negative@release_obj");
+                .append_basic_block(release_func, "refcnt_state_non_global@release_obj");
             gc.builder()
-                .build_conditional_branch(is_refcnt_negative, then_bb, cont_bb);
+                .build_conditional_branch(is_refcnt_state_global, then_bb, cont_bb);
             gc.builder().position_at_end(then_bb);
             gc.builder().build_return(None);
             gc.builder().position_at_end(cont_bb);
 
             // Decrement refcnt.
+            let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
             let refcnt = gc.builder().build_int_nsw_sub(
                 old_refcnt,
                 refcnt_type(gc.context).const_int(1, false).into(),
