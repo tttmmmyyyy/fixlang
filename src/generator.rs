@@ -950,7 +950,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 Some(dtor) => {
                     // Argument of dtor function is i8*, even when the object is unboxed.
                     let ptr = obj.ptr(self);
-                    let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
+                    let ptr: PointerValue<'_> = self.cast_pointer(ptr, ptr_to_object_type(self.context));
                     self.builder().build_call(
                         dtor,
                         &[
