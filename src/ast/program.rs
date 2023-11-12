@@ -594,7 +594,10 @@ impl Program {
                 // Prepare initialized flag.
                 let flag_name = format!("InitFlag#{}", name.to_string());
                 let (flag_ty, flag_init_val) = if gc.config.threaded {
-                    (pthread_once_t(gc.context), pthread_once_init(gc.context))
+                    (
+                        pthread_once_init_flag_type(gc.context),
+                        pthread_once_init_flag_value(gc.context),
+                    )
                 } else {
                     let ty = gc.context.i8_type();
                     (ty, ty.const_zero())

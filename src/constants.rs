@@ -108,11 +108,11 @@ pub const TUPLE_SIZE_MAX: u32 = 4;
 pub const TUPLE_UNBOX: bool = true;
 
 // The type in LLVM corresponding to `pthread_once_t` of this system.
-pub fn pthread_once_t<'c>(ctx: &'c Context) -> IntType<'c> {
+pub fn pthread_once_init_flag_type<'c>(ctx: &'c Context) -> IntType<'c> {
     ctx.i32_type()
 }
 
 // The value of `PTHREAD_ONCE_INIT` of this system.
-pub fn pthread_once_init<'c>(ctx: &'c Context) -> IntValue<'c> {
-    pthread_once_t(ctx).const_zero()
+pub fn pthread_once_init_flag_value<'c>(ctx: &'c Context) -> IntValue<'c> {
+    pthread_once_init_flag_type(ctx).const_zero()
 }

@@ -437,10 +437,11 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(
 pub fn build_pthread_once_function<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm>,
 ) -> FunctionValue<'c> {
+    let init_flag_ty = pthread_once_init_flag_type(gc.context);
     let init_fn_ty = gc.context.void_type().fn_type(&[], false);
     let pthread_once_ty = gc.context.void_type().fn_type(
         &[
-            gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
+            init_flag_ty.ptr_type(AddressSpace::from(0)).into(),
             init_fn_ty.ptr_type(AddressSpace::from(0)).into(),
         ],
         false,
