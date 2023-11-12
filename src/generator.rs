@@ -1006,6 +1006,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             ptr_refcnt_state,
             refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
         );
+        // Also, set refcnt some large number so that it will not considered as unique.
+        let ptr_refcnt: PointerValue<'_> = self.get_refcnt_ptr(ptr);
+        self.builder().build_store(
+            ptr_refcnt,
+            refcnt_type(self.context).const_int(1 << 62, false),
+        );
     }
 
     // Set all refcnts of objects reachable from `obj` to a negative value to indicate that the object is reachable from global and should not be retained or released.

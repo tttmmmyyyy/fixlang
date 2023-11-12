@@ -362,7 +362,7 @@ fn build_mark_global_boxed_object_function<'c, 'm>(
         call_traverser_bb,
     );
 
-    // Call traverser to mark all subobjects as global .
+    // Call traverser to mark all subobjects as global.
     gc.builder().position_at_end(call_traverser_bb);
     let dtor_func = CallableValue::try_from(ptr_to_traverser).unwrap();
     let one_ptr = gc.object_ptr_one();
