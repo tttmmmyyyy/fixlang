@@ -15,6 +15,7 @@ pub enum RuntimeFunctions {
     MarkGlobalBoxedObject,
     SubtractPtr,
     PtrAddOffset,
+    PthreadOnce,
 }
 
 fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -433,6 +434,21 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(
     func
 }
 
+pub fn build_pthread_once_function<'c, 'm, 'b>(
+    gc: &mut GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    let init_fn_ty = gc.context.void_type().fn_type(&[], false);
+    let pthread_once_ty = gc.context.void_type().fn_type(
+        &[
+            gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
+            init_fn_ty.ptr_type(AddressSpace::from(0)).into(),
+        ],
+        false,
+    );
+    gc.module
+        .add_function("pthread_once", pthread_once_ty, None)
+}
+
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     gc.runtimes
         .insert(RuntimeFunctions::Abort, build_abort_function(gc));
@@ -475,4 +491,9 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     let ptr_add_offset_func = build_ptr_add_offset_function(gc);
     gc.runtimes
         .insert(RuntimeFunctions::PtrAddOffset, ptr_add_offset_func);
+    if gc.config.threaded {
+        let pthread_call_once_func = build_pthread_once_function(gc);
+        gc.runtimes
+            .insert(RuntimeFunctions::PthreadOnce, pthread_call_once_func);
+    }
 }

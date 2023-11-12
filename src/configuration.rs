@@ -32,6 +32,7 @@ pub struct Configuration {
     // Output file name.
     pub out_file_path: Option<PathBuf>,
     // Use threads.
+    // To turn on this true and link pthread library, use `set_threaded` function.
     pub threaded: bool,
 }
 
@@ -113,5 +114,11 @@ impl Configuration {
             }),
             Some(out_file_path) => out_file_path.clone(),
         }
+    }
+
+    // Set threaded = true, and add ptherad library to linked_libraries.
+    pub fn set_threaded(&mut self) {
+        self.threaded = true;
+        self.add_dyanmic_library("pthread");
     }
 }

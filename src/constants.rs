@@ -1,3 +1,5 @@
+use inkwell::{context::Context, types::IntType, values::IntValue};
+
 pub const NAMESPACE_SEPARATOR: &str = "::";
 
 pub const STD_NAME: &str = "Std";
@@ -104,3 +106,13 @@ pub const FUNPTR_ARGS_MAX: u32 = 100;
 pub const TUPLE_SIZE_MAX: u32 = 4;
 // Is tuple unboxed?
 pub const TUPLE_UNBOX: bool = true;
+
+// The type in LLVM corresponding to `pthread_once_t` of this system.
+pub fn pthread_once_t<'c>(ctx: &'c Context) -> IntType<'c> {
+    ctx.i32_type()
+}
+
+// The value of `PTHREAD_ONCE_INIT` of this system.
+pub fn pthread_once_init<'c>(ctx: &'c Context) -> IntValue<'c> {
+    pthread_once_t(ctx).const_zero()
+}
