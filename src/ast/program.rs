@@ -545,30 +545,15 @@ impl Program {
                 gc.typeresolver = sym.type_resolver.clone();
                 let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
                 if obj_ty.is_funptr() {
+                    // Declare lambda function.
                     let lam = sym.expr.as_ref().unwrap().clone();
                     let lam = lam.set_inferred_type(obj_ty.clone());
                     let lam_fn = gc.declare_lambda_function(lam);
                     gc.add_global_object(name.clone(), lam_fn, obj_ty.clone());
-                    (None, None, lam_fn, sym.clone(), obj_ty)
+                    (name, lam_fn, sym.clone(), obj_ty)
                 } else {
-                    let flag_name = format!("InitFlag#{}", name.to_string());
-                    let global_var_name = format!("GlobalVar#{}", name.to_string());
+                    // Declare accessor function.
                     let acc_fn_name = format!("Get#{}", name.to_string());
-
-                    let obj_embed_ty = obj_ty.get_embedded_type(gc, &vec![]);
-
-                    // Add global variable.
-                    let global_var = gc.module.add_global(obj_embed_ty, None, &global_var_name);
-                    global_var.set_initializer(&obj_embed_ty.const_zero());
-                    let global_var = global_var.as_basic_value_enum().into_pointer_value();
-
-                    // Add initialized flag.
-                    let flag_ty = gc.context.i8_type();
-                    let init_flag = gc.module.add_global(flag_ty, None, &flag_name);
-                    init_flag.set_initializer(&flag_ty.const_zero());
-                    let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
-
-                    // Add accessor function.
                     let acc_fn_type = ptr_to_object_type(gc.context).fn_type(&[], false);
                     let acc_fn =
                         gc.module
@@ -586,19 +571,13 @@ impl Program {
                     gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
 
                     // Return global variable and accessor function.
-                    (
-                        Some(global_var),
-                        Some(init_flag),
-                        acc_fn,
-                        sym.clone(),
-                        obj_ty,
-                    )
+                    (name, acc_fn, sym.clone(), obj_ty)
                 }
             })
             .collect::<Vec<_>>();
 
         // Implement functions.
-        for (global_var, init_flag, acc_fn, sym, obj_ty) in global_objs {
+        for (name, acc_fn, sym, obj_ty) in global_objs {
             gc.typeresolver = sym.type_resolver;
             if obj_ty.is_funptr() {
                 // Implement lambda function.
@@ -608,8 +587,22 @@ impl Program {
                 gc.implement_lambda_function(lam, lam_fn, None);
             } else {
                 // Implement accessor function.
-                let global_var = global_var.unwrap();
-                let init_flag = init_flag.unwrap();
+                let flag_name = format!("InitFlag#{}", name.to_string());
+                let global_var_name = format!("GlobalVar#{}", name.to_string());
+
+                let obj_embed_ty = obj_ty.get_embedded_type(gc, &vec![]);
+
+                // Add global variable.
+                let global_var = gc.module.add_global(obj_embed_ty, None, &global_var_name);
+                global_var.set_initializer(&obj_embed_ty.const_zero());
+                let global_var = global_var.as_basic_value_enum().into_pointer_value();
+
+                // Add initialized flag.
+                let flag_ty = gc.context.i8_type();
+                let init_flag = gc.module.add_global(flag_ty, None, &flag_name);
+                init_flag.set_initializer(&flag_ty.const_zero());
+                let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
+
                 let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
                 gc.builder().position_at_end(entry_bb);
 
