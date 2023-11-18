@@ -529,7 +529,7 @@ typedef struct
     int status;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
-    Future *next; // A pointer to the next future in the queue.
+    struct Future *next; // A pointer to the next future in the queue.
 } Future;
 
 // Interface functions.
