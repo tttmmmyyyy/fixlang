@@ -6,6 +6,7 @@ use std::{cell::RefCell, env, rc::Rc};
 
 use either::Either;
 use inkwell::{
+    basic_block::BasicBlock,
     debug_info::{
         AsDIScope, DICompileUnit, DIFile, DIScope, DISubprogram, DIType, DebugInfoBuilder,
     },
@@ -620,6 +621,269 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .unwrap()
     }
 
+    // // Load reference counter in an appropriate way, i.e., check refcnt_state and load refcnt atomically if necessary.
+    // // Returns (refcnt, refcnt_bb, global_bb).
+    // // Here,
+    // // - refcnt_bb is a `BasicBlock` which is reached when the reference counter is loaded.
+    // // - global_bb is a `BasicBlock` which is reached when the object is marked as global.
+    // pub fn build_load_refcnt(
+    //     self: &mut GenerationContext<'c, 'm>,
+    //     obj_ptr: PointerValue<'c>,
+    //     memory_order: inkwell::AtomicOrdering,
+    // ) -> (IntValue<'c>, BasicBlock<'c>, BasicBlock<'c>) {
+    //     // Load refcnt_state.
+    //     let current_bb = self.builder().get_insert_block().unwrap();
+    //     let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
+    //     let refcnt_state = self
+    //         .builder()
+    //         .build_load(refcnt_state_ptr, "refcnt_state")
+    //         .into_int_value();
+
+    //     if !self.config.threaded {
+    //         // In single threaded program,
+    //         // create three basic blocks which correspond to three values of `refcnt_state` REFCNT_STATE_LOCAL, REFCNT_STATE_GLOBAL.
+    //         let refcnt_bb = self
+    //             .context
+    //             .append_basic_block(current_bb.get_parent().unwrap(), "refcnt_bb");
+    //         let global_bb = self
+    //             .context
+    //             .append_basic_block(current_bb.get_parent().unwrap(), "global_bb");
+
+    //         // In `current_bb`, check refcnt_state and jump to refcnt_bb if it is equal to `REFCNT_STATE_LOCAL`.
+    //         let is_refcnt_state_local = self.builder().build_int_compare(
+    //             inkwell::IntPredicate::EQ,
+    //             refcnt_state,
+    //             refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+    //             "is_refcnt_state_local",
+    //         );
+    //         self.builder()
+    //             .build_conditional_branch(is_refcnt_state_local, refcnt_bb, global_bb);
+
+    //         // Implement local_bb.
+    //         self.builder().position_at_end(refcnt_bb);
+    //         // Load refcnt.
+    //         let refcnt = self
+    //             .builder()
+    //             .build_load(self.get_refcnt_ptr(obj_ptr), "refcnt")
+    //             .into_int_value();
+
+    //         (refcnt, refcnt_bb, global_bb)
+    //     } else {
+    //         // In multi threaded program,
+
+    //         // create three basic blocks which correspond to three values of `refcnt_state` REFCNT_STATE_LOCAL, REFCNT_STATE_THREADED, REFCNT_STATE_GLOBAL.
+    //         let local_bb = self
+    //             .context
+    //             .append_basic_block(current_bb.get_parent().unwrap(), "local_bb");
+    //         let nonlocal_bb = self
+    //             .context
+    //             .append_basic_block(current_bb.get_parent().unwrap(), "nonlocal_bb");
+    //         let thread_bb = self
+    //             .context
+    //             .append_basic_block(current_bb.get_parent().unwrap(), "thread_bb");
+    //         let global_bb = self
+    //             .context
+    //             .append_basic_block(current_bb.get_parent().unwrap(), "global_bb");
+
+    //         // In `current_bb`, check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
+    //         let is_refcnt_state_local = self.builder().build_int_compare(
+    //             inkwell::IntPredicate::EQ,
+    //             refcnt_state,
+    //             refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+    //             "is_refcnt_state_local",
+    //         );
+    //         self.builder()
+    //             .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb);
+
+    //         // In `nonlocal_bb`, check refcnt_state and jump to thread_bb if it is equal to `REFCNT_STATE_THREADED`, or jump to global_bb otherwise.
+    //         self.builder().position_at_end(nonlocal_bb);
+    //         let is_refcnt_state_threaded = self.builder().build_int_compare(
+    //             inkwell::IntPredicate::EQ,
+    //             refcnt_state,
+    //             refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
+    //             "is_refcnt_state_threaded",
+    //         );
+    //         self.builder()
+    //             .build_conditional_branch(is_refcnt_state_threaded, thread_bb, global_bb);
+
+    //         // Add `refcnt_bb`.
+    //         let refcnt_bb = self
+    //             .context
+    //             .append_basic_block(current_bb.get_parent().unwrap(), "refcnt_bb");
+
+    //         // Implement `local_bb`.
+    //         self.builder().position_at_end(local_bb);
+    //         // Load refcnt.
+    //         let refcnt_nonatomic = self
+    //             .builder()
+    //             .build_load(self.get_refcnt_ptr(obj_ptr), "refcnt_nonatomic")
+    //             .into_int_value();
+    //         // After completing load operation, jump to `refcnt_bb`.
+    //         self.builder().build_unconditional_branch(refcnt_bb);
+
+    //         // Implement `threaded_bb`.
+    //         self.builder().position_at_end(thread_bb);
+    //         // In `thread_bb`, load refcnt atomically.
+    //         let refcnt_atomic = self
+    //             .builder()
+    //             .build_load(self.get_refcnt_ptr(obj_ptr), "refcnt_atomic")
+    //             .into_int_value();
+    //         refcnt_atomic
+    //             .as_instruction_value()
+    //             .unwrap()
+    //             .set_atomic_ordering(memory_order)
+    //             .expect("atomic loading failed");
+    //         // After completing load operation, jump to `refcnt_bb`.
+    //         self.builder().build_unconditional_branch(refcnt_bb);
+
+    //         // Implement `refcnt_bb`.
+    //         self.builder().position_at_end(refcnt_bb);
+    //         // Create phi node for refcnt.
+    //         let refcnt = self
+    //             .builder()
+    //             .build_phi(refcnt_type(self.context), "refcnt");
+    //         refcnt.add_incoming(&[(&refcnt_nonatomic, local_bb), (&refcnt_atomic, thread_bb)]);
+    //         let refcnt = refcnt.as_basic_value().into_int_value();
+
+    //         (refcnt, refcnt_bb, global_bb)
+    //     }
+    // }
+
+    // Build branch by whether or not the reference counter is one.
+    // Returns (unique_bb, shared_bb).
+    pub fn build_branch_by_is_unique(
+        self: &mut GenerationContext<'c, 'm>,
+        obj_ptr: PointerValue<'c>,
+    ) -> (BasicBlock<'c>, BasicBlock<'c>) {
+        let current_bb = self.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+
+        let unique_bb = self.context.append_basic_block(current_func, "unique_bb");
+        let unique_threaded_bb = self
+            .context
+            .append_basic_block(current_func, "unique_threaded_bb");
+        let shared_bb = self.context.append_basic_block(current_func, "shared_bb");
+
+        // Branch by refcnt_state.
+        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+
+        // Implement local_bb.
+        self.builder().position_at_end(local_bb);
+        // Load refcnt.
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+        let refcnt = self
+            .builder()
+            .build_load(ptr_to_refcnt, "refcnt")
+            .into_int_value();
+        // Jump to shared_bb if refcnt > 1.
+        let one = refcnt_type(self.context).const_int(1, false);
+        let is_unique: IntValue<'_> =
+            self.builder()
+                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+        self.builder()
+            .build_conditional_branch(is_unique, unique_bb, shared_bb);
+
+        // Implement threaded_bb.
+        self.builder().position_at_end(threaded_bb);
+        // Load refcnt atomically with monotonic ordering.
+        let refcnt = self
+            .builder()
+            .build_load(ptr_to_refcnt, "refcnt")
+            .into_int_value();
+        refcnt
+            .as_instruction_value()
+            .unwrap()
+            .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
+            .expect("Set atomic ordering failed");
+        // Jump to shared_bb if refcnt > 1.
+        let is_unique =
+            self.builder()
+                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+        self.builder()
+            .build_conditional_branch(is_unique, unique_threaded_bb, shared_bb);
+
+        // Implement unique_threaded_bb.
+        self.builder().position_at_end(unique_threaded_bb);
+        // We need to build acquire fence to avoid data race between
+        // - write / modify operations which will follow in this thread and
+        // - read operations done before another thread releases this object.
+        self.builder()
+            .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+        // Mark the object as non_threaded.
+        self.mark_as_local_one(obj_ptr);
+        // And jump to unique_bb.
+        self.builder().build_unconditional_branch(unique_bb);
+
+        // Implement global_bb.
+        self.builder().position_at_end(global_bb);
+        // Jump to shared_bb.
+        self.builder().build_unconditional_branch(shared_bb);
+
+        (unique_bb, shared_bb)
+    }
+
+    // Load refcnt state and branch by the value.
+    // Returns three building blocks (local_bb, threaded_bb, global_bb).
+    pub fn build_branch_by_refcnt_state(
+        self: &mut GenerationContext<'c, 'm>,
+        obj_ptr: PointerValue<'c>,
+    ) -> (BasicBlock<'c>, BasicBlock<'c>, BasicBlock<'c>) {
+        // Load refcnt_state.
+        let current_bb = self.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
+        let refcnt_state = self
+            .builder()
+            .build_load(refcnt_state_ptr, "refcnt_state")
+            .into_int_value();
+
+        // Add three basic blocks.
+        let local_bb = self.context.append_basic_block(current_func, "local_bb");
+        let threaded_bb = self.context.append_basic_block(current_func, "threaded_bb");
+        let global_bb = self.context.append_basic_block(current_func, "global_bb");
+
+        if !self.config.threaded {
+            // In single-threaded program,
+
+            // Check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
+            let is_refcnt_state_local = self.builder().build_int_compare(
+                inkwell::IntPredicate::EQ,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                "is_refcnt_state_local",
+            );
+            self.builder()
+                .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb);
+        } else {
+            // In multi-threaded program,
+            let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
+
+            let is_refcnt_state_local = self.builder().build_int_compare(
+                inkwell::IntPredicate::EQ,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                "is_refcnt_state_local",
+            );
+            self.builder()
+                .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb);
+
+            // Implement nonlocal_bb.
+            self.builder().position_at_end(nonlocal_bb);
+            let is_refcnt_state_threaded = self.builder().build_int_compare(
+                inkwell::IntPredicate::EQ,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
+                "is_refcnt_state_threaded",
+            );
+            self.builder().build_conditional_branch(
+                is_refcnt_state_threaded,
+                threaded_bb,
+                global_bb,
+            );
+        }
+        (local_bb, threaded_bb, global_bb)
+    }
+
     // Get pointer to state of reference counter of a given object.
     pub fn get_refcnt_state_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         let ptr_control_block = self.get_control_block_ptr(obj);
@@ -851,46 +1115,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     pub fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
         // If the object's type is Std::Destructor and the refcnt is one, call destructor.
         if obj.is_destructor_object() {
-            // Branch by whether or not the refcnt is one.
-            let ptr = obj.ptr(self);
-            let ptr_refcnt = self.get_refcnt_ptr(ptr);
-            let refcnt = self
-                .builder()
-                .build_load(ptr_refcnt, "refcnt_for_call_dtor")
-                .into_int_value();
-            if self.config.atomic_refcnt {
-                // Make load operation into relaxed atomic.
-                refcnt
-                    .as_instruction_value()
-                    .unwrap()
-                    .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
-                    .expect("set_atomic_ordering failed");
-            }
+            // Branch by whether or not the reference counter is one.
+            let obj_ptr = obj.ptr(self);
+            let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr);
 
-            let is_refcnt_one = self.builder().build_int_compare(
-                IntPredicate::EQ,
-                refcnt,
-                refcnt.get_type().const_int(1, false),
-                "is_refcnt_one_for_call_dtor",
-            );
-            let current_bb = self.builder().get_insert_block().unwrap();
-            let current_func = current_bb.get_parent().unwrap();
-            let call_dtor_bb = self
-                .context
-                .append_basic_block(current_func, "call_dtor_bb_for_call_dtor");
-            let cont_bb = self
-                .context
-                .append_basic_block(current_func, "cont_bb_for_call_dtor");
-            self.builder()
-                .build_conditional_branch(is_refcnt_one, call_dtor_bb, cont_bb);
-
-            // If refcnt is one, call dtor.
-            self.builder().position_at_end(call_dtor_bb);
-            if self.config.atomic_refcnt {
-                // Create acquire fence.
-                self.builder()
-                    .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
-            }
+            // If reference counter is one, call destructor.
+            self.builder().position_at_end(unique_bb);
             let value = ObjectFieldType::get_struct_field_noclone(
                 self,
                 obj,
@@ -904,9 +1134,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             );
             self.retain(dtor.clone());
             self.apply_lambda(dtor, vec![value], None);
+            self.builder().build_unconditional_branch(shared_bb);
 
-            self.builder().build_unconditional_branch(cont_bb);
-            self.builder().position_at_end(cont_bb);
+            self.builder().position_at_end(shared_bb);
         }
 
         let ptr = obj.ptr(self);
@@ -978,8 +1208,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn mark_as_local(&mut self, ptr: PointerValue<'c>) {
+    pub fn mark_as_local_one(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_LOCAL` to `ptr_refcnt_state`.
         self.builder().build_store(
@@ -988,8 +1217,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
     }
 
-    #[allow(dead_code)]
-    pub fn mark_as_threaded(&mut self, ptr: PointerValue<'c>) {
+    pub fn mark_as_threaded_one(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_SHARED` to `ptr_refcnt_state`.
         self.builder().build_store(
@@ -1005,12 +1233,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().build_store(
             ptr_refcnt_state,
             refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
-        );
-        // Also, set refcnt some large number so that it will not considered as unique.
-        let ptr_refcnt: PointerValue<'_> = self.get_refcnt_ptr(ptr);
-        self.builder().build_store(
-            ptr_refcnt,
-            refcnt_type(self.context).const_int(1 << 62, false),
         );
     }
 

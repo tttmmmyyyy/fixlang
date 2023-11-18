@@ -117,67 +117,63 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
-    // Get pointer to / value of reference counter.
-    let ptr_to_obj = retain_func.get_first_param().unwrap().into_pointer_value();
-    let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_obj);
+    // Get pointer to object.
+    let obj_ptr = retain_func.get_first_param().unwrap().into_pointer_value();
 
-    // Increment refcnt.
-    let old_refcnt = {
-        if gc.config.atomic_refcnt {
-            gc.builder()
-                .build_atomicrmw(
-                    inkwell::AtomicRMWBinOp::Add,
-                    ptr_to_refcnt,
-                    refcnt_type(gc.context).const_int(1, false),
-                    inkwell::AtomicOrdering::Monotonic,
-                )
-                .unwrap()
-        } else {
-            // If the reference counter state is global, then the object is reachable from global, and should not be retained, so nothing to do here.
-            let refcnt_state = gc
-                .builder()
-                .build_load(gc.get_refcnt_state_ptr(ptr_to_obj), "refcnt_state")
-                .into_int_value();
-            let is_refcnt_state_global = gc.builder().build_int_compare(
-                inkwell::IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(gc.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
-                "is_refcnt_state_global",
-            );
-            let then_bb = gc
-                .context
-                .append_basic_block(retain_func, "refcnt_state_global@retain_obj");
-            let cont_bb = gc
-                .context
-                .append_basic_block(retain_func, "refcnt_state_non_global@retain_obj");
-            gc.builder()
-                .build_conditional_branch(is_refcnt_state_global, then_bb, cont_bb);
-            gc.builder().position_at_end(then_bb);
-            gc.builder().build_return(None);
-            gc.builder().position_at_end(cont_bb);
+    // Branch by refcnt_state.
+    let (local_bb, threaded_bb, global_bb) = gc.build_branch_by_refcnt_state(obj_ptr);
 
-            // Increment refcnt.
-            let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
-            let refcnt = gc.builder().build_int_nsw_add(
-                old_refcnt,
-                refcnt_type(gc.context).const_int(1, false).into(),
-                "",
+    // A function to genearte code to report retain to sanitizer.
+    fn report_retain_to_sanitizer<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        obj_ptr: PointerValue<'c>,
+        old_refcnt: IntValue<'c>,
+    ) {
+        // Report retain to sanitizer.
+        if gc.config.sanitize_memory {
+            let obj_id = gc.get_obj_id(obj_ptr);
+            gc.call_runtime(
+                RuntimeFunctions::ReportRetain,
+                &[obj_ptr.into(), obj_id.into(), old_refcnt.into()],
             );
-            gc.builder().build_store(ptr_to_refcnt, refcnt);
-            old_refcnt
         }
-    };
-
-    // Report retain to sanitizer.
-    if gc.config.sanitize_memory {
-        let obj_id = gc.get_obj_id(ptr_to_obj);
-        gc.call_runtime(
-            RuntimeFunctions::ReportRetain,
-            &[ptr_to_obj.into(), obj_id.into(), old_refcnt.into()],
-        );
     }
 
+    // Implement `local_bb`.
+    gc.builder().position_at_end(local_bb);
+    // Increment refcnt and return.
+    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+    let old_refcnt_local = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
+    let new_refcnt = gc.builder().build_int_nsw_add(
+        old_refcnt_local,
+        refcnt_type(gc.context).const_int(1, false).into(),
+        "",
+    );
+    gc.builder().build_store(ptr_to_refcnt, new_refcnt);
+    report_retain_to_sanitizer(gc, obj_ptr, old_refcnt_local);
     gc.builder().build_return(None);
+
+    // Implement threaded_bb.
+    gc.builder().position_at_end(threaded_bb);
+    // Increment refcnt atomically and jump to `end_bb`.
+    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+    let old_refcnt_threaded = gc
+        .builder()
+        .build_atomicrmw(
+            inkwell::AtomicRMWBinOp::Add,
+            ptr_to_refcnt,
+            refcnt_type(gc.context).const_int(1, false),
+            inkwell::AtomicOrdering::Monotonic,
+        )
+        .unwrap();
+    report_retain_to_sanitizer(gc, obj_ptr, old_refcnt_threaded);
+    gc.builder().build_return(None);
+
+    // Implement global_bb.
+    gc.builder().position_at_end(global_bb);
+    // In this case, nothing to do.
+    gc.builder().build_return(None);
+
     retain_func
 }
 
@@ -195,95 +191,103 @@ fn build_release_boxed_function<'c, 'm, 'b>(
         false,
     );
     let release_func = gc.module.add_function("release_obj", func_type, None);
-    let bb = gc.context.append_basic_block(release_func, "entry");
+    let entry_bb = gc.context.append_basic_block(release_func, "entry");
 
     let _builder_guard = gc.push_builder();
-    gc.builder().position_at_end(bb);
+    gc.builder().position_at_end(entry_bb);
 
-    // Get pointer to / value of reference counter.
-    let ptr_to_obj = release_func.get_first_param().unwrap().into_pointer_value();
-    let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_obj);
+    // Get pointer to the object.
+    let obj_ptr = release_func.get_first_param().unwrap().into_pointer_value();
 
-    // Decrement refcnt.
-    let old_refcnt = {
-        if gc.config.atomic_refcnt {
-            gc.builder()
-                .build_atomicrmw(
-                    inkwell::AtomicRMWBinOp::Sub,
-                    ptr_to_refcnt,
-                    refcnt_type(gc.context).const_int(1, false),
-                    inkwell::AtomicOrdering::Release,
-                )
-                .unwrap()
-        } else {
-            // If the reference counter state is global, then the object is reachable from global, and should not be retained, so nothing to do here.
-            let refcnt_state = gc
-                .builder()
-                .build_load(gc.get_refcnt_state_ptr(ptr_to_obj), "refcnt_state")
-                .into_int_value();
-            let is_refcnt_state_global = gc.builder().build_int_compare(
-                inkwell::IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(gc.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
-                "is_refcnt_state_global",
+    // Branch by refcnt_state.
+    let (local_bb, threaded_bb, global_bb) = gc.build_branch_by_refcnt_state(obj_ptr);
+    let destruction_bb = gc
+        .context
+        .append_basic_block(release_func, "destruction_bb");
+    let end_bb = gc.context.append_basic_block(release_func, "end_bb");
+
+    // A function to genearte code to report retain to sanitizer.
+    fn report_release_to_sanitizer<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        obj_ptr: PointerValue<'c>,
+        old_refcnt: IntValue<'c>,
+    ) {
+        // Report release to sanitizer.
+        if gc.config.sanitize_memory {
+            let obj_id = gc.get_obj_id(obj_ptr);
+            gc.call_runtime(
+                RuntimeFunctions::ReportRelease,
+                &[obj_ptr.into(), obj_id.into(), old_refcnt.into()],
             );
-            let then_bb = gc
-                .context
-                .append_basic_block(release_func, "refcnt_state_global@release_obj");
-            let cont_bb = gc
-                .context
-                .append_basic_block(release_func, "refcnt_state_non_global@release_obj");
-            gc.builder()
-                .build_conditional_branch(is_refcnt_state_global, then_bb, cont_bb);
-            gc.builder().position_at_end(then_bb);
-            gc.builder().build_return(None);
-            gc.builder().position_at_end(cont_bb);
-
-            // Decrement refcnt.
-            let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
-            let refcnt = gc.builder().build_int_nsw_sub(
-                old_refcnt,
-                refcnt_type(gc.context).const_int(1, false).into(),
-                "",
-            );
-            gc.builder().build_store(ptr_to_refcnt, refcnt);
-            old_refcnt
         }
-    };
-
-    // Report release to sanitizer.
-    if gc.config.sanitize_memory {
-        let obj_id = gc.get_obj_id(ptr_to_obj);
-        gc.call_runtime(
-            RuntimeFunctions::ReportRelease,
-            &[ptr_to_obj.into(), obj_id.into(), old_refcnt.into()],
-        );
     }
 
-    // Branch if old_refcnt is one.
-    let is_refcnt_zero = gc.builder().build_int_compare(
+    // Implement local_bb.
+    gc.builder().position_at_end(local_bb);
+    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+    // Decrement refcnt.
+    let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
+    let new_refcnt = gc.builder().build_int_nsw_sub(
+        old_refcnt,
+        refcnt_type(gc.context).const_int(1, false).into(),
+        "",
+    );
+    gc.builder().build_store(ptr_to_refcnt, new_refcnt);
+    report_release_to_sanitizer(gc, obj_ptr, old_refcnt);
+
+    // Branch to `destruction_bb` if old_refcnt is one.
+    let is_refcnt_one = gc.builder().build_int_compare(
         inkwell::IntPredicate::EQ,
         old_refcnt,
         refcnt_type(gc.context).const_int(1, false),
         "is_refcnt_zero",
     );
-    let then_bb = gc
-        .context
-        .append_basic_block(release_func, "refcnt_zero_after_release");
-    let cont_bb = gc.context.append_basic_block(release_func, "end");
     gc.builder()
-        .build_conditional_branch(is_refcnt_zero, then_bb, cont_bb);
+        .build_conditional_branch(is_refcnt_one, destruction_bb, end_bb);
+
+    // Implement threaded_bb.
+    gc.builder().position_at_end(threaded_bb);
+    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+    // Decrement refcnt atomically.
+    let old_refcnt = gc
+        .builder()
+        .build_atomicrmw(
+            inkwell::AtomicRMWBinOp::Sub,
+            ptr_to_refcnt,
+            refcnt_type(gc.context).const_int(1, false),
+            inkwell::AtomicOrdering::Release,
+        )
+        .unwrap();
+    report_release_to_sanitizer(gc, obj_ptr, old_refcnt);
 
     // If refcnt is zero, try to call dtor and free object.
-    gc.builder().position_at_end(then_bb);
-    if gc.config.atomic_refcnt {
-        gc.builder()
-            .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
-    }
+    gc.builder().position_at_end(destruction_bb);
+    // Branch to `threaded_destruction_bb` if old_refcnt is one.
+    let threaded_destruction_bb = gc
+        .context
+        .append_basic_block(release_func, "threaded_destruction_bb");
+    let is_refcnt_one = gc.builder().build_int_compare(
+        inkwell::IntPredicate::EQ,
+        old_refcnt,
+        refcnt_type(gc.context).const_int(1, false),
+        "is_refcnt_one",
+    );
+    gc.builder()
+        .build_conditional_branch(is_refcnt_one, threaded_destruction_bb, end_bb);
 
+    // Implement `threaded_destruction_bb`.
+    gc.builder().position_at_end(threaded_destruction_bb);
+    gc.builder()
+        .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+    gc.builder().build_unconditional_branch(destruction_bb);
+
+    // Implement `destruction_bb`
+    gc.builder().position_at_end(destruction_bb);
+
+    // Get dtor.
     let ptr_to_dtor = release_func.get_nth_param(1).unwrap().into_pointer_value();
 
-    // If dtor is null, then skip calling dtor.
+    // If dtor is null, then skip calling dtor and jump to free_bb.
     let free_bb = gc.context.append_basic_block(release_func, "free");
     let call_dtor_bb = gc.context.append_basic_block(release_func, "call_dtor");
     let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
@@ -297,24 +301,27 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     gc.builder()
         .build_conditional_branch(is_dtor_null, free_bb, call_dtor_bb);
 
-    // Call dtor and jump to free_bb
+    // Implement `call_dtor_bb`.
     gc.builder().position_at_end(call_dtor_bb);
+    // Call dtor and jump to free_bb.
     let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
     let null_ptr = ptr_to_object_type(gc.context).const_null();
-    gc.builder().build_call(
-        dtor_func,
-        &[ptr_to_obj.into(), null_ptr.into()],
-        "call_dtor",
-    );
+    gc.builder()
+        .build_call(dtor_func, &[obj_ptr.into(), null_ptr.into()], "call_dtor");
     gc.builder().build_unconditional_branch(free_bb);
 
     // free.
     gc.builder().position_at_end(free_bb);
-    gc.builder().build_free(ptr_to_obj);
-    gc.builder().build_unconditional_branch(cont_bb);
+    gc.builder().build_free(obj_ptr);
+    gc.builder().build_unconditional_branch(end_bb);
 
-    // End function.
-    gc.builder().position_at_end(cont_bb);
+    // Implement end_bb.
+    gc.builder().position_at_end(end_bb);
+    gc.builder().build_return(None);
+
+    // Implement global_bb.
+    gc.builder().position_at_end(global_bb);
+    // In this case, nothing to do.
     gc.builder().build_return(None);
 
     release_func

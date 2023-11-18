@@ -21,8 +21,6 @@ pub struct Configuration {
     pub llvm_opt_level: OptimizationLevel,
     // Linked libraries
     pub linked_libraries: Vec<(String, LinkType)>,
-    // Make reference counting atomic.
-    pub atomic_refcnt: bool,
     // Skip optimization and create debug info.
     pub debug_mode: bool,
     // Perform uncurrying optimization.
@@ -45,7 +43,6 @@ impl Configuration {
             uncurry_optimization: true, // determined by debug_mode
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
-            atomic_refcnt: false,
             debug_mode: false,
             emit_llvm: false,
             out_file_path: None,
@@ -62,7 +59,6 @@ impl Configuration {
             uncurry_optimization: true,
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
-            atomic_refcnt: false,
             debug_mode: false,
             emit_llvm: false,
             out_file_path: None,

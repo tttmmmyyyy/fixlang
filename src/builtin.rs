@@ -1739,49 +1739,17 @@ fn make_array_unique<'c, 'm>(
     panic_if_shared: bool,
 ) -> Object<'c> {
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-    let original_array_ptr = array.ptr(gc);
-
-    // Get refcnt.
-    let refcnt_ptr = {
-        let array_ptr = array.ptr(gc);
-        gc.get_refcnt_ptr(array_ptr)
-    };
-    let refcnt = gc
-        .builder()
-        .build_load(refcnt_ptr, "refcnt_in_make_array_unique")
-        .into_int_value();
-    if gc.config.atomic_refcnt {
-        // Make load operation into acquire atomic.
-        // NOTE: Acquire is necessary only for the case refcnt == 1.
-        // We do not separate acquire atomic load into relaxed atomic load + require fence (after branch),
-        // because we assume that in many cases this functions is called with refcnt == 1.
-        refcnt
-            .as_instruction_value()
-            .unwrap()
-            .set_atomic_ordering(inkwell::AtomicOrdering::Acquire)
-            .expect("set_atomic_ordering in make_array_unique failed");
-    }
-
-    // Add shared / cont bbs.
+    let arr_ptr = array.ptr(gc);
     let current_bb = gc.builder().get_insert_block().unwrap();
     let current_func = current_bb.get_parent().unwrap();
-    let shared_bb = gc
-        .context
-        .append_basic_block(current_func, "array_shared_bb");
-    let cont_bb = gc
-        .context
-        .append_basic_block(current_func, "after_unique_array_bb");
 
-    // Jump to shared_bb if refcnt > 1.
-    let one = refcnt_type(gc.context).const_int(1, false);
-    let is_unique = gc
-        .builder()
-        .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
-    gc.builder()
-        .build_conditional_branch(is_unique, cont_bb, shared_bb);
+    // Branch by whether the array is unique or not.
+    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(arr_ptr);
+    let end_bb = gc.context.append_basic_block(current_func, "end_bb");
 
-    // In shared_bb, create new array and clone array field.
+    // Implement shared_bb.
     gc.builder().position_at_end(shared_bb);
+    // Create new array and clone array field.
     if panic_if_shared {
         // In case of unique version, panic in this case.
         gc.panic("An array is asserted as unique but is shared!\n");
@@ -1804,20 +1772,22 @@ fn make_array_unique<'c, 'm>(
     ObjectFieldType::clone_array_buf(gc, array_len, array_buf, cloned_array_buf, elem_ty);
     gc.release(array.clone()); // Given array should be released here.
 
-    // Jump to the next bb.
+    // Jump to the end_bb.
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
     let cloned_array_ptr = cloned_array.ptr(gc);
-    gc.builder().build_unconditional_branch(cont_bb);
+    gc.builder().build_unconditional_branch(end_bb);
 
-    // Implement cont_bb
-    gc.builder().position_at_end(cont_bb);
+    // Implement unique_bb
+    gc.builder().position_at_end(unique_bb);
+    // Jump to end_bb.
+    gc.builder().build_unconditional_branch(end_bb);
 
-    // Build phi value of array and array_field.
-    let array_phi = gc
-        .builder()
-        .build_phi(original_array_ptr.get_type(), "array_phi");
+    // Implement end_bb.
+    gc.builder().position_at_end(end_bb);
+    // Build phi value of array_ptr.
+    let array_phi = gc.builder().build_phi(arr_ptr.get_type(), "array_phi");
     array_phi.add_incoming(&[
-        (&original_array_ptr, current_bb),
+        (&arr_ptr, unique_bb),
         (&cloned_array_ptr, succ_of_shared_bb),
     ]);
     let array = Object::new(
@@ -2502,56 +2472,22 @@ fn make_struct_unique<'c, 'm>(
 ) -> Object<'c> {
     let is_unbox = str.ty.is_unbox(gc.type_env());
     if !is_unbox {
-        // In boxed case, str should be replaced to cloned object if it is shared.
-        // In unboxed case, str is always treated as unique object.
+        // In boxed case, `str` should be replaced to cloned object if it is shared.
 
-        // Get refcnt.
-        let refcnt_ptr = {
-            let str_ptr = str.ptr(gc);
-            gc.get_refcnt_ptr(str_ptr)
-        };
-        let refcnt = gc
-            .builder()
-            .build_load(refcnt_ptr, "refcnt_in_make_struct_unique")
-            .into_int_value();
-        if gc.config.atomic_refcnt {
-            // Make load operation into acquire atomic.
-            // NOTE: Acquire is necessary only for the case refcnt == 1.
-            // We do not separate acquire atomic load into relaxed atomic load + require fence (after branch),
-            // because we assume that in many cases this functions is called with refcnt == 1.
-            refcnt
-                .as_instruction_value()
-                .unwrap()
-                .set_atomic_ordering(inkwell::AtomicOrdering::Acquire)
-                .expect("set_atomic_ordering in make_struct_unique failed");
-        }
-
-        // Add shared / cont bbs.
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let shared_bb = gc.context.append_basic_block(current_func, "shared_bb");
-        let cont_bb = gc
+        // Branch by refcnt is one.
+        let str_ptr = str.ptr(gc);
+        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(str_ptr);
+        let end_bb = gc
             .context
-            .append_basic_block(current_func, "unique_or_cloned_bb");
+            .append_basic_block(unique_bb.get_parent().unwrap(), "end_bb");
 
-        let original_str_ptr = str.ptr(gc);
-
-        // Jump to shared_bb if refcnt > 1.
-        let one = refcnt_type(gc.context).const_int(1, false);
-        let is_unique = gc
-            .builder()
-            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
-        gc.builder()
-            .build_conditional_branch(is_unique, cont_bb, shared_bb);
-
-        // In shared_bb, create new struct and clone fields.
+        // Implement shared_bb.
         gc.builder().position_at_end(shared_bb);
         if panic_if_shared {
             // In case of unique version, panic in this case.
-            gc.panic(&format!(
-                "A struct object is asserted as unique but is shared!\n"
-            ));
+            gc.panic("A struct object is asserted as unique but is shared!\n");
         }
+        // Create new struct and clone fields.
         let cloned_str = allocate_obj(str.ty.clone(), &vec![], None, gc, Some("cloned_str"));
         for i in 0..field_count {
             // Retain field.
@@ -2563,23 +2499,25 @@ fn make_struct_unique<'c, 'm>(
         gc.release(str.clone());
         let cloned_str_ptr = cloned_str.ptr(gc);
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-        gc.builder().build_unconditional_branch(cont_bb);
+        gc.builder().build_unconditional_branch(end_bb);
 
-        // Implement cont_bb
-        gc.builder().position_at_end(cont_bb);
+        // Implement unique_bb.
+        gc.builder().position_at_end(unique_bb);
+        // Jump to end_bb.
+        gc.builder().build_unconditional_branch(end_bb);
 
-        // Build phi value
+        // Implement end_bb.
+        gc.builder().position_at_end(end_bb);
+        // Build phi value.
         let str_phi = gc.builder().build_phi(str.ptr(gc).get_type(), "str_phi");
-        str_phi.add_incoming(&[
-            (&original_str_ptr, current_bb),
-            (&cloned_str_ptr, succ_of_shared_bb),
-        ]);
+        str_phi.add_incoming(&[(&str_ptr, unique_bb), (&cloned_str_ptr, succ_of_shared_bb)]);
 
         str = Object::new(
             str_phi.as_basic_value().into_pointer_value(),
             str.ty.clone(),
         );
     }
+    // In unboxed case, str is always treated as unique object.
     str
 }
 
@@ -3385,36 +3323,33 @@ impl InlineLLVMIsUniqueFunctionBody {
 
         // Get whether argument is unique.
         let is_unique = if obj.is_box(gc.type_env()) {
-            // Get refcnt.
-            let refcnt_ptr = {
-                let array_ptr: PointerValue<'_> = obj.ptr(gc);
-                gc.get_refcnt_ptr(array_ptr)
-            };
-            let refcnt = gc
-                .builder()
-                .build_load(refcnt_ptr, "refcnt_in_is_unique")
-                .into_int_value();
-            if gc.config.atomic_refcnt {
-                // Make load operation into relaxed atomic.
-                refcnt
-                    .as_instruction_value()
-                    .unwrap()
-                    .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
-                    .expect("set_atomic_ordering in refcnt_in_is_unique failed");
-            }
+            let obj_ptr = obj.ptr(gc);
+            let current_bb = gc.builder().get_insert_block().unwrap();
+            let current_func = current_bb.get_parent().unwrap();
 
-            // Check if obj is unique.
-            let one = refcnt_type(gc.context).const_int(1, false);
-            let is_unique = gc.builder().build_int_compare(
-                IntPredicate::EQ,
-                refcnt,
-                one,
-                "is_unique@is_unique",
-            );
+            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
+            // Add continuing basic block.
+            let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
-            gc.builder()
-                .build_int_z_extend(is_unique, bool_ty, "int_z_extend@is_unique")
+            // Implement unique_bb.
+            gc.builder().position_at_end(unique_bb);
+            let flag_unique_bb = bool_ty.const_int(1, false);
+            // Jump to cont_bb.
+            gc.builder().build_unconditional_branch(cont_bb);
+
+            // Implement shared_bb.
+            gc.builder().position_at_end(shared_bb);
+            let flag_shared_bb = bool_ty.const_int(0, false);
+            // Jump to cont_bb.
+            gc.builder().build_unconditional_branch(cont_bb);
+
+            // Implement cont_bb.
+            gc.builder().position_at_end(cont_bb);
+            let flag = gc.builder().build_phi(bool_ty, "phi@is_unique");
+            flag.add_incoming(&[(&flag_unique_bb, unique_bb), (&flag_shared_bb, shared_bb)]);
+            flag.as_basic_value().into_int_value()
         } else {
+            // If the object is boxed, it is always unique.
             bool_ty.const_int(1, false)
         };
         let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
