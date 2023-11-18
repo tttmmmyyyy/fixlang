@@ -571,7 +571,6 @@ void pthread_mutex_lock_or_exit(pthread_mutex_t *mutex, const char *msg)
         perror(msg);
         exit(1);
     }
-    return 0;
 }
 void pthread_mutex_unlock_or_exit(pthread_mutex_t *mutex, const char *msg)
 {
@@ -580,7 +579,6 @@ void pthread_mutex_unlock_or_exit(pthread_mutex_t *mutex, const char *msg)
         perror(msg);
         exit(1);
     }
-    return 0;
 }
 void pthread_cond_wait_or_exit(pthread_cond_t *cond, pthread_mutex_t *mutex, const char *msg)
 {
@@ -589,7 +587,6 @@ void pthread_cond_wait_or_exit(pthread_cond_t *cond, pthread_mutex_t *mutex, con
         perror(msg);
         exit(1);
     }
-    return 0;
 }
 void pthread_cond_signal_or_exit(pthread_cond_t *cond, const char *msg)
 {
@@ -598,7 +595,6 @@ void pthread_cond_signal_or_exit(pthread_cond_t *cond, const char *msg)
         perror(msg);
         exit(1);
     }
-    return 0;
 }
 
 // Initialize thread pool.
