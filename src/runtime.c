@@ -521,10 +521,8 @@ A task must be deleted exactly once. A task must not be deleted while another th
 */
 
 typedef int *TaskData;
-typedef void (*TaskFunc)(TaskData);
 typedef struct ITask
 {
-    TaskFunc func;
     TaskData data;
     struct ITask *next; // A pointer to the next task in the queue.
     pthread_mutex_t mutex;
@@ -535,10 +533,13 @@ typedef struct ITask
 
 // Interface functions.
 void fixruntime_threadpool_initialize();
-Task *fixruntime_threadpool_create_task(TaskFunc func, TaskData data);
+Task *fixruntime_threadpool_create_task(TaskData data);
 void fixruntime_threadpool_wait_task(Task *task);
 void fixruntime_threadpool_delete_task(Task *task);
 TaskData fixruntime_threadpool_get_data(Task *task);
+
+// External functions.
+void fixruntime_threadpool_run_task(TaskData data);
 
 // Internal functions.
 void *fixruntime_threadpool_on_thread(void *);
@@ -660,10 +661,9 @@ Task *fixruntime_threadpool_pop_task()
 }
 
 // Create a task and push it to the queue.
-Task *fixruntime_threadpool_create_task(TaskFunc func, TaskData data)
+Task *fixruntime_threadpool_create_task(TaskData data)
 {
     Task *task = (Task *)malloc(sizeof(Task));
-    task->func = func;
     task->data = data;
     task->next = NULL;
     task->status = TASK_STATUS_WAITING;
@@ -691,7 +691,7 @@ void fixruntime_threadpool_wait_task(Task *task)
         // If the task is still waiting, then run it on this thread.
         task->status = TASK_STATUS_RUNNING;
         pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
-        task->func(task->data);
+        fixruntime_threadpool_run_task(task->data);
         pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
         task->status = TASK_STATUS_COMPLETED;
         pthread_cond_signal_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
@@ -752,7 +752,7 @@ void *fixruntime_threadpool_on_thread(void *data)
         }
         task->status = TASK_STATUS_RUNNING;
         pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
-        task->func(task->data);
+        fixruntime_threadpool_run_task(task->data);
         pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
         task->status = TASK_STATUS_COMPLETED;
         uint8_t refcnt = --task->refcnt;
