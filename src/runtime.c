@@ -512,53 +512,50 @@ void fixruntime_iohandle_close(IOHandle *handle)
 /*
 Thread pool implementation.
 - Call `fixruntime_threadpool_initialize` to initialize thread pool.
-- Create future object by `fixruntime_threadpool_create_future`.
+- Create task object by `fixruntime_threadpool_create_task`.
     - This function takes `TaskFunc` and `TaskData` as arguments, and call `TaskFunc` with `TaskData` when the task is executed.
-- Wait for future to be completed by `fixruntime_threadpool_wait_future`.
-- Delete future by `fixruntime_threadpool_delete_future`.
-- Get `TaskData` object from `Future` object by `fixruntime_threadpool_get_task_data`.
-A future must be deleted exactly once. A future must not be deleted while another thread is waiting it.
+- Wait for a task to be completed by `fixruntime_threadpool_wait_task`.
+- Delete task by `fixruntime_threadpool_delete_task`.
+- Get `TaskData` object from task object by `fixruntime_threadpool_get_data`.
+A task must be deleted exactly once. A task must not be deleted while another thread is waiting it.
 */
 
 typedef int *TaskData;
 typedef void (*TaskFunc)(TaskData);
-typedef struct IFuture
+typedef struct ITask
 {
     TaskFunc func;
     TaskData data;
-    struct IFuture *next; // A pointer to the next future in the queue.
+    struct ITask *next; // A pointer to the next task in the queue.
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     uint8_t status;
     uint8_t refcnt;
-} Future;
+} Task;
 
 // Interface functions.
 void fixruntime_threadpool_initialize();
-Future *fixruntime_threadpool_create_future(TaskFunc func, TaskData data);
-void fixruntime_threadpool_wait_future(Future *future);
-void fixruntime_threadpool_delete_future(Future *future);
-TaskData fixruntime_threadpool_get_task_data(Future *future);
+Task *fixruntime_threadpool_create_task(TaskFunc func, TaskData data);
+void fixruntime_threadpool_wait_task(Task *task);
+void fixruntime_threadpool_delete_task(Task *task);
+TaskData fixruntime_threadpool_get_data(Task *task);
 
 // Internal functions.
 void *fixruntime_threadpool_on_thread(void *);
-void fixruntime_threadpool_push_future(Future *future);
-Future *fixruntime_threadpool_pop_future();
-void fixruntime_threadpool_release_future(Future *future);
+void fixruntime_threadpool_push_task(Task *task);
+Task *fixruntime_threadpool_pop_task();
+void fixruntime_threadpool_release_task(Task *task);
 
-// Status of a future.
-// The status transits as WAITING -> RUNNING -> COMPLETED, and any status can transit to CANCELLED.
-// If a future is cancelled before it is completed, then it is marked as CANCELLED and will be deleted by the thread that runs it or waits it.
-// If a future is cancelled after it is completed, then it is deleted immediately.
-uint8_t FUTURE_STATUS_WAITING = 0;
-uint8_t FUTURE_STATUS_RUNNING = 1;
-uint8_t FUTURE_STATUS_COMPLETED = 2;
+// Status of a task.
+uint8_t TASK_STATUS_WAITING = 0;
+uint8_t TASK_STATUS_RUNNING = 1;
+uint8_t TASK_STATUS_COMPLETED = 2;
 
-// Future queue.
-Future *future_queue_first = NULL;
-Future *future_queue_last = NULL;
-pthread_mutex_t future_queue_mutex;
-pthread_cond_t future_queue_cond;
+// Task queue.
+Task *task_queue_first = NULL;
+Task *task_queue_last = NULL;
+pthread_mutex_t task_queue_mutex;
+pthread_cond_t task_queue_cond;
 
 // Thread pool.
 pthread_t *thread_pool;
@@ -600,16 +597,16 @@ void pthread_cond_signal_or_exit(pthread_cond_t *cond, const char *msg)
 // Initialize thread pool.
 void fixruntime_threadpool_initialize()
 {
-    // Initialize mutex for future queue.
-    if (pthread_mutex_init(&future_queue_mutex, NULL))
+    // Initialize mutex for task queue.
+    if (pthread_mutex_init(&task_queue_mutex, NULL))
     {
-        perror("[runtime] Failed to initialize mutex for future queue.");
+        perror("[runtime] Failed to initialize mutex for task queue.");
         exit(1);
     }
-    // Initialize condition variable for future queue.
-    if (pthread_cond_init(&future_queue_cond, NULL))
+    // Initialize condition variable for task queue.
+    if (pthread_cond_init(&task_queue_cond, NULL))
     {
-        perror("[runtime] Failed to initialize condition variable for future queue.");
+        perror("[runtime] Failed to initialize condition variable for task queue.");
         exit(1);
     }
     // Initialize threads.
@@ -626,160 +623,160 @@ void fixruntime_threadpool_initialize()
     }
 }
 
-// Push a future to the queue.
-void fixruntime_threadpool_push_future(Future *future)
+// Push a task to the queue.
+void fixruntime_threadpool_push_task(Task *task)
 {
-    pthread_mutex_lock_or_exit(&future_queue_mutex, "[runtime] Failed to lock mutex.");
-    if (future_queue_last)
+    pthread_mutex_lock_or_exit(&task_queue_mutex, "[runtime] Failed to lock mutex.");
+    if (task_queue_last)
     {
-        future_queue_last->next = future;
+        task_queue_last->next = task;
     }
     else
     {
-        future_queue_first = future;
+        task_queue_first = task;
     }
-    future_queue_last = future;
-    pthread_cond_signal_or_exit(&future_queue_cond, "[runtime] Failed to signal condition variable.");
-    pthread_mutex_unlock_or_exit(&future_queue_mutex, "[runtime] Failed to unlock mutex.");
+    task_queue_last = task;
+    pthread_cond_signal_or_exit(&task_queue_cond, "[runtime] Failed to signal condition variable.");
+    pthread_mutex_unlock_or_exit(&task_queue_mutex, "[runtime] Failed to unlock mutex.");
 }
 
-// Pop a future from the queue.
-// If the queue is empty, then wait for a future to be pushed.
-Future *fixruntime_threadpool_pop_future()
+// Pop a task from the queue.
+// If the queue is empty, then wait for a task to be pushed.
+Task *fixruntime_threadpool_pop_task()
 {
-    pthread_mutex_lock_or_exit(&future_queue_mutex, "[runtime] Failed to lock mutex.");
-    while (!future_queue_first) // Wait for a future to be pushed.
+    pthread_mutex_lock_or_exit(&task_queue_mutex, "[runtime] Failed to lock mutex.");
+    while (!task_queue_first) // Wait for a task to be pushed.
     {
-        pthread_cond_wait_or_exit(&future_queue_cond, &future_queue_mutex, "[runtime] Failed to wait condition variable.");
+        pthread_cond_wait_or_exit(&task_queue_cond, &task_queue_mutex, "[runtime] Failed to wait condition variable.");
     }
-    Future *future = future_queue_first;
-    future_queue_first = future->next;
-    if (!future_queue_first)
+    Task *task = task_queue_first;
+    task_queue_first = task->next;
+    if (!task_queue_first)
     {
-        future_queue_last = NULL;
+        task_queue_last = NULL;
     }
-    pthread_mutex_unlock_or_exit(&future_queue_mutex, "[runtime] Failed to unlock mutex.");
-    return future;
+    pthread_mutex_unlock_or_exit(&task_queue_mutex, "[runtime] Failed to unlock mutex.");
+    return task;
 }
 
-// Create a future and push it to the queue.
-Future *fixruntime_threadpool_create_future(TaskFunc func, TaskData data)
+// Create a task and push it to the queue.
+Task *fixruntime_threadpool_create_task(TaskFunc func, TaskData data)
 {
-    Future *future = (Future *)malloc(sizeof(Future));
-    future->func = func;
-    future->data = data;
-    future->next = NULL;
-    future->status = FUTURE_STATUS_WAITING;
-    future->refcnt = 2; // One ownership for this library, and one for the user.
-    if (pthread_mutex_init(&future->mutex, NULL))
+    Task *task = (Task *)malloc(sizeof(Task));
+    task->func = func;
+    task->data = data;
+    task->next = NULL;
+    task->status = TASK_STATUS_WAITING;
+    task->refcnt = 2; // One ownership for this library, and one for the user.
+    if (pthread_mutex_init(&task->mutex, NULL))
     {
-        perror("[runtime] Failed to initialize mutex for a future.");
+        perror("[runtime] Failed to initialize mutex for a task.");
         exit(1);
     }
-    if (pthread_cond_init(&future->cond, NULL))
+    if (pthread_cond_init(&task->cond, NULL))
     {
-        perror("[runtime] Failed to initialize condition variable for a future.");
+        perror("[runtime] Failed to initialize condition variable for a task.");
         exit(1);
     }
-    fixruntime_threadpool_push_future(future);
-    return future;
+    fixruntime_threadpool_push_task(task);
+    return task;
 }
 
-// Wait for the future to be completed.
-void fixruntime_threadpool_wait_future(Future *future)
+// Wait for the task to be completed.
+void fixruntime_threadpool_wait_task(Task *task)
 {
-    pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-    if (future->status == FUTURE_STATUS_WAITING)
+    pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
+    if (task->status == TASK_STATUS_WAITING)
     {
-        // If the future is still waiting, then run it on this thread.
-        future->status = FUTURE_STATUS_RUNNING;
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-        future->func(future->data);
-        pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-        future->status = FUTURE_STATUS_COMPLETED;
-        pthread_cond_signal_or_exit(&future->cond, "[runtime] Failed to signal condition variable.");
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        // If the task is still waiting, then run it on this thread.
+        task->status = TASK_STATUS_RUNNING;
+        pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
+        task->func(task->data);
+        pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
+        task->status = TASK_STATUS_COMPLETED;
+        pthread_cond_signal_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
+        pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
     }
-    else if (future->status == FUTURE_STATUS_RUNNING)
+    else if (task->status == TASK_STATUS_RUNNING)
     {
-        // Wait for the future to be completed.
-        while (future->status == FUTURE_STATUS_RUNNING)
+        // Wait for the task to be completed.
+        while (task->status == TASK_STATUS_RUNNING)
         {
-            pthread_cond_wait_or_exit(&future->cond, &future->mutex, "[runtime] Failed to wait condition variable.");
+            pthread_cond_wait_or_exit(&task->cond, &task->mutex, "[runtime] Failed to wait condition variable.");
         }
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
     }
     else
     {
         // If the task is already completed, then do nothing.
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
     }
 }
 
-// Delete a future.
-void fixruntime_threadpool_delete_future(Future *future)
+// Delete a task.
+void fixruntime_threadpool_delete_task(Task *task)
 {
-    pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-    future->status = FUTURE_STATUS_COMPLETED;
-    uint8_t refcnt = --future->refcnt;
-    pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+    pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
+    task->status = TASK_STATUS_COMPLETED;
+    uint8_t refcnt = --task->refcnt;
+    pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
     if (refcnt == 0)
     {
-        fixruntime_threadpool_release_future(future);
+        fixruntime_threadpool_release_task(task);
     }
 }
 
-// Get the task data from the future.
-TaskData fixruntime_threadpool_get_task_data(Future *future)
+// Get the task data from the task.
+TaskData fixruntime_threadpool_get_data(Task *task)
 {
-    return future->data;
+    return task->data;
 }
 
-// Run each future on a thread.
+// Run each task on a thread.
 void *fixruntime_threadpool_on_thread(void *data)
 {
     while (1)
     {
-        Future *future = fixruntime_threadpool_pop_future();
-        pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-        if (future->status == FUTURE_STATUS_COMPLETED || future->status == FUTURE_STATUS_RUNNING)
+        Task *task = fixruntime_threadpool_pop_task();
+        pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
+        if (task->status == TASK_STATUS_COMPLETED || task->status == TASK_STATUS_RUNNING)
         {
             // The task is already completed or running in another thread, then do nothing.
-            uint8_t refcnt = --future->refcnt;
-            pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+            uint8_t refcnt = --task->refcnt;
+            pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
             if (refcnt == 0)
             {
-                fixruntime_threadpool_release_future(future);
+                fixruntime_threadpool_release_task(task);
             }
             continue;
         }
-        future->status = FUTURE_STATUS_RUNNING;
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-        future->func(future->data);
-        pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-        future->status = FUTURE_STATUS_COMPLETED;
-        uint8_t refcnt = --future->refcnt;
-        pthread_cond_signal_or_exit(&future->cond, "[runtime] Failed to signal condition variable.");
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        task->status = TASK_STATUS_RUNNING;
+        pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
+        task->func(task->data);
+        pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
+        task->status = TASK_STATUS_COMPLETED;
+        uint8_t refcnt = --task->refcnt;
+        pthread_cond_signal_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
+        pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
         if (refcnt == 0)
         {
-            fixruntime_threadpool_release_future(future);
+            fixruntime_threadpool_release_task(task);
         }
     }
 }
 
-// Delete the future.
-void fixruntime_threadpool_release_future(Future *future)
+// Delete the task.
+void fixruntime_threadpool_release_task(Task *task)
 {
-    if (pthread_mutex_destroy(&future->mutex))
+    if (pthread_mutex_destroy(&task->mutex))
     {
-        perror("[runtime] Failed to destroy mutex for a future.");
+        perror("[runtime] Failed to destroy mutex for a task.");
         exit(1);
     }
-    if (pthread_cond_destroy(&future->cond))
+    if (pthread_cond_destroy(&task->cond))
     {
-        perror("[runtime] Failed to destroy condition variable for a future.");
+        perror("[runtime] Failed to destroy condition variable for a task.");
         exit(1);
     }
-    free(future);
+    free(task);
 }
