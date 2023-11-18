@@ -522,14 +522,14 @@ A future must be deleted exactly once. A future must not be deleted while anothe
 
 typedef int *TaskData;
 typedef void (*TaskFunc)(TaskData);
-typedef struct
+typedef struct IFuture
 {
     TaskFunc func;
     TaskData data;
     int status;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
-    struct Future *next; // A pointer to the next future in the queue.
+    struct IFuture *next; // A pointer to the next future in the queue.
 } Future;
 
 // Interface functions.
@@ -540,7 +540,7 @@ void fixruntime_threadpool_delete_future(Future *future);
 TaskData fixruntime_threadpool_get_task_data(Future *future);
 
 // Internal functions.
-void fixruntime_threadpool_on_thread(void *);
+void *fixruntime_threadpool_on_thread(void *);
 void fixruntime_threadpool_push_future(Future *future);
 Future *fixruntime_threadpool_pop_future();
 void fixruntime_threadpool_free_future(Future *future);
@@ -624,7 +624,6 @@ void fixruntime_threadpool_initialize()
             exit(1);
         }
     }
-    return 0;
 }
 
 // Push a future to the queue.
@@ -753,7 +752,7 @@ TaskData fixruntime_threadpool_get_task_data(Future *future)
 }
 
 // Run each future on a thread.
-void fixruntime_threadpool_on_thread(void *data)
+void *fixruntime_threadpool_on_thread(void *data)
 {
     while (1)
     {
