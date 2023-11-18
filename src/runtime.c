@@ -540,7 +540,7 @@ void fixruntime_threadpool_delete_future(Future *future);
 TaskData fixruntime_threadpool_get_task_data(Future *future);
 
 // Internal functions.
-void fixruntime_threadpool_on_thread();
+void fixruntime_threadpool_on_thread(void *);
 void fixruntime_threadpool_push_future(Future *future);
 Future *fixruntime_threadpool_pop_future();
 void fixruntime_threadpool_free_future(Future *future);
@@ -753,7 +753,7 @@ TaskData fixruntime_threadpool_get_task_data(Future *future)
 }
 
 // Run each future on a thread.
-void fixruntime_threadpool_on_thread()
+void fixruntime_threadpool_on_thread(void *data)
 {
     while (1)
     {
