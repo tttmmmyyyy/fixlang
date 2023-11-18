@@ -515,9 +515,9 @@ Thread pool implementation.
 - Create future object by `fixruntime_threadpool_create_future`.
     - This function takes `TaskFunc` and `TaskData` as arguments, and call `TaskFunc` with `TaskData` when the task is executed.
 - Wait for future to be completed by `fixruntime_threadpool_wait_future`.
-- Cancel future by `fixruntime_threadpool_cancel_future`.
+- Delete future by `fixruntime_threadpool_delete_future`.
 - Get `TaskData` object from `Future` object by `fixruntime_threadpool_get_task_data`.
-Any future must be waited or cancelled exactly once.
+A future must be deleted exactly once. A future must not be deleted while another thread is waiting it.
 */
 
 typedef int *TaskData;
@@ -527,29 +527,27 @@ typedef struct
     TaskFunc func;
     TaskData data;
     int status;
-    Future *next; // A pointer to the next future in the queue.
     pthread_mutex_t mutex;
     pthread_cond_t cond;
+    Future *next; // A pointer to the next future in the queue.
 } Future;
 
 // Interface functions.
 void fixruntime_threadpool_initialize();
 Future *fixruntime_threadpool_create_future(TaskFunc func, TaskData data);
 void fixruntime_threadpool_wait_future(Future *future);
-void fixruntime_threadpool_cancel_future(Future *future);
+void fixruntime_threadpool_delete_future(Future *future);
 TaskData fixruntime_threadpool_get_task_data(Future *future);
 
 // Internal functions.
 void fixruntime_threadpool_on_thread();
 void fixruntime_threadpool_push_future(Future *future);
 Future *fixruntime_threadpool_pop_future();
-void fixruntime_threadpool_delete_future(Future *future);
+void fixruntime_threadpool_free_future(Future *future);
 
 // Status of a future.
 // The status transits as WAITING -> RUNNING -> COMPLETED, and any status can transit to CANCELLED.
-// Any future must be waited or cancelled exactly once.
-// If a future is waited, then it is deleted immediately after it is completed.
-// If a future is cancelled before it is completed, then it is marked as CANCELLED and will be deleted by the thread that runs it.
+// If a future is cancelled before it is completed, then it is marked as CANCELLED and will be deleted by the thread that runs it or waits it.
 // If a future is cancelled after it is completed, then it is deleted immediately.
 int FUTURE_STATUS_WAITING = 0;
 int FUTURE_STATUS_RUNNING = 1;
@@ -701,37 +699,54 @@ void fixruntime_threadpool_wait_future(Future *future)
         future->status = FUTURE_STATUS_RUNNING;
         pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
         future->func(future->data);
-        // Commenting out the following line is violating the transition rule of the status, but it is OK because the future will be deleted immediately after.
-        // future->status = FUTURE_STATUS_COMPLETED;
-        fixruntime_threadpool_delete_future(future);
+        pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
+        future->status = FUTURE_STATUS_COMPLETED;
+        pthread_cond_signal_or_exit(&future->cond, "[runtime] Failed to signal condition variable.");
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
     }
-    else
+    else if (future->status == FUTURE_STATUS_RUNNING)
     {
-        // Completed or running.
-        // Wait for it to be completed.
+        // Wait for the future to be completed.
         while (future->status == FUTURE_STATUS_RUNNING)
         {
             pthread_cond_wait_or_exit(&future->cond, &future->mutex, "[runtime] Failed to wait condition variable.");
         }
         pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-        fixruntime_threadpool_delete_future(future);
     }
-}
-
-// Cancel the future.
-void fixruntime_threadpool_cancel_future(Future *future)
-{
-    pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-    if (future->status == FUTURE_STATUS_COMPLETED)
+    else if (future->status == FUTURE_STATUS_COMPLETED)
     {
-        // The future is already completed.
+        // Nothing to do.
         pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-        fixruntime_threadpool_delete_future(future);
     }
     else
     {
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        // The future is already cancelled.
+        perror("[runtime] Waited for a deleted future.");
+        exit(1);
+    }
+}
+
+// Delete a future.
+void fixruntime_threadpool_delete_future(Future *future)
+{
+    pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
+    if (future->status == FUTURE_STATUS_WAITING || future->status == FUTURE_STATUS_RUNNING)
+    {
+        // If the future is still not completed, then cancel it.
         future->status = FUTURE_STATUS_CANCELLED;
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+    }
+    else if (future->status == FUTURE_STATUS_COMPLETED)
+    {
+        // If the future is already completed, delete here.
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        fixruntime_threadpool_free_future(future);
+    }
+    else
+    {
+        // The future is already cancelled.
+        perror("[runtime] Deleted a future twice.");
+        exit(1);
     }
 }
 
@@ -751,7 +766,7 @@ void fixruntime_threadpool_on_thread()
         if (future->status == FUTURE_STATUS_CANCELLED)
         {
             pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-            fixruntime_threadpool_delete_future(future);
+            fixruntime_threadpool_free_future(future);
             continue;
         }
         if (future->status == FUTURE_STATUS_RUNNING)
@@ -764,13 +779,21 @@ void fixruntime_threadpool_on_thread()
         pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
         future->func(future->data);
         pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
+        if (future->status == FUTURE_STATUS_CANCELLED)
+        {
+            // If the future is cancelled while running, then delete it.
+            pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+            fixruntime_threadpool_free_future(future);
+            continue;
+        }
         future->status = FUTURE_STATUS_COMPLETED;
+        pthread_cond_signal_or_exit(&future->cond, "[runtime] Failed to signal condition variable.");
         pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
     }
 }
 
 // Delete the future.
-void fixruntime_threadpool_delete_future(Future *future)
+void fixruntime_threadpool_free_future(Future *future)
 {
     if (pthread_mutex_destroy(&future->mutex))
     {
