@@ -111,7 +111,7 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
     let module = gc.module;
     let void_type = context.void_type();
     let func_type = void_type.fn_type(&[ptr_to_object_type(context).into()], false);
-    let retain_func = module.add_function("retain_obj", func_type, None);
+    let retain_func = module.add_function("fixruntime_retain_obj", func_type, None);
     let bb = context.append_basic_block(retain_func, "entry");
 
     let _builder_guard = gc.push_builder();
@@ -190,7 +190,9 @@ fn build_release_boxed_function<'c, 'm, 'b>(
         ],
         false,
     );
-    let release_func = gc.module.add_function("release_obj", func_type, None);
+    let release_func = gc
+        .module
+        .add_function("fixruntime_release_obj", func_type, None);
     let entry_bb = gc.context.append_basic_block(release_func, "entry");
 
     let _builder_guard = gc.push_builder();
@@ -338,7 +340,9 @@ fn build_mark_global_boxed_object_function<'c, 'm>(
         ],
         false,
     );
-    let mark_func = gc.module.add_function("mark_global", func_type, None);
+    let mark_func = gc
+        .module
+        .add_function("fixruntime_mark_global", func_type, None);
     let bb = gc.context.append_basic_block(mark_func, "entry");
 
     let _builder_guard = gc.push_builder();
