@@ -260,8 +260,6 @@ fn build_release_boxed_function<'c, 'm, 'b>(
         .unwrap();
     report_release_to_sanitizer(gc, obj_ptr, old_refcnt);
 
-    // If refcnt is zero, try to call dtor and free object.
-    gc.builder().position_at_end(destruction_bb);
     // Branch to `threaded_destruction_bb` if old_refcnt is one.
     let threaded_destruction_bb = gc
         .context
