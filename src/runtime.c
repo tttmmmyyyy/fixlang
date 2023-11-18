@@ -526,10 +526,11 @@ typedef struct IFuture
 {
     TaskFunc func;
     TaskData data;
-    int status;
+    struct IFuture *next; // A pointer to the next future in the queue.
     pthread_mutex_t mutex;
     pthread_cond_t cond;
-    struct IFuture *next; // A pointer to the next future in the queue.
+    uint8_t status;
+    uint8_t refcnt;
 } Future;
 
 // Interface functions.
@@ -543,16 +544,15 @@ TaskData fixruntime_threadpool_get_task_data(Future *future);
 void *fixruntime_threadpool_on_thread(void *);
 void fixruntime_threadpool_push_future(Future *future);
 Future *fixruntime_threadpool_pop_future();
-void fixruntime_threadpool_free_future(Future *future);
+void fixruntime_threadpool_release_future(Future *future);
 
 // Status of a future.
 // The status transits as WAITING -> RUNNING -> COMPLETED, and any status can transit to CANCELLED.
 // If a future is cancelled before it is completed, then it is marked as CANCELLED and will be deleted by the thread that runs it or waits it.
 // If a future is cancelled after it is completed, then it is deleted immediately.
-int FUTURE_STATUS_WAITING = 0;
-int FUTURE_STATUS_RUNNING = 1;
-int FUTURE_STATUS_COMPLETED = 2;
-int FUTURE_STATUS_CANCELLED = 3;
+uint8_t FUTURE_STATUS_WAITING = 0;
+uint8_t FUTURE_STATUS_RUNNING = 1;
+uint8_t FUTURE_STATUS_COMPLETED = 2;
 
 // Future queue.
 Future *future_queue_first = NULL;
@@ -668,8 +668,9 @@ Future *fixruntime_threadpool_create_future(TaskFunc func, TaskData data)
     Future *future = (Future *)malloc(sizeof(Future));
     future->func = func;
     future->data = data;
-    future->status = FUTURE_STATUS_WAITING;
     future->next = NULL;
+    future->status = FUTURE_STATUS_WAITING;
+    future->refcnt = 2; // One ownership for this library, and one for the user.
     if (pthread_mutex_init(&future->mutex, NULL))
     {
         perror("[runtime] Failed to initialize mutex for a future.");
@@ -708,16 +709,10 @@ void fixruntime_threadpool_wait_future(Future *future)
         }
         pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
     }
-    else if (future->status == FUTURE_STATUS_COMPLETED)
-    {
-        // Nothing to do.
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-    }
     else
     {
-        // The future is already cancelled.
-        perror("[runtime] Waited for a deleted future.");
-        exit(1);
+        // If the task is already completed, then do nothing.
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
     }
 }
 
@@ -725,23 +720,12 @@ void fixruntime_threadpool_wait_future(Future *future)
 void fixruntime_threadpool_delete_future(Future *future)
 {
     pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-    if (future->status == FUTURE_STATUS_WAITING || future->status == FUTURE_STATUS_RUNNING)
+    future->status = FUTURE_STATUS_COMPLETED;
+    uint8_t refcnt = --future->refcnt;
+    pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+    if (refcnt == 0)
     {
-        // If the future is still not completed, then cancel it.
-        future->status = FUTURE_STATUS_CANCELLED;
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-    }
-    else if (future->status == FUTURE_STATUS_COMPLETED)
-    {
-        // If the future is already completed, delete here.
-        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-        fixruntime_threadpool_free_future(future);
-    }
-    else
-    {
-        // The future is already cancelled.
-        perror("[runtime] Deleted a future twice.");
-        exit(1);
+        fixruntime_threadpool_release_future(future);
     }
 }
 
@@ -758,37 +742,34 @@ void *fixruntime_threadpool_on_thread(void *data)
     {
         Future *future = fixruntime_threadpool_pop_future();
         pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-        if (future->status == FUTURE_STATUS_CANCELLED)
+        if (future->status == FUTURE_STATUS_COMPLETED || future->status == FUTURE_STATUS_RUNNING)
         {
+            // The task is already completed or running in another thread, then do nothing.
+            uint8_t refcnt = --future->refcnt;
             pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-            fixruntime_threadpool_free_future(future);
-            continue;
-        }
-        if (future->status == FUTURE_STATUS_RUNNING)
-        {
-            // The task is already running on another thread by `fixruntime_threadpool_wait_future`.
-            pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+            if (refcnt == 0)
+            {
+                fixruntime_threadpool_release_future(future);
+            }
             continue;
         }
         future->status = FUTURE_STATUS_RUNNING;
         pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
         future->func(future->data);
         pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
-        if (future->status == FUTURE_STATUS_CANCELLED)
-        {
-            // If the future is cancelled while running, then delete it.
-            pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
-            fixruntime_threadpool_free_future(future);
-            continue;
-        }
         future->status = FUTURE_STATUS_COMPLETED;
+        uint8_t refcnt = --future->refcnt;
         pthread_cond_signal_or_exit(&future->cond, "[runtime] Failed to signal condition variable.");
         pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        if (refcnt == 0)
+        {
+            fixruntime_threadpool_release_future(future);
+        }
     }
 }
 
 // Delete the future.
-void fixruntime_threadpool_free_future(Future *future)
+void fixruntime_threadpool_release_future(Future *future)
 {
     if (pthread_mutex_destroy(&future->mutex))
     {
