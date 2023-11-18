@@ -17,6 +17,7 @@ C functions / values for implementing Fix standard library.
 #endif // __MINGW32__
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #ifdef __MINGW32__
 #define timegm _mkgmtime
@@ -506,4 +507,280 @@ void fixruntime_iohandle_close(IOHandle *handle)
     {
         fclose(file);
     }
+}
+
+/*
+Thread pool implementation.
+- Call `fixruntime_threadpool_initialize` to initialize thread pool.
+- Create future object by `fixruntime_threadpool_create_future`.
+    - This function takes `TaskFunc` and `TaskData` as arguments, and call `TaskFunc` with `TaskData` when the task is executed.
+- Wait for future to be completed by `fixruntime_threadpool_wait_future`.
+- Cancel future by `fixruntime_threadpool_cancel_future`.
+- Get `TaskData` object from `Future` object by `fixruntime_threadpool_get_task_data`.
+Any future must be waited or cancelled exactly once.
+*/
+
+typedef int *TaskData;
+typedef void (*TaskFunc)(TaskData);
+typedef struct
+{
+    TaskFunc func;
+    TaskData data;
+    int status;
+    Future *next; // A pointer to the next future in the queue.
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+} Future;
+
+// Interface functions.
+void fixruntime_threadpool_initialize();
+Future *fixruntime_threadpool_create_future(TaskFunc func, TaskData data);
+void fixruntime_threadpool_wait_future(Future *future);
+void fixruntime_threadpool_cancel_future(Future *future);
+TaskData fixruntime_threadpool_get_task_data(Future *future);
+
+// Internal functions.
+void fixruntime_threadpool_on_thread();
+void fixruntime_threadpool_push_future(Future *future);
+Future *fixruntime_threadpool_pop_future();
+void fixruntime_threadpool_delete_future(Future *future);
+
+// Status of a future.
+// The status transits as WAITING -> RUNNING -> COMPLETED, and any status can transit to CANCELLED.
+// Any future must be waited or cancelled exactly once.
+// If a future is waited, then it is deleted immediately after it is completed.
+// If a future is cancelled before it is completed, then it is marked as CANCELLED and will be deleted by the thread that runs it.
+// If a future is cancelled after it is completed, then it is deleted immediately.
+int FUTURE_STATUS_WAITING = 0;
+int FUTURE_STATUS_RUNNING = 1;
+int FUTURE_STATUS_COMPLETED = 2;
+int FUTURE_STATUS_CANCELLED = 3;
+
+// Future queue.
+Future *future_queue_first = NULL;
+Future *future_queue_last = NULL;
+pthread_mutex_t future_queue_mutex;
+pthread_cond_t future_queue_cond;
+
+// Thread pool.
+pthread_t *thread_pool;
+
+// Utility functions.
+void pthread_mutex_lock_or_exit(pthread_mutex_t *mutex, const char *msg)
+{
+    if (pthread_mutex_lock(mutex))
+    {
+        perror(msg);
+        exit(1);
+    }
+    return 0;
+}
+void pthread_mutex_unlock_or_exit(pthread_mutex_t *mutex, const char *msg)
+{
+    if (pthread_mutex_unlock(mutex))
+    {
+        perror(msg);
+        exit(1);
+    }
+    return 0;
+}
+void pthread_cond_wait_or_exit(pthread_cond_t *cond, pthread_mutex_t *mutex, const char *msg)
+{
+    if (pthread_cond_wait(cond, mutex))
+    {
+        perror(msg);
+        exit(1);
+    }
+    return 0;
+}
+void pthread_cond_signal_or_exit(pthread_cond_t *cond, const char *msg)
+{
+    if (pthread_cond_signal(cond))
+    {
+        perror(msg);
+        exit(1);
+    }
+    return 0;
+}
+
+// Initialize thread pool.
+void fixruntime_threadpool_initialize()
+{
+    // Initialize mutex for future queue.
+    if (pthread_mutex_init(&future_queue_mutex, NULL))
+    {
+        perror("[runtime] Failed to initialize mutex for future queue.");
+        exit(1);
+    }
+    // Initialize condition variable for future queue.
+    if (pthread_cond_init(&future_queue_cond, NULL))
+    {
+        perror("[runtime] Failed to initialize condition variable for future queue.");
+        exit(1);
+    }
+    // Initialize threads.
+    // https://stackoverflow.com/questions/150355/programmatically-find-the-number-of-cores-on-a-machine
+    int num_cpu = sysconf(_SC_NPROCESSORS_ONLN);
+    thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * num_cpu);
+    for (int i = 0; i < num_cpu; i++)
+    {
+        if (pthread_create(&thread_pool[i], NULL, fixruntime_threadpool_on_thread, NULL))
+        {
+            perror("[runtime] Failed to create thread.");
+            exit(1);
+        }
+    }
+    return 0;
+}
+
+// Push a future to the queue.
+void fixruntime_threadpool_push_future(Future *future)
+{
+    pthread_mutex_lock_or_exit(&future_queue_mutex, "[runtime] Failed to lock mutex.");
+    if (future_queue_last)
+    {
+        future_queue_last->next = future;
+    }
+    else
+    {
+        future_queue_first = future;
+    }
+    future_queue_last = future;
+    pthread_cond_signal_or_exit(&future_queue_cond, "[runtime] Failed to signal condition variable.");
+    pthread_mutex_unlock_or_exit(&future_queue_mutex, "[runtime] Failed to unlock mutex.");
+}
+
+// Pop a future from the queue.
+// If the queue is empty, then wait for a future to be pushed.
+Future *fixruntime_threadpool_pop_future()
+{
+    pthread_mutex_lock_or_exit(&future_queue_mutex, "[runtime] Failed to lock mutex.");
+    while (!future_queue_first) // Wait for a future to be pushed.
+    {
+        pthread_cond_wait_or_exit(&future_queue_cond, &future_queue_mutex, "[runtime] Failed to wait condition variable.");
+    }
+    Future *future = future_queue_first;
+    future_queue_first = future->next;
+    if (!future_queue_first)
+    {
+        future_queue_last = NULL;
+    }
+    pthread_mutex_unlock_or_exit(&future_queue_mutex, "[runtime] Failed to unlock mutex.");
+    return future;
+}
+
+// Create a future and push it to the queue.
+Future *fixruntime_threadpool_create_future(TaskFunc func, TaskData data)
+{
+    Future *future = (Future *)malloc(sizeof(Future));
+    future->func = func;
+    future->data = data;
+    future->status = FUTURE_STATUS_WAITING;
+    future->next = NULL;
+    if (pthread_mutex_init(&future->mutex, NULL))
+    {
+        perror("[runtime] Failed to initialize mutex for a future.");
+        exit(1);
+    }
+    if (pthread_cond_init(&future->cond, NULL))
+    {
+        perror("[runtime] Failed to initialize condition variable for a future.");
+        exit(1);
+    }
+    fixruntime_threadpool_push_future(future);
+    return future;
+}
+
+// Wait for the future to be completed.
+void fixruntime_threadpool_wait_future(Future *future)
+{
+    pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
+    if (future->status == FUTURE_STATUS_WAITING)
+    {
+        // If the future is still waiting, then run it on this thread.
+        future->status = FUTURE_STATUS_RUNNING;
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        future->func(future->data);
+        // Commenting out the following line is violating the transition rule of the status, but it is OK because the future will be deleted immediately after.
+        // future->status = FUTURE_STATUS_COMPLETED;
+        fixruntime_threadpool_delete_future(future);
+    }
+    else
+    {
+        // Completed or running.
+        // Wait for it to be completed.
+        while (future->status == FUTURE_STATUS_RUNNING)
+        {
+            pthread_cond_wait_or_exit(&future->cond, &future->mutex, "[runtime] Failed to wait condition variable.");
+        }
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        fixruntime_threadpool_delete_future(future);
+    }
+}
+
+// Cancel the future.
+void fixruntime_threadpool_cancel_future(Future *future)
+{
+    pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
+    if (future->status == FUTURE_STATUS_COMPLETED)
+    {
+        // The future is already completed.
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        fixruntime_threadpool_delete_future(future);
+    }
+    else
+    {
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        future->status = FUTURE_STATUS_CANCELLED;
+    }
+}
+
+// Get the task data from the future.
+TaskData fixruntime_threadpool_get_task_data(Future *future)
+{
+    return future->data;
+}
+
+// Run each future on a thread.
+void fixruntime_threadpool_on_thread()
+{
+    while (1)
+    {
+        Future *future = fixruntime_threadpool_pop_future();
+        pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
+        if (future->status == FUTURE_STATUS_CANCELLED)
+        {
+            pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+            fixruntime_threadpool_delete_future(future);
+            continue;
+        }
+        if (future->status == FUTURE_STATUS_RUNNING)
+        {
+            // The task is already running on another thread by `fixruntime_threadpool_wait_future`.
+            pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+            continue;
+        }
+        future->status = FUTURE_STATUS_RUNNING;
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+        future->func(future->data);
+        pthread_mutex_lock_or_exit(&future->mutex, "[runtime] Failed to lock mutex.");
+        future->status = FUTURE_STATUS_COMPLETED;
+        pthread_mutex_unlock_or_exit(&future->mutex, "[runtime] Failed to unlock mutex.");
+    }
+}
+
+// Delete the future.
+void fixruntime_threadpool_delete_future(Future *future)
+{
+    if (pthread_mutex_destroy(&future->mutex))
+    {
+        perror("[runtime] Failed to destroy mutex for a future.");
+        exit(1);
+    }
+    if (pthread_cond_destroy(&future->cond))
+    {
+        perror("[runtime] Failed to destroy condition variable for a future.");
+        exit(1);
+    }
+    free(future);
 }
