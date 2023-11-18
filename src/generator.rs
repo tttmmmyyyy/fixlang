@@ -786,6 +786,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Implement threaded_bb.
         self.builder().position_at_end(threaded_bb);
         // Load refcnt atomically with monotonic ordering.
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
         let refcnt = self
             .builder()
             .build_load(ptr_to_refcnt, "refcnt")
