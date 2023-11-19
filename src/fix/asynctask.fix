@@ -12,6 +12,7 @@ make = |func| (
     let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr), task_data];
     let dtor = Destructor::make(task_handle, |task_handle| (
         eval CALL_C[() fixruntime_threadpool_delete_task(Ptr), task_handle];
+        eval _unsafe_delete_task_data(task_data);
         ()
     ));
     Task { dtor : dtor }
