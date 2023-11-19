@@ -1,6 +1,8 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 
-use crate::configuration::Configuration;
+use crate::{
+    ast::program::Program, configuration::Configuration, stdlib::add_asynctask_llvm_functions,
+};
 
 pub const NAMESPACE_SEPARATOR: &str = "::";
 
@@ -64,13 +66,26 @@ pub const DOT_FIXLANG: &str = ".fixlang";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const SEARCH_DYNAMIC_LIBRARY_TEMP_FILE: &str = ".fixlang/search_dl_temp";
 
-pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<fn(&mut Configuration)>)] = &[
-    ("Debug", include_str!("./fix/debug.fix"), "debug", None),
-    ("Hash", include_str!("./fix/hash.fix"), "hash", None),
+pub const STANDARD_LIBRARIES: &[(
+    &str,                           /* mod_name */
+    &str,                           /* source_content */
+    &str,                           /* file_name */
+    Option<fn(&mut Configuration)>, /* config_modifier */
+    Option<fn(&mut Program)>,       /* module_modifier */
+)] = &[
+    (
+        "Debug",
+        include_str!("./fix/debug.fix"),
+        "debug",
+        None,
+        None,
+    ),
+    ("Hash", include_str!("./fix/hash.fix"), "hash", None, None),
     (
         "HashMap",
         include_str!("./fix/hashmap.fix"),
         "hashmap",
+        None,
         None,
     ),
     (
@@ -78,18 +93,27 @@ pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<fn(&mut Configuration)
         include_str!("./fix/hashset.fix"),
         "hashset",
         None,
+        None,
     ),
     (
         "Math",
         include_str!("./fix/math.fix"),
         "math",
         Some(Configuration::add_libm),
+        None,
     ),
-    ("Time", include_str!("./fix/time.fix"), "time.fix", None),
+    (
+        "Time",
+        include_str!("./fix/time.fix"),
+        "time.fix",
+        None,
+        None,
+    ),
     (
         "Character",
         include_str!("./fix/character.fix"),
         "character",
+        None,
         None,
     ),
     (
@@ -97,12 +121,14 @@ pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<fn(&mut Configuration)
         include_str!("./fix/subprocess.fix"),
         "subprocess",
         None,
+        None,
     ),
     (
         "AsyncTask",
         include_str!("./fix/asynctask.fix"),
         "asynctask",
         Some(Configuration::set_threaded),
+        Some(add_asynctask_llvm_functions),
     ),
 ];
 

@@ -315,3 +315,5 @@ pub fn make_std_mod() -> Program {
 
     fix_module
 }
+
+pub fn add_asynctask_llvm_functions(fixmod: &mut Program) {}
