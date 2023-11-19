@@ -1,10 +1,11 @@
 module AsyncTask;
+// This module provides a way to run a computation asynchronously.
+// To use this module, pass `--threaded` flag to the compiler.
 
 // A type for a task that can be run asynchronously.
-// A task can be made from `make : (() -> a) -> Task a` function.
 type Task a = unbox struct { dtor : Destructor Ptr };
 
-// Make a task.
+// Make a task for a computation.
 make : (() -> a) -> Task a;
 make = |func| (
     let task_data = _unsafe_make_task_data(func);
@@ -16,7 +17,7 @@ make = |func| (
     Task { dtor : dtor }
 );
 
-// Get the result of a task.
+// Get the result of a computation task.
 get : Task a -> a;
 get = |task| (
     let task_handle = task.@dtor.@value; // Since we do not want to call the destructor here, we evaluate `task` later.
