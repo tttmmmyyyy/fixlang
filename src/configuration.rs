@@ -60,9 +60,9 @@ impl Configuration {
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
             debug_mode: false,
-            emit_llvm: false,
+            emit_llvm: true,
             out_file_path: None,
-            threaded: false,
+            threaded: true,
         }
     }
 
@@ -71,6 +71,11 @@ impl Configuration {
     pub fn add_dyanmic_library(&mut self, name: &str) {
         self.linked_libraries
             .push((name.to_string(), LinkType::Dynamic));
+    }
+
+    // Add `libm.so` to dynamically linked libraries.
+    pub fn add_libm(&mut self) {
+        self.add_dyanmic_library("m");
     }
 
     pub fn get_output_llvm_ir_path(&self, pre_opt: bool) -> PathBuf {

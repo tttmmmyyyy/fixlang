@@ -2058,6 +2058,8 @@ Reserve a HashSet so that it will not rehash until size exceeds the spacified va
 Convert a HashSet into an iterator.
 
 # Module `Math`
+// A math library.
+// Importing this module automatically links libm.so to the program.
 
 ## `_gcd_nonneg : I64 -> I64 -> I64`
 Calculate greatest common divisors of two non-negative integers. 

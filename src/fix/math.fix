@@ -1,3 +1,5 @@
+// A math library.
+// Importing this module automatically links libm.so to the program.
 module Math;
 
 import Debug;

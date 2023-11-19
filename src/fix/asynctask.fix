@@ -1,6 +1,7 @@
 module AsyncTask;
 // This module provides a way to run a computation asynchronously.
-// To use this module, pass `--threaded` flag to the compiler.
+// Importing this module automatically enables `--threaded` flag of the compiler. 
+// Note that this causes some overhead even for a single-threaded program.
 
 // A type for a task that can be run asynchronously.
 type Task a = unbox struct { dtor : Destructor Ptr };

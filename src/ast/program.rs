@@ -1340,15 +1340,15 @@ impl Program {
 
             let mut imported = false;
             // Search for bulit-in modules.
-            for (mod_name, source_content, file_name, native_library) in STANDARD_LIBRARIES {
+            for (mod_name, source_content, file_name, config_modifier) in STANDARD_LIBRARIES {
                 if import.target_module == *mod_name {
                     self.link(parse_source_temporary_file(
                         source_content,
                         file_name,
                         &format!("{:x}", md5::compute(build_time_utc!())),
                     ));
-                    if let Some(lib_name) = native_library {
-                        config.add_dyanmic_library(lib_name);
+                    if let Some(config_modifier) = config_modifier {
+                        config_modifier(config);
                     }
                     imported = true;
                     break;

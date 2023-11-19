@@ -1,5 +1,7 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 
+use crate::configuration::Configuration;
+
 pub const NAMESPACE_SEPARATOR: &str = "::";
 
 pub const STD_NAME: &str = "Std";
@@ -62,7 +64,7 @@ pub const DOT_FIXLANG: &str = ".fixlang";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const SEARCH_DYNAMIC_LIBRARY_TEMP_FILE: &str = ".fixlang/search_dl_temp";
 
-pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<&str>)] = &[
+pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<fn(&mut Configuration)>)] = &[
     ("Debug", include_str!("./fix/debug.fix"), "debug", None),
     ("Hash", include_str!("./fix/hash.fix"), "hash", None),
     (
@@ -77,7 +79,12 @@ pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<&str>)] = &[
         "hashset",
         None,
     ),
-    ("Math", include_str!("./fix/math.fix"), "math", Some("m")),
+    (
+        "Math",
+        include_str!("./fix/math.fix"),
+        "math",
+        Some(Configuration::add_libm),
+    ),
     ("Time", include_str!("./fix/time.fix"), "time.fix", None),
     (
         "Character",
@@ -95,7 +102,7 @@ pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<&str>)] = &[
         "AsyncTask",
         include_str!("./fix/asynctask.fix"),
         "asynctask",
-        None,
+        Some(Configuration::set_threaded),
     ),
 ];
 
