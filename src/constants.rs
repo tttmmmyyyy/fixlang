@@ -91,6 +91,12 @@ pub const STANDARD_LIBRARIES: &[(&str, &str, &str, Option<&str>)] = &[
         "subprocess",
         None,
     ),
+    (
+        "AsyncTask",
+        include_str!("./fix/asynctask.fix"),
+        "asynctask",
+        None,
+    ),
 ];
 
 #[allow(unused)]
