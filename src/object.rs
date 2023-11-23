@@ -363,7 +363,7 @@ impl ObjectFieldType {
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
         elem_ty: Rc<TypeNode>,
-        is_mark: bool,
+        work_type: TraverserWorkType,
     ) {
         // In loop body, release object of idx = counter_val.
         let loop_body = |gc: &mut GenerationContext<'c, 'm>,
@@ -382,13 +382,9 @@ impl ObjectFieldType {
             } else {
                 ptr
             };
-            // Perform release or mark as global depending on `is_mark`.
+            // Perform release or mark global or mark threaded.
             let obj = Object::new(obj, elem_ty.clone());
-            if is_mark {
-                gc.mark_global(obj)
-            } else {
-                gc.release(obj);
-            }
+            gc.release_or_mark(obj, work_type);
         };
 
         // After loop, do nothing.
@@ -401,26 +397,6 @@ impl ObjectFieldType {
 
         // Generate loop.
         Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
-    }
-
-    // Release each element in array buffer.
-    pub fn release_array_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        size: IntValue<'c>,
-        buffer: PointerValue<'c>,
-        elem_ty: Rc<TypeNode>,
-    ) {
-        ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, false)
-    }
-
-    // Mark as global each element in array buffer.
-    pub fn mark_global_array_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        size: IntValue<'c>,
-        buffer: PointerValue<'c>,
-        elem_ty: Rc<TypeNode>,
-    ) {
-        ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, true)
     }
 
     // Initialize an array by value.
@@ -617,13 +593,13 @@ impl ObjectFieldType {
         }
     }
 
-    // Perform retain or release or mark global on an object included in a union buffer.
+    // Perform retain or release or mark global or mark threaded on an object included in a union buffer.
     fn retain_release_mark_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         tag: IntValue<'c>,
         field_types: &Vec<Rc<TypeNode>>,
-        action_type: usize, // 0 for retain, 1 for release, 2 for mark global.
+        work_type: Option<TraverserWorkType>, // None for retain, and Some for release or mark global threaded.
     ) {
         // Retain or release field.
         let curr_func = gc
@@ -669,14 +645,10 @@ impl ObjectFieldType {
                 buf
             };
             let obj = Object::new(value_ptr, field_ty.clone());
-            if action_type == 0 {
+            if work_type.is_none() {
                 gc.retain(obj);
-            } else if action_type == 1 {
-                gc.release(obj);
-            } else if action_type == 2 {
-                gc.mark_global(obj);
             } else {
-                unreachable!()
+                gc.release_or_mark(obj, work_type.unwrap());
             }
             gc.builder().build_unconditional_branch(end_bb);
 
@@ -700,25 +672,7 @@ impl ObjectFieldType {
         tag: IntValue<'c>,
         field_types: &Vec<Rc<TypeNode>>,
     ) {
-        ObjectFieldType::retain_release_mark_union_buf(gc, buf, tag, field_types, 0);
-    }
-
-    pub fn release_union_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        buf: PointerValue<'c>,
-        tag: IntValue<'c>,
-        field_types: &Vec<Rc<TypeNode>>,
-    ) {
-        ObjectFieldType::retain_release_mark_union_buf(gc, buf, tag, field_types, 1);
-    }
-
-    pub fn mark_global_union_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        buf: PointerValue<'c>,
-        tag: IntValue<'c>,
-        field_types: &Vec<Rc<TypeNode>>,
-    ) {
-        ObjectFieldType::retain_release_mark_union_buf(gc, buf, tag, field_types, 2);
+        ObjectFieldType::retain_release_mark_union_buf(gc, buf, tag, field_types, None);
     }
 
     pub fn set_value_to_union_buf<'c, 'm>(
@@ -1505,7 +1459,11 @@ pub fn create_traverser<'c, 'm>(
             let mark_threaded_bb = gc
                 .context
                 .append_basic_block(func, "mark_threaded_bb@traverser");
-            let work_bbs = [release_bb, mark_global_bb, mark_threaded_bb];
+            let work_bbs = [
+                (TraverserWorkType::release(), release_bb),
+                (TraverserWorkType::mark_global(), mark_global_bb),
+                (TraverserWorkType::mark_threaded(), mark_threaded_bb),
+            ];
             let else_bb = gc.context.append_basic_block(func, "else_bb@traverser");
             let work_ty = traverser_work_type(gc.context);
             gc.builder().build_switch(
@@ -1531,7 +1489,7 @@ pub fn create_traverser<'c, 'm>(
             gc.builder().position_at_end(else_bb);
             gc.builder().build_return(None);
 
-            for (work_idx, work_bb) in work_bbs.iter().enumerate() {
+            for (work_type, work_bb) in work_bbs.iter() {
                 gc.builder().position_at_end(*work_bb);
 
                 let mut union_tag: Option<IntValue<'c>> = None;
@@ -1545,17 +1503,7 @@ pub fn create_traverser<'c, 'm>(
                                     .into_pointer_value()
                             };
                             let obj = Object::new(ptr_to_subobj, ty.clone());
-                            if work_idx == TRAVERSER_WORK_RELEASE as usize {
-                                // If work is 0, then destruct the subobject.
-                                gc.release(obj);
-                            } else if work_idx == TRAVERSER_WORK_MARK_GLOBAL as usize {
-                                // If work is 1, then mark the subobject as global.
-                                gc.mark_global(obj);
-                            } else if work_idx == TRAVERSER_WORK_MARK_THREADED as usize {
-                                gc.mark_threaded(obj);
-                            } else {
-                                unreachable!()
-                            }
+                            gc.release_or_mark(obj, *work_type);
                         }
                         ObjectFieldType::ControlBlock => {}
                         ObjectFieldType::LambdaFunction(_) => {}
@@ -1576,20 +1524,13 @@ pub fn create_traverser<'c, 'm>(
                                 .load_obj_field(ptr_to_obj, struct_type, ARRAY_LEN_IDX)
                                 .into_int_value();
                             let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
-                            if work_idx == TRAVERSER_WORK_RELEASE as usize {
-                                ObjectFieldType::release_array_buf(gc, size, buffer, ty.clone());
-                            } else if work_idx == TRAVERSER_WORK_MARK_GLOBAL as usize {
-                                ObjectFieldType::mark_global_array_buf(
-                                    gc,
-                                    size,
-                                    buffer,
-                                    ty.clone(),
-                                );
-                            } else if work_idx == TRAVERSER_WORK_MARK_THREADED as usize {
-                                todo!("")
-                            } else {
-                                unreachable!()
-                            }
+                            ObjectFieldType::release_or_mark_array_buf(
+                                gc,
+                                size,
+                                buffer,
+                                ty.clone(),
+                                *work_type,
+                            );
                         }
                         ObjectFieldType::UnionTag => {
                             union_tag = Some(
@@ -1599,25 +1540,13 @@ pub fn create_traverser<'c, 'm>(
                         }
                         ObjectFieldType::UnionBuf(_) => {
                             let buf = ptr_to_field(i as u32, gc);
-                            if work_idx == TRAVERSER_WORK_RELEASE as usize {
-                                ObjectFieldType::release_union_buf(
-                                    gc,
-                                    buf,
-                                    union_tag.unwrap(),
-                                    &ty.field_types(gc.type_env()),
-                                );
-                            } else if work_idx == TRAVERSER_WORK_MARK_GLOBAL as usize {
-                                ObjectFieldType::mark_global_union_buf(
-                                    gc,
-                                    buf,
-                                    union_tag.unwrap(),
-                                    &ty.field_types(gc.type_env()),
-                                );
-                            } else if work_idx == TRAVERSER_WORK_MARK_THREADED as usize {
-                                todo!("")
-                            } else {
-                                unreachable!()
-                            }
+                            ObjectFieldType::retain_release_mark_union_buf(
+                                gc,
+                                buf,
+                                union_tag.unwrap(),
+                                &ty.field_types(gc.type_env()),
+                                Some(*work_type),
+                            );
                         }
                         ObjectFieldType::TraverseFunction => {}
                     }

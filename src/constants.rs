@@ -1,6 +1,6 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 
-use crate::{ast::program::Program, configuration::Configuration};
+use crate::{ast::program::Program, configuration::Configuration, runtime::RuntimeFunctions};
 
 pub const NAMESPACE_SEPARATOR: &str = "::";
 
@@ -66,6 +66,27 @@ pub const SEARCH_DYNAMIC_LIBRARY_TEMP_FILE: &str = ".fixlang/search_dl_temp";
 
 pub const ASYNCTASK_NAME: &str = "AsyncTask";
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct TraverserWorkType(pub u32);
+impl TraverserWorkType {
+    pub fn release() -> Self {
+        Self(TRAVERSER_WORK_RELEASE)
+    }
+    pub fn mark_global() -> Self {
+        Self(TRAVERSER_WORK_MARK_GLOBAL)
+    }
+    pub fn mark_threaded() -> Self {
+        Self(TRAVERSER_WORK_MARK_THREADED)
+    }
+    pub fn runtime_function(&self) -> RuntimeFunctions {
+        match self.0 {
+            TRAVERSER_WORK_RELEASE => RuntimeFunctions::ReleaseBoxedObject,
+            TRAVERSER_WORK_MARK_GLOBAL => RuntimeFunctions::MarkGlobalBoxedObject,
+            TRAVERSER_WORK_MARK_THREADED => RuntimeFunctions::MarkThreadedBoxedObject,
+            _ => unreachable!(),
+        }
+    }
+}
 pub const TRAVERSER_WORK_RELEASE: u32 = 0;
 pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;
 pub const TRAVERSER_WORK_MARK_THREADED: u32 = 2;

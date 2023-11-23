@@ -1112,10 +1112,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    // Release nonnull boxed object.
-    pub fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
-        // If the object's type is Std::Destructor and the refcnt is one, call destructor.
-        if obj.is_destructor_object() {
+    // Release or mark global or mark threaded nonnull boxed object.
+    pub fn release_or_mark_nonnull_boxed(
+        &mut self,
+        obj: &Object<'c>,
+        work_type: TraverserWorkType,
+    ) {
+        // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
+        if work_type == TraverserWorkType::release() && obj.is_destructor_object() {
             // Branch by whether or not the reference counter is one.
             let obj_ptr = obj.ptr(self);
             let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr);
@@ -1142,15 +1146,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         let ptr = obj.ptr(self);
         let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
-        let dtor = obj.get_traverser_ptr_boxed(self);
+        let traverser = obj.get_traverser_ptr_boxed(self);
         self.call_runtime(
-            RuntimeFunctions::ReleaseBoxedObject,
-            &[ptr.into(), dtor.into()],
+            work_type.runtime_function(),
+            &[ptr.into(), traverser.into()],
         );
     }
 
-    // Release object.
-    pub fn release(&mut self, obj: Object<'c>) {
+    // Release or mark global or mark threaded an object.
+    pub fn release_or_mark(&mut self, obj: Object<'c>, work_type: TraverserWorkType) {
         if obj.is_box(self.type_env()) {
             let cont_bb = if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1179,7 +1183,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             };
 
             // If the object is boxed and not dynamic,
-            self.release_nonnull_boxed(&obj);
+            self.release_or_mark_nonnull_boxed(&obj, work_type);
 
             if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1190,23 +1194,44 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Nothing to do.
         } else {
             match obj.get_traverser_unboxed(self) {
-                Some(dtor) => {
+                Some(traverser) => {
                     // Argument of dtor function is i8*, even when the object is unboxed.
                     let ptr = obj.ptr(self);
                     let ptr: PointerValue<'_> =
                         self.cast_pointer(ptr, ptr_to_object_type(self.context));
                     self.builder().build_call(
-                        dtor,
+                        traverser,
                         &[
                             ptr.into(),
-                            ptr_to_object_type(self.context).const_null().into(),
+                            traverser_work_type(self.context)
+                                .const_int(work_type.0 as u64, false)
+                                .into(),
                         ],
-                        "dtor_of_unboxed",
+                        "call_traverser_of_unboxed",
                     );
                 }
                 None => {}
             }
         }
+    }
+
+    // Release object.
+    pub fn release(&mut self, obj: Object<'c>) {
+        self.release_or_mark(obj, TraverserWorkType::release())
+    }
+
+    // Release nonnull boxed object.
+    pub fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
+        self.release_or_mark_nonnull_boxed(obj, TraverserWorkType::release())
+    }
+
+    // Mark all objects reachable from `obj` as global.
+    pub fn mark_global(&mut self, obj: Object<'c>) {
+        self.release_or_mark(obj, TraverserWorkType::mark_global())
+    }
+
+    pub fn mark_threaded(&mut self, obj: Object<'c>) {
+        self.release_or_mark(obj, TraverserWorkType::mark_threaded())
     }
 
     pub fn mark_as_local_one(&mut self, ptr: PointerValue<'c>) {
@@ -1284,84 +1309,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             ptr_refcnt_state,
             refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
         );
-    }
-
-    // Mark all objects reachable from `obj` as global.
-    pub fn mark_global(&mut self, obj: Object<'c>) {
-        self.mark_global_or_threaded(obj, true);
-    }
-
-    pub fn mark_threaded(&mut self, obj: Object<'c>) {
-        self.mark_global_or_threaded(obj, false);
-    }
-
-    // Mark all objects reachable from `obj` as global or threaded.
-    pub fn mark_global_or_threaded(&mut self, obj: Object<'c>, mark_global: bool) {
-        if obj.is_box(self.type_env()) {
-            let cont_bb = if obj.is_dynamic_object() {
-                // Dynamic object can be null, so build null checking.
-
-                // Append basic blocks.
-                let current_bb = self.builder().get_insert_block().unwrap();
-                let current_func = current_bb.get_parent().unwrap();
-                let nonnull_bb = self
-                    .context
-                    .append_basic_block(current_func, "nonnull@mark_global");
-                let cont_bb = self
-                    .context
-                    .append_basic_block(current_func, "cont@mark_global");
-
-                // Branch to nonnull_bb if object is not null.
-                let is_null = obj.is_null(self);
-                self.builder()
-                    .build_conditional_branch(is_null, cont_bb, nonnull_bb);
-
-                // Implement nonnull_bb.
-                self.builder().position_at_end(nonnull_bb);
-
-                Some(cont_bb)
-            } else {
-                None
-            };
-
-            let ptr = obj.ptr(self);
-            let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
-            let traverser = obj.get_traverser_ptr_boxed(self);
-
-            // Call traverser function.
-            let func = if mark_global {
-                RuntimeFunctions::MarkGlobalBoxedObject
-            } else {
-                RuntimeFunctions::MarkThreadedBoxedObject
-            };
-            self.call_runtime(func, &[ptr.into(), traverser.into()]);
-
-            if obj.is_dynamic_object() {
-                // Dynamic object can be null, so build null checking.
-                self.builder().build_unconditional_branch(cont_bb.unwrap());
-                self.builder().position_at_end(cont_bb.unwrap());
-            }
-        } else if obj.is_funptr() {
-            // Nothing to do.
-        } else {
-            match obj.get_traverser_unboxed(self) {
-                Some(traverser) => {
-                    // Argument of traverser function is i8*, even when the object is unboxed.
-                    let ptr = obj.ptr(self);
-                    let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
-
-                    let work = if mark_global { 0 } else { 1 };
-                    let work = traverser_work_type(self.context).const_int(work, false);
-
-                    self.builder().build_call(
-                        traverser,
-                        &[ptr.into(), work.into()],
-                        "dtor_of_unboxed",
-                    );
-                }
-                None => {}
-            }
-        }
     }
 
     // Print Rust's &str to stderr.
