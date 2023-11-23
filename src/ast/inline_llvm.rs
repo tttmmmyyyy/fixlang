@@ -57,6 +57,10 @@ pub enum LLVMGenerator {
     IntDivBody(InlineLLVMIntDivBody),
     FloatDivBody(InlineLLVMFloatDivBody),
     IntRemBody(InlineLLVMIntRemBody),
+    GetPtrOfBoxedValueFunctionBody(InlineLLVMGetPtrOfBoxedValueFunctionBody),
+    MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody),
+    // AsyncTaskMakeTaskData(InlineLLVMAsyncTaskMakeTaskData),
+    // AsyncTaskDeleteTaskData(InlineLLVMAsyncTaskDeleteTaskData),
 }
 
 impl LLVMGenerator {
@@ -120,6 +124,10 @@ impl LLVMGenerator {
             LLVMGenerator::IntDivBody(x) => x.generate(gc, ty, rvo),
             LLVMGenerator::FloatDivBody(x) => x.generate(gc, ty, rvo),
             LLVMGenerator::IntRemBody(x) => x.generate(gc, ty, rvo),
+            LLVMGenerator::GetPtrOfBoxedValueFunctionBody(x) => x.generate(gc, ty, rvo),
+            LLVMGenerator::MarkThreadedFunctionBody(x) => x.generate(gc, ty, rvo),
+            // LLVMGenerator::AsyncTaskMakeTaskData(x) => x.generate(gc, ty, rvo),
+            // LLVMGenerator::AsyncTaskDeleteTaskData(x) => x.generate(gc, ty, rvo),
         }
     }
 }

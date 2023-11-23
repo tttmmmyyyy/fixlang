@@ -4,16 +4,27 @@ module AsyncTask;
 // Note that this causes some overhead even for a single-threaded program.
 
 // A type for a task that can be run asynchronously.
-type Task a = unbox struct { dtor : Destructor Ptr };
+type Task a = unbox struct { dtor : Destructor (TaskHandle, TaskData a) };
+
+// A type to store a task and its result. 
+// This type should be used only by implementation of this library.
+type TaskData a = box struct {
+    _func : () -> Array a, // We need a type of boxed `Option`, and actually we use `Array` of length at most one instead.
+    _result : Array a
+};
+
+// A type for a handle of a task, issued by runtime.
+type TaskHandle = Ptr;
 
 // Make a task for a computation.
 make : (() -> a) -> Task a;
 make = |func| (
-    let task_data = _unsafe_make_task_data(func);
-    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr), task_data];
-    let dtor = Destructor::make(task_handle, |task_handle| (
-        eval CALL_C[() fixruntime_threadpool_delete_task(Ptr), task_handle];
-        eval _unsafe_delete_task_data(task_data);
+    let func = mark_threaded(func);
+    let task_data = TaskData { _func : |_| [func()], _result : Array::empty };
+    let task_handle = CALL_C[TaskHandle fixruntime_threadpool_create_task(Ptr), task_data._unsafe_get_ptr_of_boxed_value];
+    let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
+        eval CALL_C[() fixruntime_threadpool_delete_task(TaskHandle), task_handle];
+        eval task_data; // Do not deallocate `task_data` before calling `fixruntime_threadpool_delete_task`.
         ()
     ));
     Task { dtor : dtor }
@@ -22,10 +33,7 @@ make = |func| (
 // Get the result of a computation task.
 get : Task a -> a;
 get = |task| (
-    let task_handle = task.@dtor.@value; // Since we do not want to call the destructor here, we evaluate `task` later.
-    eval CALL_C[() fixruntime_threadpool_wait_task(Ptr), task_handle];
-    let task_data = CALL_C[Ptr fixruntime_threadpool_get_data(Ptr), task_handle];
-    let res = _unsafe_extract_task_result(task_data);
-    eval task;
-    res
+    let (task_handle, task_data) = task.@dtor.@value;
+    eval CALL_C[() fixruntime_threadpool_wait_task(TaskHandle), task_handle];
+    task_data.@_result.@(0)
 );

@@ -196,7 +196,7 @@ impl<'c> Object<'c> {
         assert!(self.is_box(gc.type_env()));
         assert!(!self.is_funptr());
         if self.ty.is_dynamic() {
-            self.load_field_nocap(gc, DYNAMIC_OBJ_DTOR_IDX)
+            self.load_field_nocap(gc, DYNAMIC_OBJ_TRAVARSER_IDX)
                 .into_pointer_value()
         } else {
             get_traverser_ptr(&self.ty, &vec![], gc)
@@ -912,7 +912,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().build_load(ptr_to_field, "field_value")
     }
 
-    // Take an pointer of struct and store a value value into a pointer field.
+    // Take an pointer of struct and store a value into a pointer field.
     pub fn store_obj_field<V>(
         &self,
         obj: PointerValue<'c>,
@@ -1218,13 +1218,62 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
     }
 
-    pub fn mark_as_threaded_one(&mut self, ptr: PointerValue<'c>) {
-        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        // Store `REFCNT_STATE_SHARED` to `ptr_refcnt_state`.
+    pub fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
+        let current_bb = self.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+        let cont_bb = self
+            .context
+            .append_basic_block(current_func, "cont_bb@mark_threaded");
+
+        // Load refcnt state.
+        let ptr_refcnt_state = self.get_refcnt_state_ptr(obj_ptr);
+        let refcnt_state = self
+            .builder()
+            .build_load(ptr_refcnt_state, "refcnt_state")
+            .into_int_value();
+
+        // Branch by whether or not the refcnt state is `REFCNT_STATE_LOCAL`.
+        let local_bb = self
+            .context
+            .append_basic_block(current_func, "local_bb@mark_threaded");
+        let is_refcnt_state_local = self.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            refcnt_state,
+            refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+            "is_refcnt_state_local",
+        );
+        self.builder()
+            .build_conditional_branch(is_refcnt_state_local, local_bb, cont_bb);
+
+        // Implement local_bb.
+        self.builder().position_at_end(local_bb);
+        // Branch by whether or not the refcnt is one.
+        let local_shared_bb = self
+            .context
+            .append_basic_block(current_func, "shared_bb@mark_threaded");
+        let ptr_refcnt = self.get_refcnt_ptr(obj_ptr);
+        let refcnt = self
+            .builder()
+            .build_load(ptr_refcnt, "refcnt")
+            .into_int_value();
+        let one = refcnt_type(self.context).const_int(1, false);
+        let is_unique =
+            self.builder()
+                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+        self.builder()
+            .build_conditional_branch(is_unique, cont_bb, local_shared_bb);
+
+        // Implement local_shared_bb.
+        self.builder().position_at_end(local_shared_bb);
+        // Store `REFCNT_STATE_THREADED` to `ptr_refcnt_state`.
         self.builder().build_store(
             ptr_refcnt_state,
             refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
         );
+        self.builder().build_unconditional_branch(cont_bb);
+
+        // Set builder's position as preparation for following implementation.
+        self.builder().position_at_end(cont_bb);
     }
 
     // Mark object as global so that it will not be retained or released.
@@ -1237,8 +1286,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
     }
 
-    // Set all refcnts of objects reachable from `obj` to a negative value to indicate that the object is reachable from global and should not be retained or released.
+    // Mark all objects reachable from `obj` as global.
     pub fn mark_global(&mut self, obj: Object<'c>) {
+        self.mark_global_or_threaded(obj, true);
+    }
+
+    pub fn mark_threaded(&mut self, obj: Object<'c>) {
+        self.mark_global_or_threaded(obj, false);
+    }
+
+    // Mark all objects reachable from `obj` as global or threaded.
+    pub fn mark_global_or_threaded(&mut self, obj: Object<'c>, mark_global: bool) {
         if obj.is_box(self.type_env()) {
             let cont_bb = if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1269,10 +1327,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let ptr = obj.ptr(self);
             let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
             let traverser = obj.get_traverser_ptr_boxed(self);
-            self.call_runtime(
-                RuntimeFunctions::MarkGlobalBoxedObject,
-                &[ptr.into(), traverser.into()],
-            );
+
+            // Call traverser function.
+            let func = if mark_global {
+                RuntimeFunctions::MarkGlobalBoxedObject
+            } else {
+                RuntimeFunctions::MarkThreadedBoxedObject
+            };
+            self.call_runtime(func, &[ptr.into(), traverser.into()]);
 
             if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1287,24 +1349,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     // Argument of traverser function is i8*, even when the object is unboxed.
                     let ptr = obj.ptr(self);
                     let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
-                    let one_ptr = self.object_ptr_one();
+
+                    let work = if mark_global { 0 } else { 1 };
+                    let work = traverser_work_type(self.context).const_int(work, false);
+
                     self.builder().build_call(
                         traverser,
-                        &[ptr.into(), one_ptr.into()],
+                        &[ptr.into(), work.into()],
                         "dtor_of_unboxed",
                     );
                 }
                 None => {}
             }
         }
-    }
-
-    // Create a pointer to object whose value is 1.
-    pub fn object_ptr_one(&mut self) -> PointerValue<'c> {
-        let ptr_int_ty = self.context.ptr_sized_int_type(self.target_data(), None);
-        let one_ptr = ptr_int_ty.const_int(1, false);
-        self.builder()
-            .build_int_to_ptr(one_ptr, ptr_to_object_type(self.context), "object_ptr_one")
     }
 
     // Print Rust's &str to stderr.

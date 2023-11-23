@@ -3394,6 +3394,117 @@ pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMGetPtrOfBoxedValueFunctionBody {
+    var_name: String,
+}
+
+impl InlineLLVMGetPtrOfBoxedValueFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ret_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Get argument
+        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        let ptr = obj.ptr(gc);
+        let ret = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                make_ptr_ty(),
+                &vec![],
+                None,
+                gc,
+                Some("ret_val@get_ptr_of_boxed_value"),
+            )
+        };
+        ret.store_field_nocap(gc, 0, ptr);
+        ret
+    }
+}
+
+pub fn get_ptr_of_boxed_value_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const TYPE_NAME: &str = "a";
+    const VAR_NAME: &str = "x";
+    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let ret_type = make_ptr_ty();
+    let scm = Scheme::generalize(
+        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![],
+        type_fun(obj_type.clone(), ret_type.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(VAR_NAME)],
+        expr_llvm(
+            LLVMGenerator::GetPtrOfBoxedValueFunctionBody(
+                InlineLLVMGetPtrOfBoxedValueFunctionBody {
+                    var_name: VAR_NAME.to_string(),
+                },
+            ),
+            vec![FullName::local(VAR_NAME)],
+            format!("_unsafe_get_ptr_of_boxed_value({})", VAR_NAME),
+            ret_type,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMMarkThreadedFunctionBody {
+    var_name: String,
+}
+
+impl InlineLLVMMarkThreadedFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ret_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Get argument
+        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        gc.mark_threaded(obj.clone());
+        if rvo.is_some() {
+            assert!(obj.is_unbox(gc.type_env()));
+            let rvo = rvo.unwrap();
+            let val = obj.load_nocap(gc);
+            rvo.store_unbox(gc, val);
+            rvo
+        } else {
+            obj
+        }
+    }
+}
+
+pub fn mark_threaded_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const TYPE_NAME: &str = "a";
+    const VAR_NAME: &str = "x";
+    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let scm = Scheme::generalize(
+        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![],
+        type_fun(obj_type.clone(), obj_type.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(VAR_NAME)],
+        expr_llvm(
+            LLVMGenerator::MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody {
+                var_name: VAR_NAME.to_string(),
+            }),
+            vec![FullName::local(VAR_NAME)],
+            format!("mark_threaded({})", VAR_NAME),
+            obj_type,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
 pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
     const TYVAR_NAME: &str = "a";
     let kind = kind_star();

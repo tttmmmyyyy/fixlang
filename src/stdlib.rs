@@ -248,6 +248,14 @@ pub fn make_std_mod() -> Program {
         FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),
     );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], "_unsafe_get_ptr_of_boxed_value"),
+        get_ptr_of_boxed_value_function(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], "mark_threaded"),
+        mark_threaded_function(),
+    );
 
     // Array
     fix_module.add_global_value(
@@ -316,4 +324,17 @@ pub fn make_std_mod() -> Program {
     fix_module
 }
 
-pub fn add_asynctask_llvm_functions(fixmod: &mut Program) {}
+// pub fn add_asynctask_llvm_functions(fix_module: &mut Program) {
+//     fix_module.add_global_value(
+//         FullName::from_strs(&[ASYNCTASK_NAME], "_unsafe_make_task_data"),
+//         async_task_make_task_data_function(),
+//     );
+//     fix_module.add_global_value(
+//         FullName::from_strs(&[ASYNCTASK_NAME], "_unsafe_delete_task_data"),
+//         async_task_delete_task_data_function(),
+//     );
+//     fix_module.add_global_value(
+//         FullName::from_strs(&[ASYNCTASK_NAME], "_unsafe_extract_task_result"),
+//         async_task_extract_task_result_function(),
+//     );
+// }

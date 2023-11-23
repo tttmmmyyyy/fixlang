@@ -1,8 +1,6 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 
-use crate::{
-    ast::program::Program, configuration::Configuration, stdlib::add_asynctask_llvm_functions,
-};
+use crate::{ast::program::Program, configuration::Configuration};
 
 pub const NAMESPACE_SEPARATOR: &str = "::";
 
@@ -49,8 +47,8 @@ pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 pub const ARRAY_LEN_IDX: u32 = 1/* ControlBlock */;
 pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
 pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
-pub const DYNAMIC_OBJ_DTOR_IDX: u32 = 1/* ControlBlock */;
-pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_DTOR_IDX + 1;
+pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = 1/* Next of ControlBlock */;
+pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 
 // REFCNT_STATE_* values are stored to a field of the control block of each boxed object.
 pub const REFCNT_STATE_LOCAL: u8 = 0; // This is local object in the sense that it is not shared with other threads but should be released since it is not global.
@@ -65,6 +63,12 @@ pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const DOT_FIXLANG: &str = ".fixlang";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const SEARCH_DYNAMIC_LIBRARY_TEMP_FILE: &str = ".fixlang/search_dl_temp";
+
+pub const ASYNCTASK_NAME: &str = "AsyncTask";
+
+pub const TRAVERSER_WORK_RELEASE: u32 = 0;
+pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;
+pub const TRAVERSER_WORK_MARK_THREADED: u32 = 2;
 
 pub const STANDARD_LIBRARIES: &[(
     &str,                           /* mod_name */
@@ -124,11 +128,11 @@ pub const STANDARD_LIBRARIES: &[(
         None,
     ),
     (
-        "AsyncTask",
+        ASYNCTASK_NAME,
         include_str!("./fix/asynctask.fix"),
         "asynctask",
         Some(Configuration::set_threaded),
-        Some(add_asynctask_llvm_functions),
+        None,
     ),
 ];
 

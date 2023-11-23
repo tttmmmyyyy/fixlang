@@ -1034,11 +1034,15 @@ pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
 fn traverser_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
     context.void_type().fn_type(
         &[
-            ptr_to_object_type(context).into(), // Pointer to object.
-            ptr_to_object_type(context).into(), // Data to specify work.
+            ptr_to_object_type(context).into(),  // Pointer to object.
+            traverser_work_type(context).into(), // Data to specify work.
         ],
         false,
     )
+}
+
+pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
+    context.i8_type()
 }
 
 fn ptr_to_traverser_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
@@ -1280,7 +1284,7 @@ pub fn ty_to_object_ty(
                 assert_eq!(is_unbox, false);
                 ret.is_unbox = false;
                 ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_DTOR_IDX as usize);
+                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 ret.field_types.push(ObjectFieldType::TraverseFunction);
                 assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_CAP_IDX as usize);
                 for cap in capture {
@@ -1413,7 +1417,7 @@ pub fn allocate_obj<'c, 'm>(
                     .build_store(ptr_to_size_field, array_cap.unwrap());
             }
             ObjectFieldType::TraverseFunction => {
-                assert_eq!(i, DYNAMIC_OBJ_DTOR_IDX as usize);
+                assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 let ptr_to_dtor_field = gc
                     .builder()
                     .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_dtor_field")
@@ -1441,10 +1445,10 @@ pub fn get_traverser_ptr<'c, 'm>(
 }
 
 // Traverser function is a function that traverses all fields of an object and does some work on them.
-// Traverser function takes two arguments: a pointer to the object, and a pointer value called `work`.
-// If `work` is null, then traverser function works as destructor of an object.
-// If `work` is one, then traverser function marks all reachable objects as global, i.e., sets refcnt value to negative.
-// If `work` is a non-null (even) pointer, ... (will be implemented in a future)
+// Traverser function takes two arguments: a pointer to the object, and an 8-bit integer value called `work`.
+// If `work` is 0, then traverser function works as destructor of an object.
+// If `work` is 1, then traverser function marks all reachable objects as global.
+// If `work` is 2, then traverser function marks all reachable objects as threaded.
 pub fn create_traverser<'c, 'm>(
     ty: &Rc<TypeNode>,
     capture: &Vec<Rc<TypeNode>>, // used in destructor of dynamic object.
@@ -1478,7 +1482,7 @@ pub fn create_traverser<'c, 'm>(
 
             gc.builder().position_at_end(bb);
             let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
-            let work = func.get_nth_param(1).unwrap().into_pointer_value();
+            let work = func.get_nth_param(1).unwrap().into_int_value();
 
             // In this function, we need to access captured fields, so fundamentally we cannot use Object's methods to access fields.
             let ptr_to_field =
@@ -1494,20 +1498,33 @@ pub fn create_traverser<'c, 'm>(
                 };
 
             // Depending the value of `work`, do different works: destruction of objects (`work == 0`), or marking object as global (`work` == 1).
-            let dtor_bb = gc.context.append_basic_block(func, "dtor_bb@traverser");
-            let mark_bb = gc.context.append_basic_block(func, "mark_bb@traverser");
-            let work_bbs = [dtor_bb, mark_bb];
+            let release_bb = gc.context.append_basic_block(func, "release_bb@traverser");
+            let mark_global_bb = gc
+                .context
+                .append_basic_block(func, "mark_global_bb@traverser");
+            let mark_threaded_bb = gc
+                .context
+                .append_basic_block(func, "mark_threaded_bb@traverser");
+            let work_bbs = [release_bb, mark_global_bb, mark_threaded_bb];
             let else_bb = gc.context.append_basic_block(func, "else_bb@traverser");
-            let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
-            let work_int = gc
-                .builder()
-                .build_ptr_to_int(work, ptr_int_ty, "work_int@traverser");
-            let zero_ptr = ptr_int_ty.const_zero();
-            let one_ptr = ptr_int_ty.const_int(1, false);
+            let work_ty = traverser_work_type(gc.context);
             gc.builder().build_switch(
-                work_int,
+                work,
                 else_bb,
-                &[(zero_ptr, dtor_bb), (one_ptr, mark_bb)],
+                &[
+                    (
+                        work_ty.const_int(TRAVERSER_WORK_RELEASE as u64, false),
+                        release_bb,
+                    ),
+                    (
+                        work_ty.const_int(TRAVERSER_WORK_MARK_GLOBAL as u64, false),
+                        mark_global_bb,
+                    ),
+                    (
+                        work_ty.const_int(TRAVERSER_WORK_MARK_THREADED as u64, false),
+                        mark_threaded_bb,
+                    ),
+                ],
             );
 
             // In else_bb, do nothing.
@@ -1528,12 +1545,14 @@ pub fn create_traverser<'c, 'm>(
                                     .into_pointer_value()
                             };
                             let obj = Object::new(ptr_to_subobj, ty.clone());
-                            if work_idx == 0 {
+                            if work_idx == TRAVERSER_WORK_RELEASE as usize {
                                 // If work is 0, then destruct the subobject.
                                 gc.release(obj);
-                            } else if work_idx == 1 {
+                            } else if work_idx == TRAVERSER_WORK_MARK_GLOBAL as usize {
                                 // If work is 1, then mark the subobject as global.
                                 gc.mark_global(obj);
+                            } else if work_idx == TRAVERSER_WORK_MARK_THREADED as usize {
+                                gc.mark_threaded(obj);
                             } else {
                                 unreachable!()
                             }
@@ -1557,15 +1576,17 @@ pub fn create_traverser<'c, 'm>(
                                 .load_obj_field(ptr_to_obj, struct_type, ARRAY_LEN_IDX)
                                 .into_int_value();
                             let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
-                            if work_idx == 0 {
+                            if work_idx == TRAVERSER_WORK_RELEASE as usize {
                                 ObjectFieldType::release_array_buf(gc, size, buffer, ty.clone());
-                            } else if work_idx == 1 {
+                            } else if work_idx == TRAVERSER_WORK_MARK_GLOBAL as usize {
                                 ObjectFieldType::mark_global_array_buf(
                                     gc,
                                     size,
                                     buffer,
                                     ty.clone(),
                                 );
+                            } else if work_idx == TRAVERSER_WORK_MARK_THREADED as usize {
+                                todo!("")
                             } else {
                                 unreachable!()
                             }
@@ -1578,20 +1599,22 @@ pub fn create_traverser<'c, 'm>(
                         }
                         ObjectFieldType::UnionBuf(_) => {
                             let buf = ptr_to_field(i as u32, gc);
-                            if work_idx == 0 {
+                            if work_idx == TRAVERSER_WORK_RELEASE as usize {
                                 ObjectFieldType::release_union_buf(
                                     gc,
                                     buf,
                                     union_tag.unwrap(),
                                     &ty.field_types(gc.type_env()),
                                 );
-                            } else if work_idx == 1 {
+                            } else if work_idx == TRAVERSER_WORK_MARK_GLOBAL as usize {
                                 ObjectFieldType::mark_global_union_buf(
                                     gc,
                                     buf,
                                     union_tag.unwrap(),
                                     &ty.field_types(gc.type_env()),
                                 );
+                            } else if work_idx == TRAVERSER_WORK_MARK_THREADED as usize {
+                                todo!("")
                             } else {
                                 unreachable!()
                             }

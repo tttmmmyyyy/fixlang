@@ -13,6 +13,7 @@ pub enum RuntimeFunctions {
     RetainBoxedObject,
     ReleaseBoxedObject,
     MarkGlobalBoxedObject,
+    MarkThreadedBoxedObject,
     SubtractPtr,
     PtrAddOffset,
     PthreadOnce,
@@ -305,9 +306,16 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     gc.builder().position_at_end(call_dtor_bb);
     // Call dtor and jump to free_bb.
     let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
-    let null_ptr = ptr_to_object_type(gc.context).const_null();
-    gc.builder()
-        .build_call(dtor_func, &[obj_ptr.into(), null_ptr.into()], "call_dtor");
+    gc.builder().build_call(
+        dtor_func,
+        &[
+            obj_ptr.into(),
+            traverser_work_type(gc.context)
+                .const_int(TRAVERSER_WORK_RELEASE as u64, false)
+                .into(),
+        ],
+        "call_dtor",
+    );
     gc.builder().build_unconditional_branch(free_bb);
 
     // free.
@@ -327,8 +335,9 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     release_func
 }
 
-fn build_mark_global_boxed_object_function<'c, 'm>(
+fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
+    mark_global: bool,
 ) -> FunctionValue<'c> {
     let void_type = gc.context.void_type();
     let func_type = void_type.fn_type(
@@ -340,22 +349,25 @@ fn build_mark_global_boxed_object_function<'c, 'm>(
         ],
         false,
     );
-    let mark_func = gc
-        .module
-        .add_function("fixruntime_mark_global", func_type, None);
+    let func_name = if mark_global {
+        "fixruntime_mark_global_obj"
+    } else {
+        "fixruntime_mark_threaded_obj"
+    };
+    let mark_func = gc.module.add_function(func_name, func_type, None);
     let bb = gc.context.append_basic_block(mark_func, "entry");
 
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
-    // Get pointer to / value of reference counter.
+    // Get pointer to the object.
     let ptr_to_obj = mark_func.get_first_param().unwrap().into_pointer_value();
 
     // Get pointer to traverser function.
     let ptr_to_traverser = mark_func.get_nth_param(1).unwrap().into_pointer_value();
 
     // If traverser is null, then skip calling traverser.
-    let mark_self_global_bb = gc.context.append_basic_block(mark_func, "mark_self_global");
+    let mark_self_bb = gc.context.append_basic_block(mark_func, "mark_self");
     let call_traverser_bb = gc.context.append_basic_block(mark_func, "call_traverser");
     let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
     let is_traverser_null = gc.builder().build_int_compare(
@@ -365,29 +377,39 @@ fn build_mark_global_boxed_object_function<'c, 'm>(
         ptr_int_ty.const_zero(),
         "is_traverser_null",
     );
-    gc.builder().build_conditional_branch(
-        is_traverser_null,
-        mark_self_global_bb,
-        call_traverser_bb,
-    );
+    gc.builder()
+        .build_conditional_branch(is_traverser_null, mark_self_bb, call_traverser_bb);
 
     // Call traverser to mark all subobjects as global.
     gc.builder().position_at_end(call_traverser_bb);
-    let dtor_func = CallableValue::try_from(ptr_to_traverser).unwrap();
-    let one_ptr = gc.object_ptr_one();
+    let traverser = CallableValue::try_from(ptr_to_traverser).unwrap();
+    let work = if mark_global {
+        TRAVERSER_WORK_MARK_GLOBAL
+    } else {
+        TRAVERSER_WORK_MARK_THREADED
+    };
     gc.builder().build_call(
-        dtor_func,
-        &[ptr_to_obj.into(), one_ptr.into()],
+        traverser,
+        &[
+            ptr_to_obj.into(),
+            traverser_work_type(gc.context)
+                .const_int(work as u64, false)
+                .into(),
+        ],
         "call_traverser_for_mark",
     );
-    gc.builder().build_unconditional_branch(mark_self_global_bb);
+    gc.builder().build_unconditional_branch(mark_self_bb);
 
-    // Mark the object itself as global.
-    gc.builder().position_at_end(mark_self_global_bb);
-    gc.mark_global_one(ptr_to_obj);
+    // Mark the object itself.
+    gc.builder().position_at_end(mark_self_bb);
+    if mark_global {
+        gc.mark_global_one(ptr_to_obj);
+    } else {
+        gc.mark_threaded_one(ptr_to_obj);
+    }
 
-    // Report mark global to sanitizer.
-    if gc.config.sanitize_memory {
+    if mark_global && gc.config.sanitize_memory {
+        // Report mark global to sanitizer.
         let obj_id = gc.get_obj_id(ptr_to_obj);
         gc.call_runtime(RuntimeFunctions::ReportMarkGlobal, &[obj_id.into()]);
     }
@@ -395,6 +417,18 @@ fn build_mark_global_boxed_object_function<'c, 'm>(
     gc.builder().build_return(None);
 
     mark_func
+}
+
+fn build_mark_global_boxed_object_function<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    build_mark_global_or_threaded_boxed_object_function(gc, true)
+}
+
+fn build_mark_threaded_boxed_object_function<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    build_mark_global_or_threaded_boxed_object_function(gc, false)
 }
 
 fn build_subtract_ptr_function<'c, 'm, 'b>(
@@ -465,6 +499,51 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(
         .add_function("pthread_once", pthread_once_ty, None)
 }
 
+// Build `fixruntime_threadpool_run_task` function, which is called from runtime.c.
+pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) {
+    let context = gc.context;
+    let module = gc.module;
+
+    let fn_type = context
+        .void_type()
+        .fn_type(&[ptr_to_object_type(context).into()], false);
+    let func = module.add_function("fixruntime_threadpool_run_task", fn_type, None);
+
+    let bb = context.append_basic_block(func, "entry");
+
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(bb);
+
+    // Create type `TaskData ()` instead of `TaskData a`:
+    // We don't have information of the type of task result, but it is not necessary to know it in the following code.
+    let task_data_ty = type_tyapp(
+        type_tycon(&tycon(FullName::from_strs(&["AsyncTask"], "TaskData"))),
+        make_unit_ty(),
+    );
+
+    // Create instance of `TaskData`.
+    let task_data_ptr = func.get_first_param().unwrap().into_pointer_value();
+    let task_data = Object::new(task_data_ptr, task_data_ty);
+
+    // Extract task function from task data.
+    let task_func = ObjectFieldType::get_struct_field_noclone(gc, &task_data, 0);
+
+    // Call task function.
+    let unit_val: Object<'_> = allocate_obj(make_unit_ty(), &vec![], None, gc, Some("unit_value"));
+    let task_result_array = gc.apply_lambda(task_func, vec![unit_val], None);
+
+    // Mark `task_result_array` as threaded.
+    // This is necessary because `AsyncTask::Task` object may be threaded upto here.
+    gc.mark_threaded(task_result_array.clone());
+
+    // Store the result to task_data.
+    let old_array = ObjectFieldType::get_struct_field_noclone(gc, &task_data, 1);
+    gc.release(old_array);
+    ObjectFieldType::set_struct_field_norelease(gc, &task_data, 1, &task_result_array);
+
+    gc.builder().build_return(None);
+}
+
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     gc.runtimes
         .insert(RuntimeFunctions::Abort, build_abort_function(gc));
@@ -511,5 +590,11 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
         let pthread_call_once_func = build_pthread_once_function(gc);
         gc.runtimes
             .insert(RuntimeFunctions::PthreadOnce, pthread_call_once_func);
+        let mark_threaded_func = build_mark_threaded_boxed_object_function(gc);
+        gc.runtimes.insert(
+            RuntimeFunctions::MarkThreadedBoxedObject,
+            mark_threaded_func,
+        );
+        build_threadpool_run_task(gc);
     }
 }
