@@ -3408,6 +3408,7 @@ impl InlineLLVMGetPtrOfBoxedValueFunctionBody {
     ) -> Object<'c> {
         // Get argument
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        gc.release(obj.clone());
         let ptr = obj.ptr(gc);
         let ret = if rvo.is_some() {
             rvo.unwrap()
