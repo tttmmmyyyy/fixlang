@@ -116,7 +116,7 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
 pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -> () {
     assert_ne!(
         refcnt, 0,
-        "[Sanitizer] Object id={} whose refcnt zero is retained!",
+        "[Sanitizer] Object id={} whose refcnt zero is released!",
         obj_id
     );
     let mut object_info = (*OBJECT_TABLE).lock().unwrap();
@@ -194,4 +194,4 @@ pub extern "C" fn check_leak() -> () {
     }
 }
 
-const VERBOSE: bool = false;
+const VERBOSE: bool = true;
