@@ -515,9 +515,11 @@ Thread pool implementation.
 - Create task object by `fixruntime_threadpool_create_task`.
     - This function takes `TaskFunc` and `TaskData` as arguments, and call `TaskFunc` with `TaskData` when the task is executed.
 - Wait for a task to be completed by `fixruntime_threadpool_wait_task`.
-- Delete task by `fixruntime_threadpool_delete_task`.
 - Get `TaskData` object from task object by `fixruntime_threadpool_get_data`.
-A task must be deleted exactly once. A task must not be deleted while another thread is waiting it.
+- Delete task by `fixruntime_threadpool_delete_task`.
+    - A task must be deleted exactly once.
+    - A task cannot be waited after it is deleted.
+    - After a task is deleted, it is guaranteed that it is not running and it will not be runned in a future.
 */
 
 typedef int *TaskData;
@@ -739,7 +741,7 @@ void fixruntime_threadpool_wait_task(Task *task)
         (*ptr_fixruntime_threadpool_run_task)(task->data);
         pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
         task->status = TASK_STATUS_COMPLETED;
-        pthread_cond_signal_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
+        pthread_cond_broadcast_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
         pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
     }
     else if (task->status == TASK_STATUS_RUNNING)
@@ -759,10 +761,24 @@ void fixruntime_threadpool_wait_task(Task *task)
 }
 
 // Delete a task.
+// After a task is deleted, it is guaranteed that it is not running and it will not be runned in a future.
 void fixruntime_threadpool_delete_task(Task *task)
 {
     pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
-    task->status = TASK_STATUS_COMPLETED;
+    if (task->status == TASK_STATUS_WAITING)
+    {
+        // If it is waiting, then mark it as completed so that it will not be runned in a future.
+        task->status = TASK_STATUS_COMPLETED;
+        // We don't need to signal condition variable because it is assured that no thread is waiting for it.
+    }
+    else
+    {
+        while (task->status == TASK_STATUS_RUNNING)
+        {
+            // If the task is already running, wait for the task to be completed.
+            pthread_cond_wait_or_exit(&task->cond, &task->mutex, "[runtime] Failed to wait condition variable.");
+        }
+    }
     uint8_t refcnt = --task->refcnt;
     pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
     if (refcnt == 0)
@@ -807,8 +823,8 @@ void *fixruntime_threadpool_on_thread(void *data)
         (*ptr_fixruntime_threadpool_run_task)(task->data);
         pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
         task->status = TASK_STATUS_COMPLETED;
+        pthread_cond_broadcast_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
         uint8_t refcnt = --task->refcnt;
-        pthread_cond_signal_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
         pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
         if (refcnt == 0)
         {
