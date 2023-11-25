@@ -76,7 +76,6 @@ fn build_report_retain_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Funct
         &[
             ptr_to_object_type(gc.context).into(),
             obj_id_type(gc.context).into(),
-            refcnt_type(gc.context).into(),
         ],
         false,
     );
@@ -88,7 +87,6 @@ fn build_report_release_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Func
         &[
             ptr_to_object_type(gc.context).into(),
             obj_id_type(gc.context).into(),
-            refcnt_type(gc.context).into(),
         ],
         false,
     );
@@ -131,14 +129,13 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
     fn report_retain_to_sanitizer<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         obj_ptr: PointerValue<'c>,
-        old_refcnt: IntValue<'c>,
     ) {
         // Report retain to sanitizer.
         if gc.config.sanitize_memory {
             let obj_id = gc.get_obj_id(obj_ptr);
             gc.call_runtime(
                 RuntimeFunctions::ReportRetain,
-                &[obj_ptr.into(), obj_id.into(), old_refcnt.into()],
+                &[obj_ptr.into(), obj_id.into()],
             );
         }
     }
@@ -154,14 +151,14 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
         "",
     );
     gc.builder().build_store(ptr_to_refcnt, new_refcnt);
-    report_retain_to_sanitizer(gc, obj_ptr, old_refcnt_local);
+    report_retain_to_sanitizer(gc, obj_ptr);
     gc.builder().build_return(None);
 
     // Implement threaded_bb.
     gc.builder().position_at_end(threaded_bb);
     // Increment refcnt atomically and jump to `end_bb`.
     let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-    let old_refcnt_threaded = gc
+    let _old_refcnt_threaded = gc
         .builder()
         .build_atomicrmw(
             inkwell::AtomicRMWBinOp::Add,
@@ -170,7 +167,7 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
             inkwell::AtomicOrdering::Monotonic,
         )
         .unwrap();
-    report_retain_to_sanitizer(gc, obj_ptr, old_refcnt_threaded);
+    report_retain_to_sanitizer(gc, obj_ptr);
     gc.builder().build_return(None);
 
     // Implement global_bb.
@@ -216,14 +213,13 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     fn report_release_to_sanitizer<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         obj_ptr: PointerValue<'c>,
-        old_refcnt: IntValue<'c>,
     ) {
         // Report release to sanitizer.
         if gc.config.sanitize_memory {
             let obj_id = gc.get_obj_id(obj_ptr);
             gc.call_runtime(
                 RuntimeFunctions::ReportRelease,
-                &[obj_ptr.into(), obj_id.into(), old_refcnt.into()],
+                &[obj_ptr.into(), obj_id.into()],
             );
         }
     }
@@ -239,7 +235,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
         "",
     );
     gc.builder().build_store(ptr_to_refcnt, new_refcnt);
-    report_release_to_sanitizer(gc, obj_ptr, old_refcnt);
+    report_release_to_sanitizer(gc, obj_ptr);
 
     // Branch to `destruction_bb` if old_refcnt is one.
     let is_refcnt_one = gc.builder().build_int_compare(
@@ -264,7 +260,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
             inkwell::AtomicOrdering::Release,
         )
         .unwrap();
-    report_release_to_sanitizer(gc, obj_ptr, old_refcnt);
+    report_release_to_sanitizer(gc, obj_ptr);
 
     // Branch to `threaded_destruction_bb` if old_refcnt is one.
     let threaded_destruction_bb = gc

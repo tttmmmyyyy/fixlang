@@ -69,7 +69,7 @@ pub extern "C" fn report_mark_global(obj_id: i64) -> () {
 
 // Report retain.
 #[no_mangle]
-pub extern "C" fn report_retain(address: *const i8, obj_id: i64, _: i64) -> () {
+pub extern "C" fn report_retain(address: *const i8, obj_id: i64) -> () {
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_table.contains_key(&obj_id),
@@ -117,7 +117,7 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, _: i64) -> () {
 
 // Report release.
 #[no_mangle]
-pub extern "C" fn report_release(address: *const i8, obj_id: i64, _: i64) -> () {
+pub extern "C" fn report_release(address: *const i8, obj_id: i64) -> () {
     let mut object_info = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_info.contains_key(&obj_id),
