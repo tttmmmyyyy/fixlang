@@ -557,7 +557,7 @@ impl Program {
                         gc.module
                             .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
 
-                    // Create debug info subprgoram
+                    // Create debug info subprogram
                     if gc.has_di() {
                         acc_fn.set_subprogram(gc.create_debug_subprogram(
                             &acc_fn_name,
@@ -620,7 +620,7 @@ impl Program {
                 };
 
                 let (init_bb, end_bb, mut init_fun_di_scope_guard) = if !gc.config.threaded {
-                    // In unthreaded mode, we implement `call_once` logic by hand.
+                    // In single-threaded mode, we implement `call_once` logic by hand.
                     let flag = gc
                         .builder()
                         .build_load(init_flag, "load_init_flag")
@@ -675,7 +675,7 @@ impl Program {
                     // Push debug info scope for initialization function.
                     let init_fn_di_scope_guard: Option<PopDebugScopeGuard<'_>> = if gc.has_di() {
                         Some(gc.push_debug_scope(
-                            acc_fn.get_subprogram().map(|sp| sp.as_debug_info_scope()),
+                            init_fn.get_subprogram().map(|sp| sp.as_debug_info_scope()),
                         ))
                     } else {
                         None

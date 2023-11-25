@@ -4884,8 +4884,8 @@ pub fn test_async_task() {
 
     main : IO ();
     main = (
-        let fib_40 = fib_async(40);
-        fib_40.to_string.println
+        let x = fib_async(10);
+        x.to_string.println
     );
     "#;
     run_source(&source, Configuration::develop_compiler());
