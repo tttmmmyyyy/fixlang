@@ -18,6 +18,7 @@ pub enum RuntimeFunctions {
     PtrAddOffset,
     PthreadOnce,
     ThreadPoolInitialize,
+    ThreadPoolTerminate,
     ThreadPoolRunTask,
 }
 
@@ -557,6 +558,14 @@ fn build_threadpool_initialize_function<'c, 'm, 'b>(
         .add_function("fixruntime_threadpool_initialize", fn_ty, None)
 }
 
+fn build_threadpool_terminate_function<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    let fn_ty = gc.context.void_type().fn_type(&[], false);
+    gc.module
+        .add_function("fixruntime_threadpool_terminate", fn_ty, None)
+}
+
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     gc.runtimes
         .insert(RuntimeFunctions::Abort, build_abort_function(gc));
@@ -618,5 +627,11 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
             RuntimeFunctions::ThreadPoolInitialize,
             threadpool_initialize,
         );
+        if gc.config.sanitize_memory {
+            // If AsyncTask is used and memory sanitizer is enabled, then we need to terminate thread pool before leak checking.
+            let threadpool_terminate = build_threadpool_terminate_function(gc);
+            gc.runtimes
+                .insert(RuntimeFunctions::ThreadPoolTerminate, threadpool_terminate);
+        }
     }
 }

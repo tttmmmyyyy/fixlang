@@ -560,6 +560,10 @@ pthread_cond_t task_queue_cond;
 
 // Thread pool.
 pthread_t *thread_pool;
+int thread_pool_size;
+#ifdef THREADPOOL_TERMINATION
+uint8_t is_threadpool_terminated = 0;
+#endif // THREADPOOL_TERMINATION
 
 // Utility functions.
 void pthread_mutex_lock_or_exit(pthread_mutex_t *mutex, const char *msg)
@@ -595,6 +599,15 @@ void pthread_cond_signal_or_exit(pthread_cond_t *cond, const char *msg)
     }
 }
 
+void pthread_cond_broadcast_or_exit(pthread_cond_t *cond, const char *msg)
+{
+    if (pthread_cond_broadcast(cond))
+    {
+        perror(msg);
+        exit(1);
+    }
+}
+
 // Initialize thread pool.
 void fixruntime_threadpool_initialize()
 {
@@ -613,7 +626,8 @@ void fixruntime_threadpool_initialize()
     // Initialize threads.
     // https://stackoverflow.com/questions/150355/programmatically-find-the-number-of-cores-on-a-machine
     int num_cpu = sysconf(_SC_NPROCESSORS_ONLN);
-    thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * num_cpu);
+    thread_pool_size = num_cpu - 1; // Exclude main thread.
+    thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * thread_pool_size);
     for (int i = 0; i < num_cpu; i++)
     {
         if (pthread_create(&thread_pool[i], NULL, fixruntime_threadpool_on_thread, NULL))
@@ -623,6 +637,25 @@ void fixruntime_threadpool_initialize()
         }
     }
 }
+
+#ifdef THREADPOOL_TERMINATION
+void fixruntime_threadpool_terminate()
+{
+    pthread_mutex_lock_or_exit(&task_queue_mutex, "[runtime] Failed to lock mutex.");
+    is_threadpool_terminated = 1;
+    pthread_cond_broadcast_or_exit(&task_queue_cond, "[runtime] Failed to broadcast condition variable.");
+    pthread_mutex_unlock_or_exit(&task_queue_mutex, "[runtime] Failed to unlock mutex.");
+    for (int i = 0; i < thread_pool_size; i++)
+    {
+        if (pthread_join(thread_pool[i], NULL))
+        {
+            perror("[runtime] Failed to join thread.");
+            exit(1);
+        }
+        // TODO: release other resources, such as memory, mutexes and condition variables.
+    }
+}
+#endif // THREADPOOL_TERMINATION
 
 // Push a task to the queue.
 void fixruntime_threadpool_push_task(Task *task)
@@ -643,11 +676,23 @@ void fixruntime_threadpool_push_task(Task *task)
 
 // Pop a task from the queue.
 // If the queue is empty, then wait for a task to be pushed.
+// Return NULL if the thread pool is terminated.
 Task *fixruntime_threadpool_pop_task()
 {
     pthread_mutex_lock_or_exit(&task_queue_mutex, "[runtime] Failed to lock mutex.");
-    while (!task_queue_first) // Wait for a task to be pushed.
+    while (1) // Wait for a task to be pushed, or the thread pool to be terminated.
     {
+#ifdef THREADPOOL_TERMINATION
+        if (is_threadpool_terminated)
+        {
+            pthread_mutex_unlock_or_exit(&task_queue_mutex, "[runtime] Failed to unlock mutex.");
+            return NULL;
+        }
+#endif // THREADPOOL_TERMINATION
+        if (task_queue_first)
+        {
+            break;
+        }
         pthread_cond_wait_or_exit(&task_queue_cond, &task_queue_mutex, "[runtime] Failed to wait condition variable.");
     }
     Task *task = task_queue_first;
@@ -738,6 +783,13 @@ void *fixruntime_threadpool_on_thread(void *data)
     while (1)
     {
         Task *task = fixruntime_threadpool_pop_task();
+#ifdef THREADPOOL_TERMINATION
+        if (!task)
+        {
+            // The thread pool is terminated.
+            return NULL;
+        }
+#endif // THREADPOOL_TERMINATION
         pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
         if (task->status == TASK_STATUS_COMPLETED || task->status == TASK_STATUS_RUNNING)
         {

@@ -92,11 +92,14 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
             info.code
         );
     } else {
-        assert_eq!(
-            info.refcnt, refcnt,
-            "[Sanitizer] The refcnt of object id={} in report_retain mismatch! reported={}, sanitizer={}",
-            obj_id, refcnt, info.refcnt
-        );
+        // NOTE: This following assertion fails in multi-threaded programs, because
+        // the increment (resp. decrement) of reference counter and call of `report_retain` (resp. `report_release`) are not done in the same lock.
+        // Since this is not critical for detecting memory problems, we disable this assertion.
+        // assert_eq!(
+        //     info.refcnt, refcnt,
+        //     "[Sanitizer] The refcnt of object id={} in report_retain mismatch! reported={}, sanitizer={}",
+        //     obj_id, refcnt, info.refcnt
+        // );
     }
     info.refcnt += 1;
     if VERBOSE {
@@ -136,13 +139,16 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
             info.code
         );
     } else {
-        assert_eq!(
-            info.refcnt, refcnt,
-            "[Sanitizer] The refcnt of object id={} in report_release mismatch! reported={}, sanitizer={}",
-            obj_id, refcnt, info.refcnt
-        );
-        info.refcnt -= 1;
+        // NOTE: This following assertion fails in multi-threaded programs, because
+        // the increment (resp. decrement) of reference counter and call of `report_retain` (resp. `report_release`) are not done in the same lock.
+        // Since this is not critical for detecting memory problems, we disable this assertion.
+        // assert_eq!(
+        //     info.refcnt, refcnt,
+        //     "[Sanitizer] The refcnt of object id={} in report_release mismatch! reported={}, sanitizer={}",
+        //     obj_id, refcnt, info.refcnt
+        // );
     }
+    info.refcnt -= 1;
     if VERBOSE {
         println!(
             "[Sanitizer] Object id={} is released. refcnt=({} -> {}), addr={:#X}, code = {}",

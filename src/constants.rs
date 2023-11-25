@@ -62,7 +62,6 @@ pub const CTRL_BLK_OBJ_ID_IDX: u32 = 2;
 pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const DOT_FIXLANG: &str = ".fixlang";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
-pub const SEARCH_DYNAMIC_LIBRARY_TEMP_FILE: &str = ".fixlang/search_dl_temp";
 
 pub const ASYNCTASK_NAME: &str = "AsyncTask";
 

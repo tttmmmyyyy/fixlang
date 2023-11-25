@@ -1,6 +1,5 @@
 use build_time::build_time_utc;
 use chrono::{DateTime, Utc};
-use regex::Regex;
 use std::{
     env,
     fs::create_dir_all,
@@ -55,6 +54,10 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             .arg("-o")
             .arg(runtime_so_path.to_str().unwrap())
             .arg(runtime_c_path.to_str().unwrap());
+        // Define macros.
+        for macro_name in &config.runtime_c_define_macros {
+            com = com.arg("-D").arg(macro_name);
+        }
         // Load dynamically linked libraries specified by user.
         for (lib_name, _) in &config.linked_libraries {
             com = com.arg(format!("-l{}", lib_name));
@@ -76,40 +79,6 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             .unwrap();
         func.call()
     }
-}
-
-// Search path of libabc.so.* for given string "abc" and load it.
-// NOTE: this function is not currently used because it fails to load librt.so in ubuntu.
-#[allow(unused)]
-fn search_and_load_dynamic_library(name: &str) {
-    // Call "gcc -Wl,-t -o temp -labc", filter stdout to get paths to file "libabc + string such as 'so' or 'so.6'", and find ELF file among them.
-    let output = Command::new("gcc")
-        .arg("-Wl,-t")
-        .arg("-o")
-        .arg(SEARCH_DYNAMIC_LIBRARY_TEMP_FILE)
-        .arg(format!("-l{}", name))
-        .output()
-        .expect("Failed to run gcc.");
-    let trace = String::from_utf8(output.stdout);
-    if trace.is_err() {
-        error_exit("Failed to parse stdout from gcc as UTF8.");
-    }
-    let trace = trace.unwrap();
-    for path in Regex::new(&format!(r"[^\(\)\s]*lib{}\.[^\(\)\s]*", name))
-        .unwrap()
-        .find_iter(&trace)
-    {
-        let path = path.as_str();
-        let file = File::open(path);
-        if file.is_err() {
-            continue;
-        }
-        if !load_library_permanently(path) {
-            continue;
-        }
-        return;
-    }
-    error_exit(&format!("Cannot load library `{}`.", name))
 }
 
 fn build_module<'c>(
@@ -241,6 +210,10 @@ fn build_module<'c>(
 
     // Perform leak check
     if gc.config.sanitize_memory {
+        if gc.config.async_task {
+            // Before check leak, terminate all async tasks.
+            gc.call_runtime(RuntimeFunctions::ThreadPoolTerminate, &[]);
+        }
         gc.call_runtime(RuntimeFunctions::CheckLeak, &[]);
     }
 
@@ -449,13 +422,17 @@ pub fn build_file(mut config: Configuration) {
         fs::write(&runtime_c_path, include_str!("runtime.c"))
             .expect(&format!("Failed to generate runtime.c"));
         // Create library object file.
-        let output = Command::new("gcc")
+        let mut com = Command::new("gcc");
+        let mut com = com
             .arg("-o")
             .arg(runtime_obj_path.to_str().unwrap())
             .arg("-c")
-            .arg(runtime_c_path.to_str().unwrap())
-            .output()
-            .expect("Failed to run gcc.");
+            .arg(runtime_c_path.to_str().unwrap());
+        for macro_name in &config.runtime_c_define_macros {
+            com = com.arg("-D").arg(macro_name);
+        }
+        let output = com.output().expect("Failed to run gcc.");
+
         if output.stderr.len() > 0 {
             eprintln!(
                 "{:?}",

@@ -34,11 +34,12 @@ pub struct Configuration {
     pub threaded: bool,
     // Use AsyncTask module.
     pub async_task: bool,
+    // Defined macros for compiling runtime.c.
+    pub runtime_c_define_macros: Vec<String>,
 }
 
-impl Configuration {
-    // Configuration for release build.
-    pub fn release() -> Configuration {
+impl Default for Configuration {
+    fn default() -> Self {
         Configuration {
             source_files: vec![],
             sanitize_memory: false,
@@ -50,24 +51,23 @@ impl Configuration {
             out_file_path: None,
             threaded: false,
             async_task: false,
+            runtime_c_define_macros: vec![],
         }
+    }
+}
+
+impl Configuration {
+    // Configuration for release build.
+    pub fn release() -> Configuration {
+        Self::default()
     }
 
     // Usual configuration for compiler development
     #[allow(dead_code)]
     pub fn develop_compiler() -> Configuration {
-        Configuration {
-            source_files: vec![],
-            sanitize_memory: true,
-            uncurry_optimization: true,
-            llvm_opt_level: OptimizationLevel::Default,
-            linked_libraries: vec![],
-            debug_mode: false,
-            emit_llvm: false,
-            out_file_path: None,
-            threaded: true,
-            async_task: false,
-        }
+        let mut config = Self::default();
+        config.set_sanitize_memory();
+        config
     }
 
     // Add dynamically linked library.
@@ -130,5 +130,22 @@ impl Configuration {
     pub fn set_async_task(&mut self) {
         self.async_task = true;
         self.set_threaded();
+        if self.sanitize_memory {
+            // If AsyncTask is used and memory sanitizer is enabled, we need to terminate thread pool before check leak.
+            self.add_macro_threadpool_termination();
+        }
+    }
+
+    pub fn set_sanitize_memory(&mut self) {
+        self.sanitize_memory = true;
+        if self.async_task {
+            // If AsyncTask is used and memory sanitizer is enabled, we need to terminate thread pool before check leak.
+            self.add_macro_threadpool_termination();
+        }
+    }
+
+    pub fn add_macro_threadpool_termination(&mut self) {
+        self.runtime_c_define_macros
+            .push("THREADPOOL_TERMINATION".to_string());
     }
 }
