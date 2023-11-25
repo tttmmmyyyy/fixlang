@@ -60,9 +60,9 @@ impl Configuration {
             llvm_opt_level: OptimizationLevel::Default,
             linked_libraries: vec![],
             debug_mode: false,
-            emit_llvm: true,
+            emit_llvm: false,
             out_file_path: None,
-            threaded: true,
+            threaded: false,
         }
     }
 
