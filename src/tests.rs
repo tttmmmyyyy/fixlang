@@ -4871,12 +4871,21 @@ pub fn test_async_task() {
     module Main;
     import Debug;
     import AsyncTask;
-    
+
+    fib_async : I64 -> I64;
+    fib_async = |n| (
+        if n == 0 || n == 1 {
+            n
+        } else {
+            let task = AsyncTask::make(|_| fib_async(n - 2));
+            fib_async(n-1) + task.get
+        }
+    );
+
     main : IO ();
     main = (
-        eval assert_eq(|_|"", nullptr.add_offset(3134905646).to_string, "00000000badadd2e");
-
-        pure()
+        let fib_40 = fib_async(40);
+        fib_40.to_string.println
     );
     "#;
     run_source(&source, Configuration::develop_compiler());

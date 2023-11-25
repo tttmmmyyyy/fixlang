@@ -17,7 +17,7 @@ type TaskData a = box struct {
 make : (() -> a) -> Task a;
 make = |func| (
     let func = mark_threaded(func);
-    let task_data = TaskData { _func : |_| [func()], _result : Array::empty };
+    let task_data = TaskData { _func : |_| [func()], _result : [] };
     let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr), task_data._unsafe_get_ptr_of_boxed_value];
     let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
         eval CALL_C[() fixruntime_threadpool_delete_task(Ptr), task_handle];
