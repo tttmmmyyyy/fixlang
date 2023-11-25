@@ -4899,6 +4899,67 @@ pub fn test_async_task_fib() {
 
 #[test]
 #[serial]
+pub fn test_async_shared_array() {
+    let source = r#"
+    module Main;
+    import Debug;
+    import AsyncTask;
+
+    main : IO ();
+    main = (
+        let n = 10;
+        let arr = Iterator::range(0, n).to_array;
+        let sum_task_0 = AsyncTask::make(|_| arr.to_iter.fold(0, Add::add));
+        let sum_task_1 = AsyncTask::make(|_| arr.to_iter.reverse.fold(0, Add::add));
+        let sum_task_2 = AsyncTask::make(|_| (
+            loop((0, 0), |(i, sum)| 
+                if i == arr.get_size { 
+                    break $ sum
+                } else {
+                    continue $ (i + 1, sum + arr.@(i))
+                }
+            )
+        ));
+        let sum_task_3 = AsyncTask::make(|_| (
+            let half = arr.get_size / 2;
+            let sum = loop((0, 0), |(i, sum)| 
+                if i == half { 
+                    break $ sum
+                } else {
+                    continue $ (i + 1, sum + arr.@(i))
+                }
+            );
+            let arr = loop((arr, 0), |(arr, i)| (
+                if i == 1000 { 
+                    break $ arr
+                } else {
+                    let arr = arr.push_back(i).push_back(-i);
+                    continue $ (arr, i + 1)
+                }
+            ));
+            loop((half, sum), |(i, sum)| 
+                if i == arr.get_size { 
+                    break $ sum
+                } else {
+                    continue $ (i + 1, sum + arr.@(i))
+                }
+            )
+        ));
+        let sum_task_4 = arr.to_iter.fold(0, Add::add);
+        let ans = n * (n - 1) / 2;
+        eval assert_eq(|_|"", sum_task_0.get, ans);
+        eval assert_eq(|_|"", sum_task_1.get, ans);
+        eval assert_eq(|_|"", sum_task_2.get, ans);
+        eval assert_eq(|_|"", sum_task_3.get, ans);
+        eval assert_eq(|_|"", sum_task_4, ans);
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
