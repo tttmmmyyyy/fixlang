@@ -488,11 +488,13 @@
     - [`()`](#)
       - [`impl () : Eq`](#impl---eq)
   - [Functions](#functions)
+    - [`_unsafe_get_ptr_of_boxed_value : a -> Ptr`](#_unsafe_get_ptr_of_boxed_value--a---ptr)
     - [`abort : Lazy a`](#abort--lazy-a)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
     - [`fix : ((a -> b) -> a -> b) -> a -> b`](#fix--a---b---a---b---a---b)
     - [`loop : s -> (s -> LoopResult s r) -> r`](#loop--s---s---loopresult-s-r---r)
     - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
+    - [`mark_threaded : a -> a`](#mark_threaded--a---a)
     - [`unsafe_is_unique : a -> (Bool, a)`](#unsafe_is_unique--a---bool-a)
   - [Traits](#traits)
     - [Additive](#additive)
@@ -1719,6 +1721,10 @@ Literals:
 
 ## Functions
 
+### `_unsafe_get_ptr_of_boxed_value : a -> Ptr`
+
+Get a pointer to a boxed value.
+
 ### `abort : Lazy a`
 
 Evaluating this value stops the execution of the program.
@@ -1789,6 +1795,8 @@ main = (
     ))
 );
 ```
+
+### `mark_threaded : a -> a`
 
 ### `unsafe_is_unique : a -> (Bool, a)`
 
