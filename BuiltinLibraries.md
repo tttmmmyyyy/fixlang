@@ -516,6 +516,11 @@
       - [`to_bytes : [a : ToBytes] a -> Array U8`](#to_bytes--a--tobytes-a---array-u8)
     - [ToString](#tostring)
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
+- [Module `AsyncTask`](#module-asynctask)
+  - [`type Task a`](#type-task-a)
+  - [`type TaskData a`](#type-taskdata-a)
+  - [`get : Task a -> a`](#get--task-a---a)
+  - [`make : (() -> a) -> Task a`](#make-----a---task-a)
 - [Module `Character`](#module-character)
   - [`is_alnum : U8 -> Bool`](#is_alnum--u8---bool)
   - [`is_alpha : U8 -> Bool`](#is_alpha--u8---bool)
@@ -1881,6 +1886,28 @@ This is equivalent to `Monad::bind(|x|x)`.
 ### ToString
 
 #### `to_string : [a: ToString] a -> String`
+
+# Module `AsyncTask`
+This module provides a way to run a task asynchronously.
+
+Parallel nor preemptive multitasking is expected but not guaranteed.
+When a thread starts to wait the result of a task which is still not running, then it will be executed in the waiting thread itself.
+
+Importing this module automatically enables `--threaded` flag of the compiler. 
+Note that this causes some overhead even for a single-threaded program.
+
+## `type Task a`
+A type for a computation task that can be run asynchronously.
+
+## `type TaskData a`
+A type to store a task and its result. 
+This type should be used only by implementation of this library.
+
+## `get : Task a -> a`
+Get the result of a computation task.
+
+## `make : (() -> a) -> Task a`
+Make a task which performs a computation asynchronously.
 
 # Module `Character`
 This module provides wrapper functions of C functions defined in ctypes.h.

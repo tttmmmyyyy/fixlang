@@ -1,9 +1,13 @@
 module AsyncTask;
-// This module provides a way to run a computation asynchronously.
+// This module provides a way to run a task asynchronously.
+// 
+// Parallel nor preemptive multitasking is expected but not guaranteed.
+// When a thread starts to wait the result of a task which is still not running, then it will be executed in the waiting thread itself.
+// 
 // Importing this module automatically enables `--threaded` flag of the compiler. 
 // Note that this causes some overhead even for a single-threaded program.
 
-// A type for a task that can be run asynchronously.
+// A type for a computation task that can be run asynchronously.
 type Task a = unbox struct { dtor : Destructor (Ptr, TaskData a) };
 
 // A type to store a task and its result. 
@@ -14,7 +18,16 @@ type TaskData a = box struct {
     _result : Array a
 };
 
-// Make a task for a computation.
+// Get the result of a computation task.
+get : Task a -> a;
+get = |task| (
+    let (task_handle, task_data) = task.@dtor.@value;
+    eval CALL_C[() fixruntime_threadpool_wait_task(Ptr), task_handle];
+    eval task; // Do not call destructor of `task` before calling `fixruntime_threadpool_wait_task`.
+    task_data.@_result.@(0) // Change this to _unsafe_get_unchecked.
+);
+
+// Make a task which performs a computation asynchronously.
 make : (() -> a) -> Task a;
 make = |func| (
     let func = mark_threaded(func);
@@ -26,13 +39,4 @@ make = |func| (
         ()
     ));
     Task { dtor : dtor }
-);
-
-// Get the result of a computation task.
-get : Task a -> a;
-get = |task| (
-    let (task_handle, task_data) = task.@dtor.@value;
-    eval CALL_C[() fixruntime_threadpool_wait_task(Ptr), task_handle];
-    eval task; // Do not call destructor of `task` before calling `fixruntime_threadpool_wait_task`.
-    task_data.@_result.@(0) // Change this to _unsafe_get_unchecked.
 );
