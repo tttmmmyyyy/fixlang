@@ -194,4 +194,4 @@ pub extern "C" fn check_leak() -> () {
     }
 }
 
-const VERBOSE: bool = true;
+const VERBOSE: bool = false;

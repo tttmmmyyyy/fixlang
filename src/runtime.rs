@@ -510,12 +510,6 @@ pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> 
         .void_type()
         .fn_type(&[ptr_to_object_type(context).into()], false);
     let func = module.add_function("fixruntime_threadpool_run_task", fn_type, None);
-    // let func = module.add_function(
-    //     "fixruntime_threadpool_run_task",
-    //     fn_type,
-    //     Some(Linkage::External),
-    // );
-    // func.set_call_conventions(0);
 
     let bb = context.append_basic_block(func, "entry");
 
@@ -535,6 +529,7 @@ pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> 
 
     // Extract task function from task data.
     let task_func = ObjectFieldType::get_struct_field_noclone(gc, &task_data, 0);
+    gc.retain(task_func.clone());
 
     // Call task function.
     let unit_val: Object<'_> = allocate_obj(make_unit_ty(), &vec![], None, gc, Some("unit_value"));

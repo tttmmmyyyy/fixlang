@@ -8,6 +8,7 @@ type Task a = unbox struct { dtor : Destructor (Ptr, TaskData a) };
 
 // A type to store a task and its result. 
 // This type should be used only by implementation of this library.
+// TODO: change this to enum.
 type TaskData a = box struct {
     _func : () -> Array a, // We need a type of boxed `Option`, and actually we use `Array` of length at most one instead.
     _result : Array a
@@ -32,6 +33,6 @@ get : Task a -> a;
 get = |task| (
     let (task_handle, task_data) = task.@dtor.@value;
     eval CALL_C[() fixruntime_threadpool_wait_task(Ptr), task_handle];
-    eval task; // Do not deallocate `task` before calling `fixruntime_threadpool_wait_task`.
+    eval task; // Do not call destructor of `task` before calling `fixruntime_threadpool_wait_task`.
     task_data.@_result.@(0) // TODO: change this to unsafe_get.
 );
