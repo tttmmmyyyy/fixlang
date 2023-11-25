@@ -1,5 +1,3 @@
-use inkwell::module::Linkage;
-
 use super::*;
 
 #[derive(Eq, Hash, PartialEq, Clone)]
