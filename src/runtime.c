@@ -628,7 +628,7 @@ void fixruntime_threadpool_initialize()
     int num_cpu = sysconf(_SC_NPROCESSORS_ONLN);
     thread_pool_size = num_cpu - 1; // Exclude main thread.
     thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * thread_pool_size);
-    for (int i = 0; i < num_cpu; i++)
+    for (int i = 0; i < thread_pool_size; i++)
     {
         if (pthread_create(&thread_pool[i], NULL, fixruntime_threadpool_on_thread, NULL))
         {
