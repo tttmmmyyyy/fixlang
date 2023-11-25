@@ -4,7 +4,7 @@ module AsyncTask;
 // Note that this causes some overhead even for a single-threaded program.
 
 // A type for a task that can be run asynchronously.
-type Task a = unbox struct { dtor : Destructor (TaskHandle, TaskData a) };
+type Task a = unbox struct { dtor : Destructor (Ptr, TaskData a) };
 
 // A type to store a task and its result. 
 // This type should be used only by implementation of this library.
@@ -13,17 +13,14 @@ type TaskData a = box struct {
     _result : Array a
 };
 
-// A type for a handle of a task, issued by runtime.
-type TaskHandle = Ptr;
-
 // Make a task for a computation.
 make : (() -> a) -> Task a;
 make = |func| (
     let func = mark_threaded(func);
     let task_data = TaskData { _func : |_| [func()], _result : Array::empty };
-    let task_handle = CALL_C[TaskHandle fixruntime_threadpool_create_task(Ptr), task_data._unsafe_get_ptr_of_boxed_value];
+    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr), task_data._unsafe_get_ptr_of_boxed_value];
     let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
-        eval CALL_C[() fixruntime_threadpool_delete_task(TaskHandle), task_handle];
+        eval CALL_C[() fixruntime_threadpool_delete_task(Ptr), task_handle];
         eval task_data; // Do not deallocate `task_data` before calling `fixruntime_threadpool_delete_task`.
         ()
     ));
@@ -34,6 +31,6 @@ make = |func| (
 get : Task a -> a;
 get = |task| (
     let (task_handle, task_data) = task.@dtor.@value;
-    eval CALL_C[() fixruntime_threadpool_wait_task(TaskHandle), task_handle];
+    eval CALL_C[() fixruntime_threadpool_wait_task(Ptr), task_handle];
     task_data.@_result.@(0)
 );

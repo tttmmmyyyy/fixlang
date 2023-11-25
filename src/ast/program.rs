@@ -1146,7 +1146,6 @@ impl Program {
     }
 
     // Resolve type aliases that appear in declarations (not in expressions).
-    #[allow(dead_code)]
     pub fn resolve_type_aliases_in_declaration(&mut self) {
         // Resolve in type constructors.
         {
