@@ -4874,7 +4874,7 @@ pub fn test_async_task() {
 
     fib_async : I64 -> I64;
     fib_async = |n| (
-        // Create a task which created but is released soon.
+        // Create a task which is released soon.
         let _ = AsyncTask::make(|_| fib_async(n));
         if n == 0 || n == 1 {
             n
