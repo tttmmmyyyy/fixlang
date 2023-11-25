@@ -4866,7 +4866,7 @@ pub fn test_ptr_to_string() {
 
 #[test]
 #[serial]
-pub fn test_async_task() {
+pub fn test_async_task_fib() {
     let source = r#"
     module Main;
     import Debug;
@@ -4879,8 +4879,8 @@ pub fn test_async_task() {
             AsyncTask::make(|_| n).get // A task which is waited soon.
         } else {
             let minus_one_task = AsyncTask::make(|_| n-1); // A task which is captured by another task.
-            let minus_two_task = AsyncTask::make(|_| n-2); // A task which is captured by another task.
-            let minus_three_task = AsyncTask::make(|_| n-3); // A task which is captured by another task but not waited.
+            let minus_two_task = AsyncTask::make(|_| minus_one_task.get - 1); // A task which is captured by another task.
+            let minus_three_task = AsyncTask::make(|_| minus_two_task.get - 1); // A task which is captured by another task but not waited.
             let one_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_one_task.get));
             let two_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_two_task.get));
             one_task.get + two_task.get
