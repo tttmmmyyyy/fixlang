@@ -3408,6 +3408,9 @@ impl InlineLLVMGetPtrOfBoxedValueFunctionBody {
     ) -> Object<'c> {
         // Get argument
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        if !obj.is_box(gc.type_env()) {
+            error_exit("Std::_unsafe_get_ptr_of_boxed_value cannot be called on an unboxed value.")
+        }
         gc.release(obj.clone());
         let ptr = obj.ptr(gc);
         let ret = if rvo.is_some() {
