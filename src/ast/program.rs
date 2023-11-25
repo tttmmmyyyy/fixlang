@@ -721,6 +721,7 @@ impl Program {
 
                     // Drop di_scope_guard for initialization function.
                     init_fun_di_scope_guard.take();
+                    gc.set_debug_location(None);
                 }
 
                 // In the end of the accessor function, merely return the object.
