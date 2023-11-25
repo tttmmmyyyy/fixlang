@@ -1456,40 +1456,26 @@ pub fn create_traverser<'c, 'm>(
             let mark_global_bb = gc
                 .context
                 .append_basic_block(func, "mark_global_bb@traverser");
-            let mark_threaded_bb = gc
-                .context
-                .append_basic_block(func, "mark_threaded_bb@traverser");
-            let work_bbs = [
-                (TraverserWorkType::release(), release_bb),
-                (TraverserWorkType::mark_global(), mark_global_bb),
-                (TraverserWorkType::mark_threaded(), mark_threaded_bb),
+            let mut work_bbs = vec![
+                (TRAVERSER_WORK_RELEASE, release_bb),
+                (TRAVERSER_WORK_MARK_GLOBAL, mark_global_bb),
             ];
-            let else_bb = gc.context.append_basic_block(func, "else_bb@traverser");
+            if gc.config.threaded {
+                let mark_threaded_bb = gc
+                    .context
+                    .append_basic_block(func, "mark_threaded_bb@traverser");
+                work_bbs.push((TRAVERSER_WORK_MARK_THREADED, mark_threaded_bb))
+            }
             let work_ty = traverser_work_type(gc.context);
-            gc.builder().build_switch(
-                work,
-                else_bb,
-                &[
-                    (
-                        work_ty.const_int(TRAVERSER_WORK_RELEASE as u64, false),
-                        release_bb,
-                    ),
-                    (
-                        work_ty.const_int(TRAVERSER_WORK_MARK_GLOBAL as u64, false),
-                        mark_global_bb,
-                    ),
-                    (
-                        work_ty.const_int(TRAVERSER_WORK_MARK_THREADED as u64, false),
-                        mark_threaded_bb,
-                    ),
-                ],
-            );
-
-            // In else_bb, do nothing.
-            gc.builder().position_at_end(else_bb);
-            gc.builder().build_return(None);
+            let mut switches = work_bbs
+                .iter()
+                .map(|(work_type, bb)| (work_ty.const_int(*work_type as u64, false), bb.clone()))
+                .collect::<Vec<_>>();
+            gc.builder()
+                .build_switch(work, switches.pop().unwrap().1, &switches);
 
             for (work_type, work_bb) in work_bbs.iter() {
+                let work_type = TraverserWorkType(*work_type);
                 gc.builder().position_at_end(*work_bb);
 
                 let mut union_tag: Option<IntValue<'c>> = None;
@@ -1503,7 +1489,7 @@ pub fn create_traverser<'c, 'm>(
                                     .into_pointer_value()
                             };
                             let obj = Object::new(ptr_to_subobj, ty.clone());
-                            gc.release_or_mark(obj, *work_type);
+                            gc.release_or_mark(obj, work_type);
                         }
                         ObjectFieldType::ControlBlock => {}
                         ObjectFieldType::LambdaFunction(_) => {}
@@ -1529,7 +1515,7 @@ pub fn create_traverser<'c, 'm>(
                                 size,
                                 buffer,
                                 ty.clone(),
-                                *work_type,
+                                work_type,
                             );
                         }
                         ObjectFieldType::UnionTag => {
@@ -1545,7 +1531,7 @@ pub fn create_traverser<'c, 'm>(
                                 buf,
                                 union_tag.unwrap(),
                                 &ty.field_types(gc.type_env()),
-                                Some(*work_type),
+                                Some(work_type),
                             );
                         }
                         ObjectFieldType::TraverseFunction => {}
