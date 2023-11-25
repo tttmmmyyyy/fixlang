@@ -32,6 +32,8 @@ pub struct Configuration {
     // Use threads.
     // To turn on this true and link pthread library, use `set_threaded` function.
     pub threaded: bool,
+    // Use AsyncTask module.
+    pub async_task: bool,
 }
 
 impl Configuration {
@@ -47,6 +49,7 @@ impl Configuration {
             emit_llvm: false,
             out_file_path: None,
             threaded: false,
+            async_task: false,
         }
     }
 
@@ -62,7 +65,8 @@ impl Configuration {
             debug_mode: false,
             emit_llvm: false,
             out_file_path: None,
-            threaded: false,
+            threaded: true,
+            async_task: false,
         }
     }
 
@@ -121,5 +125,10 @@ impl Configuration {
     pub fn set_threaded(&mut self) {
         self.threaded = true;
         self.add_dyanmic_library("pthread");
+    }
+
+    pub fn set_async_task(&mut self) {
+        self.async_task = true;
+        self.set_threaded();
     }
 }

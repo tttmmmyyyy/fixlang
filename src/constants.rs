@@ -152,7 +152,7 @@ pub const STANDARD_LIBRARIES: &[(
         ASYNCTASK_NAME,
         include_str!("./fix/asynctask.fix"),
         "asynctask",
-        Some(Configuration::set_threaded),
+        Some(Configuration::set_async_task),
         None,
     ),
 ];

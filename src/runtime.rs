@@ -595,6 +595,8 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
             RuntimeFunctions::MarkThreadedBoxedObject,
             mark_threaded_func,
         );
+    }
+    if gc.config.async_task {
         build_threadpool_run_task(gc);
     }
 }
