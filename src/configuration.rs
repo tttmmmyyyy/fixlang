@@ -34,8 +34,6 @@ pub struct Configuration {
     pub threaded: bool,
     // Use AsyncTask module.
     pub async_task: bool,
-    // Defined macros for compiling runtime.c.
-    pub runtime_c_define_macros: Vec<String>,
 }
 
 impl Default for Configuration {
@@ -51,7 +49,6 @@ impl Default for Configuration {
             out_file_path: None,
             threaded: false,
             async_task: false,
-            runtime_c_define_macros: vec![],
         }
     }
 }
@@ -130,22 +127,9 @@ impl Configuration {
     pub fn set_async_task(&mut self) {
         self.async_task = true;
         self.set_threaded();
-        if self.sanitize_memory {
-            // If AsyncTask is used and memory sanitizer is enabled, we need to terminate thread pool before check leak.
-            self.add_macro_threadpool_termination();
-        }
     }
 
     pub fn set_sanitize_memory(&mut self) {
         self.sanitize_memory = true;
-        if self.async_task {
-            // If AsyncTask is used and memory sanitizer is enabled, we need to terminate thread pool before check leak.
-            self.add_macro_threadpool_termination();
-        }
-    }
-
-    pub fn add_macro_threadpool_termination(&mut self) {
-        self.runtime_c_define_macros
-            .push("THREADPOOL_TERMINATION".to_string());
     }
 }

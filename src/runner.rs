@@ -54,10 +54,6 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             .arg("-o")
             .arg(runtime_so_path.to_str().unwrap())
             .arg(runtime_c_path.to_str().unwrap());
-        // Define macros.
-        for macro_name in &config.runtime_c_define_macros {
-            com = com.arg("-D").arg(macro_name);
-        }
         // Load dynamically linked libraries specified by user.
         for (lib_name, _) in &config.linked_libraries {
             com = com.arg(format!("-l{}", lib_name));
@@ -423,14 +419,11 @@ pub fn build_file(mut config: Configuration) {
             .expect(&format!("Failed to generate runtime.c"));
         // Create library object file.
         let mut com = Command::new("gcc");
-        let mut com = com
+        let com = com
             .arg("-o")
             .arg(runtime_obj_path.to_str().unwrap())
             .arg("-c")
             .arg(runtime_c_path.to_str().unwrap());
-        for macro_name in &config.runtime_c_define_macros {
-            com = com.arg("-D").arg(macro_name);
-        }
         let output = com.output().expect("Failed to run gcc.");
 
         if output.stderr.len() > 0 {

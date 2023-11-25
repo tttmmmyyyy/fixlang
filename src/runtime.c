@@ -563,9 +563,7 @@ pthread_cond_t task_queue_cond;
 // Thread pool.
 pthread_t *thread_pool;
 int thread_pool_size;
-#ifdef THREADPOOL_TERMINATION
 uint8_t is_threadpool_terminated = 0;
-#endif // THREADPOOL_TERMINATION
 
 // Utility functions.
 void pthread_mutex_lock_or_exit(pthread_mutex_t *mutex, const char *msg)
@@ -640,7 +638,6 @@ void fixruntime_threadpool_initialize()
     }
 }
 
-#ifdef THREADPOOL_TERMINATION
 void fixruntime_threadpool_terminate()
 {
     pthread_mutex_lock_or_exit(&task_queue_mutex, "[runtime] Failed to lock mutex.");
@@ -657,7 +654,6 @@ void fixruntime_threadpool_terminate()
         // TODO: release other resources, such as memory, mutexes and condition variables.
     }
 }
-#endif // THREADPOOL_TERMINATION
 
 // Push a task to the queue.
 void fixruntime_threadpool_push_task(Task *task)
@@ -684,13 +680,11 @@ Task *fixruntime_threadpool_pop_task()
     pthread_mutex_lock_or_exit(&task_queue_mutex, "[runtime] Failed to lock mutex.");
     while (1) // Wait for a task to be pushed, or the thread pool to be terminated.
     {
-#ifdef THREADPOOL_TERMINATION
         if (is_threadpool_terminated)
         {
             pthread_mutex_unlock_or_exit(&task_queue_mutex, "[runtime] Failed to unlock mutex.");
             return NULL;
         }
-#endif // THREADPOOL_TERMINATION
         if (task_queue_first)
         {
             break;
@@ -799,13 +793,11 @@ void *fixruntime_threadpool_on_thread(void *data)
     while (1)
     {
         Task *task = fixruntime_threadpool_pop_task();
-#ifdef THREADPOOL_TERMINATION
         if (!task)
         {
             // The thread pool is terminated.
             return NULL;
         }
-#endif // THREADPOOL_TERMINATION
         pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
         if (task->status == TASK_STATUS_COMPLETED || task->status == TASK_STATUS_RUNNING)
         {
