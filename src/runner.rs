@@ -13,6 +13,7 @@ use std::{
 use either::Either;
 use inkwell::{
     execution_engine::ExecutionEngine,
+    module::Linkage,
     passes::{PassManager, PassManagerSubType},
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
@@ -195,6 +196,31 @@ fn build_module<'c>(
 
     // If AsyncTask is used, initialize thread pool.
     if config.async_task {
+        // Store the pointer to `fixruntime_threadpool_run_task` function defined in LLVM module to the `fixruntime_threadpool_run_task` global variable defined in runtime.c.
+        let run_task_func_ptr_ty = gc
+            .context
+            .void_type()
+            .fn_type(
+                &[gc.context.i8_type().ptr_type(AddressSpace::from(0)).into()],
+                false,
+            )
+            .ptr_type(AddressSpace::from(0));
+        let run_task_func_ptr = gc.module.add_global(
+            run_task_func_ptr_ty,
+            Some(AddressSpace::from(0)),
+            "ptr_fixruntime_threadpool_run_task",
+        );
+        run_task_func_ptr.set_externally_initialized(true);
+        run_task_func_ptr.set_linkage(Linkage::External);
+        let run_task_func = gc
+            .runtimes
+            .get(&RuntimeFunctions::ThreadPoolRunTask)
+            .unwrap();
+        gc.builder().build_store(
+            run_task_func_ptr.as_pointer_value(),
+            run_task_func.as_global_value().as_pointer_value(),
+        );
+        // Initialize thread pool.
         gc.call_runtime(RuntimeFunctions::ThreadPoolInitialize, &[]);
     }
 

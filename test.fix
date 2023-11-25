@@ -14,6 +14,6 @@ fib_async = |n| (
 
 main : IO ();
 main = (
-    let x = fib_async(45);
+    let x = fib_async(10);
     x.to_string.println
 );

@@ -539,7 +539,7 @@ void fixruntime_threadpool_delete_task(Task *task);
 TaskData fixruntime_threadpool_get_data(Task *task);
 
 // External functions.
-void fixruntime_threadpool_run_task(TaskData data);
+void (*ptr_fixruntime_threadpool_run_task)(TaskData);
 
 // Internal functions.
 void *fixruntime_threadpool_on_thread(void *);
@@ -691,7 +691,7 @@ void fixruntime_threadpool_wait_task(Task *task)
         // If the task is still waiting, then run it on this thread.
         task->status = TASK_STATUS_RUNNING;
         pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
-        fixruntime_threadpool_run_task(task->data);
+        (*ptr_fixruntime_threadpool_run_task)(task->data);
         pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
         task->status = TASK_STATUS_COMPLETED;
         pthread_cond_signal_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
@@ -752,7 +752,7 @@ void *fixruntime_threadpool_on_thread(void *data)
         }
         task->status = TASK_STATUS_RUNNING;
         pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
-        fixruntime_threadpool_run_task(task->data);
+        (*ptr_fixruntime_threadpool_run_task)(task->data);
         pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
         task->status = TASK_STATUS_COMPLETED;
         uint8_t refcnt = --task->refcnt;

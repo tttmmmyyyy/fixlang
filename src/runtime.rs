@@ -18,6 +18,7 @@ pub enum RuntimeFunctions {
     PtrAddOffset,
     PthreadOnce,
     ThreadPoolInitialize,
+    ThreadPoolRunTask,
 }
 
 fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -501,7 +502,7 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(
 }
 
 // Build `fixruntime_threadpool_run_task` function, which is called from runtime.c.
-pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) {
+pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
 
@@ -549,6 +550,8 @@ pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) {
     ObjectFieldType::set_struct_field_norelease(gc, &task_data, 1, &task_result_array);
 
     gc.builder().build_return(None);
+
+    func
 }
 
 fn build_threadpool_initialize_function<'c, 'm, 'b>(
@@ -612,7 +615,9 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
         );
     }
     if gc.config.async_task {
-        build_threadpool_run_task(gc);
+        let run_task_func = build_threadpool_run_task(gc);
+        gc.runtimes
+            .insert(RuntimeFunctions::ThreadPoolRunTask, run_task_func);
         let threadpool_initialize = build_threadpool_initialize_function(gc);
         gc.runtimes.insert(
             RuntimeFunctions::ThreadPoolInitialize,
