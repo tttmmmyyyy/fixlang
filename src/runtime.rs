@@ -1,3 +1,5 @@
+use inkwell::module::Linkage;
+
 use super::*;
 
 #[derive(Eq, Hash, PartialEq, Clone)]
@@ -509,6 +511,12 @@ pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) {
         .void_type()
         .fn_type(&[ptr_to_object_type(context).into()], false);
     let func = module.add_function("fixruntime_threadpool_run_task", fn_type, None);
+    // let func = module.add_function(
+    //     "fixruntime_threadpool_run_task",
+    //     fn_type,
+    //     Some(Linkage::External),
+    // );
+    // func.set_call_conventions(0);
 
     let bb = context.append_basic_block(func, "entry");
 

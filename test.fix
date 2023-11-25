@@ -1,14 +1,19 @@
 module Main;
 import Debug;
+import AsyncTask;
+
+fib_async : I64 -> I64;
+fib_async = |n| (
+    if n == 0 || n == 1 {
+        n
+    } else {
+        let task = AsyncTask::make(|_| fib_async(n - 2));
+        fib_async(n-1) + task.get
+    }
+);
 
 main : IO ();
 main = (
-    eval assert_eq(|_|"", "".strip_first_spaces, "");
-    eval assert_eq(|_|"", "Hello".strip_first_spaces, "Hello");
-    eval assert_eq(|_|"", " Hello".strip_first_spaces, "Hello");
-    eval assert_eq(|_|"", " \tHello".strip_first_spaces, "Hello");
-    eval assert_eq(|_|"", " ".strip_first_spaces, "");
-    eval assert_eq(|_|"", "  ".strip_first_spaces, "");
-
-    pure()
+    let x = fib_async(10);
+    x.to_string.println
 );
