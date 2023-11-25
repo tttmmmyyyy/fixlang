@@ -69,12 +69,7 @@ pub extern "C" fn report_mark_global(obj_id: i64) -> () {
 
 // Report retain.
 #[no_mangle]
-pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) -> () {
-    assert_ne!(
-        refcnt, 0,
-        "[Sanitizer] Object id={} whose refcnt zero is retained!",
-        obj_id
-    );
+pub extern "C" fn report_retain(address: *const i8, obj_id: i64, _: i64) -> () {
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_table.contains_key(&obj_id),
@@ -82,6 +77,12 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
         obj_id
     );
     let info = object_table.get_mut(&obj_id).unwrap();
+    let refcnt = info.refcnt;
+    assert_ne!(
+        refcnt, 0,
+        "[Sanitizer] Object id={} whose refcnt zero is retained!",
+        obj_id
+    );
     if info.is_global {
         panic!(
             "[Sanitizer] A global object of id={} is retained! refcnt=({} -> {}), addr={:#X}, code = {}",
@@ -116,12 +117,7 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64, refcnt: i64) ->
 
 // Report release.
 #[no_mangle]
-pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -> () {
-    assert_ne!(
-        refcnt, 0,
-        "[Sanitizer] Object id={} whose refcnt zero is released!",
-        obj_id
-    );
+pub extern "C" fn report_release(address: *const i8, obj_id: i64, _: i64) -> () {
     let mut object_info = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_info.contains_key(&obj_id),
@@ -129,6 +125,12 @@ pub extern "C" fn report_release(address: *const i8, obj_id: i64, refcnt: i64) -
         obj_id
     );
     let info = object_info.get_mut(&obj_id).unwrap();
+    let refcnt = info.refcnt;
+    assert_ne!(
+        refcnt, 0,
+        "[Sanitizer] Object id={} whose refcnt zero is released!",
+        obj_id
+    );
     if info.is_global {
         panic!(
             "[Sanitizer] A global object id={} is released! refcnt=({} -> {}), addr={:#X}, code = {}",
@@ -200,4 +202,4 @@ pub extern "C" fn check_leak() -> () {
     }
 }
 
-const VERBOSE: bool = false;
+const VERBOSE: bool = true;
