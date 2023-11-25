@@ -4895,6 +4895,7 @@ pub fn test_async_task() {
     );
     "#;
     run_source(&source, Configuration::develop_compiler());
+    run_source(&source, Configuration::release());
 }
 
 #[test]
