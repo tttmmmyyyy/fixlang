@@ -4874,13 +4874,16 @@ pub fn test_async_task() {
 
     fib_async : I64 -> I64;
     fib_async = |n| (
-        // Create a task which is released soon.
-        let _ = AsyncTask::make(|_| fib_async(n));
-        if n == 0 || n == 1 {
-            n
+        if n <= 1 {
+            let _ = AsyncTask::make(|_| n + 1); // A task which is not waited.
+            AsyncTask::make(|_| n).get // A task which is waited soon.
         } else {
-            let task = AsyncTask::make(|_| fib_async(n - 2));
-            fib_async(n-1) + task.get
+            let minus_one_task = AsyncTask::make(|_| n-1); // A task which is captured by another task.
+            let minus_two_task = AsyncTask::make(|_| n-2); // A task which is captured by another task.
+            let minus_three_task = AsyncTask::make(|_| n-3); // A task which is captured by another task but not waited.
+            let one_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_one_task.get));
+            let two_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_two_task.get));
+            one_task.get + two_task.get
         }
     );
 
