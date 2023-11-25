@@ -4874,6 +4874,8 @@ pub fn test_async_task() {
 
     fib_async : I64 -> I64;
     fib_async = |n| (
+        // Create a task which created but is released soon.
+        let _ = AsyncTask::make(|_| fib_async(n));
         if n == 0 || n == 1 {
             n
         } else {
@@ -4885,7 +4887,8 @@ pub fn test_async_task() {
     main : IO ();
     main = (
         let x = fib_async(10);
-        x.to_string.println
+        eval assert_eq(|_|"", x, 55);
+        pure()
     );
     "#;
     run_source(&source, Configuration::develop_compiler());
