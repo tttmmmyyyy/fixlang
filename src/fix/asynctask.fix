@@ -32,5 +32,5 @@ get : Task a -> a;
 get = |task| (
     let (task_handle, task_data) = task.@dtor.@value;
     eval CALL_C[() fixruntime_threadpool_wait_task(Ptr), task_handle];
-    task_data.@_result.@(0)
+    task_data.@_result.@(0) // TODO: change this to unsafe_get.
 );

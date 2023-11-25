@@ -17,6 +17,7 @@ pub enum RuntimeFunctions {
     SubtractPtr,
     PtrAddOffset,
     PthreadOnce,
+    ThreadPoolInitialize,
 }
 
 fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -544,6 +545,14 @@ pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) {
     gc.builder().build_return(None);
 }
 
+fn build_threadpool_initialize_function<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    let fn_ty = gc.context.void_type().fn_type(&[], false);
+    gc.module
+        .add_function("fixruntime_threadpool_initialize", fn_ty, None)
+}
+
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     gc.runtimes
         .insert(RuntimeFunctions::Abort, build_abort_function(gc));
@@ -598,5 +607,10 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     }
     if gc.config.async_task {
         build_threadpool_run_task(gc);
+        let threadpool_initialize = build_threadpool_initialize_function(gc);
+        gc.runtimes.insert(
+            RuntimeFunctions::ThreadPoolInitialize,
+            threadpool_initialize,
+        );
     }
 }

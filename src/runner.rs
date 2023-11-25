@@ -193,6 +193,11 @@ fn build_module<'c>(
     let entry_bb = context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
 
+    // If AsyncTask is used, initialize thread pool.
+    if config.async_task {
+        gc.call_runtime(RuntimeFunctions::ThreadPoolInitialize, &[]);
+    }
+
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
     let main_lambda_val = main_obj.load_field_nocap(&mut gc, 0);
