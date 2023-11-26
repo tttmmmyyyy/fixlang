@@ -4979,6 +4979,27 @@ pub fn test_async_task_captured_by_global() {
 
 #[test]
 #[serial]
+pub fn test_async_task_array_result() {
+    let source = r#"
+    module Main;
+    import Debug;
+    import AsyncTask;
+
+    main : IO ();
+    main = (
+        let n = 1000000;
+        let task_0 = AsyncTask::make(|_| Iterator::range(0, n).to_array);
+        let task_1 = AsyncTask::make(|_| Iterator::range(n, 2*n).to_array);
+        let task_2 = AsyncTask::make(|_| Iterator::range(0, 2*n).to_array);
+        eval assert_eq(|_|"", task_0.get.append(task_1.get), task_2.get);
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
