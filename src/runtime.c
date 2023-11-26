@@ -626,7 +626,7 @@ void fixruntime_threadpool_initialize()
     // Initialize threads.
     // https://stackoverflow.com/questions/150355/programmatically-find-the-number-of-cores-on-a-machine
     int num_cpu = sysconf(_SC_NPROCESSORS_ONLN);
-    thread_pool_size = num_cpu - 1; // Exclude main thread.
+    thread_pool_size = num_cpu;
     thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * thread_pool_size);
     for (int i = 0; i < thread_pool_size; i++)
     {
