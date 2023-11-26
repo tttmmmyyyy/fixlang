@@ -651,7 +651,17 @@ void fixruntime_threadpool_terminate()
             perror("[runtime] Failed to join thread.");
             exit(1);
         }
-        // TODO: release other resources, such as memory, mutexes and condition variables.
+    }
+    free(thread_pool);
+    pthread_mutex_destroy(&task_queue_mutex);
+    pthread_cond_destroy(&task_queue_cond);
+    // Iterate all tasks and delete them.
+    Task *task = task_queue_first;
+    while (task)
+    {
+        Task *next = task->next;
+        fixruntime_threadpool_release_task(task);
+        task = next;
     }
 }
 
