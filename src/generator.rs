@@ -2035,7 +2035,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             &vec![],
             Some(len),
             self,
-            Some(&format!("array_literal[{}]", elems.len())),
+            Some(&format!(
+                "array_literal[{}]",
+                elems
+                    .iter()
+                    .map(|e| e.expr.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
         );
         let buffer = array.ptr_to_field_nocap(self, ARRAY_BUF_IDX);
 
