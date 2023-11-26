@@ -205,13 +205,7 @@ fn build_module<'c>(
     gc.release(ret);
 
     // Perform leak check
-    if gc.config.sanitize_memory {
-        if gc.config.async_task {
-            // Before check leak, terminate all async tasks.
-            gc.call_runtime(RuntimeFunctions::ThreadPoolTerminate, &[]);
-        }
-        gc.call_runtime(RuntimeFunctions::CheckLeak, &[]);
-    }
+    gc.check_leak();
 
     // Return main function.
     gc.builder()

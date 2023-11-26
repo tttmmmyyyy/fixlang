@@ -4970,6 +4970,7 @@ pub fn test_async_task_captured_by_global() {
     main = (
         let task = AsyncTask::make(|_| 42);
         eval *"Hello World!".println; // Initialization of `main` value ends here, and `task` is captured by `main`.
+        // Then the result object of `task` becomes a threaded object, but a global object.
         eval assert_eq(|_|"", task.get, 42);
         pure()
     );

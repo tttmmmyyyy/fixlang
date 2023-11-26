@@ -2129,6 +2129,26 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().get_insert_block().unwrap(),
         );
     }
+
+    pub fn check_leak(&mut self) {
+        if !self.config.sanitize_memory {
+            return;
+        }
+        if self.config.async_task {
+            // Before check leak, terminate all async tasks.
+            self.call_runtime(RuntimeFunctions::ThreadPoolTerminate, &[]);
+            // And perform mark_global again.
+            // If we don't do this, the test case `test_async_task_captured_by_global` will fail.
+            let mut global_objs = vec![];
+            for (_, var) in self.global.iter() {
+                global_objs.push(var.ptr.get(self));
+            }
+            for obj in global_objs {
+                self.mark_global(obj);
+            }
+        }
+        self.call_runtime(RuntimeFunctions::CheckLeak, &[]);
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
