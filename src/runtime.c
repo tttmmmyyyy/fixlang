@@ -509,6 +509,8 @@ void fixruntime_iohandle_close(IOHandle *handle)
     }
 }
 
+#ifdef THREAD_POOL
+
 /*
 Thread pool implementation.
 - Call `fixruntime_threadpool_initialize` to initialize thread pool.
@@ -858,3 +860,5 @@ void fixruntime_threadpool_release_task(Task *task)
     }
     free(task);
 }
+
+#endif // THREAD_POOL

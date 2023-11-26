@@ -34,6 +34,8 @@ pub struct Configuration {
     pub threaded: bool,
     // Use AsyncTask module.
     pub async_task: bool,
+    // Macros defined in runtime.c.
+    pub runtime_c_macro: Vec<String>,
 }
 
 impl Default for Configuration {
@@ -49,6 +51,7 @@ impl Default for Configuration {
             out_file_path: None,
             threaded: false,
             async_task: false,
+            runtime_c_macro: vec![],
         }
     }
 }
@@ -127,6 +130,7 @@ impl Configuration {
     pub fn set_async_task(&mut self) {
         self.async_task = true;
         self.set_threaded();
+        self.runtime_c_macro.push("THREAD_POOL".to_string());
     }
 
     pub fn set_sanitize_memory(&mut self) {

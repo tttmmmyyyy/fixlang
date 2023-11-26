@@ -28,19 +28,21 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             error_exit(&format!("Failed to load \"{}\".", path));
         }
     }
-    // Load runtime library.
-    let build_time_hash = format!("{:x}", md5::compute(build_time_utc!()));
-    // Libraries specified by user will be linked to libfixruntime, so we include them to libfixruntime.*.so for implementing cache correctly.
+    // Build and load runtime library.
+    // First, determine the file name of cached runtime library.
+    // The file name is determined by the list of linked libraries and the list of macro_runtime_c, and the build time of the compiler.
+    let mut hash_source = "".to_string();
+    hash_source += build_time_utc!();
     let linked_libs_list = config
         .linked_libraries
         .iter()
         .map(|(s, _)| s.clone())
         .collect::<Vec<_>>()
         .join("_");
-    let runtime_so_path = PathBuf::from(INTERMEDIATE_PATH).join(format!(
-        "libfixruntime.{}.{}.so",
-        linked_libs_list, build_time_hash
-    ));
+    hash_source += &linked_libs_list;
+    hash_source += &config.runtime_c_macro.join("_");
+    let runtime_so_path = PathBuf::from(INTERMEDIATE_PATH)
+        .join(format!("libfixruntime.{:x}.so", md5::compute(hash_source)));
     if !runtime_so_path.exists() {
         let runtime_c_path = PathBuf::from(INTERMEDIATE_PATH).join("fixruntime.c");
         fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
@@ -54,6 +56,9 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             .arg("-o")
             .arg(runtime_so_path.to_str().unwrap())
             .arg(runtime_c_path.to_str().unwrap());
+        for m in &config.runtime_c_macro {
+            com = com.arg(format!("-D{}", m));
+        }
         // Load dynamically linked libraries specified by user.
         for (lib_name, _) in &config.linked_libraries {
             com = com.arg(format!("-l{}", lib_name));
@@ -403,9 +408,13 @@ pub fn build_file(mut config: Configuration) {
     }
 
     // Build runtime.c to object file.
-    let build_time_hash = format!("{:x}", md5::compute(build_time_utc!()));
-    let runtime_obj_path =
-        PathBuf::from(INTERMEDIATE_PATH).join(format!("fixruntime_{}.o", build_time_hash));
+    let mut runtime_obj_hash_source = "".to_string();
+    runtime_obj_hash_source += build_time_utc!();
+    runtime_obj_hash_source += &config.runtime_c_macro.join("_");
+    let runtime_obj_path = PathBuf::from(INTERMEDIATE_PATH).join(format!(
+        "fixruntime.{:x}.o",
+        md5::compute(runtime_obj_hash_source)
+    ));
     if !runtime_obj_path.exists() {
         let runtime_c_path = PathBuf::from(INTERMEDIATE_PATH).join("fixruntime.c");
         fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
@@ -413,11 +422,14 @@ pub fn build_file(mut config: Configuration) {
             .expect(&format!("Failed to generate runtime.c"));
         // Create library object file.
         let mut com = Command::new("gcc");
-        let com = com
+        let mut com = com
             .arg("-o")
             .arg(runtime_obj_path.to_str().unwrap())
             .arg("-c")
             .arg(runtime_c_path.to_str().unwrap());
+        for m in &config.runtime_c_macro {
+            com = com.arg(format!("-D{}", m));
+        }
         let output = com.output().expect("Failed to run gcc.");
 
         if output.stderr.len() > 0 {
