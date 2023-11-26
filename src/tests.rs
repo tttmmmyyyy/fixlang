@@ -4907,7 +4907,7 @@ pub fn test_async_shared_array() {
 
     main : IO ();
     main = (
-        let n = 10;
+        let n = 100000;
         let arr = Iterator::range(0, n).to_array;
         let sum_task_0 = AsyncTask::make(|_| arr.to_iter.fold(0, Add::add));
         let sum_task_1 = AsyncTask::make(|_| arr.to_iter.reverse.fold(0, Add::add));
