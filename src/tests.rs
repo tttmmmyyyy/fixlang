@@ -4857,7 +4857,6 @@ pub fn test_ptr_to_string() {
     main : IO ();
     main = (
         eval assert_eq(|_|"", nullptr.add_offset(3134905646).to_string, "00000000badadd2e");
-
         pure()
     );
     "#;
@@ -4889,8 +4888,8 @@ pub fn test_async_task_fib() {
 
     main : IO ();
     main = (
-        // let x = fib_async(10);
-        // eval assert_eq(|_|"", x, 55);
+        let x = fib_async(10);
+        eval assert_eq(|_|"", x, 55);
         pure()
     );
     "#;
