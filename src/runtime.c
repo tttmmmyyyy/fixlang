@@ -653,16 +653,18 @@ void fixruntime_threadpool_terminate()
         }
     }
     free(thread_pool);
-    pthread_mutex_destroy(&task_queue_mutex);
-    pthread_cond_destroy(&task_queue_cond);
-    // Iterate all tasks and delete them.
-    Task *task = task_queue_first;
-    while (task)
+    if (pthread_mutex_destroy(&task_queue_mutex))
     {
-        Task *next = task->next;
-        fixruntime_threadpool_release_task(task);
-        task = next;
+        perror("[runtime] Failed to destroy mutex for task queue.");
+        exit(1);
     }
+    if (pthread_cond_destroy(&task_queue_cond))
+    {
+        perror("[runtime] Failed to destroy condition variable for task queue.");
+        exit(1);
+    }
+    // Responsibility of deleting task objects is delegated to the user.
+    // `fixruntime_threadpool_delete_task` works even after `fixruntime_threadpool_terminate` called.
 }
 
 // Push a task to the queue.
