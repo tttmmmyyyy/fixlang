@@ -2,18 +2,12 @@ module Main;
 import Debug;
 import AsyncTask;
 
-fib_async : I64 -> I64;
-fib_async = |n| (
-    if n == 0 || n == 1 {
-        n
-    } else {
-        let task = AsyncTask::make(|_| fib_async(n - 2));
-        fib_async(n-1) + task.get
-    }
-);
-
 main : IO ();
 main = (
-    let x = fib_async(10);
-    x.to_string.println
+    let n = 1000000;
+    let task_0 = AsyncTask::make(|_| Iterator::range(0, n).to_array);
+    let task_1 = AsyncTask::make(|_| Iterator::range(n, 2*n).to_array);
+    let task_2 = AsyncTask::make(|_| Iterator::range(0, 2*n).to_array);
+    eval assert_eq(|_|"", task_0.get.append(task_1.get), task_2.get);
+    pure()
 );
