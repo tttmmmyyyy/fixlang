@@ -1913,9 +1913,11 @@ This type should be used only by implementation of this library.
 
 ## `get : Task a -> a`
 Get the result of a computation task.
+This function blocks the current thread until the task is finished.
 
 ## `make : (() -> a) -> Task a`
 Make a task which performs a computation asynchronously.
+The task is queued and will be executed in a thread later.
 
 # Module `Character`
 This module provides wrapper functions of C functions defined in ctypes.h.

@@ -19,6 +19,7 @@ type TaskData a = box struct {
 };
 
 // Get the result of a computation task.
+// This function blocks the current thread until the task is finished.
 get : Task a -> a;
 get = |task| (
     let (task_handle, task_data) = task.@dtor.@value;
@@ -28,6 +29,7 @@ get = |task| (
 );
 
 // Make a task which performs a computation asynchronously.
+// The task is queued and will be executed in a thread later.
 make : (() -> a) -> Task a;
 make = |func| (
     let func = mark_threaded(func);
