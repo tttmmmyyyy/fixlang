@@ -5000,6 +5000,35 @@ pub fn test_async_task_array_result() {
 
 #[test]
 #[serial]
+pub fn test_tarai() {
+    let source = r#"
+    module Main;
+    import Debug;
+
+    tarai : (I64, I64, I64) -> I64;
+    tarai = |(x, y, z)| (
+        if x <= y {
+            y
+        } else {
+            let a = tarai $ (x-1, y, z);
+            let b = tarai $ (y-1, z, x);
+            let c = tarai $ (z-1, x, y);
+            tarai $ (a, b, c)
+        }
+    );
+
+    main : IO ();
+    main = (
+        let n = tarai $ (12, 6, 0);
+        eval assert_eq(|_|"", n, 12);
+        pure()
+    );
+    "#;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
