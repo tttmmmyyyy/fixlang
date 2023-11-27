@@ -13,7 +13,6 @@ extern crate serde_json;
 extern crate serde_pickle;
 
 mod ast;
-mod asynctask;
 mod builtin;
 mod configuration;
 mod constants;
