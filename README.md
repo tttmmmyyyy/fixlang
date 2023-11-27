@@ -14,7 +14,6 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 
 ## Planned features
 
-- Threading support
 - Associated type synonyms
 
 ## Examples
