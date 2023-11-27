@@ -74,3 +74,9 @@ make = |func| (
     ));
     Task { dtor : dtor }
 );
+
+// Get the number of processors (CPU cores) currently available.
+// This is implemented by calling `sysconf(_SC_NPROCESSORS_ONLN)`.
+// The runtime pools as many threads as this number to execute asynchronous tasks.
+number_of_processors : I64;
+number_of_processors = CALL_C[I64 fixruntime_get_number_of_processors()];

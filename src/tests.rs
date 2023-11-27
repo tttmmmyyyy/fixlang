@@ -5029,6 +5029,19 @@ pub fn test_tarai() {
 
 #[test]
 #[serial]
+pub fn test_number_of_processors() {
+    let source = r##"
+    module Main;
+    import AsyncTask;
+
+    main : IO ();
+    main = ("Number of processors: " + AsyncTask::number_of_processors.to_string).println;
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 

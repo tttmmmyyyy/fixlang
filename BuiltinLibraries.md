@@ -523,6 +523,7 @@
   - [`type TaskData a`](#type-taskdata-a)
   - [`get : Task a -> a`](#get--task-a---a)
   - [`make : (() -> a) -> Task a`](#make-----a---task-a)
+  - [`number_of_processors : I64`](#number_of_processors--i64)
 - [Module `Character`](#module-character)
   - [`is_alnum : U8 -> Bool`](#is_alnum--u8---bool)
   - [`is_alpha : U8 -> Bool`](#is_alpha--u8---bool)
@@ -1951,6 +1952,11 @@ main = (
 );
 ```
 [Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQppbXBvcnQgQXN5bmNUYXNrOw0KaW1wb3J0IERlYnVnOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBzdW1fcmFuZ2UgPSB8ZnJvbSwgdG98ICgNCiAgICAgICAgbG9vcCgoMCwgZnJvbSksIHwoc3VtLCBpKXwgKA0KICAgICAgICAgICAgaWYgaSA9PSB0byB7IGJyZWFrICQgc3VtIH07DQogICAgICAgICAgICBjb250aW51ZSAkIChzdW0gKyBpLCBpICsgMSkNCiAgICAgICAgKSkNCiAgICApOw0KICAgIGxldCBuID0gMTAwMDAwMDAwMDsNCiAgICAvLyBDb21wdXRlIHRoZSBzdW0gb2YgbnVtYmVycyBmcm9tIDAgdG8gbi8yIC0gMS4NCiAgICAvLyBUaGlzIHRhc2sgd2lsbCBiZSBleGVjdXRlZCBhc3luY2hyb25vdXNseSAoaWYgeW91IGFyZSB1c2luZyBtdWx0aS1jb3JlIENQVSkuDQogICAgbGV0IHN1bV9mb3JtZXIgPSBBc3luY1Rhc2s6Om1ha2UofF98IHN1bV9yYW5nZSgwLCBuLzIpKTsNCiAgICAvLyBDb21wdXRlIHRoZSBzdW0gb2YgbnVtYmVycyBmcm9tIG4vMiB0byBuLg0KICAgIC8vIFdlIHBlcmZvbSB0aGlzIGluIHRoZSBjdXJyZW50IHRocmVhZCB3aGlsZSB3YWl0aW5nIGZvciB0aGUgcmVzdWx0IG9mIHRoZSBmb3JtZXIgdGFzay4NCiAgICBsZXQgc3VtX2xhdHRlciA9IHN1bV9yYW5nZShuLzIsIG4pOw0KICAgIC8vIFN1bSB1cCB0aGUgcmVzdWx0cyBvZiB0aGUgdHdvIGNvbXB1dGF0aW9ucy4NCiAgICBsZXQgc3VtID0gc3VtX2Zvcm1lci5nZXQgKyBzdW1fbGF0dGVyOw0KICAgIC8vIFRoZW4gdGhlIHN1bSBzaG91bGQgYmUgbiAqIChuIC0gMSkgLyAyLg0KICAgIGV2YWwgYXNzZXJ0X2VxKHxffCIiLCBzdW0sIG4gKiAobiAtIDEpIC8gMik7DQogICAgcHJpbnRsbiAkIA0KICAgICAgICAiU3VtIG9mIG51bWJlcnMgZnJvbSAwIHRvICIgKyAobiAtIDEpLnRvX3N0cmluZyArIA0KICAgICAgICAiIGlzICIgKyBzdW1fZm9ybWVyLmdldC50b19zdHJpbmcgKyAiICsgIiArIHN1bV9sYXR0ZXIudG9fc3RyaW5nICsgDQogICAgICAgICIgPSAiICsgc3VtLnRvX3N0cmluZyArICIuIg0KKTs%3D)
+
+## `number_of_processors : I64`
+Get the number of processors (CPU cores) currently available.
+This is implemented by calling `sysconf(_SC_NPROCESSORS_ONLN)`.
+The runtime pools as many threads as this number to execute asynchronous tasks.
 
 # Module `Character`
 This module provides wrapper functions of C functions defined in ctypes.h.

@@ -509,6 +509,11 @@ void fixruntime_iohandle_close(IOHandle *handle)
     }
 }
 
+int64_t fixruntime_get_number_of_processors()
+{
+    return (int64_t)sysconf(_SC_NPROCESSORS_ONLN);
+}
+
 #ifdef THREAD_POOL
 
 /*
