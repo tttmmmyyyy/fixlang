@@ -11,13 +11,18 @@ main = (
         ))
     );
     let n = 1000000000;
-    // Asynchronously calculate the sum of numbers from 0 to n/2.
+    // Compute the sum of numbers from 0 to n/2 - 1.
+    // This task will be executed asynchronously (if you are using multi-core CPU).
     let sum_former = AsyncTask::make(|_| sum_range(0, n/2));
-    // Asynchronously calculate the sum of numbers from n/2 to n.
-    let sum_latter = AsyncTask::make(|_| sum_range(n/2, n));
-    // Wait for the results of the two asynchronous tasks and sum them up.
-    let sum = sum_former.get + sum_latter.get;
-    // Then the sum will be n * (n - 1) / 2.
+    // Compute the sum of numbers from n/2 to n.
+    // We perfom this in the current thread while waiting for the result of the former task.
+    let sum_latter = sum_range(n/2, n);
+    // Sum up the results of the two computations.
+    let sum = sum_former.get + sum_latter;
+    // Then the sum should be n * (n - 1) / 2.
     eval assert_eq(|_|"", sum, n * (n - 1) / 2);
-    println $ "Sum of numbers from 0 to " + (n - 1).to_string + " is " + sum_former.get.to_string + " + " + sum_latter.get.to_string + " = " + sum.to_string + "."
+    println $ 
+        "Sum of numbers from 0 to " + (n - 1).to_string + 
+        " is " + sum_former.get.to_string + " + " + sum_latter.to_string + 
+        " = " + sum.to_string + "."
 );
