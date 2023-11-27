@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Experimental support for multi-threading. Added `AsyncTask` built-in module.
+
 ### Fixed
 - Improve performance of `Std::IO::_read_line_inner` and `Std::IO::loop_lines`, `Std::IO::loop_lines_io` (#6).
 - Fix an issue that causes parse error when there are local / global names starting with `true`, `false` or `nullptr` (#8).
