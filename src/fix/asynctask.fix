@@ -75,6 +75,21 @@ make = |func| (
     Task { dtor : dtor }
 );
 
+namespace AsyncIOTask {
+
+    // A type for an I/O action that can be run asynchronously.
+    type IOTask a = unbox struct { _task : Task a };
+
+    // Get the result of an asynchronous I/O action.
+    get : IOTask a -> IO a;
+    get = |IOTask { _task : task }| IO { _data : |_| task.get };
+
+    // Make a task which performs an I/O action asynchronously.
+    make : IO a -> IOTask a;
+    make = |io| IOTask { _task : make(|_| io._unsafe_perform) };
+
+}
+
 // Get the number of processors (CPU cores) currently available.
 // This is implemented by calling `sysconf(_SC_NPROCESSORS_ONLN)`.
 // The runtime pools as many threads as this number to execute asynchronous tasks.

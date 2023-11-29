@@ -524,6 +524,10 @@
   - [`get : Task a -> a`](#get--task-a---a)
   - [`make : (() -> a) -> Task a`](#make-----a---task-a)
   - [`number_of_processors : I64`](#number_of_processors--i64)
+  - ['namespace AsyncIOTask'](#namespace-asynciotask)
+    - [`type IOTask a`](#type-iotask-a)
+    - [`get : IOTask a -> IO a`](#get--iotask-a---io-a)
+    - [`make : IO a -> IOTask a`](#make--io-a---iotask-a)
 - [Module `Character`](#module-character)
   - [`is_alnum : U8 -> Bool`](#is_alnum--u8---bool)
   - [`is_alpha : U8 -> Bool`](#is_alpha--u8---bool)
@@ -1957,6 +1961,17 @@ main = (
 Get the number of processors (CPU cores) currently available.
 This is implemented by calling `sysconf(_SC_NPROCESSORS_ONLN)`.
 The runtime pools as many threads as this number to execute asynchronous tasks.
+
+## 'namespace AsyncIOTask'
+
+### `type IOTask a`
+A type for an I/O action that can be run asynchronously.
+
+### `get : IOTask a -> IO a`
+Get the result of an asynchronous I/O action.
+
+### `make : IO a -> IOTask a`
+Make a task which performs an I/O action asynchronously.
 
 # Module `Character`
 This module provides wrapper functions of C functions defined in ctypes.h.

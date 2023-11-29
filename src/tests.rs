@@ -5000,6 +5000,37 @@ pub fn test_async_task_array_result() {
 
 #[test]
 #[serial]
+pub fn test_async_task_io() {
+    let source = r##"
+    module Main;
+    import AsyncTask;
+
+    main : IO ();
+    main = (
+        let print_ten : I64 -> IO () = |task_num| (
+            loop_m(0, |i| (
+                if i == 10 {
+                    break_m $ ()
+                } else {
+                    let msg = "task number: " + task_num.to_string + ", i: " + i.to_string;
+                    eval *msg.println;
+                    continue_m $ i + 1
+                }
+            ))
+        );
+
+        let task_0 = AsyncIOTask::make(print_ten(0));
+        let task_1 = AsyncIOTask::make(print_ten(1));
+        eval *task_0.get;
+        eval *task_1.get;
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_tarai() {
     let source = r#"
     module Main;
