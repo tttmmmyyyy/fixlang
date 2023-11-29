@@ -1973,6 +1973,32 @@ Get the result of an asynchronous I/O action.
 ### `make : IO a -> IOTask a`
 Make a task which performs an I/O action asynchronously.
 
+Example:
+```
+module Main;
+import AsyncTask;
+
+main : IO ();
+main = (
+    let print_ten : I64 -> IO () = |task_num| (
+        loop_m(0, |i| (
+            if i == 10 {
+                break_m $ ()
+            } else {
+                let msg = "task number: " + task_num.to_string + ", i: " + i.to_string;
+                eval *msg.println;
+                continue_m $ i + 1
+            }
+        ))
+    );
+    let task_0 = AsyncIOTask::make(print_ten(0));
+    let task_1 = AsyncIOTask::make(print_ten(1));
+    eval *task_0.get;
+    eval *task_1.get;
+    pure()
+);
+```
+
 # Module `Character`
 This module provides wrapper functions of C functions defined in ctypes.h.
 

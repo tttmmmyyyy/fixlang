@@ -5018,7 +5018,6 @@ pub fn test_async_task_io() {
                 }
             ))
         );
-
         let task_0 = AsyncIOTask::make(print_ten(0));
         let task_1 = AsyncIOTask::make(print_ten(1));
         eval *task_0.get;
