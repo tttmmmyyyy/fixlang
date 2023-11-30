@@ -5072,6 +5072,21 @@ pub fn test_number_of_processors() {
 
 #[test]
 #[serial]
+pub fn test_get_args() {
+    let source = r##"
+    module Main;
+
+    main : IO ();
+    main = (
+        let args = *get_args;
+        args.to_iter.join(", ").println
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 

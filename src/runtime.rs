@@ -546,6 +546,77 @@ pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> 
     func
 }
 
+fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+    // Add GLOBAL_VAR_NAME_ARGC global variable here.
+    let argc_gv_ty = gc.context.i32_type();
+    let argc_gv = gc.module.add_global(argc_gv_ty, None, GLOBAL_VAR_NAME_ARGC);
+    argc_gv.set_initializer(&argc_gv_ty.const_zero());
+
+    let fn_ty = argc_gv_ty.fn_type(&[], false);
+    let func = gc.module.add_function("fixruntime_get_argc", fn_ty, None);
+    let bb = gc.context.append_basic_block(func, "entry");
+
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(bb);
+    let argc_ptr = gc
+        .module
+        .get_global(GLOBAL_VAR_NAME_ARGC)
+        .unwrap()
+        .as_basic_value_enum()
+        .into_pointer_value();
+    let argc = gc.builder().build_load(argc_ptr, "argc").into_int_value();
+    gc.builder().build_return(Some(&argc));
+
+    func
+}
+
+fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+    // Add GLOBAL_VAR_NAME_ARGV global variable here.
+    let argv_gv_ty = gc
+        .context
+        .i8_type()
+        .ptr_type(AddressSpace::from(0))
+        .ptr_type(AddressSpace::from(0));
+    let argv_gv = gc.module.add_global(argv_gv_ty, None, GLOBAL_VAR_NAME_ARGV);
+    argv_gv.set_initializer(&argv_gv_ty.const_zero());
+
+    let fn_ty = gc
+        .context
+        .i8_type()
+        .ptr_type(AddressSpace::from(0))
+        .fn_type(&[gc.context.i64_type().into()], false);
+    let func = gc.module.add_function("fixruntime_get_argv", fn_ty, None);
+    let bb = gc.context.append_basic_block(func, "entry");
+
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(bb);
+    let idx = func.get_first_param().unwrap().into_int_value();
+    let argv = gc
+        .module
+        .get_global(GLOBAL_VAR_NAME_ARGV)
+        .unwrap()
+        .as_basic_value_enum()
+        .into_pointer_value();
+    let argv = gc.builder().build_load(argv, "argv").into_pointer_value();
+
+    // Get argv[idx].
+    // First, offset argv by idx * size_of_pointer.
+    let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
+    let argv = gc.builder().build_ptr_to_int(argv, ptr_int_ty, "argv");
+    let idx = gc.builder().build_int_z_extend(idx, ptr_int_ty, "idx");
+    let ptr_size = gc.ptr_size();
+    let offset = gc
+        .builder()
+        .build_int_mul(idx, ptr_int_ty.const_int(ptr_size, false), "offset");
+    let argv = gc.builder().build_int_add(argv, offset, "argv");
+    let argv = gc.builder().build_int_to_ptr(argv, argv_gv_ty, "argv");
+    // Then, load argv[idx].
+    let argv = gc.builder().build_load(argv, "argv").into_pointer_value();
+    gc.builder().build_return(Some(&argv));
+
+    func
+}
+
 fn build_threadpool_initialize_function<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm>,
 ) -> FunctionValue<'c> {
@@ -630,4 +701,6 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
                 .insert(RuntimeFunctions::ThreadPoolTerminate, threadpool_terminate);
         }
     }
+    build_get_argc_function(gc);
+    build_get_argv_function(gc);
 }

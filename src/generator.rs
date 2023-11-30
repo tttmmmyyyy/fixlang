@@ -390,6 +390,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.target_data().get_bit_size(ty) / 8
     }
 
+    pub fn ptr_size(&mut self) -> u64 {
+        let ptr_ty = self.context.i8_type().ptr_type(AddressSpace::from(0));
+        let ptr_size = self.target_data().get_bit_size(&ptr_ty) / 8;
+        assert_eq!(ptr_size, 8);
+        ptr_size
+    }
+
     // Create new gc.
     pub fn new(
         ctx: &'c Context,

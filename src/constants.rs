@@ -188,3 +188,6 @@ pub fn pthread_once_init_flag_type<'c>(ctx: &'c Context) -> IntType<'c> {
 pub fn pthread_once_init_flag_value<'c>(ctx: &'c Context) -> IntValue<'c> {
     pthread_once_init_flag_type(ctx).const_zero()
 }
+
+pub const GLOBAL_VAR_NAME_ARGC: &str = "fixruntime_argc";
+pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";

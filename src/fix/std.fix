@@ -478,6 +478,35 @@ namespace IO {
     exit_with_msg : I64 -> String -> IO a;
     exit_with_msg = |code, msg| eval *eprintln(msg); exit(code);
 
+    // `get_arg(n)` returns the n-th (0-indexed) command line argument.
+    // If n is greater than or equal to the number of command line arguments, this function returns none.
+    get_arg : I64 -> IO (Option String);
+    get_arg = |n| (
+        let argc = *get_arg_count;
+        if n >= argc { pure $ Option::none() };
+        let arg_ptr = CALL_C[Ptr fixruntime_get_argv(I64), n];
+        pure $ Option::some(String::_unsafe_from_c_str_ptr(arg_ptr))
+    );
+
+    // Get the number of command line arguments.
+    get_arg_count : IO I64;
+    get_arg_count = (
+        let argc = CALL_C[I32 fixruntime_get_argc()].to_I64;
+        pure $ argc
+    );
+
+    // Get command line arguments.
+    get_args : IO (Array String);
+    get_args = (
+        let argc = *get_arg_count;
+        let args = Array::empty(argc);
+        loop_m((args, 0), |(args, idx)| (
+            if idx == argc { break_m $ args };
+            let arg = (*get_arg(idx)).as_some;
+            continue_m $ (args.push_back(arg), idx + 1)
+        ))
+    );
+
     // Read a line from stdin. If some error occurr, this function aborts.
     // If you want to handle errors, use `read_line(stdin)` instead.
     input_line : IO String;

@@ -6,6 +6,7 @@ use std::{
     fs::{self, remove_dir_all},
     path::PathBuf,
     process::Command,
+    ptr::null,
     time::SystemTime,
 };
 
@@ -76,9 +77,9 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
 
     unsafe {
         let func = ee
-            .get_function::<unsafe extern "C" fn() -> i32>("main")
+            .get_function::<unsafe extern "C" fn(i32, *const *const i8) -> i32>("main")
             .unwrap();
-        func.call()
+        func.call(0, null())
     }
 }
 
@@ -159,10 +160,35 @@ fn build_module<'c>(
     fix_mod.generate_code(&mut gc);
 
     // Add main function.
-    let main_fn_type = context.i32_type().fn_type(&[], false);
+    let main_fn_type = context.i32_type().fn_type(
+        &[
+            context.i32_type().into(), // argc
+            context
+                .i8_type()
+                .ptr_type(AddressSpace::from(0))
+                .ptr_type(AddressSpace::from(0))
+                .into(), // argv
+        ],
+        false,
+    );
     let main_function = module.add_function("main", main_fn_type, None);
     let entry_bb = context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
+
+    // Save argc and argv to global variables.
+    for (i, arg) in [GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV]
+        .iter()
+        .enumerate()
+    {
+        let arg_val = main_function.get_nth_param(i as u32).unwrap();
+        let gv_ptr = gc
+            .module
+            .get_global(arg)
+            .unwrap()
+            .as_basic_value_enum()
+            .into_pointer_value();
+        gc.builder().build_store(gv_ptr, arg_val);
+    }
 
     // If AsyncTask is used, initialize thread pool.
     if config.async_task {
