@@ -482,7 +482,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             error_exit(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
             let used_later = if ty.is_box(self.type_env()) {
-                // Global boxed objects are pre-retained, so we do not need to retain. Always move out it.
+                // We do not need to retain global objects. Always move out it.
                 0
             } else {
                 u32::MAX / 2
