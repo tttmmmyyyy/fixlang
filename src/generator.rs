@@ -1057,7 +1057,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             };
 
             let obj_ptr = obj.ptr(self);
-            self.call_runtime(RuntimeFunctions::RetainBoxedObject, &[obj_ptr.into()]);
+            self.build_retain_boxed(obj_ptr);
 
             if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1154,10 +1154,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr = obj.ptr(self);
         let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
         let traverser = obj.get_traverser_ptr_boxed(self);
-        self.call_runtime(
-            work_type.runtime_function(),
-            &[ptr.into(), traverser.into()],
-        );
+        if work_type == TraverserWorkType::release() {
+            // If the work is release, call dtor function.
+            self.build_release_boxed(ptr, traverser);
+        } else {
+            self.call_runtime(
+                work_type.runtime_function(),
+                &[ptr.into(), traverser.into()],
+            );
+        }
     }
 
     // Release or mark global or mark threaded an object.
@@ -2155,6 +2160,194 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
         }
         self.call_runtime(RuntimeFunctions::CheckLeak, &[]);
+    }
+
+    fn build_retain_boxed(&mut self, obj_ptr: PointerValue<'c>) {
+        // Branch by refcnt_state.
+        let (local_bb, threaded_bb, end_retain_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+
+        // A function to genearte code to report retain to sanitizer.
+        fn report_retain_to_sanitizer<'c, 'm>(
+            gc: &mut GenerationContext<'c, 'm>,
+            obj_ptr: PointerValue<'c>,
+        ) {
+            // Report retain to sanitizer.
+            if gc.config.sanitize_memory {
+                let obj_id = gc.get_obj_id(obj_ptr);
+                gc.call_runtime(
+                    RuntimeFunctions::ReportRetain,
+                    &[obj_ptr.into(), obj_id.into()],
+                );
+            }
+        }
+
+        // Implement `local_bb`.
+        self.builder().position_at_end(local_bb);
+        // Increment refcnt and return.
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+        let old_refcnt_local = self
+            .builder()
+            .build_load(ptr_to_refcnt, "")
+            .into_int_value();
+        let new_refcnt = self.builder().build_int_nsw_add(
+            old_refcnt_local,
+            refcnt_type(self.context).const_int(1, false).into(),
+            "",
+        );
+        self.builder().build_store(ptr_to_refcnt, new_refcnt);
+        report_retain_to_sanitizer(self, obj_ptr);
+        // Jump to `end_bb`.
+        self.builder().build_unconditional_branch(end_retain_bb);
+
+        // Implement threaded_bb.
+        self.builder().position_at_end(threaded_bb);
+        // Increment refcnt atomically and jump to `end_bb`.
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+        let _old_refcnt_threaded = self
+            .builder()
+            .build_atomicrmw(
+                inkwell::AtomicRMWBinOp::Add,
+                ptr_to_refcnt,
+                refcnt_type(self.context).const_int(1, false),
+                inkwell::AtomicOrdering::Monotonic,
+            )
+            .unwrap();
+        report_retain_to_sanitizer(self, obj_ptr);
+        // Jump to `end_bb`.
+        self.builder().build_unconditional_branch(end_retain_bb);
+
+        // Implement end_bb.
+        self.builder().position_at_end(end_retain_bb);
+    }
+
+    fn build_release_boxed(&mut self, obj_ptr: PointerValue<'c>, ptr_to_dtor: PointerValue<'c>) {
+        let current_bb = self.builder().get_insert_block().unwrap();
+        let current_func = current_bb.get_parent().unwrap();
+
+        // Branch by refcnt_state.
+        let (local_bb, threaded_bb, end_release_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+        let destruction_bb = self
+            .context
+            .append_basic_block(current_func, "destruction_bb");
+
+        // A function to genearte code to report retain to sanitizer.
+        fn report_release_to_sanitizer<'c, 'm>(
+            gc: &mut GenerationContext<'c, 'm>,
+            obj_ptr: PointerValue<'c>,
+        ) {
+            // Report release to sanitizer.
+            if gc.config.sanitize_memory {
+                let obj_id = gc.get_obj_id(obj_ptr);
+                gc.call_runtime(
+                    RuntimeFunctions::ReportRelease,
+                    &[obj_ptr.into(), obj_id.into()],
+                );
+            }
+        }
+
+        // Implement local_bb.
+        self.builder().position_at_end(local_bb);
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+        // Decrement refcnt.
+        let old_refcnt = self
+            .builder()
+            .build_load(ptr_to_refcnt, "")
+            .into_int_value();
+        let new_refcnt = self.builder().build_int_nsw_sub(
+            old_refcnt,
+            refcnt_type(self.context).const_int(1, false).into(),
+            "",
+        );
+        self.builder().build_store(ptr_to_refcnt, new_refcnt);
+        report_release_to_sanitizer(self, obj_ptr);
+
+        // Branch to `destruction_bb` if old_refcnt is one.
+        let is_refcnt_one = self.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            old_refcnt,
+            refcnt_type(self.context).const_int(1, false),
+            "is_refcnt_zero",
+        );
+        self.builder()
+            .build_conditional_branch(is_refcnt_one, destruction_bb, end_release_bb);
+
+        // Implement threaded_bb.
+        self.builder().position_at_end(threaded_bb);
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+        // Decrement refcnt atomically.
+        let old_refcnt = self
+            .builder()
+            .build_atomicrmw(
+                inkwell::AtomicRMWBinOp::Sub,
+                ptr_to_refcnt,
+                refcnt_type(self.context).const_int(1, false),
+                inkwell::AtomicOrdering::Release,
+            )
+            .unwrap();
+        report_release_to_sanitizer(self, obj_ptr);
+
+        // Branch to `threaded_destruction_bb` if old_refcnt is one.
+        let threaded_destruction_bb = self
+            .context
+            .append_basic_block(current_func, "threaded_destruction_bb");
+        let is_refcnt_one = self.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            old_refcnt,
+            refcnt_type(self.context).const_int(1, false),
+            "is_refcnt_one",
+        );
+        self.builder().build_conditional_branch(
+            is_refcnt_one,
+            threaded_destruction_bb,
+            end_release_bb,
+        );
+
+        // Implement `threaded_destruction_bb`.
+        self.builder().position_at_end(threaded_destruction_bb);
+        self.builder()
+            .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+        self.builder().build_unconditional_branch(destruction_bb);
+
+        // Implement `destruction_bb`
+        self.builder().position_at_end(destruction_bb);
+
+        // If dtor is null, then skip calling dtor and jump to free_bb.
+        let free_bb = self.context.append_basic_block(current_func, "free");
+        let call_dtor_bb = self.context.append_basic_block(current_func, "call_dtor");
+        let ptr_int_ty = self.context.ptr_sized_int_type(self.target_data(), None);
+        let is_dtor_null = self.builder().build_int_compare(
+            IntPredicate::EQ,
+            self.builder()
+                .build_ptr_to_int(ptr_to_dtor, ptr_int_ty, "ptr_to_dtor"),
+            ptr_int_ty.const_zero(),
+            "is_dtor_null",
+        );
+        self.builder()
+            .build_conditional_branch(is_dtor_null, free_bb, call_dtor_bb);
+
+        // Implement `call_dtor_bb`.
+        self.builder().position_at_end(call_dtor_bb);
+        // Call dtor and jump to free_bb.
+        let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
+        self.builder().build_call(
+            dtor_func,
+            &[
+                obj_ptr.into(),
+                traverser_work_type(self.context)
+                    .const_int(TRAVERSER_WORK_RELEASE as u64, false)
+                    .into(),
+            ],
+            "call_dtor",
+        );
+        self.builder().build_unconditional_branch(free_bb);
+
+        // free.
+        self.builder().position_at_end(free_bb);
+        self.builder().build_free(obj_ptr);
+        self.builder().build_unconditional_branch(end_release_bb);
+
+        // Implement end_bb.
+        self.builder().position_at_end(end_release_bb);
     }
 }
 

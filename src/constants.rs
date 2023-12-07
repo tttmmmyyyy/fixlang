@@ -79,7 +79,6 @@ impl TraverserWorkType {
     }
     pub fn runtime_function(&self) -> RuntimeFunctions {
         match self.0 {
-            TRAVERSER_WORK_RELEASE => RuntimeFunctions::ReleaseBoxedObject,
             TRAVERSER_WORK_MARK_GLOBAL => RuntimeFunctions::MarkGlobalBoxedObject,
             TRAVERSER_WORK_MARK_THREADED => RuntimeFunctions::MarkThreadedBoxedObject,
             _ => unreachable!(),
