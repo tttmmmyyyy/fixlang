@@ -666,6 +666,8 @@ void fixruntime_threadpool_terminate()
         fixruntime_threadpool_delete_task(task);
         task = next;
     }
+    task_queue_first = NULL;
+    task_queue_last = NULL;
     if (pthread_mutex_destroy(&task_queue_mutex))
     {
         perror("[runtime] Failed to destroy mutex for task queue.");
