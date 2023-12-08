@@ -333,6 +333,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     // In this case, nothing to do.
     gc.builder().build_return(None);
 
+    // Workaround for #14.
     release_func.add_attribute(
         AttributeLoc::Function,
         gc.context.create_enum_attribute(25 /* noinline */, 0),
