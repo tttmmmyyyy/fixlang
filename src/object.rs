@@ -1,7 +1,6 @@
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
-    module::Linkage,
     types::{BasicMetadataTypeEnum, BasicType},
 };
 
