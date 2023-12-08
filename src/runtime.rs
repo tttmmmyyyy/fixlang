@@ -1,3 +1,5 @@
+use inkwell::attributes::AttributeLoc;
+
 use super::*;
 
 #[derive(Eq, Hash, PartialEq, Clone)]
@@ -331,6 +333,10 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     // In this case, nothing to do.
     gc.builder().build_return(None);
 
+    release_func.add_attribute(
+        AttributeLoc::Function,
+        gc.context.create_enum_attribute(25 /* noinline */, 0),
+    );
     release_func
 }
 
