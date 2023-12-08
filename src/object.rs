@@ -1413,23 +1413,15 @@ pub fn create_traverser<'c, 'm>(
     if ty.is_dynamic() && capture.is_empty() {
         return None;
     }
-    let dtor_name = ty.dtor_name(capture);
-    match gc.module.get_function(&dtor_name) {
-        Some(fv) => {
-            if fv.is_null() {
-                None
-            } else {
-                Some(fv)
-            }
-        }
+    let trav_name = ty.traverser_name(capture);
+    match gc.module.get_function(&trav_name) {
+        Some(fv) => Some(fv),
         None => {
             // Define traverser function.
             let object_type = ty_to_object_ty(ty, capture, gc.type_env());
             let struct_type = object_type.to_struct_type(gc, vec![]);
             let func_type = traverser_type(gc.context);
-            let func = gc
-                .module
-                .add_function(&dtor_name, func_type, Some(Linkage::Internal));
+            let func = gc.module.add_function(&trav_name, func_type, None);
             let bb = gc.context.append_basic_block(func, "entry");
 
             let _builder_guard = gc.push_builder();
@@ -1474,6 +1466,7 @@ pub fn create_traverser<'c, 'm>(
             gc.builder()
                 .build_switch(work, switches.pop().unwrap().1, &switches);
 
+            let mut non_empty = false;
             for (work_type, work_bb) in work_bbs.iter() {
                 let work_type = TraverserWorkType(*work_type);
                 gc.builder().position_at_end(*work_bb);
@@ -1482,6 +1475,7 @@ pub fn create_traverser<'c, 'm>(
                 for (i, ft) in object_type.field_types.iter().enumerate() {
                     match ft {
                         ObjectFieldType::SubObject(ty) => {
+                            non_empty = true;
                             let ptr_to_subobj = if ty.is_unbox(gc.type_env()) {
                                 ptr_to_field(i as u32, gc)
                             } else {
@@ -1505,6 +1499,7 @@ pub fn create_traverser<'c, 'm>(
                         ObjectFieldType::F32 => {}
                         ObjectFieldType::F64 => {}
                         ObjectFieldType::Array(ty) => {
+                            non_empty = true;
                             assert_eq!(i, ARRAY_CAP_IDX as usize);
                             let size = gc
                                 .load_obj_field(ptr_to_obj, struct_type, ARRAY_LEN_IDX)
@@ -1525,6 +1520,7 @@ pub fn create_traverser<'c, 'm>(
                             );
                         }
                         ObjectFieldType::UnionBuf(_) => {
+                            non_empty = true;
                             let buf = ptr_to_field(i as u32, gc);
                             ObjectFieldType::retain_release_mark_union_buf(
                                 gc,
@@ -1540,10 +1536,13 @@ pub fn create_traverser<'c, 'm>(
                 gc.builder().build_return(None);
             }
 
-            if func.is_null() {
-                None
-            } else {
+            if non_empty {
                 Some(func)
+            } else {
+                unsafe {
+                    func.delete();
+                }
+                None
             }
         }
     }

@@ -853,14 +853,21 @@ impl TypeNode {
         }
     }
 
-    // Get dtor name.
-    pub fn dtor_name(self: &Rc<TypeNode>, capture: &Vec<Rc<TypeNode>>) -> String {
+    // Get traverser name.
+    pub fn traverser_name(self: &Rc<TypeNode>, capture: &Vec<Rc<TypeNode>>) -> String {
         let mut str = "".to_string();
         str += &self.to_string_normalize();
+        if capture.len() > 0 {
+            str += "_capturing[";
+        }
         for ty in capture {
+            str += ", ";
             str += &ty.to_string_normalize();
         }
-        "dtor_".to_string() + &format!("{:x}", md5::compute(str))
+        if capture.len() > 0 {
+            str += "]";
+        }
+        "trav_".to_string() + &format!("{:x}", md5::compute(str))
     }
 
     // Get hash value.
