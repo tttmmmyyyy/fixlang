@@ -290,12 +290,12 @@ pub fn run_source(source: &str, mut config: Configuration) {
     const MAIN_RUN: &str = "main_run";
     let datetime: DateTime<Utc> = SystemTime::now().into();
     let file_hash = format!("{:x}", md5::compute(datetime.to_rfc3339()));
-    let source_mod = parse_source_temporary_file(source, MAIN_RUN, &file_hash);
 
     if config.run_by_build {
+        save_temporary_source(source, MAIN_RUN, &file_hash);
         config.source_files = vec![temporary_source_path(MAIN_RUN, &file_hash)];
         build_file(config);
-        let output = Command::new("a.out")
+        let output = Command::new("./a.out")
             .output()
             .expect("Failed to run a.out.");
         if output.stdout.len() > 0 {
@@ -313,6 +313,7 @@ pub fn run_source(source: &str, mut config: Configuration) {
             );
         }
     } else {
+        let source_mod = parse_source_temporary_file(source, MAIN_RUN, &file_hash);
         let mut target_mod = make_std_mod();
         target_mod.link(source_mod);
         target_mod.resolve_imports(&mut config);
