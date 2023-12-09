@@ -298,6 +298,9 @@ pub fn run_source(source: &str, mut config: Configuration) {
         let output = Command::new("./a.out")
             .output()
             .expect("Failed to run a.out.");
+        if output.status.code().is_none() {
+            panic!("a.out crashed!");
+        }
         if output.stdout.len() > 0 {
             println!(
                 "{:?}",

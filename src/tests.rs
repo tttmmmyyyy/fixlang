@@ -5087,6 +5087,31 @@ pub fn test_get_args() {
 
 #[test]
 #[serial]
+pub fn test_regression_issue_14() {
+    let source = r##"
+    module Main;
+    
+    main: IO ();
+    main = (
+        let _ = *(eprintln ("started"));
+        let str = "abc";
+        let buf = Array::fill(256, 0_U8);
+        let res = str.borrow_c_str(|p_str|
+            buf.borrow_ptr(|p_ret|
+                0_I32
+            )
+        );
+        pure()
+    );
+    "##;
+    let mut config = Configuration::develop_compiler();
+    config.set_threaded();
+    config.run_by_build = true;
+    run_source(&source, config);
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
