@@ -36,6 +36,8 @@ pub struct Configuration {
     pub async_task: bool,
     // Macros defined in runtime.c.
     pub runtime_c_macro: Vec<String>,
+    // Execute `run` not by ExecutionEngin, but by building executable binary and running it.
+    pub run_by_build: bool,
 }
 
 impl Default for Configuration {
@@ -52,6 +54,7 @@ impl Default for Configuration {
             threaded: false,
             async_task: false,
             runtime_c_macro: vec![],
+            run_by_build: false,
         }
     }
 }

@@ -286,15 +286,38 @@ fn build_module<'c>(
 }
 
 #[allow(dead_code)]
-pub fn run_source(source: &str, mut config: Configuration) -> i32 {
-    let mut target_mod = make_std_mod();
+pub fn run_source(source: &str, mut config: Configuration) {
+    const MAIN_RUN: &str = "main_run";
     let datetime: DateTime<Utc> = SystemTime::now().into();
     let file_hash = format!("{:x}", md5::compute(datetime.to_rfc3339()));
-    let source_mod = parse_source_temporary_file(source, "main_run", &file_hash);
-    target_mod.link(source_mod);
-    target_mod.resolve_imports(&mut config);
+    let source_mod = parse_source_temporary_file(source, MAIN_RUN, &file_hash);
 
-    run_module(target_mod, config)
+    if config.run_by_build {
+        config.source_files = vec![temporary_source_path(MAIN_RUN, &file_hash)];
+        build_file(config);
+        let output = Command::new("a.out")
+            .output()
+            .expect("Failed to run a.out.");
+        if output.stdout.len() > 0 {
+            println!(
+                "{:?}",
+                String::from_utf8(output.stdout)
+                    .unwrap_or("(failed to parse stdout from a.out as UTF8.)".to_string()),
+            );
+        }
+        if output.stderr.len() > 0 {
+            eprintln!(
+                "{:?}",
+                String::from_utf8(output.stderr)
+                    .unwrap_or("(failed to parse stderr from a.out as UTF8.)".to_string())
+            );
+        }
+    } else {
+        let mut target_mod = make_std_mod();
+        target_mod.link(source_mod);
+        target_mod.resolve_imports(&mut config);
+        run_module(target_mod, config);
+    }
 }
 
 pub fn run_module(fix_mod: Program, config: Configuration) -> i32 {
