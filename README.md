@@ -29,11 +29,11 @@ You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-pla
 
 ## Install (macOS / Linux, WSL)
 
-### Pre-built binary
+### Install pre-built binary
 
 Go to [Releases](https://github.com/tttmmmyyyy/fixlang/releases/), download pre-built binary and install it to somewhere you like.
 
-### From source
+### Bulid from source
 
 - Install [Rust](https://www.rust-lang.org/tools/install).
 - Install llvm12.0.1. It is recommended to use [llvmemv](https://crates.io/crates/llvmenv).
