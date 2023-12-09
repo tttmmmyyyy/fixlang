@@ -262,9 +262,6 @@ fn build_module<'c>(
     }
 
     passmgr.run_on(module);
-    unsafe {
-        module.run_in_pass_manager(&passmgr);
-    }
 
     // Verify LLVM module.
     // Maybe not needed at now?
