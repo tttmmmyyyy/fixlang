@@ -9,7 +9,8 @@
 ### Fixed
 - Improve performance of `Std::IO::_read_line_inner` and `Std::IO::loop_lines`, `Std::IO::loop_lines_io` (#6).
 - Fix an issue that causes parse error when there are local / global names starting with `true`, `false` or `nullptr` (#8).
-- Fixed an issue where the `ToString` implementation of `Ptr` was causing heap buffer overflow (#11).
+- Fix an issue where the `ToString` implementation of `Ptr` was causing heap buffer overflow (#11).
+- Fix an issue where `Std::eprint` and `Std::eprintln` wrote the output to stderr, not to stdout (#13).
 
 ## [0.1.0] - 2023-10-24
 

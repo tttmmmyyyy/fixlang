@@ -455,7 +455,7 @@ namespace IO {
     eprint = |str| (
         IO { _data : |_| (
             eval str.borrow_c_str(|c_ptr|
-                CALL_C[I32 fprintf(Ptr, Ptr, ...), stdout._file_ptr, c_ptr]
+                CALL_C[I32 fprintf(Ptr, Ptr, ...), stderr._file_ptr, c_ptr]
             );
             ()
         )}
