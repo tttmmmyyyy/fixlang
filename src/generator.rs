@@ -579,7 +579,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             if obj.is_unbox(self.type_env()) {
                 // if unboxed, in addition to retain, we also need to store the value to another memory region other than obj,
                 // since all unboxed values are treated as like unique object (i.e., the object of refcnt = 1)
-                // in the sense that it will be modified by functions such as `Struct.set`.
+                // in the sense that it will be modified by functions such as `set` function of struct.
                 if rvo.is_some() {
                     let rvo = rvo.unwrap();
                     let obj_val = obj.value(self);
