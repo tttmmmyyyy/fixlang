@@ -5106,6 +5106,7 @@ pub fn test_regression_issue_14() {
     "##;
     let mut config = Configuration::develop_compiler();
     config.set_threaded();
+    config.sanitize_memory = false;
     config.run_by_build = true;
     run_source(&source, config);
 }

@@ -455,7 +455,7 @@ namespace IO {
     eprint = |str| (
         IO { _data : |_| (
             eval str.borrow_c_str(|c_ptr|
-                CALL_C[I32 fprintf(Ptr, Ptr, ...), stderr._file_ptr, c_ptr]
+                CALL_C[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr]
             );
             ()
         )}
@@ -595,7 +595,7 @@ namespace IO {
     print = |str| (
         IO { _data : |_| (
             eval str.borrow_c_str(|c_ptr|
-                CALL_C[I32 printf(Ptr, ...), c_ptr]
+                CALL_C[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr]
             );
             ()
         )}
