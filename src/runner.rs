@@ -14,7 +14,7 @@ use either::Either;
 use inkwell::{
     execution_engine::ExecutionEngine,
     module::Linkage,
-    passes::{PassManager, PassManagerSubType},
+    passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
 
