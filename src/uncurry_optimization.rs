@@ -76,7 +76,7 @@ pub fn exclude(name: &FullName) -> bool {
 }
 
 fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
-    *name += &format!("@funptr{}", var_count);
+    *name += &format!("#funptr{}", var_count);
 }
 
 // Convert lambda expression to function pointer.
