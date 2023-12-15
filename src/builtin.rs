@@ -1694,7 +1694,7 @@ fn read_array_body(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
-    let name = format!("Array::get({}, {})", idx, array);
+    let name = format!("Array::@({}, {})", idx, array);
     let free_vars = vec![array_str.clone(), idx_str.clone()];
     expr_llvm(
         LLVMGenerator::ArrayGetBody(InlineLLVMArrayGetBody {
