@@ -1665,6 +1665,7 @@ pub fn unsafe_set_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
 pub struct InlineLLVMArrayGetBody {
     arr_name: FullName,
     idx_name: FullName,
+    release_arr: bool,
 }
 
 impl InlineLLVMArrayGetBody {
@@ -1679,7 +1680,9 @@ impl InlineLLVMArrayGetBody {
         let len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
-        gc.release(gc.get_var(&self.idx_name).ptr.get(gc));
+        if self.release_arr {
+            gc.release(gc.get_var(&self.idx_name).ptr.get(gc));
+        }
         let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx, rvo);
         gc.release(array);
         elem
@@ -1697,6 +1700,7 @@ fn read_array_body(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
         LLVMGenerator::ArrayGetBody(InlineLLVMArrayGetBody {
             arr_name: array_str,
             idx_name: idx_str,
+            release_arr: true,
         }),
         free_vars,
         name,
@@ -2604,7 +2608,7 @@ pub fn struct_set(
                 format!(
                     "{}.{}{}{}({})",
                     STRUCT_NAME,
-                    SETTER_SYMBOL,
+                    STRUCT_SETTER_SYMBOL,
                     field_name,
                     if is_unique_version { "!" } else { "" },
                     VALUE_NAME

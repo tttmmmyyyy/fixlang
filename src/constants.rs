@@ -35,8 +35,9 @@ pub const EVAL_VAR_NAME: &str = "#eval_var";
 pub const FUNPTR_NAME: &str = "#FunPtr";
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
-pub const GETTER_SYMBOL: &str = "@";
-pub const SETTER_SYMBOL: &str = "set_";
+pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
+pub const STRUCT_GETTER_SYMBOL: &str = "@";
+pub const STRUCT_SETTER_SYMBOL: &str = "set_";
 
 pub const CAP_NAME: &str = "#CAP";
 

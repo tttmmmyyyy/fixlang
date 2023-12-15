@@ -1218,7 +1218,7 @@ impl Program {
                         self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
-                                &format!("{}{}", GETTER_SYMBOL, &field.name),
+                                &format!("{}{}", STRUCT_GETTER_SYMBOL, &field.name),
                             ),
                             struct_get(&struct_name, decl, &field.name),
                         );
@@ -1239,7 +1239,7 @@ impl Program {
                                     &decl.name.to_namespace(),
                                     &format!(
                                         "{}{}{}",
-                                        SETTER_SYMBOL,
+                                        STRUCT_SETTER_SYMBOL,
                                         &field.name,
                                         if is_unique { "!" } else { "" }
                                     ),

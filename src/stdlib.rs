@@ -282,10 +282,7 @@ pub fn make_std_mod() -> Program {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique"),
         force_unique_array(false),
     );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "@"),
-        read_array(),
-    );
+    fix_module.add_global_value(array_getter_function_name(), read_array());
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
         write_array(),
@@ -324,17 +321,6 @@ pub fn make_std_mod() -> Program {
     fix_module
 }
 
-// pub fn add_asynctask_llvm_functions(fix_module: &mut Program) {
-//     fix_module.add_global_value(
-//         FullName::from_strs(&[ASYNCTASK_NAME], "_unsafe_make_task_data"),
-//         async_task_make_task_data_function(),
-//     );
-//     fix_module.add_global_value(
-//         FullName::from_strs(&[ASYNCTASK_NAME], "_unsafe_delete_task_data"),
-//         async_task_delete_task_data_function(),
-//     );
-//     fix_module.add_global_value(
-//         FullName::from_strs(&[ASYNCTASK_NAME], "_unsafe_extract_task_result"),
-//         async_task_extract_task_result_function(),
-//     );
-// }
+pub fn array_getter_function_name() -> FullName {
+    FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_GETTER_FUNCTION_NAME)
+}

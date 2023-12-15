@@ -75,7 +75,7 @@ pub fn exclude(name: &FullName) -> bool {
     return false;
 }
 
-fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
+pub fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
     *name += &format!("#funptr{}", var_count);
 }
 
@@ -95,7 +95,7 @@ fn funptr_lambda(
         return None;
     }
 
-    // Extract abstructions from expr.
+    // Extract abstractions from expr.
     let expr = move_abs_front_let_all(expr);
     let (args, body) = collect_abs(&expr, vars_count);
     if args.len() != vars_count {
