@@ -1,9 +1,8 @@
 extern crate rustc_version;
 use core::panic;
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ffi::CStr;
-use std::ops::{Add, AddAssign};
+use std::ops::AddAssign;
 use std::sync::Mutex;
 extern crate libc;
 use once_cell::sync::Lazy;
