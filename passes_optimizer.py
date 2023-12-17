@@ -101,13 +101,14 @@ ALLOWED_DEGRATION_ON_MINIMIZE = 0.99
 
 # All passes
 # Exclude:
-#  add_scalar_repl_aggregates_pass_with_threshold,
-#  add_internalize_pass, add_gvn_pass (segfaults),
-#  add_instruction_combining_pass (segfaults),
-#  add_memcpy_optimize_pass (segfaults)
-#  add_new_gvn_pass (breaks progream)
-#  add_licm_pass (breaks progream)
+#  add_scalar_repl_aggregates_pass_with_threshold (because requires parameter),
+#  add_internalize_pass (because requires parameter),
+#  add_gvn_pass (segfaults),
+#  add_new_gvn_pass (breaks program)
+#  add_licm_pass (breaks program)
 PASSES = '''
+add_instruction_combining_pass
+add_memcpy_optimize_pass
 add_aggressive_dce_pass
 add_aggressive_inst_combiner_pass
 add_alignment_from_assumptions_pass
