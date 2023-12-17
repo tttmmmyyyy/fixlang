@@ -92,7 +92,7 @@ FOOTER = '''
 ADD_PASS_FORMAT = 'passmgr.{}();'
 
 # Benchmark program should write running time to stdout.
-FIX_SOURCE_FILE = './examples/prime_loop'  # without extension
+FIX_SOURCE_FILE = './benchmark/prime_loop'  # without extension
 
 RUN_BENCH_ITERATION = 10
 
