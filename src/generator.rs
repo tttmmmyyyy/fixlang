@@ -1328,11 +1328,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate literal
     fn eval_llvm(
         &mut self,
-        lit: Rc<InlineLLVM>,
+        llvm: Rc<InlineLLVM>,
         ty: Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        lit.generator.generate(self, &ty, rvo, &lit.borrowed_vars)
+        llvm.generator.generate(self, &ty, rvo, &llvm.borrowed_vars)
     }
 
     // Calculate captured variables and their types of lambda expression.
