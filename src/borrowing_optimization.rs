@@ -13,17 +13,31 @@ pub fn borrowing_optimization(program: &mut Program) {
     // Define borrowing versions of each function if possible.
     define_borrowing_functions(program);
 
+    // Set `released_params_indices` field for the function of each application expression.
+    let instantiated_global_symbols = program.instantiated_global_symbols.clone();
+    for (name, sym) in instantiated_global_symbols {
+        let expr = sym.expr.as_ref().unwrap();
+        let expr = set_released_param_indices(expr, program);
+        program
+            .instantiated_global_symbols
+            .get_mut(&name)
+            .unwrap()
+            .expr = Some(expr);
+    }
+
     // NOTE: Replacement of call expressions is handled in `borrowing_optimization_evaluating_application` which is called from `Generator::eval_app`.
 }
 
 // This function converts a name of a function to the name of a same function but it only borrows its argument (i.e., does not release the argument in its body).
-pub fn convert_to_borrowing_function_name(name: &mut FullName, mut borrowed_vars: Vec<FullName>) {
-    borrowed_vars.sort();
-
+pub fn convert_to_borrowing_function_name(
+    name: &mut FullName,
+    mut borrowed_params_indices: Vec<usize>,
+) {
+    borrowed_params_indices.sort();
     let name = name.name_as_mut();
     *name = name.clone()
         + "#borrowing_"
-        + &borrowed_vars
+        + &borrowed_params_indices
             .iter()
             .map(|v| v.to_string())
             .collect::<Vec<_>>()
@@ -52,6 +66,7 @@ pub fn define_borrowing_functions(program: &mut Program) {
         if !expr.is_lam() {
             continue;
         }
+        let params = expr.get_lam_params();
         let expr_body = expr.get_lam_body();
         // Currently, we handle only when `expr_body` is InlineLLVM.
         if !expr_body.is_llvm() {
@@ -72,7 +87,10 @@ pub fn define_borrowing_functions(program: &mut Program) {
             }
             let expr = expr.unwrap();
             let mut name = sym_name.clone();
-            convert_to_borrowing_function_name(&mut name, borrowed_vars);
+            let borrowed_params_indices = (0..params.len())
+                .filter(|i| borrowed_vars.contains(&params[*i].name))
+                .collect::<Vec<_>>();
+            convert_to_borrowing_function_name(&mut name, borrowed_params_indices);
             new_functions.insert(
                 name.clone(),
                 InstantiatedSymbol {
@@ -96,9 +114,8 @@ pub fn borrowing_optimization_evaluating_application(
     fun: Rc<ExprNode>,
     args: &Vec<Rc<ExprNode>>,
 ) -> Option<(Rc<ExprNode>, Vec<usize>)> {
-    // If the function is not a variable, we do not perform borrowing optimization.
-    if !fun.is_var() {
-        return None;
+    if fun.released_params_indices.is_none() {
+        return None; // When `released_params_indices` is unknown, we can not perform borrowing optimization.
     }
 
     // Emulate the state of used_later values at the time when the argument is evaluated.
@@ -112,7 +129,7 @@ pub fn borrowing_optimization_evaluating_application(
     for (i, arg) in args.iter().enumerate() {
         // Emulate the state of used_later values at the time when the argument is evaluated.
         gc.scope_unlock_as_used_later(arg.free_vars());
-        // Handle only local variables.
+        // Proceed only for variables.
         if !arg.is_var() {
             continue;
         }
@@ -122,37 +139,19 @@ pub fn borrowing_optimization_evaluating_application(
         }
     }
 
-    // Get a list of parameters which are released in the function body.
-    let (params, body) = fun.destructure_lam();
-    assert_eq!(args.len(), params.len());
-    let released_params = body.released_vars();
-    if released_params.is_none() {
-        return None; // We do not perform borrowing optimization.
-    }
-
-    // Get a list of parameters which are released in the function body.
-    let released_params = released_params.unwrap();
-    let released_args_indices = (0..params.len())
-        .filter(|i| released_params.contains(&params[*i].name))
-        .collect::<Vec<_>>();
-
     // Get a list of arguments which SHOULD be borrowed here.
     // Filter out arguments in `borrowed_args_indices` which are not released by the function.
     let borrowed_args_indices = borrowable_args_indices
         .iter()
         .cloned()
-        .filter(|i| released_args_indices.contains(i))
+        .filter(|i| fun.released_params_indices.as_ref().unwrap().contains(i))
         .collect::<Vec<_>>();
 
     // Get borrowing version of the function.
-    let borrowed_params = borrowed_args_indices
-        .iter()
-        .map(|i| params[*i].name.clone())
-        .collect::<Vec<_>>();
     let mut borrowing_fun_name = fun.get_var().name.clone();
-    convert_to_borrowing_function_name(&mut borrowing_fun_name, borrowed_params);
+    convert_to_borrowing_function_name(&mut borrowing_fun_name, borrowed_args_indices.clone());
 
-    // Get the borrowing version of the function is defined.
+    // Check whether the borrowing version of the function is defined.
     if !gc.global.contains_key(&borrowing_fun_name) {
         return None;
     }
@@ -163,62 +162,73 @@ pub fn borrowing_optimization_evaluating_application(
     Some((borrowing_fun, borrowed_args_indices))
 }
 
-// // Perform borrowing optimization for an expression.
-// // - `used_later_lock` - Keys are variables defined locally. When `used_later_lock[v]` is positive, then the variable `v` is also used after `expr`.
-// fn borrowing_optimization_expr(
-//     expr: &Rc<ExprNode>,
-//     used_later_lock: &mut HashMap<FullName, u32>,
-// ) -> Rc<ExprNode> {
-//     match &*expr.expr {
-//         Expr::Var(_) => expr.clone(),
-//         Expr::LLVM(_) => expr.clone(),
-//         Expr::App(fun, args) => {
-//             let args = args
-//                 .iter()
-//                 .map(|arg| borrowing_optimization_expr(arg))
-//                 .collect();
-//             let expr = expr
-//                 .set_app_func(borrowing_optimization_expr(fun))
-//                 .set_app_args(args);
-//             borrowing_optimization_application(&expr)
-//         }
-//         Expr::Lam(_, body) => expr.set_lam_body(borrowing_optimization_expr(body)),
-//         Expr::Let(_, bound, value) => expr
-//             .set_let_bound(borrowing_optimization_expr(bound))
-//             .set_let_value(borrowing_optimization_expr(value)),
-//         Expr::If(c, t, e) => expr
-//             .set_if_cond(borrowing_optimization_expr(c))
-//             .set_if_then(borrowing_optimization_expr(t))
-//             .set_if_else(borrowing_optimization_expr(e)),
-//         Expr::TyAnno(e, _) => expr.set_tyanno_expr(borrowing_optimization_expr(e)),
-//         Expr::ArrayLit(elems) => {
-//             let mut expr = expr.clone();
-//             for (i, e) in elems.iter().enumerate() {
-//                 expr = expr.set_array_lit_elem(borrowing_optimization_expr(e), i)
-//             }
-//             expr
-//         }
-//         Expr::MakeStruct(_, fields) => {
-//             let fields = fields.clone();
-//             let mut expr = expr.clone();
-//             for (field_name, field_expr) in fields {
-//                 let field_expr = borrowing_optimization_expr(&field_expr);
-//                 expr = expr.set_make_struct_field(&field_name, field_expr);
-//             }
-//             expr
-//         }
-//         Expr::CallC(_, _, _, _, args) => {
-//             let mut expr = expr.clone();
-//             for (i, e) in args.iter().enumerate() {
-//                 expr = expr.set_call_c_arg(borrowing_optimization_expr(e), i)
-//             }
-//             expr
-//         }
-//     }
-// }
-
-// // Perform borrowing optimization for an application expression.
-// fn borrowing_optimization_application(app_expr: &Rc<ExprNode>) -> Rc<ExprNode> {
-//     let fun = app_expr.get_app_func();
-//     let args = app_expr.get_app_args();
-// }
+// Set `released_params_indices` field for the function of each application expression.
+fn set_released_param_indices(expr: &Rc<ExprNode>, program: &Program) -> Rc<ExprNode> {
+    match &*expr.expr {
+        Expr::Var(_) => expr.clone(),
+        Expr::LLVM(_) => expr.clone(),
+        Expr::App(fun, args) => {
+            let args = args
+                .iter()
+                .map(|arg| set_released_param_indices(arg, program))
+                .collect::<Vec<_>>();
+            let mut fun = set_released_param_indices(fun, program);
+            if fun.is_var() {
+                let fun_name = fun.get_var().name.clone();
+                if fun_name.is_global() {
+                    let lam_expr = program
+                        .instantiated_global_symbols
+                        .get(&fun_name)
+                        .unwrap()
+                        .expr
+                        .as_ref()
+                        .unwrap()
+                        .clone();
+                    let (params, body) = lam_expr.destructure_lam();
+                    assert_eq!(args.len(), params.len());
+                    let released_params = body.released_vars();
+                    if released_params.is_some() {
+                        let released_params = released_params.unwrap();
+                        let released_params_indices = (0..params.len())
+                            .filter(|i| released_params.contains(&params[*i].name))
+                            .collect::<Vec<_>>();
+                        fun = fun.set_released_params_indices(released_params_indices);
+                    }
+                }
+            }
+            expr.set_app_func(fun).set_app_args(args)
+        }
+        Expr::Lam(_, body) => expr.set_lam_body(set_released_param_indices(body, program)),
+        Expr::Let(_, bound, value) => expr
+            .set_let_bound(set_released_param_indices(bound, program))
+            .set_let_value(set_released_param_indices(value, program)),
+        Expr::If(c, t, e) => expr
+            .set_if_cond(set_released_param_indices(c, program))
+            .set_if_then(set_released_param_indices(t, program))
+            .set_if_else(set_released_param_indices(e, program)),
+        Expr::TyAnno(e, _) => expr.set_tyanno_expr(set_released_param_indices(e, program)),
+        Expr::ArrayLit(elems) => {
+            let mut expr = expr.clone();
+            for (i, e) in elems.iter().enumerate() {
+                expr = expr.set_array_lit_elem(set_released_param_indices(e, program), i)
+            }
+            expr
+        }
+        Expr::MakeStruct(_, fields) => {
+            let fields = fields.clone();
+            let mut expr = expr.clone();
+            for (field_name, field_expr) in fields {
+                let field_expr = set_released_param_indices(&field_expr, program);
+                expr = expr.set_make_struct_field(&field_name, field_expr);
+            }
+            expr
+        }
+        Expr::CallC(_, _, _, _, args) => {
+            let mut expr = expr.clone();
+            for (i, e) in args.iter().enumerate() {
+                expr = expr.set_call_c_arg(set_released_param_indices(e, program), i)
+            }
+            expr
+        }
+    }
+}

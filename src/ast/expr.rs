@@ -17,6 +17,8 @@ pub struct ExprNode {
     pub source: Option<Span>,
     pub app_order: AppSourceCodeOrderType,
     pub ty: Option<Rc<TypeNode>>,
+    // When this expression is a function, this field contains indices of parameters which are released exactly once by calling this function (if known).
+    pub released_params_indices: Option<Vec<usize>>,
 }
 
 impl ExprNode {
@@ -24,6 +26,13 @@ impl ExprNode {
     fn set_free_vars(&self, free_vars: HashSet<FullName>) -> Rc<Self> {
         let mut ret = self.clone();
         ret.free_vars = Some(free_vars);
+        Rc::new(ret)
+    }
+
+    // Set `released_params_indices`.
+    pub fn set_released_params_indices(&self, indices: Vec<usize>) -> Rc<Self> {
+        let mut ret = self.clone();
+        ret.released_params_indices = Some(indices);
         Rc::new(ret)
     }
 
@@ -144,7 +153,10 @@ impl ExprNode {
     pub fn destructure_lam(&self) -> (Vec<Rc<Var>>, Rc<ExprNode>) {
         match &*self.expr {
             Expr::Lam(args, body) => (args.clone(), body.clone()),
-            _ => panic!(""),
+            _ => panic!(
+                "Call destructure_lam for an expression which is not lambda! {}",
+                self.expr.to_string()
+            ),
         }
     }
 
@@ -185,6 +197,15 @@ impl ExprNode {
     pub fn get_lam_body(&self) -> Rc<ExprNode> {
         match &*self.expr {
             Expr::Lam(_, body) => body.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn get_lam_params(&self) -> Vec<Rc<Var>> {
+        match &*self.expr {
+            Expr::Lam(args, _) => args.clone(),
             _ => {
                 panic!()
             }
@@ -665,6 +686,7 @@ impl Expr {
             source: src,
             app_order: AppSourceCodeOrderType::FunctionIsFormer,
             ty: None,
+            released_params_indices: None,
         })
     }
     pub fn to_string(&self) -> String {

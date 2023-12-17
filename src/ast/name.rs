@@ -98,6 +98,10 @@ impl FullName {
         return self.namespace.is_local();
     }
 
+    pub fn is_global(&self) -> bool {
+        return !self.is_local();
+    }
+
     pub fn to_string(&self) -> String {
         let ns = self.namespace.to_string();
         if ns.is_empty() {
