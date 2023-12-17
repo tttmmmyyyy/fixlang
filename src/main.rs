@@ -13,7 +13,7 @@ extern crate serde_json;
 extern crate serde_pickle;
 
 mod ast;
-mod borrow_optimization;
+mod borrowing_optimization;
 mod builtin;
 mod configuration;
 mod constants;
@@ -40,7 +40,7 @@ use ast::program::*;
 use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
-use borrow_optimization::*;
+use borrowing_optimization::*;
 use builtin::*;
 use clap::ArgMatches;
 use clap::{App, AppSettings, Arg};
