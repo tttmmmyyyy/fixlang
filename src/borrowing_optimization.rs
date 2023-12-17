@@ -49,6 +49,9 @@ pub fn define_borrowing_functions(program: &mut Program) {
     let mut new_functions: HashMap<FullName, InstantiatedSymbol> = Default::default();
     for (sym_name, sym) in &program.instantiated_global_symbols {
         let expr = sym.expr.as_ref().unwrap();
+        if !expr.is_lam() {
+            continue;
+        }
         let expr_body = expr.get_lam_body();
         // Currently, we handle only when `expr_body` is InlineLLVM.
         if !expr_body.is_llvm() {

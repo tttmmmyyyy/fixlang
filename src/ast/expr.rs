@@ -175,6 +175,13 @@ impl ExprNode {
         Rc::new(ret)
     }
 
+    pub fn is_lam(&self) -> bool {
+        match &*self.expr {
+            Expr::Lam(_, _) => true,
+            _ => false,
+        }
+    }
+
     pub fn get_lam_body(&self) -> Rc<ExprNode> {
         match &*self.expr {
             Expr::Lam(_, body) => body.clone(),
