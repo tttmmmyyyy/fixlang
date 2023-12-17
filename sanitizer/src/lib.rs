@@ -1,7 +1,9 @@
 extern crate rustc_version;
 use core::panic;
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ffi::CStr;
+use std::ops::{Add, AddAssign};
 use std::sync::Mutex;
 extern crate libc;
 use once_cell::sync::Lazy;
@@ -10,6 +12,9 @@ static OBJECT_ID: Lazy<Mutex<i64>> = Lazy::new(|| Mutex::new(0));
 
 static OBJECT_TABLE: Lazy<Mutex<HashMap<i64, ObjectInfo>>> =
     Lazy::new(|| Mutex::new(Default::default()));
+
+static PERF_RETAIN_COUNT: Lazy<Mutex<i64>> = Lazy::new(|| Mutex::new(0));
+static PERF_RELEASE_COUNT: Lazy<Mutex<i64>> = Lazy::new(|| Mutex::new(0));
 
 struct ObjectInfo {
     addr: usize,
@@ -70,6 +75,9 @@ pub extern "C" fn report_mark_global(obj_id: i64) -> () {
 // Report retain.
 #[no_mangle]
 pub extern "C" fn report_retain(address: *const i8, obj_id: i64) -> () {
+    let mut retain_count = (*PERF_RETAIN_COUNT).lock().unwrap();
+    retain_count.add_assign(1);
+
     let mut object_table = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_table.contains_key(&obj_id),
@@ -118,6 +126,9 @@ pub extern "C" fn report_retain(address: *const i8, obj_id: i64) -> () {
 // Report release.
 #[no_mangle]
 pub extern "C" fn report_release(address: *const i8, obj_id: i64) -> () {
+    let mut release_count = (*PERF_RELEASE_COUNT).lock().unwrap();
+    release_count.add_assign(1);
+
     let mut object_info = (*OBJECT_TABLE).lock().unwrap();
     assert!(
         object_info.contains_key(&obj_id),
@@ -199,6 +210,16 @@ pub extern "C" fn check_leak() -> () {
     }
     if leak {
         panic!("[Sanitizer] Some objects leaked!");
+    }
+    if VERBOSE {
+        println!(
+            "[Sanitizer] Retain count = {}",
+            *PERF_RETAIN_COUNT.lock().unwrap()
+        );
+        println!(
+            "[Sanitizer] Release count = {}",
+            *PERF_RELEASE_COUNT.lock().unwrap()
+        );
     }
 }
 
