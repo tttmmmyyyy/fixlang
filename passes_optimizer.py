@@ -69,6 +69,8 @@ add_dead_store_elimination_pass
 add_cfg_simplification_pass
 add_bit_tracking_dce_pass
 add_constant_merge_pass
+add_memcpy_optimize_pass
+add_instruction_combining_pass
 '''
 INITIAL_PASSES = INITIAL_PASSES.split('\n')
 INITIAL_PASSES = [line.strip() for line in INITIAL_PASSES]
@@ -89,7 +91,8 @@ FOOTER = '''
 
 ADD_PASS_FORMAT = 'passmgr.{}();'
 
-FIX_SOURCE_FILE = './benchmark/copy_lines'  # without extension
+# Benchmark program should write running time to stdout.
+FIX_SOURCE_FILE = './examples/prime_loop'  # without extension
 
 RUN_BENCH_ITERATION = 10
 
@@ -204,7 +207,7 @@ def run_benchmark(run_bench_iteration=RUN_BENCH_ITERATION, timeout=60):
                 times = [1.0 * timeout]
                 break
             else:
-                times.append(float(cp.stderr))
+                times.append(float(cp.stdout))
         except subprocess.TimeoutExpired:
             times = [1.0 * timeout]
             break

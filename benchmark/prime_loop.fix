@@ -1,0 +1,42 @@
+module Main;
+import Debug;
+
+// Calculate a Bool array whose element is true iff idx is prime.
+is_prime : I64 -> Array Bool;
+is_prime = |n| (
+    let arr = Array::fill(n, true);
+    let arr = arr.set!(0, false);
+    let arr = arr.set!(1, false);
+    // A way for loop is to use `loop`, `continue` and `break`.
+    // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body.
+    // continue : s -> LoopResult s r -- Take the next state and continues the loop.
+    // break : r -> LoopResult s r -- Break the loop and `loop` returns the value given to `break`.
+    loop((2, arr), |(i, arr)|
+        if i*i > n { break $ arr };
+        let next_arr = (
+            if !arr.@(i) { arr };
+            loop((i+i, arr), |(q, arr)|
+                if n-1 < q { break $ arr };
+                continue $ (q+i, arr.set!(q, false))
+            )
+        );
+        continue $ (i+1, next_arr)
+    )
+);
+
+// Count the appearance of a value in an array.
+count : [a: Eq] a -> Array a -> I64;
+count = |elem, arr| (
+    loop((0, 0), |(i, sum)|
+        if arr.get_size == i { break $ sum };
+        let sum = sum + (if arr.@(i) == elem {1} else {0});
+        continue $ (i+1, sum)
+    )
+);
+
+main : IO ();
+main = (
+    let (ans, time) = consumed_time_while_lazy(|_| is_prime(50000000).count(true));
+    eval assert_eq(|_|"", ans, 3001134);
+    println $ time.to_string
+);
