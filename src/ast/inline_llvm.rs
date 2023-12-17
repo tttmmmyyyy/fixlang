@@ -136,6 +136,7 @@ impl LLVMGenerator {
     pub fn released_vars(&self) -> Option<Vec<FullName>> {
         match self {
             LLVMGenerator::ArrayGetBody(x) => Some(x.released_vars()),
+            LLVMGenerator::ArrayGetSizeBody(x) => Some(x.released_vars()),
             _ => None,
         }
     }

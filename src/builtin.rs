@@ -2190,7 +2190,7 @@ impl InlineLLVMArrayGetSizeBody {
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Rc<TypeNode>,
         rvo: Option<Object<'c>>,
-        _borrowed_vars: &Vec<FullName>,
+        borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let arr_name = FullName::local(&self.arr_name);
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
@@ -2198,7 +2198,9 @@ impl InlineLLVMArrayGetSizeBody {
         let len = array_obj
             .load_field_nocap(gc, ARRAY_LEN_IDX)
             .into_int_value();
-        gc.release(array_obj);
+        if !borrowed_vars.contains(&arr_name) {
+            gc.release(array_obj);
+        }
         let int_obj = if rvo.is_none() {
             allocate_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"))
         } else {
@@ -2206,6 +2208,10 @@ impl InlineLLVMArrayGetSizeBody {
         };
         int_obj.store_field_nocap(gc, 0, len);
         int_obj
+    }
+
+    pub fn released_vars(&self) -> Vec<FullName> {
+        vec![FullName::local(&self.arr_name)]
     }
 }
 
