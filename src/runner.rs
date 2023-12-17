@@ -478,6 +478,8 @@ pub fn build_file(mut config: Configuration) {
         // Create library object file.
         let mut com = Command::new("gcc");
         let mut com = com
+            .arg("-ffunction-sections")
+            .arg("-fdata-sections")
             .arg("-o")
             .arg(runtime_obj_path.to_str().unwrap())
             .arg("-c")
@@ -500,6 +502,7 @@ pub fn build_file(mut config: Configuration) {
         .args(libs_opts)
         .arg("-Wno-unused-command-line-argument")
         .arg("-no-pie")
+        .arg("-Wl,--gc-sections")
         .arg("-o")
         .arg(exec_path.to_str().unwrap())
         .arg(obj_path.to_str().unwrap())
