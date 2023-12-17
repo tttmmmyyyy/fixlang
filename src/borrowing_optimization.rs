@@ -55,7 +55,9 @@ fn create_borrowing_function(
     if !body.is_llvm() {
         return None;
     }
-    Some(body.set_llvm_borrowed_vars(borrowed_args))
+    let body = body.set_llvm_borrowed_vars(borrowed_args);
+    let expr = function.set_lam_body(body);
+    Some(expr)
 }
 
 // Adds a borrowing version of functions in a program.
