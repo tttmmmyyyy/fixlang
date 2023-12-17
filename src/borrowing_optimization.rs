@@ -186,15 +186,17 @@ fn set_released_param_indices(expr: &Rc<ExprNode>, program: &Program) -> Rc<Expr
                         .as_ref()
                         .unwrap()
                         .clone();
-                    let (params, body) = lam_expr.destructure_lam();
-                    assert_eq!(args.len(), params.len());
-                    let released_params = body.released_vars();
-                    if released_params.is_some() {
-                        let released_params = released_params.unwrap();
-                        let released_params_indices = (0..params.len())
-                            .filter(|i| released_params.contains(&params[*i].name))
-                            .collect::<Vec<_>>();
-                        fun = fun.set_released_params_indices(released_params_indices);
+                    if lam_expr.is_lam() {
+                        let (params, body) = lam_expr.destructure_lam();
+                        assert_eq!(args.len(), params.len());
+                        let released_params = body.released_vars();
+                        if released_params.is_some() {
+                            let released_params = released_params.unwrap();
+                            let released_params_indices = (0..params.len())
+                                .filter(|i| released_params.contains(&params[*i].name))
+                                .collect::<Vec<_>>();
+                            fun = fun.set_released_params_indices(released_params_indices);
+                        }
                     }
                 }
             }
