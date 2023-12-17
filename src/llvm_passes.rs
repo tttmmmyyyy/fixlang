@@ -64,4 +64,7 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_cfg_simplification_pass();
     passmgr.add_bit_tracking_dce_pass();
     passmgr.add_constant_merge_pass();
+
+    passmgr.add_memcpy_optimize_pass();
+    passmgr.add_instruction_combining_pass();
 }
