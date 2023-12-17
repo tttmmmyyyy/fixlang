@@ -25,6 +25,8 @@ pub struct Configuration {
     pub debug_mode: bool,
     // Perform uncurrying optimization.
     pub uncurry_optimization: bool,
+    // Perform borrowing optimization.
+    pub borrowing_optimization: bool,
     // Is emit llvm?
     pub emit_llvm: bool,
     // Output file name.
@@ -45,8 +47,9 @@ impl Default for Configuration {
         Configuration {
             source_files: vec![],
             sanitize_memory: false,
-            uncurry_optimization: true, // determined by debug_mode
-            llvm_opt_level: OptimizationLevel::Default,
+            uncurry_optimization: true, // changed to false in set_debug_mode.
+            borrowing_optimization: true, // changed to false in set_debug_mode.
+            llvm_opt_level: OptimizationLevel::Default, // changed to None in set_debug_mode.
             linked_libraries: vec![],
             debug_mode: false,
             emit_llvm: false,
@@ -138,5 +141,12 @@ impl Configuration {
 
     pub fn set_sanitize_memory(&mut self) {
         self.sanitize_memory = true;
+    }
+
+    pub fn set_debug_mode(&mut self) {
+        self.debug_mode = true;
+        self.uncurry_optimization = false;
+        self.borrowing_optimization = false;
+        self.llvm_opt_level = OptimizationLevel::None;
     }
 }

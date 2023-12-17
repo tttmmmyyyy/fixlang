@@ -139,6 +139,11 @@ fn build_module<'c>(
         uncurry_optimization(&mut fix_mod);
     }
 
+    // Perform borrowing optimization.
+    if config.borrowing_optimization {
+        borrowing_optimization(&mut fix_mod);
+    }
+
     // Create GenerationContext.
     let mut gc = GenerationContext::new(
         &context,

@@ -2,7 +2,11 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
-use std::{cell::RefCell, env, rc::Rc};
+use std::{
+    cell::RefCell,
+    env::{self},
+    rc::Rc,
+};
 
 use either::Either;
 use inkwell::{
@@ -244,11 +248,11 @@ impl<'c> Scope<'c> {
         }
     }
 
-    pub fn get(self: &Self, var: &FullName) -> Variable<'c> {
+    pub fn get(&self, var: &FullName) -> Variable<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
 
-    fn modify_used_later(self: &mut Self, vars: &HashSet<FullName>, by: i32) {
+    fn modify_used_later(&mut self, vars: &HashSet<FullName>, by: i32) {
         for var in vars {
             if !var.is_local() {
                 continue;
@@ -263,11 +267,14 @@ impl<'c> Scope<'c> {
             *used_later = add_i32_to_u32(*used_later, by);
         }
     }
-    fn increment_used_later(self: &mut Self, names: &HashSet<FullName>) {
+    fn increment_used_later(&mut self, names: &HashSet<FullName>) {
         self.modify_used_later(names, 1);
     }
-    fn decrement_used_later(self: &mut Self, names: &HashSet<FullName>) {
+    fn decrement_used_later(&mut self, names: &HashSet<FullName>) {
         self.modify_used_later(names, -1);
+    }
+    fn is_used_later(&self, name: &FullName) -> bool {
+        self.data.get(name).unwrap().last().unwrap().used_later > 0
     }
 }
 
@@ -529,7 +536,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Lock variables in scope to avoid being moved out.
-    fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<FullName>) {
+    pub fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<FullName>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -538,12 +545,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Unlock variables in scope.
-    fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<FullName>) {
+    pub fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<FullName>) {
         self.scope
             .borrow_mut()
             .last_mut()
             .unwrap()
             .decrement_used_later(names);
+    }
+
+    // Is a variable used later?
+    pub fn is_var_used_later(&self, var: &FullName) -> bool {
+        self.scope.borrow().last().unwrap().is_used_later(var)
     }
 
     // Get field of object in the scope.
@@ -627,134 +639,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .build_struct_gep(ptr_control_block, CTRL_BLK_REFCNT_IDX, "ptr_to_refcnt")
             .unwrap()
     }
-
-    // // Load reference counter in an appropriate way, i.e., check refcnt_state and load refcnt atomically if necessary.
-    // // Returns (refcnt, refcnt_bb, global_bb).
-    // // Here,
-    // // - refcnt_bb is a `BasicBlock` which is reached when the reference counter is loaded.
-    // // - global_bb is a `BasicBlock` which is reached when the object is marked as global.
-    // pub fn build_load_refcnt(
-    //     self: &mut GenerationContext<'c, 'm>,
-    //     obj_ptr: PointerValue<'c>,
-    //     memory_order: inkwell::AtomicOrdering,
-    // ) -> (IntValue<'c>, BasicBlock<'c>, BasicBlock<'c>) {
-    //     // Load refcnt_state.
-    //     let current_bb = self.builder().get_insert_block().unwrap();
-    //     let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
-    //     let refcnt_state = self
-    //         .builder()
-    //         .build_load(refcnt_state_ptr, "refcnt_state")
-    //         .into_int_value();
-
-    //     if !self.config.threaded {
-    //         // In single threaded program,
-    //         // create three basic blocks which correspond to three values of `refcnt_state` REFCNT_STATE_LOCAL, REFCNT_STATE_GLOBAL.
-    //         let refcnt_bb = self
-    //             .context
-    //             .append_basic_block(current_bb.get_parent().unwrap(), "refcnt_bb");
-    //         let global_bb = self
-    //             .context
-    //             .append_basic_block(current_bb.get_parent().unwrap(), "global_bb");
-
-    //         // In `current_bb`, check refcnt_state and jump to refcnt_bb if it is equal to `REFCNT_STATE_LOCAL`.
-    //         let is_refcnt_state_local = self.builder().build_int_compare(
-    //             inkwell::IntPredicate::EQ,
-    //             refcnt_state,
-    //             refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-    //             "is_refcnt_state_local",
-    //         );
-    //         self.builder()
-    //             .build_conditional_branch(is_refcnt_state_local, refcnt_bb, global_bb);
-
-    //         // Implement local_bb.
-    //         self.builder().position_at_end(refcnt_bb);
-    //         // Load refcnt.
-    //         let refcnt = self
-    //             .builder()
-    //             .build_load(self.get_refcnt_ptr(obj_ptr), "refcnt")
-    //             .into_int_value();
-
-    //         (refcnt, refcnt_bb, global_bb)
-    //     } else {
-    //         // In multi threaded program,
-
-    //         // create three basic blocks which correspond to three values of `refcnt_state` REFCNT_STATE_LOCAL, REFCNT_STATE_THREADED, REFCNT_STATE_GLOBAL.
-    //         let local_bb = self
-    //             .context
-    //             .append_basic_block(current_bb.get_parent().unwrap(), "local_bb");
-    //         let nonlocal_bb = self
-    //             .context
-    //             .append_basic_block(current_bb.get_parent().unwrap(), "nonlocal_bb");
-    //         let thread_bb = self
-    //             .context
-    //             .append_basic_block(current_bb.get_parent().unwrap(), "thread_bb");
-    //         let global_bb = self
-    //             .context
-    //             .append_basic_block(current_bb.get_parent().unwrap(), "global_bb");
-
-    //         // In `current_bb`, check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
-    //         let is_refcnt_state_local = self.builder().build_int_compare(
-    //             inkwell::IntPredicate::EQ,
-    //             refcnt_state,
-    //             refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-    //             "is_refcnt_state_local",
-    //         );
-    //         self.builder()
-    //             .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb);
-
-    //         // In `nonlocal_bb`, check refcnt_state and jump to thread_bb if it is equal to `REFCNT_STATE_THREADED`, or jump to global_bb otherwise.
-    //         self.builder().position_at_end(nonlocal_bb);
-    //         let is_refcnt_state_threaded = self.builder().build_int_compare(
-    //             inkwell::IntPredicate::EQ,
-    //             refcnt_state,
-    //             refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
-    //             "is_refcnt_state_threaded",
-    //         );
-    //         self.builder()
-    //             .build_conditional_branch(is_refcnt_state_threaded, thread_bb, global_bb);
-
-    //         // Add `refcnt_bb`.
-    //         let refcnt_bb = self
-    //             .context
-    //             .append_basic_block(current_bb.get_parent().unwrap(), "refcnt_bb");
-
-    //         // Implement `local_bb`.
-    //         self.builder().position_at_end(local_bb);
-    //         // Load refcnt.
-    //         let refcnt_nonatomic = self
-    //             .builder()
-    //             .build_load(self.get_refcnt_ptr(obj_ptr), "refcnt_nonatomic")
-    //             .into_int_value();
-    //         // After completing load operation, jump to `refcnt_bb`.
-    //         self.builder().build_unconditional_branch(refcnt_bb);
-
-    //         // Implement `threaded_bb`.
-    //         self.builder().position_at_end(thread_bb);
-    //         // In `thread_bb`, load refcnt atomically.
-    //         let refcnt_atomic = self
-    //             .builder()
-    //             .build_load(self.get_refcnt_ptr(obj_ptr), "refcnt_atomic")
-    //             .into_int_value();
-    //         refcnt_atomic
-    //             .as_instruction_value()
-    //             .unwrap()
-    //             .set_atomic_ordering(memory_order)
-    //             .expect("atomic loading failed");
-    //         // After completing load operation, jump to `refcnt_bb`.
-    //         self.builder().build_unconditional_branch(refcnt_bb);
-
-    //         // Implement `refcnt_bb`.
-    //         self.builder().position_at_end(refcnt_bb);
-    //         // Create phi node for refcnt.
-    //         let refcnt = self
-    //             .builder()
-    //             .build_phi(refcnt_type(self.context), "refcnt");
-    //         refcnt.add_incoming(&[(&refcnt_nonatomic, local_bb), (&refcnt_atomic, thread_bb)]);
-    //         let refcnt = refcnt.as_basic_value().into_int_value();
-
-    //         (refcnt, refcnt_bb, global_bb)
-    //     }
-    // }
 
     // Build branch by whether or not the reference counter is one.
     // Returns (unique_bb, shared_bb).
@@ -1394,19 +1278,50 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate application
     fn eval_app(
         &mut self,
-        fun: Rc<ExprNode>,
+        mut fun: Rc<ExprNode>,
         args: Vec<Rc<ExprNode>>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
+        // Prepare for borrowing optimization.
+        let borrowing_optimization_data = if self.config.borrowing_optimization {
+            borrowing_optimization_evaluating_application(self, fun.clone(), &args)
+        } else {
+            None
+        };
+
+        // Replace fun to the borrowing one.
+        if borrowing_optimization_data.is_some() {
+            fun = borrowing_optimization_data.as_ref().unwrap().0.clone();
+        }
+
+        // Before evaluating `fun`, we lock all variables in arguments as used later.
         for arg in &args {
             self.scope_lock_as_used_later(arg.free_vars());
         }
+
+        // Evaluate the function object.
         let fun_obj = self.eval_expr(fun, None);
+
+        // Evaluate arguments.
         let mut arg_objs = vec![];
-        for arg in &args {
+        for (i, arg) in args.iter().enumerate() {
             self.scope_unlock_as_used_later(arg.free_vars());
-            arg_objs.push(self.eval_expr(arg.clone(), None))
+
+            // Check whether or not the argument should be borrowed.
+            let borrow_arg_var = borrowing_optimization_data.is_some()
+                && borrowing_optimization_data.as_ref().unwrap().1.contains(&i);
+            let arg_obj = if borrow_arg_var {
+                // Borrow the argument (which is also a variable expression).
+                let var_name = &arg.get_var().name;
+                self.get_var(var_name).ptr.get(self)
+            } else {
+                // Evaluate the argument expression.
+                self.eval_expr(arg.clone(), None)
+            };
+            arg_objs.push(arg_obj)
         }
+
+        // Call the function.
         self.apply_lambda(fun_obj, arg_objs, rvo)
     }
 
@@ -1417,7 +1332,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ty: Rc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        lit.generator.generate(self, &ty, rvo)
+        lit.generator.generate(self, &ty, rvo, &lit.borrowed_vars)
     }
 
     // Calculate captured variables and their types of lambda expression.

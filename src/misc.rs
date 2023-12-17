@@ -62,3 +62,13 @@ pub fn flatten_opt<T>(o: Option<Option<T>>) -> Option<T> {
         None => None,
     }
 }
+
+pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
+    let mut result = vec![];
+    for i in 0..v.len() {
+        for j in i..v.len() {
+            result.push(v[i..j + 1].to_vec());
+        }
+    }
+    result
+}

@@ -78,6 +78,22 @@ impl ExprNode {
         Rc::new(ret)
     }
 
+    pub fn is_var(&self) -> bool {
+        match &*self.expr {
+            Expr::Var(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn get_var(&self) -> Rc<Var> {
+        match &*self.expr {
+            Expr::Var(v) => v.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
     pub fn set_app_func(&self, func: Rc<ExprNode>) -> Rc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
@@ -102,6 +118,26 @@ impl ExprNode {
             }
         }
         Rc::new(ret)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_app_func(&self) -> Rc<ExprNode> {
+        match &*self.expr {
+            Expr::App(func, _) => func.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn get_app_args(&self) -> Vec<Rc<ExprNode>> {
+        match &*self.expr {
+            Expr::App(_, args) => args.clone(),
+            _ => {
+                panic!()
+            }
+        }
     }
 
     // destructure lambda expression to list of variables and body expression
@@ -137,6 +173,15 @@ impl ExprNode {
             }
         }
         Rc::new(ret)
+    }
+
+    pub fn get_lam_body(&self) -> Rc<ExprNode> {
+        match &*self.expr {
+            Expr::Lam(_, body) => body.clone(),
+            _ => {
+                panic!()
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -346,6 +391,51 @@ impl ExprNode {
             }
         }
         Rc::new(ret)
+    }
+
+    pub fn set_llvm(&self, llvm: InlineLLVM) -> Rc<ExprNode> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::LLVM(_) => {
+                ret.expr = Rc::new(Expr::LLVM(Rc::new(llvm)));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Rc::new(ret)
+    }
+
+    pub fn get_llvm(&self) -> Rc<InlineLLVM> {
+        match &*self.expr {
+            Expr::LLVM(llvm) => llvm.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn is_llvm(&self) -> bool {
+        match &*self.expr {
+            Expr::LLVM(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn set_llvm_borrowed_vars(&self, vars: Vec<FullName>) -> Rc<ExprNode> {
+        let llvm = self.get_llvm();
+        let mut llvm: InlineLLVM = llvm.as_ref().clone();
+        llvm.borrowed_vars = vars;
+        self.set_llvm(llvm)
+    }
+
+    // Returns a list of variables which is released by evaluating this expression.
+    // None if the expression does not support this interface yet.
+    pub fn released_vars(&self) -> Option<Vec<FullName>> {
+        match &*self.expr {
+            Expr::LLVM(llvm) => llvm.generator.released_vars(),
+            _ => None,
+        }
     }
 
     pub fn resolve_namespace(self: &Rc<ExprNode>, ctx: &NameResolutionContext) -> Rc<ExprNode> {
@@ -693,6 +783,7 @@ pub fn expr_llvm(
         free_vars,
         name,
         ty,
+        borrowed_vars: vec![],
     })))
     .into_expr_info(src)
 }

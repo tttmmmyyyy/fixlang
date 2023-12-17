@@ -171,17 +171,13 @@ fn main() {
         config.source_files = read_source_files_options(m);
         config.out_file_path = read_output_file_option(m);
         config.linked_libraries.append(&mut read_library_options(m));
-        config.debug_mode = m.contains_id("debug-mode");
+        if m.contains_id("debug-mode") {
+            config.set_debug_mode();
+        }
         config.emit_llvm = m.contains_id("emit-llvm");
         if m.contains_id("threaded") {
             config.set_threaded();
         }
-        config.uncurry_optimization = !config.debug_mode;
-        config.llvm_opt_level = if config.debug_mode {
-            OptimizationLevel::None
-        } else {
-            OptimizationLevel::Default
-        };
         config
     }
 

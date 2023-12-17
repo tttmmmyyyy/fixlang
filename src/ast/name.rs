@@ -66,6 +66,18 @@ pub struct FullName {
     pub name: String,
 }
 
+impl PartialOrd for FullName {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.to_string().cmp(&other.to_string()))
+    }
+}
+
+impl Ord for FullName {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_string().cmp(&other.to_string())
+    }
+}
+
 impl FullName {
     pub fn new(ns: &NameSpace, name: &str) -> Self {
         Self {
