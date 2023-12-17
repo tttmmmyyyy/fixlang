@@ -1367,14 +1367,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Declare function of lambda expression
-    pub fn declare_lambda_function(&mut self, lam: Rc<ExprNode>) -> FunctionValue<'c> {
+    pub fn declare_lambda_function(
+        &mut self,
+        lam: Rc<ExprNode>,
+        name: Option<&FullName>,
+    ) -> FunctionValue<'c> {
         let lam_ty = lam.ty.clone().unwrap();
         let lam_fn_ty = lambda_function_type(&lam_ty, self);
-        let lam_fn = self.module.add_function(
-            &format!("closure[{}]", lam_ty.to_string_normalize()),
-            lam_fn_ty,
-            Some(Linkage::Internal),
-        );
+        let name = if name.is_some() {
+            name.unwrap().to_string()
+        } else {
+            format!("closure[{}]", lam_ty.to_string_normalize())
+        };
+        let lam_fn = self
+            .module
+            .add_function(&name, lam_fn_ty, Some(Linkage::Internal));
         // Create and set debug info subprogram.
         if self.has_di() {
             let fn_name = lam_fn.get_name().to_str().unwrap();
@@ -1576,7 +1583,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .collect::<Vec<_>>();
 
         // Define lambda function
-        let lam_fn = self.declare_lambda_function(lam.clone());
+        let lam_fn = self.declare_lambda_function(lam.clone(), None);
         self.implement_lambda_function(lam, lam_fn, Some(cap_vars.clone()));
 
         // Allocate lambda

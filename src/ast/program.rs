@@ -546,7 +546,7 @@ impl Program {
                     // Declare lambda function.
                     let lam = sym.expr.as_ref().unwrap().clone();
                     let lam = lam.set_inferred_type(obj_ty.clone());
-                    let lam_fn = gc.declare_lambda_function(lam);
+                    let lam_fn = gc.declare_lambda_function(lam, Some(name));
                     gc.add_global_object(name.clone(), lam_fn, obj_ty.clone());
                     (name, lam_fn, sym.clone(), obj_ty)
                 } else {
