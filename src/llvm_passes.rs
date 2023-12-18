@@ -33,8 +33,6 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_cfg_simplification_pass();
     passmgr.add_bit_tracking_dce_pass();
     passmgr.add_constant_merge_pass();
-
-    // Duplicate passes because we have been running optimization passes twice upto 0d6a35a0781156de192159e1bc72b22571d9feb0.
     passmgr.add_scalar_repl_aggregates_pass();
     passmgr.add_function_inlining_pass();
     passmgr.add_cfg_simplification_pass();
@@ -64,7 +62,15 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_cfg_simplification_pass();
     passmgr.add_bit_tracking_dce_pass();
     passmgr.add_constant_merge_pass();
-
     passmgr.add_memcpy_optimize_pass();
     passmgr.add_instruction_combining_pass();
+    passmgr.add_ipsccp_pass();
+    passmgr.add_dead_store_elimination_pass();
+    passmgr.add_global_optimizer_pass();
+    passmgr.add_aggressive_dce_pass();
+    passmgr.add_strip_dead_prototypes_pass();
+    passmgr.add_loop_rotate_pass();
+    passmgr.add_early_cse_mem_ssa_pass();
+    passmgr.add_tail_call_elimination_pass();
+    passmgr.add_simplify_lib_calls_pass();
 }
