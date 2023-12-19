@@ -13,7 +13,6 @@ SOURCE_FILE = './src/llvm_passes.rs'
 INITIAL_PASSES = '''
 add_early_cse_pass
 add_scalar_repl_aggregates_pass_ssa
-add_merge_functions_pass
 add_global_optimizer_pass
 add_aggressive_dce_pass
 add_loop_unroll_and_jam_pass
@@ -102,6 +101,7 @@ ALLOWED_DEGRATION_ON_MINIMIZE = 0.99
 #  add_new_gvn_pass (breaks program)
 #  add_licm_pass (breaks program)
 #  add_early_cse_mem_ssa_pass (breaks program (Random module))
+#  add_merge_functions_pass (breaks program)
 PASSES = '''
 add_instruction_combining_pass
 add_memcpy_optimize_pass
@@ -135,7 +135,6 @@ add_loop_unroll_pass
 add_loop_vectorize_pass
 add_lower_expect_intrinsic_pass
 add_lower_switch_pass
-add_merge_functions_pass
 add_merged_load_store_motion_pass
 add_partially_inline_lib_calls_pass
 add_promote_memory_to_register_pass

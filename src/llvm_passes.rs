@@ -6,7 +6,6 @@ use inkwell::passes::PassManagerSubType;
 pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_early_cse_pass();
     passmgr.add_scalar_repl_aggregates_pass_ssa();
-    passmgr.add_merge_functions_pass();
     passmgr.add_global_optimizer_pass();
     passmgr.add_aggressive_dce_pass();
     passmgr.add_loop_unroll_and_jam_pass();
