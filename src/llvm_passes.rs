@@ -70,7 +70,6 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_aggressive_dce_pass();
     passmgr.add_strip_dead_prototypes_pass();
     passmgr.add_loop_rotate_pass();
-    passmgr.add_early_cse_mem_ssa_pass();
     passmgr.add_tail_call_elimination_pass();
     passmgr.add_simplify_lib_calls_pass();
 }

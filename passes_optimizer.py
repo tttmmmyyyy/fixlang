@@ -109,6 +109,7 @@ ALLOWED_DEGRATION_ON_MINIMIZE = 0.99
 #  add_gvn_pass (segfaults),
 #  add_new_gvn_pass (breaks program)
 #  add_licm_pass (breaks program)
+#  add_early_cse_mem_ssa_pass (breaks program (Random module))
 PASSES = '''
 add_instruction_combining_pass
 add_memcpy_optimize_pass
@@ -124,7 +125,6 @@ add_correlated_value_propagation_pass
 add_dead_arg_elimination_pass
 add_dead_store_elimination_pass
 add_demote_memory_to_register_pass
-add_early_cse_mem_ssa_pass
 add_early_cse_pass
 add_function_attrs_pass
 add_function_inlining_pass
