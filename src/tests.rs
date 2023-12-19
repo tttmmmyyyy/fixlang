@@ -5121,27 +5121,27 @@ pub fn test_random() {
     main : IO ();
     main = (
         let init = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
-        let random = init_by_array64(init);
+        let random = init_by_array(init);
         let n = 100;
-        eval *println(n.to_string + " outputs of genrand64_int64()");
+        eval *println(n.to_string + " outputs of generate_U64()");
         let random : Random = *loop_m (
             (random, 0), |(random, i)|
             if i >= n {
                 break_m $ random
             };
-            let (x, random) = genrand64_int64(random);
+            let (x, random) = generate_U64(random);
             eval *print(x.to_string + " ");
             eval *(if (i%5==4) { println("") } else { pure() });
             continue_m $ (random, i + 1)
         );
         eval *println("");
-        eval *println(n.to_string + " outputs of genrand64_real2()");
+        eval *println(n.to_string + " outputs of generate_F64_2()");
         let random : Random = *loop_m (
             (random, 0), |(random, i)|
             if i >= n {
                 break_m $ random
             };
-            let (x, random) = genrand64_real2(random);
+            let (x, random) = generate_F64_2(random);
             eval *print (x.to_string + " ");
             eval *(if (i%5==4) { println("") } else { pure() });
             continue_m $ (random, i + 1)
