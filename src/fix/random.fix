@@ -80,7 +80,7 @@ _mag01: Array U64;
 _mag01 = [ 0_U64, _MATRIX_A ];
 
 // Random number generator.
-type Random = box struct {
+type Random = unbox struct {
     mt: Array U64,  /* The array for the state vector */
     mti: I64        /* mti==_NN+1 means mt[_NN] is not initialized */
 };
