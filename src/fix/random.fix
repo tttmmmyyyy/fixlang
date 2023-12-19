@@ -1,0 +1,287 @@
+// Mersenne Twister, ported to Fix Language by https://github.com/pt9999.
+//
+// Original Source Code (C Language, 64bit):
+//   http://www.math.sci.hiroshima-u.ac.jp/m-mat/MT/VERSIONS/C-LANG/mt19937-64.c
+
+// Original copyright notice:
+/* 
+   A C-program for MT19937-64 (2004/9/29 version).
+   Coded by Takuji Nishimura and Makoto Matsumoto.
+
+   This is a 64-bit version of Mersenne Twister pseudorandom number
+   generator.
+
+   Before using, initialize the state by using init_genrand64(seed)  
+   or init_by_array64(init_key, key_length).
+
+   Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura,
+   All rights reserved.                          
+
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions
+   are met:
+
+     1. Redistributions of source code must retain the above copyright
+        notice, this list of conditions and the following disclaimer.
+
+     2. Redistributions in binary form must reproduce the above copyright
+        notice, this list of conditions and the following disclaimer in the
+        documentation and/or other materials provided with the distribution.
+
+     3. The names of its contributors may not be used to endorse or promote 
+        products derived from this software without specific prior written 
+        permission.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+   A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+   References:
+   T. Nishimura, ``Tables of 64-bit Mersenne Twisters''
+     ACM Transactions on Modeling and 
+     Computer Simulation 10. (2000) 348--357.
+   M. Matsumoto and T. Nishimura,
+     ``Mersenne Twister: a 623-dimensionally equidistributed
+       uniform pseudorandom number generator''
+     ACM Transactions on Modeling and 
+     Computer Simulation 8. (Jan. 1998) 3--30.
+
+   Any feedback is very welcome.
+   http://www.math.hiroshima-u.ac.jp/~m-mat/MT/emt.html
+   email: m-mat @ math.sci.hiroshima-u.ac.jp (remove spaces)
+*/
+
+module Random;
+
+_NN: I64;
+_NN = 312;
+
+_MM: I64;
+_MM = 156;
+
+_MATRIX_A: U64;
+_MATRIX_A = /* 0xB5026F5AA96619E9 = */ 13043109905998158313_U64;
+
+_UM: U64;
+_UM = /* 0xFFFFFFFF80000000 = */ 18446744071562067968_U64; /* Most significant 33 bits */
+
+_LM: U64;
+_LM = /* 0x7FFFFFFF = */ 2147483647_U64; /* Least significant 31 bits */
+
+_mag01: Array U64;
+_mag01 = [ 0_U64, _MATRIX_A ];
+
+// Random number generator.
+type Random = box struct {
+    mt: Array U64,  /* The array for the state vector */
+    mti: I64        /* mti==_NN+1 means mt[_NN] is not initialized */
+};
+
+// Initializes `Random` with a seed.
+init_genrand64: U64 -> Random;
+init_genrand64 = |seed| (
+    let mt = Array::fill(_NN, 0_U64);
+    let mt = mt.set!(0, seed);
+    loop((mt, 1), |(mt, mti)| 
+        if mti >= _NN {
+            break $ Random { mt: mt, mti: _NN }
+        };
+        let mt = mt.set!(mti, 
+            (6364136223846793005_U64 * (mt.@(mti-1).bit_xor(mt.@(mti-1).shift_right(62_U64))) + mti.to_U64)
+        );
+        continue $ (mt, mti + 1)
+    )
+);
+
+// Initializes `Random` with an array.
+init_by_array64: Array U64 -> Random;
+init_by_array64 = |init_key| (
+    let key_length = init_key.get_size.to_I64;
+    let random = init_genrand64(19650218_U64);
+    let Random { mt:mt, mti:mti } = random;
+    let i: I64 = 1;
+    let j: I64 = 0;
+    let k: I64 = if _NN > key_length { _NN } else { key_length };
+    let (mt, mti, (i, j, k)) = loop(
+        (mt, mti, (i, j, k)), |(mt, mti, (i, j, k))| (
+            if k <= 0 {
+                break $ (mt, mti, (i, j, k))
+            };
+            let mt = mt.set!(
+                i, 
+                mt.@(i).bit_xor(
+                    (mt.@(i - 1).bit_xor(
+                        mt.@(i - 1).shift_right(62_U64))
+                    ) * 3935559000370003845_U64)
+                + init_key.@(j) 
+                + j.to_U64 /* non linear */
+            );
+            let i = i + 1;
+            let j = j + 1;
+            let (mt, i) = if (i >= _NN) { 
+                (mt.set!(0, mt.@(_NN-1)), 1)
+            } else { 
+                (mt, i) 
+            };
+            let j = if (j>=key_length) { 0 } else { j };
+            let k = k - 1;
+            continue $ (mt, mti, (i, j, k))
+        )
+    );
+    let k = _NN-1;
+    let (mt, mti, (i, j, k)) = loop(
+        (mt, mti, (i, j, k)), |(mt, mti, (i, j, k))| (
+            if k <= 0 {
+                break $ (mt, mti, (i, j, k))
+            };
+            let mt = mt.set!(
+                i, 
+                mt.@(i).bit_xor(
+                    (mt.@(i - 1).bit_xor(
+                        mt.@(i - 1).shift_right(62_U64))
+                    ) * 2862933555777941757_U64)
+                - i.to_U64 /* non linear */
+            );
+            let i = i + 1;
+            let (mt, i) =  if (i >= _NN) { 
+                (mt.set!(0, mt.@(_NN - 1)), 1)
+            } else {
+                (mt, i)
+            };
+            let k = k - 1;
+            continue $ (mt, mti, (i, j, k))
+        )
+    );
+    
+    let mt = mt.set!(0, 1_U64.shift_left(63_U64)); /* MSB is 1; assuring non-zero initial array */ 
+    Random { mt: mt, mti: mti }
+);
+
+// Generates a random number on [0, 2^64-1]-interval.
+genrand64_int64: Random -> (U64, Random);
+genrand64_int64 = |Random { mt:mt, mti:mti }| (
+    let (mt, mti) = if (mti < _NN) {
+        (mt, mti)
+    } else { 
+        /* generate _NN words at one time */
+
+        /* if init_genrand64() has not been called, */
+        /* a default initial seed is used     */
+        let (mt, mti) = if (mti == _NN+1) {
+            let Random { mt:mt, mti:mti } = init_genrand64(5489_U64);
+            (mt, mti)
+        } else {
+            (mt, mti)
+        };
+        let (mt, mti) = loop(
+            (mt, mti, 0), |(mt, mti, i)|
+            if i >= _NN - _MM {
+                break $ (mt, mti)
+            };
+            let x = mt.@(i).bit_and(_UM).bit_or(mt.@(i + 1).bit_and(_LM));
+            let mt = mt.set(
+                i, 
+                mt.@(i + _MM)
+                .bit_xor(x.shift_right(1_U64))
+                .bit_xor(_mag01.@(x.bit_and(1_U64).to_I64)));
+            continue $ (mt, mti, i + 1)
+        );
+        let (mt, mti) = loop(
+            (mt, mti, _NN - _MM), |(mt, mti, i)|
+            if i >= _NN - 1 {
+                break $ (mt, mti)
+            };
+            let x = mt.@(i).bit_and(_UM).bit_or(mt.@(i + 1).bit_and(_LM));
+            let mt = mt.set(
+                i, 
+                mt.@(i + (_MM - _NN))
+                .bit_xor(x.shift_right(1_U64))
+                .bit_xor(_mag01.@(x.bit_and(1_U64).to_I64)));
+            continue $ (mt, mti, i + 1)
+        );
+        let x = mt.@(_NN - 1).bit_and(_UM).bit_or(mt.@(0).bit_and(_LM));
+        let mt = mt.set(
+            _NN - 1,
+            mt.@(_MM-1)
+            .bit_xor(x.shift_right(1_U64))
+            .bit_xor(_mag01.@(x.bit_and(1_U64).to_I64)));
+        let mti = 0;
+        (mt, mti)
+    };
+  
+    let x = mt.@(mti);
+    let mti = mti + 1;
+
+    let x = x.bit_xor(x.shift_right(29_U64).bit_and(/* 0x5555555555555555 = */ 6148914691236517205_U64));
+    let x = x.bit_xor(x.shift_left(17_U64).bit_and(/* 0x71D67FFFEDA60000 = */ 8202884508482404352_U64));
+    let x = x.bit_xor(x.shift_left(37_U64).bit_and(/* 0xFFF7EEE000000000 = */ 18444473444759240704_U64));
+    let x = x.bit_xor(x.shift_right(43_U64));
+
+    (x, Random { mt:mt, mti:mti })
+);
+
+// Generates a random number on [0, 2^63-1]-interval.
+genrand64_int63: Random -> (I64, Random);
+genrand64_int63 = |random| (
+    let (x, random) = random.genrand64_int64;
+    (x.shift_right(1_U64).to_I64, random)
+);
+
+// Generates a random number on [0,1]-real-interval.
+genrand64_real1: Random -> (F64, Random);
+genrand64_real1 = |random| (
+    let (x, random) = random.genrand64_int64;
+    (x.shift_right(11_U64).to_F64 * (1.0/9007199254740991.0), random)
+);
+
+// Generates a random number on [0,1)-real-interval.
+genrand64_real2: Random -> (F64, Random);
+genrand64_real2 = |random| (
+    let (x, random) = random.genrand64_int64;
+    (x.shift_right(11_U64).to_F64 * (1.0/9007199254740992.0), random)
+);
+
+// Generates a random number on (0,1)-real-interval.
+genrand64_real3: Random -> (F64, Random);
+genrand64_real3 = |random| (
+    let (x, random) = random.genrand64_int64;
+    ((x.shift_right(12_U64).to_F64 + 0.5) * (1.0/4503599627370496.0), random)
+);
+
+main : IO ();
+main = (
+    let init = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
+    let random = init_by_array64(init);
+    eval *println("1000 outputs of genrand64_int64()");
+    let random : Random = *loop_m (
+        (random, 0), |(random, i)|
+        if i >= 1000 {
+            break_m $ random
+        };
+        let (x, random) = genrand64_int64(random);
+        eval *print(x.to_string + " ");
+        eval *(if (i%5==4) { println("") } else { pure() });
+        continue_m $ (random, i + 1)
+    );
+    eval *println("");
+    eval *println("1000 outputs of genrand64_real2()");
+    let random : Random = *loop_m (
+        (random, 0), |(random, i)|
+        if i >= 1000 {
+            break_m $ random
+        };
+        let (x, random) = genrand64_real2(random);
+        eval *print (x.to_string + " ");
+        eval *(if (i%5==4) { println("") } else { pure() });
+        continue_m $ (random, i + 1)
+    );
+    pure()
+);

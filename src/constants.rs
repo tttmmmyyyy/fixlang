@@ -128,6 +128,13 @@ pub const STANDARD_LIBRARIES: &[(
         None,
     ),
     (
+        "Random",
+        include_str!("./fix/random.fix"),
+        "random",
+        None,
+        None,
+    ),
+    (
         "Time",
         include_str!("./fix/time.fix"),
         "time.fix",

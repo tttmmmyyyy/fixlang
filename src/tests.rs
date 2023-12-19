@@ -5113,6 +5113,47 @@ pub fn test_regression_issue_14() {
 
 #[test]
 #[serial]
+pub fn test_random() {
+    let source = r##"
+    module Main;
+    import Random;
+    
+    main : IO ();
+    main = (
+        let init = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
+        let random = init_by_array64(init);
+        let n = 100;
+        eval *println(n.to_string + " outputs of genrand64_int64()");
+        let random : Random = *loop_m (
+            (random, 0), |(random, i)|
+            if i >= n {
+                break_m $ random
+            };
+            let (x, random) = genrand64_int64(random);
+            eval *print(x.to_string + " ");
+            eval *(if (i%5==4) { println("") } else { pure() });
+            continue_m $ (random, i + 1)
+        );
+        eval *println("");
+        eval *println(n.to_string + " outputs of genrand64_real2()");
+        let random : Random = *loop_m (
+            (random, 0), |(random, i)|
+            if i >= n {
+                break_m $ random
+            };
+            let (x, random) = genrand64_real2(random);
+            eval *print (x.to_string + " ");
+            eval *(if (i%5==4) { println("") } else { pure() });
+            continue_m $ (random, i + 1)
+        );
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
