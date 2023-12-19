@@ -71,6 +71,14 @@ add_bit_tracking_dce_pass
 add_constant_merge_pass
 add_memcpy_optimize_pass
 add_instruction_combining_pass
+add_ipsccp_pass
+add_dead_store_elimination_pass
+add_global_optimizer_pass
+add_aggressive_dce_pass
+add_strip_dead_prototypes_pass
+add_loop_rotate_pass
+add_tail_call_elimination_pass
+add_simplify_lib_calls_pass
 '''
 INITIAL_PASSES = INITIAL_PASSES.split('\n')
 INITIAL_PASSES = [line.strip() for line in INITIAL_PASSES]
