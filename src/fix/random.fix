@@ -86,8 +86,8 @@ type Random = box struct {
 };
 
 // Initializes `Random` with a seed.
-init_genrand64: U64 -> Random;
-init_genrand64 = |seed| (
+init_by_seed : U64 -> Random;
+init_by_seed = |seed| (
     let mt = Array::fill(_NN, 0_U64);
     let mt = mt.set!(0, seed);
     loop((mt, 1), |(mt, mti)| 
@@ -102,10 +102,10 @@ init_genrand64 = |seed| (
 );
 
 // Initializes `Random` with an array.
-init_by_array64: Array U64 -> Random;
-init_by_array64 = |init_key| (
+init_by_array : Array U64 -> Random;
+init_by_array = |init_key| (
     let key_length = init_key.get_size.to_I64;
-    let random = init_genrand64(19650218_U64);
+    let random = init_by_seed(19650218_U64);
     let Random { mt:mt, mti:mti } = random;
     let i: I64 = 1;
     let j: I64 = 0;
@@ -166,17 +166,17 @@ init_by_array64 = |init_key| (
 );
 
 // Generates a random number on [0, 2^64-1]-interval.
-genrand64_int64: Random -> (U64, Random);
-genrand64_int64 = |Random { mt:mt, mti:mti }| (
+generate_U64 : Random -> (U64, Random);
+generate_U64 = |Random { mt:mt, mti:mti }| (
     let (mt, mti) = if (mti < _NN) {
         (mt, mti)
     } else { 
         /* generate _NN words at one time */
 
-        /* if init_genrand64() has not been called, */
+        /* if init_by_seed() has not been called, */
         /* a default initial seed is used     */
         let (mt, mti) = if (mti == _NN+1) {
-            let Random { mt:mt, mti:mti } = init_genrand64(5489_U64);
+            let Random { mt:mt, mti:mti } = init_by_seed(5489_U64);
             (mt, mti)
         } else {
             (mt, mti)
@@ -229,59 +229,29 @@ genrand64_int64 = |Random { mt:mt, mti:mti }| (
 );
 
 // Generates a random number on [0, 2^63-1]-interval.
-genrand64_int63: Random -> (I64, Random);
-genrand64_int63 = |random| (
-    let (x, random) = random.genrand64_int64;
+generate_I64_nonneg : Random -> (I64, Random);
+generate_I64_nonneg = |random| (
+    let (x, random) = random.generate_U64;
     (x.shift_right(1_U64).to_I64, random)
 );
 
-// Generates a random number on [0,1]-real-interval.
-genrand64_real1: Random -> (F64, Random);
-genrand64_real1 = |random| (
-    let (x, random) = random.genrand64_int64;
+// Generates a random number on [0, 1]-real-interval.
+generate_F64 : Random -> (F64, Random);
+generate_F64 = |random| (
+    let (x, random) = random.generate_U64;
     (x.shift_right(11_U64).to_F64 * (1.0/9007199254740991.0), random)
 );
 
-// Generates a random number on [0,1)-real-interval.
-genrand64_real2: Random -> (F64, Random);
-genrand64_real2 = |random| (
-    let (x, random) = random.genrand64_int64;
+// Generates a random number on [0, 1)-real-interval.
+generate_F64_2 : Random -> (F64, Random);
+generate_F64_2 = |random| (
+    let (x, random) = random.generate_U64;
     (x.shift_right(11_U64).to_F64 * (1.0/9007199254740992.0), random)
 );
 
-// Generates a random number on (0,1)-real-interval.
-genrand64_real3: Random -> (F64, Random);
-genrand64_real3 = |random| (
-    let (x, random) = random.genrand64_int64;
+// Generates a random number on (0, 1)-real-interval.
+generate_F64_3 : Random -> (F64, Random);
+generate_F64_3 = |random| (
+    let (x, random) = random.generate_U64;
     ((x.shift_right(12_U64).to_F64 + 0.5) * (1.0/4503599627370496.0), random)
-);
-
-main : IO ();
-main = (
-    let init = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
-    let random = init_by_array64(init);
-    eval *println("1000 outputs of genrand64_int64()");
-    let random : Random = *loop_m (
-        (random, 0), |(random, i)|
-        if i >= 1000 {
-            break_m $ random
-        };
-        let (x, random) = genrand64_int64(random);
-        eval *print(x.to_string + " ");
-        eval *(if (i%5==4) { println("") } else { pure() });
-        continue_m $ (random, i + 1)
-    );
-    eval *println("");
-    eval *println("1000 outputs of genrand64_real2()");
-    let random : Random = *loop_m (
-        (random, 0), |(random, i)|
-        if i >= 1000 {
-            break_m $ random
-        };
-        let (x, random) = genrand64_real2(random);
-        eval *print (x.to_string + " ");
-        eval *(if (i%5==4) { println("") } else { pure() });
-        continue_m $ (random, i + 1)
-    );
-    pure()
 );

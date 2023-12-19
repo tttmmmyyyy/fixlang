@@ -622,6 +622,15 @@
   - [`sqrt : F64 -> F64`](#sqrt--f64---f64)
   - [`tan : F64 -> F64`](#tan--f64---f64)
   - [`tanh : F64 -> F64`](#tanh--f64---f64)
+- [module `Random`](#module-random)
+  - [`type Random`](#type-random)
+  - [`init_by_seed : U64 -> Random`](#init_by_seed--u64---random)
+  - [`init_by_array : Array U64 -> Random`](#init_by_array--array-u64---random)
+  - [`generate_U64 : Random -> (U64, Random)`](#generate_u64--random---u64-random)
+  - [`generate_I64_nonneg : Random -> (I64, Random)`](#generate_i64_nonneg--random---i64-random)
+  - [`generate_F64 : Random -> (F64, Random)`](#generate_f64--random---f64-random)
+  - [`generate_F64_2 : Random -> (F64, Random)`](#generate_f64_2--random---f64-random)
+  - [`generate_F64_3 : Random -> (F64, Random)`](#generate_f64_3--random---f64-random)
 - [module `Subprocess`](#module-subprocess)
   - [`type ExitStatus`](#type-exitstatus)
   - [`run_string : String -> Array String -> String -> IOFail ((String, String), ExitStatus)`](#run_string--string---array-string---string---iofail-string-string-exitstatus)
@@ -2294,6 +2303,32 @@ This is wrapper of C's tan.
 ## `tanh : F64 -> F64`
 Calculate the hyperbolic tangent of the argument.
 This is wrapper of C's tanh.
+
+# module `Random`
+
+## `type Random`
+Random number generator.
+
+## `init_by_seed : U64 -> Random`
+Initializes `Random` with a seed.
+
+## `init_by_array : Array U64 -> Random`
+Initializes `Random` with an array.
+
+## `generate_U64 : Random -> (U64, Random)`
+Generates a random number on [0, 2^64-1]-interval.
+
+## `generate_I64_nonneg : Random -> (I64, Random)`
+Generates a random number on [0, 2^63-1]-interval.
+
+## `generate_F64 : Random -> (F64, Random)`
+Generates a random number on [0, 1]-real-interval.
+
+## `generate_F64_2 : Random -> (F64, Random)`
+Generates a random number on [0, 1)-real-interval.
+
+## `generate_F64_3 : Random -> (F64, Random)`
+Generates a random number on (0, 1)-real-interval.
 
 # module `Subprocess`
 
