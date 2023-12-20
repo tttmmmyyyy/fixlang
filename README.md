@@ -52,8 +52,9 @@ Go to [Releases](https://github.com/tttmmmyyyy/fixlang/releases/), download pre-
 
 ## Document
 
-* [Document](/Document.md).
-* [Built-in libraries](/BuiltinLibraries.md).
+* [Document](/Document.md)
+* [Built-in libraries](/BuiltinLibraries.md)
+* [Change log](/CHANGELOG.md)
 * 紹介（日本語）：[HaskellとRustを足して2で割ったような関数型言語Fixを作っている話](https://qiita.com/tttmmmyyyy/items/ddb1c44efd81e3fc2370)
 
 ## Discord
