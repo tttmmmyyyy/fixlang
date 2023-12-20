@@ -5154,6 +5154,27 @@ pub fn test_random() {
 
 #[test]
 #[serial]
+pub fn test_float_inf() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let inf_f32 = F32::infinity;
+        eval assert_eq(|_|"", inf_f32.to_string, "inf");
+
+        let inf_f64 = F64::infinity;
+        eval assert_eq(|_|"", inf_f64.to_string, "inf");
+
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 

@@ -59,8 +59,6 @@ pub enum LLVMGenerator {
     IntRemBody(InlineLLVMIntRemBody),
     GetPtrOfBoxedValueFunctionBody(InlineLLVMGetPtrOfBoxedValueFunctionBody),
     MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody),
-    // AsyncTaskMakeTaskData(InlineLLVMAsyncTaskMakeTaskData),
-    // AsyncTaskDeleteTaskData(InlineLLVMAsyncTaskDeleteTaskData),
 }
 
 impl LLVMGenerator {

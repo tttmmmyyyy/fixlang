@@ -318,6 +318,18 @@ pub fn make_std_mod() -> Program {
     // Debug
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "abort"), abort_function());
 
+    // Numeric constants.
+    for type_name in [F32_NAME, F64_NAME] {
+        fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, type_name], "infinity"),
+            infinity_value(type_name),
+        );
+        // fix_module.add_global_value(
+        //     FullName::from_strs(&[STD_NAME, type_name], "quiet_nan"),
+        //     quiet_nan_value(type_name),
+        // );
+    }
+
     fix_module
 }
 
