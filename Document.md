@@ -642,7 +642,7 @@ The boolean type is `Bool` and its literals are `true` and `false`.
 
 ## Numbers and literals
 
-Types for numbers are `I32`, `I64` (signed integers), `U8`, `U32`, `U64` (unsigned integers) and `F32`, `F64` (floating point values).
+Types for numbers are `I8`, `I16`, `I32`, `I64` (signed integers), `U8`, `U16`, `U32`, `U64` (unsigned integers) and `F32`, `F64` (floating point values).
 
 Syntax for number literals is: 
 ```
