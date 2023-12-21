@@ -258,6 +258,7 @@
     - [F32](#f32)
       - [`abs : F32 -> F32`](#abs--f32---f32)
       - [`infinity : F32`](#infinity--f32)
+      - [`quiet_nan : F32`](#quiet_nan--f32)
       - [`to_I8 : F32 -> I8`](#to_i8--f32---i8)
       - [`to_U8 : F32 -> U8`](#to_u8--f32---u8)
       - [`to_I16 : F32 -> I16`](#to_i16--f32---i16)
@@ -286,6 +287,7 @@
     - [F64](#f64)
       - [`abs : F64 -> F64`](#abs--f64---f64)
       - [`infinity : F64`](#infinity--f64)
+      - [`quiet_nan : F32`](#quiet_nan--f32-1)
       - [`to_I8 : F64 -> I8`](#to_i8--f64---i8)
       - [`to_U8 : F64 -> U8`](#to_u8--f64---u8)
       - [`to_I16 : F64 -> I16`](#to_i16--f64---i16)
@@ -1007,6 +1009,9 @@ For `F32` literals, you need to add a suffix "_F32" to explicitly specify the ty
 
 #### `abs : F32 -> F32`
 #### `infinity : F32`
+#### `quiet_nan : F32`
+A floating number represented by `01111111111111111111111111111111` in binary.
+
 #### `to_I8 : F32 -> I8`
 #### `to_U8 : F32 -> U8`
 #### `to_I16 : F32 -> I16`
@@ -1047,6 +1052,9 @@ For `F64` literals, you can write or omit explicit type specifier suffix "_F64".
 
 #### `abs : F64 -> F64`
 #### `infinity : F64`
+#### `quiet_nan : F32`
+A floating number represented by `011111111111111111111111111111111111111111111111111111111111111` in binary.
+
 #### `to_I8 : F64 -> I8`
 #### `to_U8 : F64 -> U8`
 #### `to_I16 : F64 -> I16`

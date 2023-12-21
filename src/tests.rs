@@ -5154,18 +5154,28 @@ pub fn test_random() {
 
 #[test]
 #[serial]
-pub fn test_float_inf() {
+pub fn test_float_inf_nan() {
     let source = r##"
     module Main;
     import Debug;
     
     main : IO ();
     main = (
-        let inf_f32 = F32::infinity;
-        eval assert_eq(|_|"", inf_f32.to_string, "inf");
+        eval assert_eq(|_|"", F32::infinity.to_string, "inf");
 
-        let inf_f64 = F64::infinity;
-        eval assert_eq(|_|"", inf_f64.to_string, "inf");
+        eval assert_eq(|_|"", F64::infinity.to_string, "inf");
+
+        eval assert_eq(|_|"", (-F32::infinity).to_string, "-inf");
+
+        eval assert_eq(|_|"", (-F64::infinity).to_string, "-inf");
+
+        eval assert_eq(|_|"", F32::quiet_nan.to_bytes, [255_U8, 255_U8, 255_U8, 127_U8]);
+
+        eval assert_eq(|_|"", F64::quiet_nan.to_bytes, [255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 127_U8]);
+
+        eval assert_eq(|_|"", F32::quiet_nan.to_string, "nan");
+
+        eval assert_eq(|_|"", F64::quiet_nan.to_string, "nan");
 
         pure()
     );

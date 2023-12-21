@@ -324,10 +324,10 @@ pub fn make_std_mod() -> Program {
             FullName::from_strs(&[STD_NAME, type_name], "infinity"),
             infinity_value(type_name),
         );
-        // fix_module.add_global_value(
-        //     FullName::from_strs(&[STD_NAME, type_name], "quiet_nan"),
-        //     quiet_nan_value(type_name),
-        // );
+        fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, type_name], "quiet_nan"),
+            quiet_nan_value(type_name),
+        );
     }
 
     fix_module

@@ -3564,35 +3564,6 @@ pub fn mark_threaded_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct InlineLLVMSpecialFloatValueBody {
-//     type_name: String, // F32 or F64
-//     value:
-// }
-
-// impl InlineLLVMInfValueBody {
-//     pub fn generate<'c, 'm, 'b>(
-//         &self,
-//         gc: &mut GenerationContext<'c, 'm>,
-//         ty: &Rc<TypeNode>,
-//         rvo: Option<Object<'c>>,
-//         _borrowed_vars: &Vec<FullName>,
-//     ) -> Object<'c> {
-//         let ret = if rvo.is_some() {
-//             rvo.unwrap()
-//         } else {
-//             allocate_obj(ty.clone(), &vec![], None, gc, Some("ret@inf_value"))
-//         };
-//         let float_ty = ret
-//             .struct_ty(gc)
-//             .get_field_type_at_index(0)
-//             .unwrap()
-//             .into_float_type();
-//         ret.store_field_nocap(gc, 0, float_ty.const_float(INFINITY));
-//         ret
-//     }
-// }
-
 // `infinity` built-in value
 pub fn infinity_value(type_name: &str) -> (Rc<ExprNode>, Rc<Scheme>) {
     let ty = make_floating_ty(type_name).unwrap();
@@ -3607,47 +3578,22 @@ pub fn infinity_value(type_name: &str) -> (Rc<ExprNode>, Rc<Scheme>) {
     (expr, scm)
 }
 
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct InlineLLVMQuietNaNValueBody {
-//     type_name: String, // F32 or F64
-// }
+// `quiet_nan` built-in value
+pub fn quiet_nan_value(type_name: &str) -> (Rc<ExprNode>, Rc<Scheme>) {
+    let quet_nan_bits = u64::MAX ^ (1 << 63);
+    let nan_val: f64 = unsafe { std::mem::transmute(quet_nan_bits) };
 
-// impl InlineLLVMQuietNaNValueBody {
-//     pub fn generate<'c, 'm, 'b>(
-//         &self,
-//         gc: &mut GenerationContext<'c, 'm>,
-//         ty: &Rc<TypeNode>,
-//         rvo: Option<Object<'c>>,
-//         _borrowed_vars: &Vec<FullName>,
-//     ) -> Object<'c> {
-//         let ret = if rvo.is_some() {
-//             rvo.unwrap()
-//         } else {
-//             allocate_obj(ty.clone(), &vec![], None, gc, Some("ret@inf_value"))
-//         };
-//         let float_ty = ret
-//             .struct_ty(gc)
-//             .get_field_type_at_index(0)
-//             .unwrap()
-//             .into_float_type();
-//         ret.store_field_nocap(gc, 0, float_ty.const_float(INFINITY));
-//         ret
-//     }
-// }
-
-// // `quiet_nan` built-in value
-// pub fn quiet_nan_value(type_name: &str) -> (Rc<ExprNode>, Rc<Scheme>) {
-//     let ty = make_floating_ty(type_name).unwrap();
-//     let expr = expr_llvm(
-//         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: f64::NAN }),
-//         vec![],
-//         format!("quiet_nan_{}", type_name),
-//         ty,
-//         None,
-//     );
-//     let scm = Scheme::generalize(HashMap::default(), vec![], ty);
-//     (expr, scm)
-// }
+    let ty = make_floating_ty(type_name).unwrap();
+    let expr = expr_llvm(
+        LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: nan_val }),
+        vec![],
+        format!("quiet_nan_{}", type_name),
+        ty.clone(),
+        None,
+    );
+    let scm = Scheme::generalize(HashMap::default(), vec![], ty);
+    (expr, scm)
+}
 
 pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
     const TYVAR_NAME: &str = "a";
