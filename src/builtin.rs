@@ -381,12 +381,13 @@ pub fn make_floating_ty(name: &str) -> Option<Rc<TypeNode>> {
 }
 
 // Get numeric types from its name.
-pub fn make_numeric_ty(name: &str) -> Option<Rc<TypeNode>> {
+// Returns (type, is_float)
+pub fn make_numeric_ty(name: &str) -> (Option<Rc<TypeNode>>, bool) {
     let int_opt = make_integral_ty(name);
     if int_opt.is_some() {
-        return int_opt;
+        return (int_opt, false);
     }
-    make_floating_ty(name)
+    (make_floating_ty(name), true)
 }
 
 // Get dynamic object type.

@@ -1375,7 +1375,14 @@ fn parse_expr_number_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
             // Type of literal is explicitly specified.
             assert_eq!(pair.as_rule(), Rule::number_lit_type);
             let type_name = pair.as_str();
-            (make_numeric_ty(type_name).unwrap(), type_name)
+            let (ty, is_float_type) = make_numeric_ty(type_name);
+            if is_float != is_float_type {
+                error_exit_with_src(
+                    "Mismatch between literal format and specified type. Note that floating point literals must contain a decimal point.",
+                    &Some(span),
+                );
+            }
+            (ty.unwrap(), type_name)
         }
         None => {
             // Type of literal is implicit.
