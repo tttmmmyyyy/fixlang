@@ -2,6 +2,7 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
+use num_bigint::BigInt;
 use std::{cmp::min, mem::swap};
 
 use pest::error::Error;
@@ -1369,18 +1370,19 @@ fn parse_expr_number_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::number_lit_body);
     let val_str = pair.as_str();
     let is_float = val_str.contains(".");
-    let ty = match pairs.next() {
+    let (ty, ty_name) = match pairs.next() {
         Some(pair) => {
             // Type of literal is explicitly specified.
             assert_eq!(pair.as_rule(), Rule::number_lit_type);
-            make_numeric_ty(pair.as_str()).unwrap()
+            let type_name = pair.as_str();
+            (make_numeric_ty(type_name).unwrap(), type_name)
         }
         None => {
             // Type of literal is implicit.
             if is_float {
-                make_f64_ty()
+                (make_f64_ty(), F64_NAME)
             } else {
-                make_i64_ty()
+                (make_i64_ty(), I64_NAME)
             }
         }
     };
@@ -1398,8 +1400,9 @@ fn parse_expr_number_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
         let val = val.unwrap();
         expr_float_lit(val, ty, Some(span))
     } else {
-        let val = val_str.parse::<i128>();
-        if val.is_err() {
+        // Integral literal
+        let val = parse_integral_string_lit(val_str);
+        if val.is_none() {
             error_exit_with_src(
                 &format!(
                     "A literal string `{}` cannot be parsed as an integer.",
@@ -1409,8 +1412,60 @@ fn parse_expr_number_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {
             )
         }
         let val = val.unwrap();
+
+        // Check size.
+        let (ty_min, ty_max) = integral_ty_range(ty_name);
+        if !(ty_min <= val && val <= ty_max) {
+            error_exit_with_src(
+                &format!(
+                    "The value of an integer literal `{}` is out of range of `{}`.",
+                    val_str, ty_name
+                ),
+                &Some(span),
+            )
+        }
+
+        // Now stringify val and parse it again as i128.
+        let val = val.to_str_radix(10).parse::<i128>().unwrap();
         expr_int_lit(val as u64, ty, Some(span))
     }
+}
+
+fn parse_integral_string_lit(s: &str) -> Option<BigInt> {
+    if s.len() == 0 {
+        return None;
+    }
+    let split = s.split('e').collect::<Vec<_>>();
+    if split.len() > 2 {
+        return None;
+    }
+    if split.len() == 1 {
+        // 'e' is not contained.
+        return BigInt::parse_bytes(s.as_bytes(), 10);
+    }
+    assert_eq!(split.len(), 2);
+    let num = BigInt::parse_bytes(split[0].as_bytes(), 10);
+    if num.is_none() {
+        return None;
+    }
+    let num = num.unwrap();
+    let exp = BigInt::parse_bytes(split[1].as_bytes(), 10);
+    if exp.is_none() {
+        return None;
+    }
+    let exp = exp.unwrap();
+    if exp < BigInt::from(0 as i32) {
+        // Negative exponent is not allowed in integral literal.
+        return None;
+    }
+    // Return num * 10^exp.
+    let mut ret = num;
+    let mut i = BigInt::from(0);
+    while i < exp {
+        ret *= 10;
+        i += 1;
+    }
+    Some(ret)
 }
 
 fn parse_expr_nullptr_lit(pair: Pair<Rule>, src: &SourceFile) -> Rc<ExprNode> {

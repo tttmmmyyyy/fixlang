@@ -14,7 +14,7 @@ pub fn test0() {
 
             main : IO ();
             main = (
-                eval assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 10);
+                eval assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 1e1_I64);
                 pure()
             );
         "#;
@@ -2504,7 +2504,7 @@ pub fn test96() {
             
             main : IO ();
             main = (
-                eval assert_eq(|_|"", -1_U8, 255_U8);
+                eval assert_eq(|_|"", 255_U8, 255_U8);
                 eval assert_eq(|_|"", 'A', 65_U8);
                 eval assert_eq(|_|"", '\0', 0_U8);
                 eval assert_eq(|_|"", '\t', 9_U8);
@@ -2528,21 +2528,21 @@ pub fn test97() {
 
         main : IO ();
         main = (
-            eval assert_eq(|_|"", -(1_U8), 255_U8);
-            eval assert_eq(|_|"", 255_U8 + 3_U8, 2_U8);
-            eval assert_eq(|_|"", 1_U8 - 3_U8, 254_U8);
-            eval assert_eq(|_|"", 20_U8 * 30_U8, 88_U8);
-            eval assert_eq(|_|"", 10_U8 / 3_U8, 3_U8);
-            eval assert_eq(|_|"", 10_U8 % 3_U8, 1_U8);
-            eval assert_eq(|_|"", -1_U8 > 0_U8, true);
-            eval assert_eq(|_|"", -1_U8 >= 0_U8, true);
+            eval assert_eq(|_|"1", -(1_U8), 255_U8);
+            eval assert_eq(|_|"2", 255_U8 + 3_U8, 2_U8);
+            eval assert_eq(|_|"3", 1_U8 - 3_U8, 254_U8);
+            eval assert_eq(|_|"4", 20_U8 * 30_U8, 88_U8);
+            eval assert_eq(|_|"5", 10_U8 / 3_U8, 3_U8);
+            eval assert_eq(|_|"6", 10_U8 % 3_U8, 1_U8);
+            eval assert_eq(|_|"7", 255_U8 > 0_U8, true);
+            eval assert_eq(|_|"8", 255_U8 >= 0_U8, true);
 
-            eval assert_eq(|_|"", 2147483647_I32 + 2_I32, -2147483647_I32);
-            eval assert_eq(|_|"", -2147483647_I32 - 2_I32, 2147483647_I32);
-            eval assert_eq(|_|"", 2147483647_I32 * 2_I32, -2_I32);
-            eval assert_eq(|_|"", 10_I32 / -3_I32, -3_I32);
-            eval assert_eq(|_|"", 10_I32 % -3_I32, 1_I32);
-            eval assert_eq(|_|"", -1_I32 < 0_I32, true);
+            eval assert_eq(|_|"9", 2147483647_I32 + 2_I32, -2147483647_I32);
+            eval assert_eq(|_|"10", -2147483647_I32 - 2_I32, 2147483647_I32);
+            eval assert_eq(|_|"11", 2147483647_I32 * 2_I32, -2_I32);
+            eval assert_eq(|_|"12", 10_I32 / -3_I32, -3_I32);
+            eval assert_eq(|_|"13", 10_I32 % -3_I32, 1_I32);
+            eval assert_eq(|_|"14", -1_I32 < 0_I32, true);
             
             pure()
         );
@@ -2625,16 +2625,16 @@ pub fn test99() {
     let tys = &[
         I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME,
     ];
-    fn cast(num: i64, ty: &str) -> i64 {
+    fn cast(num: i128, ty: &str) -> i128 {
         match ty {
-            I8_NAME => (num as i8) as i64,
-            U8_NAME => (num as u8) as i64,
-            I16_NAME => (num as i16) as i64,
-            U16_NAME => (num as u16) as i64,
-            I32_NAME => (num as i32) as i64,
-            U32_NAME => (num as u32) as i64,
-            I64_NAME => num,
-            U64_NAME => (num as u64) as i64,
+            I8_NAME => (num as i8) as i128,
+            U8_NAME => (num as u8) as i128,
+            I16_NAME => (num as i16) as i128,
+            U16_NAME => (num as u16) as i128,
+            I32_NAME => (num as i32) as i128,
+            U32_NAME => (num as u32) as i128,
+            I64_NAME => (num as i64) as i128,
+            U64_NAME => (num as u64) as i128,
             _ => {
                 unreachable!()
             }
@@ -2642,7 +2642,7 @@ pub fn test99() {
     }
     for ty1 in tys {
         for ty2 in tys {
-            let num = rng.gen::<i64>();
+            let num = rng.gen::<i128>();
             let num1 = cast(num, ty1);
             let num2 = cast(num1, ty2);
             let lhs = format!("{}_{}.to_{}", num1, ty1, ty2);

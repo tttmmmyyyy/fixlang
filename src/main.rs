@@ -6,6 +6,7 @@ extern crate pest_derive;
 extern crate serial_test;
 extern crate build_time;
 extern crate chrono;
+extern crate num_bigint;
 extern crate rand;
 extern crate regex;
 extern crate serde;

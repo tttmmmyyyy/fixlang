@@ -1,3 +1,4 @@
+use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 
 // Implement built-in functions, types, etc.
@@ -343,6 +344,28 @@ pub fn make_integral_ty(name: &str) -> Option<Rc<TypeNode>> {
         Some(make_u64_ty())
     } else {
         None
+    }
+}
+
+pub fn integral_ty_range(name: &str) -> (BigInt, BigInt) {
+    if name == I8_NAME {
+        (BigInt::from(i8::MIN), BigInt::from(i8::MAX))
+    } else if name == U8_NAME {
+        (BigInt::from(0), BigInt::from(u8::MAX))
+    } else if name == I16_NAME {
+        (BigInt::from(i16::MIN), BigInt::from(i16::MAX))
+    } else if name == U16_NAME {
+        (BigInt::from(0), BigInt::from(u16::MAX))
+    } else if name == I32_NAME {
+        (BigInt::from(i32::MIN), BigInt::from(i32::MAX))
+    } else if name == U32_NAME {
+        (BigInt::from(0), BigInt::from(u32::MAX))
+    } else if name == I64_NAME {
+        (BigInt::from(i64::MIN), BigInt::from(i64::MAX))
+    } else if name == U64_NAME {
+        (BigInt::from(0), BigInt::from(u64::MAX))
+    } else {
+        panic!("Not an integral type: {}", name);
     }
 }
 

@@ -718,7 +718,7 @@ Literals:
 Literals:
 
 - `{number}_U8`
-    - Example: `-1_U8 == 255_U8`
+    - Example: `42_U8`
 - `'{character}'`
   - Example: 
     - `'A'` for `65_U8`
@@ -889,7 +889,7 @@ Literals:
 Literals:
 
 - `{number}_U32`
-    - Example: `-1_U32 == 4294967295_U32`
+    - Example: `42_U32`
 
 #### `maximum : U32`
 #### `minimum : U32`
@@ -969,7 +969,7 @@ Literals:
 Literals:
 
 - `{number}_U64`
-    - Example: `-1_U64 == 18446744073709551615_U64`
+    - Example: `42_U64`
 
 #### `maximum : U64`
 #### `minimum : U64`
