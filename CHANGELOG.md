@@ -8,11 +8,15 @@
 - Add `Random` built-in module.
 - Add `Std::F32::infinity`, `Std::F64::infinity`, `Std::F32::quiet_nan`, `Std::F64::quiet_nan`.
 
+### Changed
+- Overflowing integer literals now result in a compile-time error.
+
 ### Fixed
 - Improve performance of `Std::IO::_read_line_inner` and `Std::IO::loop_lines`, `Std::IO::loop_lines_io` (#6).
 - Fix an issue that causes parse error when there are local / global names starting with `true`, `false` or `nullptr` (#8).
 - Fix an issue where the `ToString` implementation of `Ptr` was causing heap buffer overflow (#11).
 - Fix an issue where `Std::eprint` and `Std::eprintln` wrote the output to stderr, not to stdout (#13).
+- Fixed an issue where exponential notation of integer literals such as 3e10 was not working (#14).
 
 ## [0.1.0] - 2023-10-24
 
