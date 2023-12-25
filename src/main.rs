@@ -26,6 +26,7 @@ mod object;
 mod parser;
 mod runner;
 mod runtime;
+mod sourcefile;
 mod stdlib;
 #[cfg(test)]
 mod tests;
@@ -67,6 +68,7 @@ use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use runner::*;
 use runtime::*;
+use sourcefile::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
