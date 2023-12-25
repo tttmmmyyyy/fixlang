@@ -328,6 +328,16 @@ impl Program {
         fix_mod
     }
 
+    // Add `Std::TupleN` type if not exists.
+    pub fn add_tuple_defn(&mut self, tuple_size: usize) {
+        let defn = tuple_defn(tuple_size as u32);
+        let defined = self.type_defns.iter().any(|td| td.name == defn.name);
+        if defined {
+            return;
+        }
+        self.type_defns.push(defn);
+    }
+
     // If this program consists of single module, returns its name.
     pub fn get_name_if_single_module(&self) -> Name {
         let linked_mods = self.linked_mods();

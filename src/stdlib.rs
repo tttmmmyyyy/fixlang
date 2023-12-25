@@ -22,11 +22,14 @@ pub fn make_std_mod() -> Program {
         ),
     );
 
-    // Types
+    // `LoopResult` type.
     fix_module.type_defns.push(loop_result_defn());
-    for i in 0..=TUPLE_SIZE_MAX {
+
+    // `TupleN` types.
+    // Other tuples are defined on-demand in parser.
+    for i in 0..=TUPLE_SIZE_BASE {
         if i != 1 {
-            fix_module.type_defns.push(tuple_defn(i));
+            fix_module.add_tuple_defn(i as usize);
         }
     }
 

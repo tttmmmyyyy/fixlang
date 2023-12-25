@@ -162,7 +162,9 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile) -> Program {
     fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls, trait_aliases);
     fix_mod.add_import_statements(import_statements);
-    todo!("Here, define all tuple types required.");
+    for tuple_size in ctx.tuple_sizes {
+        fix_mod.add_tuple_defn(tuple_size);
+    }
 
     fix_mod
 }
@@ -613,7 +615,7 @@ fn parse_expr_with_new_do(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNo
     // Here use new DoContext.
     let old_doctx = std::mem::replace(&mut ctx.do_context, DoContext::default());
     let expr = parse_expr(pair, ctx);
-    ctx.do_context.expand_binds(expr);
+    let expr = ctx.do_context.expand_binds(expr);
 
     // Restore old DoContext.
     ctx.do_context = old_doctx;
@@ -1180,8 +1182,10 @@ fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
     if exprs.len() == 1 {
         exprs[0].clone()
     } else {
+        let tuple_size = exprs.len();
+        ctx.tuple_sizes.push(tuple_size);
         expr_make_struct(
-            tycon(make_tuple_name(exprs.len() as u32)),
+            tycon(make_tuple_name(tuple_size as u32)),
             exprs
                 .iter()
                 .cloned()
@@ -1567,7 +1571,9 @@ fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<TypeNode> {
     if types.len() == 1 {
         types[0].clone()
     } else {
-        let mut res = type_tycon(&tycon(make_tuple_name(types.len() as u32)));
+        let tuple_size = types.len();
+        ctx.tuple_sizes.push(tuple_size);
+        let mut res = type_tycon(&tycon(make_tuple_name(tuple_size as u32)));
         for ty in types {
             res = type_tyapp(res, ty);
         }
@@ -1606,8 +1612,10 @@ fn parse_pattern_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<PatternNo
     let pats = pairs
         .map(|pair| parse_pattern(pair, ctx))
         .collect::<Vec<_>>();
+    let tuple_size = pats.len();
+    ctx.tuple_sizes.push(tuple_size);
     PatternNode::make_struct(
-        tycon(make_tuple_name(pats.len() as u32)),
+        tycon(make_tuple_name(tuple_size as u32)),
         pats.iter()
             .enumerate()
             .map(|(i, pat)| (i.to_string(), pat.clone()))
