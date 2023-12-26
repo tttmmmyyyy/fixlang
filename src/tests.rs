@@ -5185,6 +5185,22 @@ pub fn test_float_inf_nan() {
 
 #[test]
 #[serial]
+pub fn test_large_tuple() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let x = (1,2,3,4,5,6,7,8,9,10);
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
