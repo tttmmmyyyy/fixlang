@@ -287,6 +287,9 @@ impl<'de> serde::de::Visitor<'de> for UpdateDateVisitor {
 // Program of fix a collection of modules.
 // A program can link another program which consists of a single module.
 pub struct Program {
+    // List of tuple sizes used in this program.
+    pub used_tuple_sizes: Vec<u32>,
+
     pub type_defns: Vec<TypeDefn>,
     pub global_values: HashMap<FullName, GlobalValue>,
     pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
@@ -321,6 +324,7 @@ impl Program {
             type_env: Default::default(),
             last_updates: Default::default(),
             last_affected_dates: Default::default(),
+            used_tuple_sizes: Vec::from_iter(0..=TUPLE_SIZE_BASE),
         };
         fix_mod.add_visible_mod(&module_name, &module_name);
         fix_mod.add_visible_mod(&module_name, &STD_NAME.to_string());
@@ -329,13 +333,8 @@ impl Program {
     }
 
     // Add `Std::TupleN` type if not exists.
-    pub fn add_tuple_defn(&mut self, tuple_size: usize) {
-        let defn = tuple_defn(tuple_size as u32);
-        let defined = self.type_defns.iter().any(|td| td.name == defn.name);
-        if defined {
-            return;
-        }
-        self.type_defns.push(defn);
+    pub fn add_tuple_defn(&mut self, tuple_size: u32) {
+        self.type_defns.push(tuple_defn(tuple_size));
     }
 
     // If this program consists of single module, returns its name.

@@ -11,7 +11,7 @@ use super::*;
 
 struct ParseContext {
     // The list of sizes of tuples used in this module.
-    tuple_sizes: Vec<usize>,
+    tuple_sizes: Vec<u32>,
     // Context for parsing *-operator.
     do_context: DoContext,
     // The source code.
@@ -162,9 +162,7 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile) -> Program {
     fix_mod.add_type_defns(type_defns);
     fix_mod.add_traits(trait_infos, trait_impls, trait_aliases);
     fix_mod.add_import_statements(import_statements);
-    for tuple_size in ctx.tuple_sizes {
-        fix_mod.add_tuple_defn(tuple_size);
-    }
+    fix_mod.used_tuple_sizes.append(&mut ctx.tuple_sizes);
 
     fix_mod
 }
@@ -1180,7 +1178,7 @@ fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
         exprs[0].clone()
     } else {
         let tuple_size = exprs.len();
-        ctx.tuple_sizes.push(tuple_size);
+        ctx.tuple_sizes.push(tuple_size as u32);
         expr_make_struct(
             tycon(make_tuple_name(tuple_size as u32)),
             exprs
@@ -1569,7 +1567,7 @@ fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<TypeNode> {
         types[0].clone()
     } else {
         let tuple_size = types.len();
-        ctx.tuple_sizes.push(tuple_size);
+        ctx.tuple_sizes.push(tuple_size as u32);
         let mut res = type_tycon(&tycon(make_tuple_name(tuple_size as u32)));
         for ty in types {
             res = type_tyapp(res, ty);
@@ -1610,7 +1608,7 @@ fn parse_pattern_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<PatternNo
         .map(|pair| parse_pattern(pair, ctx))
         .collect::<Vec<_>>();
     let tuple_size = pats.len();
-    ctx.tuple_sizes.push(tuple_size);
+    ctx.tuple_sizes.push(tuple_size as u32);
     PatternNode::make_struct(
         tycon(make_tuple_name(tuple_size as u32)),
         pats.iter()

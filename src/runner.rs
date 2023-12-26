@@ -93,6 +93,15 @@ fn build_module<'c>(
     // Calculate last affected dates.
     fix_mod.set_last_affected_dates();
 
+    // Add tuple types used in this program.
+    let mut used_tuple_sizes = fix_mod.used_tuple_sizes.clone();
+    // Make elements of used_tuple_sizes unique.
+    used_tuple_sizes.sort();
+    used_tuple_sizes.dedup();
+    for tuple_size in used_tuple_sizes {
+        fix_mod.add_tuple_defn(tuple_size);
+    }
+
     // Calculate list of type constructors.
     fix_mod.calculate_type_env();
 

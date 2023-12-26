@@ -25,14 +25,6 @@ pub fn make_std_mod() -> Program {
     // `LoopResult` type.
     fix_module.type_defns.push(loop_result_defn());
 
-    // `TupleN` types.
-    // Other tuples are defined on-demand in parser.
-    for i in 0..=TUPLE_SIZE_BASE {
-        if i != 1 {
-            fix_module.add_tuple_defn(i as usize);
-        }
-    }
-
     // Traits
     fix_module.trait_env.add_trait(eq_trait());
     fix_module.trait_env.add_trait(add_trait());
