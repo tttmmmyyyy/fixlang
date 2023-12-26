@@ -1334,6 +1334,9 @@ impl Program {
         for (module, dt) in other.last_updates {
             self.last_updates.insert(module, dt);
         }
+
+        // Merge used_tuple_sizes.
+        self.used_tuple_sizes.append(&mut other.used_tuple_sizes);
     }
 
     // Link built-in modules following unsolved import statements.
