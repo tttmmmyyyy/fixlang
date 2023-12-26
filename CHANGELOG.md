@@ -10,6 +10,7 @@
 
 ### Changed
 - Overflowing integer literals now result in a compile-time error.
+- Now tuple types (`Std::Tuple{N}`) for any large N are defined if they are used. In older versions, only tuples upto N=4 were defined.
 
 ### Fixed
 - Improve performance of `Std::IO::_read_line_inner` and `Std::IO::loop_lines`, `Std::IO::loop_lines_io` (#6).
