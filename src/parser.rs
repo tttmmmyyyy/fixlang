@@ -1166,10 +1166,7 @@ fn parse_expr_if(expr: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
 fn parse_expr_do(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
     assert!(pair.as_rule() == Rule::expr_do);
     let pair = pair.into_inner().next().unwrap();
-    let mut msc = DoContext::default();
-    let expr = parse_expr(pair, ctx);
-    let expr = msc.expand_binds(expr);
-    expr
+    parse_expr_with_new_do(pair, ctx)
 }
 
 fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
