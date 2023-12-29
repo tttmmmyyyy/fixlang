@@ -19,6 +19,7 @@
 - Fix an issue where `Std::eprint` and `Std::eprintln` wrote the output to stderr, not to stdout (#13).
 - Fixed an issue where exponential notation of integer literals such as 3e10 was not working (#14).
 - Fixed an issue where parsing floating point literal without decimal point (e.g., `1_F32`) causes the compiler to panic.
+- Fixed an issue on linking dynamic library (PR #20).
 
 ## [0.1.0] - 2023-10-24
 
