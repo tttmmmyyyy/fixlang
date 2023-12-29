@@ -62,6 +62,7 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
         }
         // Load dynamically linked libraries specified by user.
         for (lib_name, _) in &config.linked_libraries {
+            com = com.arg(format!("-Wl,--no-as-needed"));
             com = com.arg(format!("-l{}", lib_name));
         }
         let output = com.output().expect("Failed to run cc.");
@@ -508,7 +509,6 @@ pub fn build_file(mut config: Configuration) {
     }
 
     let output = Command::new("gcc")
-        .args(libs_opts)
         .arg("-Wno-unused-command-line-argument")
         .arg("-no-pie")
         .arg("-Wl,--gc-sections")
@@ -516,6 +516,7 @@ pub fn build_file(mut config: Configuration) {
         .arg(exec_path.to_str().unwrap())
         .arg(obj_path.to_str().unwrap())
         .arg(runtime_obj_path.to_str().unwrap())
+        .args(libs_opts)
         .output()
         .expect("Failed to run gcc.");
     if output.stderr.len() > 0 {
