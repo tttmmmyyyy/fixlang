@@ -5072,6 +5072,34 @@ pub fn test_number_of_processors() {
 
 #[test]
 #[serial]
+pub fn test_async_task_dedicated_thread() {
+    let source = r##"
+    module Main;
+    import AsyncTask;
+
+    main : IO ();
+    main = (
+        let num_procs = AsyncTask::number_of_processors;
+        eval *num_procs.to_string.println;
+        let num_threads = num_procs * 2;
+        let tasks = Iterator::range(0, num_threads).fold([], |tasks, i| (
+            let task = AsyncIOTask::make_on_dedicated_thread(println $ "thread number: " + i.to_string);
+            tasks.push_back(task)
+        ));
+        loop_m(tasks, |tasks| (
+            if tasks.is_empty { break_m $ () };
+            let task = tasks.get_last.as_some;
+            let tasks = tasks.pop_back;
+            eval *task.get;
+            continue_m $ tasks
+        ))
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_get_args() {
     let source = r##"
     module Main;
