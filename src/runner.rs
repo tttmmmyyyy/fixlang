@@ -315,14 +315,14 @@ pub fn run_source(source: &str, mut config: Configuration) {
         }
         if output.stdout.len() > 0 {
             println!(
-                "{:?}",
+                "{}",
                 String::from_utf8(output.stdout)
                     .unwrap_or("(failed to parse stdout from a.out as UTF8.)".to_string()),
             );
         }
         if output.stderr.len() > 0 {
             eprintln!(
-                "{:?}",
+                "{}",
                 String::from_utf8(output.stderr)
                     .unwrap_or("(failed to parse stderr from a.out as UTF8.)".to_string())
             );
@@ -501,7 +501,7 @@ pub fn build_file(mut config: Configuration) {
 
         if output.stderr.len() > 0 {
             eprintln!(
-                "{:?}",
+                "{}",
                 String::from_utf8(output.stderr)
                     .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
             );
@@ -521,7 +521,7 @@ pub fn build_file(mut config: Configuration) {
         .expect("Failed to run gcc.");
     if output.stderr.len() > 0 {
         eprintln!(
-            "{:?}",
+            "{}",
             String::from_utf8(output.stderr)
                 .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
         );

@@ -553,8 +553,8 @@ void *fixruntime_threadpool_on_thread(void *);
 void fixruntime_threadpool_push_task(Task *task);
 Task *fixruntime_threadpool_pop_task();
 void fixruntime_threadpool_destroy_task(Task *task);
-void fixruntime_threadpool_run_task(Task *task);
-void *fixruntime_threadpool_run_task_void(void *task);
+void fixruntime_threadpool_execute_task(Task *task);
+void *fixruntime_threadpool_execute_task_void(void *task);
 
 // Status of a task.
 uint8_t TASK_STATUS_WAITING = 0;
@@ -753,7 +753,7 @@ Task *fixruntime_threadpool_create_task(TaskData data, void (*release_func)(void
     {
         // Run the task on a dedicated thread.
         pthread_t thread;
-        if (pthread_create(&thread, NULL, fixruntime_threadpool_run_task_void, task))
+        if (pthread_create(&thread, NULL, fixruntime_threadpool_execute_task_void, task))
         {
             perror("[runtime] Failed to create thread.");
             return NULL;
@@ -833,12 +833,12 @@ void *fixruntime_threadpool_on_thread(void *data)
             // The thread pool is terminated.
             return NULL;
         }
-        fixruntime_threadpool_run_task(task);
+        fixruntime_threadpool_execute_task(task);
     }
 }
 
 // Run a task on this thread.
-void fixruntime_threadpool_run_task(Task *task)
+void fixruntime_threadpool_execute_task(Task *task)
 {
     pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
     if (task->status == TASK_STATUS_COMPLETED || task->status == TASK_STATUS_RUNNING)
@@ -866,9 +866,9 @@ void fixruntime_threadpool_run_task(Task *task)
     }
 }
 
-void *fixruntime_threadpool_run_task_void(void *task)
+void *fixruntime_threadpool_execute_task_void(void *task)
 {
-    fixruntime_threadpool_run_task((Task *)task);
+    fixruntime_threadpool_execute_task((Task *)task);
     return NULL;
 }
 
