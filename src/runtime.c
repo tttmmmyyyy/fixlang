@@ -728,7 +728,7 @@ Task *fixruntime_threadpool_pop_task()
     return task;
 }
 
-// Create a task and push it to the queue.
+// Create a task and push it to the queue or execute it on a dedicated thread.
 Task *fixruntime_threadpool_create_task(TaskData data, uint8_t on_dedicated_thread)
 {
     Task *task = (Task *)malloc(sizeof(Task));
@@ -754,7 +754,7 @@ Task *fixruntime_threadpool_create_task(TaskData data, uint8_t on_dedicated_thre
         pthread_t thread;
         if (pthread_create(&thread, NULL, fixruntime_threadpool_run_task_void, task))
         {
-            fixruntime_threadpool_release_task(task);
+            perror("[runtime] Failed to create thread.");
             return NULL;
         }
         if (pthread_detach(thread))
