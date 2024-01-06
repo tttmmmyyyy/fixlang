@@ -65,12 +65,12 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             com = com.arg(format!("-Wl,--no-as-needed"));
             com = com.arg(format!("-l{}", lib_name));
         }
-        let output = com.output().expect("Failed to run cc.");
+        let output = com.output().expect("Failed to run gcc.");
         if output.stderr.len() > 0 {
             eprintln!(
                 "{:?}",
                 String::from_utf8(output.stderr)
-                    .unwrap_or("(failed to stringify error message of cc.)".to_string())
+                    .unwrap_or("(failed to stringify error message of gcc.)".to_string())
             );
         }
     }
