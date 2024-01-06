@@ -2064,9 +2064,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             return;
         }
         if self.config.async_task {
-            // Before check leak, terminate all async tasks.
-            self.call_runtime(RuntimeFunctions::ThreadPoolTerminate, &[]);
-            // And perform mark_global again.
+            // Perform mark_global again.
             // If we don't do this, the test case `test_async_task_captured_by_global` will fail.
             let mut global_objs = vec![];
             for (_, var) in self.global.iter() {
