@@ -25,7 +25,7 @@ get = |task| (
     let (task_handle, task_data) = task.@dtor.@value;
     eval CALL_C[() fixruntime_threadpool_wait_task(Ptr), task_handle];
     eval task; // Do not call destructor of `task` before calling `fixruntime_threadpool_wait_task`.
-    task_data.@_result.@(0) // Change this to _unsafe_get_unchecked.
+    task_data.@_result.@(0) // TODO: Change this to _unsafe_get_unchecked.
 );
 
 // Make a task which performs a computation asynchronously.
