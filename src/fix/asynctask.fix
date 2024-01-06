@@ -21,8 +21,8 @@ _make_inner : Bool -> (() -> a) -> Task a;
 _make_inner = |on_dedicated_thread, func| (
     let func = mark_threaded(func);
     let task_data = TaskData { _func : |_| [func()], _result : [] };
-    let on_deion_dedicated_thread = if on_dedicated_thread { 1_U8 } else { 0_U8 };
-    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr), task_data._unsafe_get_ptr_of_boxed_value, on_dedicated_thread];
+    let on_dedicated_thread = if on_dedicated_thread { 1_U8 } else { 0_U8 };
+    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr, U8), task_data._unsafe_get_ptr_of_boxed_value, on_dedicated_thread];
     let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
         eval CALL_C[() fixruntime_threadpool_delete_task(Ptr), task_handle];
         eval task_data; // Do not deallocate `task_data` before calling `fixruntime_threadpool_delete_task`.
@@ -125,8 +125,7 @@ namespace AsyncIOTask {
     make : IO a -> IOTask a;
     make = |io| IOTask { _task : make(|_| io._unsafe_perform) };
 
-    // Make a task which performs an I/O action asynchronously.
-    // In contrast to `make`, the task created by this function is exected in a dedicated thread.
+    // An `IO` version of `AsyncTask::make_on_dedicated_thread`.
     make_on_dedicated_thread : IO a -> IOTask a;
     make_on_dedicated_thread = |io| IOTask { _task : make_on_dedicated_thread(|_| io._unsafe_perform) };
 }

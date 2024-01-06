@@ -554,6 +554,7 @@ void fixruntime_threadpool_push_task(Task *task);
 Task *fixruntime_threadpool_pop_task();
 void fixruntime_threadpool_release_task(Task *task);
 void fixruntime_threadpool_run_task(Task *task);
+void *fixruntime_threadpool_run_task_void(void *task);
 
 // Status of a task.
 uint8_t TASK_STATUS_WAITING = 0;
@@ -751,7 +752,7 @@ Task *fixruntime_threadpool_create_task(TaskData data, uint8_t on_dedicated_thre
     {
         // Run the task on a dedicated thread.
         pthread_t thread;
-        if (pthread_create(&thread, NULL, fixruntime_threadpool_run_task, task))
+        if (pthread_create(&thread, NULL, fixruntime_threadpool_run_task_void, task))
         {
             fixruntime_threadpool_release_task(task);
             return NULL;
@@ -871,6 +872,12 @@ void fixruntime_threadpool_run_task(Task *task)
     {
         fixruntime_threadpool_release_task(task);
     }
+}
+
+void *fixruntime_threadpool_run_task_void(void *task)
+{
+    fixruntime_threadpool_run_task((Task *)task);
+    return NULL;
 }
 
 // Delete the task.

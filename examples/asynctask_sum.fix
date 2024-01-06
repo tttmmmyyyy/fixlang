@@ -10,7 +10,7 @@ main = (
             continue $ (sum + i, i + 1)
         ))
     );
-    let n = 1000000000;
+    let n = 10000000;
     // Compute the sum of numbers from 0 to n/2 - 1.
     // This task will be executed asynchronously (if you are using multi-core CPU).
     let sum_former = AsyncTask::make(|_| sum_range(0, n/2));
