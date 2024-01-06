@@ -522,7 +522,6 @@ Thread pool implementation.
 - Create task object by `fixruntime_threadpool_create_task`.
     - This function takes `TaskFunc` and `TaskData` as arguments, and call `TaskFunc` with `TaskData` when the task is executed.
 - Wait for a task to be completed by `fixruntime_threadpool_wait_task`.
-- Get `TaskData` object from task object by `fixruntime_threadpool_get_data`.
 - Delete task by `fixruntime_threadpool_delete_task`.
     - A task must be deleted exactly once.
     - A task cannot be waited after it is deleted.
@@ -543,7 +542,6 @@ void fixruntime_threadpool_initialize();
 Task *fixruntime_threadpool_create_task(TaskData data);
 void fixruntime_threadpool_wait_task(Task *task);
 void fixruntime_threadpool_delete_task(Task *task);
-TaskData fixruntime_threadpool_get_data(Task *task);
 
 // External functions.
 void (*ptr_fixruntime_threadpool_run_task)(TaskData);
@@ -794,12 +792,6 @@ void fixruntime_threadpool_delete_task(Task *task)
     {
         fixruntime_threadpool_release_task(task);
     }
-}
-
-// Get the task data from the task.
-TaskData fixruntime_threadpool_get_data(Task *task)
-{
-    return task->data;
 }
 
 // Run each task on a thread.
