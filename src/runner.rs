@@ -68,7 +68,7 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
         let output = com.output().expect("Failed to run gcc.");
         if output.stderr.len() > 0 {
             eprintln!(
-                "{:?}",
+                "{}",
                 String::from_utf8(output.stderr)
                     .unwrap_or("(failed to stringify error message of gcc.)".to_string())
             );
