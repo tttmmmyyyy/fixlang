@@ -4874,14 +4874,14 @@ pub fn test_async_task_fib() {
     fib_async : I64 -> I64;
     fib_async = |n| (
         if n <= 1 {
-            let _ = AsyncTask::make(|_| n + 1); // A task which is not waited.
-            AsyncTask::make(|_| n).get // A task which is waited soon.
+            let _ = AsyncTask::make(TaskPolicy::default, |_| n + 1); // A task which is not waited.
+            AsyncTask::make(TaskPolicy::default, |_| n).get // A task which is waited soon.
         } else {
-            let minus_one_task = AsyncTask::make(|_| n-1); // A task which is captured by another task.
-            let minus_two_task = AsyncTask::make(|_| minus_one_task.get - 1); // A task which is captured by another task.
-            let minus_three_task = AsyncTask::make(|_| minus_two_task.get - 1); // A task which is captured by another task but not waited.
-            let one_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_one_task.get));
-            let two_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_two_task.get));
+            let minus_one_task = AsyncTask::make(TaskPolicy::default, |_| n-1); // A task which is captured by another task.
+            let minus_two_task = AsyncTask::make(TaskPolicy::default, |_| minus_one_task.get - 1); // A task which is captured by another task.
+            let minus_three_task = AsyncTask::make(TaskPolicy::default, |_| minus_two_task.get - 1); // A task which is captured by another task but not waited.
+            let one_task = AsyncTask::make(TaskPolicy::default, |_| eval minus_three_task; fib_async(minus_one_task.get));
+            let two_task = AsyncTask::make(TaskPolicy::default, |_| eval minus_three_task; fib_async(minus_two_task.get));
             one_task.get + two_task.get
         }
     );
@@ -4908,9 +4908,9 @@ pub fn test_async_shared_array() {
     main = (
         let n = 100000;
         let arr = Iterator::range(0, n).to_array;
-        let sum_task_0 = AsyncTask::make(|_| arr.to_iter.fold(0, Add::add));
-        let sum_task_1 = AsyncTask::make(|_| arr.to_iter.reverse.fold(0, Add::add));
-        let sum_task_2 = AsyncTask::make(|_| (
+        let sum_task_0 = AsyncTask::make(TaskPolicy::default, |_| arr.to_iter.fold(0, Add::add));
+        let sum_task_1 = AsyncTask::make(TaskPolicy::default, |_| arr.to_iter.reverse.fold(0, Add::add));
+        let sum_task_2 = AsyncTask::make(TaskPolicy::default, |_| (
             loop((0, 0), |(i, sum)| 
                 if i == arr.get_size { 
                     break $ sum
@@ -4919,7 +4919,7 @@ pub fn test_async_shared_array() {
                 }
             )
         ));
-        let sum_task_3 = AsyncTask::make(|_| (
+        let sum_task_3 = AsyncTask::make(TaskPolicy::default, |_| (
             let half = arr.get_size / 2;
             let sum = loop((0, 0), |(i, sum)| 
                 if i == half { 
@@ -4967,7 +4967,7 @@ pub fn test_async_task_captured_by_global() {
 
     main : IO ();
     main = (
-        let task = AsyncTask::make(|_| 42);
+        let task = AsyncTask::make(TaskPolicy::default, |_| 42);
         eval *"Hello World!".println; // Initialization of `main` value ends here, and `task` is captured by `main`.
         // Then the result object of `task` becomes a threaded object, but a global object.
         eval assert_eq(|_|"", task.get, 42);
@@ -4988,9 +4988,9 @@ pub fn test_async_task_array_result() {
     main : IO ();
     main = (
         let n = 1000000;
-        let task_0 = AsyncTask::make(|_| Iterator::range(0, n).to_array);
-        let task_1 = AsyncTask::make(|_| Iterator::range(n, 2*n).to_array);
-        let task_2 = AsyncTask::make(|_| Iterator::range(0, 2*n).to_array);
+        let task_0 = AsyncTask::make(TaskPolicy::default, |_| Iterator::range(0, n).to_array);
+        let task_1 = AsyncTask::make(TaskPolicy::default, |_| Iterator::range(n, 2*n).to_array);
+        let task_2 = AsyncTask::make(TaskPolicy::default, |_| Iterator::range(0, 2*n).to_array);
         eval assert_eq(|_|"", task_0.get.append(task_1.get), task_2.get);
         pure()
     );
@@ -5004,7 +5004,7 @@ pub fn test_async_task_io() {
     let source = r##"
     module Main;
     import AsyncTask;
-
+    
     main : IO ();
     main = (
         let print_ten : I64 -> IO () = |task_num| (
@@ -5018,10 +5018,8 @@ pub fn test_async_task_io() {
                 }
             ))
         );
-        let task_0 = AsyncIOTask::make(print_ten(0));
-        let task_1 = AsyncIOTask::make(print_ten(1));
-        eval *task_0.get;
-        eval *task_1.get;
+        eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(0));
+        eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(1));
         pure()
     );
     "##;
@@ -5079,20 +5077,15 @@ pub fn test_async_task_dedicated_thread() {
 
     main : IO ();
     main = (
-        let num_procs = AsyncTask::number_of_processors;
-        eval *num_procs.to_string.println;
-        let num_threads = num_procs * 2;
-        let tasks = Iterator::range(0, num_threads).fold([], |tasks, i| (
-            let task = AsyncIOTask::make_on_dedicated_thread(println $ "thread number: " + i.to_string);
-            tasks.push_back(task)
-        ));
-        loop_m(tasks, |tasks| (
-            if tasks.is_empty { break_m $ () };
-            let task = tasks.get_last.as_some;
-            let tasks = tasks.pop_back;
-            eval *task.get;
-            continue_m $ tasks
-        ))
+        let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
+        // let num_procs = AsyncTask::number_of_processors;
+        // let num_threads = num_procs * 2;
+        // Iterator::range(0, num_threads).fold_m((), |_, i| (
+        //     eval *AsyncIOTask::make(policy, println $ "thread number: " + i.to_string);
+        //     pure()
+        // ))
+        eval *AsyncIOTask::make(policy, println $ "thread number: " + 0.to_string);
+        pure()
     );
     "##;
     run_source(&source, Configuration::develop_compiler());

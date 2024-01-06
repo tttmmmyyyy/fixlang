@@ -7,6 +7,10 @@ module AsyncTask;
 // A type for a computation task that can be run asynchronously.
 type Task a = unbox struct { dtor : Destructor (Ptr, TaskData a) };
 
+// A policy which represents how a task should be executed.
+// This is a bit flag: mask values are defined in namespace `TaskPolicy`.
+type TaskPolicy = U32;
+
 // A type to store a task and its result. 
 // This type should be used only by implementation of this library.
 // TODO: We can change this to enum to release task function earlier.
@@ -14,28 +18,6 @@ type TaskData a = box struct {
     _func : () -> Array a, // We need a type of boxed `Option`, and actually we use `Array` of length at most one instead.
     _result : Array a
 };
-
-// Make a task which performs a computation asynchronously.
-// The first boolean argument specifies whether the task should be executed in a dedicated thread or in the thread pool.
-_make_inner : Bool -> (() -> a) -> Task a;
-_make_inner = |on_dedicated_thread, func| (
-    // Create TaskData.
-    let func = mark_threaded(func);
-    let task_data = TaskData { _func : |_| [func()], _result : [] };
-
-    // Get task handle issued by the runtime by cloning (retaining) the task data.
-    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr, Ptr, U8), 
-        task_data._unsafe_get_retained_ptr_of_boxed_value,
-        task_data._unsafe_get_release_function_of_boxed_value,
-        if on_dedicated_thread { 1_U8 } else { 0_U8 }
-    ];
-
-    // In the destructor, release the task handle.
-    let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
-        CALL_C[() fixruntime_threadpool_release_task(Ptr), task_handle]
-    ));
-    Task { dtor : dtor }
-);
 
 // Get the result of a computation task.
 // This function blocks the current thread until the task is finished.
@@ -70,7 +52,7 @@ get = |task| (
 //     let n = 1000000000;
 //     // Compute the sum of numbers from 0 to n/2 - 1.
 //     // This task will be executed asynchronously (if you are using multi-core CPU).
-//     let sum_former = AsyncTask::make(|_| sum_range(0, n/2));
+//     let sum_former = AsyncTask::make(TaskPolicy::default, |_| sum_range(0, n/2));
 //     // Compute the sum of numbers from n/2 to n.
 //     // We perfom this in the current thread while waiting for the result of the former task.
 //     let sum_latter = sum_range(n/2, n);
@@ -84,13 +66,25 @@ get = |task| (
 //         " = " + sum.to_string + "."
 // );
 // ```
-make : (() -> a) -> Task a;
-make = |func| _make_inner(false, func);
+make : TaskPolicy -> (() -> a) -> Task a;
+make = |policy, func| (
+    // Create TaskData.
+    let func = mark_threaded(func);
+    let task_data = TaskData { _func : |_| [func()], _result : [] };
 
-// Make a task which performs a computation asynchronously.
-// In contrast to `make`, the task created by this function is executed in a dedicated thread.
-make_on_dedicated_thread : (() -> a) -> Task a;
-make_on_dedicated_thread = |func| _make_inner(true, func);
+    // Get task handle issued by the runtime by cloning (retaining) the task data.
+    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr, Ptr, U32), 
+        task_data._unsafe_get_retained_ptr_of_boxed_value,
+        task_data._unsafe_get_release_function_of_boxed_value,
+        policy
+    ];
+
+    // In the destructor, release the task handle.
+    let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
+        CALL_C[() fixruntime_threadpool_release_task(Ptr), task_handle]
+    ));
+    Task { dtor : dtor }
+);
 
 // Get the number of processors (CPU cores) currently available.
 // This is implemented by calling `sysconf(_SC_NPROCESSORS_ONLN)`.
@@ -127,17 +121,27 @@ namespace AsyncIOTask {
     //             }
     //         ))
     //     );
-    //     let task_0 = AsyncIOTask::make(print_ten(0));
-    //     let task_1 = AsyncIOTask::make(print_ten(1));
-    //     eval *task_0.get;
-    //     eval *task_1.get;
+    //     eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(0));
+    //     eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(1));
     //     pure()
     // );
     // ```
-    make : IO a -> IOTask a;
-    make = |io| IOTask { _task : make(|_| io._unsafe_perform) };
+    make : TaskPolicy -> IO a -> IO (IOTask a);
+    make = |policy, io| pure $ IOTask { _task : make(policy, |_| io._unsafe_perform) };
+}
 
-    // An `IO` version of `AsyncTask::make_on_dedicated_thread`.
-    make_on_dedicated_thread : IO a -> IOTask a;
-    make_on_dedicated_thread = |io| IOTask { _task : make_on_dedicated_thread(|_| io._unsafe_perform) };
+namespace TaskPolicy {
+    // Default task policy.
+    default : TaskPolicy;
+    default = 0_U32;
+
+    // By default policy, a task will be canceled when the task object is destructed.
+    // This task policy runs the task even after the task object is destructed.
+    run_after_destructed : TaskPolicy;
+    run_after_destructed = 1_U32.shift_left(1_U32);
+
+    // By default policy, a task will be executed on a thread in the thread pool.
+    // This task policy runs the task on a dedicated thread.
+    on_dedicated_thread : TaskPolicy;
+    on_dedicated_thread = 1_U32.shift_left(0_U32);
 }
