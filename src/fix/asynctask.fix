@@ -127,7 +127,12 @@ namespace AsyncIOTask {
     // );
     // ```
     make : TaskPolicy -> IO a -> IO (IOTask a);
-    make = |policy, io| pure $ IOTask { _task : make(policy, |_| io._unsafe_perform) };
+    make = |policy, io| (
+        // NOTE: we must not create AsyncTask in this function; we should create it in the IO action.
+        // Otherwise, user can run IO action in a pure function.
+        // So we cannot implement this function as `pure $ IOTask { ... }`.
+        IO { _data : |_| IOTask { _task : make(policy, |_| io._unsafe_perform) } }
+    );
 }
 
 namespace TaskPolicy {

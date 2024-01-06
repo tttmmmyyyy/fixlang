@@ -5078,14 +5078,12 @@ pub fn test_async_task_dedicated_thread() {
     main : IO ();
     main = (
         let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
-        // let num_procs = AsyncTask::number_of_processors;
-        // let num_threads = num_procs * 2;
-        // Iterator::range(0, num_threads).fold_m((), |_, i| (
-        //     eval *AsyncIOTask::make(policy, println $ "thread number: " + i.to_string);
-        //     pure()
-        // ))
-        eval *AsyncIOTask::make(policy, println $ "thread number: " + 0.to_string);
-        pure()
+        let num_procs = AsyncTask::number_of_processors;
+        let num_threads = num_procs * 2;
+        Iterator::range(0, num_threads).fold_m((), |_, i| (
+            eval *AsyncIOTask::make(policy, println $ "thread number: " + i.to_string);
+            pure()
+        ))
     );
     "##;
     run_source(&source, Configuration::develop_compiler());
