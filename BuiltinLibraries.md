@@ -495,7 +495,8 @@
     - [`()`](#)
       - [`impl () : Eq`](#impl---eq)
   - [Functions](#functions)
-    - [`_unsafe_get_ptr_of_boxed_value : a -> Ptr`](#_unsafe_get_ptr_of_boxed_value--a---ptr)
+    - [`_unsafe_get_release_function_of_boxed_value : a -> Ptr`](#_unsafe_get_release_function_of_boxed_value--a---ptr)
+    - [`_unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`](#_unsafe_get_retained_ptr_of_boxed_value--a---ptr)
     - [`abort : Lazy a`](#abort--lazy-a)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
     - [`fix : ((a -> b) -> a -> b) -> a -> b`](#fix--a---b---a---b---a---b)
@@ -1763,9 +1764,16 @@ Literals:
 
 ## Functions
 
-### `_unsafe_get_ptr_of_boxed_value : a -> Ptr`
+### `_unsafe_get_release_function_of_boxed_value : a -> Ptr`
 
-Get a pointer to a boxed value.
+Get a function pointer (of type `void (*)(void*)`) to release a boxed value.
+This function is intended to be used with `_unsafe_get_retained_ptr_of_boxed_value`.
+
+### `_unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`
+
+Get a retained pointer to a boxed value.
+This function is intended to be used to share ownership of boxed objects with C code.
+To release the object in C code, call it on the function pointer obtained by `_unsafe_get_release_function_of_boxed_value`.
 
 ### `abort : Lazy a`
 

@@ -522,16 +522,16 @@ Thread pool implementation.
 - Create task object by `fixruntime_threadpool_create_task`.
     - This function takes `TaskFunc` and `TaskData` as arguments, and call `TaskFunc` with `TaskData` when the task is executed.
 - Wait for a task to be completed by `fixruntime_threadpool_wait_task`.
-- Delete task by `fixruntime_threadpool_delete_task`.
-    - A task must be deleted exactly once.
-    - A task cannot be waited after it is deleted.
-    - After a task is deleted, it is guaranteed that it is not running and it will not be runned in a future.
+- Release task by `fixruntime_threadpool_release_task`.
+    - A task must be released exactly once.
+    - A task cannot be waited after it is released.
 */
 
 typedef int *TaskData;
 typedef struct ITask
 {
     TaskData data;
+    void (*release_func)(void *);
     struct ITask *next; // A pointer to the next task in the queue.
     uint8_t status;
     uint8_t refcnt;
@@ -541,9 +541,9 @@ typedef struct ITask
 
 // Interface functions.
 void fixruntime_threadpool_initialize();
-Task *fixruntime_threadpool_create_task(TaskData data, uint8_t on_dedicated_thread);
+Task *fixruntime_threadpool_create_task(TaskData data, void (*release_func)(void *), uint8_t on_dedicated_thread);
 void fixruntime_threadpool_wait_task(Task *task);
-void fixruntime_threadpool_delete_task(Task *task);
+void fixruntime_threadpool_release_task(Task *task);
 
 // External functions.
 void (*ptr_fixruntime_threadpool_run_task)(TaskData);
@@ -552,7 +552,7 @@ void (*ptr_fixruntime_threadpool_run_task)(TaskData);
 void *fixruntime_threadpool_on_thread(void *);
 void fixruntime_threadpool_push_task(Task *task);
 Task *fixruntime_threadpool_pop_task();
-void fixruntime_threadpool_release_task(Task *task);
+void fixruntime_threadpool_destroy_task(Task *task);
 void fixruntime_threadpool_run_task(Task *task);
 void *fixruntime_threadpool_run_task_void(void *task);
 
@@ -665,7 +665,7 @@ void fixruntime_threadpool_terminate()
     while (task)
     {
         Task *next = task->next;
-        fixruntime_threadpool_delete_task(task);
+        fixruntime_threadpool_release_task(task);
         task = next;
     }
     task_queue_first = NULL;
@@ -729,10 +729,11 @@ Task *fixruntime_threadpool_pop_task()
 }
 
 // Create a task and push it to the queue or execute it on a dedicated thread.
-Task *fixruntime_threadpool_create_task(TaskData data, uint8_t on_dedicated_thread)
+Task *fixruntime_threadpool_create_task(TaskData data, void (*release_func)(void *), uint8_t on_dedicated_thread)
 {
     Task *task = (Task *)malloc(sizeof(Task));
     task->data = data;
+    task->release_func = release_func;
     task->next = NULL;
     task->status = TASK_STATUS_WAITING;
     task->refcnt = 2; // One ownership for this library, and one for the user.
@@ -759,7 +760,7 @@ Task *fixruntime_threadpool_create_task(TaskData data, uint8_t on_dedicated_thre
         }
         if (pthread_detach(thread))
         {
-            fixruntime_threadpool_release_task(task);
+            fixruntime_threadpool_destroy_task(task);
             return NULL;
         }
     }
@@ -803,9 +804,8 @@ void fixruntime_threadpool_wait_task(Task *task)
     }
 }
 
-// Delete a task.
-// After a task is deleted, it is guaranteed that it is not running and it will not be runned in a future.
-void fixruntime_threadpool_delete_task(Task *task)
+// Release a task.
+void fixruntime_threadpool_release_task(Task *task)
 {
     pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
     if (task->status == TASK_STATUS_WAITING)
@@ -814,19 +814,11 @@ void fixruntime_threadpool_delete_task(Task *task)
         task->status = TASK_STATUS_COMPLETED;
         // We don't need to signal condition variable because it is assured that no thread is waiting for it.
     }
-    else
-    {
-        while (task->status == TASK_STATUS_RUNNING)
-        {
-            // If the task is already running, wait for the task to be completed.
-            pthread_cond_wait_or_exit(&task->cond, &task->mutex, "[runtime] Failed to wait condition variable.");
-        }
-    }
     uint8_t refcnt = --task->refcnt;
     pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
     if (refcnt == 0)
     {
-        fixruntime_threadpool_release_task(task);
+        fixruntime_threadpool_destroy_task(task);
     }
 }
 
@@ -856,7 +848,7 @@ void fixruntime_threadpool_run_task(Task *task)
         pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
         if (refcnt == 0)
         {
-            fixruntime_threadpool_release_task(task);
+            fixruntime_threadpool_destroy_task(task);
         }
         return;
     }
@@ -870,7 +862,7 @@ void fixruntime_threadpool_run_task(Task *task)
     pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
     if (refcnt == 0)
     {
-        fixruntime_threadpool_release_task(task);
+        fixruntime_threadpool_destroy_task(task);
     }
 }
 
@@ -880,9 +872,10 @@ void *fixruntime_threadpool_run_task_void(void *task)
     return NULL;
 }
 
-// Delete the task.
-void fixruntime_threadpool_release_task(Task *task)
+// Free the task object.
+void fixruntime_threadpool_destroy_task(Task *task)
 {
+    (*task->release_func)(task->data);
     if (pthread_mutex_destroy(&task->mutex))
     {
         perror("[runtime] Failed to destroy mutex for a task.");

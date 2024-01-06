@@ -244,8 +244,12 @@ pub fn make_std_mod() -> Program {
         is_unique_function(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "_unsafe_get_ptr_of_boxed_value"),
-        get_ptr_of_boxed_value_function(),
+        FullName::from_strs(&[STD_NAME], "_unsafe_get_retained_ptr_of_boxed_value"),
+        get_retained_ptr_of_boxed_value_function(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], "_unsafe_get_release_function_of_boxed_value"),
+        get_release_function_of_boxed_value(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "mark_threaded"),

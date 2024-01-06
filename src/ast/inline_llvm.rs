@@ -57,8 +57,11 @@ pub enum LLVMGenerator {
     IntDivBody(InlineLLVMIntDivBody),
     FloatDivBody(InlineLLVMFloatDivBody),
     IntRemBody(InlineLLVMIntRemBody),
-    GetPtrOfBoxedValueFunctionBody(InlineLLVMGetPtrOfBoxedValueFunctionBody),
+    GetRetainedPtrOfBoxedValueFunctionBody(InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody),
     MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody),
+    GetReleaseFunctionOfBoxedValueFunctionBody(
+        InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
+    ),
 }
 
 impl LLVMGenerator {
@@ -123,8 +126,13 @@ impl LLVMGenerator {
             LLVMGenerator::IntDivBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::FloatDivBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::IntRemBody(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::GetPtrOfBoxedValueFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::GetRetainedPtrOfBoxedValueFunctionBody(x) => {
+                x.generate(gc, ty, rvo, bvs)
+            }
             LLVMGenerator::MarkThreadedFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => {
+                x.generate(gc, ty, rvo, bvs)
+            }
         }
     }
 

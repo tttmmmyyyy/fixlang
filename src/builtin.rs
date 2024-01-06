@@ -3472,11 +3472,11 @@ pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMGetPtrOfBoxedValueFunctionBody {
+pub struct InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
     var_name: String,
 }
 
-impl InlineLLVMGetPtrOfBoxedValueFunctionBody {
+impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3489,7 +3489,6 @@ impl InlineLLVMGetPtrOfBoxedValueFunctionBody {
         if !obj.is_box(gc.type_env()) {
             error_exit("Std::_unsafe_get_ptr_of_boxed_value cannot be called on an unboxed value.")
         }
-        gc.release(obj.clone());
         let ptr = obj.ptr(gc);
         let ret = if rvo.is_some() {
             rvo.unwrap()
@@ -3504,10 +3503,11 @@ impl InlineLLVMGetPtrOfBoxedValueFunctionBody {
         };
         ret.store_field_nocap(gc, 0, ptr);
         ret
+        // Since the object should be retained by calling this function, we do not release `obj`.
     }
 }
 
-pub fn get_ptr_of_boxed_value_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_retained_ptr_of_boxed_value_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
@@ -3520,13 +3520,113 @@ pub fn get_ptr_of_boxed_value_function() -> (Rc<ExprNode>, Rc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_llvm(
-            LLVMGenerator::GetPtrOfBoxedValueFunctionBody(
-                InlineLLVMGetPtrOfBoxedValueFunctionBody {
+            LLVMGenerator::GetRetainedPtrOfBoxedValueFunctionBody(
+                InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
                     var_name: VAR_NAME.to_string(),
                 },
             ),
             vec![FullName::local(VAR_NAME)],
-            format!("_unsafe_get_ptr_of_boxed_value({})", VAR_NAME),
+            format!("_unsafe_get_retained_ptr_of_boxed_value({})", VAR_NAME),
+            ret_type,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+    var_name: String,
+}
+
+impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ret_ty: &Rc<TypeNode>,
+        rvo: Option<Object<'c>>,
+        _borrowed_vars: &Vec<FullName>,
+    ) -> Object<'c> {
+        // Get argument
+        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        if !obj.is_box(gc.type_env()) {
+            error_exit(
+                "Std::_unsafe_get_release_function_of_boxed_value cannot be called on an unboxed value.",
+            )
+        }
+        gc.release(obj.clone());
+
+        // Get function pointer to release function.
+        let release_function_name = format!("release#{}", obj.ty.to_string_normalize());
+        let func = if let Some(func) = gc.module.get_function(&release_function_name) {
+            func
+        } else {
+            // Define release function.
+            let release_function_ty = gc
+                .context
+                .void_type()
+                .fn_type(&[ptr_to_object_type(gc.context).into()], false);
+            let release_function =
+                gc.module
+                    .add_function(&release_function_name, release_function_ty, None);
+            let bb = gc.context.append_basic_block(release_function, "entry");
+            let _builder_guard = gc.push_builder();
+            gc.builder().position_at_end(bb);
+
+            // Get pointer to object.
+            let obj_ptr = release_function
+                .get_nth_param(0)
+                .unwrap()
+                .into_pointer_value();
+            // Create object.
+            let obj = Object::new(obj_ptr, obj.ty.clone());
+            // Release object.
+            gc.release(obj);
+            // Return.
+            gc.builder().build_return(None);
+
+            release_function
+        };
+        let func_ptr = func.as_global_value().as_pointer_value();
+        let func_ptr = gc.cast_pointer(func_ptr, ptr_to_object_type(gc.context));
+
+        let ret = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                make_ptr_ty(),
+                &vec![],
+                None,
+                gc,
+                Some("ret_val@_unsafe_get_release_function_of_boxed_value"),
+            )
+        };
+        ret.store_field_nocap(gc, 0, func_ptr);
+        ret
+    }
+}
+
+pub fn get_release_function_of_boxed_value() -> (Rc<ExprNode>, Rc<Scheme>) {
+    const TYPE_NAME: &str = "a";
+    const VAR_NAME: &str = "x";
+    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let ret_type = make_ptr_ty();
+    let scm = Scheme::generalize(
+        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![],
+        type_fun(obj_type.clone(), ret_type.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(VAR_NAME)],
+        expr_llvm(
+            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(
+                InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+                    var_name: VAR_NAME.to_string(),
+                },
+            ),
+            vec![FullName::local(VAR_NAME)],
+            format!("_unsafe_get_release_function_of_boxed_value({})", VAR_NAME),
             ret_type,
             None,
         ),
