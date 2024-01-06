@@ -535,7 +535,7 @@ pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> 
 
     // Extract task function from task data.
     let task_func = ObjectFieldType::get_struct_field_noclone(gc, &task_data, 0);
-    gc.retain(task_func.clone());
+    gc.retain(task_func.clone()); // TODO: here, it is better to replace `task_func` in `task_data` to another function which does nothing.
 
     // Call task function.
     let unit_val: Object<'_> = allocate_obj(make_unit_ty(), &vec![], None, gc, Some("unit_value"));
