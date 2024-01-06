@@ -1,9 +1,6 @@
 module AsyncTask;
 // This module provides a way to run a task asynchronously.
 // 
-// Parallel nor preemptive multitasking is expected but not guaranteed.
-// When a thread starts to wait the result of a task which is still not running, then it will be executed in the waiting thread itself.
-// 
 // Importing this module automatically enables `--threaded` flag of the compiler. 
 // Note that this causes some overhead even for a single-threaded program.
 
@@ -18,6 +15,22 @@ type TaskData a = box struct {
     _result : Array a
 };
 
+// Make a task which performs a computation asynchronously.
+// The first boolean argument specifies whether the task should be executed in a dedicated thread or in the thread pool.
+_make_inner : Bool -> (() -> a) -> Task a;
+_make_inner = |on_dedicated_thread, func| (
+    let func = mark_threaded(func);
+    let task_data = TaskData { _func : |_| [func()], _result : [] };
+    let on_deion_dedicated_thread = if on_dedicated_thread { 1_U8 } else { 0_U8 };
+    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr), task_data._unsafe_get_ptr_of_boxed_value, on_dedicated_thread];
+    let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
+        eval CALL_C[() fixruntime_threadpool_delete_task(Ptr), task_handle];
+        eval task_data; // Do not deallocate `task_data` before calling `fixruntime_threadpool_delete_task`.
+        ()
+    ));
+    Task { dtor : dtor }
+);
+
 // Get the result of a computation task.
 // This function blocks the current thread until the task is finished.
 get : Task a -> a;
@@ -29,7 +42,10 @@ get = |task| (
 );
 
 // Make a task which performs a computation asynchronously.
-// The task is queued and will be executed in a thread later.
+// The task is queued and will be executed in a thread pool later.
+// NOTE: 
+// Parallel nor preemptive multitasking is not guaranteed.
+// In particular, when a thread starts to wait the result of a task which is still not running, then it will be executed in the waiting thread itself.
 
 // Example:
 // ```
@@ -63,17 +79,12 @@ get = |task| (
 // );
 // ```
 make : (() -> a) -> Task a;
-make = |func| (
-    let func = mark_threaded(func);
-    let task_data = TaskData { _func : |_| [func()], _result : [] };
-    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr), task_data._unsafe_get_ptr_of_boxed_value];
-    let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
-        eval CALL_C[() fixruntime_threadpool_delete_task(Ptr), task_handle];
-        eval task_data; // Do not deallocate `task_data` before calling `fixruntime_threadpool_delete_task`.
-        ()
-    ));
-    Task { dtor : dtor }
-);
+make = |func| _make_inner(false, func);
+
+// Make a task which performs a computation asynchronously.
+// In contrast to `make`, the task created by this function is executed in a dedicated thread.
+make_on_dedicated_thread : (() -> a) -> Task a;
+make_on_dedicated_thread = |func| _make_inner(true, func);
 
 namespace AsyncIOTask {
 
@@ -84,10 +95,40 @@ namespace AsyncIOTask {
     get : IOTask a -> IO a;
     get = |IOTask { _task : task }| IO { _data : |_| task.get };
 
-    // Make a task which performs an I/O action asynchronously.
+    // An `IO` version of `AsyncTask::make`.
+    // 
+    // Example:
+    // ```
+    // module Main;
+    // import AsyncTask;
+    // 
+    // main : IO ();
+    // main = (
+    //     let print_ten : I64 -> IO () = |task_num| (
+    //         loop_m(0, |i| (
+    //             if i == 10 {
+    //                 break_m $ ()
+    //             } else {
+    //                 let msg = "task number: " + task_num.to_string + ", i: " + i.to_string;
+    //                 eval *msg.println;
+    //                 continue_m $ i + 1
+    //             }
+    //         ))
+    //     );
+    //     let task_0 = AsyncIOTask::make(print_ten(0));
+    //     let task_1 = AsyncIOTask::make(print_ten(1));
+    //     eval *task_0.get;
+    //     eval *task_1.get;
+    //     pure()
+    // );
+    // ```
     make : IO a -> IOTask a;
     make = |io| IOTask { _task : make(|_| io._unsafe_perform) };
 
+    // Make a task which performs an I/O action asynchronously.
+    // In contrast to `make`, the task created by this function is exected in a dedicated thread.
+    make_on_dedicated_thread : IO a -> IOTask a;
+    make_on_dedicated_thread = |io| IOTask { _task : make_on_dedicated_thread(|_| io._unsafe_perform) };
 }
 
 // Get the number of processors (CPU cores) currently available.

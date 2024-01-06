@@ -541,7 +541,7 @@ typedef struct ITask
 
 // Interface functions.
 void fixruntime_threadpool_initialize();
-Task *fixruntime_threadpool_create_task(TaskData data);
+Task *fixruntime_threadpool_create_task(TaskData data, uint8_t on_dedicated_thread);
 void fixruntime_threadpool_wait_task(Task *task);
 void fixruntime_threadpool_delete_task(Task *task);
 
@@ -553,6 +553,7 @@ void *fixruntime_threadpool_on_thread(void *);
 void fixruntime_threadpool_push_task(Task *task);
 Task *fixruntime_threadpool_pop_task();
 void fixruntime_threadpool_release_task(Task *task);
+void fixruntime_threadpool_run_task(Task *task);
 
 // Status of a task.
 uint8_t TASK_STATUS_WAITING = 0;
@@ -727,7 +728,7 @@ Task *fixruntime_threadpool_pop_task()
 }
 
 // Create a task and push it to the queue.
-Task *fixruntime_threadpool_create_task(TaskData data)
+Task *fixruntime_threadpool_create_task(TaskData data, uint8_t on_dedicated_thread)
 {
     Task *task = (Task *)malloc(sizeof(Task));
     task->data = data;
@@ -744,7 +745,29 @@ Task *fixruntime_threadpool_create_task(TaskData data)
         perror("[runtime] Failed to initialize condition variable for a task.");
         exit(1);
     }
-    fixruntime_threadpool_push_task(task);
+
+    // Run the task on a dedicated thread or in a thread pool.
+    if (on_dedicated_thread)
+    {
+        // Run the task on a dedicated thread.
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, fixruntime_threadpool_run_task, task))
+        {
+            fixruntime_threadpool_release_task(task);
+            return NULL;
+        }
+        if (pthread_detach(thread))
+        {
+            fixruntime_threadpool_release_task(task);
+            return NULL;
+        }
+    }
+    else
+    {
+        // Run the task in a thread pool.
+        fixruntime_threadpool_push_task(task);
+    }
+
     return task;
 }
 
@@ -817,30 +840,36 @@ void *fixruntime_threadpool_on_thread(void *data)
             // The thread pool is terminated.
             return NULL;
         }
-        pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
-        if (task->status == TASK_STATUS_COMPLETED || task->status == TASK_STATUS_RUNNING)
-        {
-            // The task is already completed or running in another thread, then do nothing.
-            uint8_t refcnt = --task->refcnt;
-            pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
-            if (refcnt == 0)
-            {
-                fixruntime_threadpool_release_task(task);
-            }
-            continue;
-        }
-        task->status = TASK_STATUS_RUNNING;
-        pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
-        (*ptr_fixruntime_threadpool_run_task)(task->data);
-        pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
-        task->status = TASK_STATUS_COMPLETED;
-        pthread_cond_broadcast_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
+        fixruntime_threadpool_run_task(task);
+    }
+}
+
+// Run a task on this thread.
+void fixruntime_threadpool_run_task(Task *task)
+{
+    pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
+    if (task->status == TASK_STATUS_COMPLETED || task->status == TASK_STATUS_RUNNING)
+    {
+        // The task is already completed or running in another thread, then do nothing.
         uint8_t refcnt = --task->refcnt;
         pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
         if (refcnt == 0)
         {
             fixruntime_threadpool_release_task(task);
         }
+        return;
+    }
+    task->status = TASK_STATUS_RUNNING;
+    pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
+    (*ptr_fixruntime_threadpool_run_task)(task->data);
+    pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex.");
+    task->status = TASK_STATUS_COMPLETED;
+    pthread_cond_broadcast_or_exit(&task->cond, "[runtime] Failed to signal condition variable.");
+    uint8_t refcnt = --task->refcnt;
+    pthread_mutex_unlock_or_exit(&task->mutex, "[runtime] Failed to unlock mutex.");
+    if (refcnt == 0)
+    {
+        fixruntime_threadpool_release_task(task);
     }
 }
 
