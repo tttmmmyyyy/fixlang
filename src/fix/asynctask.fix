@@ -65,8 +65,8 @@ make = |policy, func| (
 
     // Get task handle issued by the runtime by cloning (retaining) the task data.
     let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr, Ptr, U32), 
-        task_data._unsafe_get_retained_ptr_of_boxed_value,
-        task_data._unsafe_get_release_function_of_boxed_value,
+        task_data.unsafe_get_retained_ptr_of_boxed_value,
+        task_data.unsafe_get_release_function_of_boxed_value,
         policy
     ];
 
