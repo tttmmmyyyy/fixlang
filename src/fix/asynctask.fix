@@ -7,10 +7,6 @@ module AsyncTask;
 // A type for a computation task that can be run asynchronously.
 type Task a = unbox struct { dtor : Destructor (Ptr, TaskData a) };
 
-// A policy which represents how a task should be executed.
-// This is a bit flag: mask values are defined in namespace `TaskPolicy`.
-type TaskPolicy = U32;
-
 // A type to store a task and its result. 
 // This type should be used only by implementation of this library.
 // TODO: We can change this to enum to release task function earlier.
@@ -18,6 +14,10 @@ type TaskData a = box struct {
     _func : () -> Array a, // We need a type of boxed `Option`, and actually we use `Array` of length at most one instead.
     _result : Array a
 };
+
+// A type to represent how a task should be executed.
+// This is a bit flag: mask values are defined in namespace `TaskPolicy`.
+type TaskPolicy = U32;
 
 // Get the result of a computation task.
 // This function blocks the current thread until the task is finished.

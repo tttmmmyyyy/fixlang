@@ -703,12 +703,9 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
             RuntimeFunctions::ThreadPoolInitialize,
             threadpool_initialize,
         );
-        if gc.config.sanitize_memory {
-            // If AsyncTask is used and memory sanitizer is enabled, then we need to terminate thread pool before leak checking.
-            let threadpool_terminate = build_threadpool_terminate_function(gc);
-            gc.runtimes
-                .insert(RuntimeFunctions::ThreadPoolTerminate, threadpool_terminate);
-        }
+        let threadpool_terminate = build_threadpool_terminate_function(gc);
+        gc.runtimes
+            .insert(RuntimeFunctions::ThreadPoolTerminate, threadpool_terminate);
     }
     build_get_argc_function(gc);
     build_get_argv_function(gc);
