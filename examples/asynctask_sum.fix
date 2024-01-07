@@ -13,7 +13,7 @@ main = (
     let n = 10000000;
     // Compute the sum of numbers from 0 to n/2 - 1.
     // This task will be executed asynchronously (if you are using multi-core CPU).
-    let sum_former = AsyncTask::make(|_| sum_range(0, n/2));
+    let sum_former = AsyncTask::make(TaskPolicy::default, |_| sum_range(0, n/2));
     // Compute the sum of numbers from n/2 to n.
     // We perfom this in the current thread while waiting for the result of the former task.
     let sum_latter = sum_range(n/2, n);

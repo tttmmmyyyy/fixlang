@@ -12,7 +12,7 @@ main = (
     eval *println(output);
     eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
 
-    eval *println("Run \"sed s/w/W/\" and write \"Hello world!\" to the standard input:");
+    eval *println("Run \"sed s/w/W/\" and write \"Hello World!\" to the standard input:");
     let ((output, error), exit_status) = *run_string("sed", ["sed", "s/w/W/"], "Hello world!").try(exit_with_msg(1));
     eval assert_eq(|_|"", output, "Hello World!");
     eval *println(output);
