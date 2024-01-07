@@ -9,14 +9,13 @@ type Task a = unbox struct { dtor : Destructor (Ptr, TaskData a) };
 
 // A type to store a task and its result. 
 // This type should be used only by implementation of this library.
-// TODO: We can change this to enum to release task function earlier.
 type TaskData a = box struct {
     _func : () -> Array a, // We need a type of boxed `Option`, and actually we use `Array` of length at most one instead.
     _result : Array a
 };
 
 // A type to represent how a task should be executed.
-// This is a bit flag: mask values are defined in namespace `TaskPolicy`.
+// This is a type alias of `U32` and used as bit flag: mask values are defined in namespace `TaskPolicy`.
 type TaskPolicy = U32;
 
 // Get the result of a computation task.
@@ -30,10 +29,6 @@ get = |task| (
 );
 
 // Make a task which performs a computation asynchronously.
-// The task is queued and will be executed in a thread pool later.
-// NOTE: 
-// Parallel nor preemptive multitasking is not guaranteed.
-// In particular, when a thread starts to wait the result of a task which is still not running, then it will be executed in the waiting thread itself.
 
 // Example:
 // ```
