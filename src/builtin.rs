@@ -3488,7 +3488,7 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
         if !obj.is_box(gc.type_env()) {
             error_exit(
-                "Std::FFI::unsafe_get_ptr_of_boxed_value cannot be called on an unboxed value.",
+                "Std::FFI::unsafe_get_retained_ptr_of_boxed_value cannot be called on an unboxed value.",
             )
         }
         let ptr = obj.ptr(gc);

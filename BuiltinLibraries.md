@@ -550,6 +550,7 @@
     - [`get : Var a -> IO a`](#get--var-a---io-a)
     - [`lock : (a -> IO b) -> Var a -> IO b`](#lock--a---io-b---var-a---io-b)
     - [`make : a -> Var a`](#make--a---var-a)
+    - [`mod : (a -> a) -> Var a -> IO ()`](#mod--a---a---var-a---io-)
     - [`set : a -> Var a -> IO ()`](#set--a---var-a---io-)
     - [`wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b`](#wait_and_lock--a---bool---a---io-b---var-a---io-b)
 - [Module `Character`](#module-character)
@@ -2093,6 +2094,9 @@ Get a value stored in a `Var`.
 
 ### `make : a -> Var a`
 `Create a new `Var` object.`
+
+### `mod : (a -> a) -> Var a -> IO ()`
+Atomically modifies a value in a `Var`.
 
 ### `set : a -> Var a -> IO ()`
 Set a value to a `Var`.

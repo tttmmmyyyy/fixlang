@@ -189,6 +189,10 @@ namespace Var {
         Var { _dtor : dtor }
     );
 
+    // Atomically modifies a value in a `Var`.
+    mod : (a -> a) -> Var a -> IO ();
+    mod = |act, var| var.lock(|val| var.set(act(val)));
+
     // Set a value to a `Var`.
     set : a -> Var a -> IO ();
     set = |value, Var { _dtor : dtor }| IO { _data : |_| (
