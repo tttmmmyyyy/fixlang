@@ -5096,7 +5096,8 @@ pub fn test_mvar() {
             eval *(println $ "Thread 2");
             var.mod(add(1))
         });
-        AsyncIOTask::make(policy, var.wait(|x| x == 2))
+        eval *AsyncIOTask::make(policy, var.wait(|x| x == 2));
+        pure()
     );
     "##;
     run_source(&source, Configuration::develop_compiler());
