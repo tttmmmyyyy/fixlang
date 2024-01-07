@@ -152,6 +152,8 @@ namespace Var {
 
     type VarHandle = Ptr;
 
+    type VarValue a = box struct { value : a };
+
     // Get a value stored in a `Var`.
     get : Var a -> IO a;
     get = |Var { _dtor : dtor }| IO { _data : |_| (
@@ -160,7 +162,7 @@ namespace Var {
         let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
         eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
         eval dtor; // Do not call destructor before ending working with handle.
-        ptr.unsafe_get_boxed_value_from_retained_ptr
+        ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value
     ) };
 
     // `var.lock(act)` performs an action on the value in `var` while locking `var` to prevent it from being changed by another thread.
@@ -169,7 +171,7 @@ namespace Var {
         let handle = dtor.@value;
         eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
         let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
-        let res = act(ptr.unsafe_get_boxed_value_from_retained_ptr)._unsafe_perform; 
+        let res = act(ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value)._unsafe_perform; 
         eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
         eval dtor; // Do not call destructor before ending working with handle.
         res
@@ -178,6 +180,7 @@ namespace Var {
     // Create a new `Var` object.
     make : a -> Var a;
     make = |value| (
+        let value = VarValue { value : value };
         let handle = CALL_C[Ptr fixruntime_threadpool_var_create(Ptr, Ptr, Ptr), 
             value.unsafe_get_retained_ptr_of_boxed_value,
             value.unsafe_get_release_function_of_boxed_value,
@@ -196,7 +199,7 @@ namespace Var {
     // Set a value to a `Var`.
     set : a -> Var a -> IO ();
     set = |value, Var { _dtor : dtor }| IO { _data : |_| (
-        let ptr = value.unsafe_get_retained_ptr_of_boxed_value;
+        let ptr = VarValue { value : value }.unsafe_get_retained_ptr_of_boxed_value;
         let handle = dtor.@value;
         eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
         eval CALL_C[() fixruntime_threadpool_var_set(Ptr), ptr];
@@ -214,7 +217,7 @@ namespace Var {
         eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
         let ok_val = loop((), |_| (
             let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
-            let val = ptr.unsafe_get_boxed_value_from_retained_ptr;
+            let val = ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value;
             if cond(val) {
                 break $ val
             } else {
