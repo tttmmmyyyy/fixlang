@@ -209,6 +209,10 @@ namespace Var {
         ()
     ) };
 
+    // `var.wait(cond)` waits until `cond` on the value of `var` is satisfied.
+    wait : (a -> Bool) -> Var a -> IO ();
+    wait = |cond, var| var.wait_and_lock(cond, |_| pure());
+
     // `var.wait_and_lock(cond, act)` waits until `cond` on the value of `var` is satisfied, 
     // then performs `act` on the value in `var` while locking `var` to prevent it from being changed by another thread.
     wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b;

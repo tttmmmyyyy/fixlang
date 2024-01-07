@@ -5079,6 +5079,31 @@ pub fn test_async_task_dedicated_thread() {
 
 #[test]
 #[serial]
+pub fn test_mvar() {
+    let source = r##"
+    module Main;
+    import AsyncTask;
+
+    main : IO ();
+    main = (
+        let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
+        let var = Var::make(0);
+        eval *AsyncIOTask::make(policy, do {
+            eval *(println $ "Thread 1");
+            var.mod(add(1))
+        });
+        eval *AsyncIOTask::make(policy, do {
+            eval *(println $ "Thread 2");
+            var.mod(add(1))
+        });
+        eval *AsyncIOTask::make(policy, var.wait(|x| x == 2));
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_get_args() {
     let source = r##"
     module Main;

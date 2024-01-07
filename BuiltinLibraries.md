@@ -552,6 +552,7 @@
     - [`make : a -> Var a`](#make--a---var-a)
     - [`mod : (a -> a) -> Var a -> IO ()`](#mod--a---a---var-a---io-)
     - [`set : a -> Var a -> IO ()`](#set--a---var-a---io-)
+    - [`wait : (a -> Bool) -> Var a -> IO ()`](#wait--a---bool---var-a---io-)
     - [`wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b`](#wait_and_lock--a---bool---a---io-b---var-a---io-b)
 - [Module `Character`](#module-character)
   - [`is_alnum : U8 -> Bool`](#is_alnum--u8---bool)
@@ -2100,6 +2101,9 @@ Atomically modifies a value in a `Var`.
 
 ### `set : a -> Var a -> IO ()`
 Set a value to a `Var`.
+
+### `wait : (a -> Bool) -> Var a -> IO ()`
+`var.wait(cond)` waits until `cond` on the value of `var` is satisfied.
 
 ### `wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b`
 `var.wait_and_lock(cond, act)` waits until `cond` on the value of `var` is satisfied, 
