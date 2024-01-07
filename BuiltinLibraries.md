@@ -529,16 +529,18 @@
 - [Module `AsyncTask`](#module-asynctask)
   - [`type Task a`](#type-task-a)
   - [`type TaskData a`](#type-taskdata-a)
+  - [`type TaskPolicy`](#type-taskpolicy)
   - [`get : Task a -> a`](#get--task-a---a)
-  - [`_make_inner : Bool -> (() -> a) -> Task a`](#_make_inner--bool------a---task-a)
-  - [`make : (() -> a) -> Task a`](#make-----a---task-a)
-  - [`make_on_dedicated_thread : (() -> a) -> Task a`](#make_on_dedicated_thread-----a---task-a)
+  - [`make : TaskPolicy -> (() -> a) -> Task a`](#make--taskpolicy------a---task-a)
   - [`number_of_processors : I64`](#number_of_processors--i64)
-  - ['namespace AsyncIOTask'](#namespace-asynciotask)
+  - [`namespace AsyncIOTask`](#namespace-asynciotask)
     - [`type IOTask a`](#type-iotask-a)
     - [`get : IOTask a -> IO a`](#get--iotask-a---io-a)
-    - [`make : IO a -> IOTask a`](#make--io-a---iotask-a)
-    - [`make_on_dedicated_thread : IO a -> IOTask a`](#make_on_dedicated_thread--io-a---iotask-a)
+    - [`make : TaskPolicy -> IO a -> IO (IOTask a)`](#make--taskpolicy---io-a---io-iotask-a)
+  - [`namespace TaskPolicy`](#namespace-taskpolicy)
+    - [`default : TaskPolicy`](#default--taskpolicy)
+    - [`run_after_destructed : TaskPolicy`](#run_after_destructed--taskpolicy)
+    - [`on_dedicated_thread : TaskPolicy`](#on_dedicated_thread--taskpolicy)
 - [Module `Character`](#module-character)
   - [`is_alnum : U8 -> Bool`](#is_alnum--u8---bool)
   - [`is_alpha : U8 -> Bool`](#is_alpha--u8---bool)
@@ -1958,20 +1960,16 @@ A type for a computation task that can be run asynchronously.
 A type to store a task and its result. 
 This type should be used only by implementation of this library.
 
+## `type TaskPolicy`
+A type to represent how a task should be executed.
+This is a type alias of `U32` and used as bit flag: mask values are defined in namespace `TaskPolicy`.
+
 ## `get : Task a -> a`
 Get the result of a computation task.
 This function blocks the current thread until the task is finished.
 
-## `_make_inner : Bool -> (() -> a) -> Task a`
+## `make : TaskPolicy -> (() -> a) -> Task a`
 Make a task which performs a computation asynchronously.
-The first boolean argument specifies whether the task should be executed in a dedicated thread or in the thread pool.
-
-## `make : (() -> a) -> Task a`
-Make a task which performs a computation asynchronously.
-The task is queued and will be executed in a thread pool later.
-NOTE: 
-Parallel nor preemptive multitasking is not guaranteed.
-In particular, when a thread starts to wait the result of a task which is still not running, then it will be executed in the waiting thread itself.
 
 Example:
 ```
@@ -1990,7 +1988,7 @@ main = (
     let n = 1000000000;
     // Compute the sum of numbers from 0 to n/2 - 1.
     // This task will be executed asynchronously (if you are using multi-core CPU).
-    let sum_former = AsyncTask::make(|_| sum_range(0, n/2));
+    let sum_former = AsyncTask::make(TaskPolicy::default, |_| sum_range(0, n/2));
     // Compute the sum of numbers from n/2 to n.
     // We perfom this in the current thread while waiting for the result of the former task.
     let sum_latter = sum_range(n/2, n);
@@ -2004,18 +2002,13 @@ main = (
         " = " + sum.to_string + "."
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQppbXBvcnQgQXN5bmNUYXNrOw0KaW1wb3J0IERlYnVnOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBzdW1fcmFuZ2UgPSB8ZnJvbSwgdG98ICgNCiAgICAgICAgbG9vcCgoMCwgZnJvbSksIHwoc3VtLCBpKXwgKA0KICAgICAgICAgICAgaWYgaSA9PSB0byB7IGJyZWFrICQgc3VtIH07DQogICAgICAgICAgICBjb250aW51ZSAkIChzdW0gKyBpLCBpICsgMSkNCiAgICAgICAgKSkNCiAgICApOw0KICAgIGxldCBuID0gMTAwMDAwMDAwMDsNCiAgICAvLyBDb21wdXRlIHRoZSBzdW0gb2YgbnVtYmVycyBmcm9tIDAgdG8gbi8yIC0gMS4NCiAgICAvLyBUaGlzIHRhc2sgd2lsbCBiZSBleGVjdXRlZCBhc3luY2hyb25vdXNseSAoaWYgeW91IGFyZSB1c2luZyBtdWx0aS1jb3JlIENQVSkuDQogICAgbGV0IHN1bV9mb3JtZXIgPSBBc3luY1Rhc2s6Om1ha2UofF98IHN1bV9yYW5nZSgwLCBuLzIpKTsNCiAgICAvLyBDb21wdXRlIHRoZSBzdW0gb2YgbnVtYmVycyBmcm9tIG4vMiB0byBuLg0KICAgIC8vIFdlIHBlcmZvbSB0aGlzIGluIHRoZSBjdXJyZW50IHRocmVhZCB3aGlsZSB3YWl0aW5nIGZvciB0aGUgcmVzdWx0IG9mIHRoZSBmb3JtZXIgdGFzay4NCiAgICBsZXQgc3VtX2xhdHRlciA9IHN1bV9yYW5nZShuLzIsIG4pOw0KICAgIC8vIFN1bSB1cCB0aGUgcmVzdWx0cyBvZiB0aGUgdHdvIGNvbXB1dGF0aW9ucy4NCiAgICBsZXQgc3VtID0gc3VtX2Zvcm1lci5nZXQgKyBzdW1fbGF0dGVyOw0KICAgIC8vIFRoZW4gdGhlIHN1bSBzaG91bGQgYmUgbiAqIChuIC0gMSkgLyAyLg0KICAgIGV2YWwgYXNzZXJ0X2VxKHxffCIiLCBzdW0sIG4gKiAobiAtIDEpIC8gMik7DQogICAgcHJpbnRsbiAkIA0KICAgICAgICAiU3VtIG9mIG51bWJlcnMgZnJvbSAwIHRvICIgKyAobiAtIDEpLnRvX3N0cmluZyArIA0KICAgICAgICAiIGlzICIgKyBzdW1fZm9ybWVyLmdldC50b19zdHJpbmcgKyAiICsgIiArIHN1bV9sYXR0ZXIudG9fc3RyaW5nICsgDQogICAgICAgICIgPSAiICsgc3VtLnRvX3N0cmluZyArICIuIg0KKTs%3D)
-
-## `make_on_dedicated_thread : (() -> a) -> Task a`
-Make a task which performs a computation asynchronously.
-In contrast to `make`, the task created by this function is executed in a dedicated thread.
 
 ## `number_of_processors : I64`
 Get the number of processors (CPU cores) currently available.
 This is implemented by calling `sysconf(_SC_NPROCESSORS_ONLN)`.
 The runtime pools as many threads as this number to execute asynchronous tasks.
 
-## 'namespace AsyncIOTask'
+## `namespace AsyncIOTask`
 
 ### `type IOTask a`
 A type for an I/O action that can be run asynchronously.
@@ -2023,7 +2016,7 @@ A type for an I/O action that can be run asynchronously.
 ### `get : IOTask a -> IO a`
 Get the result of an asynchronous I/O action.
 
-### `make : IO a -> IOTask a`
+### `make : TaskPolicy -> IO a -> IO (IOTask a)`
 An `IO` version of `AsyncTask::make`.
 
 Example:
@@ -2044,16 +2037,24 @@ main = (
             }
         ))
     );
-    let task_0 = AsyncIOTask::make(print_ten(0));
-    let task_1 = AsyncIOTask::make(print_ten(1));
-    eval *task_0.get;
-    eval *task_1.get;
+    eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(0));
+    eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(1));
     pure()
 );
 ```
 
-### `make_on_dedicated_thread : IO a -> IOTask a`
-An `IO` version of `AsyncTask::make_on_dedicated_thread`.
+## `namespace TaskPolicy`
+
+### `default : TaskPolicy`
+Default task policy.
+
+### `run_after_destructed : TaskPolicy`
+By default policy, a task will be canceled when the task object is destructed.
+This task policy runs the task even after the task object is destructed.
+
+### `on_dedicated_thread : TaskPolicy`
+By default policy, a task will be executed on a thread in the thread pool.
+This task policy runs the task on a dedicated thread.
 
 # Module `Character`
 This module provides wrapper functions of C functions defined in ctypes.h.
