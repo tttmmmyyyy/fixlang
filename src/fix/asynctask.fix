@@ -202,7 +202,7 @@ namespace Var {
         let ptr = VarValue { value : value }.unsafe_get_retained_ptr_of_boxed_value;
         let handle = dtor.@value;
         eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
-        eval CALL_C[() fixruntime_threadpool_var_set(Ptr), ptr];
+        eval CALL_C[() fixruntime_threadpool_var_set(Ptr, Ptr), handle, ptr];
         eval CALL_C[() fixruntime_threadpool_var_signalall(Ptr), handle];
         eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
         eval dtor; // Do not call destructor before ending working with handle.
