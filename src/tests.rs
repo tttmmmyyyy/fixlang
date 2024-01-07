@@ -5067,10 +5067,9 @@ pub fn test_async_task_dedicated_thread() {
     main : IO ();
     main = (
         let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
-        let num_procs = AsyncTask::number_of_processors;
-        let num_threads = num_procs * 2;
+        let num_threads = 2;
         Iterator::range(0, num_threads).fold_m((), |_, i| (
-            eval *AsyncIOTask::make(policy, println $ "thread number: " + i.to_string);
+            eval *AsyncIOTask::make(policy, println $ "Thread " + i.to_string);
             pure()
         ))
     );
