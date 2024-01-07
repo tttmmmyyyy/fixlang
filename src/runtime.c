@@ -678,6 +678,16 @@ void fixruntime_threadpool_initialize()
 
 void fixruntime_threadpool_terminate()
 {
+    // Wait for all tasks that runs even after released on a dedicated thread to be completed.
+    pthread_mutex_lock_or_exit(&count_task_run_after_released_on_dedicated_thread_mutex, "[runtime] Failed to lock mutex.");
+    while (count_task_run_after_released_on_dedicated_thread > 0)
+    {
+        pthread_cond_wait_or_exit(
+            &count_task_run_after_released_on_dedicated_thread_cond,
+            &count_task_run_after_released_on_dedicated_thread_mutex, "[runtime] Failed to wait condition variable.");
+    }
+    pthread_mutex_unlock_or_exit(&count_task_run_after_released_on_dedicated_thread_mutex, "[runtime] Failed to unlock mutex.");
+
     // Wait for each thread in thread pool to be terminated.
     pthread_mutex_lock_or_exit(&task_queue_mutex, "[runtime] Failed to lock mutex.");
     is_threadpool_terminated = 1;
@@ -691,15 +701,6 @@ void fixruntime_threadpool_terminate()
             exit(1);
         }
     }
-    // Wait for all tasks that runs even after released on a dedicated thread to be completed.
-    pthread_mutex_lock_or_exit(&count_task_run_after_released_on_dedicated_thread_mutex, "[runtime] Failed to lock mutex.");
-    while (count_task_run_after_released_on_dedicated_thread > 0)
-    {
-        pthread_cond_wait_or_exit(
-            &count_task_run_after_released_on_dedicated_thread_cond,
-            &count_task_run_after_released_on_dedicated_thread_mutex, "[runtime] Failed to wait condition variable.");
-    }
-    pthread_mutex_unlock_or_exit(&count_task_run_after_released_on_dedicated_thread_mutex, "[runtime] Failed to unlock mutex.");
 
     free(thread_pool);
     // Iterate all tasks and delete them.
