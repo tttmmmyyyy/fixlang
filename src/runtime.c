@@ -1051,6 +1051,7 @@ void *fixruntime_threadpool_var_get(Var *handle)
 
 void fixruntime_threadpool_var_set(Var *handle, void *data)
 {
+    (*handle->release_func)(handle->data);
     handle->data = data;
 }
 
