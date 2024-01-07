@@ -1774,8 +1774,8 @@ This function is intended to be used with `_unsafe_get_retained_ptr_of_boxed_val
 ### `_unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`
 
 Get a retained pointer to a boxed value.
-This function is intended to be used to share ownership of boxed objects with C code.
-To release the object in C code, call it on the function pointer obtained by `_unsafe_get_release_function_of_boxed_value`.
+This function is intended to be used to share ownership of Fix's boxed objects with C program.
+To release the object in C program, call it on the function pointer obtained by `_unsafe_get_release_function_of_boxed_value`.
 
 ### `abort : Lazy a`
 
