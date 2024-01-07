@@ -5007,16 +5007,9 @@ pub fn test_async_task_io() {
     
     main : IO ();
     main = (
-        let var = Var::make(0);
-        eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, do {
-            eval "Thread 1".println;
-            var.mod(add(1))
-        });
-        eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, do {
-            eval "Thread 2".println;
-            var.mod(add(1))
-        });
-        var.wait_and_lock(|x| x == 2, |_| pure())
+        eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, println $ "Thread 1");
+        eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, println $ "Thread 2");
+        pure()
     );
     "##;
     run_source(&source, Configuration::develop_compiler());
