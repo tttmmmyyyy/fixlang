@@ -495,8 +495,6 @@
     - [`()`](#)
       - [`impl () : Eq`](#impl---eq)
   - [Functions](#functions)
-    - [`_unsafe_get_release_function_of_boxed_value : a -> Ptr`](#_unsafe_get_release_function_of_boxed_value--a---ptr)
-    - [`_unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`](#_unsafe_get_retained_ptr_of_boxed_value--a---ptr)
     - [`abort : Lazy a`](#abort--lazy-a)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
     - [`fix : ((a -> b) -> a -> b) -> a -> b`](#fix--a---b---a---b---a---b)
@@ -504,6 +502,11 @@
     - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
     - [`mark_threaded : a -> a`](#mark_threaded--a---a)
     - [`unsafe_is_unique : a -> (Bool, a)`](#unsafe_is_unique--a---bool-a)
+    - [`namespace FFI`](#namespace-ffi)
+      - [`unsafe_get_release_function_of_boxed_value : a -> Ptr`](#unsafe_get_release_function_of_boxed_value--a---ptr)
+      - [`unsafe_get_retain_function_of_boxed_value : a -> Ptr`](#unsafe_get_retain_function_of_boxed_value--a---ptr)
+      - [`unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`](#unsafe_get_boxed_value_from_retained_ptr--ptr---a)
+      - [`unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`](#unsafe_get_retained_ptr_of_boxed_value--a---ptr)
   - [Traits](#traits)
     - [Additive](#additive)
     - [FromBytes](#frombytes)
@@ -529,7 +532,6 @@
 - [Module `AsyncTask`](#module-asynctask)
   - [`type Task a`](#type-task-a)
   - [`type TaskData a`](#type-taskdata-a)
-  - [`type TaskPolicy`](#type-taskpolicy)
   - [`get : Task a -> a`](#get--task-a---a)
   - [`make : TaskPolicy -> (() -> a) -> Task a`](#make--taskpolicy------a---task-a)
   - [`number_of_processors : I64`](#number_of_processors--i64)
@@ -538,9 +540,18 @@
     - [`get : IOTask a -> IO a`](#get--iotask-a---io-a)
     - [`make : TaskPolicy -> IO a -> IO (IOTask a)`](#make--taskpolicy---io-a---io-iotask-a)
   - [`namespace TaskPolicy`](#namespace-taskpolicy)
+    - [`type TaskPolicy`](#type-taskpolicy)
     - [`default : TaskPolicy`](#default--taskpolicy)
     - [`run_after_destructed : TaskPolicy`](#run_after_destructed--taskpolicy)
     - [`on_dedicated_thread : TaskPolicy`](#on_dedicated_thread--taskpolicy)
+  - [`namespace Var`](#namespace-var)
+    - [`type Var a`](#type-var-a)
+    - [`type VarHandle`](#type-varhandle)
+    - [`get : Var a -> IO a`](#get--var-a---io-a)
+    - [`lock : (a -> IO b) -> Var a -> IO b`](#lock--a---io-b---var-a---io-b)
+    - [`make : a -> Var a`](#make--a---var-a)
+    - [`set : a -> Var a -> IO ()`](#set--a---var-a---io-)
+    - [`wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b`](#wait_and_lock--a---bool---a---io-b---var-a---io-b)
 - [Module `Character`](#module-character)
   - [`is_alnum : U8 -> Bool`](#is_alnum--u8---bool)
   - [`is_alpha : U8 -> Bool`](#is_alpha--u8---bool)
@@ -1766,17 +1777,6 @@ Literals:
 
 ## Functions
 
-### `_unsafe_get_release_function_of_boxed_value : a -> Ptr`
-
-Get a function pointer (of type `void (*)(void*)`) to release a boxed value.
-This function is intended to be used with `_unsafe_get_retained_ptr_of_boxed_value`.
-
-### `_unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`
-
-Get a retained pointer to a boxed value.
-This function is intended to be used to share ownership of Fix's boxed objects with C program.
-To release the object in C program, call it on the function pointer obtained by `_unsafe_get_release_function_of_boxed_value`.
-
 ### `abort : Lazy a`
 
 Evaluating this value stops the execution of the program.
@@ -1887,6 +1887,28 @@ main = (
 );
 ```
 
+### `namespace FFI`
+
+#### `unsafe_get_release_function_of_boxed_value : a -> Ptr`
+
+Get a function pointer (of type `void (*)(void*)`) to release a boxed value.
+This function is intended to be used with `_unsafe_get_retained_ptr_of_boxed_value`.
+
+#### `unsafe_get_retain_function_of_boxed_value : a -> Ptr`
+
+Get a function pointer (of type `void (*)(void*)`) to retain a boxed value.
+This function is intended to be used with `_unsafe_get_retained_ptr_of_boxed_value`.
+
+#### `unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`
+
+Get a boxed value from a retained pointer.
+
+#### `unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`
+
+Get a retained pointer to a boxed value.
+This function is intended to be used to share ownership of Fix's boxed objects with C program.
+To release / retain the object in C program, call it on the function pointer obtained by `unsafe_get_release_function_of_boxed_value` and `unsafe_get_retain_function_of_boxed_value`.
+
 ## Traits
 
 ### Additive
@@ -1959,10 +1981,6 @@ A type for a computation task that can be run asynchronously.
 ## `type TaskData a`
 A type to store a task and its result. 
 This type should be used only by implementation of this library.
-
-## `type TaskPolicy`
-A type to represent how a task should be executed.
-This is a type alias of `U32` and used as bit flag: mask values are defined in namespace `TaskPolicy`.
 
 ## `get : Task a -> a`
 Get the result of a computation task.
@@ -2045,6 +2063,10 @@ main = (
 
 ## `namespace TaskPolicy`
 
+### `type TaskPolicy`
+A type to represent how a task should be executed.
+This is a type alias of `U32` and used as bit flag.
+
 ### `default : TaskPolicy`
 Default task policy.
 
@@ -2055,6 +2077,29 @@ This task policy runs the task even after the task object is destructed.
 ### `on_dedicated_thread : TaskPolicy`
 By default policy, a task will be executed on a thread in the thread pool.
 This task policy runs the task on a dedicated thread.
+
+## `namespace Var`
+
+### `type Var a`
+A type of variable which can be modified from multiple threads.
+
+### `type VarHandle`
+
+### `get : Var a -> IO a`
+Get a value stored in a `Var`.
+
+### `lock : (a -> IO b) -> Var a -> IO b`
+`var.lock(act)` performs an action on the value in `var` while locking `var` to prevent it from being changed by another thread.
+
+### `make : a -> Var a`
+`Create a new `Var` object.`
+
+### `set : a -> Var a -> IO ()`
+Set a value to a `Var`.
+
+### `wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b`
+`var.wait_and_lock(cond, act)` waits until `cond` on the value of `var` is satisfied, 
+then performs `act` on the value in `var` while locking `var` to prevent it from being changed by another thread.
 
 # Module `Character`
 This module provides wrapper functions of C functions defined in ctypes.h.

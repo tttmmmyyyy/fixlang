@@ -965,4 +965,91 @@ void fixruntime_threadpool_destroy_task(Task *task)
     free(task);
 }
 
+typedef struct Var
+{
+    void *data;
+    void (*release_func)(void *);
+    void (*retain_func)(void *);
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+} Var;
+
+Var *fixruntime_threadpool_var_create(void *data, void (*release_func)(void *), void (*retain_func)(void *))
+{
+    struct Var *handle = (struct Var *)malloc(sizeof(struct Var));
+
+    // Create recursive mutex.
+    pthread_mutexattr_t Attr;
+    pthread_mutexattr_init(&Attr);
+    pthread_mutexattr_settype(&Attr, PTHREAD_MUTEX_RECURSIVE);
+    if (pthread_mutex_init(&handle->mutex, &Attr))
+    {
+        perror("[runtime] Failed to initialize mutex for a Var.");
+        exit(1);
+    }
+    pthread_mutexattr_destroy(&Attr);
+
+    // Create condition variable.
+    if (pthread_cond_init(&handle->cond, NULL))
+    {
+        perror("[runtime] Failed to initialize condition variable for a Var.");
+        exit(1);
+    }
+
+    // Set fields.
+    handle->data = data;
+    handle->release_func = release_func;
+    handle->retain_func = retain_func;
+
+    return handle;
+}
+
+void fixruntime_threadpool_var_destroy(Var *handle)
+{
+    (*handle->release_func)(handle->data);
+    if (pthread_mutex_destroy(&handle->mutex))
+    {
+        perror("[runtime] Failed to destroy mutex for a Var.");
+        exit(1);
+    }
+    if (pthread_cond_destroy(&handle->cond))
+    {
+        perror("[runtime] Failed to destroy condition variable for a Var.");
+        exit(1);
+    }
+    free(handle);
+}
+
+void fixruntime_threadpool_var_lock(Var *handle)
+{
+    pthread_mutex_lock_or_exit(&handle->mutex, ("[runtime] Failed to lock mutex for a Var."));
+}
+
+void fixruntime_threadpool_var_unlock(Var *handle)
+{
+    pthread_mutex_unlock_or_exit(&handle->mutex, ("[runtime] Failed to unlock mutex for a Var."));
+}
+
+void fixruntime_threadpool_var_wait(Var *handle)
+{
+    pthread_cond_wait_or_exit(&handle->cond, &handle->mutex, "[runtime] Failed to wait condition variable for a Var.");
+}
+
+void fixruntime_threadpool_var_signalall(Var *handle)
+{
+    pthread_cond_broadcast_or_exit(&handle->cond, "[runtime] Failed to signal condition variable for a Var.");
+}
+
+void *fixruntime_threadpool_var_get(Var *handle)
+{
+    void *data = handle->data;
+    (*handle->retain_func)(data);
+    return data;
+}
+
+void fixruntime_threadpool_var_set(Var *handle, void *data)
+{
+    handle->data = data;
+}
+
 #endif // THREAD_POOL

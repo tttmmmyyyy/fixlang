@@ -244,14 +244,6 @@ pub fn make_std_mod() -> Program {
         is_unique_function(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "_unsafe_get_retained_ptr_of_boxed_value"),
-        get_retained_ptr_of_boxed_value_function(),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "_unsafe_get_release_function_of_boxed_value"),
-        get_release_function_of_boxed_value(),
-    );
-    fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "mark_threaded"),
         mark_threaded_function(),
     );
@@ -328,6 +320,36 @@ pub fn make_std_mod() -> Program {
             quiet_nan_value(type_name),
         );
     }
+
+    // FFI.
+    fix_module.add_global_value(
+        FullName::from_strs(
+            &[STD_NAME, FFI_NAME],
+            "unsafe_get_retained_ptr_of_boxed_value",
+        ),
+        get_retained_ptr_of_boxed_value_function(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(
+            &[STD_NAME, FFI_NAME],
+            "unsafe_get_boxed_value_from_retained_ptr",
+        ),
+        get_boxed_value_from_retained_ptr_function(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(
+            &[STD_NAME, FFI_NAME],
+            "unsafe_get_release_function_of_boxed_value",
+        ),
+        get_release_function_of_boxed_value(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(
+            &[STD_NAME, FFI_NAME],
+            "unsafe_get_retain_function_of_boxed_value",
+        ),
+        get_retain_function_of_boxed_value(),
+    );
 
     fix_module
 }

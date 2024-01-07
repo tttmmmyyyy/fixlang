@@ -5,6 +5,7 @@ use crate::{ast::program::Program, configuration::Configuration, runtime::Runtim
 pub const NAMESPACE_SEPARATOR: &str = "::";
 
 pub const STD_NAME: &str = "Std";
+pub const FFI_NAME: &str = "FFI";
 pub const IO_NAME: &str = "IO";
 pub const PTR_NAME: &str = "Ptr";
 pub const U8_NAME: &str = "U8";

@@ -14,10 +14,6 @@ type TaskData a = box struct {
     _result : Array a
 };
 
-// A type to represent how a task should be executed.
-// This is a type alias of `U32` and used as bit flag: mask values are defined in namespace `TaskPolicy`.
-type TaskPolicy = U32;
-
 // Get the result of a computation task.
 // This function blocks the current thread until the task is finished.
 get : Task a -> a;
@@ -131,6 +127,10 @@ namespace AsyncIOTask {
 }
 
 namespace TaskPolicy {
+    // A type to represent how a task should be executed.
+    // This is a type alias of `U32` and used as bit flag: mask values are defined in namespace `TaskPolicy`.
+    type TaskPolicy = U32;
+
     // Default task policy.
     default : TaskPolicy;
     default = 0_U32;
@@ -144,4 +144,83 @@ namespace TaskPolicy {
     // This task policy runs the task on a dedicated thread.
     on_dedicated_thread : TaskPolicy;
     on_dedicated_thread = 1_U32.shift_left(0_U32);
+}
+
+namespace Var {
+    // A type of variable which can be modified from multiple threads.
+    type Var a = unbox struct { _dtor : Destructor VarHandle };
+
+    type VarHandle = Ptr;
+
+    // Get a value stored in a `Var`.
+    get : Var a -> IO a;
+    get = |Var { _dtor : dtor }| IO { _data : |_| (
+        let handle = dtor.@value;
+        eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
+        let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
+        eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
+        eval dtor; // Do not call destructor before ending working with handle.
+        ptr.unsafe_get_boxed_value_from_retained_ptr
+    ) };
+
+    // `var.lock(act)` performs an action on the value in `var` while locking `var` to prevent it from being changed by another thread.
+    lock : (a -> IO b) -> Var a -> IO b;
+    lock = |act, Var { _dtor : dtor }| IO { _data : |_| (
+        let handle = dtor.@value;
+        eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
+        let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
+        let res = act(ptr.unsafe_get_boxed_value_from_retained_ptr)._unsafe_perform; 
+        eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
+        eval dtor; // Do not call destructor before ending working with handle.
+        res
+    ) };
+
+    // Create a new `Var` object.
+    make : a -> Var a;
+    make = |value| (
+        let handle = CALL_C[Ptr fixruntime_threadpool_var_create(Ptr, Ptr, Ptr), 
+            value.unsafe_get_retained_ptr_of_boxed_value,
+            value.unsafe_get_release_function_of_boxed_value,
+            value.unsafe_get_retain_function_of_boxed_value
+        ];
+        let dtor = Destructor::make(handle, |handle| (
+            CALL_C[() fixruntime_threadpool_var_destroy(Ptr), handle]
+        ));
+        Var { _dtor : dtor }
+    );
+
+    // Set a value to a `Var`.
+    set : a -> Var a -> IO ();
+    set = |value, Var { _dtor : dtor }| IO { _data : |_| (
+        let ptr = value.unsafe_get_retained_ptr_of_boxed_value;
+        let handle = dtor.@value;
+        eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
+        eval CALL_C[() fixruntime_threadpool_var_set(Ptr), ptr];
+        eval CALL_C[() fixruntime_threadpool_var_signalall(Ptr), handle];
+        eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
+        eval dtor; // Do not call destructor before ending working with handle.
+        ()
+    ) };
+
+    // `var.wait_and_lock(cond, act)` waits until `cond` on the value of `var` is satisfied, 
+    // then performs `act` on the value in `var` while locking `var` to prevent it from being changed by another thread.
+    wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b;
+    wait_and_lock = |cond, act, Var { _dtor : dtor }| IO { _data : |_| (
+        let handle = dtor.@value;
+        eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
+        let ok_val = loop((), |_| (
+            let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
+            let val = ptr.unsafe_get_boxed_value_from_retained_ptr;
+            if cond(val) {
+                break $ val
+            } else {
+                eval CALL_C[() fixruntime_threadpool_var_wait(Ptr), handle];
+                continue $ ()
+            }
+        ));
+        let res = act(ok_val)._unsafe_perform;
+        eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
+        eval dtor; // Do not call destructor before ending working with handle.
+        res
+    ) };
 }
