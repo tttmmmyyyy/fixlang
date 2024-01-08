@@ -2146,6 +2146,37 @@ This task policy runs the task on a dedicated thread.
 ### `type Var a`
 A type of variable which can be modified from multiple threads.
 
+```
+module Main;
+import AsyncTask;
+
+main : IO ();
+main = (
+    let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
+    let logger = *Var::make([]); // A mutable array of strings.
+
+    // Launch multiple threads, and log in which order each thread is executed.
+    let num_threads = number_of_processors * 2;
+    eval *Iterator::range(0, num_threads).fold_m((), |_, i| (
+        eval *AsyncIOTask::make(policy, 
+            logger.lock(|logs| (
+                let count = logs.get_size;
+                let msg = "Thread " + i.to_string + " is running at " + count.to_string + 
+                    if count % 10 == 1 { "st" } else if count % 10 == 2 { "nd" } else if count % 10 == 3 { "rd" } else { "th" };
+                let msg = msg + if i == count { "." } else { "!" };
+                logger.set(logs.push_back(msg))
+            ))
+        );
+        pure()
+    ));
+
+    // Wait until all threads are finished.
+    eval *logger.wait(|logs| logs.get_size == num_threads);
+
+    println $ (*logger.get).to_iter.join("\n")
+);
+```
+
 ### `type VarHandle`
 
 ### `get : Var a -> IO a`
