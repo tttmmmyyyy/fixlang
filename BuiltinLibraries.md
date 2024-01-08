@@ -354,9 +354,6 @@
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
       - [`impl Array : Functor`](#impl-array--functor)
       - [`impl Array : Monad`](#impl-array--monad)
-    - [Destructor](#destructor)
-      - [`borrow : (a -> b) -> Destructor a -> b`](#borrow--a---b---destructor-a---b)
-      - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
     - [ErrMsg](#errmsg)
     - [IO](#io)
       - [`_read_line_inner : Bool -> IOHandle -> IOFail ErrMsg String`](#_read_line_inner--bool---iohandle---iofail-errmsg-string)
@@ -507,6 +504,10 @@
       - [`unsafe_get_retain_function_of_boxed_value : a -> Ptr`](#unsafe_get_retain_function_of_boxed_value--a---ptr)
       - [`unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`](#unsafe_get_boxed_value_from_retained_ptr--ptr---a)
       - [`unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`](#unsafe_get_retained_ptr_of_boxed_value--a---ptr)
+      - [`namespace Destructor`](#namespace-destructor)
+        - [`type Destructor`](#type-destructor)
+      - [`borrow : (a -> b) -> Destructor a -> b`](#borrow--a---b---destructor-a---b)
+      - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
   - [Traits](#traits)
     - [Additive](#additive)
     - [FromBytes](#frombytes)
@@ -549,7 +550,7 @@
     - [`type VarHandle`](#type-varhandle)
     - [`get : Var a -> IO a`](#get--var-a---io-a)
     - [`lock : (a -> IO b) -> Var a -> IO b`](#lock--a---io-b---var-a---io-b)
-    - [`make : a -> Var a`](#make--a---var-a)
+    - [`make : a -> IO (Var a)`](#make--a---io-var-a)
     - [`mod : (a -> a) -> Var a -> IO ()`](#mod--a---a---var-a---io-)
     - [`set : a -> Var a -> IO ()`](#set--a---var-a---io-)
     - [`wait : (a -> Bool) -> Var a -> IO ()`](#wait--a---bool---var-a---io-)
@@ -1270,27 +1271,6 @@ Truncate an array, keeping the given number of first elements.
 
 #### `impl Array : Monad`
 
-### Destructor
-
-`Destructor a` is a boxed type which has two fields of type `a` and `a -> ()`, where the latter field is called destructor.
-The destructor function will be called when a value of `Destructor a` is deallocated.
-Note that the inner value of type `a` may be still alive after the destructor function is called.
-This type is useful to manage resources allocated by C function.
-
-```
-type Destructor a = box struct { value : a, dtor : a -> () };
-```
-
-#### `borrow : (a -> b) -> Destructor a -> b`
-Borrow the internal value.
-`borrow(worker, dtor)` calls `worker` on the internal value captured by `dtor`, and returns the value returned by `worker`.
-If you try to extract the value by `dtor.@_value` from `dtor : Destructor a` and this expression is the last use of `dtor`, 
-then you get a value after the destructor function is called. 
-On the other hand, in `borrow(worker, dtor)`, `worker` will be called before the destructor is called.
-
-#### `make : a -> (a -> ()) -> Destructor a`
-Make a destructor value.
-
 ### ErrMsg
 
 A type (alias) for error message. 
@@ -1911,6 +1891,87 @@ Get a retained pointer to a boxed value.
 This function is intended to be used to share ownership of Fix's boxed objects with C program.
 To release / retain the object in C program, call it on the function pointer obtained by `unsafe_get_release_function_of_boxed_value` and `unsafe_get_retain_function_of_boxed_value`.
 
+#### `namespace Destructor`
+
+##### `type Destructor`
+
+`Destructor a` is a boxed type which has two fields `value : a` and `dtor : a -> ()`, where the latter field is called destructor.
+The destructor function will be called when a value of `Destructor a` is deallocated.
+Note that the inner value of type `a` itself may be still alive after the destructor function is called.
+
+Typically, this type is used to manage resources allocated by C function in Fix's world.
+```
+type Resource = unbox struct { _dtor : Destructor Ptr };
+
+let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+let obj = Resource { _dtor : dtor };
+// Then, when `obj` is deallocated from Fix's memory space, the resouce of C'side will be deallocated.
+```
+
+When using this type, it should be noted that Fix does not deallocate global values or values captured by global ones. 
+So, the global value defined as
+```
+resource : Resource;
+resource = (
+    let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+    let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+    Resource { _dtor : dtor }
+);
+```
+will not be deallocated and the destructor function will never be called. 
+A more intuitive example is the following.
+```
+main : IO ();
+main = (
+    let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+    let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+    let res = Resource { _dtor : dtor };
+    eval *println("Resource allocated.");
+    // ... some code uses `res` ... 
+);
+```
+If we desugar the syntax of monadic *-operator, the above is equivalent to the following.
+```
+main : IO ();
+main = (
+    let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+    let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+    let res = Resource { _dtor : dtor };
+    println("Resource allocated.").bind(|_| ... some code uses `res` ... )
+);
+```
+Fix's runtime first *creates* the `main` value, and then executes the created `main` value.
+In the above program, the `res` is allocated in the *creation* of the `main` value. It is captured by the function passed to `bind`, and captured by the global `main` value in the end. Since Fix does not deallocate global values, the `res` will not be deallocated.
+
+If this is a problem for you, you should cover up the side effects of resource allocation in the IO monad.
+```
+allocate_resource : IO Resource;
+allocate_resource = IO { _data : |_| (
+    let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+    let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+    Resource { _dtor : dtor };
+) };
+```
+If you use it as follows,
+```
+main : IO ();
+main = (
+    let res = *allocate_resource;
+    eval *println("Resource allocated.");
+    // ... some code uses `res` ... 
+);
+```
+then the `res` will be allocated in the *execution* of `main` as a local value, and will be deallocated upto the end of the execution.
+
+#### `borrow : (a -> b) -> Destructor a -> b`
+Borrow the internal value. `dtor.borrow(worker)` calls `worker` on the internal value captured by `dtor`, and returns the value returned by `worker`.
+
+This function is for performing operations on resources with keeping them alive: If you simply write `f(dtor.@value)`, the destructor may be called immediately after `@value` function is called, and the resource may be already released when `f` is called. This happens if the `dtor.@value` expression is the last place `dtor` is used.
+
+#### `make : a -> (a -> ()) -> Destructor a`
+Make a destructor value.
+
 ## Traits
 
 ### Additive
@@ -2093,7 +2154,7 @@ Get a value stored in a `Var`.
 ### `lock : (a -> IO b) -> Var a -> IO b`
 `var.lock(act)` performs an action on the value in `var` while locking `var` to prevent it from being changed by another thread.
 
-### `make : a -> Var a`
+### `make : a -> IO (Var a)`
 `Create a new `Var` object.`
 
 ### `mod : (a -> a) -> Var a -> IO ()`

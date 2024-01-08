@@ -375,13 +375,16 @@ impl Bool : ToString {
     );
 }
 
-// `Destructor a` is a boxed type which has two fields of type `a` and `a -> ()`, where the latter field is called destructor.
-// The destructor function will be called when a value of `Destructor a` is deallocated.
-// Note that the inner value of type `a` may be still alive after the destructor function is called.
-// This type is useful to manage resources allocated by C function.
-type Destructor a = box struct { value : a, dtor : a -> () };
+// A type (alias) for error message. 
+type ErrMsg = String;
 
-namespace Destructor {
+namespace FFI::Destructor {
+    // `Destructor a` is a boxed type which has two fields of type `a` and `a -> ()`, where the latter field is called destructor.
+    // The destructor function will be called when a value of `Destructor a` is deallocated.
+    // Note that the inner value of type `a` may be still alive after the destructor function is called.
+    // This type is useful to manage resources allocated by C function.
+    type Destructor a = box struct { value : a, dtor : a -> () };
+
     // Borrow the internal value.
     // `borrow(worker, dtor)` calls `worker` on the internal value captured by `dtor`, and returns the value returned by `worker`.
     // If you try to extract the value by `dtor.@_value` from `dtor : Destructor a` and this expression is the last use of `dtor`, 
@@ -398,9 +401,6 @@ namespace Destructor {
     make : a -> (a -> ()) -> Destructor a;
     make = |val, dtor| Destructor { value : val, dtor : dtor };
 }
-
-// A type (alias) for error message. 
-type ErrMsg = String;
 
 type IO a = unbox struct { _data : () -> a };
 

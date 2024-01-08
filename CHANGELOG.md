@@ -7,7 +7,7 @@
 - Add functions related to command line arguments: `get_arg`, `get_arg_count`, `get_args` in `Std::IO`.
 - Add `Random` built-in module.
 - Add `Std::F32::infinity`, `Std::F64::infinity`, `Std::F32::quiet_nan`, `Std::F64::quiet_nan`.
-- Add `Std::FFI` namespace which includes functions which are used to share ownership of Fix's boxed object with C program via FFI.
+- Add `Std::FFI` namespace which includes functions which are used to share ownership of Fix's boxed object with C program via FFI. Move `Destructor` and associated functions into `Std::FFI`.
 
 ### Changed
 - Overflowing integer literals now result in a compile-time error.

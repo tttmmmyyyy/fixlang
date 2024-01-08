@@ -178,8 +178,8 @@ namespace Var {
     ) };
 
     // Create a new `Var` object.
-    make : a -> Var a;
-    make = |value| (
+    make : a -> IO (Var a);
+    make = |value| IO { _data : |_| (
         let value = VarValue { value : value };
         let handle = CALL_C[Ptr fixruntime_threadpool_var_create(Ptr, Ptr, Ptr), 
             value.unsafe_get_retained_ptr_of_boxed_value,
@@ -190,7 +190,7 @@ namespace Var {
             CALL_C[() fixruntime_threadpool_var_destroy(Ptr), handle]
         ));
         Var { _dtor : dtor }
-    );
+    ) };
 
     // Atomically modifies a value in a `Var`.
     mod : (a -> a) -> Var a -> IO ();

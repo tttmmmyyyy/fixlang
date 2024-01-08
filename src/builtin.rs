@@ -191,7 +191,7 @@ pub fn make_dynamic_object_name() -> FullName {
 }
 
 pub fn make_destructor_object_name() -> FullName {
-    FullName::from_strs(&[STD_NAME], DESTRUCTOR_OBJECT_NAME)
+    FullName::from_strs(&[STD_NAME, FFI_NAME], DESTRUCTOR_OBJECT_NAME)
 }
 
 pub fn make_funptr_name(arity: u32) -> Name {

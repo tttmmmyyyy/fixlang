@@ -5087,7 +5087,7 @@ pub fn test_mvar() {
     main : IO ();
     main = (
         let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
-        let var = Var::make(0);
+        let var = *Var::make(0);
         eval *AsyncIOTask::make(policy, do {
             eval *(println $ "Thread 1");
             var.mod(add(1))
