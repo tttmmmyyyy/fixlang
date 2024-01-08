@@ -5087,8 +5087,9 @@ pub fn test_mvar() {
     main : IO ();
     main = (
         let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
-        let logger = *Var::make([]); // `Array` of `String`s
+        let logger = *Var::make([]); // A mutable array of strings.
 
+        // Launch multiple threads, and log in which order each thread is executed.
         let num_threads = number_of_processors * 2;
         eval *Iterator::range(0, num_threads).fold_m((), |_, i| (
             eval *AsyncIOTask::make(policy, 
@@ -5102,7 +5103,10 @@ pub fn test_mvar() {
             );
             pure()
         ));
+
+        // Wait until all threads are finished.
         eval *logger.wait(|logs| logs.get_size == num_threads);
+
         println $ (*logger.get).to_iter.join("\n")
     );
     "##;
