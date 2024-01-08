@@ -5087,20 +5087,23 @@ pub fn test_mvar() {
     main : IO ();
     main = (
         let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
-        let var = *Var::make(0);
-        eval *AsyncIOTask::make(policy, do {
-            eval *(println $ "Thread 1");
-            var.mod(add(1))
-        });
-        eval *AsyncIOTask::make(policy, do {
-            eval *(println $ "Thread 2");
-            var.mod(add(1))
-        });
-        eval *AsyncIOTask::make(policy, do {
-            eval *var.wait(|x| x == 2);
-            println("OK.")
-        });
-        pure()
+        let logger = *Var::make([]); // `Array` of `String`s
+
+        let num_threads = number_of_processors * 2;
+        eval *Iterator::range(0, num_threads).fold_m((), |_, i| (
+            eval *AsyncIOTask::make(policy, 
+                logger.lock(|logs| (
+                    let count = logs.get_size;
+                    let msg = "Thread " + i.to_string + " is running at " + count.to_string + 
+                        if count % 10 == 1 { "st" } else if count % 10 == 2 { "nd" } else if count % 10 == 3 { "rd" } else { "th" };
+                    let msg = msg + if i == count { "." } else { "!" };
+                    logger.set(logs.push_back(msg))
+                ))
+            );
+            pure()
+        ));
+        eval *logger.wait(|logs| logs.get_size == num_threads);
+        println $ (*logger.get).to_iter.join("\n")
     );
     "##;
     run_source(&source, Configuration::develop_compiler());
