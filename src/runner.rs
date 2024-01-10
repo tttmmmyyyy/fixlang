@@ -250,11 +250,6 @@ fn build_module<'c>(
     let ret = gc.apply_lambda(main_lambda, vec![unit], None);
     gc.release(ret);
 
-    // If AsyncTask is used, terminate thread pool (and tasks running with TaskPolicy::run_after_destructed).
-    if config.async_task {
-        gc.call_runtime(RuntimeFunctions::ThreadPoolTerminate, &[]);
-    }
-
     // Perform leak check
     gc.check_leak();
 

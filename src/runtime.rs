@@ -703,9 +703,11 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
             RuntimeFunctions::ThreadPoolInitialize,
             threadpool_initialize,
         );
-        let threadpool_terminate = build_threadpool_terminate_function(gc);
-        gc.runtimes
-            .insert(RuntimeFunctions::ThreadPoolTerminate, threadpool_terminate);
+        if gc.config.sanitize_memory {
+            let threadpool_terminate = build_threadpool_terminate_function(gc);
+            gc.runtimes
+                .insert(RuntimeFunctions::ThreadPoolTerminate, threadpool_terminate);
+        }
     }
     build_get_argc_function(gc);
     build_get_argv_function(gc);
