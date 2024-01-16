@@ -152,6 +152,7 @@ impl TraitInstance {
     // this function returns "[a: Show, b: Show] (a, b) -> String" as the type of "show".
     pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Rc<Scheme> {
         let trait_tyvar = &trait_info.type_var.name;
+
         let impl_type = self.qual_pred.predicate.ty.clone();
         let s = Substitution::single(&trait_tyvar, impl_type);
         let mut method_qualty = trait_info.method_ty(method_name);
@@ -161,6 +162,15 @@ impl TraitInstance {
         let vars = ty.free_vars();
         let mut preds = self.qual_pred.context.clone();
         preds.append(&mut method_qualty.preds);
+
+        // Set source location of the type to the location where the method is implemented.
+        let source = self
+            .method_expr(method_name)
+            .source
+            .as_ref()
+            .map(|src| src.to_single_character());
+        let ty = ty.set_source(source);
+
         Scheme::generalize(vars, preds, ty)
     }
 
