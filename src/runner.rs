@@ -465,9 +465,16 @@ pub fn build_file(mut config: Configuration) {
 
     let mut libs_opts = vec![];
     for (lib_name, link_type) in &config.linked_libraries {
-        match link_type {
-            LinkType::Static => libs_opts.push("-Wl,-Bstatic".to_string()),
-            LinkType::Dynamic => libs_opts.push("-Wl,-Bdynamic".to_string()),
+        if std::env::consts::OS != "macos" {
+            match link_type {
+                LinkType::Static => libs_opts.push("-Wl,-Bstatic".to_string()),
+                LinkType::Dynamic => libs_opts.push("-Wl,-Bdynamic".to_string()),
+            }
+        } else {
+            match link_type {
+                LinkType::Static => error_exit("Static linking is not supported on macOS."),
+                _ => {}
+            }
         }
         libs_opts.push(format!("-l{}", lib_name));
     }
