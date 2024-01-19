@@ -515,17 +515,19 @@ pub fn build_file(mut config: Configuration) {
         }
     }
 
-    let output = Command::new("gcc")
-        .arg("-Wno-unused-command-line-argument")
-        .arg("-no-pie")
-        .arg("-Wl,--gc-sections")
-        .arg("-o")
+    let mut com = Command::new("gcc");
+    com.arg("-Wno-unused-command-line-argument").arg("-no-pie");
+    if std::env::consts::OS == "macos" {
+        com.arg("-Wl,-dead_strip");
+    } else {
+        com.arg("-Wl,--gc-sections");
+    }
+    com.arg("-o")
         .arg(exec_path.to_str().unwrap())
         .arg(obj_path.to_str().unwrap())
         .arg(runtime_obj_path.to_str().unwrap())
-        .args(libs_opts)
-        .output()
-        .expect("Failed to run gcc.");
+        .args(libs_opts);
+    let output = com.output().expect("Failed to run gcc.");
     if output.stderr.len() > 0 {
         eprintln!(
             "{}",
