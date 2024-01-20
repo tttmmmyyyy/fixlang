@@ -5119,6 +5119,37 @@ pub fn test_mvar() {
 
 #[test]
 #[serial]
+pub fn test_mvar_of_shared_object() {
+    // Share an array between multiple threads using Var.
+    // This test is to check whether the refcnt of the array is not corrupted.
+    let source = r##"
+    module Main;
+    import Debug;
+    import AsyncTask;
+
+    main : IO ();
+    main = (
+        let n = 100000;
+        let var = *Var::make([]);
+        let th0 = *AsyncIOTask::make(TaskPolicy::on_dedicated_thread, (
+            let arr = Iterator::range(0, n).to_array;
+            eval *var.Var::set(arr); // Why do we need "Var::" here?
+            pure $ arr.to_iter.fold(0, Add::add)
+        ));
+        let th1 = *AsyncIOTask::make(TaskPolicy::on_dedicated_thread, (
+            let arr = *var.wait_and_lock(|arr| !arr.is_empty, |arr| pure $ arr);
+            pure $ arr.to_iter.fold(0, Add::add)
+        ));
+        eval assert_eq(|_|"", *th0.get, n * (n - 1) / 2);
+        eval assert_eq(|_|"", *th1.get, n * (n - 1) / 2);
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[serial]
 pub fn test_get_args() {
     let source = r##"
     module Main;
