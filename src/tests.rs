@@ -4899,6 +4899,7 @@ pub fn test_async_task_fib() {
 #[test]
 #[serial]
 pub fn test_async_shared_array() {
+    // This test shares array between multiple threads, try to mutate it from one thread while read it from multiple threads simultaneously.
     let source = r#"
     module Main;
     import Debug;
@@ -4944,7 +4945,10 @@ pub fn test_async_shared_array() {
                 }
             )
         ));
-        let sum_task_4 = arr.to_iter.fold(0, Add::add);
+        let sum_task_4 = loop((0, 0), |(i, sum)| (
+            if i == arr.get_size { break $ sum };
+            continue $ (i + 1, sum + arr.@(i))
+        ));
         let ans = n * (n - 1) / 2;
         eval assert_eq(|_|"", sum_task_0.get, ans);
         eval assert_eq(|_|"", sum_task_1.get, ans);
