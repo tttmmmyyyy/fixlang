@@ -571,7 +571,7 @@ impl TypeCheckContext {
                         .join(", ");
                     error_exit_with_src(
                         &format!(
-                            "Name `{}` is ambiguous: there are {}. Maybe you need to write (suffix of) its namespace to help overloading resolution.",
+                            "Name `{}` is ambiguous: there are {}. Maybe you need to write (suffix of) its namespace or type annotation to help overloading resolution.",
                             var.name.to_string(),
                             candidates_str
                         ),

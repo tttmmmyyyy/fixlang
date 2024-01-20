@@ -5134,7 +5134,11 @@ pub fn test_mvar_of_shared_object() {
         let th0 = *AsyncIOTask::make(TaskPolicy::on_dedicated_thread, (
             eval *(println $ "Thread is running."); // This line makes the `arr` is created on `th0` and not in the main thread.
             let arr = Iterator::range(0, n).to_array;
-            eval *var.Var::set(arr); // Why do we need "Var::" here?
+            eval *var.Var::set(arr);
+            // NOTE: we need `Var::` in the above line, because:
+            // - When the compiler try to infer namespace of `set`, it knows that it has type `set : a -> Var (Array b) -> c`.
+            // - `Array::set` has type `I64 -> d -> Array d -> Array d`, which is unifiable to `a -> Var (Array b) -> c` 
+            //   by `a = I64`, `d = Var (Array b)` and `c = Array d -> Array d`.
             pure $ arr.to_iter.fold(0, Add::add)
         ));
         let th1 = *AsyncIOTask::make(TaskPolicy::on_dedicated_thread, (
