@@ -5132,6 +5132,7 @@ pub fn test_mvar_of_shared_object() {
         let n = 100000;
         let var = *Var::make([]);
         let th0 = *AsyncIOTask::make(TaskPolicy::on_dedicated_thread, (
+            eval *(println $ "Thread is running."); // This line makes the `arr` is created on `th0` and not in the main thread.
             let arr = Iterator::range(0, n).to_array;
             eval *var.Var::set(arr); // Why do we need "Var::" here?
             pure $ arr.to_iter.fold(0, Add::add)

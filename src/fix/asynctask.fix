@@ -180,7 +180,7 @@ namespace Var {
     // Create a new `Var` object.
     make : a -> IO (Var a);
     make = |value| IO { _data : |_| (
-        let value = VarValue { value : value };
+        let value = mark_threaded(VarValue { value : value });
         let handle = CALL_C[Ptr fixruntime_threadpool_var_create(Ptr, Ptr, Ptr), 
             value.unsafe_get_retained_ptr_of_boxed_value,
             value.unsafe_get_release_function_of_boxed_value,
@@ -199,7 +199,8 @@ namespace Var {
     // Set a value to a `Var`.
     set : a -> Var a -> IO ();
     set = |value, Var { _dtor : dtor }| IO { _data : |_| (
-        let ptr = VarValue { value : value }.unsafe_get_retained_ptr_of_boxed_value;
+        let value = mark_threaded(VarValue { value : value });
+        let ptr = value.unsafe_get_retained_ptr_of_boxed_value;
         let handle = dtor.@value;
         eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
         eval CALL_C[() fixruntime_threadpool_var_set(Ptr, Ptr), handle, ptr];
