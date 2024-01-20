@@ -1163,24 +1163,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Implement local_bb.
         self.builder().position_at_end(local_bb);
-        // Branch by whether or not the refcnt is one.
-        let local_shared_bb = self
-            .context
-            .append_basic_block(current_func, "shared_bb@mark_threaded");
-        let ptr_refcnt = self.get_refcnt_ptr(obj_ptr);
-        let refcnt = self
-            .builder()
-            .build_load(ptr_refcnt, "refcnt")
-            .into_int_value();
-        let one = refcnt_type(self.context).const_int(1, false);
-        let is_unique =
-            self.builder()
-                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
-        self.builder()
-            .build_conditional_branch(is_unique, cont_bb, local_shared_bb);
-
-        // Implement local_shared_bb.
-        self.builder().position_at_end(local_shared_bb);
         // Store `REFCNT_STATE_THREADED` to `ptr_refcnt_state`.
         self.builder().build_store(
             ptr_refcnt_state,
