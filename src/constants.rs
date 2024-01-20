@@ -190,7 +190,12 @@ pub const TUPLE_UNBOX: bool = true;
 
 // The type in LLVM corresponding to `pthread_once_t` of this system.
 pub fn pthread_once_init_flag_type<'c>(ctx: &'c Context) -> IntType<'c> {
-    ctx.i32_type()
+    // TODO: we should compile C program including "sizeof(pthread_once_t)" and run it to get the correct size.
+    if std::env::consts::OS == "macos" {
+        ctx.i128_type()
+    } else {
+        ctx.i32_type()
+    }
 }
 
 // The value of `PTHREAD_ONCE_INIT` of this system.

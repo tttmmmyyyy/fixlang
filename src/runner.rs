@@ -51,19 +51,20 @@ fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> 
             .expect(&format!("Failed to generate runtime.c"));
         // Create library binary file.
         let mut com = Command::new("gcc");
-        let mut com = com
-            .arg("-shared")
+        com.arg("-shared")
             .arg("-fpic")
             .arg("-o")
             .arg(runtime_so_path.to_str().unwrap())
             .arg(runtime_c_path.to_str().unwrap());
         for m in &config.runtime_c_macro {
-            com = com.arg(format!("-D{}", m));
+            com.arg(format!("-D{}", m));
         }
         // Load dynamically linked libraries specified by user.
         for (lib_name, _) in &config.linked_libraries {
-            com = com.arg(format!("-Wl,--no-as-needed"));
-            com = com.arg(format!("-l{}", lib_name));
+            if std::env::consts::OS != "macos" {
+                com.arg(format!("-Wl,--no-as-needed")); // Apple's ld command doesn't support --no-as-needed.
+            }
+            com.arg(format!("-l{}", lib_name));
         }
         let output = com.output().expect("Failed to run gcc.");
         if output.stderr.len() > 0 {
