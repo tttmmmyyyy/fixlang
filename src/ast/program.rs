@@ -884,7 +884,7 @@ impl Program {
     fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol, tc: &TypeCheckContext) {
         assert!(sym.expr.is_none());
         if !sym.ty.free_vars().is_empty() {
-            error_exit_with_src(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add a type annotation.", sym.template_name.to_string(), sym.ty.to_string_normalize()), &sym.expr.as_ref().unwrap().source);
+            error_exit_with_src(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add type annotation.", sym.template_name.to_string(), sym.ty.to_string_normalize()), &sym.expr.as_ref().unwrap().source);
         }
         let global_sym = self.global_values.get(&sym.template_name).unwrap();
         let typed_expr = match &global_sym.expr {
