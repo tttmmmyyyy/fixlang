@@ -649,6 +649,14 @@ Syntax for number literals is:
 "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )?
 ```
 
+Integer literals can also be written with a hexadecimal (`0x`), octal (`0o`), or binary (`0b`) prefix.
+Syntax for these number literal is:
+```
+"0x" ~ ASCII_HEX_DIGIT+
+"0o" ~ ('0'..'7')+
+"0b" ~ ('0'..'1')+
+```
+
 Note that literals for floating point values requires at least one digit before and after the decimal point. 
 For example, `1.` or `.1` is not valid float literal (where it is valid in C) and you need to write `1.0` or `0.1` instead.
 

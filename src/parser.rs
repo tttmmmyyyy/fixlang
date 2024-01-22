@@ -1329,6 +1329,15 @@ fn parse_integral_string_lit(s: &str) -> Option<BigInt> {
     if s.len() == 0 {
         return None;
     }
+    if s.starts_with("0x") {
+        return BigInt::parse_bytes(s.trim_start_matches("0x").as_bytes(), 16);
+    }
+    if s.starts_with("0o") {
+        return BigInt::parse_bytes(s.trim_start_matches("0o").as_bytes(), 8);
+    }
+    if s.starts_with("0b") {
+        return BigInt::parse_bytes(s.trim_start_matches("0b").as_bytes(), 2);
+    }
     let split = s.split('e').collect::<Vec<_>>();
     if split.len() > 2 {
         return None;

@@ -5409,3 +5409,34 @@ pub fn test_comment_1() {
         );";
     run_source(source, Configuration::develop_compiler());
 }
+
+#[test]
+#[serial]
+pub fn test_hex_oct_bin_lit() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", 0x0, 0);
+        eval assert_eq(|_|"", 0o0, 0);
+        eval assert_eq(|_|"", 0b0, 0);
+        eval assert_eq(|_|"", 0x0123456789abcdef, 81985529216486895);
+        eval assert_eq(|_|"", 0x0123456789ABCDEF, 81985529216486895);
+        eval assert_eq(|_|"", 0o01234567, 342391);
+        eval assert_eq(|_|"", 0b01, 1);
+        eval assert_eq(|_|"", 0xdeadbeef, 3735928559);
+        eval assert_eq(|_|"", 0o33653337357, 3735928559);
+        eval assert_eq(|_|"", 0b11011110101011011011111011101111, 3735928559);
+        eval assert_eq(|_|"", 0x7FFFFFFFFFFFFFFF, 9223372036854775807);
+        eval assert_eq(|_|"", 0xFFFFFFFFFFFFFFFF_U64, 18446744073709551615_U64);
+        eval assert_eq(|_|"", 0o1777777777777777777777_U64, 18446744073709551615_U64);
+        eval assert_eq(|_|"", 0b1111111111111111111111111111111111111111111111111111111111111111_U64, 18446744073709551615_U64);
+        eval assert_eq(|_|"", 0x7FFFFFFF_I32, 2147483647_I32);
+        eval assert_eq(|_|"", 0xFFFFFFFF_U32, 4294967295_U32);
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
