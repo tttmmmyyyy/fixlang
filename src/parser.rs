@@ -1655,8 +1655,8 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
     let span = Span::from_pair(&ctx.source, &pair);
     let target_module = pair.into_inner().next().unwrap().as_str().to_string();
     ImportStatement {
-        source_module: ctx.module_name.clone(),
-        target_module,
+        importer: ctx.module_name.clone(),
+        importee: target_module,
         source: Some(span),
     }
 }

@@ -354,7 +354,7 @@ impl Program {
     // Add import statements.
     pub fn add_import_statements(&mut self, mut imports: Vec<ImportStatement>) {
         for import in &imports {
-            self.add_visible_mod(&import.source_module, &import.target_module);
+            self.add_visible_mod(&import.importer, &import.importee);
         }
         self.unresolved_imports.append(&mut imports);
     }
@@ -1346,7 +1346,7 @@ impl Program {
             let import = self.unresolved_imports.pop().unwrap();
 
             // If import is already resolved, do nothing.
-            if self.visible_mods.contains_key(&import.target_module) {
+            if self.visible_mods.contains_key(&import.importee) {
                 continue;
             }
 
@@ -1355,7 +1355,7 @@ impl Program {
             for (mod_name, source_content, file_name, config_modifier, mod_modifier) in
                 STANDARD_LIBRARIES
             {
-                if import.target_module == *mod_name {
+                if import.importee == *mod_name {
                     let mut fixmod = parse_source_temporary_file(
                         source_content,
                         file_name,
@@ -1377,7 +1377,7 @@ impl Program {
             }
 
             error_exit_with_src(
-                &format!("Cannot find module `{}`", import.target_module),
+                &format!("Cannot find module `{}`", import.importee),
                 &import.source,
             );
         }
