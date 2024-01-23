@@ -652,9 +652,9 @@ Syntax for number literals is:
 Integer literals can also be written with a hexadecimal (`0x`), octal (`0o`), or binary (`0b`) prefix.
 Syntax for these number literal is:
 ```
-"0x" ~ ASCII_HEX_DIGIT+
-"0o" ~ ('0'..'7')+
-"0b" ~ ('0'..'1')+
+"-"? ~ "0x" ~ ASCII_HEX_DIGIT+
+"-"? ~ "0o" ~ ('0'..'7')+
+"-"? ~ "0b" ~ ('0'..'1')+
 ```
 
 Note that literals for floating point values requires at least one digit before and after the decimal point. 
