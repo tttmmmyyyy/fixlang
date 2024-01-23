@@ -132,7 +132,7 @@ fn build_module<'c>(
     let mut typechecker = TypeCheckContext::new(
         fix_mod.trait_env.clone(),
         fix_mod.type_env(),
-        fix_mod.visible_mods.clone(),
+        fix_mod.visible_namespaces.clone(),
     );
 
     // Register type declarations of global symbols to typechecker.

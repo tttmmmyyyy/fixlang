@@ -299,23 +299,24 @@ pub struct Program {
 
     // Import statements to be resolved.
     pub unresolved_imports: Vec<ImportStatement>,
-    // For each linked module `m`, `visible_mods[m]` is the set of modules imported by `m`.
+    // For each linked module `m`, `visible_mods[m]` is the set of module / namespaces imported by `m`.
     // Each module imports itself.
     // This is used to namespace resolution and overloading resolution.
-    pub visible_mods: HashMap<Name, HashSet<Name>>,
+    // Keys are always module names, where values can be namespaces.
+    pub visible_namespaces: HashMap<NameSpace, HashSet<NameSpace>>,
     // Last update date for each linked modules.
-    pub last_updates: HashMap<Name, UpdateDate>,
+    pub last_updates: HashMap<NameSpace, UpdateDate>,
     // Last affected date for each linked modules.
     // Last affected date is defined as the maximum value of last update dates of all imported modules.
-    pub last_affected_dates: HashMap<Name, UpdateDate>,
+    pub last_affected_dates: HashMap<NameSpace, UpdateDate>,
 }
 
 impl Program {
     // Create a program consists of single module.
-    pub fn single_module(module_name: Name) -> Program {
+    pub fn single_module(module_name: NameSpace) -> Program {
         let mut fix_mod = Program {
             unresolved_imports: vec![],
-            visible_mods: Default::default(),
+            visible_namespaces: Default::default(),
             type_defns: Default::default(),
             global_values: Default::default(),
             instantiated_global_symbols: Default::default(),
@@ -327,7 +328,7 @@ impl Program {
             used_tuple_sizes: Vec::from_iter(0..=TUPLE_SIZE_BASE),
         };
         fix_mod.add_visible_mod(&module_name, &module_name);
-        fix_mod.add_visible_mod(&module_name, &STD_NAME.to_string());
+        fix_mod.add_visible_mod(&module_name, &NameSpace::new_str(&[STD_NAME]));
         fix_mod.set_last_update(module_name, UpdateDate(SystemTime::now().into())); // Later updated to source file's last modified date.
         fix_mod
     }
@@ -347,7 +348,7 @@ impl Program {
     }
 
     // Set this module's last update.
-    pub fn set_last_update(&mut self, mod_name: Name, time: UpdateDate) {
+    pub fn set_last_update(&mut self, mod_name: NameSpace, time: UpdateDate) {
         self.last_updates.insert(mod_name, time);
     }
 
@@ -863,7 +864,7 @@ impl Program {
         let nrctx = NameResolutionContext {
             types: self.tycon_names_with_aliases(),
             traits: self.trait_names_with_aliases(),
-            imported_modules: self.visible_mods[define_module].clone(),
+            imported_modules: self.visible_namespaces[define_module].clone(),
         };
         te.expr = te.expr.resolve_namespace(&nrctx);
 
@@ -1128,7 +1129,7 @@ impl Program {
         {
             let mut tycons = (*self.type_env.tycons).clone();
             for (tc, ti) in &mut tycons {
-                ctx.imported_modules = self.visible_mods[&tc.name.module()].clone();
+                ctx.imported_modules = self.visible_namespaces[&tc.name.module()].clone();
                 ti.resolve_namespace(&ctx);
             }
             self.type_env.tycons = Rc::new(tycons);
@@ -1137,20 +1138,20 @@ impl Program {
         {
             let mut aliases = (*self.type_env.aliases).clone();
             for (tc, ta) in &mut aliases {
-                ctx.imported_modules = self.visible_mods[&tc.name.module()].clone();
+                ctx.imported_modules = self.visible_namespaces[&tc.name.module()].clone();
                 ta.resolve_namespace(&ctx);
             }
             self.type_env.aliases = Rc::new(aliases);
         }
 
         self.trait_env
-            .resolve_namespace(&mut ctx, &self.visible_mods);
+            .resolve_namespace(&mut ctx, &self.visible_namespaces);
         for decl in &mut self.type_defns {
-            ctx.imported_modules = self.visible_mods[&decl.name.module()].clone();
+            ctx.imported_modules = self.visible_namespaces[&decl.name.module()].clone();
             decl.resolve_namespace(&ctx);
         }
         for (name, sym) in &mut self.global_values {
-            ctx.imported_modules = self.visible_mods[&name.module()].clone();
+            ctx.imported_modules = self.visible_namespaces[&name.module()].clone();
             sym.resolve_namespace_in_declaration(&ctx);
         }
     }
@@ -1288,7 +1289,7 @@ impl Program {
     }
 
     pub fn linked_mods(&self) -> HashSet<Name> {
-        self.visible_mods.keys().cloned().collect()
+        self.visible_namespaces.keys().cloned().collect()
     }
 
     // Link an module.
@@ -1304,11 +1305,12 @@ impl Program {
         }
 
         // Merge imported_mod_map.
-        for (importer, importee) in &other.visible_mods {
-            if let Some(known_importee) = self.visible_mods.get(importer) {
+        for (importer, importee) in &other.visible_namespaces {
+            if let Some(known_importee) = self.visible_namespaces.get(importer) {
                 assert_eq!(known_importee, importee);
             } else {
-                self.visible_mods.insert(importer.clone(), importee.clone());
+                self.visible_namespaces
+                    .insert(importer.clone(), importee.clone());
             }
         }
 
@@ -1346,7 +1348,7 @@ impl Program {
             let import = self.unresolved_imports.pop().unwrap();
 
             // If import is already resolved, do nothing.
-            if self.visible_mods.contains_key(&import.importee) {
+            if self.visible_namespaces.contains_key(&import.importee) {
                 continue;
             }
 
@@ -1383,12 +1385,12 @@ impl Program {
         }
     }
 
-    pub fn add_visible_mod(&mut self, importer: &Name, imported: &Name) {
-        if !self.visible_mods.contains_key(importer) {
-            self.visible_mods
+    pub fn add_visible_mod(&mut self, importer: &NameSpace, imported: &NameSpace) {
+        if !self.visible_namespaces.contains_key(importer) {
+            self.visible_namespaces
                 .insert(importer.clone(), Default::default());
         }
-        self.visible_mods
+        self.visible_namespaces
             .get_mut(importer)
             .unwrap()
             .insert(imported.clone());
@@ -1397,7 +1399,7 @@ impl Program {
     // Create a graph of modules. If module A imports module B, an edge from B to A is added.
     pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
-        for (from, tos) in &self.visible_mods {
+        for (from, tos) in &self.visible_namespaces {
             for to in tos {
                 graph.connect(
                     *elem_to_idx.get(from).unwrap(),

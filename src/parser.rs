@@ -17,7 +17,9 @@ struct ParseContext {
     // The source code.
     source: SourceFile,
     // The module name.
-    module_name: Name,
+    module_name: NameSpace,
+    // Current namespace.
+    namespace: NameSpace,
 }
 
 impl ParseContext {
@@ -26,8 +28,19 @@ impl ParseContext {
             tuple_sizes: vec![],
             do_context: DoContext::default(),
             source,
-            module_name: "".to_string(),
+            module_name: NameSpace::new(vec![]),
+            namespace: NameSpace::new(vec![]),
         }
+    }
+
+    fn append_namespace(&mut self, namespace: NameSpace) -> NameSpace {
+        let res = self.namespace;
+        self.namespace.append(namespace);
+        res
+    }
+
+    fn set_namespace(&mut self, namespace: NameSpace) {
+        self.namespace = namespace;
     }
 }
 
@@ -125,7 +138,6 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile) -> Program {
 
     let mut pairs = pair.into_inner();
     ctx.module_name = parse_module_defn(pairs.next().unwrap());
-    let namespace = NameSpace::new(vec![ctx.module_name.clone()]);
     let mut fix_mod = Program::single_module(ctx.module_name.clone());
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
@@ -141,7 +153,6 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile) -> Program {
             Rule::global_defns => parse_global_defns(
                 pair,
                 &mut ctx,
-                &namespace,
                 &mut global_value_decls,
                 &mut global_value_defns,
                 &mut type_defns,
@@ -170,7 +181,6 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile) -> Program {
 fn parse_global_defns(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-    namespace: &NameSpace,
     global_value_decls: &mut Vec<GlobalValueDecl>,
     global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
@@ -185,7 +195,6 @@ fn parse_global_defns(
                 parse_global_defns_in_namespace(
                     pair,
                     ctx,
-                    namespace,
                     global_value_decls,
                     global_value_defns,
                     type_defns,
@@ -194,19 +203,19 @@ fn parse_global_defns(
                 );
             }
             Rule::type_defn => {
-                type_defns.push(parse_type_defn(pair, ctx, &namespace));
+                type_defns.push(parse_type_defn(pair, ctx));
             }
             Rule::global_name_type_sign => {
-                global_value_decls.push(parse_global_value_decl(pair, ctx, &namespace));
+                global_value_decls.push(parse_global_value_decl(pair, ctx));
             }
             Rule::global_name_defn => {
-                global_value_defns.push(parse_global_name_defn(pair, ctx, &namespace));
+                global_value_defns.push(parse_global_name_defn(pair, ctx));
             }
             Rule::trait_defn => {
-                trait_infos.push(parse_trait_defn(pair, ctx, &namespace));
+                trait_infos.push(parse_trait_defn(pair, ctx));
             }
             Rule::trait_alias_defn => {
-                trait_aliases.push(parse_trait_alias(pair, ctx, &namespace));
+                trait_aliases.push(parse_trait_alias(pair, ctx));
             }
             _ => unreachable!(),
         }
@@ -216,7 +225,6 @@ fn parse_global_defns(
 fn parse_global_defns_in_namespace(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-    namespace: &NameSpace,
     global_value_decls: &mut Vec<GlobalValueDecl>,
     global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
@@ -225,12 +233,12 @@ fn parse_global_defns_in_namespace(
 ) {
     assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
     let mut pairs = pair.into_inner();
-    let namespace = namespace.append(parse_namespace(pairs.next().unwrap(), ctx));
+    let namespace = parse_namespace(pairs.next().unwrap());
+    let bak_namespace = ctx.append_namespace(namespace);
     for pair in pairs {
         parse_global_defns(
             pair,
             ctx,
-            &namespace,
             global_value_decls,
             global_value_defns,
             type_defns,
@@ -238,19 +246,16 @@ fn parse_global_defns_in_namespace(
             trait_aliases,
         );
     }
+    ctx.set_namespace(bak_namespace);
 }
 
-fn parse_trait_alias(
-    pair: Pair<Rule>,
-    ctx: &mut ParseContext,
-    namespace: &NameSpace,
-) -> TraitAlias {
+fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
     assert_eq!(pair.as_rule(), Rule::trait_alias_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
     let id = TraitId::from_fullname(FullName::new(
-        namespace,
+        &ctx.namespace,
         &pairs.next().unwrap().as_str().to_string(),
     ));
     let mut values = vec![];
@@ -265,7 +270,7 @@ fn parse_trait_alias(
     }
 }
 
-fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext, namespace: &NameSpace) -> TraitInfo {
+fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -289,7 +294,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext, namespace: &NameSp
         .map(|pair| parse_trait_member_defn(pair, ctx))
         .collect();
     TraitInfo {
-        id: TraitId::from_fullname(FullName::new(namespace, &trait_name)),
+        id: TraitId::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
         kind_predicates: kinds,
@@ -346,11 +351,7 @@ fn parse_predicate_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualPr
     qp
 }
 
-fn parse_global_value_decl(
-    pair: Pair<Rule>,
-    ctx: &mut ParseContext,
-    namespace: &NameSpace,
-) -> GlobalValueDecl {
+fn parse_global_value_decl(pair: Pair<Rule>, ctx: &mut ParseContext) -> GlobalValueDecl {
     assert_eq!(pair.as_rule(), Rule::global_name_type_sign);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -359,24 +360,20 @@ fn parse_global_value_decl(
     let preds = qual_type.preds.clone();
     let ty = qual_type.ty.clone();
     GlobalValueDecl {
-        name: FullName::new(namespace, &name),
+        name: FullName::new(&ctx.namespace, &name),
         ty: Scheme::generalize(ty.free_vars(), preds, ty),
         src: Some(span),
     }
 }
 
-fn parse_global_name_defn(
-    pair: Pair<Rule>,
-    ctx: &mut ParseContext,
-    namespace: &NameSpace,
-) -> GlobalValueDefn {
+fn parse_global_name_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> GlobalValueDefn {
     assert_eq!(pair.as_rule(), Rule::global_name_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx);
     GlobalValueDefn {
-        name: FullName::new(namespace, &name),
+        name: FullName::new(&ctx.namespace, &name),
         expr: expr,
         src: Some(span),
     }
@@ -509,11 +506,11 @@ fn parse_kind_braced(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<Kind> {
     parse_kind(pair, ctx)
 }
 
-fn parse_module_defn(pair: Pair<Rule>) -> Name {
-    pair.into_inner().next().unwrap().as_str().to_string()
+fn parse_module_defn(pair: Pair<Rule>) -> NameSpace {
+    parse_namespace(pair.into_inner().next().unwrap())
 }
 
-fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext, namespace: &NameSpace) -> TypeDefn {
+fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDefn {
     assert_eq!(pair.as_rule(), Rule::type_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -534,7 +531,7 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext, namespace: &NameSpa
         unreachable!();
     };
     TypeDefn {
-        name: FullName::new(namespace, name),
+        name: FullName::new(&ctx.namespace, name),
         value: type_value,
         tyvars,
         source: Some(span),
@@ -1063,7 +1060,7 @@ fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let namespace = if pairs.peek().unwrap().as_rule() == Rule::namespace {
-        parse_namespace(pairs.next().unwrap(), ctx)
+        parse_namespace(pairs.next().unwrap())
     } else {
         NameSpace::local()
     };
@@ -1075,7 +1072,7 @@ fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
     expr_var(name, Some(span))
 }
 
-fn parse_namespace(pair: Pair<Rule>, _ctx: &mut ParseContext) -> NameSpace {
+fn parse_namespace(pair: Pair<Rule>) -> NameSpace {
     assert_eq!(pair.as_rule(), Rule::namespace);
     let pairs = pair.into_inner();
     let mut ret: Vec<String> = Vec::new();
@@ -1653,7 +1650,7 @@ fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<PatternNo
 fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportStatement {
     assert_eq!(pair.as_rule(), Rule::import_statement);
     let span = Span::from_pair(&ctx.source, &pair);
-    let target_module = pair.into_inner().next().unwrap().as_str().to_string();
+    let target_module = parse_namespace(pair.into_inner().next().unwrap());
     ImportStatement {
         importer: ctx.module_name.clone(),
         importee: target_module,

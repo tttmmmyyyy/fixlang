@@ -117,7 +117,7 @@ pub struct TraitInstance {
     // Method implementation.
     pub methods: HashMap<Name, Rc<ExprNode>>,
     // Module where this instance is defined.
-    pub define_module: Name,
+    pub define_module: NameSpace,
     // Source location where this instance is defined.
     pub source: Option<Span>,
 }
