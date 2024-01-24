@@ -116,11 +116,15 @@ The first line is the module definition:
 module Main;
 ```
 
-In Fix, values, functions, types and traits defined in a source file is collected to a module. Each source file has to declare the name of the module it defines by `module {module_name};`. The first letter of the module name must be capitalized.
+In Fix, values, functions, types and traits defined in a source file is collected to a module. Each source file has to declare the name of the module it defines by `module {module_name};`. 
 
 When Fix program runs, it calls `main` function defined in the `Main` module.
 
 The usefulness of modules is hard to see in this example. They are useful when you construct a program from multiple source files.
+
+The first letter of the module name must be capitalized. 
+Moreover, you can use a sequence of strings with a capital initial separated by periods (e.g. `Main.Model.Impl`) as a module name. 
+Though periods in a module name does not have any functionality, this grammar will be useful to express the hierarchy of modules.
 
 ## Global values
 
