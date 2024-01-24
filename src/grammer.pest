@@ -17,10 +17,11 @@ var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" | "!" }
 var = { !keywords ~ (var_head ~ var_char*) }
 
 capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
+
+// Though period is allowed in namespace item in grammer, the parser raisse an error if a user tries to define a namespace with period.
+// It is ok for using period in module name.
+namespace_item = { capital_name ~ ("." ~ capital_name)* }
 capital_fullname = { (namespace_item ~ "::")* ~ capital_name }
-
-namespace_item = { capital_name }
-
 namespace = { namespace_item ~ ("::" ~ namespace_item)* }
 
 // === Expressions ===
@@ -230,14 +231,10 @@ global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semi
 global_name_defn = { var ~ sep+ ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
 
 // === Import statements === 
-import_statement = { "import" ~ sep+ ~ module_name ~ sep* ~ semicolon }
+import_statement = { "import" ~ sep+ ~ namespace_item ~ sep* ~ semicolon }
 
 // === Module ===
-module_name_head = _{ ASCII_ALPHA_UPPER }
-module_name_char = _{ ASCII_ALPHA | ASCII_DIGIT }
-module_name = { module_name_head ~ module_name_char* }
-
-module_defn = { "module" ~ sep+ ~ namespace ~ sep* ~ semicolon }
+module_defn = { "module" ~ sep+ ~ namespace_item ~ sep* ~ semicolon }
 
 global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_alias_defn }
 
