@@ -5,12 +5,13 @@ module Main;
 import Lib0;
 import Lib1;
 import Lib2;
+import Lib2.Lib3;
 
 name : String;
 name = "Main";
 
 imports : Array String;
-imports = [Lib0::name, Lib1::name, Lib2::name];
+imports = [Lib0::name, Lib1::name, Lib2::name, Lib2.Lib3::name];
 
 print_imports : String -> Array String -> IO ();
 print_imports = |name, imports| (
@@ -23,5 +24,6 @@ main = (
     eval *print_imports(Lib0::name, Lib0::imports);
     eval *print_imports(Lib1::name, Lib1::imports);
     eval *print_imports(Lib2::name, Lib2::imports);
+    eval *print_imports(Lib2.Lib3::name, Lib2.Lib3::imports);
     pure()
 );
