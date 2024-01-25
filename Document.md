@@ -124,7 +124,7 @@ The usefulness of modules is hard to see in this example. They are useful when y
 
 The first letter of the module name must be capitalized. 
 Moreover, you can use a sequence of strings with a capital initial separated by periods (e.g. `Main.Model.Impl`) as a module name. 
-Though periods in a module name does not have any functionality, this grammar will be useful to express the hierarchy of modules.
+This grammar will be useful to express the hierarchy of modules.
 
 ## Global values
 
@@ -834,6 +834,9 @@ main = (
 [Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCm5hbWVzcGFjZSBCb29sZWFuVHJ1dGggew0KICAgIHRydXRoIDogQm9vbDsNCiAgICB0cnV0aCA9IHRydWU7DQp9DQoNCm5hbWVzcGFjZSBJbnRlZ3JhbFRydXRoIHsNCiAgICB0cnV0aCA6IEk2NDsNCiAgICB0cnV0aCA9IDQyOw0KfQ0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIHByaW50bG4gJCAoMCArIHRydXRoKS50b19zdHJpbmcNCik7)
 
 will compile because Fix can infer the type of `truth` by the fact that it can be added to `0` of type `I64`.
+
+A module name can be a string created by concatenating strings with capital initials by periods (e.g. `Main.Model.Impl`).
+In this case, an entity whose full name is `Main.Model.Impl::truth` can be referred to as `Impl::truth` or `Model.Impl::truth`.
 
 ## Recursion
 

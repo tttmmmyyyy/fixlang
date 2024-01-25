@@ -3,6 +3,7 @@ use inkwell::{context::Context, types::IntType, values::IntValue};
 use crate::{ast::program::Program, configuration::Configuration, runtime::RuntimeFunctions};
 
 pub const NAMESPACE_SEPARATOR: &str = "::";
+pub const MODULE_SEPARATOR: &str = ".";
 
 pub const STD_NAME: &str = "Std";
 pub const FFI_NAME: &str = "FFI";

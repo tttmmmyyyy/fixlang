@@ -24,6 +24,6 @@ main = (
     eval *print_imports(Lib0::name, Lib0::imports);
     eval *print_imports(Lib1::name, Lib1::imports);
     eval *print_imports(Lib2::name, Lib2::imports);
-    eval *print_imports(Lib2.Lib3::name, Lib2.Lib3::imports);
+    eval *print_imports(Lib2.Lib3::name, Lib3::imports);
     pure()
 );

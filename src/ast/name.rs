@@ -30,14 +30,29 @@ impl NameSpace {
         self.names.join(NAMESPACE_SEPARATOR)
     }
 
+    // Checks if `self` is a suffix of the argument.
+    // "Name::entity" is not suffix of "ModName::entity", but should be suffix of "Mod.Name::entity".
     pub fn is_suffix(&self, rhs: &NameSpace) -> bool {
-        let n = self.names.len();
-        let m = rhs.names.len();
+        // Splits `Mod.Name::entity` into `[Mod, Name, entity]`.
+        fn to_components(namespace: &NameSpace) -> Vec<String> {
+            if namespace.names.is_empty() {
+                return vec![];
+            }
+            let str = namespace.to_string();
+            let str = str.replace(NAMESPACE_SEPARATOR, MODULE_SEPARATOR);
+            str.split(MODULE_SEPARATOR)
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        }
+        let lhs = to_components(self);
+        let rhs = to_components(rhs);
+        let n = lhs.len();
+        let m = rhs.len();
         if n > m {
             return false;
         }
         for i in 0..n {
-            if self.names[n - 1 - i] != rhs.names[m - i - 1] {
+            if lhs[n - 1 - i] != rhs[m - i - 1] {
                 return false;
             }
         }

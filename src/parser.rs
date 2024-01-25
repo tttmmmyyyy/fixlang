@@ -227,7 +227,7 @@ fn parse_global_defns_in_namespace(
     let mut pairs = pair.into_inner();
     let namespace = parse_namespace(pairs.next().unwrap(), ctx);
     // Do not allow period in namepsace: it is allowed only in module name.
-    if namespace.names.iter().any(|s| s.contains('.')) {
+    if namespace.names.iter().any(|s| s.contains(MODULE_SEPARATOR)) {
         let src = src.to_single_character();
         error_exit_with_src(
             "Period is not allowed in namespace: it is only allowed in module name.",
