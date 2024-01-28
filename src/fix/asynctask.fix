@@ -131,7 +131,7 @@ namespace AsyncIOTask {
         // NOTE: we must not create AsyncTask in this function; we should create it in the IO action.
         // Otherwise, user can run IO action in a pure function.
         // So we cannot implement this function as `pure $ IOTask { ... }`.
-        IO { _data : |_| IOTask { _task : make(policy, |_| io._unsafe_perform) } }
+        IO { _data : |_| IOTask { _task : make(|_| io._unsafe_perform) } }
     );
 }
 
