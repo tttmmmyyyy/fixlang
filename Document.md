@@ -1280,7 +1280,8 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 - Use `...` for `va_arg`.
 - If return type is `void`, put `()` before the function name.
 
-Note that calling C function may break Fix's assurance such as immutability or memory safety. Use this feature carefully.
+Note that calling C function may break Fix's assurance such as immutability or memory safety. 
+The programmer has a responsibility to hide the side effect of C program by `IO`, or manage resource appropriately.
 
 ### Sending Fix's object to C 
 
@@ -1297,6 +1298,7 @@ You have a responsibility to "release" (i.e., decrement the reference counter) i
 You can get a function pointer of retain / release function by the followings:
 - `Std::FFI::unsafe_get_release_function_of_boxed_value : a -> Ptr`
 - `Std::FFI::unsafe_get_retain_function_of_boxed_value : a -> Ptr`
+
 They return a function pointer of type `void (*)(void*)`. 
 
 To manage reference counter of Fix's object from C side, you need to send the function pointers to C side using `CALL_C`, and call them on a pointer which directs to a Fix's object properly.
