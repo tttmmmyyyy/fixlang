@@ -60,7 +60,7 @@
   - [Foreign function interface (FFI)](#foreign-function-interface-ffi)
     - [Calling C functions from Fix](#calling-c-functions-from-fix)
     - [Sending Fix's value to C](#sending-fixs-value-to-c)
-    - [Retain / release Fix's value from C](#retain--release-fixs-value-from-c)
+    - [Retaining / releasing Fix's value from C](#retaining--releasing-fixs-value-from-c)
     - [Calling Fix's function from C](#calling-fixs-function-from-c)
     - [Casting back a `Ptr` to a Fix's value](#casting-back-a-ptr-to-a-fixs-value)
     - [Managing C resource from Fix](#managing-c-resource-from-fix)
@@ -1293,7 +1293,7 @@ Then you can send the pointer to C's world by `CALL_C`.
 The returned pointer is "retained" in the sense that it has a (shared) ownership of the Fix's value. 
 You have a responsibility to "release" (i.e., decrement the reference counter) it to avoid resource leak.
 
-### Retain / release Fix's value from C
+### Retaining / releasing Fix's value from C
 
 You can get a function pointer of retain / release function by the followings:
 - `Std::FFI::unsafe_get_release_function_of_boxed_value : a -> Ptr`
