@@ -3910,8 +3910,6 @@ pub fn test123_5() {
 
         import Debug;
 
-        type Boxed = box struct { x : I64 };
-
         main : IO ();
         main = (
             let act2: I64 -> Option I64 = |v| (
