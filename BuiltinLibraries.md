@@ -2184,7 +2184,7 @@ Get a value stored in a `Var`.
 `var.lock(act)` performs an action on the value in `var` while locking `var` to prevent it from being changed by another thread.
 
 ### `make : a -> IO (Var a)`
-`Create a new `Var` object.`
+Create a new `Var` object.
 
 ### `mod : (a -> a) -> Var a -> IO ()`
 Atomically modifies a value in a `Var`.
