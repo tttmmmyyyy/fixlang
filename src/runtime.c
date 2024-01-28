@@ -540,7 +540,7 @@ typedef struct
 void fixruntime_thread_prepare_termination();
 void fixruntime_thread_terminate();
 Task *fixruntime_thread_create_task(TaskFunction function, void (*release_result)(void *), void (*retain_result)(void *));
-void *fixruntime_thread_get_task_result(Task *task);
+TaskResult fixruntime_thread_get_task_result(Task *task);
 void fixruntime_thread_release_task(Task *task);
 
 // Internal functions.
