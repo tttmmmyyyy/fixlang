@@ -1339,7 +1339,7 @@ For details, [see the document for `Destructor`](./BuiltinLibraries.md#namespace
 ### Note on multi-threading
 
 Fix's reference counting is not thread-safe by default. 
-Retaining / releasing a pointer to a Fix's value from multiple shreads simultaneously may cause memory leak or segmentation fault.
+Retaining / releasing a pointer to a Fix's value from multiple threads simultaneously may cause memory leak or segmentation fault.
 
 To avoid this problem, add the `--threaded` compiler flag, and call `Std::mark_threaded : a -> a` on the value before obtaining the pointer.
 The `Std::mark_threaded` function traverses all values reachable from the given value, and changes them into multi-threaded mode so that the reference counting on them will be done atomically.
