@@ -678,9 +678,6 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     let ptr_add_offset_func = build_ptr_add_offset_function(gc);
     gc.runtimes
         .insert(RuntimeFunctions::PtrAddOffset, ptr_add_offset_func);
-    let run_function_func = build_run_function(gc);
-    gc.runtimes
-        .insert(RuntimeFunctions::RunFunction, run_function_func);
 
     if gc.config.threaded {
         let pthread_call_once_func = build_pthread_once_function(gc);
@@ -702,6 +699,10 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
         gc.runtimes
             .insert(RuntimeFunctions::ThreadTerminate, thread_terminate);
     }
+    let run_function_func = build_run_function(gc); // This should be built after `build_mark_threaded_boxed_object_function`.
+    gc.runtimes
+        .insert(RuntimeFunctions::RunFunction, run_function_func);
+
     build_get_argc_function(gc);
     build_get_argv_function(gc);
 }
