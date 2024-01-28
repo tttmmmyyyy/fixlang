@@ -533,19 +533,15 @@
       - [`to_string : [a: ToString] a -> String`](#to_string--a-tostring-a---string)
 - [Module `AsyncTask`](#module-asynctask)
   - [`type Task a`](#type-task-a)
-  - [`type TaskData a`](#type-taskdata-a)
+  - [`type TaskHandle`](#type-taskhandle)
+  - [`_get_boxed_none_of_codomain_type : (() -> a) -> Boxed (Option a)`](#_get_boxed_none_of_codomain_type-----a---boxed-option-a)
   - [`get : Task a -> a`](#get--task-a---a)
-  - [`make : TaskPolicy -> (() -> a) -> Task a`](#make--taskpolicy------a---task-a)
+  - [`make : (() -> a) -> Task a`](#make-----a---task-a)
   - [`number_of_processors : I64`](#number_of_processors--i64)
   - [`namespace AsyncIOTask`](#namespace-asynciotask)
     - [`type IOTask a`](#type-iotask-a)
     - [`get : IOTask a -> IO a`](#get--iotask-a---io-a)
-    - [`make : TaskPolicy -> IO a -> IO (IOTask a)`](#make--taskpolicy---io-a---io-iotask-a)
-  - [`namespace TaskPolicy`](#namespace-taskpolicy)
-    - [`type TaskPolicy`](#type-taskpolicy)
-    - [`default : TaskPolicy`](#default--taskpolicy)
-    - [`run_after_destructed : TaskPolicy`](#run_after_destructed--taskpolicy)
-    - [`on_dedicated_thread : TaskPolicy`](#on_dedicated_thread--taskpolicy)
+    - [`make : IO a -> IO (IOTask a)`](#make--io-a---io-iotask-a)
   - [`namespace Var`](#namespace-var)
     - [`type Var a`](#type-var-a)
     - [`type VarHandle`](#type-varhandle)
@@ -2055,17 +2051,19 @@ Importing this module automatically enables `--threaded` flag of the compiler.
 Note that this causes some overhead even for a single-threaded program.
 
 ## `type Task a`
-A type for a computation task that can be run asynchronously.
+A type for a computation task that runs asynchronously.
 
-## `type TaskData a`
-A type to store a task and its result. 
-This type should be used only by implementation of this library.
+## `type TaskHandle`
+A native handle of a task. This type is used only for implementation.
+
+## `_get_boxed_none_of_codomain_type : (() -> a) -> Boxed (Option a)`
+Get a boxed none of type `a` from a value of type `() -> a`.
 
 ## `get : Task a -> a`
-Get the result of a computation task.
+Get the result of a task.
 This function blocks the current thread until the task is finished.
 
-## `make : TaskPolicy -> (() -> a) -> Task a`
+## `make : (() -> a) -> Task a`
 Make a task which performs a computation asynchronously.
 
 Example:
@@ -2113,7 +2111,7 @@ A type for an I/O action that can be run asynchronously.
 ### `get : IOTask a -> IO a`
 Get the result of an asynchronous I/O action.
 
-### `make : TaskPolicy -> IO a -> IO (IOTask a)`
+### `make : IO a -> IO (IOTask a)`
 An `IO` version of `AsyncTask::make`.
 
 Example:
@@ -2140,23 +2138,6 @@ main = (
 );
 ```
 
-## `namespace TaskPolicy`
-
-### `type TaskPolicy`
-A type to represent how a task should be executed.
-This is a type alias of `U32` and used as bit flag.
-
-### `default : TaskPolicy`
-Default task policy.
-
-### `run_after_destructed : TaskPolicy`
-By default policy, a task will be canceled when the task object is destructed.
-This task policy runs the task even after the task object is destructed.
-
-### `on_dedicated_thread : TaskPolicy`
-By default policy, a task will be executed on a thread in the thread pool.
-This task policy runs the task on a dedicated thread.
-
 ## `namespace Var`
 
 ### `type Var a`
@@ -2168,13 +2149,12 @@ import AsyncTask;
 
 main : IO ();
 main = (
-    let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
     let logger = *Var::make([]); // A mutable array of strings.
 
     // Launch multiple threads, and log in which order each thread is executed.
     let num_threads = number_of_processors * 2;
     eval *Iterator::range(0, num_threads).fold_m((), |_, i| (
-        eval *AsyncIOTask::make(policy, 
+        eval *AsyncIOTask::make(
             logger.lock(|logs| (
                 let count = logs.get_size;
                 let msg = "Thread " + i.to_string + " is running at " + count.to_string + 
