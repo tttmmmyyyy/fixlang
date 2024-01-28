@@ -64,7 +64,7 @@
     - [Calling Fix's function from C](#calling-fixs-function-from-c)
     - [Casting back a `Ptr` to a Fix's value](#casting-back-a-ptr-to-a-fixs-value)
     - [Managing C resource from Fix](#managing-c-resource-from-fix)
-    - [Note on multi-threading](#note-on-multi-threading)
+    - [Sharing a `Ptr` between multiple threads](#sharing-a-ptr-between-multiple-threads)
 - [Operators](#operators)
 - [Tips](#tips)
   - [How to debug Fix program](#how-to-debug-fix-program)
@@ -1336,7 +1336,7 @@ If you try to create a Fix's type which wraps a C resource, and want to call the
 
 For details, [see the document for `Destructor`](./BuiltinLibraries.md#namespace-destructor).
 
-### Note on multi-threading
+### Sharing a `Ptr` between multiple threads
 
 Fix's reference counting is not thread-safe by default. 
 Retaining / releasing a pointer to a Fix's value from multiple threads simultaneously may cause memory leak or segmentation fault.
