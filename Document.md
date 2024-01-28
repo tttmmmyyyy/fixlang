@@ -1281,7 +1281,7 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 - If return type is `void`, put `()` before the function name.
 
 Note that calling C function may break Fix's assurance such as immutability or memory safety. 
-The programmer has a responsibility to hide the side effect of C program by `IO`, or manage resource appropriately.
+The programmer has a responsibility to hide the side effect of C function into `IO`, or manage resource appropriately.
 
 ### Sending Fix's object to C 
 
