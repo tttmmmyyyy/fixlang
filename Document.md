@@ -57,7 +57,11 @@
     - [Array](#array)
     - [Structs](#structs-2)
     - [Unions](#unions-2)
-  - [Calling C functions](#calling-c-functions)
+  - [Foreign function interface (FFI)](#foreign-function-interface-ffi)
+    - [Calling C functions from Fix](#calling-c-functions-from-fix)
+    - [Calling Fix function from C](#calling-fix-function-from-c)
+    - [Memory management](#memory-management)
+    - [](#)
 - [Operators](#operators)
 - [Tips](#tips)
   - [How to debug Fix program](#how-to-debug-fix-program)
@@ -1242,7 +1246,9 @@ Unions are unboxed by default. To define boxed union type, write `box` specifier
 type Weight = box union { pound: I64, kilograms: I64 };
 ```
 
-## Calling C functions
+## Foreign function interface (FFI)
+
+### Calling C functions from Fix
 
 To call C a function, use the following expression:
 
@@ -1269,7 +1275,17 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 - Use `...` for `va_arg`.
 - If return type is `void`, put `()` before the function name.
 
-Note that calling C function may break Fix's features such as immutability or memory safety. Use this feature carefully.
+Note that calling C function may break Fix's assurance such as immutability or memory safety. Use this feature carefully.
+
+### Calling Fix function from C
+
+(TBA)
+
+### Memory management
+
+(TBA)
+
+### 
 
 # Operators
 
