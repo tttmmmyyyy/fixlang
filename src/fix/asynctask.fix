@@ -21,7 +21,7 @@ _get_boxed_none_of_codomain_type = |_func| (
 get : Task a -> a;
 get = |task| (
     let task_handle = task.@dtor.@value;
-    let task_result_ptr = CALL_C[() fixruntime_thread_get_task_result(Ptr), task_handle];
+    let task_result_ptr = CALL_C[Ptr fixruntime_thread_get_task_result(Ptr), task_handle];
     eval task; // Do not call destructor before ending working with `task_handle`.
     unsafe_get_boxed_value_from_retained_ptr(task_result_ptr).@value.as_some
 );
@@ -65,7 +65,7 @@ make = |func| (
     let func = mark_threaded(func);
 
     // Create task function to be run on a thread.
-    let task_func : () -> Boxed (Option a) = |_| (
+    let task_func = |_ : ()| (
         // Run the task function.
         let result = func();
         // Return the boxed and threaded value.
@@ -73,11 +73,10 @@ make = |func| (
     );
     let boxed_task_func = Boxed { value : task_func };
     // Get the native handle of the task.
-    let result_none_value = Boxed { value : Option::none };
     let task_handle : TaskHandle = CALL_C[Ptr fixruntime_thread_create_task(Ptr, Ptr, Ptr), 
         boxed_task_func.unsafe_get_retained_ptr_of_boxed_value,
         boxed_none.unsafe_get_release_function_of_boxed_value,
-        boxed_none.unsafe_get_retain_function_of_boxed_value,
+        boxed_none.unsafe_get_retain_function_of_boxed_value
     ];
 
     // In the destructor, release the task handle.
