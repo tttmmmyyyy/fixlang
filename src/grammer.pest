@@ -28,7 +28,11 @@ namespace = { namespace_item ~ ("::" ~ namespace_item)* }
 
 expr_number_lit = { number_lit_body ~ ("_" ~ number_lit_type)? }
 
-number_lit_body = { "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )? }
+number_lit_body_hex = { "-"? ~ "0x" ~ ASCII_HEX_DIGIT+ }
+number_lit_body_oct = { "-"? ~ "0o" ~ ('0'..'7')+ }
+number_lit_body_bin = { "-"? ~ "0b" ~ ('0'..'1')+ }
+number_lit_body_dec = { "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )? }
+number_lit_body = { number_lit_body_hex | number_lit_body_oct | number_lit_body_bin | number_lit_body_dec }
 
 number_lit_type = { "I8" | "U8" | "I16" | "U16" | "I32" | "U32" | "I64" | "U64" | "F32" | "F64" }
 
