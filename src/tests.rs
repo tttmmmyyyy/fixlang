@@ -3781,23 +3781,23 @@ pub fn test123() {
 
         import Debug;
 
-        type Boxed = box struct { x : I64 };
+        type MyBoxed = box struct { x : I64 };
 
         main : IO ();
         main = (
-            let act0: Boxed -> Option Boxed = |v| (
+            let act0: MyBoxed -> Option MyBoxed = |v| (
                 if v.@x == 0 { Option::some $ v.mod_x!(add(5)) } else { Option::none() }
             );
-            let act01: Boxed -> Option Boxed = |v| (
+            let act01: MyBoxed -> Option MyBoxed = |v| (
                 if v.@x == 0 { Option::some $ v.mod_x(add(5)) } else { Option::none() }
             );
-            let act1: Boxed -> Option Boxed = |v| (
-                if v.@x == 0 { Option::some $ Boxed { x : 5 } } else { Option::none() }
+            let act1: MyBoxed -> Option MyBoxed = |v| (
+                if v.@x == 0 { Option::some $ MyBoxed { x : 5 } } else { Option::none() }
             );
 
             // Case 0-0-0-0: Boxed element, unique array, act0 succeeds.
             let case = "0-0-0-0";
-            let arr = [Boxed { x : 0 }, Boxed { x : 3 }];
+            let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act!(0, act0);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
             eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
@@ -3806,13 +3806,13 @@ pub fn test123() {
 
             // Case 0-0-0-1: Boxed element, unique array, act0 fails.
             let case = "0-0-0-1";
-            let arr = [Boxed { x : 1 }, Boxed { x : 3 }];
+            let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act!(0, act0);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 0-0-1-0: Boxed element, unique array, act1 succeeds.
             let case = "0-0-1-0";
-            let arr = [Boxed { x : 0 }, Boxed { x : 3 }];
+            let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act!(0, act1);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
             eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
@@ -3821,13 +3821,13 @@ pub fn test123() {
 
             // Case 0-0-1-1: Boxed element, unique array, act1 fails.
             let case = "0-0-1-1";
-            let arr = [Boxed { x : 1 }, Boxed { x : 3 }];
+            let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act!(0, act1);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 0-1-0-0: Boxed element, shared array, act01 succeeds.
             let case = "0-1-0-0";
-            let arr = [Boxed { x : 0 }, Boxed { x : 3 }];
+            let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act01);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
             eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
@@ -3837,14 +3837,14 @@ pub fn test123() {
 
             // Case 0-1-0-1: Boxed element, shared array, act0 fails.
             let case = "0-1-0-1";
-            let arr = [Boxed { x : 1 }, Boxed { x : 3 }];
+            let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act0);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
             eval assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
 
             // Case 0-1-1-0: Boxed element, shared array, act1 succeeds.
             let case = "0-1-1-0";
-            let arr = [Boxed { x : 0 }, Boxed { x : 3 }];
+            let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act1);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
             eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
@@ -3854,7 +3854,7 @@ pub fn test123() {
 
             // Case 0-1-1-1: Boxed element, shared array, act1 fails.
             let case = "0-1-1-1";
-            let arr = [Boxed { x : 1 }, Boxed { x : 3 }];
+            let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act1);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
             eval assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
