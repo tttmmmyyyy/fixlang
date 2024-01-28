@@ -3681,45 +3681,45 @@ pub fn test122() {
 
         import Debug;
 
-        type Boxed = box struct { x : I64 };
+        type MyBoxed = box struct { x : I64 };
 
         main : IO ();
         main = (
             // Case 1-1: Punch an array of two boxed values and release parray.
-            let arr = [Boxed { x : 5 }, Boxed { x : 7 }];
+            let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 1-1", five.@x, 5);
 
             // Case 1-2: Punch an array of two boxed values and plug-in the same element.
-            let arr = [Boxed { x : 5 }, Boxed { x : 7 }];
+            let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 1-2-a", five.@x, 5);
             let arr = parr.plug_in!(five);
             eval assert_eq(|_|"case 1-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 7);
 
             // Case 1-3: Punch an array of two boxed values and plug-in the other element.
-            let seven = Boxed { x : 7 };
-            let arr = [Boxed { x : 5 }, seven];
+            let seven = MyBoxed { x : 7 };
+            let arr = [MyBoxed { x : 5 }, seven];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 1-3-a", five.@x, 5);
             let arr = parr.plug_in!(seven);
             eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 7);
 
             // Case 1-4: Punch an array of two boxed values and plug-in another value.
-            let arr = [Boxed { x : 5 }, Boxed { x : 7 }];
+            let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 1-3-a", five.@x, 5);
-            let arr = parr.plug_in!(Boxed { x : 11 });
+            let arr = parr.plug_in!(MyBoxed { x : 11 });
             eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 11);
 
             // Case 2-1: Punch an array of two shared boxed values and release parray.
-            let five = Boxed { x : 5 };
+            let five = MyBoxed { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 2-1", five.@x, 5);
 
             // Case 2-2: Punch an array of two shared boxed values and plug-in the same element.
-            let five = Boxed { x : 5 };
+            let five = MyBoxed { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 2-2-a", five.@x, 5);
@@ -3727,7 +3727,7 @@ pub fn test122() {
             eval assert_eq(|_|"case 2-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
 
             // Case 2-3: Punch an array of two shared boxed values and plug-in the value again.
-            let five = Boxed { x : 5 };
+            let five = MyBoxed { x : 5 };
             let arr = [five, five];
             let (parr, five1) = arr.punch!(0);
             eval assert_eq(|_|"case 2-3-a", five1.@x, 5);
@@ -3735,20 +3735,20 @@ pub fn test122() {
             eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
 
             // Case 2-4: Punch an array of two shared boxed values and plug-in another value.
-            let five = Boxed { x : 5 };
+            let five = MyBoxed { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 2-3-a", five.@x, 5);
-            let arr = parr.plug_in!(Boxed { x : 7 });
+            let arr = parr.plug_in!(MyBoxed { x : 7 });
             eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 5);
 
             // Case 3-1: Punch an array of one boxed values and release parray.
-            let arr = [Boxed { x : 5 }];
+            let arr = [MyBoxed { x : 5 }];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 3-1", five.@x, 5);
 
             // Case 3-2: Punch an array of two boxed values and plug-in the same element.
-            let arr = [Boxed { x : 5 }];
+            let arr = [MyBoxed { x : 5 }];
             let (parr, five) = arr.punch!(0);
             eval assert_eq(|_|"case 3-2-a", five.@x, 5);
             let arr = parr.plug_in!(five);

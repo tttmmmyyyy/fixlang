@@ -1244,7 +1244,7 @@ type Weight = box union { pound: I64, kilograms: I64 };
 
 ## Calling C functions
 
-To call C functions, use the following expression:
+To call C a function, use the following expression:
 
 ```
 CALL_C[{c_function_signature}, {arg_0}, {arg_1}, ...]
