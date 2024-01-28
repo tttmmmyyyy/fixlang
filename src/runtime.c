@@ -525,7 +525,7 @@ void *fixruntime_run_function(void *function)
 
 typedef int *TaskFunction;
 typedef int *TaskResult;
-typedef struct ITask
+typedef struct
 {
     TaskFunction function;
     TaskResult result;
@@ -656,7 +656,7 @@ void fixruntime_thread_terminate()
 Task *fixruntime_thread_create_task(TaskFunction function, void (*release_result)(void *), void (*retain_result)(void *))
 {
     Task *task = (Task *)malloc(sizeof(Task));
-    task->function = data;
+    task->function = function;
     task->result = NULL;
     task->release_result = release_result;
     task->retain_result = retain_result;
@@ -694,7 +694,7 @@ Task *fixruntime_thread_create_task(TaskFunction function, void (*release_result
 }
 
 // Get the task result.
-TaskResult *fixruntime_thread_get_task_result(Task *task)
+TaskResult fixruntime_thread_get_task_result(Task *task)
 {
     pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex for a task.");
     while (!task->result)
