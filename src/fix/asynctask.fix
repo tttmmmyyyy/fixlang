@@ -4,24 +4,26 @@ module AsyncTask;
 // Importing this module automatically enables `--threaded` flag of the compiler. 
 // Note that this causes some overhead even for a single-threaded program.
 
-// A type for a computation task that can be run asynchronously.
-type Task a = unbox struct { dtor : Destructor (Ptr, TaskData a) };
+// A type for a computation task that runs asynchronously.
+type Task a = unbox struct { dtor : Destructor TaskHandle };
 
-// A type to store a task and its result. 
-// This type should be used only by implementation of this library.
-type TaskData a = box struct {
-    _func : () -> Array a, // We need a type of boxed `Option`, and actually we use `Array` of length at most one instead.
-    _result : Array a
-};
+// A native handle of a task.
+type TaskHandle = Ptr;
 
-// Get the result of a computation task.
+// Get a boxed none of type `a` from a value of type `() -> a`.
+_get_boxed_none_of_codomain_type : (() -> a) -> Boxed (Option a);
+_get_boxed_none_of_codomain_type = |_func| (
+    Boxed { value : Option::none }
+);
+
+// Get the result of a task.
 // This function blocks the current thread until the task is finished.
 get : Task a -> a;
 get = |task| (
-    let (task_handle, task_data) = task.@dtor.@value;
-    eval CALL_C[() fixruntime_threadpool_wait_task(Ptr), task_handle];
-    eval task; // Do not call destructor of `task` before calling `fixruntime_threadpool_wait_task`, or otherwise the task will be canceled.
-    task_data.@_result.@(0) // TODO: Change this to _unsafe_get_unchecked.
+    let task_handle = task.@dtor.@value;
+    let task_result_ptr = CALL_C[() fixruntime_thread_get_task_result(Ptr), task_handle];
+    eval task; // Do not call destructor before ending working with `task_handle`.
+    unsafe_get_boxed_value_from_retained_ptr(task_result_ptr).@value.as_some
 );
 
 // Make a task which performs a computation asynchronously.
@@ -43,7 +45,7 @@ get = |task| (
 //     let n = 1000000000;
 //     // Compute the sum of numbers from 0 to n/2 - 1.
 //     // This task will be executed asynchronously (if you are using multi-core CPU).
-//     let sum_former = AsyncTask::make(TaskPolicy::default, |_| sum_range(0, n/2));
+//     let sum_former = AsyncTask::make(|_| sum_range(0, n/2));
 //     // Compute the sum of numbers from n/2 to n.
 //     // We perfom this in the current thread while waiting for the result of the former task.
 //     let sum_latter = sum_range(n/2, n);
@@ -57,22 +59,30 @@ get = |task| (
 //         " = " + sum.to_string + "."
 // );
 // ```
-make : TaskPolicy -> (() -> a) -> Task a;
-make = |policy, func| (
-    // Create TaskData.
+make : (() -> a) -> Task a;
+make = |func| (
+    let boxed_none = _get_boxed_none_of_codomain_type(func);
     let func = mark_threaded(func);
-    let task_data = TaskData { _func : |_| [func()], _result : [] };
 
-    // Get task handle issued by the runtime by cloning (retaining) the task data.
-    let task_handle = CALL_C[Ptr fixruntime_threadpool_create_task(Ptr, Ptr, U32), 
-        task_data.unsafe_get_retained_ptr_of_boxed_value,
-        task_data.unsafe_get_release_function_of_boxed_value,
-        policy
+    // Create task function to be run on a thread.
+    let task_func : () -> Boxed (Option a) = |_| (
+        // Run the task function.
+        let result = func();
+        // Return the boxed and threaded value.
+        mark_threaded(Boxed { value : Option::some(result) })
+    );
+    let boxed_task_func = Boxed { value : task_func };
+    // Get the native handle of the task.
+    let result_none_value = Boxed { value : Option::none };
+    let task_handle : TaskHandle = CALL_C[Ptr fixruntime_thread_create_task(Ptr, Ptr, Ptr), 
+        boxed_task_func.unsafe_get_retained_ptr_of_boxed_value,
+        boxed_none.unsafe_get_release_function_of_boxed_value,
+        boxed_none.unsafe_get_retain_function_of_boxed_value,
     ];
 
     // In the destructor, release the task handle.
-    let dtor = Destructor::make((task_handle, task_data), |(task_handle, task_data)| (
-        CALL_C[() fixruntime_threadpool_release_task(Ptr), task_handle]
+    let dtor = Destructor::make(task_handle, |task_handle| (
+        CALL_C[() fixruntime_thread_release_task(Ptr), task_handle]
     ));
     Task { dtor : dtor }
 );
@@ -112,38 +122,18 @@ namespace AsyncIOTask {
     //             }
     //         ))
     //     );
-    //     eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(0));
-    //     eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(1));
+    //     eval *AsyncIOTask::make(print_ten(0));
+    //     eval *AsyncIOTask::make(print_ten(1));
     //     pure()
     // );
     // ```
-    make : TaskPolicy -> IO a -> IO (IOTask a);
-    make = |policy, io| (
+    make : IO a -> IO (IOTask a);
+    make = |io| (
         // NOTE: we must not create AsyncTask in this function; we should create it in the IO action.
         // Otherwise, user can run IO action in a pure function.
         // So we cannot implement this function as `pure $ IOTask { ... }`.
         IO { _data : |_| IOTask { _task : make(policy, |_| io._unsafe_perform) } }
     );
-}
-
-namespace TaskPolicy {
-    // A type to represent how a task should be executed.
-    // This is a type alias of `U32` and used as bit flag: mask values are defined in namespace `TaskPolicy`.
-    type TaskPolicy = U32;
-
-    // Default task policy.
-    default : TaskPolicy;
-    default = 0_U32;
-
-    // By default policy, a task will be canceled when the task object is destructed.
-    // This task policy runs the task even after the task object is destructed.
-    run_after_destructed : TaskPolicy;
-    run_after_destructed = 1_U32.shift_left(1_U32);
-
-    // By default policy, a task will be executed on a thread in the thread pool.
-    // This task policy runs the task on a dedicated thread.
-    on_dedicated_thread : TaskPolicy;
-    on_dedicated_thread = 1_U32.shift_left(0_U32);
 }
 
 namespace Var {
@@ -158,9 +148,9 @@ namespace Var {
     get : Var a -> IO a;
     get = |Var { _dtor : dtor }| IO { _data : |_| (
         let handle = dtor.@value;
-        eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
-        let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
-        eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
+        let ptr = CALL_C[Ptr fixruntime_thread_var_get(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
         eval dtor; // Do not call destructor before ending working with handle.
         ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value
     ) };
@@ -169,10 +159,10 @@ namespace Var {
     lock : (a -> IO b) -> Var a -> IO b;
     lock = |act, Var { _dtor : dtor }| IO { _data : |_| (
         let handle = dtor.@value;
-        eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
-        let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
+        let ptr = CALL_C[Ptr fixruntime_thread_var_get(Ptr), handle];
         let res = act(ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value)._unsafe_perform; 
-        eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
         eval dtor; // Do not call destructor before ending working with handle.
         res
     ) };
@@ -181,13 +171,13 @@ namespace Var {
     make : a -> IO (Var a);
     make = |value| IO { _data : |_| (
         let value = mark_threaded(VarValue { value : value });
-        let handle = CALL_C[Ptr fixruntime_threadpool_var_create(Ptr, Ptr, Ptr), 
+        let handle = CALL_C[Ptr fixruntime_thread_var_create(Ptr, Ptr, Ptr), 
             value.unsafe_get_retained_ptr_of_boxed_value,
             value.unsafe_get_release_function_of_boxed_value,
             value.unsafe_get_retain_function_of_boxed_value
         ];
         let dtor = Destructor::make(handle, |handle| (
-            CALL_C[() fixruntime_threadpool_var_destroy(Ptr), handle]
+            CALL_C[() fixruntime_thread_var_destroy(Ptr), handle]
         ));
         Var { _dtor : dtor }
     ) };
@@ -202,10 +192,10 @@ namespace Var {
         let value = mark_threaded(VarValue { value : value });
         let ptr = value.unsafe_get_retained_ptr_of_boxed_value;
         let handle = dtor.@value;
-        eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
-        eval CALL_C[() fixruntime_threadpool_var_set(Ptr, Ptr), handle, ptr];
-        eval CALL_C[() fixruntime_threadpool_var_signalall(Ptr), handle];
-        eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_set(Ptr, Ptr), handle, ptr];
+        eval CALL_C[() fixruntime_thread_var_signalall(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
         eval dtor; // Do not call destructor before ending working with handle.
         ()
     ) };
@@ -219,19 +209,19 @@ namespace Var {
     wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b;
     wait_and_lock = |cond, act, Var { _dtor : dtor }| IO { _data : |_| (
         let handle = dtor.@value;
-        eval CALL_C[() fixruntime_threadpool_var_lock(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
         let ok_val = loop((), |_| (
-            let ptr = CALL_C[Ptr fixruntime_threadpool_var_get(Ptr), handle];
+            let ptr = CALL_C[Ptr fixruntime_thread_var_get(Ptr), handle];
             let val = ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value;
             if cond(val) {
                 break $ val
             } else {
-                eval CALL_C[() fixruntime_threadpool_var_wait(Ptr), handle];
+                eval CALL_C[() fixruntime_thread_var_wait(Ptr), handle];
                 continue $ ()
             }
         ));
         let res = act(ok_val)._unsafe_perform;
-        eval CALL_C[() fixruntime_threadpool_var_unlock(Ptr), handle];
+        eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
         eval dtor; // Do not call destructor before ending working with handle.
         res
     ) };

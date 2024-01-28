@@ -375,6 +375,14 @@ impl Bool : ToString {
     );
 }
 
+// Boxed wrapper for a type.
+// This is nothing but
+// ```
+// type Boxed a = box struct { value : a };
+// ```
+// .
+type Boxed a = box struct { value : a };
+
 // A type (alias) for error message. 
 type ErrMsg = String;
 

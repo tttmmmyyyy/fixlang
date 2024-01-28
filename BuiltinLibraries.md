@@ -354,6 +354,7 @@
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
       - [`impl Array : Functor`](#impl-array--functor)
       - [`impl Array : Monad`](#impl-array--monad)
+    - [`type Boxed a`](#type-boxed-a)
     - [ErrMsg](#errmsg)
     - [IO](#io)
       - [`_read_line_inner : Bool -> IOHandle -> IOFail ErrMsg String`](#_read_line_inner--bool---iohandle---iofail-errmsg-string)
@@ -1278,6 +1279,14 @@ Truncate an array, keeping the given number of first elements.
 
 #### `impl Array : Monad`
 
+### `type Boxed a`
+Boxed wrapper for a type.
+This is nothing but
+```
+type Boxed a = box struct { value : a };
+```
+.
+
 ### ErrMsg
 
 A type (alias) for error message. 
@@ -2076,7 +2085,7 @@ main = (
     let n = 1000000000;
     // Compute the sum of numbers from 0 to n/2 - 1.
     // This task will be executed asynchronously (if you are using multi-core CPU).
-    let sum_former = AsyncTask::make(TaskPolicy::default, |_| sum_range(0, n/2));
+    let sum_former = AsyncTask::make(|_| sum_range(0, n/2));
     // Compute the sum of numbers from n/2 to n.
     // We perfom this in the current thread while waiting for the result of the former task.
     let sum_latter = sum_range(n/2, n);
@@ -2125,8 +2134,8 @@ main = (
             }
         ))
     );
-    eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(0));
-    eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, print_ten(1));
+    eval *AsyncIOTask::make(print_ten(0));
+    eval *AsyncIOTask::make(print_ten(1));
     pure()
 );
 ```

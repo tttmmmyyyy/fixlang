@@ -2047,7 +2047,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         if self.config.async_task {
             // If AsyncTask is used, we need wait for all tasks to be finished before checking leak.
-            self.call_runtime(RuntimeFunctions::ThreadPoolTerminate, &[]);
+            self.call_runtime(RuntimeFunctions::ThreadTerminate, &[]);
 
             // Perform mark_global again.
             // If we don't do this, the test case `test_async_task_captured_by_global` will fail.

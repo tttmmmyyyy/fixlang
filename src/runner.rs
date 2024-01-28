@@ -206,34 +206,32 @@ fn build_module<'c>(
         gc.builder().build_store(gv_ptr, arg_val);
     }
 
-    // If AsyncTask is used, initialize thread pool.
-    if config.async_task {
-        // Store the pointer to `fixruntime_threadpool_run_task` function defined in LLVM module to the `fixruntime_threadpool_run_task` global variable defined in runtime.c.
-        let run_task_func_ptr_ty = gc
-            .context
-            .void_type()
-            .fn_type(
-                &[gc.context.i8_type().ptr_type(AddressSpace::from(0)).into()],
-                false,
-            )
-            .ptr_type(AddressSpace::from(0));
-        let run_task_func_ptr = gc.module.add_global(
-            run_task_func_ptr_ty,
-            Some(AddressSpace::from(0)),
-            "ptr_fixruntime_threadpool_run_task",
-        );
-        run_task_func_ptr.set_externally_initialized(true);
-        run_task_func_ptr.set_linkage(Linkage::External);
-        let run_task_func = gc
-            .runtimes
-            .get(&RuntimeFunctions::ThreadPoolRunTask)
-            .unwrap();
-        gc.builder().build_store(
-            run_task_func_ptr.as_pointer_value(),
-            run_task_func.as_global_value().as_pointer_value(),
-        );
-        // Initialize thread pool.
-        gc.call_runtime(RuntimeFunctions::ThreadPoolInitialize, &[]);
+    // Store the pointer to `fixruntime_run_function` function defined in LLVM module to the `ptr_fixruntime_run_function` global variable defined in runtime.c.
+    let run_function_func_ptr_ty = gc
+        .context
+        .i8_type()
+        .ptr_type(AddressSpace::from(0))
+        .fn_type(
+            &[gc.context.i8_type().ptr_type(AddressSpace::from(0)).into()],
+            false,
+        )
+        .ptr_type(AddressSpace::from(0));
+    let run_task_func_ptr = gc.module.add_global(
+        run_function_func_ptr_ty,
+        Some(AddressSpace::from(0)),
+        "ptr_fixruntime_run_function",
+    );
+    run_task_func_ptr.set_externally_initialized(true);
+    run_task_func_ptr.set_linkage(Linkage::External);
+    let run_function_func = gc.runtimes.get(&RuntimeFunctions::RunFunction).unwrap();
+    gc.builder().build_store(
+        run_task_func_ptr.as_pointer_value(),
+        run_function_func.as_global_value().as_pointer_value(),
+    );
+
+    // If both of `AsyncTask` and sanitizer are used, prepare for terminating threads.
+    if config.async_task && config.sanitize_memory {
+        gc.call_runtime(RuntimeFunctions::ThreadPrepareTermination, &[]);
     }
 
     // Run main object.

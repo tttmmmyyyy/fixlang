@@ -4874,14 +4874,14 @@ pub fn test_async_task_fib() {
     fib_async : I64 -> I64;
     fib_async = |n| (
         if n <= 1 {
-            let _ = AsyncTask::make(TaskPolicy::default, |_| n + 1); // A task which is not waited.
-            AsyncTask::make(TaskPolicy::default, |_| n).get // A task which is waited soon.
+            let _ = AsyncTask::make(|_| n + 1); // A task which is not waited.
+            AsyncTask::make(|_| n).get // A task which is waited soon.
         } else {
-            let minus_one_task = AsyncTask::make(TaskPolicy::default, |_| n-1); // A task which is captured by another task.
-            let minus_two_task = AsyncTask::make(TaskPolicy::default, |_| minus_one_task.get - 1); // A task which is captured by another task.
-            let minus_three_task = AsyncTask::make(TaskPolicy::default, |_| minus_two_task.get - 1); // A task which is captured by another task but not waited.
-            let one_task = AsyncTask::make(TaskPolicy::default, |_| eval minus_three_task; fib_async(minus_one_task.get));
-            let two_task = AsyncTask::make(TaskPolicy::default, |_| eval minus_three_task; fib_async(minus_two_task.get));
+            let minus_one_task = AsyncTask::make(|_| n-1); // A task which is captured by another task.
+            let minus_two_task = AsyncTask::make(|_| minus_one_task.get - 1); // A task which is captured by another task.
+            let minus_three_task = AsyncTask::make(|_| minus_two_task.get - 1); // A task which is captured by another task but not waited.
+            let one_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_one_task.get));
+            let two_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_two_task.get));
             one_task.get + two_task.get
         }
     );
@@ -4909,9 +4909,9 @@ pub fn test_async_shared_array() {
     main = (
         let n = 100000;
         let arr = Iterator::range(0, n).to_array;
-        let sum_task_0 = AsyncTask::make(TaskPolicy::default, |_| arr.to_iter.fold(0, Add::add));
-        let sum_task_1 = AsyncTask::make(TaskPolicy::default, |_| arr.to_iter.reverse.fold(0, Add::add));
-        let sum_task_2 = AsyncTask::make(TaskPolicy::default, |_| (
+        let sum_task_0 = AsyncTask::make(|_| arr.to_iter.fold(0, Add::add));
+        let sum_task_1 = AsyncTask::make(|_| arr.to_iter.reverse.fold(0, Add::add));
+        let sum_task_2 = AsyncTask::make(|_| (
             loop((0, 0), |(i, sum)| 
                 if i == arr.get_size { 
                     break $ sum
@@ -4920,7 +4920,7 @@ pub fn test_async_shared_array() {
                 }
             )
         ));
-        let sum_task_3 = AsyncTask::make(TaskPolicy::default, |_| (
+        let sum_task_3 = AsyncTask::make(|_| (
             let half = arr.get_size / 2;
             let sum = loop((0, 0), |(i, sum)| 
                 if i == half { 
@@ -4971,7 +4971,7 @@ pub fn test_async_task_captured_by_global() {
 
     main : IO ();
     main = (
-        let task = AsyncTask::make(TaskPolicy::default, |_| 42);
+        let task = AsyncTask::make(|_| 42);
         eval *"Hello World!".println; // Initialization of `main` value ends here, and `task` is captured by `main`.
         // Then the result object of `task` becomes a threaded object, but a global object.
         eval assert_eq(|_|"", task.get, 42);
@@ -4992,9 +4992,9 @@ pub fn test_async_task_array_result() {
     main : IO ();
     main = (
         let n = 1000000;
-        let task_0 = AsyncTask::make(TaskPolicy::default, |_| Iterator::range(0, n).to_array);
-        let task_1 = AsyncTask::make(TaskPolicy::default, |_| Iterator::range(n, 2*n).to_array);
-        let task_2 = AsyncTask::make(TaskPolicy::default, |_| Iterator::range(0, 2*n).to_array);
+        let task_0 = AsyncTask::make(|_| Iterator::range(0, n).to_array);
+        let task_1 = AsyncTask::make(|_| Iterator::range(n, 2*n).to_array);
+        let task_2 = AsyncTask::make(|_| Iterator::range(0, 2*n).to_array);
         eval assert_eq(|_|"", task_0.get.append(task_1.get), task_2.get);
         pure()
     );
@@ -5011,8 +5011,8 @@ pub fn test_async_task_io() {
     
     main : IO ();
     main = (
-        eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, println $ "Thread 1");
-        eval *AsyncIOTask::make(TaskPolicy::run_after_destructed, println $ "Thread 2");
+        eval *AsyncIOTask::make(println $ "Thread 1");
+        eval *AsyncIOTask::make(println $ "Thread 2");
         pure()
     );
     "##;
@@ -5070,10 +5070,9 @@ pub fn test_async_task_dedicated_thread() {
 
     main : IO ();
     main = (
-        let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
         let num_threads = 2;
         Iterator::range(0, num_threads).fold_m((), |_, i| (
-            eval *AsyncIOTask::make(policy, println $ "Thread " + i.to_string);
+            eval *AsyncIOTask::make(println $ "Thread " + i.to_string);
             pure()
         ))
     );
@@ -5090,13 +5089,12 @@ pub fn test_mvar() {
 
     main : IO ();
     main = (
-        let policy = TaskPolicy::run_after_destructed.bit_or(TaskPolicy::on_dedicated_thread);
         let logger = *Var::make([]); // A mutable array of strings.
 
         // Launch multiple threads, and log in which order each thread is executed.
         let num_threads = number_of_processors * 2;
         eval *Iterator::range(0, num_threads).fold_m((), |_, i| (
-            eval *AsyncIOTask::make(policy, 
+            eval *AsyncIOTask::make(
                 logger.lock(|logs| (
                     let count = logs.get_size;
                     let msg = "Thread " + i.to_string + " is running at " + count.to_string + 
@@ -5131,7 +5129,7 @@ pub fn test_mvar_of_shared_object() {
     main = (
         let n = 100000;
         let var = *Var::make([]);
-        let th0 = *AsyncIOTask::make(TaskPolicy::on_dedicated_thread, (
+        let th0 = *AsyncIOTask::make((
             eval *(println $ "Thread is running."); // This line makes the `arr` is created on `th0` and not in the main thread.
             let arr = Iterator::range(0, n).to_array;
             eval *var.Var::set(arr);
@@ -5141,7 +5139,7 @@ pub fn test_mvar_of_shared_object() {
             //   by `a = I64`, `d = Var (Array b)` and `c = Array d -> Array d`.
             pure $ arr.to_iter.fold(0, Add::add)
         ));
-        let th1 = *AsyncIOTask::make(TaskPolicy::on_dedicated_thread, (
+        let th1 = *AsyncIOTask::make((
             let arr = *var.wait_and_lock(|arr| !arr.is_empty, |arr| pure $ arr);
             pure $ arr.to_iter.fold(0, Add::add)
         ));

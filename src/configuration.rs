@@ -136,11 +136,13 @@ impl Configuration {
     pub fn set_async_task(&mut self) {
         self.async_task = true;
         self.set_threaded();
-        self.runtime_c_macro.push("THREAD_POOL".to_string());
+        self.runtime_c_macro.push("THREAD".to_string());
+        self.add_terminate_tasks_macro_if_needed();
     }
 
     pub fn set_sanitize_memory(&mut self) {
         self.sanitize_memory = true;
+        self.add_terminate_tasks_macro_if_needed();
     }
 
     pub fn set_debug_mode(&mut self) {
@@ -148,5 +150,11 @@ impl Configuration {
         self.uncurry_optimization = false;
         self.borrowing_optimization = false;
         self.llvm_opt_level = OptimizationLevel::None;
+    }
+
+    fn add_terminate_tasks_macro_if_needed(&mut self) {
+        if self.async_task && self.sanitize_memory {
+            self.runtime_c_macro.push("TERMINATE_TASKS".to_string());
+        }
     }
 }

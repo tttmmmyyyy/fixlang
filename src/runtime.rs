@@ -19,9 +19,9 @@ pub enum RuntimeFunctions {
     SubtractPtr,
     PtrAddOffset,
     PthreadOnce,
-    ThreadPoolInitialize,
-    ThreadPoolTerminate,
-    ThreadPoolRunTask,
+    ThreadPrepareTermination,
+    ThreadTerminate,
+    RunFunction,
 }
 
 fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -507,52 +507,62 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(
         .add_function("pthread_once", pthread_once_ty, None)
 }
 
-// Build `fixruntime_threadpool_run_task` function, which is called from runtime.c.
-pub fn build_threadpool_run_task<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+// Build `fixruntime_run_task` function, which is called from runtime.c.
+pub fn build_run_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
 
-    let fn_type = context
-        .void_type()
-        .fn_type(&[ptr_to_object_type(context).into()], false);
-    let func = module.add_function("fixruntime_threadpool_run_task", fn_type, None);
+    let fn_type = ptr_to_object_type(context).fn_type(&[ptr_to_object_type(context).into()], false);
+    let func = module.add_function("fixruntime_run_function_llvm", fn_type, None);
 
     let bb = context.append_basic_block(func, "entry");
 
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
-    // Create type `TaskData ()` instead of `TaskData a`:
-    // We don't have information of the type of task result, but it is not necessary to know it in the following code.
-    let task_data_ty = type_tyapp(
-        type_tycon(&tycon(FullName::from_strs(&["AsyncTask"], "TaskData"))),
+    // Create type `Boxed (() -> a)` where `a = Boxed ()`.
+    // Since we don't have information of which the type `a` is, and use `Boxed ()` instead.
+    // This is not a problem because the following code only depends on the fact that `a` is a boxed type.
+    let boxed_ty = type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOXED_NAME)));
+    let unit_ty = make_unit_ty();
+    let task_func_ty = type_fun(
         make_unit_ty(),
+        type_tyapp(boxed_ty.clone(), unit_ty.clone()),
     );
+    let boxed_task_func_ty = type_tyapp(boxed_ty, task_func_ty);
 
-    // Create instance of `TaskData`.
-    let task_data_ptr = func.get_first_param().unwrap().into_pointer_value();
-    let task_data = Object::new(task_data_ptr, task_data_ty);
+    // Create an boxed task function object from the function parameter.
+    let task_func_ptr = func.get_first_param().unwrap().into_pointer_value();
+    let boxed_task_func = Object::new(task_func_ptr, boxed_task_func_ty);
 
-    // Extract task function from task data.
-    let task_func = ObjectFieldType::get_struct_field_noclone(gc, &task_data, 0);
-    gc.retain(task_func.clone()); // TODO: here, it is better to replace `task_func` in `task_data` to another function which does nothing.
+    // Extract task function from `boxed_task_func`.
+    let task_func =
+        ObjectFieldType::get_struct_fields(gc, &boxed_task_func, vec![(0, None)])[0].clone();
 
-    // Call task function.
-    let unit_val: Object<'_> = allocate_obj(make_unit_ty(), &vec![], None, gc, Some("unit_value"));
-    let task_result_array = gc.apply_lambda(task_func, vec![unit_val], None);
+    // Call the task function.
+    let unit_val: Object<'_> = allocate_obj(unit_ty, &vec![], None, gc, Some("unit_value"));
+    let task_result = gc.apply_lambda(task_func, vec![unit_val], None);
+    let task_result_ptr = task_result.ptr(gc);
 
-    // Mark `task_result_array` as threaded.
-    // This is necessary because `AsyncTask::Task` object may be threaded upto here.
-    gc.mark_threaded(task_result_array.clone());
-
-    // Store the result to task_data.
-    let old_array = ObjectFieldType::get_struct_field_noclone(gc, &task_data, 1);
-    gc.release(old_array);
-    ObjectFieldType::set_struct_field_norelease(gc, &task_data, 1, &task_result_array);
-
-    gc.builder().build_return(None);
+    gc.builder().build_return(Some(&task_result_ptr));
 
     func
+}
+
+fn build_thread_prepare_termination_function<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    let fn_ty = gc.context.void_type().fn_type(&[], false);
+    gc.module
+        .add_function("fixruntime_thread_prepare_termination", fn_ty, None)
+}
+
+fn build_thread_terminate_function<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm>,
+) -> FunctionValue<'c> {
+    let fn_ty = gc.context.void_type().fn_type(&[], false);
+    gc.module
+        .add_function("fixruntime_thread_terminate", fn_ty, None)
 }
 
 fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
@@ -626,22 +636,6 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fu
     func
 }
 
-fn build_threadpool_initialize_function<'c, 'm, 'b>(
-    gc: &GenerationContext<'c, 'm>,
-) -> FunctionValue<'c> {
-    let fn_ty = gc.context.void_type().fn_type(&[], false);
-    gc.module
-        .add_function("fixruntime_threadpool_initialize", fn_ty, None)
-}
-
-fn build_threadpool_terminate_function<'c, 'm, 'b>(
-    gc: &GenerationContext<'c, 'm>,
-) -> FunctionValue<'c> {
-    let fn_ty = gc.context.void_type().fn_type(&[], false);
-    gc.module
-        .add_function("fixruntime_threadpool_terminate", fn_ty, None)
-}
-
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     gc.runtimes
         .insert(RuntimeFunctions::Abort, build_abort_function(gc));
@@ -684,6 +678,10 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
     let ptr_add_offset_func = build_ptr_add_offset_function(gc);
     gc.runtimes
         .insert(RuntimeFunctions::PtrAddOffset, ptr_add_offset_func);
+    let run_function_func = build_run_function(gc);
+    gc.runtimes
+        .insert(RuntimeFunctions::RunFunction, run_function_func);
+
     if gc.config.threaded {
         let pthread_call_once_func = build_pthread_once_function(gc);
         gc.runtimes
@@ -694,20 +692,15 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
             mark_threaded_func,
         );
     }
-    if gc.config.async_task {
-        let run_task_func = build_threadpool_run_task(gc);
-        gc.runtimes
-            .insert(RuntimeFunctions::ThreadPoolRunTask, run_task_func);
-        let threadpool_initialize = build_threadpool_initialize_function(gc);
+    if gc.config.async_task && gc.config.sanitize_memory {
+        let prepare_termination = build_thread_prepare_termination_function(gc);
         gc.runtimes.insert(
-            RuntimeFunctions::ThreadPoolInitialize,
-            threadpool_initialize,
+            RuntimeFunctions::ThreadPrepareTermination,
+            prepare_termination,
         );
-        if gc.config.sanitize_memory {
-            let threadpool_terminate = build_threadpool_terminate_function(gc);
-            gc.runtimes
-                .insert(RuntimeFunctions::ThreadPoolTerminate, threadpool_terminate);
-        }
+        let thread_terminate = build_thread_terminate_function(gc);
+        gc.runtimes
+            .insert(RuntimeFunctions::ThreadTerminate, thread_terminate);
     }
     build_get_argc_function(gc);
     build_get_argv_function(gc);
