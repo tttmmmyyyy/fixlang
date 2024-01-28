@@ -1844,6 +1844,8 @@ main = (
 
 ### `mark_threaded : a -> a`
 
+Traverses all objects reachable from the given object, and changes them into multi-threaded mode so that the reference counting on them will be done atomically.
+
 ### `unsafe_is_unique : a -> (Bool, a)`
 
 This function checks if a value is uniquely refernced by a name, and returns the result paired with the given value itself. If `a` is unboxed, the 0th component of the returned value is always `true`.
