@@ -164,6 +164,41 @@ pub const STANDARD_LIBRARIES: &[(
         Some(Configuration::set_async_task),
         None,
     ),
+    (
+        "RegExp",
+        include_str!("./fix/regexp/regexp.fix"),
+        "regexp__regexp",
+        None,
+        None,
+    ),
+    (
+        "RegExp.RegExpNFA",
+        include_str!("./fix/regexp/regexp_nfa.fix"),
+        "regexp__regexp_nfa",
+        None,
+        None,
+    ),
+    (
+        "RegExp.RegExpPattern",
+        include_str!("./fix/regexp/regexp_pattern.fix"),
+        "regexp__regexp_pattern",
+        None,
+        None,
+    ),
+    (
+        "RegExp.SimpleParser",
+        include_str!("./fix/regexp/simple_parser.fix"),
+        "regexp__simple_parser",
+        None,
+        None,
+    ),
+    (
+        "RegExp.StringEx",
+        include_str!("./fix/regexp/stringex.fix"),
+        "regexp__stringex",
+        None,
+        None,
+    ),
 ];
 
 #[allow(unused)]

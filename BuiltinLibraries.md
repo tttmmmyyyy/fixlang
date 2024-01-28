@@ -655,6 +655,13 @@
   - [`generate_F64 : Random -> (F64, Random)`](#generate_f64--random---f64-random)
   - [`generate_F64_2 : Random -> (F64, Random)`](#generate_f64_2--random---f64-random)
   - [`generate_F64_3 : Random -> (F64, Random)`](#generate_f64_3--random---f64-random)
+- [module `RegExp`](#module-regexp)
+  - [`type RegExp`](#type-regexp)
+  - [`namespace RegExp`](#namespace-regexp)
+    - [`compile: String -> String -> Result ErrMsg RegExp`](#compile-string---string---result-errmsg-regexp)
+    - [`match: String -> RegExp -> Result ErrMsg (Array String)`](#match-string---regexp---result-errmsg-array-string)
+    - [`match_all: String -> RegExp -> Array (Array String)`](#match_all-string---regexp---array-array-string)
+    - [`replace_all: String -> String -> RegExp -> String`](#replace_all-string---string---regexp---string)
 - [module `Subprocess`](#module-subprocess)
   - [`type ExitStatus`](#type-exitstatus)
   - [`run_string : String -> Array String -> String -> IOFail ((String, String), ExitStatus)`](#run_string--string---array-string---string---iofail-string-string-exitstatus)
@@ -2509,6 +2516,91 @@ Generates a random number on [0, 1)-real-interval.
 
 ## `generate_F64_3 : Random -> (F64, Random)`
 Generates a random number on (0, 1)-real-interval.
+
+# module `RegExp`
+Simple regular expression.
+
+Currently it only supports patterns below:
+- Character classes: `[xyz]`, `[^xyz]`, `.`, `\d`, `\D`, `\w`, `\W`, `\s`,
+  `\S`, `\t`, `\r`, `\n`, `\v`, `\f`, `[\b]`, `x|y`
+- Assertions: `^`, `$`
+- Groups: `(x)`
+- Quantifiers: `x*`, `x+`, `x?`, `x{n}`, `x{n,}`, `x{n,m}`
+
+For details, see
+[mdn web docs: Regular expressions](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions).
+
+LIMITATION:
+
+Currently, only single byte characters (U+0001..U+007F) can be specified in character classes.
+Non-ASCII characters (U+0080..U+10FFFF) are encoded to two or more bytes in UTF-8, so they cannot be specified in character classes.
+And the null character (U+0000) cannot be used in Fix strings.
+
+## `type RegExp`
+Type of a compiled regular expression.
+
+## `namespace RegExp`
+
+### `compile: String -> String -> Result ErrMsg RegExp`
+`RegExp::compile(pattern, flags)` compiles `pattern` into a regular expression.
+`flags` change behavior of regular expression matching.
+Currently only global flag (`"g"`) is supported.
+
+### `match: String -> RegExp -> Result ErrMsg (Array String)`
+`regexp.match(target)` matches `target` against `regexp`.
+
+If the global flag (`"g"`) is not set, it returns an array of the groups of the first match.
+Group 0 is a substring that matches the entire regular expression.
+Group 1 and beyond are the captured substrings in each group. If not captured, the group will be an empty string.
+
+Example:
+```
+let regexp = RegExp::compile("[a-z]+([0-9]+)", "").as_ok;
+let groups = regexp.match("abc012 def345").as_ok;
+// groups == ["abc012", "012"]
+```
+
+If the global flag (`"g"`) is set, all matching results will be returned, but captured groups will not be included.
+
+Example:
+```
+let regexp = RegExp::compile("[a-z]+([0-9]+)", "g").as_ok;
+let groups = regexp.match("abc012 def345").as_ok;
+// groups == ["abc012", "def345"]
+```
+
+If the match against the regular expression fails, an error `"NotMatch"` is reported.
+
+This function is similar to [String.match()](https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Global_Objects/String/match)
+function of JavaScript.
+
+### `match_all: String -> RegExp -> Array (Array String)`
+`regexp.match_all(target)` matches `target` against `regexp`.
+All matching results will be returned including captured groups.
+
+If the match against the regular expression fails, an empty array is returned.
+
+This function is similar to [String.matchAll()](https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Global_Objects/String/matchAll)
+function of JavaScript.
+
+### `replace_all: String -> String -> RegExp -> String`
+`regexp.replace_all(target, replacement)` matches `target` against `regexp`,
+and replace all matching substrings with `replacement`.
+If `replacement` contains `$&`, it is substituted with entire matched substring.
+If `replacement` contains `$n` where `n` is an integer, it is substituted with
+the captured group.
+If `replacement` contains `$$`, it is substituted with single `$`.
+
+Example:
+```
+let regexp = RegExp::compile("(\\w\\w)(\\w)", "").as_ok;
+let result = regexp.replace_all("abc def ijk", "$2$1");
+// result == "cab fde kij"
+```
+
+This function is similar to [String.replaceAll()](https://developer.mozilla.org/ja/docs/Web/JavaScript/Reference/Global_Objects/String/replaceAll)
+function of JavaScript.
+Note that `$'`, `` $` ``, `$<Name>` are not supported yet.
 
 # module `Subprocess`
 

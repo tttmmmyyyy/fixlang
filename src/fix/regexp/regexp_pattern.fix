@@ -1,0 +1,454 @@
+// Character class and Pattern parser. This is internal module of `RegExp`.
+module RegExp.RegExpPattern;
+
+import Character;
+import Debug;
+
+import RegExp.SimpleParser;
+import RegExp.StringEx;
+
+// Type of a character class.
+type CharClass = unbox struct {
+    // A label that describes this class (for debugging only)
+    label: String,
+    // A member function that judges whether a character is contained in this class or not
+    f: U8 -> Bool
+};
+
+namespace CharClass {
+    // An empty character class.
+    empty: CharClass;
+    empty = CharClass {
+        label: "",
+        f: |c| false
+    };
+
+    // Creates a character class from a label and a member function.
+    make: String -> (U8 -> Bool) -> CharClass;
+    make = |label, f| CharClass { label:label, f:f };
+
+    // Returns true if the character is a member of the class.
+    contains: U8 -> CharClass -> Bool;
+    contains = |c, cls| (cls.@f)(c);
+
+    // Creates a character class whose only member is the specified character.
+    singleton: U8 -> CharClass;
+    singleton = |c| CharClass {
+        label: byte_to_string(c),
+        f: |c1| c1 == c
+    };
+
+    // Creates a character class whose members are characters from start to end.
+    range: U8 -> U8 -> CharClass;
+    range = |start, end| CharClass {
+        label: byte_to_string(start) + "-" + byte_to_string(end),
+        f: |c| start <= c && c <= end
+    };
+
+    // Creates a character class whose members are characters in the specified string.
+    consists_of: String -> CharClass;
+    consists_of = |str| CharClass {
+        label: str,
+        f: |c| str.find_byte(c).is_some
+    };
+
+    // Negate the member function of a character class.
+    negate: CharClass -> CharClass;
+    negate = |cls| (
+        let label = "^" + cls.@label;
+        let f = cls.@f;
+        CharClass {
+            label: label,
+            f: |c| !f(c)
+        }
+    );
+
+    // Creates union of two character classes.
+    union: CharClass -> CharClass -> CharClass;
+    union = |cls1, cls2| (
+        let f = cls1.@f;
+        let g = cls2.@f;
+        CharClass {
+            label: cls1.@label + cls2.@label,
+            f: |c| f(c) || g(c)
+        }
+    );
+
+    // Adds a character to the character class.
+    add: U8 -> CharClass -> CharClass;
+    add = |c, cls| cls.union(singleton(c));
+
+    // For optimization, creates a lookup table of same members, and returns a character class
+    // using that table.
+    to_table: CharClass -> CharClass;
+    to_table = |cls| (
+        let table = Iterator::count_up(0).take(256).fold(
+            Array::fill(256, false), |arr, i|
+            arr.set(i, cls.contains(i.to_U8))
+        );
+        CharClass {
+            label: cls.@label,
+            f: |c| table.@(c.to_I64)
+        }
+    );
+
+    // A character class of `.`. (any character except newlines)
+    cls_dot: CharClass;
+    cls_dot = CharClass::make(".") $ |c| c != '\n' && c != '\r';
+
+    // A character class of `\d`. (digits)
+    cls_digit: CharClass;
+    cls_digit = CharClass::make("\\d") $ is_digit;
+
+    // A character class of `\D`. (non-digits)
+    cls_non_digit: CharClass;
+    cls_non_digit = cls_digit.negate.set_label("\\D");
+
+    // A character class of `\w`. (ie. `[A-Za-z0-9_]`)
+    cls_word_char: CharClass;
+    cls_word_char = CharClass::make("\\w") $ |c| is_alnum(c) || c == '_';
+
+    // A character class of `\W`. (ie. `[^A-Za-z0-9_]`)
+    cls_non_word_char: CharClass;
+    cls_non_word_char = cls_word_char.negate.set_label("\\W");
+
+    // A character class of `\s`. (whitespaces)
+    cls_whitespace: CharClass;
+    cls_whitespace = CharClass::make("\\s") $ is_space;
+
+    // A character class of `\S`. (non-whitespaces)
+    cls_non_whitespace: CharClass;
+    cls_non_whitespace = cls_whitespace.negate.set_label("\\S");
+}
+
+// Converts a character class to a string.
+impl CharClass: ToString {
+    to_string = |cls| (
+        if cls.@label.get_size <= 1 {
+            cls.@label
+        } else {
+            "[" + cls.@label + "]"
+        }
+    );
+}
+
+
+// Type of an assertion for regular expressions, such as `^`, `$`.
+type PAssertion = unbox union {
+    pa_begin: (),       // beginning of line, ie. '^'
+    pa_end: ()          // end of line,       ie. '$'
+};
+
+// Converts an assertion to a string.
+impl PAssertion: ToString {
+    to_string = |pa| (
+        if pa.is_pa_begin { "^" };
+        if pa.is_pa_end { "$" };
+        eval assert(|_|"err", false);
+        ""
+    );
+}
+
+// Type of a parsed regular expression.
+type Pattern = box union {
+    // Character class pattern, eg. `a`, `[a-z]`, `\d` etc.
+    pclass: CharClass,
+    // Assertion pattern, eg. `^`, `$`
+    passert: PAssertion,
+    // Sequence of patterns, eg. `XYZ`
+    psequence: Array Pattern,
+    // Either pattern, eg. `X|Y`
+    peither: (Pattern, Pattern),
+    // Quantified pattern, eg. `X?`, `X*`, `X+`, `X{n,m}`
+    pquant: (Pattern, /*min_count:*/ I64, /*max_count:*/ I64),
+    // Grouped pattern, eg. `(X)`
+    pgroup: (/* group_number:*/ I64, Pattern)
+};
+
+// Converts a pattern to a string.
+impl Pattern: ToString {
+    to_string = |pat| (
+        if pat.is_pclass {
+            "[" + pat.as_pclass.@label + "]"
+        };
+        if pat.is_passert {
+            pat.as_passert.to_string
+        };
+        if pat.is_psequence {
+            pat.as_psequence.to_iter.map(to_string).join("")
+        };
+
+        if pat.is_peither {
+            let (pat1, pat2) = pat.as_peither;
+            pat1.to_string + "|" + pat2.to_string
+        };
+        if pat.is_pquant {
+            let (pat1, min, max) = pat.as_pquant;
+            pat1.to_string + "{" + min.to_string + "," +
+                if max == I64::maximum { "" } else { max.to_string }
+            + "}"
+        };
+        if pat.is_pgroup {
+            let (n, pat_inner) = pat.as_pgroup;
+            "(" + n.to_string + ":" + pat_inner.to_string + ")"
+        };
+        eval assert(|_|"err", false);
+        ""
+    );
+}
+
+
+namespace Pattern {
+
+    // Parses a pattern from specified string.
+    parse: String -> Result ErrMsg Pattern;
+    parse = |str| (
+        parse_pattern.run_parser_str(str).map(|(p,_)| p)
+    );
+
+    // Parses a pattern from the stream.
+    parse_pattern: Parser Pattern;
+    parse_pattern = do {
+        let pat = *_parse_peither;
+        let _ = *match_end_of_stream;
+        pure $ pat
+    };
+
+    // Parses either-pattern, ie. `X|Y`
+    _parse_peither: Parser Pattern;
+    _parse_peither = do {
+        let pat1 = *_parse_psequence;
+        let bar = *match_char_if_exists('|');
+        if bar.is_some {
+            let pat2 = *_parse_peither;
+            pure $ peither $ (pat1, pat2)
+        };
+        pure $ pat1
+    };
+
+    // Parses sequence of patterns, ie. `XYZ`
+    _parse_psequence: Parser Pattern;
+    _parse_psequence = do {
+        pure $ psequence $ *zero_or_more(
+            _parse_passert.or_else(_parse_pquant)
+        )
+    };
+
+    // Parses an assertion pattern, ie. `^`, `$` etc.
+    _parse_passert: Parser Pattern;
+    _parse_passert = do {
+        let circumflex = *match_char_if_exists('^');
+        if circumflex.is_some {
+            pure $ passert $ pa_begin()
+        };
+        let dollar = *match_char_if_exists('$');
+        if dollar.is_some {
+            pure $ passert $ pa_end()
+        };
+        // TODO word boundary support
+        not_match
+    };
+
+    // Parses Quantified Pattern, ie. `X?`, `X*`, `X+`, `X{n}`, `X{n,}`, `X{n,m}`
+    _parse_pquant: Parser Pattern;
+    _parse_pquant = do {
+        let pat = *_parse_quantifiable_item;
+        let question = *match_char_if_exists('?');
+        if question.is_some {
+            pure $ pquant $ (pat, 0, 1)
+        };
+        let asterisk = *match_char_if_exists('*');
+        if asterisk.is_some {
+            // TODO: support non-greedy match
+            pure $ pquant $ (pat, 0, maximum)
+        };
+        let plus = *match_char_if_exists('+');
+        if plus.is_some {
+            // TODO: support non-greedy match
+            pure $ pquant $ (pat, 1, maximum)
+        };
+        // `X{n}`, `X{n,}`, `X{n,m}`
+        let lbrace = *match_char_if_exists('{');
+        if lbrace.is_some {
+            let (min_count, max_count) = *_parse_pquant_n_m_inner;
+            let _ = *match_char('}').or_error("'}' is missing");
+            pure $ pquant $ (pat, min_count, max_count)
+        };
+        pure $ pat
+    };
+
+    // Parses inner of `X{n}`, `X{n,}`, `X{n,m}`
+    _parse_pquant_n_m_inner: Parser (I64, I64);
+    _parse_pquant_n_m_inner = do {
+        let start_stream = *get_stream;
+        let min_count = *match_integer;
+        let comma = *match_char_if_exists(',');
+        if comma.is_none {
+            pure $ (min_count, min_count)
+        };
+        let max_count = *match_integer.map(some).or_else(pure $ none());
+        if max_count.is_some {
+            let max_count = max_count.as_some;
+            if min_count > max_count {
+                let start = start_stream.@position;
+                let end = (*get_stream).@position;
+                let text = start_stream.read_string(end - start);
+                error_parser $ "Invalid quantifier:{" + text + "}"
+            };
+            pure $ (min_count, max_count)
+        };
+        pure $ (min_count, maximum)
+    };
+
+    // Parses quantifiable item.
+    _parse_quantifiable_item: Parser Pattern;
+    _parse_quantifiable_item = do {
+        _parse_pgroup.or_else(_parse_pclass)
+    };
+
+    // TODO: support backreferences, ie. `\\1`, `\\2` etc.
+
+    // Parses Group Pattern, ie. `(X)`
+    _parse_pgroup: Parser Pattern;
+    _parse_pgroup = do {
+        let lparen = *match_char('(');
+        let pat = *_parse_peither;
+        let rparen = *match_char(')').or_error("')' is missing");
+        let group_idx = 0;  // have to assign group index later
+        pure $ pgroup $ (group_idx, pat)
+    };
+
+    // A table of normal characters, ie. not a meta character.
+    _normal_chars: CharClass;
+    _normal_chars = (
+        CharClass::consists_of(
+            ".?*+^$|[](){}\\"
+        ).negate.to_table
+    );
+
+    // Parses character class pattern, ie. `.`, `[a-z]`, `\w` etc.
+    _parse_pclass: Parser Pattern;
+    _parse_pclass = do {
+        let c = *match_any_char;
+        if _normal_chars.contains(c) {
+            pure $ pclass(CharClass::singleton(c))
+        };
+        if c == '.' {
+            pure $ pclass(CharClass::cls_dot)
+        };
+        if c == '[' {
+            pure $ pclass(*_parse_pclass_bracket)
+        };
+        if c == '\\' {
+            pure $ pclass(*_parse_backslash_char_class(false))
+        };
+        not_match
+    };
+
+    // Parses a character class that begins with '['.
+    // The `[` itself is parsed already.
+    _parse_pclass_bracket: Parser CharClass;
+    _parse_pclass_bracket = do {
+        let circumflex = *match_char_if_exists('^');
+        let start_hyphen = *match_char_if_exists('-');
+        let components = *repeat(_parse_bracket_component);
+        let end_hyphen = *match_char_if_exists('-');
+        let _ = *match_char(']').or_error("']' is missing");
+
+        let cls = components.to_iter.fold(
+            CharClass::empty, union
+        );
+        let cls = if start_hyphen.is_some || end_hyphen.is_some { cls.add('-') } else { cls };
+        let cls = if circumflex.is_some { cls.negate } else { cls };
+        pure $ cls.to_table
+    };
+
+    // Parses each component in a bracket.
+    _parse_bracket_component: Parser CharClass;
+    _parse_bracket_component = (
+        let parse_backslash = do {
+            let _ = *match_char('\\');
+            _parse_backslash_char_class(true)
+        };
+        let parse_triplet = do {
+            let start = *match_any_char.filter(|c| c != ']' && c != '\\');
+            let _ = *match_char('-');
+            let end = *match_any_char.filter(|c| c != ']' && c != '\\');
+            pure $ CharClass::range(start, end)
+        };
+        let parse_single = do {
+            let c = *match_any_char.filter(|c| c != ']' && c != '\\' && c != '-');
+            pure $ CharClass::singleton(c)
+        };
+        parse_backslash
+        .or_else(parse_triplet)
+        .or_else(parse_single)
+    );
+
+    // Parses the char class that begins with a backslash.
+    // The backslash itself is parsed already.
+    _parse_backslash_char_class: Bool -> Parser CharClass;
+    _parse_backslash_char_class = |in_bracket| do {
+        let c = *match_any_char;
+        if c == 'd' { pure $ CharClass::cls_digit };
+        if c == 'D' { pure $ CharClass::cls_non_digit };
+        if c == 'w' { pure $ CharClass::cls_word_char };
+        if c == 'W' { pure $ CharClass::cls_non_word_char };
+        if c == 's' { pure $ CharClass::cls_whitespace };
+        if c == 'S' { pure $ CharClass::cls_non_whitespace };
+        if c == 't' { pure $ CharClass::singleton('\t') };
+        if c == 'r' { pure $ CharClass::singleton('\r') };
+        if c == 'n' { pure $ CharClass::singleton('\n') };
+        if c == 'v' { pure $ CharClass::singleton(11_U8) };
+        if c == 'f' { pure $ CharClass::singleton(12_U8) };
+        if c == 'b' && in_bracket { pure $ CharClass::singleton(8_U8) };
+        // TODO: support for \xhh, \uhhhh
+
+        // other character is treated as itself, ie. `\\`, `\+`, `\*` etc.
+        pure $ CharClass::singleton(c)
+    };
+
+    // `pat._assign_group_number(n)` assigns group number for each group.
+    // The first group number becomes `n`.
+    // It returns the translated pattern along with group count.
+    _assign_group_number: I64 -> Pattern -> (I64, Pattern);
+    _assign_group_number = |n, pat| (
+        if pat.is_pclass || pat.is_passert {
+            (n, pat)
+        };
+        if pat.is_psequence {
+            let input: Array Pattern = pat.as_psequence;
+            let output: Array Pattern = Array::empty(input.get_size);
+            let (n, output) = input.to_iter.fold(
+                (n, output), |(n, output), pat_inner|
+                let (n, pat_inner) = pat_inner._assign_group_number(n);
+                let output = output.push_back(pat_inner);
+                (n, output)
+            );
+            let pat = psequence $ output;
+            (n, pat)
+        };
+        if pat.is_peither {
+            let (pat1, pat2) = pat.as_peither;
+            let (n, pat1) = pat1._assign_group_number(n);
+            let (n, pat2) = pat2._assign_group_number(n);
+            let pat = peither $ (pat1, pat2);
+            (n, pat)
+        };
+        if pat.is_pquant {
+            let (pat_inner, min, max) = pat.as_pquant;
+            let (n, pat_inner) = pat_inner._assign_group_number(n);
+            let pat = pquant $ (pat_inner, min, max);
+            (n, pat)
+        };
+        if pat.is_pgroup {
+            let (_, pat_inner) = pat.as_pgroup;
+            let gn = n;
+            let (n, pat_inner) = pat_inner._assign_group_number(gn + 1);
+            let pat = pgroup $ (gn, pat_inner);
+            (n, pat)
+        };
+        eval assert(|_|"err", false);
+        (n, pat)
+    );
+}

@@ -8,7 +8,8 @@
 - Add `Random` built-in module.
 - Add `Std::F32::infinity`, `Std::F64::infinity`, `Std::F32::quiet_nan`, `Std::F64::quiet_nan`.
 - Add `Std::FFI` namespace which includes functions which are used to share ownership of Fix's boxed object with C program via FFI. Move `Destructor` and associated functions into `Std::FFI`.
-- Add hexadecimal, octal, binary integer literal (`0xaBC`, `0o123` or `0b110`).
+- Add hexadecimal, octal, binary integer literal (`0xaBC`, `0o123` or `0b110`) (#24).
+- Add `RegExp` module (written by [pt9999](https://github.com/pt9999)).
 
 ### Changed
 - Overflowing integer literals now result in a compile-time error.

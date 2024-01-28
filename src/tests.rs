@@ -5453,3 +5453,31 @@ pub fn test_hex_oct_bin_lit() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[serial]
+pub fn test_regexp() {
+    let source = r##"
+    module Main;
+    import Debug;
+    import RegExp;
+    
+    main : IO ();
+    main = (
+        let regexp = RegExp::compile("[a-z]+([0-9]+)", "").as_ok;
+        let groups = regexp.match("abc012 def345").as_ok;
+        eval assert_eq(|_|"", groups, ["abc012", "012"]);
+
+        let regexp = RegExp::compile("[a-z]+([0-9]+)", "g").as_ok;
+        let groups = regexp.match("abc012 def345").as_ok;
+        eval assert_eq(|_|"", groups, ["abc012", "def345"]);
+
+        let regexp = RegExp::compile("(\\w\\w)(\\w)", "").as_ok;
+        let result = regexp.replace_all("abc def ijk", "$2$1");
+        eval assert_eq(|_|"", result, "cab fde kij");
+
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}

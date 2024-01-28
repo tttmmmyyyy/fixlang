@@ -1,0 +1,440 @@
+// String extensions, such as:
+// - ToString for Tuple, Option, Result, Array, HashMap
+// - Array U8 -> String conversion
+// - Search, replace, split, comparison of String
+// - Hexadecimal String
+// - File Path handling
+module RegExp.StringEx;
+
+import Debug;
+import HashMap;
+import Character;
+
+//---------------------------------
+// ToString for various types
+//---------------------------------
+
+// Converts `()` to a string `"()"`.
+impl (): ToString {
+    to_string = |_| "()";
+}
+
+// Converts `(a, b, c)` to a string, for example `"(123, 3.14, abc)"`.
+impl [a : ToString, b : ToString, c : ToString] (a, b, c) : ToString {
+    to_string = |(l, m, r)| "(" + l.to_string + ", " + m.to_string + ", " + r.to_string + ")";
+}
+
+// Converts `(a, b, c, d)` to a string, for example `"(123, 3.14, abc, ())"`.
+impl [a : ToString, b : ToString, c : ToString, d : ToString] (a, b, c, d) : ToString {
+    to_string = |(l, m, m2, r)| "(" + l.to_string + ", " + m.to_string + ", " + m2.to_string + ", " + r.to_string + ")";
+}
+
+// Converts `Option a` to a string, for example `"none()"`, `"some(1)"` etc.
+impl [a: ToString] Option a: ToString {
+    to_string = |o| (
+        o.map_or(
+            "none()",
+            |a| "some(" + a.to_string + ")"
+        )
+    );
+}
+
+// Converts `Result e a` to a string, for example `"err(File not found)"`, `"ok(1)"` etc.
+impl [a: ToString, e: ToString] Result e a: ToString {
+    to_string = |res| (
+        if res.is_err {
+            "err(" + res.as_err.to_string + ")"
+        };
+        "ok(" + res.as_ok.to_string + ")"
+    );
+}
+
+// Converts `HashMap k v` to a string, for example `"{a:1,b:2}"` etc.
+impl [k: ToString, v: ToString] HashMap k v : ToString {
+    to_string = |h| (
+        "{" +
+        h.to_iter.map(|(k,v)| k.to_string + ":" + v.to_string).join(",")
+        + "}"
+    );
+}
+
+// Converts `Array a` to a string, for example `"[1,2,3]"` etc.
+impl [a: ToString] Array a: ToString {
+    to_string = |a| (
+        "[" +
+        a.to_iter.map(|x| x.to_string).join(",")
+        + "]"
+    );
+}
+
+//---------------------------------
+// String utility functions
+//---------------------------------
+
+// Converts a byte array to a string. Specifically, it calls `String::_unsafe_to_string()`
+// after appending a null character to the end of the byte array.
+_unsafe_to_string: Array U8 -> String;
+_unsafe_to_string = |a| (
+    String::_unsafe_from_c_str (a.push_back(0_U8))
+);
+
+// Converts the specified string to lowercase.
+to_lower: String -> String;
+to_lower = |str| (
+    str.get_bytes.pop_back.map(Character::to_lower)._unsafe_to_string
+);
+
+// Converts the specified string to uppercase.
+to_upper: String -> String;
+to_upper = |str| (
+    str.get_bytes.pop_back.map(Character::to_upper)._unsafe_to_string
+);
+
+// Converts a byte (a character) to a string of length 1.
+byte_to_string: U8 -> String;
+byte_to_string = |c| (
+    Array::empty(2).push_back(c)._unsafe_to_string
+);
+
+// Searches for the specified byte from the beginning of a string.
+// If found, returns the index of that byte.
+find_byte: U8 -> String -> Option I64;
+find_byte = |c, str| (
+    let array = str.get_bytes;
+    let n = str.get_size;
+    loop(
+        0, |i|
+        if i >= n {
+            break $ none()
+        };
+        if array.@(i) == c {
+            break $ some $ i
+        };
+        continue $ i + 1
+    )
+);
+
+// Searches for the specified byte from the end of a string.
+// If found, returns the index of that byte.
+find_last_byte: U8 -> String -> Option I64;
+find_last_byte = |c, str| (
+    let array = str.get_bytes;
+    let n = str.get_size;
+    loop(
+        n - 1, |i|
+        if i < 0 {
+            break $ none()
+        };
+        if array.@(i) == c {
+            break $ some $ i
+        };
+        continue $ i - 1
+    )
+);
+
+// Replaces all occurrences of `from` in the string with `to`.
+replace_all: String -> String -> String -> String;
+replace_all = |from, to, str| (
+    if from.get_size <= 0 {
+        str
+    };
+    loop((str, 0), |(str, find_start)|
+        let pos = str.find(from, find_start);
+        if pos.is_none {
+            break $ str
+        };
+        let pos = pos.as_some;
+        let str = (
+            str.substring(0, pos) +
+            to +
+            str.substring(pos + from.get_size, str.get_size)
+        );
+        let find_start = pos + to.get_size;
+        continue $ (str, find_start)
+    )
+);
+
+
+// `str.replace_suffix(from, to)` replaces `from` at the end of `str` with `to`.
+// if `str` does not end with `from`, an error occurs.
+// Example:
+// ```
+// "test.txt".replace_suffix(".txt", ".tmp")  ==> ok("test.tmp")
+// "test.jpg".replace_suffix(".txt", ".tmp")  ==> err("suffix does not match: test.jpg")
+// ```
+replace_suffix: String -> String -> String -> Result ErrMsg String;
+replace_suffix = |from, to, str| (
+    if !str.ends_with(from) {
+        err $ "suffix does not match: " + str
+    };
+    let str = str.substring(0, str.get_size - from.get_size);
+    ok $ str + to
+);
+
+// `str.split_first(delim)` splits the string `str` into two parts with the delimiter `delim`.
+// Returns `(left, right)` where `left` is the left part of the delimiter, and
+// `right` is the right part of the delimiter.
+// Returns `(str, "")` if the delimiter is not found.
+split_first: String -> String -> (String, String);
+split_first = |delim, str| (
+    let pos = str.find(delim, 0);
+    if pos.is_none {
+        (str, "")
+    };
+    let pos = pos.as_some;
+    (str.substring(0, pos), str.substring(pos + delim.get_size, str.get_size))
+);
+
+// Same as Std::String::split, except that `"foo".split_ex(",")` returns a singleton iterator of "foo".
+split_ex: String -> String -> Iterator String;
+split_ex = |delim, str| (
+    if delim == "" {
+        Iterator::empty.push_front(str)
+    };
+    let pos = str.find(delim, 0);
+    if pos.is_none {
+        Iterator::empty.push_front(str)
+    };
+    str.split(delim)
+);
+
+// Splits a string by a function that checks whether a character is a delimiter or not.
+// The result will not contain any empty string.
+split_by: (U8 -> Bool) -> String -> Iterator String;
+split_by = |is_delim, str| (
+    let output = Array::empty(str.get_size);
+    let output = loop(
+        (output, 0, 0), |(output, start, i)|
+        if i >= str.get_size {
+            let output = if start < i { output.push_back(str.substring(start, i)) } else { output };
+            break $ output
+        };
+        let c = str.get_bytes.@(i);
+        if !is_delim(c) {
+            continue $ (output, start, i + 1)
+        };
+        let output = if start < i { output.push_back(str.substring(start, i)) } else { output };
+        continue $ (output, i + 1, i + 1)
+    );
+    output.to_iter
+);
+
+// Returns a substring extracted from a specified range from a string.
+// If the specified range exceeds the string, it will be truncated to fit within the string.
+substring: I64 -> I64 -> String -> String;
+substring = |s, e, str| (
+    let size = str.get_size;
+    let s = (if s < 0 { 0 }; if s >= size { size }; s);
+    let e = (if e < s { s }; if e >= size { size }; e);
+    if s == 0 && e == size { str };
+    str.get_sub(s, e)
+);
+
+// Checks if a string starts with the specified prefix.
+starts_with: String -> String -> Bool;
+starts_with = |prefix, str| (
+    str.substring(0, prefix.get_size) == prefix
+);
+
+// Checks if a string ends with the specified suffix.
+ends_with: String -> String -> Bool;
+ends_with = |suffix, str| (
+    str.substring(str.get_size - suffix.get_size, str.get_size) == suffix
+);
+
+// `string_less_than((str1,str2))` compares two strings.
+// Returns True if and only if `str1` is less than `str2` in lexicographical order.
+string_less_than: (String, String) -> Bool;
+string_less_than = |(str1, str2)| (
+    let a1 = str1.get_bytes;
+    let a2 = str2.get_bytes;
+    let n1 = a1.get_size;
+    let n2 = a2.get_size;
+    _array_cmp_inner(a1, a2, n1, n2, 0) < 0
+);
+
+_array_cmp_inner: Array U8 -> Array U8 -> I64 -> I64 -> I64 -> I64;
+_array_cmp_inner = |a1, a2, n1, n2, i| (
+    if i >= n1 {
+        if i >= n2 {
+            0 
+        } else { 
+            -1 
+        }
+    };
+    if i >= n2 {
+        1
+    };
+    let c1 = a1.@(i);
+    let c2 = a2.@(i);
+    if c1 != c2 {
+        if c1 < c2 {
+            -1
+        } else {
+            1
+        }
+    };
+    _array_cmp_inner(a1, a2, n1, n2, i + 1)
+);
+
+
+// `less_than(str1,str2) compares two strings.
+// Returns True if and only if `str1` is less than `str2` in lexicographical order.
+impl String: LessThan {
+    less_than = |str1,str2| string_less_than $ (str1, str2);
+}
+
+
+//---------------------------------
+// Format
+//---------------------------------
+
+// `array.formatv(str)` replaces each occurence of `{}` in the format string `str`
+// with each element of `array`.
+// Currently only supports `{}`.
+formatv: String -> Array String -> String;
+formatv = |str, args| (
+    let from = "{}";
+    let output = Array::empty(args.get_size * 2);
+    let (output, tail) = args.to_iter.loop_iter(
+        (output, 0), |(output, find_start), to|
+        let pos = str.find(from, find_start);
+        if pos.is_none {
+            break $ (output, find_start)
+        };
+        let pos = pos.as_some;
+        let output = output
+            .push_back(str.substring(find_start, pos))
+            .push_back(to)
+        ;
+        let find_start = pos + from.get_size;
+        continue $ (output, find_start)
+    );
+    let output = output
+        .push_back(str.substring(tail, str.get_size));
+    output.to_iter.concat_iter
+);
+
+namespace Array {
+    // `array.format(str)` replaces each occurence of `{}` in the format string `str`
+    // with each element of `array`.
+    // Currently only supports `{}`.
+    format: [a: ToString] String -> Array a -> String;
+    format = |str, arr| arr.map(to_string).formatv(str);
+}
+
+namespace Tuple2 {
+    // `(a, b).format(str)` replaces each occurence of `{}` in the format string `str`
+    // with `a`, `b`.
+    format: [a: ToString, b: ToString] String -> (a,b) -> String;
+    format = |str, (a,b)| [a.to_string, b.to_string].formatv(str);
+}
+
+namespace Tuple3 {
+    // `(a, b, c).format(str)` replaces each occurence of `{}` in the format string `str`
+    // with `a`, `b`, `c`.
+    format: [a: ToString, b: ToString, c:ToString] String -> (a,b,c) -> String;
+    format = |str, (a,b,c)| [a.to_string, b.to_string, c.to_string].formatv(str);
+}
+
+namespace Tuple4 {
+    // `(a, b, c, d).format(str)` replaces each occurence of `{}` in the format string `str`
+    // with `a`, `b`, `c`, `d`.
+    format: [a: ToString, b: ToString, c:ToString, d:ToString] String -> (a,b,c,d) -> String;
+    format = |str, (a,b,c,d)| [a.to_string, b.to_string, c.to_string, d.to_string].formatv(str);
+}
+
+//---------------------------------
+// Hexadecimal
+//---------------------------------
+
+// Converts a 4bit number (0..15) to a hex character ('0'..'9', 'A'..'F').
+encode_hex_char: U8 -> U8;
+encode_hex_char =
+    let hex_chars = "0123456789ABCDEF".get_bytes.pop_back
+    in |c| hex_chars.@(c.bit_and(15_U8).to_I64);
+
+// Converts a hex character ('0'..'9', 'A'..'F' or 'a'..'f') to a 4bit number (0..15).
+decode_hex_char: U8 -> Result ErrMsg U8;
+decode_hex_char = |c| (
+    if '0' <= c && c <= '9' { ok $ c - '0' };
+    if 'A' <= c && c <= 'F' { ok $ c - 'A' + 10_U8 };
+    if 'a' <= c && c <= 'f' { ok $ c - 'a' + 10_U8 };
+    err $ "Not a hexadecimal character: '" + byte_to_string(c) + "'"
+);
+
+// Converts a 64bit number to a hex string.
+to_string_hex: U64 -> String;
+to_string_hex = |input| (
+    let output: Iterator U8 = Iterator::empty;
+    let output = loop(
+        (output, 0, input), |(output, i, input)|
+        if i >= 16 || input == 0_U64 {
+            break $ output
+        };
+        let h = input.bit_and(15_U64).to_U8;
+        let input = input.shift_right(4_U64);
+        let output = output.push_front(encode_hex_char(h));
+        continue $ (output, i + 1, input)
+    );
+    let output = if output.is_empty { output.push_front ('0') } else { output };
+    output.to_array._unsafe_to_string
+);
+
+// Converts a hex string to a 64bit number.
+from_string_hex: String -> Result ErrMsg U64;
+from_string_hex = |input| (
+    if input.get_size == 0 {
+        err $ "Empty string"
+    };
+    let input = input.get_bytes.pop_back;
+    input.to_iter.fold_m(
+        0_U64, |output, c|
+        let c = *decode_hex_char(c);
+        pure $ output.shift_left(4_U64).bit_or(c.to_U64)
+    )
+);
+
+//---------------------------------
+// File Path handling
+//---------------------------------
+
+// Checks if the byte is a path separator. Currently only '/' is supported.
+is_path_sep: U8 -> Bool;
+is_path_sep = |c| c == '/';
+
+// `join_paths(path_segments)` joins segments into a path.
+join_paths: Array String -> String;
+join_paths = |path_segments| (
+    path_segments.to_iter.fold(
+        "", |result, segment|
+        if result == "" {
+            segment
+        };
+        let result = result.strip_last_bytes(is_path_sep);
+        let segment = segment.strip_first_bytes(is_path_sep);
+        result + "/" + segment
+    )
+);
+
+// `dirname(path)` returns the path with its last non-slash component and trailing slashes removed.
+// if `path` contains no `/`s, returns `"."`.
+dirname: String -> String;
+dirname = |path| (
+    if path == "" {
+        "."
+    };
+    let path = path.strip_last_bytes(is_path_sep);
+    if path == "" {
+        "/"
+    };
+    let opt = path.find_last_byte('/');
+    if opt.is_none {
+        "."
+    };
+    if opt.as_some == 0 {
+        "/"
+    };
+    let parent_dir = path.substring(0, opt.as_some);
+    parent_dir
+);
