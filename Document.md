@@ -59,10 +59,10 @@
     - [Unions](#unions-2)
   - [Foreign function interface (FFI)](#foreign-function-interface-ffi)
     - [Calling C functions from Fix](#calling-c-functions-from-fix)
-    - [Sending Fix's object to C](#sending-fixs-object-to-c)
-    - [Retain / release Fix's object from C](#retain--release-fixs-object-from-c)
+    - [Sending Fix's value to C](#sending-fixs-value-to-c)
+    - [Retain / release Fix's value from C](#retain--release-fixs-value-from-c)
     - [Calling Fix's function from C](#calling-fixs-function-from-c)
-    - [Casting back a `Ptr` to a Fix's object](#casting-back-a-ptr-to-a-fixs-object)
+    - [Casting back a `Ptr` to a Fix's value](#casting-back-a-ptr-to-a-fixs-value)
     - [Managing C resource from Fix](#managing-c-resource-from-fix)
     - [Note on multi-threading](#note-on-multi-threading)
 - [Operators](#operators)
@@ -1283,17 +1283,17 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 Note that calling C function may break Fix's assurance such as immutability or memory safety. 
 The programmer has a responsibility to hide the side effect of C function into `IO`, or manage resource appropriately.
 
-### Sending Fix's object to C 
+### Sending Fix's value to C 
 
 NOTE: To understand the contents of this and following sections, you will need to be familiar with scope-based reference counters, such as C++'s `shared_ptr` or Rust's `Rc`.
 
-The function `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr` returns a pointer to a Fix's object of *boxed type*.
+The function `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr` returns a pointer to a Fix's value of *boxed type*.
 Then you can send the pointer to C's world by `CALL_C`.
 
-The returned pointer is "retained" in the sense that it has a (shared) ownership of the Fix's object. 
+The returned pointer is "retained" in the sense that it has a (shared) ownership of the Fix's value. 
 You have a responsibility to "release" (i.e., decrement the reference counter) it to avoid resource leak.
 
-### Retain / release Fix's object from C
+### Retain / release Fix's value from C
 
 You can get a function pointer of retain / release function by the followings:
 - `Std::FFI::unsafe_get_release_function_of_boxed_value : a -> Ptr`
@@ -1301,7 +1301,7 @@ You can get a function pointer of retain / release function by the followings:
 
 They return a function pointer of type `void (*)(void*)`. 
 
-To manage reference counter of Fix's object from C side, you need to send the function pointers to C side using `CALL_C`, and call them on a pointer which directs to a Fix's object properly.
+To manage reference counter of Fix's value from C side, you need to send the function pointers to C side using `CALL_C`, and call them on a pointer which directs to a Fix's value properly.
 
 ### Calling Fix's function from C
 
@@ -1311,35 +1311,35 @@ If you want to call a Fix's function from C side, use the following native funct
 void *fixruntime_run_function(void *function)
 ```
 
-Here, the argument `function` should be a (retained) pointer to the object of type `Std::Boxed (() -> a)` where `a` is a *boxed* type. 
-The function `fixruntime_run_function` calls the function given as the argument, *release it*, and returns the (retained) pointer to the result object.
+Here, the argument `function` should be a (retained) pointer to the value of type `Std::Boxed (() -> a)` where `a` is a *boxed* type. 
+The function `fixruntime_run_function` calls the Fix's function given as the argument, *release it*, and returns the (retained) pointer to the result value.
 
 So, to call a Fix's function from C side, 
 - you first need to wrap the function in `Std::Boxed`, get a pointer to it by `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`, and send the pointer to C side by `CALL_C`.
 - In C library, you need to declare `void *fixruntime_run_function(void *function)`.
-- Call `fixruntime_run_function` on a (retained) pointer to the Fix's function. Note that `fixruntime_run_function` itself releases the argument; if you plan to call the function again later, you need to retain it before you call `fixruntime_run_function` to prevent the function object to be deallocated.
+- Call `fixruntime_run_function` on a (retained) pointer to the Fix's function. Note that `fixruntime_run_function` itself releases the argument; if you plan to call the function again later, you need to retain it before you call `fixruntime_run_function` to prevent the function value to be deallocated.
 - The return value of `fixruntime_run_function` is a (retained pointer) of the result. 
 
-### Casting back a `Ptr` to a Fix's object
+### Casting back a `Ptr` to a Fix's value
 
-In many cases, the return value of `fixruntime_run_function` will be sent to Fix's side in any way and "casted" to a Fix's object to utilize it. 
-To cast a `Ptr` to a Fix's object, use `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
-Note that, once casted to a Fix's object, the responsibility to release the pointer will be on the Fix's compiler, not on you. 
+In many cases, the return value of `fixruntime_run_function` will be sent to Fix's side in any way and "casted" to a Fix's value to utilize it. 
+To cast a `Ptr` to a Fix's value, use `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
+Note that, once casted to a Fix's value, the responsibility to release the pointer will be on the Fix's compiler, not on you. 
 
 ### Managing C resource from Fix
 
 Some C functions allocate a resource which should be deallocated by another C function in the end. Most famous examples may be `malloc` / `free` and `fopen` / `fclose`.
-If you try to create a Fix's type which wraps a C resource, and want to call the deallocation function automatically at the end of Fix object's lifetime, `Std::FFI::Destructor::` will be useful.
+If you try to create a Fix's type which wraps a C resource, and want to call the deallocation function automatically at the end of Fix value's lifetime, `Std::FFI::Destructor::` will be useful.
 
 For details, [see the document for `Destructor`](./BuiltinLibraries.md#namespace-destructor).
 
 ### Note on multi-threading
 
 Fix's reference counting is not thread-safe by default. 
-If a pointer to Fix's object is shared from multiple threads, retaining / releasing it may lead to data race.
+If a pointer to Fix's value is shared from multiple threads, retaining / releasing it may lead to data race.
 
-To avoid data race, add the `--threaded` compiler flag, and call `Std::mark_threaded : a -> a` on the object before obtaining the pointer.
-The `Std::mark_threaded` function traverses all objects reachable from the given object, and changes them into multi-threaded mode so that the reference counting on them will be done atomically.
+To avoid data race, add the `--threaded` compiler flag, and call `Std::mark_threaded : a -> a` on the value before obtaining the pointer.
+The `Std::mark_threaded` function traverses all values reachable from the given value, and changes them into multi-threaded mode so that the reference counting on them will be done atomically.
 
 # Operators
 
