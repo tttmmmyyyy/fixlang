@@ -1317,18 +1317,21 @@ The function `fixruntime_run_function` calls the Fix's function given as the arg
 So, to call a Fix's function from C side, 
 - you first need to wrap the function in `Std::Boxed`, get a pointer to it by `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`, and send the pointer to C side by `CALL_C`.
 - In C library, you need to declare `void *fixruntime_run_function(void *function)`.
-- Call `fixruntime_run_function` on a (retained) pointer to the Fix's function. Note that `fixruntime_run_function` itself releases the argument; if you plan to call the function again later, you need to retain it before you call `fixruntime_run_function` to prevent the function value to be deallocated.
+- Call `fixruntime_run_function` on a (retained) pointer to the Fix's function. Note that `fixruntime_run_function` itself releases the argument; if you plan to call the function again later, you need to retain it before calling `fixruntime_run_function` to prevent the function value to be deallocated.
 - The return value of `fixruntime_run_function` is a (retained pointer) of the result. 
 
 ### Casting back a `Ptr` to a Fix's value
 
 In many cases, the return value of `fixruntime_run_function` will be sent to Fix's side in any way and "casted" to a Fix's value to utilize it. 
 To cast a `Ptr` to a Fix's value, use `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
+
 Note that, once casted to a Fix's value, the responsibility to release the pointer will be on the Fix's compiler, not on you. 
 
 ### Managing C resource from Fix
 
-Some C functions allocate a resource which should be deallocated by another C function in the end. Most famous examples may be `malloc` / `free` and `fopen` / `fclose`.
+Some C functions allocate a resource which should be deallocated by another C function in the end. 
+Most famous examples may be `malloc` / `free` and `fopen` / `fclose`.
+
 If you try to create a Fix's type which wraps a C resource, and want to call the deallocation function automatically at the end of Fix value's lifetime, `Std::FFI::Destructor::` will be useful.
 
 For details, [see the document for `Destructor`](./BuiltinLibraries.md#namespace-destructor).
@@ -1336,9 +1339,9 @@ For details, [see the document for `Destructor`](./BuiltinLibraries.md#namespace
 ### Note on multi-threading
 
 Fix's reference counting is not thread-safe by default. 
-If a pointer to Fix's value is shared from multiple threads, retaining / releasing it may lead to data race.
+Retaining / releasing a pointer to a Fix's value from multiple shreads simultaneously may cause memory leak or segmentation fault.
 
-To avoid data race, add the `--threaded` compiler flag, and call `Std::mark_threaded : a -> a` on the value before obtaining the pointer.
+To avoid this problem, add the `--threaded` compiler flag, and call `Std::mark_threaded : a -> a` on the value before obtaining the pointer.
 The `Std::mark_threaded` function traverses all values reachable from the given value, and changes them into multi-threaded mode so that the reference counting on them will be done atomically.
 
 # Operators
