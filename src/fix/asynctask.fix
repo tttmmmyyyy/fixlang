@@ -13,7 +13,7 @@ type TaskHandle = Ptr;
 // Get a boxed none of type `a` from a value of type `() -> a`.
 _get_boxed_none_of_codomain_type : (() -> a) -> Boxed (Option a);
 _get_boxed_none_of_codomain_type = |_func| (
-    Boxed { value : Option::none }
+    Boxed { value : Option::none() }
 );
 
 // Get the result of a task.
@@ -23,7 +23,7 @@ get = |task| (
     let task_handle = task.@dtor.@value;
     let task_result_ptr = CALL_C[Ptr fixruntime_thread_get_task_result(Ptr), task_handle];
     eval task; // Do not call destructor before ending working with `task_handle`.
-    unsafe_get_boxed_value_from_retained_ptr(task_result_ptr).@value.as_some
+    unsafe_get_boxed_value_from_retained_ptr(task_result_ptr).Boxed::@value.as_some
 );
 
 // Make a task which performs a computation asynchronously.
