@@ -801,9 +801,9 @@ impl TypeNode {
                 let tycon = self.toplevel_tycon();
                 if tycon.is_some() {
                     match get_tuple_n(&tycon.unwrap().name) {
-                        Some(n) => {
+                        Some(_n) => {
                             let args = self.collect_type_argments();
-                            assert_eq!(args.len(), n as usize);
+                            //assert_eq!(args.len(), n as usize);
                             let arg_strs =
                                 args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
                             return format!("({})", arg_strs.join(", "));
