@@ -90,9 +90,11 @@ from_utc = _datetime_to_time_inner(false);
 // Get current time.
 get_now : IO Time;
 get_now = (
-    let buf: Array I64 = Array::empty(2)._unsafe_set_size(2); // sec, usec.
-    eval CALL_C[() fixruntime_clock_gettime(Ptr), buf._get_ptr];
-    pure $ Time { sec : buf.@(0), nanosec : buf.@(1).to_U32 }
+    IO { _data : |_| (
+        let buf: Array I64 = Array::empty(2)._unsafe_set_size(2); // sec, usec.
+        eval CALL_C[() fixruntime_clock_gettime(Ptr), buf._get_ptr];
+        Time { sec : buf.@(0), nanosec : buf.@(1).to_U32 }
+    )}
 );
 
 // Convert time to 64-bit floating value.
