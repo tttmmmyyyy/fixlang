@@ -803,9 +803,14 @@ impl TypeNode {
                     match get_tuple_n(&tycon.unwrap().name) {
                         Some(n) => {
                             let args = self.collect_type_argments();
-                            assert_eq!(args.len(), n as usize);
-                            let arg_strs =
+                            let mut arg_strs =
                                 args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
+                            assert!(args.len() <= n as usize);
+                            // If args.len() < n, then `self` is a partial application to a tuple.
+                            // In this case, we show missing arguments by `*` (e.g., `(Std::I64, *)`).
+                            for _ in args.len()..n as usize {
+                                arg_strs.push("*".to_string());
+                            }
                             return format!("({})", arg_strs.join(", "));
                         }
                         None => {}
