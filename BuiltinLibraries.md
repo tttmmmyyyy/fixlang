@@ -540,7 +540,7 @@
   - [`number_of_processors : I64`](#number_of_processors--i64)
   - [`namespace AsyncIOTask`](#namespace-asynciotask)
     - [`type IOTask a`](#type-iotask-a)
-    - [`get : IOTask a -> IO a`](#get--iotask-a---io-a)
+    - [`get : IOTask a -> a`](#get--iotask-a---a)
     - [`make : IO a -> IO (IOTask a)`](#make--io-a---io-iotask-a)
   - [`namespace Var`](#namespace-var)
     - [`type Var a`](#type-var-a)
@@ -2110,7 +2110,7 @@ The runtime pools as many threads as this number to execute asynchronous tasks.
 ### `type IOTask a`
 A type for an I/O action that can be run asynchronously.
 
-### `get : IOTask a -> IO a`
+### `get : IOTask a -> a`
 Get the result of an asynchronous I/O action.
 
 ### `make : IO a -> IO (IOTask a)`
@@ -2194,6 +2194,8 @@ Set a value to a `Var`.
 
 ### `wait : (a -> Bool) -> Var a -> IO ()`
 `var.wait(cond)` waits until `cond` on the value of `var` is satisfied.
+Note that it is not assured that `cond` is satisfied after `wait` returned; 
+the value in `var` may be changed after `cond` is evaluated.
 
 ### `wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b`
 `var.wait_and_lock(cond, act)` waits until `cond` on the value of `var` is satisfied, 

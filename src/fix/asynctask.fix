@@ -98,8 +98,8 @@ namespace AsyncIOTask {
     type IOTask a = unbox struct { _task : Task a };
 
     // Get the result of an asynchronous I/O action.
-    get : IOTask a -> IO a;
-    get = |IOTask { _task : task }| IO { _data : |_| task.get };
+    get : IOTask a -> a;
+    get = |IOTask { _task : task }| task.get;
 
     // An `IO` version of `AsyncTask::make`.
     // 
@@ -230,6 +230,8 @@ namespace Var {
     ) };
 
     // `var.wait(cond)` waits until `cond` on the value of `var` is satisfied.
+    // Note that it is not assured that `cond` is satisfied after `wait` returned; 
+    // the value in `var` may be changed after `cond` is evaluated.
     wait : (a -> Bool) -> Var a -> IO ();
     wait = |cond, var| var.wait_and_lock(cond, |_| pure());
 
