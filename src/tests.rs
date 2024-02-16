@@ -5121,8 +5121,8 @@ pub fn test_mvar_of_shared_object() {
             let arr = *var.wait_and_lock(|arr| !arr.is_empty, |arr| pure $ arr);
             pure $ arr.to_iter.fold(0, Add::add)
         ));
-        eval assert_eq(|_|"", *th0.get, n * (n - 1) / 2);
-        eval assert_eq(|_|"", *th1.get, n * (n - 1) / 2);
+        eval assert_eq(|_|"", th0.get, n * (n - 1) / 2);
+        eval assert_eq(|_|"", th1.get, n * (n - 1) / 2);
         pure()
     );
     "##;
