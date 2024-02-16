@@ -160,7 +160,8 @@ fn main() {
         ] {
             options.append(
                 &mut m
-                    .get_many::<String>(opt_id)
+                    .try_get_many::<String>(opt_id)
+                    .unwrap_or_default()
                     .unwrap_or_default()
                     .map(|v| (v.clone(), link_type))
                     .collect::<Vec<_>>(),
