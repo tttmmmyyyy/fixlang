@@ -4,7 +4,7 @@ use rand::Rng;
 
 use super::*;
 
-// Tests should run sequentially, since OBJECT_TABLE in libfixsanitizer.so is shared between tests and check_leak() asserts OBJECT_TABLE is empty.
+// Tests should run sequentially, since libfixsanitizer.so does not work properly in multi threaded context.
 #[test]
 #[serial]
 pub fn test0() {
