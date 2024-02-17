@@ -1,4 +1,5 @@
 module Main;
+import Debug;
 
 trait a : Show {
     show : a -> String;

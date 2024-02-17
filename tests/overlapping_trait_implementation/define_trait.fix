@@ -1,5 +1,0 @@
-module DefnTrait;
-
-trait a : Show {
-    show : a -> String;
-}
