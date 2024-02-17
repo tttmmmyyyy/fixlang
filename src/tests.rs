@@ -5311,35 +5311,49 @@ pub fn test_graph_find_loop() {
 #[test]
 #[serial]
 pub fn test_run_examples() {
-    // Run all "*.fix" files in "examples" directory.
-    let paths = fs::read_dir("./examples").unwrap();
+    test_files_in_directory(Path::new("./examples"));
+}
+
+#[test]
+#[serial]
+pub fn test_tests_directory() {
+    test_files_in_directory(Path::new("./tests"));
+}
+
+// Run all "*.fix" files in the specified directory.
+// If the directory contains subdirectories, run Fix program consists of all "*.fix" files in each subdirectory.
+pub fn test_files_in_directory(path: &Path) {
+    let paths = fs::read_dir(path).unwrap();
     for path in paths {
         let path = path.unwrap().path();
-        let display = path.display();
-        if path.extension().is_none() || path.extension().unwrap() != "fix" {
-            continue;
-        }
-        println!("[run_examples] {}:", display);
-
         let mut config = Configuration::develop_compiler();
-        config.source_files.push(path);
+        if path.is_dir() {
+            // Skip hidden directories.
+            if path.file_name().unwrap().to_str().unwrap().starts_with(".") {
+                continue;
+            }
+
+            // For each directory in "tests" directory, run Fix program which consists of "*.fix" files in the directory.
+            let files = fs::read_dir(&path).unwrap();
+            for file in files {
+                let file = file.unwrap().path();
+                if file.extension().is_none() || file.extension().unwrap() != "fix" {
+                    continue;
+                }
+                config.source_files.push(file);
+            }
+        } else {
+            // For each file which has extention "fix" in "tests" directory, run it as Fix program.
+            if path.extension().is_none() || path.extension().unwrap() != "fix" {
+                continue;
+            }
+            config.source_files.push(path.clone());
+        }
+        let display = path.display();
+        println!("[{}]:", display);
         run_file(config);
         remove_file("test.txt").unwrap_or(());
     }
-
-    // Run import example.
-    println!("[run_examples] examples/import");
-    let paths = fs::read_dir("./examples/import").unwrap();
-    let mut config = Configuration::develop_compiler();
-    for path in paths {
-        let path = path.unwrap().path();
-        if path.extension().is_none() || path.extension().unwrap() != "fix" {
-            continue;
-        }
-        config.source_files.push(path);
-    }
-    run_file(config);
-    remove_file("test.txt").unwrap_or(());
 }
 
 #[test]
