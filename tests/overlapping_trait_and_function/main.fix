@@ -1,0 +1,19 @@
+module Main;
+
+trait a : Show {
+    show : a -> String;
+}
+
+impl I64 : Show {
+    show = |val| "(trait) " + val.to_string;
+}
+
+show : I64 -> String;
+show = |val| "(function) " + val.to_string;
+
+main : IO ();
+main = (
+    eval assert_eq(|_|"", Main::show(42), "(function) 42");
+    eval assert_eq(|_|"", Show::show(42), "(trait) 42");
+    pure()
+);

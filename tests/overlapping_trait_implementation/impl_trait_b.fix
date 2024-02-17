@@ -1,0 +1,7 @@
+module ImplTraitB;
+
+import DefnTrait;
+
+impl I64 : Show {
+    show = |val| "(trait implementation B) " + val.to_string;
+}

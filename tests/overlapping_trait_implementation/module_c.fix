@@ -1,0 +1,11 @@
+module ModuleC;
+
+show : I64 -> String;
+show = |val| "(usual function) " + val.to_string;
+
+call : IO ();
+call = (
+    eval assert_eq(|_|"", 42.ModuleC::show, "(usual function) 42");
+    eval assert_eq(|_|"", 42.ImplTraitB::show, "(trait implementation B) 42");
+    pure()
+);
