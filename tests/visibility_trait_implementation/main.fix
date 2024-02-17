@@ -1,10 +1,11 @@
 module Main;
 
-// Although there are overlapping implementations of `Show` of `I64`, we only import one of them.
 import ImplTraitA;
 
 main : IO ();
 main = (
+    // Although there are overlapping implementations of `Show` of `I64` in `ImplTraitA` module and `ImplTraitB` module, 
+    // we only import one of them in `Main` module, so there is no ambiguity.
     eval assert_eq(|_|"", 42.show, "(A) 42");
     pure()
 );
