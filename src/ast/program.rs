@@ -1395,13 +1395,13 @@ impl Program {
     }
 
     // Create a graph of modules. If module A imports module B, an edge from B to A is added.
-    pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
+    pub fn imported_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
-        for (from, tos) in &self.visible_mods {
-            for to in tos {
+        for (importer, importees) in &self.visible_mods {
+            for importee in importees {
                 graph.connect(
-                    *elem_to_idx.get(from).unwrap(),
-                    *elem_to_idx.get(to).unwrap(),
+                    *elem_to_idx.get(importee).unwrap(),
+                    *elem_to_idx.get(importer).unwrap(),
                 );
             }
         }
@@ -1411,14 +1411,14 @@ impl Program {
     // Calculate and set last_affected_dates from last_updates.
     pub fn set_last_affected_dates(&mut self) {
         self.last_affected_dates = Default::default();
-        let (imported_graph, mod_to_node) = self.importing_module_graph();
+        let (imported_graph, mod_to_node) = self.imported_module_graph();
         for module in &self.linked_mods() {
             let mut last_affected = self.last_updates.get(module).unwrap().clone();
             let imported_modules =
                 imported_graph.reachable_nodes(*mod_to_node.get(module).unwrap());
             for imported_module in imported_modules {
-                let imported_module = imported_graph.get(imported_module);
-                last_affected = last_affected.max(self.last_updates.get(imported_module).unwrap());
+                let importing_module = imported_graph.get(imported_module);
+                last_affected = last_affected.max(self.last_updates.get(importing_module).unwrap());
             }
             self.last_affected_dates
                 .insert(module.clone(), last_affected);
