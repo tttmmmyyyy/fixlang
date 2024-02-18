@@ -96,11 +96,12 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 // Saving a source code to a file is necessary for:
 // - For build cache system, giving "last modified date" to the source code which is on memory.
 // - Generate debug information, in which source location is required.
-pub fn parse_and_save_to_temporary_file(source: &str, file_name: &str, hash: &str) -> Program {
-    if !check_temporary_source(file_name, hash) {
-        save_temporary_source(source, file_name, hash);
+pub fn parse_and_save_to_temporary_file(source: &str, file_name: &str) -> Program {
+    let hash = format!("{:x}", md5::compute(source));
+    if !check_temporary_source(file_name, &hash) {
+        save_temporary_source(source, file_name, &hash);
     }
-    parse_file_path(temporary_source_path(file_name, hash))
+    parse_file_path(temporary_source_path(file_name, &hash))
 }
 
 pub fn parse_file_path(file_path: PathBuf) -> Program {

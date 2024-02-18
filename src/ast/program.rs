@@ -1,4 +1,3 @@
-use build_time::build_time_utc;
 use chrono::{DateTime, Utc};
 
 use inkwell::{debug_info::AsDIScope, module::Linkage};
@@ -808,8 +807,6 @@ impl Program {
                     }
                 };
             if last_update.0 != define_module_last_affected.0 {
-                // We intentionally use "!=" here;
-                // If we use here "<" instead of "!=", the possibility that issue #32 causes a problem is increased.
                 return None;
             }
             Some(expr)
@@ -1365,11 +1362,7 @@ impl Program {
                 STANDARD_LIBRARIES
             {
                 if import.target_module == *mod_name {
-                    let mut fixmod = parse_and_save_to_temporary_file(
-                        source_content,
-                        file_name,
-                        &format!("{:x}", md5::compute(build_time_utc!())),
-                    );
+                    let mut fixmod = parse_and_save_to_temporary_file(source_content, file_name);
                     if let Some(mod_modifier) = mod_modifier {
                         mod_modifier(&mut fixmod);
                     }
@@ -1403,14 +1396,14 @@ impl Program {
             .insert(imported.clone());
     }
 
-    // Create a graph of modules. If module A imports module B, an edge from B to A is added.
-    pub fn imported_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
+    // Create a graph of modules. If module A imports module B, an edge from A to B is added.
+    pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
         for (importer, importees) in &self.visible_mods {
             for importee in importees {
                 graph.connect(
-                    *elem_to_idx.get(importee).unwrap(),
                     *elem_to_idx.get(importer).unwrap(),
+                    *elem_to_idx.get(importee).unwrap(),
                 );
             }
         }
@@ -1469,25 +1462,25 @@ impl Program {
                 }
             }
         }
-        let module_paths_prev = read_module_paths_file();
+        let module_paths_old = read_module_paths_file();
         let module_paths_curr = self
             .module_to_files
             .iter()
-            .map(|(mod_name, src)| (mod_name.clone(), src.file_path.clone()))
-            .collect::<HashMap<Name, PathBuf>>();
-        save_module_paths_file(module_paths_curr.clone());
+            .map(|(mod_name, src)| (mod_name.clone(), src.file_path.clone()));
+        let mut module_paths_new = module_paths_old.clone();
+        module_paths_new.extend(module_paths_curr);
+        save_module_paths_file(module_paths_new.clone());
 
         // Collect last update date of each module.
         // If a module has a source file different from the one at the previous build, then treat it as being updated.
         let mut last_update_dates: HashMap<Name, UpdateDate> = Default::default();
         for module in &self.linked_mods() {
-            let prev_path = module_paths_prev.get(module);
-            let curr_path = module_paths_curr.get(module);
-            let last_update = if prev_path.is_none() || curr_path.is_none() {
+            let prev_path = module_paths_old.get(module);
+            let last_update = if prev_path.is_none() {
                 UpdateDate::now()
             } else {
                 let prev_path = prev_path.unwrap();
-                let curr_path = curr_path.unwrap();
+                let curr_path = module_paths_new.get(module).unwrap();
                 if prev_path != curr_path {
                     UpdateDate::now()
                 } else {
@@ -1501,14 +1494,15 @@ impl Program {
         }
 
         self.last_affected_dates = Default::default();
-        let (imported_graph, mod_to_node) = self.imported_module_graph();
+        let (importing_graph, mod_to_node) = self.importing_module_graph();
         for module in &self.linked_mods() {
             let mut last_affected = last_update_dates.get(module).unwrap().clone();
             let imported_modules =
-                imported_graph.reachable_nodes(*mod_to_node.get(module).unwrap());
-            for imported_module in imported_modules {
-                let importing_module = imported_graph.get(imported_module);
-                last_affected = last_affected.max(last_update_dates.get(importing_module).unwrap());
+                importing_graph.reachable_nodes(*mod_to_node.get(module).unwrap());
+            for imported_module_idx in imported_modules {
+                let imported_module = importing_graph.get(imported_module_idx);
+                // eprintln!("module {} imports module {}.", module, imported_module);
+                last_affected = last_affected.max(last_update_dates.get(imported_module).unwrap());
             }
             self.last_affected_dates
                 .insert(module.clone(), last_affected);

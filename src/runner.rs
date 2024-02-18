@@ -1,5 +1,4 @@
 use build_time::build_time_utc;
-use chrono::{DateTime, Utc};
 use std::{
     env,
     fs::create_dir_all,
@@ -7,7 +6,6 @@ use std::{
     path::PathBuf,
     process::Command,
     ptr::null,
-    time::SystemTime,
 };
 
 use either::Either;
@@ -305,12 +303,12 @@ fn build_module<'c>(
 #[allow(dead_code)]
 pub fn run_source(source: &str, mut config: Configuration) {
     const MAIN_RUN: &str = "main_run";
-    let datetime: DateTime<Utc> = SystemTime::now().into();
-    let file_hash = format!("{:x}", md5::compute(datetime.to_rfc3339()));
-
     if config.run_by_build {
-        save_temporary_source(source, MAIN_RUN, &file_hash);
-        config.source_files = vec![temporary_source_path(MAIN_RUN, &file_hash)];
+        // Save the source file to a temporary file, and add it to source_files.
+        let source_hash = format!("{:x}", md5::compute(source));
+        save_temporary_source(source, MAIN_RUN, &source_hash);
+        config.source_files = vec![temporary_source_path(MAIN_RUN, &source_hash)];
+
         build_file(config);
         let output = Command::new("./a.out")
             .output()
@@ -333,7 +331,7 @@ pub fn run_source(source: &str, mut config: Configuration) {
             );
         }
     } else {
-        let source_mod = parse_and_save_to_temporary_file(source, MAIN_RUN, &file_hash);
+        let source_mod = parse_and_save_to_temporary_file(source, MAIN_RUN);
         let mut target_mod = make_std_mod();
         target_mod.link(source_mod);
         target_mod.resolve_imports(&mut config);
