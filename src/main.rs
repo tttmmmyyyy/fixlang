@@ -98,11 +98,23 @@ fn main() {
         .short('d')
         .action(clap::ArgAction::Append)
         .help("Add dynamically linked library. For example, give \"abc\" to link \"libabc.so\".");
-    let debug_mode = Arg::new("debug-mode")
+    let debug_info = Arg::new("debug-info")
         .long("debug")
         .short('g')
         .takes_value(false)
-        .help("Omit any optimization and generate debugging information. \nNote that tail recursion optimization is not performed, so even tail recursion may result in a stack overflow.");
+        .help("[Experimental] Generate debugging information. \n\
+              This option automatically turns on `-O none`. You can override this by explicitly specifying another optimization level.");
+    let opt_level = Arg::new("opt-level")
+        .long("opt-level")
+        .short('O')
+        .takes_value(true)
+        .value_parser(["none", "minimum", "default"])
+        // .default_value("default") // we do not set default value because we want to check if this option is specified by user.
+        .next_line_help(true)
+        .help("Set optimization level.\n\
+              - none: Perform no optimizations. Since tail recursion optimization is also omitted, programs that perform recursion may not work properly.\n\
+              - minimum: Perform only few optimizations to minimize compile time.\n\
+              - default: Compile to minimize execution time. This is the default option.").hide_possible_values(true);
     let emit_llvm = Arg::new("emit-llvm")
         .long("emit-llvm")
         .takes_value(false)
@@ -121,7 +133,8 @@ fn main() {
         .arg(source_file.clone())
         .arg(output_file.clone())
         .arg(dynamic_link_library.clone())
-        .arg(debug_mode.clone())
+        .arg(debug_info.clone())
+        .arg(opt_level.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone());
     let build_subc = App::new("build")
@@ -130,7 +143,8 @@ fn main() {
         .arg(output_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
-        .arg(debug_mode.clone())
+        .arg(debug_info.clone())
+        .arg(opt_level)
         .arg(emit_llvm.clone())
         .arg(threaded.clone());
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
@@ -175,12 +189,22 @@ fn main() {
         config.source_files = read_source_files_options(m);
         config.out_file_path = read_output_file_option(m);
         config.linked_libraries.append(&mut read_library_options(m));
-        if m.contains_id("debug-mode") {
-            config.set_debug_mode();
+        if m.contains_id("debug-info") {
+            config.set_debug_info();
         }
         config.emit_llvm = m.contains_id("emit-llvm");
         if m.contains_id("threaded") {
             config.set_threaded();
+        }
+        if m.contains_id("opt-level") {
+            // These lines should be after calling `set_debug_info`; otherwise, user cannot specify the optimization level while generating debug information.
+            let opt_level = m.get_one::<String>("opt-level").unwrap();
+            match opt_level.as_str() {
+                "none" => config.set_fix_opt_level(FixOptimizationLevel::None),
+                "minimum" => config.set_fix_opt_level(FixOptimizationLevel::Minimum),
+                "default" => config.set_fix_opt_level(FixOptimizationLevel::Default),
+                _ => panic!("Unknown optimization level: {}", opt_level),
+            }
         }
         config
     }

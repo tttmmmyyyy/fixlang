@@ -146,12 +146,12 @@ fn build_module<'c>(
     let main_expr = fix_mod.instantiate_main_function(&typechecker);
 
     // Perform uncurrying optimization.
-    if config.uncurry_optimization {
+    if config.get_uncurry_optimization() {
         uncurry_optimization(&mut fix_mod);
     }
 
     // Perform borrowing optimization.
-    if config.borrowing_optimization {
+    if config.get_borrowing_optimization() {
         borrowing_optimization(&mut fix_mod);
     }
 
@@ -165,7 +165,7 @@ fn build_module<'c>(
     );
 
     // In debug mode, create debug infos.
-    if config.debug_mode {
+    if config.debug_info {
         gc.create_debug_info();
     }
 
@@ -271,8 +271,14 @@ fn build_module<'c>(
     let passmgr = PassManager::create(());
 
     passmgr.add_verifier_pass();
-    if !config.debug_mode {
-        add_passes(&passmgr);
+    match config.fix_opt_level {
+        FixOptimizationLevel::None => {}
+        FixOptimizationLevel::Minimum => {
+            passmgr.add_tail_call_elimination_pass();
+        }
+        FixOptimizationLevel::Default => {
+            add_passes(&passmgr);
+        }
     }
 
     passmgr.run_on(module);
@@ -339,7 +345,7 @@ pub fn run_module(fix_mod: Program, config: Configuration) -> i32 {
     let ctx = Context::create();
     let module = ctx.create_module("Main");
     let ee = module
-        .create_jit_execution_engine(config.llvm_opt_level)
+        .create_jit_execution_engine(config.get_llvm_opt_level())
         .unwrap();
     let ee = build_module(&ctx, &module, Either::Right(ee), fix_mod, config.clone()).unwrap_right();
     execute_main_module(&ee, &config)
@@ -448,7 +454,7 @@ pub fn build_file(mut config: Configuration) {
     // Create intermediate directory.
     fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
 
-    let tm = get_target_machine(config.llvm_opt_level);
+    let tm = get_target_machine(config.get_llvm_opt_level());
 
     let fix_mod = load_file(&mut config);
 

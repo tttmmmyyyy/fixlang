@@ -17,16 +17,12 @@ pub struct Configuration {
     // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
     // Requires shared library sanitizer/libfixsanitizer.so.
     pub sanitize_memory: bool,
-    // LLVM optimization level.
-    pub llvm_opt_level: OptimizationLevel,
+    // Fix's optimization level.
+    pub fix_opt_level: FixOptimizationLevel,
     // Linked libraries
     pub linked_libraries: Vec<(String, LinkType)>,
-    // Skip optimization and create debug info.
-    pub debug_mode: bool,
-    // Perform uncurrying optimization.
-    pub uncurry_optimization: bool,
-    // Perform borrowing optimization.
-    pub borrowing_optimization: bool,
+    // Create debug info.
+    pub debug_info: bool,
     // Is emit llvm?
     pub emit_llvm: bool,
     // Output file name.
@@ -42,16 +38,21 @@ pub struct Configuration {
     pub run_by_build: bool,
 }
 
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum FixOptimizationLevel {
+    None,    // For debugging; skip even tail call optimization.
+    Minimum, // For fast compilation.
+    Default, // For fast execution.
+}
+
 impl Default for Configuration {
     fn default() -> Self {
         Configuration {
             source_files: vec![],
             sanitize_memory: false,
-            uncurry_optimization: true, // changed to false in set_debug_mode.
-            borrowing_optimization: true, // changed to false in set_debug_mode.
-            llvm_opt_level: OptimizationLevel::Default, // changed to None in set_debug_mode.
+            fix_opt_level: FixOptimizationLevel::Default, // Fix's optimization level.
             linked_libraries: vec![],
-            debug_mode: false,
+            debug_info: false,
             emit_llvm: false,
             out_file_path: None,
             threaded: false,
@@ -145,11 +146,37 @@ impl Configuration {
         self.add_terminate_tasks_macro_if_needed();
     }
 
-    pub fn set_debug_mode(&mut self) {
-        self.debug_mode = true;
-        self.uncurry_optimization = false;
-        self.borrowing_optimization = false;
-        self.llvm_opt_level = OptimizationLevel::None;
+    pub fn set_debug_info(&mut self) {
+        self.debug_info = true;
+        self.set_fix_opt_level(FixOptimizationLevel::None);
+    }
+
+    pub fn set_fix_opt_level(&mut self, level: FixOptimizationLevel) {
+        self.fix_opt_level = level;
+    }
+
+    pub fn get_llvm_opt_level(&self) -> OptimizationLevel {
+        match self.fix_opt_level {
+            FixOptimizationLevel::None => OptimizationLevel::None,
+            FixOptimizationLevel::Minimum => OptimizationLevel::Less,
+            FixOptimizationLevel::Default => OptimizationLevel::Default,
+        }
+    }
+
+    pub fn get_uncurry_optimization(&self) -> bool {
+        match self.fix_opt_level {
+            FixOptimizationLevel::None => false,
+            FixOptimizationLevel::Minimum => false,
+            FixOptimizationLevel::Default => true,
+        }
+    }
+
+    pub fn get_borrowing_optimization(&self) -> bool {
+        match self.fix_opt_level {
+            FixOptimizationLevel::None => false,
+            FixOptimizationLevel::Minimum => false,
+            FixOptimizationLevel::Default => true,
+        }
     }
 
     fn add_terminate_tasks_macro_if_needed(&mut self) {
