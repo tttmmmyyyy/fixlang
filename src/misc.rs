@@ -1,5 +1,5 @@
 use super::*;
-use std::{fs, process};
+use std::{fs, process, time::Instant};
 
 pub fn error_exit(msg: &str) -> ! {
     eprintln!("error: {}", msg);
@@ -71,4 +71,35 @@ pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
         }
     }
     result
+}
+
+pub struct StopWatch {
+    name: String,
+    now: Instant,
+    running: bool,
+}
+
+impl StopWatch {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            now: Instant::now(),
+            running: true,
+        }
+    }
+
+    pub fn end(&self) {
+        if !self.running {
+            return;
+        }
+        let elapsed = self.now.elapsed();
+        let time_str = format!("{}.{:03} sec", elapsed.as_secs(), elapsed.subsec_millis());
+        eprintln!("{}: {}", self.name, time_str);
+    }
+}
+
+impl Drop for StopWatch {
+    fn drop(&mut self) {
+        self.end();
+    }
 }
