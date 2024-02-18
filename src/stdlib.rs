@@ -13,14 +13,7 @@ pub fn make_std_mod() -> Program {
         "std",
         &format!("{:x}", md5::compute(build_time_utc!())),
     );
-    fix_module.set_last_update(
-        STD_NAME.to_string(),
-        UpdateDate(
-            DateTime::parse_from_rfc3339(build_time_utc!())
-                .unwrap()
-                .with_timezone(&Utc),
-        ),
-    );
+    fix_module.set_last_update_to_build_time(STD_NAME.to_string());
 
     // `LoopResult` type.
     fix_module.type_defns.push(loop_result_defn());

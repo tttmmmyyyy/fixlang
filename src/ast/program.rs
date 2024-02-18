@@ -346,8 +346,18 @@ impl Program {
         panic!("")
     }
 
-    // Set this module's last update.
+    // Set module's last update.
     pub fn set_last_update(&mut self, mod_name: Name, time: UpdateDate) {
+        self.last_updates.insert(mod_name, time);
+    }
+
+    // Set module's last update to the time at which compiler was built.
+    pub fn set_last_update_to_build_time(&mut self, mod_name: Name) {
+        let time = UpdateDate(
+            DateTime::parse_from_rfc3339(build_time_utc!())
+                .unwrap()
+                .with_timezone(&Utc),
+        );
         self.last_updates.insert(mod_name, time);
     }
 
@@ -1361,6 +1371,7 @@ impl Program {
                         file_name,
                         &format!("{:x}", md5::compute(build_time_utc!())),
                     );
+                    fixmod.set_last_update_to_build_time(mod_name.to_string());
                     if let Some(mod_modifier) = mod_modifier {
                         mod_modifier(&mut fixmod);
                     }
