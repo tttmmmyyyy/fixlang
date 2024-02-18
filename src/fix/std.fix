@@ -644,7 +644,7 @@ namespace IO {
         ));
         // Concatenate bytes.
         let res = Array::empty(len);
-        pure $ iter.fold(res, |res, bytes| res.append!(bytes))
+        pure $ iter.fold(res, |res, bytes| res.append!(bytes).reserve(len))
     );
 
     // Read at most n bytes from an IOHandle.
