@@ -820,7 +820,9 @@ impl Program {
                         return None;
                     }
                 };
-            if last_update.0 < define_module_last_affected.0 {
+            if last_update.0 != define_module_last_affected.0 {
+                // We intentionally use "!=" here;
+                // If we use here "<" instead of "!=", the possibility that issue #32 causes a problem is increased.
                 return None;
             }
             Some(expr)
