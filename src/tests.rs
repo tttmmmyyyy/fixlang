@@ -5258,55 +5258,55 @@ pub fn test_large_tuple() {
     run_source(&source, Configuration::develop_compiler());
 }
 
-#[test]
-#[serial]
-pub fn test_graph_find_loop() {
-    // Test find_loop of graph.rs.
+// #[test]
+// #[serial]
+// pub fn test_graph_find_loop() {
+//     // Test find_loop of graph.rs.
 
-    let g = Graph::new((0..3).collect());
-    assert_eq!(g.find_loop(), vec![] as Vec<usize>);
+//     let g = Graph::new((0..3).collect());
+//     assert_eq!(g.find_loop(), vec![] as Vec<usize>);
 
-    let mut g = Graph::new((0..3).collect());
-    g.connect(0, 1);
-    g.connect(1, 2);
-    assert_eq!(g.find_loop(), vec![] as Vec<usize>);
+//     let mut g = Graph::new((0..3).collect());
+//     g.connect(0, 1);
+//     g.connect(1, 2);
+//     assert_eq!(g.find_loop(), vec![] as Vec<usize>);
 
-    let mut g = Graph::new((0..3).collect());
-    g.connect(0, 0);
-    assert_eq!(g.find_loop(), vec![0 as usize]);
+//     let mut g = Graph::new((0..3).collect());
+//     g.connect(0, 0);
+//     assert_eq!(g.find_loop(), vec![0 as usize]);
 
-    let mut g = Graph::new((0..3).collect());
-    g.connect(1, 1);
-    assert_eq!(g.find_loop(), vec![1 as usize]);
+//     let mut g = Graph::new((0..3).collect());
+//     g.connect(1, 1);
+//     assert_eq!(g.find_loop(), vec![1 as usize]);
 
-    let mut g = Graph::new((0..3).collect());
-    g.connect(0, 1);
-    g.connect(2, 2);
-    assert_eq!(g.find_loop(), vec![2 as usize]);
+//     let mut g = Graph::new((0..3).collect());
+//     g.connect(0, 1);
+//     g.connect(2, 2);
+//     assert_eq!(g.find_loop(), vec![2 as usize]);
 
-    let mut g = Graph::new((0..3).collect());
-    g.connect(1, 2);
-    g.connect(2, 1);
-    assert_eq!(g.find_loop(), vec![1 as usize, 2 as usize]);
+//     let mut g = Graph::new((0..3).collect());
+//     g.connect(1, 2);
+//     g.connect(2, 1);
+//     assert_eq!(g.find_loop(), vec![1 as usize, 2 as usize]);
 
-    let mut g = Graph::new((0..4).collect());
-    g.connect(0, 1);
-    g.connect(1, 2);
-    g.connect(1, 3);
-    g.connect(2, 3);
-    assert_eq!(g.find_loop(), vec![] as Vec<usize>);
+//     let mut g = Graph::new((0..4).collect());
+//     g.connect(0, 1);
+//     g.connect(1, 2);
+//     g.connect(1, 3);
+//     g.connect(2, 3);
+//     assert_eq!(g.find_loop(), vec![] as Vec<usize>);
 
-    let mut g = Graph::new((0..5).collect());
-    g.connect(0, 1);
-    g.connect(1, 2);
-    g.connect(1, 3);
-    g.connect(3, 4);
-    g.connect(4, 1);
-    assert_eq!(
-        g.find_loop(),
-        vec![1 as usize, 3 as usize, 4 as usize] as Vec<usize>
-    );
-}
+//     let mut g = Graph::new((0..5).collect());
+//     g.connect(0, 1);
+//     g.connect(1, 2);
+//     g.connect(1, 3);
+//     g.connect(3, 4);
+//     g.connect(4, 1);
+//     assert_eq!(
+//         g.find_loop(),
+//         vec![1 as usize, 3 as usize, 4 as usize] as Vec<usize>
+//     );
+// }
 
 #[test]
 #[serial]

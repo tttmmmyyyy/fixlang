@@ -90,9 +90,6 @@ fn build_module<'c>(
     mut fix_mod: Program,
     config: Configuration,
 ) -> Either<TargetMachine, ExecutionEngine<'c>> {
-    // Calculate last affected dates.
-    fix_mod.set_last_affected_dates();
-
     // Add tuple types used in this program.
     let mut used_tuple_sizes = fix_mod.used_tuple_sizes.clone();
     // Make elements of used_tuple_sizes unique.
@@ -350,7 +347,7 @@ pub fn run_module(fix_mod: Program, config: Configuration) -> i32 {
 }
 
 // Return file content and last modified.
-pub fn read_file(path: &Path) -> Result<(String, UpdateDate), String> {
+pub fn read_file(path: &Path) -> Result<String, String> {
     let display = path.display();
     let mut file = match File::open(&path) {
         Err(why) => return Err(format!("Couldn't open {}: {}", display, why)),
@@ -361,24 +358,7 @@ pub fn read_file(path: &Path) -> Result<(String, UpdateDate), String> {
         Err(why) => return Err(format!("Couldn't read {}: {}", display, why)),
         Ok(_) => (),
     }
-    let last_modified: Option<UpdateDate> = match file.metadata() {
-        Err(why) => {
-            eprintln!("Failed to get last modified date of {}: {}", display, why);
-            None
-        }
-        Ok(md) => match md.modified() {
-            Err(why) => {
-                eprintln!("Failed to get last modified date of {}: {}", display, why);
-                None
-            }
-            Ok(time) => Some(UpdateDate(time.into())),
-        },
-    };
-    if last_modified.is_none() {
-        eprintln!("Build cache for {} will be ignored.", display);
-    }
-    let last_modified = last_modified.unwrap_or(UpdateDate::now());
-    Ok((s, last_modified))
+    Ok(s)
 }
 
 // Create a directory if it doesn't exist, and return its path.

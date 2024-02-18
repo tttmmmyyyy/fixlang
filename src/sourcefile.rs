@@ -3,31 +3,23 @@ use std::{path::PathBuf, rc::Rc};
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 
-use crate::{parser::Rule, runner::read_file, UpdateDate};
+use crate::{parser::Rule, runner::read_file};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
     #[serde(skip)]
-    pub string: Option<(Rc<String>, UpdateDate)>,
+    pub string: Option<Rc<String>>,
+    #[serde(skip)]
+    pub hash: Option<String>,
     pub file_path: PathBuf,
 }
 
 impl SourceFile {
     pub fn string(&self) -> String {
         match &self.string {
-            Some((s, _)) => s.as_str().to_string(),
+            Some(s) => s.as_str().to_string(),
             None => match read_file(&self.file_path) {
-                Ok((s, _)) => s,
-                Err(e) => panic!("{}", e),
-            },
-        }
-    }
-
-    pub fn last_modifed_date(&self) -> UpdateDate {
-        match &self.string {
-            Some((_, d)) => d.clone(),
-            None => match read_file(&self.file_path) {
-                Ok((_, d)) => d,
+                Ok(s) => s,
                 Err(e) => panic!("{}", e),
             },
         }
@@ -36,9 +28,11 @@ impl SourceFile {
     pub fn from_file_path(file_path: PathBuf) -> Self {
         let mut src_file = Self {
             string: None,
+            hash: None,
             file_path,
         };
         src_file.read_file();
+        src_file.set_hash();
         src_file
     }
 
@@ -46,9 +40,25 @@ impl SourceFile {
     pub fn read_file(&mut self) {
         if self.string.is_none() {
             self.string = match read_file(&self.file_path) {
-                Ok((source, last_modified)) => Option::Some((Rc::new(source), last_modified)),
+                Ok(source) => Option::Some(Rc::new(source)),
                 Err(e) => panic!("{}", e),
             };
+        }
+    }
+
+    pub fn set_hash(&mut self) {
+        if self.hash.is_some() {
+            return;
+        }
+        self.hash = Option::Some(format!("{:x}", md5::compute(self.string())));
+    }
+
+    pub fn hash(&self) -> String {
+        match &self.hash {
+            Some(h) => h.clone(),
+            None => {
+                format!("{:x}", md5::compute(self.string()))
+            }
         }
     }
 

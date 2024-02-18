@@ -1,8 +1,6 @@
-use chrono::{DateTime, Utc};
-
 use inkwell::{debug_info::AsDIScope, module::Linkage};
 use serde::{Deserialize, Serialize};
-use std::{io::Write, str::FromStr, time::SystemTime};
+use std::io::Write;
 
 use super::*;
 
@@ -236,55 +234,6 @@ impl<'a> NameResolutionContext {
     }
 }
 
-#[derive(Clone)]
-pub struct UpdateDate(pub DateTime<Utc>);
-
-impl UpdateDate {
-    pub fn max(&self, other: &UpdateDate) -> UpdateDate {
-        UpdateDate(self.0.max(other.0))
-    }
-
-    pub fn now() -> UpdateDate {
-        UpdateDate(SystemTime::now().into())
-    }
-}
-
-impl Serialize for UpdateDate {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0.to_rfc3339())
-    }
-}
-
-impl<'de> Deserialize<'de> for UpdateDate {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(UpdateDateVisitor)
-    }
-}
-
-struct UpdateDateVisitor;
-impl<'de> serde::de::Visitor<'de> for UpdateDateVisitor {
-    type Value = UpdateDate;
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Ok(UpdateDate(
-            DateTime::parse_from_rfc3339(v).unwrap().with_timezone(&Utc),
-        ))
-    }
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("String for UpdateDate")
-    }
-}
-
 // Program of fix a collection of modules.
 // A program can link another program which consists of a single module.
 pub struct Program {
@@ -304,9 +253,6 @@ pub struct Program {
     // Each module imports itself.
     // This is used to namespace resolution and overloading resolution.
     pub visible_mods: HashMap<Name, HashSet<Name>>,
-    // Last affected date for each linked modules.
-    // Last affected date is defined as the maximum value of last update dates of all imported modules.
-    pub last_affected_dates: HashMap<Name, UpdateDate>,
     // For each module, the path to the source file.
     pub module_to_files: HashMap<Name, SourceFile>,
 }
@@ -323,7 +269,6 @@ impl Program {
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
             type_env: Default::default(),
-            last_affected_dates: Default::default(),
             used_tuple_sizes: Vec::from_iter(0..=TUPLE_SIZE_BASE),
             module_to_files: Default::default(),
         };
@@ -756,22 +701,25 @@ impl Program {
         define_module: &Name,
         tc: &TypeCheckContext,
     ) {
-        fn cache_file_name(name: &FullName, define_module: &Name, scheme: &Rc<Scheme>) -> String {
+        fn cache_file_name(
+            name: &FullName,
+            define_module_hash: &str,
+            scheme: &Rc<Scheme>,
+        ) -> String {
             let data = format!(
                 "{}_{}_{}",
                 name.to_string(),
-                define_module,
+                define_module_hash,
                 scheme.to_string()
             );
             format!("{:x}", md5::compute(data))
         }
         fn load_cache(
             name: &FullName,
-            define_module: &Name,
-            define_module_last_affected: &UpdateDate,
+            define_module_hash: &str,
             required_scheme: &Rc<Scheme>,
         ) -> Option<TypedExpr> {
-            let cache_file_name = cache_file_name(name, define_module, required_scheme);
+            let cache_file_name = cache_file_name(name, define_module_hash, required_scheme);
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
@@ -795,20 +743,16 @@ impl Program {
                     return None;
                 }
             }
-            let (expr, last_update): (TypedExpr, UpdateDate) =
-                match serde_pickle::from_slice(&cache_bytes, Default::default()) {
-                    Ok(res) => res,
-                    Err(why) => {
-                        eprintln!(
-                            "warning: Failed to parse content of cache file {}: {}.",
-                            cache_file_display, why
-                        );
-                        return None;
-                    }
-                };
-            if last_update.0 != define_module_last_affected.0 {
-                return None;
-            }
+            let expr: TypedExpr = match serde_pickle::from_slice(&cache_bytes, Default::default()) {
+                Ok(res) => res,
+                Err(why) => {
+                    eprintln!(
+                        "warning: Failed to parse content of cache file {}: {}.",
+                        cache_file_display, why
+                    );
+                    return None;
+                }
+            };
             Some(expr)
         }
 
@@ -816,10 +760,9 @@ impl Program {
             te: &TypedExpr,
             required_scheme: &Rc<Scheme>,
             name: &FullName,
-            define_module: &Name,
-            define_module_last_affected: &UpdateDate,
+            define_module_hash: &str,
         ) {
-            let cache_file_name = cache_file_name(name, define_module, required_scheme);
+            let cache_file_name = cache_file_name(name, define_module_hash, required_scheme);
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
@@ -833,9 +776,7 @@ impl Program {
                 }
                 Ok(file) => file,
             };
-            let serialized =
-                serde_pickle::to_vec(&(te, define_module_last_affected), Default::default())
-                    .unwrap();
+            let serialized = serde_pickle::to_vec(&te, Default::default()).unwrap();
             match cache_file.write_all(&serialized) {
                 Ok(_) => {}
                 Err(_) => {
@@ -848,8 +789,8 @@ impl Program {
         }
 
         // Load type-checking cache file.
-        let last_affected_date = self.last_affected_dates.get(define_module).unwrap();
-        let opt_cache = load_cache(name, define_module, last_affected_date, required_scheme);
+        let define_module_hash = self.module_to_files.get(define_module).unwrap().hash();
+        let opt_cache = load_cache(name, &define_module_hash, required_scheme);
         if opt_cache.is_some() {
             // If cache is available,
             *te = opt_cache.unwrap();
@@ -875,7 +816,7 @@ impl Program {
         te.type_resolver = tc.resolver;
 
         // Save the result to cache file.
-        save_cache(te, required_scheme, name, define_module, last_affected_date);
+        save_cache(te, required_scheme, name, &define_module_hash);
     }
 
     // Instantiate symbol.
@@ -1394,118 +1335,5 @@ impl Program {
             .get_mut(importer)
             .unwrap()
             .insert(imported.clone());
-    }
-
-    // Create a graph of modules. If module A imports module B, an edge from A to B is added.
-    pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
-        let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
-        for (importer, importees) in &self.visible_mods {
-            for importee in importees {
-                graph.connect(
-                    *elem_to_idx.get(importer).unwrap(),
-                    *elem_to_idx.get(importee).unwrap(),
-                );
-            }
-        }
-        (graph, elem_to_idx)
-    }
-
-    // Calculate and set last_affected_dates from last_updates.
-    pub fn set_last_affected_dates(&mut self) {
-        // First, read MODULE_PATHS_FILE and update it.
-        // The file MODULE_PATHS_FILE stores file paths of each modules used in the previous build.
-        fn read_module_paths_file() -> HashMap<Name, PathBuf> {
-            let module_paths_file = PathBuf::from_str(MODULE_PATHS_FILE).unwrap();
-            let mut file = match File::open(module_paths_file) {
-                Err(_) => {
-                    return HashMap::new();
-                }
-                Ok(file) => file,
-            };
-            let mut bytes = vec![];
-            match file.read_to_end(&mut bytes) {
-                Err(_) => {
-                    return HashMap::new();
-                }
-                Ok(_) => {}
-            }
-            match serde_pickle::from_slice(&bytes, Default::default()) {
-                Err(why) => {
-                    eprintln!(
-                        "warning: Failed to parse content of file \"{}\": {}.",
-                        MODULE_PATHS_FILE, why
-                    );
-                    return HashMap::new();
-                }
-                Ok(res) => res,
-            }
-        }
-        fn save_module_paths_file(module_paths: HashMap<Name, PathBuf>) {
-            let module_paths_file = PathBuf::from_str(MODULE_PATHS_FILE).unwrap();
-            let module_paths_file_dir = module_paths_file.parent().unwrap();
-            touch_directory(module_paths_file_dir);
-            let mut file = match File::create(&module_paths_file) {
-                Err(_) => {
-                    eprintln!("warning: Failed to create file \"{}\".", MODULE_PATHS_FILE);
-                    return;
-                }
-                Ok(file) => file,
-            };
-            let serialized = serde_pickle::to_vec(&module_paths, Default::default()).unwrap();
-            match file.write_all(&serialized) {
-                Ok(_) => {}
-                Err(_) => {
-                    eprintln!(
-                        "warning: Failed to write to file \"{}\".",
-                        module_paths_file.display()
-                    );
-                }
-            }
-        }
-        let module_paths_old = read_module_paths_file();
-        let module_paths_curr = self
-            .module_to_files
-            .iter()
-            .map(|(mod_name, src)| (mod_name.clone(), src.file_path.clone()));
-        let mut module_paths_new = module_paths_old.clone();
-        module_paths_new.extend(module_paths_curr);
-        save_module_paths_file(module_paths_new.clone());
-
-        // Collect last update date of each module.
-        // If a module has a source file different from the one at the previous build, then treat it as being updated.
-        let mut last_update_dates: HashMap<Name, UpdateDate> = Default::default();
-        for module in &self.linked_mods() {
-            let prev_path = module_paths_old.get(module);
-            let last_update = if prev_path.is_none() {
-                UpdateDate::now()
-            } else {
-                let prev_path = prev_path.unwrap();
-                let curr_path = module_paths_new.get(module).unwrap();
-                if prev_path != curr_path {
-                    UpdateDate::now()
-                } else {
-                    self.module_to_files
-                        .get(module)
-                        .unwrap()
-                        .last_modifed_date()
-                }
-            };
-            last_update_dates.insert(module.clone(), last_update);
-        }
-
-        self.last_affected_dates = Default::default();
-        let (importing_graph, mod_to_node) = self.importing_module_graph();
-        for module in &self.linked_mods() {
-            let mut last_affected = last_update_dates.get(module).unwrap().clone();
-            let imported_modules =
-                importing_graph.reachable_nodes(*mod_to_node.get(module).unwrap());
-            for imported_module_idx in imported_modules {
-                let imported_module = importing_graph.get(imported_module_idx);
-                // eprintln!("module {} imports module {}.", module, imported_module);
-                last_affected = last_affected.max(last_update_dates.get(imported_module).unwrap());
-            }
-            self.last_affected_dates
-                .insert(module.clone(), last_affected);
-        }
     }
 }
