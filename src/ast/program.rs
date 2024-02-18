@@ -723,6 +723,7 @@ impl Program {
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
+            return None; // Currently, type check cache is broken, so we don't use it.
             if !cache_file.exists() {
                 return None;
             }
@@ -816,7 +817,7 @@ impl Program {
         te.type_resolver = tc.resolver;
 
         // Save the result to cache file.
-        save_cache(te, required_scheme, name, &define_module_hash);
+        // save_cache(te, required_scheme, name, &define_module_hash); // Curently, type check cache is broken, so we don't use it.
     }
 
     // Instantiate symbol.
