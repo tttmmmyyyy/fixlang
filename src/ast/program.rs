@@ -833,7 +833,7 @@ impl Program {
             required_scheme: &Rc<Scheme>,
             name: &FullName,
             define_module: &Name,
-            last_updated: &UpdateDate,
+            define_module_last_affected: &UpdateDate,
         ) {
             let cache_file_name = cache_file_name(name, define_module, required_scheme);
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
@@ -849,7 +849,9 @@ impl Program {
                 }
                 Ok(file) => file,
             };
-            let serialized = serde_pickle::to_vec(&(te, last_updated), Default::default()).unwrap();
+            let serialized =
+                serde_pickle::to_vec(&(te, define_module_last_affected), Default::default())
+                    .unwrap();
             match cache_file.write_all(&serialized) {
                 Ok(_) => {}
                 Err(_) => {
