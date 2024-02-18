@@ -441,6 +441,9 @@ namespace IO {
                     if last_byte == '\n' { break $ Result::ok(str) };
                     continue $ str
                 } else {
+                    let str = if str.@_data.get_capacity == str.@_data.get_size {
+                        str.mod__data(|data| data.reserve(data.get_size * 2))
+                    } else { str };
                     continue $ str
                 }
             )
