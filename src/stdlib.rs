@@ -1,5 +1,4 @@
 use build_time::build_time_utc;
-use chrono::{DateTime, Utc};
 
 use super::*;
 
@@ -8,12 +7,11 @@ pub const FIX_NAME: &str = "fix";
 const STD_SOURCE: &str = include_str!("fix/std.fix");
 
 pub fn make_std_mod() -> Program {
-    let mut fix_module = parse_source_temporary_file(
+    let mut fix_module = parse_and_save_to_temporary_file(
         STD_SOURCE,
         "std",
         &format!("{:x}", md5::compute(build_time_utc!())),
     );
-    fix_module.set_last_update_to_build_time(STD_NAME.to_string());
 
     // `LoopResult` type.
     fix_module.type_defns.push(loop_result_defn());

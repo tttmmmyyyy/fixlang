@@ -1,11 +1,9 @@
-use std::time::SystemTime;
-
 use build_time::build_time_utc;
 use chrono::{DateTime, Utc};
 
 use inkwell::{debug_info::AsDIScope, module::Linkage};
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::{io::Write, str::FromStr, time::SystemTime};
 
 use super::*;
 
@@ -246,6 +244,10 @@ impl UpdateDate {
     pub fn max(&self, other: &UpdateDate) -> UpdateDate {
         UpdateDate(self.0.max(other.0))
     }
+
+    pub fn now() -> UpdateDate {
+        UpdateDate(SystemTime::now().into())
+    }
 }
 
 impl Serialize for UpdateDate {
@@ -303,16 +305,16 @@ pub struct Program {
     // Each module imports itself.
     // This is used to namespace resolution and overloading resolution.
     pub visible_mods: HashMap<Name, HashSet<Name>>,
-    // Last update date for each linked modules.
-    pub last_updates: HashMap<Name, UpdateDate>,
     // Last affected date for each linked modules.
     // Last affected date is defined as the maximum value of last update dates of all imported modules.
     pub last_affected_dates: HashMap<Name, UpdateDate>,
+    // For each module, the path to the source file.
+    pub module_to_files: HashMap<Name, SourceFile>,
 }
 
 impl Program {
     // Create a program consists of single module.
-    pub fn single_module(module_name: Name) -> Program {
+    pub fn single_module(module_name: Name, src: &SourceFile) -> Program {
         let mut fix_mod = Program {
             unresolved_imports: vec![],
             visible_mods: Default::default(),
@@ -322,13 +324,13 @@ impl Program {
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
             type_env: Default::default(),
-            last_updates: Default::default(),
             last_affected_dates: Default::default(),
             used_tuple_sizes: Vec::from_iter(0..=TUPLE_SIZE_BASE),
+            module_to_files: Default::default(),
         };
         fix_mod.add_visible_mod(&module_name, &module_name);
         fix_mod.add_visible_mod(&module_name, &STD_NAME.to_string());
-        fix_mod.set_last_update(module_name, UpdateDate(SystemTime::now().into())); // Later updated to source file's last modified date.
+        fix_mod.module_to_files.insert(module_name, src.clone());
         fix_mod
     }
 
@@ -344,21 +346,6 @@ impl Program {
             return linked_mods.into_iter().next().unwrap();
         }
         panic!("")
-    }
-
-    // Set module's last update.
-    pub fn set_last_update(&mut self, mod_name: Name, time: UpdateDate) {
-        self.last_updates.insert(mod_name, time);
-    }
-
-    // Set module's last update to the time at which compiler was built.
-    pub fn set_last_update_to_build_time(&mut self, mod_name: Name) {
-        let time = UpdateDate(
-            DateTime::parse_from_rfc3339(build_time_utc!())
-                .unwrap()
-                .with_timezone(&Utc),
-        );
-        self.last_updates.insert(mod_name, time);
     }
 
     // Add import statements.
@@ -1307,7 +1294,20 @@ impl Program {
 
     // Link an module.
     pub fn link(&mut self, mut other: Program) {
-        // TODO: check if a module defined by a single source file.
+        // Morge module file paths.
+        for (mod_name, file) in &other.module_to_files {
+            let file = file.clone();
+            if self.module_to_files.contains_key(mod_name) {
+                let another = self.module_to_files.get(mod_name).unwrap();
+                error_exit(&format!(
+                    "Module `{}` is defined in two files: \"{}\" and \"{}\".",
+                    mod_name,
+                    another.file_path.to_str().unwrap(),
+                    file.file_path.to_str().unwrap()
+                ));
+            }
+            self.module_to_files.insert(mod_name.clone(), file);
+        }
 
         // If already linked, do nothing.
         if self
@@ -1344,11 +1344,6 @@ impl Program {
             }
         }
 
-        // Merge last updates.
-        for (module, dt) in other.last_updates {
-            self.last_updates.insert(module, dt);
-        }
-
         // Merge used_tuple_sizes.
         self.used_tuple_sizes.append(&mut other.used_tuple_sizes);
     }
@@ -1370,12 +1365,11 @@ impl Program {
                 STANDARD_LIBRARIES
             {
                 if import.target_module == *mod_name {
-                    let mut fixmod = parse_source_temporary_file(
+                    let mut fixmod = parse_and_save_to_temporary_file(
                         source_content,
                         file_name,
                         &format!("{:x}", md5::compute(build_time_utc!())),
                     );
-                    fixmod.set_last_update_to_build_time(mod_name.to_string());
                     if let Some(mod_modifier) = mod_modifier {
                         mod_modifier(&mut fixmod);
                     }
@@ -1425,15 +1419,96 @@ impl Program {
 
     // Calculate and set last_affected_dates from last_updates.
     pub fn set_last_affected_dates(&mut self) {
+        // First, read MODULE_PATHS_FILE and update it.
+        // The file MODULE_PATHS_FILE stores file paths of each modules used in the previous build.
+        fn read_module_paths_file() -> HashMap<Name, PathBuf> {
+            let module_paths_file = PathBuf::from_str(MODULE_PATHS_FILE).unwrap();
+            let mut file = match File::open(module_paths_file) {
+                Err(_) => {
+                    return HashMap::new();
+                }
+                Ok(file) => file,
+            };
+            let mut bytes = vec![];
+            match file.read_to_end(&mut bytes) {
+                Err(_) => {
+                    return HashMap::new();
+                }
+                Ok(_) => {}
+            }
+            match serde_pickle::from_slice(&bytes, Default::default()) {
+                Err(why) => {
+                    eprintln!(
+                        "warning: Failed to parse content of file \"{}\": {}.",
+                        MODULE_PATHS_FILE, why
+                    );
+                    return HashMap::new();
+                }
+                Ok(res) => res,
+            }
+        }
+        fn save_module_paths_file(module_paths: HashMap<Name, PathBuf>) {
+            let module_paths_file = PathBuf::from_str(MODULE_PATHS_FILE).unwrap();
+            let module_paths_file_dir = module_paths_file.parent().unwrap();
+            touch_directory(module_paths_file_dir);
+            let mut file = match File::create(&module_paths_file) {
+                Err(_) => {
+                    eprintln!("warning: Failed to create file \"{}\".", MODULE_PATHS_FILE);
+                    return;
+                }
+                Ok(file) => file,
+            };
+            let serialized = serde_pickle::to_vec(&module_paths, Default::default()).unwrap();
+            match file.write_all(&serialized) {
+                Ok(_) => {}
+                Err(_) => {
+                    eprintln!(
+                        "warning: Failed to write to file \"{}\".",
+                        module_paths_file.display()
+                    );
+                }
+            }
+        }
+        let module_paths_prev = read_module_paths_file();
+        let module_paths_curr = self
+            .module_to_files
+            .iter()
+            .map(|(mod_name, src)| (mod_name.clone(), src.file_path.clone()))
+            .collect::<HashMap<Name, PathBuf>>();
+        save_module_paths_file(module_paths_curr.clone());
+
+        // Collect last update date of each module.
+        // If a module has a source file different from the one at the previous build, then treat it as being updated.
+        let mut last_update_dates: HashMap<Name, UpdateDate> = Default::default();
+        for module in &self.linked_mods() {
+            let prev_path = module_paths_prev.get(module);
+            let curr_path = module_paths_curr.get(module);
+            let last_update = if prev_path.is_none() || curr_path.is_none() {
+                UpdateDate::now()
+            } else {
+                let prev_path = prev_path.unwrap();
+                let curr_path = curr_path.unwrap();
+                if prev_path != curr_path {
+                    UpdateDate::now()
+                } else {
+                    self.module_to_files
+                        .get(module)
+                        .unwrap()
+                        .last_modifed_date()
+                }
+            };
+            last_update_dates.insert(module.clone(), last_update);
+        }
+
         self.last_affected_dates = Default::default();
         let (imported_graph, mod_to_node) = self.imported_module_graph();
         for module in &self.linked_mods() {
-            let mut last_affected = self.last_updates.get(module).unwrap().clone();
+            let mut last_affected = last_update_dates.get(module).unwrap().clone();
             let imported_modules =
                 imported_graph.reachable_nodes(*mod_to_node.get(module).unwrap());
             for imported_module in imported_modules {
                 let importing_module = imported_graph.get(imported_module);
-                last_affected = last_affected.max(self.last_updates.get(importing_module).unwrap());
+                last_affected = last_affected.max(last_update_dates.get(importing_module).unwrap());
             }
             self.last_affected_dates
                 .insert(module.clone(), last_affected);

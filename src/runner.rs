@@ -333,7 +333,7 @@ pub fn run_source(source: &str, mut config: Configuration) {
             );
         }
     } else {
-        let source_mod = parse_source_temporary_file(source, MAIN_RUN, &file_hash);
+        let source_mod = parse_and_save_to_temporary_file(source, MAIN_RUN, &file_hash);
         let mut target_mod = make_std_mod();
         target_mod.link(source_mod);
         target_mod.resolve_imports(&mut config);
@@ -365,21 +365,21 @@ pub fn read_file(path: &Path) -> Result<(String, UpdateDate), String> {
     }
     let last_modified: Option<UpdateDate> = match file.metadata() {
         Err(why) => {
-            println!("Failed to get last modified date of {}: {}", display, why);
+            eprintln!("Failed to get last modified date of {}: {}", display, why);
             None
         }
         Ok(md) => match md.modified() {
             Err(why) => {
-                println!("Failed to get last modified date of {}: {}", display, why);
+                eprintln!("Failed to get last modified date of {}: {}", display, why);
                 None
             }
             Ok(time) => Some(UpdateDate(time.into())),
         },
     };
     if last_modified.is_none() {
-        println!("Build cache for {} will be ignored", display);
+        eprintln!("Build cache for {} will be ignored.", display);
     }
-    let last_modified = last_modified.unwrap_or(UpdateDate(SystemTime::now().into()));
+    let last_modified = last_modified.unwrap_or(UpdateDate::now());
     Ok((s, last_modified))
 }
 
@@ -404,14 +404,7 @@ pub fn load_file(config: &mut Configuration) -> Program {
     // Link all modules specified in source_files.
     let mut target_mod = make_std_mod();
     for file_path in &config.source_files {
-        let (content, last_modified) = match read_file(file_path) {
-            Ok(p) => p,
-            Err(e) => {
-                panic!("{}", e)
-            }
-        };
-        let mut fix_mod = parse_source(&content, file_path.to_str().unwrap());
-        fix_mod.set_last_update(fix_mod.get_name_if_single_module(), last_modified);
+        let fix_mod = parse_file_path(file_path.clone());
         target_mod.link(fix_mod);
     }
     target_mod.resolve_imports(config);

@@ -3,28 +3,57 @@ use std::{path::PathBuf, rc::Rc};
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 
-use crate::{parser::Rule, runner::read_file};
+use crate::{parser::Rule, runner::read_file, UpdateDate};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
     #[serde(skip)]
-    pub string: Option<Rc<String>>,
-    pub file_path: String,
+    pub string: Option<(Rc<String>, UpdateDate)>,
+    pub file_path: PathBuf,
 }
 
 impl SourceFile {
     pub fn string(&self) -> String {
         match &self.string {
-            Some(s) => s.as_str().to_string(),
-            None => match read_file(&PathBuf::from(self.file_path.clone())) {
+            Some((s, _)) => s.as_str().to_string(),
+            None => match read_file(&self.file_path) {
                 Ok((s, _)) => s,
                 Err(e) => panic!("{}", e),
             },
         }
     }
 
+    pub fn last_modifed_date(&self) -> UpdateDate {
+        match &self.string {
+            Some((_, d)) => d.clone(),
+            None => match read_file(&self.file_path) {
+                Ok((_, d)) => d,
+                Err(e) => panic!("{}", e),
+            },
+        }
+    }
+
+    pub fn from_file_path(file_path: PathBuf) -> Self {
+        let mut src_file = Self {
+            string: None,
+            file_path,
+        };
+        src_file.read_file();
+        src_file
+    }
+
+    // Set the values of uninitialized fields.
+    pub fn read_file(&mut self) {
+        if self.string.is_none() {
+            self.string = match read_file(&self.file_path) {
+                Ok((source, last_modified)) => Option::Some((Rc::new(source), last_modified)),
+                Err(e) => panic!("{}", e),
+            };
+        }
+    }
+
     pub fn get_file_dir(&self) -> String {
-        PathBuf::from(&self.file_path)
+        self.file_path
             .parent()
             .unwrap()
             .to_str()
@@ -33,7 +62,7 @@ impl SourceFile {
     }
 
     pub fn get_file_name(&self) -> String {
-        PathBuf::from(&self.file_path)
+        self.file_path
             .file_name()
             .unwrap()
             .to_str()
@@ -125,7 +154,7 @@ impl Span {
             span.start_pos().line_col().1,
             span.end_pos().line_col().0,
             span.end_pos().line_col().1,
-            self.input.file_path
+            self.input.file_path.to_str().unwrap().to_string()
         );
         ret += &(" ".repeat(linenum_str_size) + " | " + "\n");
         for line_span in span.lines_span() {

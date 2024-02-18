@@ -91,27 +91,27 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
     }
 }
 
-pub fn parse_source_temporary_file(source: &str, file_name: &str, hash: &str) -> Program {
+// Given source code, save it to temporary file (with the given file name and hash value) and the parse the program.
+// This is used to parse the source code that is not saved to a file, e.g., source code embedded to the compiler or test code.
+// Saving a source code to a file is necessary for:
+// - For build cache system, giving "last modified date" to the source code which is on memory.
+// - Generate debug information, in which source location is required.
+pub fn parse_and_save_to_temporary_file(source: &str, file_name: &str, hash: &str) -> Program {
     if !check_temporary_source(file_name, hash) {
         save_temporary_source(source, file_name, hash);
     }
-    parse_source(
-        source,
-        temporary_source_path(file_name, hash).to_str().unwrap(),
-    )
+    parse_file_path(temporary_source_path(file_name, hash))
 }
 
-pub fn parse_source(source: &str, file_name: &str) -> Program {
-    let source_file = SourceFile {
-        string: Some(Rc::new(source.to_string())),
-        file_path: file_name.to_string(),
-    };
-    let file = FixParser::parse(Rule::file, source);
+pub fn parse_file_path(file_path: PathBuf) -> Program {
+    let source = SourceFile::from_file_path(file_path);
+    let source_code = source.string();
+    let file = FixParser::parse(Rule::file, &source_code);
     let file = match file {
         Ok(res) => res,
-        Err(e) => error_exit(&message_parse_error(e, &source_file)),
+        Err(e) => error_exit(&message_parse_error(e, &source)),
     };
-    parse_file(file, source_file)
+    parse_file(file, source)
 }
 
 fn parse_file(mut file: Pairs<Rule>, src: SourceFile) -> Program {
@@ -124,12 +124,12 @@ fn parse_file(mut file: Pairs<Rule>, src: SourceFile) -> Program {
 
 fn parse_module(pair: Pair<Rule>, src: SourceFile) -> Program {
     assert_eq!(pair.as_rule(), Rule::module);
-    let mut ctx: ParseContext = ParseContext::from_source(src);
+    let mut ctx: ParseContext = ParseContext::from_source(src.clone());
 
     let mut pairs = pair.into_inner();
     ctx.module_name = parse_module_defn(pairs.next().unwrap());
     ctx.namespace = NameSpace::new(vec![ctx.module_name.clone()]);
-    let mut fix_mod = Program::single_module(ctx.module_name.clone());
+    let mut fix_mod = Program::single_module(ctx.module_name.clone(), &src);
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
     let mut global_value_decls: Vec<GlobalValueDecl> = vec![];
