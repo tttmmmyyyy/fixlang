@@ -1161,15 +1161,13 @@ This function is almost the same as `Array::act`, but it panics if the given arr
 
 #### `append : Array a -> Array a -> Array a`
 Append an array to an array.
-Note 1: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
-Note 2: 
-As an optimization, when `a1` is empty, `a1.append(a2)` may return `a2` itself.
-So even if you call `append` on an unique empty array, the returned array can be a shared one.
+Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 
 #### `append! : Array a -> Array a -> Array a`
 Append an array to an array.
 This is similar to `Array::append`, but `a1.append!(a2)` panics if this function has to clone `a1` due to it being shared.
-Note that, when the capacity of `a1` is less than `a1.get_size + a2.get_size`, then `a1.append!(a2)` will not panic even if `a1` is shared, because in this case cloning is inevitable whether or not `a1` is shared.
+Note that, when the capacity of `a1` is less than `a1.get_size + a2.get_size`, then `a1.append!(a2)` will not panic even if `a1` is shared, 
+because in this case cloning is inevitable whether or not `a1` is shared.
 
 #### `borrow_ptr : (Ptr -> b) -> Array a -> b`
 Call a function with a pointer to the memory region where elements are stored.
