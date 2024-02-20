@@ -703,27 +703,26 @@ impl Program {
     ) {
         fn cache_file_name(
             name: &FullName,
-            define_module_hash: &str,
+            hash_of_dependent_codes: &str,
             scheme: &Rc<Scheme>,
         ) -> String {
             let data = format!(
                 "{}_{}_{}",
                 name.to_string(),
-                define_module_hash,
+                hash_of_dependent_codes,
                 scheme.to_string()
             );
             format!("{:x}", md5::compute(data))
         }
         fn load_cache(
             name: &FullName,
-            define_module_hash: &str,
+            hash_of_dependent_codes: &str,
             required_scheme: &Rc<Scheme>,
         ) -> Option<TypedExpr> {
-            let cache_file_name = cache_file_name(name, define_module_hash, required_scheme);
+            let cache_file_name = cache_file_name(name, hash_of_dependent_codes, required_scheme);
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
-            return None; // Currently, type check cache is broken, so we don't use it.
             if !cache_file.exists() {
                 return None;
             }
@@ -761,9 +760,9 @@ impl Program {
             te: &TypedExpr,
             required_scheme: &Rc<Scheme>,
             name: &FullName,
-            define_module_hash: &str,
+            hash_of_dependent_codes: &str,
         ) {
-            let cache_file_name = cache_file_name(name, define_module_hash, required_scheme);
+            let cache_file_name = cache_file_name(name, hash_of_dependent_codes, required_scheme);
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
@@ -790,8 +789,8 @@ impl Program {
         }
 
         // Load type-checking cache file.
-        let define_module_hash = self.module_to_files.get(define_module).unwrap().hash();
-        let opt_cache = load_cache(name, &define_module_hash, required_scheme);
+        let hash_of_dependent_codes = self.hash_of_dependent_codes(define_module);
+        let opt_cache = load_cache(name, &hash_of_dependent_codes, required_scheme);
         if opt_cache.is_some() {
             // If cache is available,
             *te = opt_cache.unwrap();
@@ -817,7 +816,7 @@ impl Program {
         te.type_resolver = tc.resolver;
 
         // Save the result to cache file.
-        // save_cache(te, required_scheme, name, &define_module_hash); // Curently, type check cache is broken, so we don't use it.
+        save_cache(te, required_scheme, name, &hash_of_dependent_codes);
     }
 
     // Instantiate symbol.
@@ -1336,5 +1335,36 @@ impl Program {
             .get_mut(importer)
             .unwrap()
             .insert(imported.clone());
+    }
+
+    // Create a graph of modules. If module A imports module B, an edge from A to B is added.
+    pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
+        let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
+        for (importer, importees) in &self.visible_mods {
+            for importee in importees {
+                graph.connect(
+                    *elem_to_idx.get(importer).unwrap(),
+                    *elem_to_idx.get(importee).unwrap(),
+                );
+            }
+        }
+        (graph, elem_to_idx)
+    }
+
+    // Calculate a hash value of a module which is affected by source codes of all dependent modules.
+    pub fn hash_of_dependent_codes(&self, module: &Name) -> String {
+        let (importing_graph, mod_to_node) = self.importing_module_graph();
+        let mut dependent_module_names = importing_graph
+            .reachable_nodes(*mod_to_node.get(module).unwrap())
+            .iter()
+            .map(|idx| importing_graph.get(*idx))
+            .collect::<Vec<_>>();
+        dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
+        let concatenated_source_hashes = dependent_module_names
+            .iter()
+            .map(|mod_name| self.module_to_files.get(*mod_name).unwrap().hash())
+            .collect::<Vec<_>>()
+            .join("");
+        format!("{:x}", md5::compute(concatenated_source_hashes))
     }
 }

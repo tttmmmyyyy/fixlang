@@ -49,7 +49,7 @@ use clap::{App, AppSettings, Arg};
 use configuration::*;
 use constants::*;
 use generator::*;
-// use graph::*;
+use graph::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
