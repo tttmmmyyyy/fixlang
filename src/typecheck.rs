@@ -282,7 +282,22 @@ impl Substitution {
         ty2: &Rc<TypeNode>,
     ) -> Option<Self> {
         match &ty1.ty {
-            Type::TyVar(v1) => Self::unify_tyvar(kind_map, v1, ty2),
+            Type::TyVar(v1) => {
+                // We do not use `unify_tyvar` here:
+                // `unify_tyvar` avoids adding circular substitution, but `matching` SHOULD not avoid it.
+                // For example, consider `ty1 = t0 -> t0`, `ty2 = t1 -> t0`.
+                // There is not substitution `s` such that `s(ty1) = ty2`, so we should return None.
+                // If we use `unify_tyvar`, it returns `{t0 -> t1}`, because
+                // - `unify_tyvar` returns `{t0 -> t1}` when trying to unify the domains of `ty1` and `ty2`.
+                // - `unify_tyvar` returns `{}` (empty substitution) when trying to unify the codomains of `ty1` and `ty2`.
+                // - `{t0 -> t1}` and `{}` can be merged to `{t0 -> t1}`.
+                //
+                // (And this implementation is the same as one in "Typing Haskell in Haskell".)
+                if v1.kind != ty2.kind(kind_map) {
+                    return None;
+                }
+                Some(Self::single(&v1.name, ty2.clone()))
+            }
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
                     if tc1 == tc2 {
