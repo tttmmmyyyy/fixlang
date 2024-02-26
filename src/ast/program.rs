@@ -867,12 +867,7 @@ impl Program {
                     // Calculate free vars.
                     e.calculate_free_vars();
                     // Specialize e's type to required type `sym.ty`
-                    let ok = e.unify_to(&sym.ty);
-                    if !ok {
-                        println!("{}", e.expr.ty.as_ref().unwrap().to_string());
-                        println!("{}", sym.ty.to_string());
-                    }
-                    assert!(ok);
+                    assert!(e.unify_to(&sym.ty));
                     opt_e = Some(e);
                     break;
                 }
