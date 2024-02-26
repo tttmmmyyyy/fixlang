@@ -807,7 +807,7 @@ namespace IO::IOFail {
 }
 
 impl IOFail : Functor {
-    map = |f, iof| iof.mod__data(map(map(f)));
+    map = |f, iof| IOFail { _data : iof.@_data.map(map(f)) };
 }
 
 impl IOFail : Monad {
