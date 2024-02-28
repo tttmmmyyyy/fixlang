@@ -9,16 +9,16 @@ We hope it will grow to a language such that people recommend it as "your first 
 You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-playground/).
 
 Features: 
-- Familiar syntax. The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
-- Simple specifications. We try to keep the specifications of Fix simple and small so that it is easily learned and understood.
-- Performance. Fix focuses on performance which is achievable without degrading its simplicity. 
+- *Familiar syntax.* The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
+- *Simple specifications.* We try to keep the specifications of Fix simple and small so that it is easily learned and understood.
+- *Performance.* Fix focuses on performance which is achievable without degrading its simplicity. 
   - An example of this policy: instead of introducing "borrowing" or "mutable reference" as in Rust, Fix manages lifetime and mutability of values by reference counting. When you try to modify a value, Fix judges it can mutate the value without cloning if the reference counter of the value is one. This enables you to write an algorithm which needs to mutate an array in O(1) without relying something like "ST monad".
 
 Example code: 
 ```
 module Main;
 
-// Prints 30th value of Fibonacci sequence.
+// Prints 30th value of Fibonacci sequence in O(1).
 main : IO ();
 main = (
     let arr = Array::fill(31, 0);
@@ -37,7 +37,7 @@ main = (
     println $ arr.@(30).to_string // 832040
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/?src2=bW9kdWxlIE1haW47DQoNCi8vIFByaW50cyAzMHRoIHZhbHVlIG9mIEZpYm9uYWNjaSBzZXF1ZW5jZS4NCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgbGV0IGFyciA9IEFycmF5OjpmaWxsKDMxLCAwKTsNCiAgICBsZXQgYXJyID0gYXJyLnNldCgwLCAwKTsNCiAgICBsZXQgYXJyID0gYXJyLnNldCgxLCAxKTsNCiAgICBsZXQgYXJyID0gbG9vcCgoMiwgYXJyKSwgfChpZHgsIGFycil8DQogICAgICAgIGlmIGlkeCA9PSBhcnIuZ2V0X3NpemUgew0KICAgICAgICAgICAgYnJlYWsgJCBhcnINCiAgICAgICAgfSBlbHNlIHsNCiAgICAgICAgICAgIGxldCB4ID0gYXJyLkAoaWR4LTEpOw0KICAgICAgICAgICAgbGV0IHkgPSBhcnIuQChpZHgtMik7DQogICAgICAgICAgICBsZXQgYXJyID0gYXJyLnNldChpZHgsIHgreSk7DQogICAgICAgICAgICBjb250aW51ZSAkIChpZHgrMSwgYXJyKQ0KICAgICAgICB9DQogICAgKTsNCiAgICBwcmludGxuICQgYXJyLkAoMzApLnRvX3N0cmluZw0KKTs%3D)
+[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCi8vIFByaW50cyAzMHRoIHZhbHVlIG9mIEZpYm9uYWNjaSBzZXF1ZW5jZSBpbiBPKDEpLg0KbWFpbiA6IElPICgpOw0KbWFpbiA9ICgNCiAgICBsZXQgYXJyID0gQXJyYXk6OmZpbGwoMzEsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDAsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDEsIDEpOw0KICAgIGxldCBhcnIgPSBsb29wKCgyLCBhcnIpLCB8KGlkeCwgYXJyKXwNCiAgICAgICAgaWYgaWR4ID09IGFyci5nZXRfc2l6ZSB7DQogICAgICAgICAgICBicmVhayAkIGFycg0KICAgICAgICB9IGVsc2Ugew0KICAgICAgICAgICAgbGV0IHggPSBhcnIuQChpZHgtMSk7DQogICAgICAgICAgICBsZXQgeSA9IGFyci5AKGlkeC0yKTsNCiAgICAgICAgICAgIGxldCBhcnIgPSBhcnIuc2V0KGlkeCwgeCt5KTsNCiAgICAgICAgICAgIGNvbnRpbnVlICQgKGlkeCsxLCBhcnIpDQogICAgICAgIH0NCiAgICApOw0KICAgIHByaW50bG4gJCBhcnIuQCgzMCkudG9fc3RyaW5nIC8vIDgzMjA0MA0KKTs%3D)
 
 ## Planned features
 
