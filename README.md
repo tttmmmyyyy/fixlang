@@ -9,7 +9,7 @@ We hope it will grow to a language such that people recommend it as "your first 
 You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-playground/).
 
 Features: 
-- Familier syntax. The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
+- Familiar syntax. The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
 - Simple specifications. We try to keep the specifications of Fix simple and small so that it is easily learned and understood.
 - Performance. Fix focuses on performance which is achievable without degrading its simplicity. 
   - An example of this policy: instead of introducing "borrowing" or "mutable reference" as in Rust, Fix manages lifetime and mutability of values by reference counting. When you try to modify a value, Fix judges it can mutate the value without cloning if the reference counter of the value is one. This enables you to write an algorithm which needs to mutate an array in O(1) without relying something like "ST monad".
