@@ -17,13 +17,9 @@
 - Module names can contain period so that you can define a module such as `Main.Model.Impl`.
 
 ### Fixed
-- Improve performance of `Std::IO::_read_line_inner` and `Std::IO::loop_lines`, `Std::IO::loop_lines_io` (#6).
-- Fix an issue that causes parse error when there are local / global names starting with `true`, `false` or `nullptr` (#8).
-- Fix an issue where the `ToString` implementation of `Ptr` was causing heap buffer overflow (#11).
-- Fix an issue where `Std::eprint` and `Std::eprintln` wrote the output to stderr, not to stdout (#13).
-- Fixed an issue where exponential notation of integer literals such as 3e10 was not working (#14).
-- Fixed an issue where parsing floating point literal without decimal point (e.g., `1_F32`) causes the compiler to panic.
-- Fixed an issue on linking dynamic library (PR #20).
+- Performance improvement of functions in built-in libraries: #6, #30, #31
+- Bug fixes on built-in libraries: #11, #13, #27, #34
+- Bug fixes on compiler: #8, #14, #15, #20, #25, #26, #28, #36
 
 ## [0.1.0] - 2023-10-24
 
