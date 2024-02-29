@@ -22,10 +22,11 @@ Example code:
 ```
 module Main;
 
-// Prints 30th value of Fibonacci sequence in O(1).
+// Prints n-th value of Fibonacci sequence in O(n).
 main : IO ();
 main = (
-    let arr = Array::fill(31, 0);
+    let n = 30;
+    let arr = Array::fill(n+1, 0);
     let arr = arr.set(0, 0);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
@@ -38,10 +39,10 @@ main = (
             continue $ (idx+1, arr)
         }
     );
-    println $ arr.@(30).to_string // 832040
+    println $ arr.@(n).to_string // 832040 for n = 30
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCi8vIFByaW50cyAzMHRoIHZhbHVlIG9mIEZpYm9uYWNjaSBzZXF1ZW5jZSBpbiBPKDEpLg0KbWFpbiA6IElPICgpOw0KbWFpbiA9ICgNCiAgICBsZXQgYXJyID0gQXJyYXk6OmZpbGwoMzEsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDAsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDEsIDEpOw0KICAgIGxldCBhcnIgPSBsb29wKCgyLCBhcnIpLCB8KGlkeCwgYXJyKXwNCiAgICAgICAgaWYgaWR4ID09IGFyci5nZXRfc2l6ZSB7DQogICAgICAgICAgICBicmVhayAkIGFycg0KICAgICAgICB9IGVsc2Ugew0KICAgICAgICAgICAgbGV0IHggPSBhcnIuQChpZHgtMSk7DQogICAgICAgICAgICBsZXQgeSA9IGFyci5AKGlkeC0yKTsNCiAgICAgICAgICAgIGxldCBhcnIgPSBhcnIuc2V0KGlkeCwgeCt5KTsNCiAgICAgICAgICAgIGNvbnRpbnVlICQgKGlkeCsxLCBhcnIpDQogICAgICAgIH0NCiAgICApOw0KICAgIHByaW50bG4gJCBhcnIuQCgzMCkudG9fc3RyaW5nIC8vIDgzMjA0MA0KKTs%3D)
+[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCi8vIFByaW50cyBuLXRoIHZhbHVlIG9mIEZpYm9uYWNjaSBzZXF1ZW5jZSBpbiBPKG4pLg0KbWFpbiA6IElPICgpOw0KbWFpbiA9ICgNCiAgICBsZXQgbiA9IDMwOw0KICAgIGxldCBhcnIgPSBBcnJheTo6ZmlsbChuKzEsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDAsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDEsIDEpOw0KICAgIGxldCBhcnIgPSBsb29wKCgyLCBhcnIpLCB8KGlkeCwgYXJyKXwNCiAgICAgICAgaWYgaWR4ID09IGFyci5nZXRfc2l6ZSB7DQogICAgICAgICAgICBicmVhayAkIGFycg0KICAgICAgICB9IGVsc2Ugew0KICAgICAgICAgICAgbGV0IHggPSBhcnIuQChpZHgtMSk7DQogICAgICAgICAgICBsZXQgeSA9IGFyci5AKGlkeC0yKTsNCiAgICAgICAgICAgIGxldCBhcnIgPSBhcnIuc2V0KGlkeCwgeCt5KTsNCiAgICAgICAgICAgIGNvbnRpbnVlICQgKGlkeCsxLCBhcnIpDQogICAgICAgIH0NCiAgICApOw0KICAgIHByaW50bG4gJCBhcnIuQChuKS50b19zdHJpbmcgLy8gODMyMDQwIGZvciBuID0gMzANCik7)
 
 ## Planned features
 
