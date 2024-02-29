@@ -13,7 +13,7 @@ Features:
   - The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
 - **Simplicity.** 
   - We try to keep the specifications of Fix simple and small so that it is easily learned and understood.
-- **Safety and performance.** 
+- **Safety and efficiency.** 
   - For modern languages, memory / thread safety is a natural requirement. An outstanding language with this characteristic is Rust. Rust introduces "lifetime", "mutable references" and "borrowing rules" to achieve it, but these language features complicate the type system and put a burden on a programmer. Since Fix focuses on simplicity and ease, we go another way: Fix manages lifetime and mutability of values by reference counting.
   - Fix uses reference counter for judging mutability. For example, suppose that you are trying to make a new array by modifying an old one, like `let arr2 = arr1.set(i, v);`. If the reference counter of `arr1` is one at the call of `set(i, v)`, Fix just mutates `arr1` and call the result as `arr2`, avoiding cloning the array. This optimization enables you to implement an algorithm which needs to mutate an array in O(1) without relying something like "ST monad".
   - Of course, Fix uses reference counter for garbage collection. This ensures that values that are no longer needed are immediately released, and that no invalid memory access occurs. Moreover, Fix's syntax ensures that no circular reference is made, so Fix is free from memory leak.
