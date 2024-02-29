@@ -9,8 +9,10 @@ We hope it will grow to a language that is recommended as "your first functional
 You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-playground/).
 
 Features: 
-- **Familiar syntax.** The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
-- **Simplicity.** We try to keep the specifications of Fix simple and small so that it is easily learned and understood.
+- **Familiar syntax.** 
+  - The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
+- **Simplicity.** 
+  - We try to keep the specifications of Fix simple and small so that it is easily learned and understood.
 - **Safety.** 
   - For modern languages, memory / thread safety is a natural requirement. An outstanding language with this characteristic is Rust. Rust introduces "lifetime", "mutable references" and "borrowing rules" to achieve it, but these language features complicate the type system and put a burden on a programmer. Since Fix focuses on simplicity and ease, we go another way: Fix manages lifetime and mutability of values by reference counting.
   - Fix uses reference counter for judging mutability. For example, suppose that you are trying to make a new array by modifying an old one, like `let arr2 = arr1.set(i, v);`. If the reference counter of `arr1` is one at the call of `set(i, v)`, Fix just mutates `arr1` and call the result as `arr2`, avoiding cloning the array. This feature enables you to implement an algorithm which needs to mutate an array in O(1) without relying something like "ST monad".
