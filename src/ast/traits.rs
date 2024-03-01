@@ -343,6 +343,10 @@ impl Predicate {
         )
     }
 
+    pub fn to_string(&self) -> String {
+        format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
+    }
+
     pub fn set_kinds(&mut self, scope: &HashMap<Name, Rc<Kind>>) {
         self.ty = self.ty.set_kinds(scope);
     }

@@ -1044,7 +1044,7 @@ impl Scheme {
                 "[{}] ",
                 preds
                     .iter()
-                    .map(|p| p.to_string_normalize())
+                    .map(|p| p.to_string())
                     .collect::<Vec<_>>()
                     .join(", ")
             )
