@@ -1,4 +1,5 @@
 use build_time::build_time_utc;
+use rand::Rng;
 use std::{
     env,
     fs::create_dir_all,
@@ -284,9 +285,13 @@ pub fn load_file(config: &mut Configuration) -> Program {
 
 pub fn run_file(mut config: Configuration) {
     fs::create_dir_all(DOT_FIXLANG).expect("Failed to create \".fixlang\" directory.");
-    let a_out_path: String = format!("./{}/a.out", DOT_FIXLANG);
+
+    // For parallel execution, use different file name for each execution.
+    let a_out_path: String = format!("./{}/a{}.out", DOT_FIXLANG, rand::thread_rng().gen::<u64>());
     config.out_file_path = Some(PathBuf::from(a_out_path.clone()));
+
     build_file(config.clone());
+
     let output = Command::new(a_out_path.clone())
         .output()
         .expect(&format!("Failed to run \"{}\".", a_out_path));
@@ -296,21 +301,20 @@ pub fn run_file(mut config: Configuration) {
     if output.stdout.len() > 0 {
         print!(
             "{}",
-            String::from_utf8(output.stdout).unwrap_or(format!(
-                "(failed to parse stdout from \"{}\" as UTF8.)",
-                a_out_path
-            )),
+            String::from_utf8(output.stdout)
+                .unwrap_or("Failed to parse stdout as UTF8.".to_string()),
         );
     }
     if output.stderr.len() > 0 {
         eprint!(
             "{}",
-            String::from_utf8(output.stderr).unwrap_or(format!(
-                "(failed to parse stderr from \"{}\" as UTF8.)",
-                a_out_path
-            )),
+            String::from_utf8(output.stderr)
+                .unwrap_or("Failed to parse stderr as UTF8.".to_string()),
         );
     }
+
+    // Remove the executable file.
+    fs::remove_file(a_out_path.clone()).expect(&format!("Failed to remove \"{}\".", a_out_path));
 }
 
 fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
