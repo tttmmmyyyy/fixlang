@@ -254,7 +254,7 @@ fn build_module<'c>(
     gc.builder()
         .build_return(Some(&gc.context.i32_type().const_int(0, false)));
 
-    // If debug inf generated, finalize it.
+    // If debug info is generated, finalize it.
     gc.finalize_di();
 
     // Print LLVM bitcode to file
