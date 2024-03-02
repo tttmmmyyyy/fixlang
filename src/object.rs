@@ -137,15 +137,15 @@ impl ObjectFieldType {
             ObjectFieldType::SubObject(ty) => ty_to_debug_embedded_ty(ty.clone(), gc),
             ObjectFieldType::UnionBuf(tys) => {
                 let basic_ty = self.to_basic_type(gc, vec![]);
-                let size_in_bits = gc.target_data().get_bit_size(&basic_ty);
-                let align_in_bits = gc.target_data().get_abi_alignment(&basic_ty) * 8;
+                let size_in_bits = gc.target_data.get_bit_size(&basic_ty);
+                let align_in_bits = gc.target_data.get_abi_alignment(&basic_ty) * 8;
 
                 let mut elements = vec![];
                 for (i, ty) in tys.iter().enumerate() {
                     let variant_ty = ty.get_embedded_type(gc, &vec![]);
                     let variant_debug_ty = ty_to_debug_embedded_ty(ty.clone(), gc);
-                    let size_in_bits = gc.target_data().get_bit_size(&variant_ty);
-                    let align_in_bits = gc.target_data().get_abi_alignment(&variant_ty) * 8;
+                    let size_in_bits = gc.target_data.get_bit_size(&variant_ty);
+                    let align_in_bits = gc.target_data.get_abi_alignment(&variant_ty) * 8;
                     let offset_in_bits = 0; // Union buffer has alignment 8.
                     let mem_ty = gc
                         .get_di_builder()
@@ -203,10 +203,10 @@ impl ObjectFieldType {
                 // Create element type for capacity field.
                 let capacity_ty = self.to_basic_type(gc, vec![]);
                 let capacity_debug_ty = ObjectFieldType::I64.to_debug_type(gc);
-                let capacity_size_in_bits = gc.target_data().get_bit_size(&capacity_ty);
-                let capacity_align_in_bits = gc.target_data().get_abi_alignment(&capacity_ty) * 8;
+                let capacity_size_in_bits = gc.target_data.get_bit_size(&capacity_ty);
+                let capacity_align_in_bits = gc.target_data.get_abi_alignment(&capacity_ty) * 8;
                 let capacity_offset_in_bits = gc
-                    .target_data()
+                    .target_data
                     .offset_of_element(&struct_ty, ARRAY_CAP_IDX - ARRAY_CAP_IDX)
                     .unwrap()
                     * 8;
@@ -229,10 +229,10 @@ impl ObjectFieldType {
                 let element_ty =
                     ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc, vec![]);
                 let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
-                let element_size_in_bits = gc.target_data().get_bit_size(&element_ty);
-                let element_align_in_bits = gc.target_data().get_abi_alignment(&element_ty) * 8;
+                let element_size_in_bits = gc.target_data.get_bit_size(&element_ty);
+                let element_align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
                 let element_offset_in_bits = gc
-                    .target_data()
+                    .target_data
                     .offset_of_element(&struct_ty, ARRAY_BUF_IDX - ARRAY_CAP_IDX)
                     .unwrap()
                     * 8;
@@ -260,8 +260,8 @@ impl ObjectFieldType {
                     )
                     .as_type();
 
-                let size_in_bits = gc.target_data().get_bit_size(&struct_ty);
-                let align_in_bits = gc.target_data().get_abi_alignment(&struct_ty) * 8;
+                let size_in_bits = gc.target_data.get_bit_size(&struct_ty);
+                let align_in_bits = gc.target_data.get_abi_alignment(&struct_ty) * 8;
                 let name = format!("<array buffer of `{}`>", elem_ty.to_string());
                 // It seems that the second parameter of create_struct_type (`name`, not `unique_id`) should vary depending on the element type, at least for lldb.
                 gc.get_di_builder()
@@ -903,7 +903,7 @@ impl ObjectType {
                 .size_of()
                 .unwrap();
             let struct_ty = self.to_struct_type(gc, vec![]);
-            let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
+            let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
             let size = array_size.unwrap();
             let size = gc
                 .builder()
@@ -1019,9 +1019,9 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DITy
     let str_type = control_block_type(gc);
 
     let refcnt_ty = refcnt_type(gc.context);
-    let refcnt_size_in_bits = gc.target_data().get_bit_size(&refcnt_ty);
-    let refcnt_align_in_bits = gc.target_data().get_abi_alignment(&refcnt_ty) * 8;
-    let refcnt_offset_in_bits = gc.target_data().offset_of_element(&str_type, 0).unwrap();
+    let refcnt_size_in_bits = gc.target_data.get_bit_size(&refcnt_ty);
+    let refcnt_align_in_bits = gc.target_data.get_abi_alignment(&refcnt_ty) * 8;
+    let refcnt_offset_in_bits = gc.target_data.offset_of_element(&str_type, 0).unwrap();
     let refcnt_member = gc
         .get_di_builder()
         .create_member_type(
@@ -1039,9 +1039,9 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DITy
     let mut elements = vec![refcnt_member];
     if gc.config.sanitize_memory {
         let obj_id_ty = refcnt_type(gc.context);
-        let obj_id_size_in_bits = gc.target_data().get_bit_size(&obj_id_ty);
-        let obj_id_align_in_bits = gc.target_data().get_abi_alignment(&obj_id_ty) * 8;
-        let obj_id_offset_in_bits = gc.target_data().offset_of_element(&str_type, 1).unwrap();
+        let obj_id_size_in_bits = gc.target_data.get_bit_size(&obj_id_ty);
+        let obj_id_align_in_bits = gc.target_data.get_abi_alignment(&obj_id_ty) * 8;
+        let obj_id_offset_in_bits = gc.target_data.offset_of_element(&str_type, 1).unwrap();
         let obj_id_member = gc
             .get_di_builder()
             .create_member_type(
@@ -1060,8 +1060,8 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DITy
     }
 
     let name = "<control block>";
-    let size_in_bits = gc.target_data().get_bit_size(&str_type);
-    let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
+    let size_in_bits = gc.target_data.get_bit_size(&str_type);
+    let align_in_bits = gc.target_data.get_abi_alignment(&str_type) * 8;
     gc.get_di_builder()
         .create_struct_type(
             gc.get_di_compile_unit().as_debug_info_scope(),
@@ -1086,7 +1086,7 @@ pub fn ptr_to_control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Poin
 
 pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
     let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
-    let size_in_bits = gc.target_data().get_bit_size(&ptr_ty);
+    let size_in_bits = gc.target_data.get_bit_size(&ptr_ty);
     gc.get_di_builder()
         .create_basic_type(name, size_in_bits, DW_ATE_ADDRESS, 0)
         .unwrap()
@@ -1554,8 +1554,8 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
     let debug_str_ty = ty_to_debug_struct_ty(ty.clone(), gc);
     if ty.is_box(&gc.type_env()) {
         let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
-        let size_in_bits = gc.target_data().get_bit_size(&ptr_ty);
-        let align_in_bits = gc.target_data().get_abi_alignment(&ptr_ty) * 8;
+        let size_in_bits = gc.target_data.get_bit_size(&ptr_ty);
+        let align_in_bits = gc.target_data.get_abi_alignment(&ptr_ty) * 8;
         gc.get_di_builder()
             .create_pointer_type(
                 "<pointer to boxed value>",
@@ -1597,8 +1597,8 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
     } else {
         // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
         let str_type = obj_type.to_struct_type(gc, vec![]);
-        let size_in_bits = gc.target_data().get_bit_size(&str_type);
-        let align_in_bits = gc.target_data().get_abi_alignment(&str_type) * 8;
+        let size_in_bits = gc.target_data.get_bit_size(&str_type);
+        let align_in_bits = gc.target_data.get_abi_alignment(&str_type) * 8;
 
         let mut subelement_names = vec![];
         if !ty.is_closure() {
@@ -1644,10 +1644,10 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
 
             let element_di_ty = field.to_debug_type(gc);
             let elemet_ty = field.to_basic_type(gc, vec![]);
-            let size_in_bits = gc.target_data().get_bit_size(&elemet_ty);
-            let align_in_bits = gc.target_data().get_abi_alignment(&elemet_ty) * 8;
+            let size_in_bits = gc.target_data.get_bit_size(&elemet_ty);
+            let align_in_bits = gc.target_data.get_abi_alignment(&elemet_ty) * 8;
             let offset_in_bits = gc
-                .target_data()
+                .target_data
                 .offset_of_element(&str_type, i as u32)
                 .unwrap()
                 * 8;

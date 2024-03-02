@@ -14,10 +14,9 @@ use inkwell::{
     debug_info::{
         AsDIScope, DICompileUnit, DIFile, DIScope, DISubprogram, DIType, DebugInfoBuilder,
     },
-    execution_engine::ExecutionEngine,
     intrinsics::Intrinsic,
     module::Linkage,
-    targets::{TargetData, TargetMachine},
+    targets::TargetData,
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
@@ -298,8 +297,7 @@ pub struct GenerationContext<'c, 'm> {
     pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typeresolver: TypeResolver,
     type_env: TypeEnv,
-    pub target: Either<TargetMachine, ExecutionEngine<'c>>,
-    target_data_cache: Option<TargetData>,
+    pub target_data: TargetData,
     pub config: Configuration,
 }
 
@@ -380,26 +378,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         &self.type_env
     }
 
-    pub fn target_data(&mut self) -> &TargetData {
-        if self.target_data_cache.is_some() {
-            return self.target_data_cache.as_ref().unwrap();
-        }
-        match &self.target {
-            Either::Left(tm) => {
-                self.target_data_cache = Some(tm.get_target_data());
-                self.target_data_cache.as_ref().unwrap()
-            }
-            Either::Right(ee) => ee.get_target_data(),
-        }
-    }
-
     pub fn sizeof(&mut self, ty: &dyn AnyType<'c>) -> u64 {
-        self.target_data().get_bit_size(ty) / 8
+        self.target_data.get_bit_size(ty) / 8
     }
 
     pub fn ptr_size(&mut self) -> u64 {
         let ptr_ty = self.context.i8_type().ptr_type(AddressSpace::from(0));
-        let ptr_size = self.target_data().get_bit_size(&ptr_ty) / 8;
+        let ptr_size = self.target_data.get_bit_size(&ptr_ty) / 8;
         assert_eq!(ptr_size, 8);
         ptr_size
     }
@@ -408,7 +393,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     pub fn new(
         ctx: &'c Context,
         module: &'m Module<'c>,
-        target: Either<TargetMachine, ExecutionEngine<'c>>,
+        target_data: TargetData,
         config: Configuration,
         type_env: TypeEnv,
     ) -> Self {
@@ -424,8 +409,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             runtimes: Default::default(),
             typeresolver: Default::default(),
             type_env,
-            target,
-            target_data_cache: None,
+            target_data: target_data,
             config,
         };
         ret

@@ -5,92 +5,24 @@ use std::{
     fs::{self, remove_dir_all},
     path::PathBuf,
     process::Command,
-    ptr::null,
 };
 
-use either::Either;
 use inkwell::{
-    execution_engine::ExecutionEngine,
     module::Linkage,
     passes::PassManager,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
+    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetData, TargetMachine},
 };
 use stopwatch::StopWatch;
 
 use super::*;
 
-fn execute_main_module<'c>(ee: &ExecutionEngine<'c>, config: &Configuration) -> i32 {
-    // If sanitize_memory, load `libfixsanitizer.so`.
-    if config.sanitize_memory {
-        let path = "./sanitizer/libfixsanitizer.so";
-        let err = load_library_permanently(path);
-        if err {
-            error_exit(&format!("Failed to load \"{}\".", path));
-        }
-    }
-    // Build and load runtime library.
-    // First, determine the file name of cached runtime library.
-    // The file name is determined by the list of linked libraries and the list of macro_runtime_c, and the build time of the compiler.
-    let mut hash_source = "".to_string();
-    hash_source += build_time_utc!();
-    let linked_libs_list = config
-        .linked_libraries
-        .iter()
-        .map(|(s, _)| s.clone())
-        .collect::<Vec<_>>()
-        .join("_");
-    hash_source += &linked_libs_list;
-    hash_source += &config.runtime_c_macro.join("_");
-    let runtime_so_path = PathBuf::from(INTERMEDIATE_PATH)
-        .join(format!("libfixruntime.{:x}.so", md5::compute(hash_source)));
-    if !runtime_so_path.exists() {
-        let runtime_c_path = PathBuf::from(INTERMEDIATE_PATH).join("fixruntime.c");
-        fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
-        fs::write(&runtime_c_path, include_str!("runtime.c"))
-            .expect(&format!("Failed to generate runtime.c"));
-        // Create library binary file.
-        let mut com = Command::new("gcc");
-        com.arg("-shared")
-            .arg("-fpic")
-            .arg("-o")
-            .arg(runtime_so_path.to_str().unwrap())
-            .arg(runtime_c_path.to_str().unwrap());
-        for m in &config.runtime_c_macro {
-            com.arg(format!("-D{}", m));
-        }
-        // Load dynamically linked libraries specified by user.
-        for (lib_name, _) in &config.linked_libraries {
-            if std::env::consts::OS != "macos" {
-                com.arg(format!("-Wl,--no-as-needed")); // Apple's ld command doesn't support --no-as-needed.
-            }
-            com.arg(format!("-l{}", lib_name));
-        }
-        let output = com.output().expect("Failed to run gcc.");
-        if output.stderr.len() > 0 {
-            eprintln!(
-                "{}",
-                String::from_utf8(output.stderr)
-                    .unwrap_or("(failed to stringify error message of gcc.)".to_string())
-            );
-        }
-    }
-    load_library_permanently(runtime_so_path.to_str().unwrap());
-
-    unsafe {
-        let func = ee
-            .get_function::<unsafe extern "C" fn(i32, *const *const i8) -> i32>("main")
-            .unwrap();
-        func.call(0, null())
-    }
-}
-
 fn build_module<'c>(
     context: &'c Context,
     module: &Module<'c>,
-    target: Either<TargetMachine, ExecutionEngine<'c>>,
+    target_data: TargetData,
     mut fix_mod: Program,
     config: Configuration,
-) -> Either<TargetMachine, ExecutionEngine<'c>> {
+) {
     let _sw = StopWatch::new("build_module", config.show_build_times);
 
     // Add tuple types used in this program.
@@ -157,7 +89,7 @@ fn build_module<'c>(
     let mut gc = GenerationContext::new(
         &context,
         &module,
-        target,
+        target_data,
         config.clone(),
         fix_mod.type_env(),
     );
@@ -296,57 +228,14 @@ fn build_module<'c>(
             error_exit(&format!("Failed to emit llvm: {}", e.to_string()));
         }
     }
-
-    gc.target
 }
 
 #[allow(dead_code)]
 pub fn run_source(source: &str, mut config: Configuration) {
     const MAIN_RUN: &str = "main_run";
-    if config.run_by_build {
-        // Save the source file to a temporary file, and add it to source_files.
-        let source_hash = format!("{:x}", md5::compute(source));
-        save_temporary_source(source, MAIN_RUN, &source_hash);
-        config.source_files = vec![temporary_source_path(MAIN_RUN, &source_hash)];
-
-        build_file(config);
-        let output = Command::new("./a.out")
-            .output()
-            .expect("Failed to run a.out.");
-        if output.status.code().is_none() {
-            panic!("a.out crashed!");
-        }
-        if output.stdout.len() > 0 {
-            println!(
-                "{}",
-                String::from_utf8(output.stdout)
-                    .unwrap_or("(failed to parse stdout from a.out as UTF8.)".to_string()),
-            );
-        }
-        if output.stderr.len() > 0 {
-            eprintln!(
-                "{}",
-                String::from_utf8(output.stderr)
-                    .unwrap_or("(failed to parse stderr from a.out as UTF8.)".to_string())
-            );
-        }
-    } else {
-        let source_mod = parse_and_save_to_temporary_file(source, MAIN_RUN);
-        let mut target_mod = make_std_mod();
-        target_mod.link(source_mod);
-        target_mod.resolve_imports(&mut config);
-        run_module(target_mod, config);
-    }
-}
-
-pub fn run_module(fix_mod: Program, config: Configuration) -> i32 {
-    let ctx = Context::create();
-    let module = ctx.create_module("Main");
-    let ee = module
-        .create_jit_execution_engine(config.get_llvm_opt_level())
-        .unwrap();
-    let ee = build_module(&ctx, &module, Either::Right(ee), fix_mod, config.clone()).unwrap_right();
-    execute_main_module(&ee, &config)
+    let source_hash = format!("{:x}", md5::compute(source));
+    save_temporary_source(source, MAIN_RUN, &source_hash);
+    config.source_files = vec![temporary_source_path(MAIN_RUN, &source_hash)];
 }
 
 // Return file content and last modified.
@@ -392,8 +281,28 @@ pub fn load_file(config: &mut Configuration) -> Program {
     target_mod
 }
 
-pub fn run_file(mut config: Configuration) -> i32 {
-    run_module(load_file(&mut config), config)
+pub fn run_file(config: Configuration) {
+    build_file(config);
+    let output = Command::new("./a.out")
+        .output()
+        .expect("Failed to run a.out.");
+    if output.status.code().is_none() {
+        panic!("a.out crashed!");
+    }
+    if output.stdout.len() > 0 {
+        println!(
+            "{}",
+            String::from_utf8(output.stdout)
+                .unwrap_or("(failed to parse stdout from a.out as UTF8.)".to_string()),
+        );
+    }
+    if output.stderr.len() > 0 {
+        eprintln!(
+            "{}",
+            String::from_utf8(output.stderr)
+                .unwrap_or("(failed to parse stderr from a.out as UTF8.)".to_string())
+        );
+    }
 }
 
 fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
@@ -428,20 +337,27 @@ pub fn build_file(mut config: Configuration) {
     // Create intermediate directory.
     fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
 
-    let tm = get_target_machine(config.get_llvm_opt_level());
+    let target_machine = get_target_machine(config.get_llvm_opt_level());
 
     let fix_mod = load_file(&mut config);
 
     let ctx = Context::create();
     let module = ctx.create_module("Main");
-    module.set_triple(&tm.get_triple());
-    module.set_data_layout(&tm.get_target_data().get_data_layout());
+    module.set_triple(&target_machine.get_triple());
+    module.set_data_layout(&target_machine.get_target_data().get_data_layout());
 
-    let tm = build_module(&ctx, &module, Either::Left(tm), fix_mod, config.clone()).unwrap_left();
+    build_module(
+        &ctx,
+        &module,
+        target_machine.get_target_data(),
+        fix_mod,
+        config.clone(),
+    );
 
     {
         let _sw = StopWatch::new("write_to_file", config.show_build_times);
-        tm.write_to_file(&module, inkwell::targets::FileType::Object, &obj_path)
+        target_machine
+            .write_to_file(&module, inkwell::targets::FileType::Object, &obj_path)
             .map_err(|e| error_exit(&format!("Failed to write to file: {}", e)))
             .unwrap();
     }
