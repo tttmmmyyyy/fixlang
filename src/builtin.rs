@@ -655,7 +655,7 @@ pub fn make_string_from_ptr<'c, 'm>(
     let dst = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
     let len_ptr = gc.builder().build_int_cast(
         len_with_null_terminator,
-        gc.context.ptr_sized_int_type(gc.target_data(), None),
+        gc.context.ptr_sized_int_type(&gc.target_data, None),
         "len_ptr@make_string_from_ptr",
     );
     gc.builder()

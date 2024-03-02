@@ -292,7 +292,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
     // If dtor is null, then skip calling dtor and jump to free_bb.
     let free_bb = gc.context.append_basic_block(release_func, "free");
     let call_dtor_bb = gc.context.append_basic_block(release_func, "call_dtor");
-    let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
+    let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
     let is_dtor_null = gc.builder().build_int_compare(
         IntPredicate::EQ,
         gc.builder()
@@ -377,7 +377,7 @@ fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
     // If traverser is null, then skip calling traverser.
     let mark_self_bb = gc.context.append_basic_block(mark_func, "mark_self");
     let call_traverser_bb = gc.context.append_basic_block(mark_func, "call_traverser");
-    let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
+    let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
     let is_traverser_null = gc.builder().build_int_compare(
         IntPredicate::EQ,
         gc.builder()
@@ -620,7 +620,7 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fu
 
     // Get argv[idx].
     // First, offset argv by idx * size_of_pointer.
-    let ptr_int_ty = gc.context.ptr_sized_int_type(gc.target_data(), None);
+    let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
     let argv = gc.builder().build_ptr_to_int(argv, ptr_int_ty, "argv");
     let idx = gc.builder().build_int_z_extend(idx, ptr_int_ty, "idx");
     let ptr_size = gc.ptr_size();

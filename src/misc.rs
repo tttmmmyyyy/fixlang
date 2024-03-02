@@ -52,7 +52,7 @@ pub fn check_temporary_source(file_name: &str, hash: &str) -> bool {
 
 pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) {
     let path = temporary_source_path(file_name, hash);
-    fs::create_dir_all(DOT_FIXLANG).expect("Failed to create .fixlang directory.");
+    fs::create_dir_all(DOT_FIXLANG).expect("Failed to create \".fixlang\" directory.");
     fs::write(path, source).expect(&format!("Failed to generate temporary file {}", file_name));
 }
 
