@@ -28,6 +28,7 @@ mod runner;
 mod runtime;
 mod sourcefile;
 mod stdlib;
+mod stopwatch;
 #[cfg(test)]
 mod tests;
 mod typecheck;

@@ -15,6 +15,7 @@ use inkwell::{
     passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
+use stopwatch::StopWatch;
 
 use super::*;
 
@@ -90,6 +91,8 @@ fn build_module<'c>(
     mut fix_mod: Program,
     config: Configuration,
 ) -> Either<TargetMachine, ExecutionEngine<'c>> {
+    let _sw = StopWatch::new("build_module", config.show_build_times);
+
     // Add tuple types used in this program.
     let mut used_tuple_sizes = fix_mod.used_tuple_sizes.clone();
     // Make elements of used_tuple_sizes unique.
@@ -435,9 +438,13 @@ pub fn build_file(mut config: Configuration) {
     module.set_data_layout(&tm.get_target_data().get_data_layout());
 
     let tm = build_module(&ctx, &module, Either::Left(tm), fix_mod, config.clone()).unwrap_left();
-    tm.write_to_file(&module, inkwell::targets::FileType::Object, &obj_path)
-        .map_err(|e| error_exit(&format!("Failed to write to file: {}", e)))
-        .unwrap();
+
+    {
+        let _sw = StopWatch::new("write_to_file", config.show_build_times);
+        tm.write_to_file(&module, inkwell::targets::FileType::Object, &obj_path)
+            .map_err(|e| error_exit(&format!("Failed to write to file: {}", e)))
+            .unwrap();
+    }
 
     let mut libs_opts = vec![];
     for (lib_name, link_type) in &config.linked_libraries {
