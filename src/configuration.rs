@@ -36,6 +36,8 @@ pub struct Configuration {
     pub runtime_c_macro: Vec<String>,
     // Execute `run` not by ExecutionEngin, but by building executable binary and running it.
     pub run_by_build: bool,
+    // Show times for each build steps.
+    pub show_build_times: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -59,6 +61,7 @@ impl Default for Configuration {
             async_task: false,
             runtime_c_macro: vec![],
             run_by_build: false,
+            show_build_times: false,
         }
     }
 }

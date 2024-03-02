@@ -1,6 +1,9 @@
+use build_time::build_time_utc;
 use inkwell::{debug_info::AsDIScope, module::Linkage};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
+
+use self::stopwatch::StopWatch;
 
 use super::*;
 
@@ -485,7 +488,9 @@ impl Program {
 
     // Generate codes of global symbols.
     pub fn generate_code(&self, gc: &mut GenerationContext) {
-        // First, declara accessor function (a function that returns a pointer to the global value) for a global value, or function for global function value.
+        let _sw = StopWatch::new("generate_code", gc.config.show_build_times);
+
+        // First, declare accessor function (a function that returns a pointer to the global value) for a global value, or function for global function value.
         let global_objs = self
             .instantiated_global_symbols
             .iter()
@@ -707,10 +712,11 @@ impl Program {
             scheme: &Rc<Scheme>,
         ) -> String {
             let data = format!(
-                "{}_{}_{}",
+                "{}_{}_{}_{}",
                 name.to_string(),
                 hash_of_dependent_codes,
-                scheme.to_string()
+                scheme.to_string(),
+                build_time_utc!()
             );
             format!("{:x}", md5::compute(data))
         }

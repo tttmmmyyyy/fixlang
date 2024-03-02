@@ -94,7 +94,6 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 // Given source code, save it to temporary file (with the given file name and hash value) and the parse the program.
 // This is used to parse the source code that is not saved to a file, e.g., source code embedded to the compiler or test code.
 // Saving a source code to a file is necessary for:
-// - For build cache system, giving "last modified date" to the source code which is on memory.
 // - Generate debug information, in which source location is required.
 pub fn parse_and_save_to_temporary_file(source: &str, file_name: &str) -> Program {
     let hash = format!("{:x}", md5::compute(source));
