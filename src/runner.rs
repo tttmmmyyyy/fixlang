@@ -294,17 +294,21 @@ pub fn run_file(mut config: Configuration) {
         panic!("Program terminated abnormally.");
     }
     if output.stdout.len() > 0 {
-        println!(
+        print!(
             "{}",
-            String::from_utf8(output.stdout)
-                .unwrap_or("(failed to parse stdout from a.out as UTF8.)".to_string()),
+            String::from_utf8(output.stdout).unwrap_or(format!(
+                "(failed to parse stdout from \"{}\" as UTF8.)",
+                a_out_path
+            )),
         );
     }
     if output.stderr.len() > 0 {
-        eprintln!(
+        eprint!(
             "{}",
-            String::from_utf8(output.stderr)
-                .unwrap_or("(failed to parse stderr from a.out as UTF8.)".to_string())
+            String::from_utf8(output.stderr).unwrap_or(format!(
+                "(failed to parse stderr from \"{}\" as UTF8.)",
+                a_out_path
+            )),
         );
     }
 }
