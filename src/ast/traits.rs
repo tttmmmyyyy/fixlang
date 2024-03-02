@@ -728,7 +728,6 @@ impl TraitEnv {
         }
         let ps = resolved_ps;
 
-        // Resolve trait aliases in p.
         p.resolve_trait_aliases(self)
             .iter()
             .all(|p| self.entail_inner(&ps, p, kind_map))
@@ -742,12 +741,10 @@ impl TraitEnv {
         p: &Predicate,
         kind_map: &HashMap<TyCon, Rc<Kind>>,
     ) -> bool {
-        // If p is a special case of a predicate in ps, then ok.
+        // If p is in ps, then ok.
         for q in ps {
-            if q.trait_id == p.trait_id {
-                if Substitution::matching(kind_map, &q.ty, &p.ty).is_some() {
-                    return true;
-                }
+            if q.to_string() == p.to_string() {
+                return true;
             }
         }
         // Try reducing p by instances.
