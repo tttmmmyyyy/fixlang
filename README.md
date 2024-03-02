@@ -46,7 +46,7 @@ main = (
 
 ## Planned features
 
-- Associated type synonyms
+- Associated type synonyms (if they are truely necessary).
 
 ## Examples
 
