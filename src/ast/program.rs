@@ -1,3 +1,4 @@
+use build_time::build_time_utc;
 use inkwell::{debug_info::AsDIScope, module::Linkage};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -707,10 +708,11 @@ impl Program {
             scheme: &Rc<Scheme>,
         ) -> String {
             let data = format!(
-                "{}_{}_{}",
+                "{}_{}_{}_{}",
                 name.to_string(),
                 hash_of_dependent_codes,
-                scheme.to_string()
+                scheme.to_string(),
+                build_time_utc!()
             );
             format!("{:x}", md5::compute(data))
         }
