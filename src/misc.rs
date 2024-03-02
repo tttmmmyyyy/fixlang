@@ -1,5 +1,5 @@
 use super::*;
-use std::{cell::Cell, fs, process, time::Instant};
+use std::{fs, process};
 
 pub fn error_exit(msg: &str) -> ! {
     eprintln!("error: {}", msg);
