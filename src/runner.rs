@@ -377,6 +377,9 @@ pub fn build_file(mut config: Configuration) {
         }
         libs_opts.push(format!("-l{}", lib_name));
     }
+    if config.sanitize_memory {
+        libs_opts.push("-Wl,-Bdynamic,-L:./sanitizer/libfixsanitizer.so".to_string());
+    }
 
     // Build runtime.c to object file.
     let mut runtime_obj_hash_source = "".to_string();

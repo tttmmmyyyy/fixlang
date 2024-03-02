@@ -15,7 +15,7 @@ pub struct Configuration {
     // Source files.
     pub source_files: Vec<PathBuf>,
     // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
-    // Requires shared library sanitizer/libfixsanitizer.so.
+    // Requires shared library ,/sanitizer/libfixsanitizer.so.
     pub sanitize_memory: bool,
     // Fix's optimization level.
     pub fix_opt_level: FixOptimizationLevel,
