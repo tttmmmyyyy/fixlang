@@ -486,7 +486,7 @@ impl Program {
 
     // Generate codes of global symbols.
     pub fn generate_code(&self, gc: &mut GenerationContext) {
-        // First, declara accessor function (a function that returns a pointer to the global value) for a global value, or function for global function value.
+        // First, declare accessor function (a function that returns a pointer to the global value) for a global value, or function for global function value.
         let global_objs = self
             .instantiated_global_symbols
             .iter()
