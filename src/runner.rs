@@ -236,6 +236,7 @@ pub fn run_source(source: &str, mut config: Configuration) {
     let source_hash = format!("{:x}", md5::compute(source));
     save_temporary_source(source, MAIN_RUN, &source_hash);
     config.source_files = vec![temporary_source_path(MAIN_RUN, &source_hash)];
+    run_file(config);
 }
 
 // Return file content and last modified.
@@ -281,13 +282,16 @@ pub fn load_file(config: &mut Configuration) -> Program {
     target_mod
 }
 
-pub fn run_file(config: Configuration) {
-    build_file(config);
-    let output = Command::new("./a.out")
+pub fn run_file(mut config: Configuration) {
+    fs::create_dir_all(DOT_FIXLANG).expect("Failed to create \".fixlang\" directory.");
+    let a_out_path: String = format!("./{}/a.out", DOT_FIXLANG);
+    config.out_file_path = Some(PathBuf::from(a_out_path.clone()));
+    build_file(config.clone());
+    let output = Command::new(a_out_path.clone())
         .output()
-        .expect("Failed to run a.out.");
+        .expect(&format!("Failed to run \"{}\".", a_out_path));
     if output.status.code().is_none() {
-        panic!("a.out crashed!");
+        panic!("Program terminated abnormally.");
     }
     if output.stdout.len() > 0 {
         println!(
@@ -378,7 +382,9 @@ pub fn build_file(mut config: Configuration) {
         libs_opts.push(format!("-l{}", lib_name));
     }
     if config.sanitize_memory {
-        libs_opts.push("-Wl,-Bdynamic,-L:./sanitizer/libfixsanitizer.so".to_string());
+        libs_opts.push("-Wl,-rpath=./sanitizer".to_string());
+        libs_opts.push("-Wl,-Bdynamic".to_string());
+        libs_opts.push("-lfixsanitizer".to_string());
     }
 
     // Build runtime.c to object file.
