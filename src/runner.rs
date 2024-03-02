@@ -171,10 +171,7 @@ fn build_module<'c>(
     build_runtime(&mut gc);
 
     // Generate codes.
-    {
-        let _sw = StopWatch::new("generate_code", config.show_build_times);
-        fix_mod.generate_code(&mut gc);
-    }
+    fix_mod.generate_code(&mut gc);
 
     // Add main function.
     let main_fn_type = context.i32_type().fn_type(

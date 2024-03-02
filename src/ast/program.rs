@@ -3,6 +3,8 @@ use inkwell::{debug_info::AsDIScope, module::Linkage};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
+use self::stopwatch::StopWatch;
+
 use super::*;
 
 #[derive(Clone)]
@@ -486,6 +488,8 @@ impl Program {
 
     // Generate codes of global symbols.
     pub fn generate_code(&self, gc: &mut GenerationContext) {
+        let _sw = StopWatch::new("generate_code", gc.config.show_build_times);
+
         // First, declare accessor function (a function that returns a pointer to the global value) for a global value, or function for global function value.
         let global_objs = self
             .instantiated_global_symbols
