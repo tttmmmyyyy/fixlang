@@ -112,7 +112,7 @@ fn main() {
         // .default_value("default") // we do not set default value because we want to check if this option is specified by user.
         .next_line_help(true)
         .help("Set optimization level.\n\
-              - none: Perform no optimizations. Since tail recursion optimization is also omitted, programs that perform recursion may not work properly.\n\
+              - none: Perform no optimizations. Since tail recursion optimization is also omitted, programs that use recursion may not work properly.\n\
               - minimum: Perform only few optimizations to minimize compile time.\n\
               - default: Compile to minimize execution time. This is the default option.").hide_possible_values(true);
     let emit_llvm = Arg::new("emit-llvm")
