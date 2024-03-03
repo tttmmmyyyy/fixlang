@@ -74,6 +74,10 @@ Go to [Releases](https://github.com/tttmmmyyyy/fixlang/releases/), download pre-
 - `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
 - `cargo install --locked --path .`. Then the compiler command `fix` will be installed to `~/.cargo/bin`.
 
+## Use Docker image
+
+Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker.com/r/pt9999/fixlang) is available! 
+
 ## Usage
 
 - You can run the source file (with extension ".fix") by `fix run -f {source-files}`.
