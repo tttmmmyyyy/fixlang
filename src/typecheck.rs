@@ -787,8 +787,8 @@ impl TypeCheckContext {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
-                            ty.to_string(),
-                            ret_ty.to_string()
+                            &self.substitute_type(&ty).to_string_normalize(),
+                            &self.substitute_type(&ret_ty).to_string_normalize()
                         ),
                         &ei.source,
                     );
