@@ -2,10 +2,9 @@ use build_time::build_time_utc;
 use rand::Rng;
 use std::{
     env,
-    fs::create_dir_all,
-    fs::{self, remove_dir_all},
+    fs::{self, create_dir_all, remove_dir_all},
     path::PathBuf,
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use inkwell::{
@@ -290,25 +289,18 @@ pub fn run_file(mut config: Configuration) {
     let a_out_path: String = format!("./{}/a{}.out", DOT_FIXLANG, rand::thread_rng().gen::<u64>());
     config.out_file_path = Some(PathBuf::from(a_out_path.clone()));
 
+    // Build executable file.
     build_file(config.clone());
 
-    let output = Command::new(a_out_path.clone())
+    // Run the executable file.
+    let mut com = Command::new(a_out_path.clone());
+    com.stdout(Stdio::inherit())
+        .stdin(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    let output = com
         .output()
         .expect(&format!("Failed to run \"{}\".", a_out_path));
-    if output.stdout.len() > 0 {
-        print!(
-            "{}",
-            String::from_utf8(output.stdout)
-                .unwrap_or("Failed to parse stdout as UTF8.".to_string()),
-        );
-    }
-    if output.stderr.len() > 0 {
-        eprint!(
-            "{}",
-            String::from_utf8(output.stderr)
-                .unwrap_or("Failed to parse stderr as UTF8.".to_string()),
-        );
-    }
+
     // Remove the executable file.
     fs::remove_file(a_out_path.clone()).expect(&format!("Failed to remove \"{}\".", a_out_path));
 
