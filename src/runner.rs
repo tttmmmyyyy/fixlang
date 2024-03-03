@@ -295,9 +295,6 @@ pub fn run_file(mut config: Configuration) {
     let output = Command::new(a_out_path.clone())
         .output()
         .expect(&format!("Failed to run \"{}\".", a_out_path));
-    if output.status.code().is_none() {
-        panic!("Program terminated abnormally.");
-    }
     if output.stdout.len() > 0 {
         print!(
             "{}",
@@ -312,9 +309,12 @@ pub fn run_file(mut config: Configuration) {
                 .unwrap_or("Failed to parse stderr as UTF8.".to_string()),
         );
     }
-
     // Remove the executable file.
     fs::remove_file(a_out_path.clone()).expect(&format!("Failed to remove \"{}\".", a_out_path));
+
+    if output.status.code().is_none() {
+        panic!("Program terminated abnormally.");
+    }
 }
 
 fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
@@ -343,7 +343,8 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
 }
 
 pub fn build_file(mut config: Configuration) {
-    let obj_path = PathBuf::from(INTERMEDIATE_PATH).join("a.o");
+    let obj_path =
+        PathBuf::from(INTERMEDIATE_PATH).join(format!("a{}.o", rand::thread_rng().gen::<u64>())); // Add randomness for parallel execution.
     let exec_path = config.get_output_executable_file_path();
 
     // Create intermediate directory.

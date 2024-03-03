@@ -6,7 +6,6 @@ use super::*;
 
 // Tests should run sequentially, since libfixsanitizer.so does not work properly in multi threaded context.
 #[test]
-#[serial]
 pub fn test0() {
     let source = r#"    
             module Main; 
@@ -22,7 +21,6 @@ pub fn test0() {
 }
 
 #[test]
-#[serial]
 pub fn test1() {
     let source = r#"
             module Main; 
@@ -38,7 +36,6 @@ pub fn test1() {
 }
 
 #[test]
-#[serial]
 pub fn test2() {
     let source = r#"
             module Main; 
@@ -54,7 +51,6 @@ pub fn test2() {
 }
 
 #[test]
-#[serial]
 pub fn test3() {
     let source = r#"
         module Main; 
@@ -70,7 +66,6 @@ pub fn test3() {
 }
 
 #[test]
-#[serial]
 pub fn test4() {
     let source = r#"
         module Main; 
@@ -86,7 +81,6 @@ pub fn test4() {
 }
 
 #[test]
-#[serial]
 pub fn test5() {
     let source = r#"
         module Main; 
@@ -102,7 +96,6 @@ pub fn test5() {
 }
 
 #[test]
-#[serial]
 pub fn test6() {
     let source = r#"
         module Main; import Debug;
@@ -116,7 +109,6 @@ pub fn test6() {
 }
 
 #[test]
-#[serial]
 pub fn test7() {
     let source = r#"
         module Main; import Debug;
@@ -130,7 +122,6 @@ pub fn test7() {
 }
 
 #[test]
-#[serial]
 pub fn test8() {
     let source = r#"
         module Main; import Debug; 
@@ -145,7 +136,6 @@ pub fn test8() {
 }
 
 #[test]
-#[serial]
 pub fn test9_5() {
     let source = r#"
         module Main; import Debug;
@@ -162,7 +152,6 @@ pub fn test9_5() {
 }
 
 #[test]
-#[serial]
 pub fn test10() {
     let source = r#"
         module Main; import Debug;
@@ -177,7 +166,6 @@ pub fn test10() {
 }
 
 #[test]
-#[serial]
 pub fn test11() {
     let source = r#"
         module Main; import Debug;
@@ -194,7 +182,6 @@ pub fn test11() {
 }
 
 #[test]
-#[serial]
 pub fn test12() {
     let source = r#"
         module Main; import Debug;
@@ -213,7 +200,6 @@ pub fn test12() {
 }
 
 #[test]
-#[serial]
 pub fn test13() {
     let source = r#"
         module Main; import Debug;
@@ -228,7 +214,6 @@ pub fn test13() {
 }
 
 #[test]
-#[serial]
 pub fn test13_5() {
     let source = r#"
         module Main; import Debug;
@@ -243,7 +228,6 @@ pub fn test13_5() {
 }
 
 #[test]
-#[serial]
 pub fn test14() {
     let source = r#"
         module Main; import Debug;
@@ -260,7 +244,6 @@ pub fn test14() {
 }
 
 #[test]
-#[serial]
 pub fn test15() {
     let source = r#"
         module Main; import Debug;
@@ -275,7 +258,6 @@ pub fn test15() {
 }
 
 #[test]
-#[serial]
 pub fn test15_5() {
     let source = r#"
         module Main; import Debug;
@@ -291,7 +273,6 @@ pub fn test15_5() {
 }
 
 #[test]
-#[serial]
 pub fn test16() {
     let source = r#"
         module Main; import Debug;
@@ -306,7 +287,6 @@ pub fn test16() {
 }
 
 #[test]
-#[serial]
 pub fn test17() {
     let source = r#"
         module Main; import Debug;
@@ -320,7 +300,6 @@ pub fn test17() {
 }
 
 #[test]
-#[serial]
 pub fn test18() {
     let source = r#"
         module Main; import Debug;
@@ -334,7 +313,6 @@ pub fn test18() {
 }
 
 #[test]
-#[serial]
 pub fn test19() {
     let source = r#"
         module Main; import Debug;
@@ -348,7 +326,6 @@ pub fn test19() {
 }
 
 #[test]
-#[serial]
 pub fn test20() {
     let source = r#"
         module Main; import Debug;
@@ -362,7 +339,6 @@ pub fn test20() {
 }
 
 #[test]
-#[serial]
 pub fn test20_5() {
     let source = r#"
         module Main; import Debug;
@@ -385,7 +361,6 @@ pub fn test20_5() {
 }
 
 #[test]
-#[serial]
 pub fn test21() {
     let source = r#"
             module Main; import Debug;
@@ -401,7 +376,6 @@ pub fn test21() {
 }
 
 #[test]
-#[serial]
 pub fn test22() {
     // Test recursion function defined by fix with two variables that is tail-call.
     let n: i64 = 1000000;
@@ -430,7 +404,6 @@ pub fn test22() {
 }
 
 #[test]
-#[serial]
 pub fn test22_5() {
     // Test recursion function defined by fix that is not tail-call.
     let source = r#"
@@ -454,7 +427,6 @@ pub fn test22_5() {
 }
 
 #[test]
-#[serial]
 pub fn test22_7() {
     // Test global recursion function
     let source = r#"
@@ -481,7 +453,6 @@ pub fn test22_7() {
 }
 
 #[test]
-#[serial]
 pub fn test23() {
     // Test Array::fill of size 0.
     let source = r#"
@@ -496,7 +467,6 @@ pub fn test23() {
 }
 
 #[test]
-#[serial]
 pub fn test24() {
     // Test Array::fill of size > 0.
     let source = r#"
@@ -512,7 +482,6 @@ pub fn test24() {
 }
 
 #[test]
-#[serial]
 pub fn test25() {
     // Test Array::get.
     let source = r#"
@@ -529,7 +498,6 @@ pub fn test25() {
 }
 
 #[test]
-#[serial]
 pub fn test26() {
     // Test Array::set (unique case).
     let source = r#"
@@ -546,7 +514,6 @@ pub fn test26() {
 }
 
 #[test]
-#[serial]
 pub fn test27() {
     // Test Array::set (shared case).
     let source = r#"
@@ -563,7 +530,6 @@ pub fn test27() {
 }
 
 #[test]
-#[serial]
 pub fn test27_5() {
     // Test Array of boxed object.
     let source = r#"
@@ -580,7 +546,6 @@ pub fn test27_5() {
 }
 
 #[test]
-#[serial]
 pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r#"
@@ -609,7 +574,6 @@ pub fn test28() {
 }
 
 #[test]
-#[serial]
 pub fn test29() {
     let source = r#"
         module Main; import Debug;
@@ -627,7 +591,6 @@ pub fn test29() {
 }
 
 #[test]
-#[serial]
 pub fn test30() {
     // Test dollar combinator
     let source = r#"
@@ -645,7 +608,6 @@ pub fn test30() {
 }
 
 #[test]
-#[serial]
 pub fn test31() {
     // Test . combinator
     let source = r#"
@@ -663,7 +625,6 @@ pub fn test31() {
 }
 
 #[test]
-#[serial]
 pub fn test32() {
     // Test . and $ combinator
     let source = r#"
@@ -679,7 +640,6 @@ pub fn test32() {
 }
 
 #[test]
-#[serial]
 pub fn test33() {
     // Test struct declaration and new, mod.
     let source = r#"
@@ -698,7 +658,6 @@ pub fn test33() {
 }
 
 #[test]
-#[serial]
 pub fn test34_5() {
     // Test unboxed struct declaration and new, mod.
     let source = r#"
@@ -717,7 +676,6 @@ pub fn test34_5() {
 }
 
 #[test]
-#[serial]
 pub fn test34() {
     // Test namespace inference.
     let source = r#"
@@ -738,7 +696,6 @@ pub fn test34() {
 }
 
 #[test]
-#[serial]
 pub fn test35() {
     // Test overloading resolution.
     let source = r#"
@@ -760,7 +717,6 @@ pub fn test35() {
 }
 
 #[test]
-#[serial]
 pub fn test36() {
     // Test modifier composition.
     let source = r#"
@@ -782,7 +738,6 @@ pub fn test36() {
 }
 
 #[test]
-#[serial]
 pub fn test37() {
     // Test unique modField.
     let source = r#"
@@ -804,7 +759,6 @@ pub fn test37() {
 }
 
 #[test]
-#[serial]
 pub fn test37_5() {
     // Test shared modField.
     let source = r#"
@@ -826,7 +780,6 @@ pub fn test37_5() {
 }
 
 #[test]
-#[serial]
 pub fn test38() {
     // Test type annotation.
     let source = r#"
@@ -849,7 +802,6 @@ pub fn test38() {
 }
 
 #[test]
-#[serial]
 pub fn test39() {
     // Test type annotation.
     let source = r#"
@@ -872,7 +824,6 @@ pub fn test39() {
 }
 
 #[test]
-#[serial]
 pub fn test40() {
     // Test type annotation at let-binding.
     let source = r#"
@@ -895,7 +846,6 @@ pub fn test40() {
 }
 
 #[test]
-#[serial]
 pub fn test41() {
     // Test type annotation at let-binding.
     let source = r#"
@@ -913,7 +863,6 @@ pub fn test41() {
 }
 
 #[test]
-#[serial]
 pub fn test41_5() {
     // Test type annotation at lambda
     let source = r#"
@@ -931,7 +880,6 @@ pub fn test41_5() {
 }
 
 #[test]
-#[serial]
 pub fn test42() {
     // Recursion function using global variable (not tail call).
     let n = 10000;
@@ -956,7 +904,6 @@ pub fn test42() {
 }
 
 #[test]
-#[serial]
 pub fn test43() {
     // Recursion function using global variable (tail call).
     let n: i64 = 10000000;
@@ -981,7 +928,6 @@ pub fn test43() {
 }
 
 #[test]
-#[serial]
 pub fn test44() {
     // Test basic use of traits.
     let source = r#"
@@ -1026,7 +972,6 @@ pub fn test44() {
 }
 
 #[test]
-#[serial]
 pub fn test44_5() {
     // Test Array::from_map.
     let source = r#"
@@ -1053,7 +998,6 @@ pub fn test44_5() {
 }
 
 #[test]
-#[serial]
 pub fn test45() {
     // Test HKT.
     let source = r#"
@@ -1091,7 +1035,6 @@ pub fn test45() {
 }
 
 #[test]
-#[serial]
 pub fn test46() {
     // Test confliction of global name and local name.
     let source = r#"
@@ -1114,7 +1057,6 @@ pub fn test46() {
 }
 
 #[test]
-#[serial]
 pub fn test47() {
     // Basic use of union.
     let source = r#"
@@ -1137,7 +1079,6 @@ pub fn test47() {
 }
 
 #[test]
-#[serial]
 pub fn test47_2() {
     // Basic use of boxed union.
     let source = r#"
@@ -1160,7 +1101,6 @@ pub fn test47_2() {
 }
 
 #[test]
-#[serial]
 pub fn test47_5() {
     // Test union of closure object
     let source = r#"
@@ -1182,7 +1122,6 @@ pub fn test47_5() {
 }
 
 #[test]
-#[serial]
 pub fn test47_6() {
     // Test union of boxed object
     let source = r#"
@@ -1208,7 +1147,6 @@ pub fn test47_6() {
 }
 
 #[test]
-#[serial]
 pub fn test48() {
     // Parametrised struct.
     let source = r#"
@@ -1231,7 +1169,6 @@ pub fn test48() {
 }
 
 #[test]
-#[serial]
 pub fn test49() {
     // Parametrised union.
     let source = r#"
@@ -1259,7 +1196,6 @@ pub fn test49() {
 }
 
 #[test]
-#[serial]
 pub fn test50() {
     // test loop.
     let n = 100;
@@ -1291,7 +1227,6 @@ pub fn test50() {
 }
 
 #[test]
-#[serial]
 pub fn test50_3() {
     // test loop_iter, loop_iter_m.
     let source = r#"
@@ -1320,7 +1255,6 @@ pub fn test50_3() {
 }
 
 #[test]
-#[serial]
 pub fn test51() {
     // test trait bounds.
     let source = r#"
@@ -1353,7 +1287,6 @@ pub fn test51() {
 }
 
 #[test]
-#[serial]
 pub fn test52() {
     // Test loop with boxed state / break.
     let source = r#"
@@ -1411,7 +1344,6 @@ pub fn test52() {
 }
 
 #[test]
-#[serial]
 pub fn test53() {
     // Test mutation of unique unboxed struct (e.g., tuple).
     let source = r#"
@@ -1433,7 +1365,6 @@ pub fn test53() {
 }
 
 #[test]
-#[serial]
 pub fn test54() {
     // Test mutation of shared unboxed struct (e.g., tuple).
     let source = r#"
@@ -1455,7 +1386,6 @@ pub fn test54() {
 }
 
 #[test]
-#[serial]
 pub fn test55() {
     // Test <= operator
     let source = r#"
@@ -1480,7 +1410,6 @@ pub fn test55() {
 }
 
 #[test]
-#[serial]
 pub fn test56() {
     // Test && and || operator
     let source = r#"
@@ -1503,7 +1432,6 @@ pub fn test56() {
 }
 
 #[test]
-#[serial]
 pub fn test57() {
     // Test ! operator
     let source = r#"
@@ -1526,7 +1454,6 @@ pub fn test57() {
 }
 
 #[test]
-#[serial]
 pub fn test58() {
     // Test != operator
     let source = r#"
@@ -1549,7 +1476,6 @@ pub fn test58() {
 }
 
 #[test]
-#[serial]
 pub fn test59() {
     // Test namespace definition
     let source = r#"
@@ -1582,7 +1508,6 @@ pub fn test59() {
 }
 
 #[test]
-#[serial]
 pub fn test60() {
     // Test unit.
     let source = r"
@@ -1598,7 +1523,6 @@ pub fn test60() {
 }
 
 #[test]
-#[serial]
 pub fn test61() {
     // Test Hello world.
     let source = r#"
@@ -1621,7 +1545,6 @@ pub fn test61() {
 }
 
 #[test]
-#[serial]
 pub fn test61_5() {
     // Test Hello world.
     let source = r#"
@@ -1640,7 +1563,6 @@ pub fn test61_5() {
 }
 
 #[test]
-#[serial]
 pub fn test62() {
     // Test String length.
     let source = r#"
@@ -1657,7 +1579,6 @@ pub fn test62() {
 }
 
 #[test]
-#[serial]
 pub fn test63() {
     // Test I64 ToString.
     // See also test98.
@@ -1675,7 +1596,6 @@ pub fn test63() {
 }
 
 #[test]
-#[serial]
 pub fn test64() {
     // Test escape sequence.
     let source = r#"
@@ -1690,7 +1610,6 @@ pub fn test64() {
 }
 
 #[test]
-#[serial]
 pub fn test65() {
     // Test tuple pattern matching.
     let source = r#"
@@ -1714,7 +1633,6 @@ pub fn test65() {
 }
 
 #[test]
-#[serial]
 pub fn test66() {
     // Test unboxed struct pattern matching.
     let source = r#"
@@ -1740,7 +1658,6 @@ pub fn test66() {
 }
 
 #[test]
-#[serial]
 pub fn test67() {
     // Test boxed struct pattern matching.
     let source = r#"
@@ -1765,90 +1682,7 @@ pub fn test67() {
     run_source(source, Configuration::develop_compiler());
 }
 
-// #[test]
-// #[serial]
-// pub fn test68() {
-//     // Test unboxed union pattern matching.
-//     let source = r#"
-//     module Main; import Debug;
-
-//     type I64OrBool = unbox union {int: I64, bool: Bool};
-
-//     main : IO ();
-//     main = (
-//         let u = I64OrBool::int(42);
-//         let I64OrBool::int(x) = u;
-//         let u = assert_eq(|_|"", x, 42);
-//         pure()
-//     );
-//     "#;
-//     run_source(source, Configuration::develop_compiler());
-// }
-
-// #[test]
-// #[serial]
-// pub fn test69() {
-//     // Test boxed union pattern matching.
-//     let source = r#"
-//     module Main; import Debug;
-
-//     type I64OrBool = box union {int: I64, bool: Bool};
-
-//     main : IO ();
-//     main = (
-//         let u = I64OrBool::bool(true);
-//         let I64OrBool::bool(x) = u;
-//         let u = assert_eq(|_|"", x, true);
-//         pure()
-//     );
-//     "#;
-//     run_source(source, Configuration::develop_compiler());
-// }
-
-// #[test]
-// #[serial]
-// pub fn test70() {
-//     // Test tuple in union pattern.
-//     let source = r#"
-//     module Main; import Debug;
-
-//     type Union = union {left: (I64, String), right: Bool};
-
-//     main : IO ();
-//     main = (
-//         let u = Union::left((42, "truth"));
-//         let Union::left((x, y)) = u;
-//         let u = assert_eq(|_|"", x, 42);
-//         pure()
-//     );
-//     "#;
-//     run_source(source, Configuration::develop_compiler());
-// }
-
-// #[test]
-// #[serial]
-// pub fn test71() {
-//     // Test union in struct pattern.
-//     let source = r#"
-//     module Main; import Debug;
-
-//     type Struct = box struct {uni: Union, value: I64};
-//     type Union = union {left: (I64, String), right: Bool};
-
-//     main : IO ();
-//     main = (
-//         let u = box struct {uni: Union::left((42, "truth")), value: 13};
-//         let Struct { uni: Union::left((truth, string)), value: val } = u;
-//         let u = assert_eq(|_|"", truth, 42);
-//         let u = assert_eq(|_|"", val, 13);
-//         pure()
-//     );
-//     "#;
-//     run_source(source, Configuration::develop_compiler());
-// }
-
 #[test]
-#[serial]
 pub fn test72() {
     // Test pattern matching on argment.
     let source = r#"
@@ -1871,7 +1705,6 @@ pub fn test72() {
 }
 
 #[test]
-#[serial]
 pub fn test73() {
     // Test pattern matching on argment.
     let source = r#"
@@ -1891,7 +1724,6 @@ pub fn test73() {
 }
 
 #[test]
-#[serial]
 pub fn test74() {
     // Test setter function of struct / tuple.
     let source = r#"
@@ -1930,7 +1762,6 @@ pub fn test74() {
 }
 
 #[test]
-#[serial]
 pub fn test75() {
     // Test iterator.
     let source = r#"
@@ -1956,7 +1787,6 @@ pub fn test75() {
 }
 
 #[test]
-#[serial]
 pub fn test76() {
     // Test array modifier.
     let source = r#"
@@ -1974,7 +1804,6 @@ pub fn test76() {
 }
 
 #[test]
-#[serial]
 pub fn test77() {
     // Test Iterator::zip / map / take / fold / subsequences.
     let source = r#"
@@ -2004,7 +1833,6 @@ pub fn test77() {
 }
 
 #[test]
-#[serial]
 pub fn test78() {
     // Test Iterator::filter
     let source = r#"
@@ -2023,7 +1851,6 @@ pub fn test78() {
 }
 
 #[test]
-#[serial]
 pub fn test79() {
     // Test Iterator::push_front
     let source = r#"
@@ -2044,7 +1871,6 @@ pub fn test79() {
 }
 
 #[test]
-#[serial]
 pub fn test80() {
     // Test Iterator::last
     let source = r#"
@@ -2064,7 +1890,6 @@ pub fn test80() {
 }
 
 #[test]
-#[serial]
 pub fn test81() {
     // Test array literal.
     let source = r#"
@@ -2083,7 +1908,6 @@ pub fn test81() {
 }
 
 #[test]
-#[serial]
 pub fn test82() {
     // Test Array::append.
     let source = r#"
@@ -2154,7 +1978,6 @@ pub fn test82() {
 }
 
 #[test]
-#[serial]
 pub fn test83() {
     // Test Array::push_back, pop_back
     let source = r#"
@@ -2210,7 +2033,6 @@ pub fn test83() {
 }
 
 #[test]
-#[serial]
 pub fn test84() {
     // Test Eq for Array
     let source = r#"
@@ -2241,7 +2063,6 @@ pub fn test84() {
 }
 
 #[test]
-#[serial]
 pub fn test85() {
     // Test concat string, compare string.
     let source = r#"
@@ -2262,7 +2083,6 @@ pub fn test85() {
 }
 
 #[test]
-#[serial]
 pub fn test86() {
     // Test concat_iter
     let source = r#"
@@ -2280,7 +2100,6 @@ pub fn test86() {
 }
 
 #[test]
-#[serial]
 pub fn test87() {
     // Test iterator comparison
     let source = r#"
@@ -2308,7 +2127,6 @@ pub fn test87() {
 }
 
 #[test]
-#[serial]
 pub fn test88() {
     // Test iterator comparison
     let source = r#"
@@ -2336,7 +2154,6 @@ pub fn test88() {
 }
 
 #[test]
-#[serial]
 pub fn test89() {
     // Test Iterator::append
     let source = r#"
@@ -2368,7 +2185,6 @@ pub fn test89() {
 }
 
 #[test]
-#[serial]
 pub fn test90() {
     // Test Array::sort_by.
     let source = r#"
@@ -2396,7 +2212,6 @@ pub fn test90() {
 }
 
 #[test]
-#[serial]
 pub fn test92() {
     let source = r#"
     module Main; import Debug;
@@ -2415,7 +2230,6 @@ pub fn test92() {
 }
 
 #[test]
-#[serial]
 pub fn test93() {
     // Test try to make circular reference (and fail).
     let source = r#"
@@ -2436,7 +2250,6 @@ pub fn test93() {
 }
 
 #[test]
-#[serial]
 pub fn test_call_c() {
     // Test FFI
     let source = r#"
@@ -2454,7 +2267,6 @@ pub fn test_call_c() {
 }
 
 #[test]
-#[serial]
 pub fn test95() {
     // Test Std::unsafe_is_unique, Debug::assert_unique!
     let source = r#"
@@ -2496,7 +2308,6 @@ pub fn test95() {
 }
 
 #[test]
-#[serial]
 pub fn test96() {
     // Test U8 literal
     let source = r#"
@@ -2520,7 +2331,6 @@ pub fn test96() {
 }
 
 #[test]
-#[serial]
 pub fn test97() {
     // Test arithmetic operation of U8, I32
     let source = r#"
@@ -2551,7 +2361,6 @@ pub fn test97() {
 }
 
 #[test]
-#[serial]
 pub fn test98() {
     // Test to_string, from_string for integrals
     let source = r#"
@@ -2617,7 +2426,6 @@ pub fn test98() {
 }
 
 #[test]
-#[serial]
 pub fn test99() {
     // Test cast between integral types.
     let mut rng = rand::thread_rng();
@@ -2671,7 +2479,6 @@ pub fn test99() {
 }
 
 #[test]
-#[serial]
 pub fn test99_5() {
     // Test cast float to integral types.
     let source = r#"
@@ -2704,7 +2511,6 @@ pub fn test99_5() {
 }
 
 #[test]
-#[serial]
 pub fn test99_51() {
     // Test cast integral to float types.
     let source = r#"
@@ -2737,7 +2543,6 @@ pub fn test99_51() {
 }
 
 #[test]
-#[serial]
 pub fn test100() {
     // Test u8 literal
     let source = r#"
@@ -2756,7 +2561,6 @@ pub fn test100() {
 }
 
 #[test]
-#[serial]
 pub fn test101() {
     // Test Array::is_empty, get_first, get_last.
     let source = r#"
@@ -2783,7 +2587,6 @@ pub fn test101() {
 }
 
 #[test]
-#[serial]
 pub fn test102() {
     // Test I64 : Eq, LessThan, LessThanEq
     let source = r#"
@@ -2812,7 +2615,6 @@ pub fn test102() {
 }
 
 #[test]
-#[serial]
 pub fn test103() {
     // Test Bool : Eq
     let source = r#"
@@ -2832,7 +2634,6 @@ pub fn test103() {
 }
 
 #[test]
-#[serial]
 pub fn test104() {
     // Test Bool : ToString
     let source = r#"
@@ -2850,7 +2651,6 @@ pub fn test104() {
 }
 
 #[test]
-#[serial]
 pub fn test105() {
     // Test String::get_first_byte, get_last_byte, is_empty
     let source = r#"
@@ -2872,7 +2672,6 @@ pub fn test105() {
 }
 
 #[test]
-#[serial]
 pub fn test106() {
     // Test [a : Eq] Option a : Eq
     let source = r#"
@@ -2903,7 +2702,6 @@ pub fn test106() {
 }
 
 #[test]
-#[serial]
 pub fn test107() {
     // Test String::pop_back_byte, strip_last_bytes, strip_last_newlines.
     let source = r#"
@@ -2931,7 +2729,6 @@ pub fn test107() {
 }
 
 #[test]
-#[serial]
 pub fn test108() {
     // Test write_file_string!, read_file_string!, read_line.
     let source = r#"
@@ -2939,7 +2736,7 @@ pub fn test108() {
 
         main : IO ();
         main = (
-            let file_path = Path::parse("test.txt").as_some;
+            let file_path = Path::parse("test_uAfQDPwJ7sS6.txt").as_some;
             let lines = ["Hello", "World!"];
             let content = Iterator::from_array(lines).intersperse("\n").concat_iter;
             do {
@@ -2959,11 +2756,10 @@ pub fn test108() {
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
-    remove_file("test.txt").unwrap();
+    remove_file("test_uAfQDPwJ7sS6.txt").unwrap();
 }
 
 #[test]
-#[serial]
 pub fn test_is_eof() {
     let source = r#"
         module Main; 
@@ -2971,7 +2767,7 @@ pub fn test_is_eof() {
 
         main : IO ();
         main = (
-            let file_path = Path::parse("test.txt").as_some;
+            let file_path = Path::parse("test_bUeW9baGGZmE.txt").as_some;
             let content = "Hello World!";
             do {
                 eval *write_file_string(file_path, content);
@@ -2990,11 +2786,10 @@ pub fn test_is_eof() {
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
-    remove_file("test.txt").unwrap();
+    remove_file("test_bUeW9baGGZmE.txt").unwrap();
 }
 
 #[test]
-#[serial]
 pub fn test108_5() {
     // Test write_file_bytes, read_file_bytes.
     let source = r#"
@@ -3002,7 +2797,7 @@ pub fn test108_5() {
 
         main : IO ();
         main = (
-            let file_path = Path::parse("test_bytes.dat").as_some;
+            let file_path = Path::parse("test_vgZNhmj4gPbF.dat").as_some;
             let data = Array::from_map(1024 + 512, |n| n.to_U8);
             do {
                 eval *write_file_bytes(file_path, data);
@@ -3015,11 +2810,10 @@ pub fn test108_5() {
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
-    remove_file("test_bytes.dat").unwrap();
+    remove_file("test_vgZNhmj4gPbF.dat").unwrap();
 }
 
 #[test]
-#[serial]
 pub fn test109() {
     // Test monad syntax.
     let source = r#"
@@ -3070,7 +2864,6 @@ pub fn test109() {
 }
 
 #[test]
-#[serial]
 pub fn test110a() {
     // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
@@ -3136,7 +2929,6 @@ pub fn test110a() {
 }
 
 #[test]
-#[serial]
 pub fn test110b() {
     // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
@@ -3213,7 +3005,6 @@ pub fn test110b() {
 }
 
 #[test]
-#[serial]
 pub fn test111() {
     // Test function composition operators
     let source = r#"
@@ -3237,7 +3028,6 @@ pub fn test111() {
 }
 
 #[test]
-#[serial]
 pub fn test112() {
     // Test Iterator::generate
     let source = r#"
@@ -3260,7 +3050,6 @@ pub fn test112() {
 }
 
 #[test]
-#[serial]
 pub fn test113() {
     // Test bit operations.
     let source = r#"
@@ -3295,7 +3084,6 @@ pub fn test113() {
 }
 
 #[test]
-#[serial]
 pub fn test114() {
     // Test Array::find_by
     let source = r#"
@@ -3318,7 +3106,6 @@ pub fn test114() {
 }
 
 #[test]
-#[serial]
 pub fn test115() {
     // Test HashMap
     let source = r#"
@@ -3367,7 +3154,6 @@ pub fn test115() {
 }
 
 #[test]
-#[serial]
 pub fn test115_5() {
     // Test HashSet
     let source = r#"
@@ -3456,7 +3242,6 @@ pub fn test115_5() {
 }
 
 #[test]
-#[serial]
 pub fn test116() {
     // Test Std::Destructor
     let source = r#"
@@ -3503,7 +3288,6 @@ pub fn test116() {
 }
 
 #[test]
-#[serial]
 pub fn test117() {
     // Test String::from_c_str
     let source = r#"
@@ -3521,7 +3305,6 @@ pub fn test117() {
 }
 
 #[test]
-#[serial]
 pub fn test118() {
     // Test fold_m
     let source = r#"
@@ -3542,7 +3325,6 @@ pub fn test118() {
 }
 
 #[test]
-#[serial]
 pub fn test119() {
     // Test namespace and MakeStruct, Pattern.
     let source = r#"
@@ -3571,7 +3353,6 @@ pub fn test119() {
 }
 
 #[test]
-#[serial]
 pub fn test120() {
     // Test abort of type Array or function.
     let source = r#"
@@ -3592,7 +3373,6 @@ pub fn test120() {
 }
 
 #[test]
-#[serial]
 pub fn test121() {
     // Test Math module
     let source = r#"
@@ -3673,7 +3453,6 @@ pub fn test121() {
 }
 
 #[test]
-#[serial]
 pub fn test122() {
     // Test PunchedArray.
     let source = r#"
@@ -3773,7 +3552,6 @@ pub fn test122() {
 }
 
 #[test]
-#[serial]
 pub fn test123() {
     // Test Array::act and Array::act!
     let source = r#"
@@ -3902,7 +3680,6 @@ pub fn test123() {
 }
 
 #[test]
-#[serial]
 pub fn test123_5() {
     // Test Array::act and Array::act! (case 2)
     let source = r#"
@@ -3950,7 +3727,6 @@ pub fn test123_5() {
 }
 
 #[test]
-#[serial]
 pub fn test124() {
     // Test Array : Functor, Array : Monad
     let source = r#"
@@ -4002,7 +3778,6 @@ pub fn test124() {
 }
 
 #[test]
-#[serial]
 pub fn test125() {
     // Test () : Eq
     let source = r#"
@@ -4022,7 +3797,6 @@ pub fn test125() {
 }
 
 #[test]
-#[serial]
 pub fn test126() {
     // Test Iterator::sum.
     let source = r#"
@@ -4043,7 +3817,6 @@ pub fn test126() {
 }
 
 #[test]
-#[serial]
 pub fn test127() {
     // Test trait alias.
     // Basic example are Additive and Iterator::sum, which are tested in other tests.
@@ -4133,7 +3906,6 @@ pub fn test127() {
 }
 
 #[test]
-#[serial]
 pub fn test128() {
     // Test type alias.
     let source = r#"
@@ -4182,7 +3954,6 @@ pub fn test128() {
 }
 
 #[test]
-#[serial]
 pub fn test129() {
     // Test ToBytes/FromBytes
     let source = r#"
@@ -4278,7 +4049,6 @@ pub fn test129() {
 }
 
 #[test]
-#[serial]
 pub fn test130() {
     // Test Time module
     let source = r#"
@@ -4318,7 +4088,6 @@ pub fn test130() {
 }
 
 #[test]
-#[serial]
 pub fn test131() {
     // Test Character module
     let source = r#"
@@ -4424,7 +4193,6 @@ pub fn test131() {
 }
 
 #[test]
-#[serial]
 pub fn test132() {
     // Test Debug module
     let source = r#"
@@ -4439,7 +4207,7 @@ pub fn test132() {
             eval debug_println("loop time : " + t.to_string + ", sum : " + r.to_string);
 
             let (_, t) = *consumed_time_while_io(
-                let file_path = Path::parse("test.txt").as_some;
+                let file_path = Path::parse("test_tMB3iCfTeeES.txt").as_some;
                 eval *write_file_string(file_path, "Hello World!").try(exit_with_msg(1));
                 let read_content = *read_file_string(file_path).try(exit_with_msg(1));
                 println $ read_content
@@ -4450,11 +4218,10 @@ pub fn test132() {
         );
     "#;
     run_source(&source, Configuration::develop_compiler());
-    remove_file("test.txt").unwrap();
+    remove_file("test_tMB3iCfTeeES.txt").unwrap();
 }
 
 #[test]
-#[serial]
 pub fn test_signed_integral_abs() {
     let source = r#"
         module Main; import Debug;
@@ -4480,7 +4247,6 @@ pub fn test_signed_integral_abs() {
 }
 
 #[test]
-#[serial]
 pub fn test_float_to_string_precision() {
     let source = r#"
         module Main; import Debug;
@@ -4502,7 +4268,6 @@ pub fn test_float_to_string_precision() {
 }
 
 #[test]
-#[serial]
 pub fn test_float_to_string_exp() {
     let source = r#"
         module Main; import Debug;
@@ -4522,7 +4287,6 @@ pub fn test_float_to_string_exp() {
 }
 
 #[test]
-#[serial]
 pub fn test_float_to_string_exp_precision() {
     let source = r#"
         module Main; import Debug;
@@ -4544,7 +4308,6 @@ pub fn test_float_to_string_exp_precision() {
 }
 
 #[test]
-#[serial]
 pub fn test_string_unsafe_from_c_str_ptr() {
     let source = r#"
         module Main;
@@ -4562,7 +4325,6 @@ pub fn test_string_unsafe_from_c_str_ptr() {
 }
 
 #[test]
-#[serial]
 pub fn test_subprocess_run_stream() {
     let source = r#"
     module Main;
@@ -4594,7 +4356,6 @@ pub fn test_subprocess_run_stream() {
 }
 
 #[test]
-#[serial]
 pub fn test_loop_lines() {
     let source = r#"
     module Main;
@@ -4619,7 +4380,7 @@ pub fn test_loop_lines() {
     
     main : IO ();
     main = (
-        let file_path = Path::parse("test.txt").as_some;
+        let file_path = Path::parse("test_GndeZP399tLX.txt").as_some;
         do {
             eval *write_file_string(file_path, ["0", "1", "2", "X", "3", "4"].to_iter.join("\n"));
             eval assert_eq(|_|"", *sum_up_while(file_path), 0 + 1 + 2);
@@ -4635,11 +4396,10 @@ pub fn test_loop_lines() {
     );
     "#;
     run_source(&source, Configuration::develop_compiler());
-    remove_file("test.txt").unwrap();
+    remove_file("test_GndeZP399tLX.txt").unwrap();
 }
 
 #[test]
-#[serial]
 pub fn test_array_get_sub() {
     let source = r#"
     module Main;
@@ -4674,7 +4434,6 @@ pub fn test_array_get_sub() {
 }
 
 #[test]
-#[serial]
 pub fn test_string_get_sub() {
     let source = r#"
     module Main;
@@ -4697,7 +4456,6 @@ pub fn test_string_get_sub() {
 }
 
 #[test]
-#[serial]
 pub fn test_string_strip_first_spaces() {
     let source = r#"
     module Main;
@@ -4719,7 +4477,6 @@ pub fn test_string_strip_first_spaces() {
 }
 
 #[test]
-#[serial]
 pub fn test_loop_lines_io() {
     let source = r#"
     module Main;
@@ -4728,8 +4485,8 @@ pub fn test_loop_lines_io() {
     main : IO ();
     main = (
         let content1 = "Hello\nWorld!";
-        let file1 = Path::parse("test1.txt").as_some;
-        let file2 = Path::parse("test2.txt").as_some;
+        let file1 = Path::parse("test_MsuHh3QEXKYN.txt").as_some;
+        let file2 = Path::parse("test_9A5bu4U57xTd.txt").as_some;
         do {
             eval *write_file_string(file1, content1);
 
@@ -4750,12 +4507,11 @@ pub fn test_loop_lines_io() {
     );
     "#;
     run_source(&source, Configuration::develop_compiler());
-    remove_file("test1.txt").unwrap();
-    remove_file("test2.txt").unwrap();
+    remove_file("test_MsuHh3QEXKYN.txt").unwrap();
+    remove_file("test_9A5bu4U57xTd.txt").unwrap();
 }
 
 #[test]
-#[serial]
 pub fn test_string_find() {
     let source = r#"
     module Main;
@@ -4794,7 +4550,6 @@ pub fn test_string_find() {
 }
 
 #[test]
-#[serial]
 pub fn test_names_literal_prefix() {
     let source = r#"
     module Main;
@@ -4824,7 +4579,6 @@ pub fn test_names_literal_prefix() {
 }
 
 #[test]
-#[serial]
 pub fn test_string_split() {
     let source = r#"
     module Main;
@@ -4846,7 +4600,6 @@ pub fn test_string_split() {
 }
 
 #[test]
-#[serial]
 pub fn test_ptr_to_string() {
     let source = r#"
     module Main;
@@ -4862,7 +4615,6 @@ pub fn test_ptr_to_string() {
 }
 
 #[test]
-#[serial]
 pub fn test_async_task_fib() {
     let source = r#"
     module Main;
@@ -4895,7 +4647,6 @@ pub fn test_async_task_fib() {
 }
 
 #[test]
-#[serial]
 pub fn test_async_shared_array() {
     // This test shares array between multiple threads, try to mutate it from one thread while read it from multiple threads simultaneously.
     let source = r#"
@@ -4960,7 +4711,6 @@ pub fn test_async_shared_array() {
 }
 
 #[test]
-#[serial]
 pub fn test_async_task_array_result() {
     let source = r#"
     module Main;
@@ -4981,7 +4731,6 @@ pub fn test_async_task_array_result() {
 }
 
 #[test]
-#[serial]
 pub fn test_async_task_io() {
     let source = r##"
     module Main;
@@ -4998,7 +4747,6 @@ pub fn test_async_task_io() {
 }
 
 #[test]
-#[serial]
 pub fn test_tarai() {
     let source = r#"
     module Main;
@@ -5027,7 +4775,6 @@ pub fn test_tarai() {
 }
 
 #[test]
-#[serial]
 pub fn test_number_of_processors() {
     let source = r##"
     module Main;
@@ -5040,7 +4787,6 @@ pub fn test_number_of_processors() {
 }
 
 #[test]
-#[serial]
 pub fn test_async_task_dedicated_thread() {
     let source = r##"
     module Main;
@@ -5059,7 +4805,6 @@ pub fn test_async_task_dedicated_thread() {
 }
 
 #[test]
-#[serial]
 pub fn test_mvar() {
     let source = r##"
     module Main;
@@ -5094,7 +4839,6 @@ pub fn test_mvar() {
 }
 
 #[test]
-#[serial]
 pub fn test_mvar_of_shared_object() {
     // Share an array between multiple threads using Var.
     // This test is to check whether the refcnt of the array is not corrupted.
@@ -5130,7 +4874,6 @@ pub fn test_mvar_of_shared_object() {
 }
 
 #[test]
-#[serial]
 pub fn test_get_args() {
     let source = r##"
     module Main;
@@ -5145,7 +4888,6 @@ pub fn test_get_args() {
 }
 
 #[test]
-#[serial]
 pub fn test_regression_issue_14() {
     let source = r##"
     module Main;
@@ -5170,7 +4912,6 @@ pub fn test_regression_issue_14() {
 }
 
 #[test]
-#[serial]
 pub fn test_random() {
     let source = r##"
     module Main;
@@ -5211,7 +4952,6 @@ pub fn test_random() {
 }
 
 #[test]
-#[serial]
 pub fn test_float_inf_nan() {
     let source = r##"
     module Main;
@@ -5242,7 +4982,6 @@ pub fn test_float_inf_nan() {
 }
 
 #[test]
-#[serial]
 pub fn test_large_tuple() {
     let source = r##"
     module Main;
@@ -5258,7 +4997,6 @@ pub fn test_large_tuple() {
 }
 
 #[test]
-#[serial]
 pub fn test_graph_find_loop() {
     // Test find_loop of graph.rs.
 
@@ -5308,13 +5046,11 @@ pub fn test_graph_find_loop() {
 }
 
 #[test]
-#[serial]
 pub fn test_run_examples() {
     test_files_in_directory(Path::new("./examples"));
 }
 
 #[test]
-#[serial]
 pub fn test_tests_directory() {
     test_files_in_directory(Path::new("./tests"));
 }
@@ -5351,12 +5087,11 @@ pub fn test_files_in_directory(path: &Path) {
         let display = path.display();
         println!("[{}]:", display);
         run_file(config);
-        remove_file("test.txt").unwrap_or(());
+        remove_file("test_process_text_file.txt").unwrap_or(());
     }
 }
 
 #[test]
-#[serial]
 pub fn test_comment_0() {
     // block comment
     let source = r"/* head */ module Main; import Debug; 
@@ -5381,7 +5116,6 @@ pub fn test_comment_0() {
 }
 
 #[test]
-#[serial]
 pub fn test_comment_1() {
     // ilne comment
     let source = r"
@@ -5400,7 +5134,6 @@ pub fn test_comment_1() {
 }
 
 #[test]
-#[serial]
 pub fn test_hex_oct_bin_lit() {
     let source = r##"
     module Main;
@@ -5444,7 +5177,6 @@ pub fn test_hex_oct_bin_lit() {
 }
 
 #[test]
-#[serial]
 pub fn test_regexp() {
     let source = r##"
     module Main;
