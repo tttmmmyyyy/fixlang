@@ -1019,10 +1019,14 @@ fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
     let mut args = vec![];
     if pairs.peek().is_some() {
         // If parentheses for arguments are given,
-        args = parse_arg_list(pairs.next().unwrap(), ctx);
+        let pair = pairs.next().unwrap();
+        let args_span = Span::from_pair(&ctx.source, &pair);
+        args = parse_arg_list(pair, ctx);
         if args.len() == 0 {
             // `f()` is interpreted as application to unit: `f $ ()`.
-            args.push(expr_make_struct(tycon(make_tuple_name(0)), vec![]))
+            args.push(
+                expr_make_struct(tycon(make_tuple_name(0)), vec![]).set_source(Some(args_span)),
+            )
         }
     }
     let mut ret = head;
@@ -1186,6 +1190,7 @@ fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
                 .map(|(i, expr)| (i.to_string(), expr))
                 .collect(),
         )
+        .set_source(Some(span))
     }
 }
 
