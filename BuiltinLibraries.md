@@ -462,6 +462,7 @@
     - [Result](#result)
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl Result e : Monad`](#impl-result-e--monad)
+      - [`impl [e : ToString, a : ToString] Result e a : ToString`](#impl-e--tostring-a--tostring-result-e-a--tostring)
     - [String](#string)
       - [`_unsafe_from_c_str : Array U8 -> String`](#_unsafe_from_c_str--array-u8---string)
       - [`_unsafe_from_c_str_ptr : Ptr -> String`](#_unsafe_from_c_str_ptr--ptr---string)
@@ -1667,6 +1668,8 @@ type Result o e = unbox union { ok : o, err: e };
 Returns the containing value if the value is ok, or otherwise aborts.
 
 #### `impl Result e : Monad`
+
+#### `impl [e : ToString, a : ToString] Result e a : ToString`
 
 ### String
 

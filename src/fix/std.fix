@@ -3,7 +3,7 @@ module Std;
 import Debug;
 
 impl () : ToString {
-    to_string = |_| "()" 
+    to_string = |_| "()";
 }
 
 namespace Array {
@@ -1302,6 +1302,10 @@ impl Result e : Functor {
 impl Result e : Monad {
     pure = Result::ok;
     bind = |f, res| if res.is_err { Result::err $ res.as_err } else { f(res.as_ok) };
+}
+
+impl [e : ToString, a : ToString] Result e a : ToString {
+    to_string = |res| if res.is_ok { "ok(" + res.as_ok.to_string + ")" } else { "err(" + res.as_err.to_string + ")" };
 }
 
 type String = unbox struct { _data : Array U8 };

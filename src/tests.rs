@@ -5249,3 +5249,21 @@ pub fn test_unit_to_string() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_result_to_string() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let res : Result String Bool = Result::ok(true);
+        eval assert_eq(|_|"", res.to_string, "ok(true)");
+        let res : Result String Bool = Result::err("error");
+        eval assert_eq(|_|"", res.to_string, "err(error)");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
