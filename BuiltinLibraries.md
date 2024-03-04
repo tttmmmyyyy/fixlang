@@ -447,6 +447,7 @@
       - [`impl [a : Eq] Option a : Eq`](#impl-a--eq-option-a--eq)
       - [`impl Option : Functor`](#impl-option--functor)
       - [`impl Option : Monad`](#impl-option--monad)
+      - [`impl [a : ToString] Option a : ToString`](#impl-a--tostring-option-a--tostring)
     - [Path](#path)
       - [`parse : String -> Option Path`](#parse--string---option-path)
       - [`impl Path : ToString`](#impl-path--tostring)
@@ -1602,6 +1603,8 @@ Returns the provided default value if the option is none, or applies a function 
 #### `impl Option : Functor`
 
 #### `impl Option : Monad`
+
+#### `impl [a : ToString] Option a : ToString`
 
 ### Path
 

@@ -1195,6 +1195,10 @@ impl [a : Eq] Option a : Eq {
     );
 }
 
+impl [a : ToString] Option a : ToString {
+    to_string = |opt| if opt.is_some { "some(" + opt.as_some.to_string + ")" } else { "none()" };
+}
+
 impl Option : Functor {
     map = |f, opt| (
         if opt.is_none {

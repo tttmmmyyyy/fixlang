@@ -5218,3 +5218,19 @@ pub fn test_array_to_string() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_option_to_string() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", (Option::none() : Option Bool).to_string, "none()");
+        eval assert_eq(|_|"", (Option::some(42) : Option I64).to_string, "some(42)");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
