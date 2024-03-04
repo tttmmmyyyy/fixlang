@@ -354,6 +354,7 @@
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
       - [`impl Array : Functor`](#impl-array--functor)
       - [`impl Array : Monad`](#impl-array--monad)
+      - [`impl [a : ToString] Array a : ToString`](#impl-a--tostring-array-a--tostring)
     - [`type Boxed a`](#type-boxed-a)
     - [ErrMsg](#errmsg)
     - [IO](#io)
@@ -1272,6 +1273,8 @@ Truncate an array, keeping the given number of first elements.
 #### `impl Array : Functor`
 
 #### `impl Array : Monad`
+
+#### `impl [a : ToString] Array a : ToString`
 
 ### `type Boxed a`
 Boxed wrapper for a type.
