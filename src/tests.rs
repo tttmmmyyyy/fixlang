@@ -5267,3 +5267,38 @@ pub fn test_result_to_string() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_result_eq() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let ok1 = Result::ok(true);
+        let ok2 = Result::ok(false);
+        let err1 = Result::err("err1");
+        let err2 = Result::err("err2");
+
+        let ress = [ok1, ok2, err1, err2];
+
+        let indices = do {
+            let i = *Iterator::range(0, ress.get_size);
+            let j = *Iterator::range(0, ress.get_size);
+            pure $ (i, j)
+        };
+        eval *indices.loop_iter_m((), |_, (i, j)| (
+            eval if i == j {
+                assert_eq(|_|"", ress.@(i) == ress.@(j), true)
+            } else {
+                assert_eq(|_|"", ress.@(i) == ress.@(j), false)
+            };
+            continue_m $ ()
+        ));
+
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}

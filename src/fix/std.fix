@@ -1289,6 +1289,14 @@ namespace Result {
     );
 }
 
+impl [e : Eq, a : Eq] Result e a : Eq {
+    eq = |lhs, rhs| (
+        if lhs.is_ok && rhs.is_ok { lhs.as_ok == rhs.as_ok };
+        if lhs.is_err && rhs.is_err { lhs.as_err == rhs.as_err };
+        false
+    );
+}
+
 impl Result e : Functor {
     map = |f, res| (
         if res.is_err {

@@ -461,6 +461,7 @@
       - [`punch! : I64 -> Array a -> (PunchedArray a, a)`](#punch--i64---array-a---punchedarray-a-a)
     - [Result](#result)
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
+      - [`impl [e : Eq, a : Eq] Result e a : Eq`](#impl-e--eq-a--eq-result-e-a--eq)
       - [`impl Result e : Monad`](#impl-result-e--monad)
       - [`impl [e : ToString, a : ToString] Result e a : ToString`](#impl-e--tostring-a--tostring-result-e-a--tostring)
     - [String](#string)
@@ -1666,6 +1667,8 @@ type Result o e = unbox union { ok : o, err: e };
 #### `unwrap : Result e o -> o`
 
 Returns the containing value if the value is ok, or otherwise aborts.
+
+#### `impl [e : Eq, a : Eq] Result e a : Eq`
 
 #### `impl Result e : Monad`
 
