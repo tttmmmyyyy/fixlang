@@ -5302,3 +5302,36 @@ pub fn test_result_eq() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_array_less_than_and_less_than_or_eq() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let arr1 = [];
+        let arr2 = [1];
+        let arr3 = [1, 1];
+        let arr4 = [1, 2];
+        let arr5 = [2];
+
+        let arrs = [arr1, arr2, arr3, arr4, arr5];
+
+        let indices = do {
+            let i = *Iterator::range(0, arrs.get_size);
+            let j = *Iterator::range(0, arrs.get_size);
+            pure $ (i, j)
+        };
+        eval *indices.loop_iter_m((), |_, (i, j)| (
+            eval assert_eq(|_|"", arrs.@(i) < arrs.@(j), i < j);
+            eval assert_eq(|_|"", arrs.@(i) <= arrs.@(j), i <= j);
+            continue_m $ ()
+        ));
+
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}

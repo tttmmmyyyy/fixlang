@@ -329,6 +329,34 @@ impl [a : Eq] Array a : Eq {
     );
 }
 
+impl [a : Eq, a : LessThan] Array a : LessThan {
+    less_than = |lhs, rhs| (
+        loop(0, |i| (
+            if i == lhs.get_size && i == rhs.get_size { break $ false };
+            if i == lhs.get_size { break $ true };
+            if i == rhs.get_size { break $ false };
+            let l = lhs.@(i);
+            let r = rhs.@(i);
+            if l == r { continue $ i + 1 };
+            break $ l < r
+        ))
+    );
+}
+
+impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq {
+    less_than_or_eq = |lhs, rhs| (
+        loop(0, |i| (
+            if i == lhs.get_size && i == rhs.get_size { break $ true };
+            if i == lhs.get_size { break $ true };
+            if i == rhs.get_size { break $ false };
+            let l = lhs.@(i);
+            let r = rhs.@(i);
+            if l == r { continue $ i + 1 };
+            break $ l <= r
+        ))
+    );
+}
+
 impl Array : Functor {
     map = |f, arr| (
         let n = arr.get_size;

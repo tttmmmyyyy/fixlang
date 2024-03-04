@@ -353,6 +353,8 @@
       - [`truncate : I64 -> Array a -> Array a`](#truncate--i64---array-a---array-a)
       - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
       - [`impl Array : Functor`](#impl-array--functor)
+      - [`impl [a : Eq, a : LessThan] Array a : LessThan`](#impl-a--eq-a--lessthan-array-a--lessthan)
+      - [`impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq`](#impl-a--eq-a--lessthanoreq-array-a--lessthanoreq)
       - [`impl Array : Monad`](#impl-array--monad)
       - [`impl [a : ToString] Array a : ToString`](#impl-a--tostring-array-a--tostring)
     - [`type Boxed a`](#type-boxed-a)
@@ -1275,6 +1277,28 @@ Truncate an array, keeping the given number of first elements.
 #### `impl [a : Eq] Array a : Eq`
 
 #### `impl Array : Functor`
+
+#### `impl [a : Eq, a : LessThan] Array a : LessThan`
+
+Compare two arrays by lexicographical order.
+
+In other words, `[x(0), x(1), ...] < [y(0), y(1), ...]` if and only if there is n >= 0 such that 
+
+* for all i < n, x(i) == y(i), and
+* x(n) < y(n).
+
+Here, for i such that x(i) or y(i) is out of range of the array, we consider it represents the minimum value of type `a`.
+
+#### `impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq`
+
+Compare two arrays by lexicographical order.
+
+In other words, `[x(0), x(1), ...] <= [y(0), y(1), ...]` if and only if they are equal or there is n >= 0 such that 
+
+* for all i < n, x(i) == y(i), and
+* x(n) != y(n) && x(n) <= y(n).
+
+Here, for i such that x(i) or y(i) is out of range of the array, we consider it represents the minimum value of type `a`.
 
 #### `impl Array : Monad`
 
