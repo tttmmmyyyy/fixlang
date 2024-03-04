@@ -2,6 +2,10 @@ module Std;
 
 import Debug;
 
+impl () : ToString {
+    to_string = |_| "()" 
+}
+
 namespace Array {
 
     // A function like `get_sub`, but behaves as if the size of the array is the specified value, 

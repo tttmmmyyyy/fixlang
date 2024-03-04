@@ -494,6 +494,7 @@
       - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
     - [`()`](#)
       - [`impl () : Eq`](#impl---eq)
+      - [`impl () : ToString`](#impl---tostring)
   - [Functions](#functions)
     - [`abort : Lazy a`](#abort--lazy-a)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
@@ -1772,6 +1773,8 @@ Literals:
 * `() : ()` represents the unique value of type `()`.
 
 #### `impl () : Eq`
+
+#### `impl () : ToString`
 
 ## Functions
 

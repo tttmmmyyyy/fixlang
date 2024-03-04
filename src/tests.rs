@@ -5234,3 +5234,18 @@ pub fn test_option_to_string() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_unit_to_string() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", ().to_string, "()");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
