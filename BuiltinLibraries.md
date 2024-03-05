@@ -495,6 +495,8 @@
       - [`impl String : ToString`](#impl-string--tostring)
     - [Tuple{N} (for N \>= 2)](#tuplen-for-n--2)
       - [`impl [a1 : Eq, ..., aN : Eq] (a1, ..., aN) : Eq`](#impl-a1--eq--an--eq-a1--an--eq)
+      - [`impl [a1 : Eq, a1 : LessThan, ..., aN : Eq, aN : LessThan] (a1, ..., aN) : LessThan`](#impl-a1--eq-a1--lessthan--an--eq-an--lessthan-a1--an--lessthan)
+      - [`impl [a1 : Eq, a1 : LessThanOrEq, ..., aN : Eq, aN : LessThanOrEq] (a1, ..., aN) : LessThanOrEq`](#impl-a1--eq-a1--lessthanoreq--an--eq-an--lessthanoreq-a1--an--lessthanoreq)
       - [`impl [a1 : ToString, ..., aN : ToString] (a1, ..., aN) : ToString`](#impl-a1--tostring--an--tostring-a1--an--tostring)
     - [`()`](#)
       - [`impl () : Eq`](#impl---eq)
@@ -1282,23 +1284,23 @@ Truncate an array, keeping the given number of first elements.
 
 Compare two arrays by lexicographical order.
 
-In other words, `[x(0), x(1), ...] < [y(0), y(1), ...]` if and only if there is n >= 0 such that 
+More concretely, for `xs = [x(0), x(1), ...]` and `ys = [y(0), y(1), ...]`,
 
-* for all i < n, x(i) == y(i), and
-* x(n) < y(n).
+* If `xs == ys`, then `xs < ys` is `false`.
+* Otherwise, take `n` minimum such that `x(n) != y(n)`. We define `xs < ys` iff `x(n) < y(n)`.
 
-Here, for i such that x(i) or y(i) is out of range of the array, we consider it represents the minimum value of type `a`.
+Here, we are seeing `xs` and `ys` as infinite sequence of elements of type `a` by extending the original array by the minimum value of `a`.
 
 #### `impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq`
 
 Compare two arrays by lexicographical order.
 
-In other words, `[x(0), x(1), ...] <= [y(0), y(1), ...]` if and only if they are equal or there is n >= 0 such that 
+More concretely, for `xs = [x(0), x(1), ...]` and `ys = [y(0), y(1), ...]`,
 
-* for all i < n, x(i) == y(i), and
-* x(n) != y(n) && x(n) <= y(n).
+* If `xs == ys`, then `xs <= ys` is `true`.
+* Otherwise, take `n` minimum such that `x(n) != y(n)`. We define `xs <= ys` iff `x(n) <= y(n)`.
 
-Here, for i such that x(i) or y(i) is out of range of the array, we consider it represents the minimum value of type `a`.
+Here, we are seeing `xs` and `ys` as infinite sequence of elements of type `a` by extending the original array by the minimum value of `a`.
 
 #### `impl Array : Monad`
 
@@ -1792,6 +1794,24 @@ Defined as an identity function.
 ### Tuple{N} (for N >= 2) 
 
 #### `impl [a1 : Eq, ..., aN : Eq] (a1, ..., aN) : Eq`
+
+#### `impl [a1 : Eq, a1 : LessThan, ..., aN : Eq, aN : LessThan] (a1, ..., aN) : LessThan`
+
+Compare two tuples by lexicographical order.
+
+More concretely, for `xs = (x(0), x(1), ..., x(N))` and `ys = (y(0), y(1), ..., y(N))`,
+
+* If `xs == ys`, then `xs < ys` is `false`.
+* Otherwise, take minimum `n` such that `x(n) != y(n)`. We define `xs < ys` iff `x(n) < y(n)`.
+
+#### `impl [a1 : Eq, a1 : LessThanOrEq, ..., aN : Eq, aN : LessThanOrEq] (a1, ..., aN) : LessThanOrEq`
+
+Compare two tuples by lexicographical order.
+
+More concretely, for `xs = (x(0), x(1), ..., x(N))` and `ys = (y(0), y(1), ..., y(N))`,
+
+* If `xs == ys`, then `xs <= ys` is `true`.
+* Otherwise, take minimum `n` such that `x(n) != y(n)`. We define `xs <= ys` iff `x(n) <= y(n)`.
 
 #### `impl [a1 : ToString, ..., aN : ToString] (a1, ..., aN) : ToString`
 

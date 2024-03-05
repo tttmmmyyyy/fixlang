@@ -333,8 +333,8 @@ impl [a : Eq, a : LessThan] Array a : LessThan {
             if i == rhs.get_size { break $ false };
             let l = lhs.@(i);
             let r = rhs.@(i);
-            if l == r { continue $ i + 1 };
-            break $ l < r
+            if l != r { break $ l < r };
+            continue $ i + 1
         ))
     );
 }
@@ -347,8 +347,8 @@ impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq {
             if i == rhs.get_size { break $ false };
             let l = lhs.@(i);
             let r = rhs.@(i);
-            if l == r { continue $ i + 1 };
-            break $ l <= r
+            if l != r { break $ l <= r };
+            continue $ i + 1
         ))
     );
 }

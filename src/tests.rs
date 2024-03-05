@@ -5268,7 +5268,33 @@ pub fn test_unit_tuple_eq() {
         eval assert(|_|"", (0, true, "truth") != (42, true, "truth"));
         eval assert(|_|"", (42, false, "truth") != (42, true, "truth"));
         eval assert(|_|"", (42, false, "falsy") != (42, true, "truth"));
-        
+
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_tuple_less_than_and_less_than_or_eq() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", (1, 2) < (2, 1), true);
+        eval assert_eq(|_|"", (2, 1) < (1, 2), false);
+        eval assert_eq(|_|"", (1, 2) < (1, 1), false);
+        eval assert_eq(|_|"", (1, 1) < (1, 2), true);
+        eval assert_eq(|_|"", (1, 1) < (1, 1), false);
+
+        eval assert_eq(|_|"", (1, 2) <= (2, 1), true);
+        eval assert_eq(|_|"", (2, 1) <= (1, 2), false);
+        eval assert_eq(|_|"", (1, 2) <= (1, 1), false);
+        eval assert_eq(|_|"", (1, 1) <= (1, 2), true);
+        eval assert_eq(|_|"", (1, 1) <= (1, 1), true);
+
         pure()
     );
     "##;
