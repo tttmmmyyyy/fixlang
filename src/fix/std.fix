@@ -2118,9 +2118,3 @@ impl F64 : FromString {
 impl () : ToString {
     to_string = |_| "()";
 }
-
-// Eq Implementation for fundamental types
-
-impl [a : Eq, b : Eq] (a, b) : Eq {
-    eq = |(a, b), (c, d)| a == c && b == d;
-}

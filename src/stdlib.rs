@@ -352,6 +352,7 @@ fn make_tuple_traits_source(sizes: Vec<u32>) -> String {
             continue;
         }
         assert!(*size >= 2);
+        // Implement `ToString` trait.
         src += "impl [";
         src += &(0..*size)
             .into_iter()
@@ -377,6 +378,38 @@ fn make_tuple_traits_source(sizes: Vec<u32>) -> String {
             .collect::<Vec<_>>()
             .join(" + \", \" + ");
         src += " + \")\";\n";
+        src += "}\n\n";
+        // Implement `Eq` trait.
+        src += "impl [";
+        src += &(0..*size)
+            .into_iter()
+            .map(|i| format!("t{} : Eq", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += "] ";
+        src += "(";
+        src += &(0..*size)
+            .map(|i| format!("t{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += ") : Eq { \n";
+        src += "    eq = |(";
+        src += &(0..*size)
+            .map(|i| format!("x{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += "), (";
+        src += &(0..*size)
+            .map(|i| format!("y{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += ")| ";
+        src += &(0..*size)
+            .into_iter()
+            .map(|i| format!("x{} == y{}", i, i))
+            .collect::<Vec<_>>()
+            .join(" && ");
+        src += ";\n";
         src += "}\n\n";
     }
     src
