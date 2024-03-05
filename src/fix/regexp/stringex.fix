@@ -14,56 +14,12 @@ import Character;
 // ToString for various types
 //---------------------------------
 
-// Converts `()` to a string `"()"`.
-impl (): ToString {
-    to_string = |_| "()";
-}
-
-// Converts `(a, b, c)` to a string, for example `"(123, 3.14, abc)"`.
-impl [a : ToString, b : ToString, c : ToString] (a, b, c) : ToString {
-    to_string = |(l, m, r)| "(" + l.to_string + ", " + m.to_string + ", " + r.to_string + ")";
-}
-
-// Converts `(a, b, c, d)` to a string, for example `"(123, 3.14, abc, ())"`.
-impl [a : ToString, b : ToString, c : ToString, d : ToString] (a, b, c, d) : ToString {
-    to_string = |(l, m, m2, r)| "(" + l.to_string + ", " + m.to_string + ", " + m2.to_string + ", " + r.to_string + ")";
-}
-
-// Converts `Option a` to a string, for example `"none()"`, `"some(1)"` etc.
-impl [a: ToString] Option a: ToString {
-    to_string = |o| (
-        o.map_or(
-            "none()",
-            |a| "some(" + a.to_string + ")"
-        )
-    );
-}
-
-// Converts `Result e a` to a string, for example `"err(File not found)"`, `"ok(1)"` etc.
-impl [a: ToString, e: ToString] Result e a: ToString {
-    to_string = |res| (
-        if res.is_err {
-            "err(" + res.as_err.to_string + ")"
-        };
-        "ok(" + res.as_ok.to_string + ")"
-    );
-}
-
 // Converts `HashMap k v` to a string, for example `"{a:1,b:2}"` etc.
 impl [k: ToString, v: ToString] HashMap k v : ToString {
     to_string = |h| (
         "{" +
         h.to_iter.map(|(k,v)| k.to_string + ":" + v.to_string).join(",")
         + "}"
-    );
-}
-
-// Converts `Array a` to a string, for example `"[1,2,3]"` etc.
-impl [a: ToString] Array a: ToString {
-    to_string = |a| (
-        "[" +
-        a.to_iter.map(|x| x.to_string).join(",")
-        + "]"
     );
 }
 
