@@ -4,7 +4,6 @@ use rand::Rng;
 
 use super::*;
 
-// Tests should run sequentially, since libfixsanitizer.so does not work properly in multi threaded context.
 #[test]
 pub fn test0() {
     let source = r#"    
