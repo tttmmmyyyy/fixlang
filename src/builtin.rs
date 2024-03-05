@@ -453,6 +453,7 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
 }
 
 pub fn tuple_defn(size: u32) -> TypeDefn {
+    assert!(size != 1);
     let tyvars = (0..size)
         .map(|i| "t".to_string() + &i.to_string())
         .collect::<Vec<_>>();

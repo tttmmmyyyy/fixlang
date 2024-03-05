@@ -5236,7 +5236,7 @@ pub fn test_option_to_string() {
 }
 
 #[test]
-pub fn test_unit_to_string() {
+pub fn test_unit_tuple_to_string() {
     let source = r##"
     module Main;
     import Debug;
@@ -5244,6 +5244,9 @@ pub fn test_unit_to_string() {
     main : IO ();
     main = (
         eval assert_eq(|_|"", ().to_string, "()");
+        // eval assert_eq(|_|"", (42).to_string, "(42)");
+        eval assert_eq(|_|"", (42, true).to_string, "(42, true)");
+        eval assert_eq(|_|"", (42, true, "truth").to_string, "(42, true, truth)");
         pure()
     );
     "##;

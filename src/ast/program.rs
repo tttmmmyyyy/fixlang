@@ -272,7 +272,7 @@ impl Program {
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
             type_env: Default::default(),
-            used_tuple_sizes: Vec::from_iter(0..=TUPLE_SIZE_BASE),
+            used_tuple_sizes: (0..=TUPLE_SIZE_BASE).filter(|i| *i != 1).collect(),
             module_to_files: Default::default(),
         };
         fix_mod.add_visible_mod(&module_name, &module_name);
@@ -1232,12 +1232,17 @@ impl Program {
     }
 
     // Link an module.
-    pub fn link(&mut self, mut other: Program) {
-        // Morge module file paths.
+    // * extend - If true, the module defined in `other` allowed to conflict with a module already in `self`.
+    //            This is used for extending implementation of a module already linked to `self` afterwards.
+    pub fn link(&mut self, mut other: Program, extend: bool) {
+        // Merge module file paths.
         for (mod_name, file) in &other.module_to_files {
             let file = file.clone();
             if self.module_to_files.contains_key(mod_name) {
                 let another = self.module_to_files.get(mod_name).unwrap();
+                if extend {
+                    break;
+                }
                 error_exit(&format!(
                     "Module `{}` is defined in two files: \"{}\" and \"{}\".",
                     mod_name,
@@ -1249,17 +1254,18 @@ impl Program {
         }
 
         // If already linked, do nothing.
-        if self
-            .linked_mods()
-            .contains(&other.get_name_if_single_module())
+        if !extend
+            && self
+                .linked_mods()
+                .contains(&other.get_name_if_single_module())
         {
             return;
         }
 
-        // Merge imported_mod_map.
+        // Merge visible_mods.
         for (importer, importee) in &other.visible_mods {
-            if let Some(known_importee) = self.visible_mods.get(importer) {
-                assert_eq!(known_importee, importee);
+            if let Some(old_importee) = self.visible_mods.get_mut(importer) {
+                old_importee.extend(importee.iter().cloned());
             } else {
                 self.visible_mods.insert(importer.clone(), importee.clone());
             }
@@ -1308,7 +1314,7 @@ impl Program {
                     if let Some(mod_modifier) = mod_modifier {
                         mod_modifier(&mut fixmod);
                     }
-                    self.link(fixmod);
+                    self.link(fixmod, false);
                     if let Some(config_modifier) = config_modifier {
                         config_modifier(config);
                     }

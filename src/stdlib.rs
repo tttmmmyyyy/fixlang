@@ -342,3 +342,48 @@ pub fn make_std_mod() -> Program {
 pub fn array_getter_function_name() -> FullName {
     FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_GETTER_FUNCTION_NAME)
 }
+
+// Create source code to define traits such as ToString or Eq for tuples.
+fn make_tuple_traits_source(sizes: Vec<u32>) -> String {
+    let mut src = "module Main; \n\n".to_string();
+    for size in &sizes {
+        // For unit type, we define necessary traits in "std.fix".
+        if *size == 0 || *size == 1 {
+            continue;
+        }
+        assert!(*size >= 2);
+        src += "impl [";
+        src += &(0..*size)
+            .into_iter()
+            .map(|i| format!("t{} : ToString", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += "] ";
+        src += "(";
+        src += &(0..*size)
+            .map(|i| format!("t{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += ") : ToString { \n";
+        src += "    to_string = |(";
+        src += &(0..*size)
+            .map(|i| format!("x{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += ")| \"(\" + ";
+        src += &(0..*size)
+            .into_iter()
+            .map(|i| format!("x{}.to_string", i))
+            .collect::<Vec<_>>()
+            .join(" + \", \" + ");
+        src += " + \")\";\n";
+        src += "}\n\n";
+    }
+    src
+}
+
+// Create module which defines traits such as ToString or Eq for tuples.
+pub fn make_tuple_traits_mod(sizes: Vec<u32>) -> Program {
+    let src = make_tuple_traits_source(sizes);
+    parse_and_save_to_temporary_file(&src, "std_tuple_traits")
+}

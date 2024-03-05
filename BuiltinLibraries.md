@@ -493,9 +493,9 @@
       - [`impl String : Add`](#impl-string--add)
       - [`impl String : Eq`](#impl-string--eq)
       - [`impl String : ToString`](#impl-string--tostring)
-    - [Tuple{N}](#tuplen)
+    - [Tuple{N} (for N \>= 2)](#tuplen-for-n--2)
       - [`impl [a : Eq, b : Eq] (a, b) : Eq`](#impl-a--eq-b--eq-a-b--eq)
-      - [`impl [a : ToString, b : ToString] (a, b) : ToString`](#impl-a--tostring-b--tostring-a-b--tostring)
+      - [`impl [a1 : ToString, ..., aN : ToString] (a1, ..., aN) : ToString`](#impl-a1--tostring--an--tostring-a1--an--tostring)
     - [`()`](#)
       - [`impl () : Eq`](#impl---eq)
       - [`impl () : ToString`](#impl---tostring)
@@ -1789,11 +1789,11 @@ Add two strings by `String.concat`.
 #### `impl String : ToString`
 Defined as an identity function.
 
-### Tuple{N}
+### Tuple{N} (for N >= 2) 
 
 #### `impl [a : Eq, b : Eq] (a, b) : Eq`
 
-#### `impl [a : ToString, b : ToString] (a, b) : ToString`
+#### `impl [a1 : ToString, ..., aN : ToString] (a1, ..., aN) : ToString`
 
 ### `()`
 

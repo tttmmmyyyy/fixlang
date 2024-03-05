@@ -2,10 +2,6 @@ module Std;
 
 import Debug;
 
-impl () : ToString {
-    to_string = |_| "()";
-}
-
 namespace Array {
 
     // A function like `get_sub`, but behaves as if the size of the array is the specified value, 
@@ -2118,8 +2114,9 @@ impl F64 : FromString {
     );
 }
 
-impl [a : ToString, b : ToString] (a, b) : ToString {
-    to_string = |(l, r)| "(" + l.to_string + ", " + r.to_string + ")";
+// ToString implementations for fundamental types
+impl () : ToString {
+    to_string = |_| "()";
 }
 
 // Eq Implementation for fundamental types

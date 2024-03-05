@@ -30,9 +30,12 @@ fn build_module<'c>(
     // Make elements of used_tuple_sizes unique.
     used_tuple_sizes.sort();
     used_tuple_sizes.dedup();
-    for tuple_size in used_tuple_sizes {
-        fix_mod.add_tuple_defn(tuple_size);
+    for tuple_size in &used_tuple_sizes {
+        fix_mod.add_tuple_defn(*tuple_size);
     }
+
+    // Add trait implementations for tuples such as ToString or Eq.
+    fix_mod.link(make_tuple_traits_mod(used_tuple_sizes), true);
 
     // Calculate list of type constructors.
     fix_mod.calculate_type_env();
@@ -276,7 +279,7 @@ pub fn load_file(config: &mut Configuration) -> Program {
     let mut target_mod = make_std_mod();
     for file_path in &config.source_files {
         let fix_mod = parse_file_path(file_path.clone());
-        target_mod.link(fix_mod);
+        target_mod.link(fix_mod, false);
     }
     target_mod.resolve_imports(config);
     target_mod
