@@ -9,10 +9,6 @@ pythagoras_triplets = |limit| (
     pure $ (a, b, c)
 );
 
-impl (I64, I64, I64) : ToString {
-    to_string = |(a,b,c)| "(" + a.to_string + ", " + b.to_string + ", " + c.to_string + ")";
-}
-
 main : IO ();
 main = (
     let triplets = pythagoras_triplets(100);
