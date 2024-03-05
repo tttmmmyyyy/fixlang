@@ -10,6 +10,9 @@
 - Add `Std::FFI` namespace which includes functions which are used to share ownership of Fix's boxed object with C program via FFI. Move `Destructor` and associated functions into `Std::FFI`.
 - Add hexadecimal, octal, binary integer literal (`0xaBC`, `0o123` or `0b110`) (#24).
 - Add `RegExp` module (written by [pt9999](https://github.com/pt9999)).
+- `Option a`, `Result e a` and tuples now implements `Eq` when type parameters of each type is satisfying preconditions.
+- `Array a`, `Option a`, `Result e a`, `()` and tuples now implements `ToString` when type parameters of each type is satisfying preconditions.
+- `Array a` and tuples now implements `LessThan` and `LessThanOrEq` when type parameters of each type is satisfying preconditions.
 
 ### Changed
 - Overflowing integer literals now result in a compile-time error.
