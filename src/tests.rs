@@ -5419,3 +5419,30 @@ pub fn test_string_less_than_and_less_than_or_eq() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_overlapping_trait_and_function() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    trait a : Show {
+        show : a -> String;
+    }
+    
+    impl I64 : Show {
+        show = |val| "(trait) " + val.to_string;
+    }
+    
+    show : I64 -> String;
+    show = |val| "(function) " + val.to_string;
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", Main::show(42), "(function) 42");
+        eval assert_eq(|_|"", Show::show(42), "(trait) 42");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
