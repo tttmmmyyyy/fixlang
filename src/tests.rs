@@ -5386,3 +5386,36 @@ pub fn test_array_less_than_and_less_than_or_eq() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_string_less_than_and_less_than_or_eq() {
+    let source = r##"
+    module Main;
+    import Debug;
+    
+    main : IO ();
+    main = (
+        let s1 = "";
+        let s2 = "a";
+        let s3 = "ab";
+        let s4 = "ac";
+        let s5 = "b";
+
+        let ss = [s1, s2, s3, s4, s5];
+
+        let indices = do {
+            let i = *Iterator::range(0, ss.get_size);
+            let j = *Iterator::range(0, ss.get_size);
+            pure $ (i, j)
+        };
+        eval *indices.loop_iter_m((), |_, (i, j)| (
+            eval assert_eq(|_|"", ss.@(i) < ss.@(j), i < j);
+            eval assert_eq(|_|"", ss.@(i) <= ss.@(j), i <= j);
+            continue_m $ ()
+        ));
+
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
