@@ -233,14 +233,6 @@ _array_cmp_inner = |a1, a2, n1, n2, i| (
     _array_cmp_inner(a1, a2, n1, n2, i + 1)
 );
 
-
-// `less_than(str1,str2) compares two strings.
-// Returns True if and only if `str1` is less than `str2` in lexicographical order.
-impl String: LessThan {
-    less_than = |str1,str2| string_less_than $ (str1, str2);
-}
-
-
 //---------------------------------
 // Format
 //---------------------------------
