@@ -308,7 +308,7 @@ pub fn run_file(mut config: Configuration) {
     fs::remove_file(a_out_path.clone()).expect(&format!("Failed to remove \"{}\".", a_out_path));
 
     if output.status.code().is_none() {
-        panic!("Program terminated abnormally.");
+        error_exit("Program terminated abnormally.");
     }
 }
 

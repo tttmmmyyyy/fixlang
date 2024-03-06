@@ -5446,3 +5446,41 @@ pub fn test_overlapping_trait_and_function() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_orphan_rule_1() {
+    let source = r##"
+    module Main;
+
+    impl Array a : ToString {
+        to_string = "array!";
+    }
+    
+    main : IO ();
+    main = (
+        println $ [1,2,3].to_string
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_orphan_rule_2() {
+    let source = r##"
+    module Main;
+
+    type MyType = unbox struct { data : () };
+
+    impl Array MyType : ToString {
+        to_string = "array!";
+    }
+    
+    main : IO ();
+    main = (
+        println $ [1,2,3].to_string
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}

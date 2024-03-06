@@ -1,9 +1,13 @@
 use super::*;
-use std::{fs, process};
+use std::fs;
 
 pub fn error_exit(msg: &str) -> ! {
+    // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
+    // We replace it to empty.
+    std::panic::set_hook(Box::new(move |_info| {}));
+
     eprintln!("error: {}", msg);
-    process::exit(1)
+    panic!(""); // We dont use here `process::exit()` because we are using `#[should_panic]` attribute in tests.
 }
 
 pub fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
