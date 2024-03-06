@@ -13,6 +13,7 @@
 - `Option a`, `Result e a` and tuples now implements `Eq` when type parameters of each type is satisfying preconditions.
 - `Array a`, `Option a`, `Result e a`, `()` and tuples now implements `ToString` when type parameters of each type is satisfying preconditions.
 - `Array a`, `String` and tuples now implements `LessThan` and `LessThanOrEq` when type parameters of each type is satisfying preconditions.
+- Added orphan rule: a module cannot implement an external trait for an external type.
 
 ### Changed
 - Overflowing integer literals now result in a compile-time error.
