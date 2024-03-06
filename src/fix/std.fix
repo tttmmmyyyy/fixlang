@@ -1530,6 +1530,14 @@ impl String : Eq {
     eq = |lhs, rhs| (lhs.@_data == rhs.@_data);
 }
 
+impl String : LessThan {
+    less_than = |lhs, rhs| lhs.@_data < rhs.@_data;
+}
+
+impl String : LessThanOrEq {
+    less_than_or_eq = |lhs, rhs| lhs.@_data <= rhs.@_data;
+}
+
 impl String : ToString {
     to_string = |s| s;
 }

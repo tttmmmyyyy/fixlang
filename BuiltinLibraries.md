@@ -492,6 +492,8 @@
       - [`strip_spaces : String -> String`](#strip_spaces--string---string)
       - [`impl String : Add`](#impl-string--add)
       - [`impl String : Eq`](#impl-string--eq)
+      - [`impl String : LessThan`](#impl-string--lessthan)
+      - [`impl String : LessThanOrEq`](#impl-string--lessthanoreq)
       - [`impl String : ToString`](#impl-string--tostring)
     - [Tuple{N} (for N \>= 2)](#tuplen-for-n--2)
       - [`impl [a1 : Eq, ..., aN : Eq] (a1, ..., aN) : Eq`](#impl-a1--eq--an--eq-a1--an--eq)
@@ -1787,6 +1789,12 @@ Strip leading and trailing whitespace characters.
 Add two strings by `String.concat`.
 
 #### `impl String : Eq`
+
+#### `impl String : LessThan`
+Compare two strings lexicographically as a byte array.
+
+#### `impl String : LessThanOrEq`
+Compare two strings lexicographically as a byte array.
 
 #### `impl String : ToString`
 Defined as an identity function.
