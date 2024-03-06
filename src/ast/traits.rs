@@ -537,7 +537,7 @@ impl TraitEnv {
                             ty.to_string_normalize(),
                             def_mod.to_string(),
                         ),
-                        &inst.source,
+                        &inst.source.as_ref().map(|s| s.to_single_character()),
                     );
                 }
             }
