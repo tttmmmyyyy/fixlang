@@ -11,19 +11,6 @@ import HashMap;
 import Character;
 
 //---------------------------------
-// ToString for various types
-//---------------------------------
-
-// Converts `HashMap k v` to a string, for example `"{a:1,b:2}"` etc.
-impl [k: ToString, v: ToString] HashMap k v : ToString {
-    to_string = |h| (
-        "{" +
-        h.to_iter.map(|(k,v)| k.to_string + ":" + v.to_string).join(",")
-        + "}"
-    );
-}
-
-//---------------------------------
 // String utility functions
 //---------------------------------
 
