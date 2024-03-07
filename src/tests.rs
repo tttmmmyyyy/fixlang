@@ -5484,3 +5484,69 @@ pub fn test_orphan_rule_2() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_orphan_rule_3() {
+    let source = r##"
+    module Main;
+
+    type MyType = unbox struct { data : () };
+
+    impl MyType -> MyType : ToString {
+        to_string = "mytype!";
+    }
+    
+    main : IO ();
+    main = (
+        println $ [1,2,3].to_string
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_implement_trait_on_arrow_1() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    trait a : MyToString {
+        to_string : a -> String;
+    }
+
+    impl [b : ToString] I64 -> b : MyToString {
+        to_string = |f| "f(0) = " + f(0).ToString::to_string + ", f(1) = " + f(1).ToString::to_string;
+    }
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"fail", (|x| x + 1).to_string, "f(0) = 1, f(1) = 2");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_implement_trait_on_arrow_2() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    trait a : MyToString {
+        to_string : a -> String;
+    }
+
+    impl a -> b : MyToString {
+        to_string = |f| "arrow";
+    }
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"fail", (|x| x + 1).to_string, "arrow");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}

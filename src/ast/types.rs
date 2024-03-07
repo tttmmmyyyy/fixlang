@@ -572,6 +572,16 @@ impl TypeNode {
         }
     }
 
+    // Is this type head normal form? i.e., begins with type variable.
+    pub fn is_funty(&self) -> bool {
+        match &self.ty {
+            Type::TyVar(_) => false,
+            Type::TyCon(_) => false,
+            Type::TyApp(_, _) => false,
+            Type::FunTy(_, _) => true,
+        }
+    }
+
     // Get top-level type constructor of a type.
     pub fn toplevel_tycon(&self) -> Option<Rc<TyCon>> {
         match &self.ty {

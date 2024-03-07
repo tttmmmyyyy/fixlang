@@ -525,17 +525,21 @@ impl TraitEnv {
                 }
 
                 // Check Orphan rules.
-                let def_mod = &inst.define_module;
+                let instance_def_mod = &inst.define_module;
+                let trait_def_id = trait_id.name.module();
                 let ty = &inst.qual_pred.predicate.ty;
-                if trait_id.name.module() != *def_mod
-                    && ty.toplevel_tycon().unwrap().name.module() != *def_mod
-                {
+                let type_def_id = if ty.is_funty() {
+                    STD_NAME.to_string()
+                } else {
+                    ty.toplevel_tycon().unwrap().name.module()
+                };
+                if trait_def_id != *instance_def_mod && type_def_id != *instance_def_mod {
                     error_exit_with_src(
                         &format!(
                             "Implementing trait `{}` for type `{}` in module `{}` is not allowed. In general you cannot implement an external trait for an external type.",
                             trait_id.to_string(),
                             ty.to_string_normalize(),
-                            def_mod.to_string(),
+                            instance_def_mod.to_string(),
                         ),
                         &inst.source.as_ref().map(|s| s.to_single_character()),
                     );
