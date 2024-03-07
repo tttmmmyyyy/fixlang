@@ -5550,3 +5550,119 @@ pub fn test_implement_trait_on_arrow_2() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_overlapping_instances_1() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    trait a : MyToString {
+        to_string : a -> String;
+    }
+
+    impl Array a : MyToString {
+        to_string = |f| "array";
+    }
+
+    impl [a : ToString] Array a : MyToString {
+        to_string = |f| "array";
+    }
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"fail", [1,2,3].to_string, "array");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_overlapping_instances_2() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    trait a : MyToString {
+        to_string : a -> String;
+    }
+
+    impl Array a : MyToString {
+        to_string = |f| "array";
+    }
+
+    impl Array I64 : MyToString {
+        to_string = |f| "array";
+    }
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"fail", [1,2,3].to_string, "array");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_overlapping_instances_3() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    trait a : MyToString {
+        to_string : a -> String;
+    }
+
+    impl a -> b : MyToString {
+        to_string = |f| "arrow";
+    }
+
+    impl [b : ToString] I64 -> b : MyToString {
+        to_string = |f| "f(0) = " + f(0).ToString::to_string + ", f(1) = " + f(1).ToString::to_string;
+    }
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"fail", [1,2,3].to_string, "array");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_overlapping_instances_4() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    trait a : MyToString {
+        to_string : a -> String;
+    }
+
+    impl [e : MyToString] Result e a : MyToString {
+        to_string = |f| "result";
+    }
+
+    impl [a : MyToString] Result e a : MyToString {
+        to_string = |f| "result";
+    }
+
+    impl I64 : MyToString {
+        to_string = |_| "I64";
+    }
+    
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"fail", Result::ok(1), "result");
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
