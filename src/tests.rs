@@ -5484,3 +5484,18 @@ pub fn test_orphan_rule_2() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_eval_non_unit() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        eval 1;
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
