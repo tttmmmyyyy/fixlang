@@ -2202,8 +2202,8 @@ main = (
             }
         ))
     );
-    eval *AsyncIOTask::make(print_ten(0));
-    eval *AsyncIOTask::make(print_ten(1));
+    eval (*AsyncIOTask::make(print_ten(0))).get;
+    eval (*AsyncIOTask::make(print_ten(1))).get;
     pure()
 );
 ```

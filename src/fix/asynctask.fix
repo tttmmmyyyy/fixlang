@@ -121,8 +121,8 @@ namespace AsyncIOTask {
     //             }
     //         ))
     //     );
-    //     eval *AsyncIOTask::make(print_ten(0)).forget;
-    //     eval *AsyncIOTask::make(print_ten(1)).forget;
+    //     eval (*AsyncIOTask::make(print_ten(0))).get;
+    //     eval (*AsyncIOTask::make(print_ten(1))).get;
     //     pure()
     // );
     // ```
