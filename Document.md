@@ -50,6 +50,7 @@
       - [Result-like monads](#result-like-monads)
       - [List-like monads](#list-like-monads)
     - [`do` block and monadic bind operator `*`](#do-block-and-monadic-bind-operator-)
+    - [Chaining IO actions by `eval` and `forget`](#chaining-io-actions-by-eval-and-forget)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
     - [Tuples](#tuples)
@@ -881,6 +882,7 @@ On the other hand, Fix's `let`-binding doesn't allow to make recursive definitio
 ## `eval` syntax
 
 An expression `eval {expression_0}; {expression_1}` evaluates both of `{expression_0}` and `{expression_1}`, and returns value of `{expression_1}`.
+The type of `{expression_0}` has to be `()`.
 
 Since Fix is functional, only evaluating an expression and ignoring the result has no effect in most cases. 
 Typical use-cases of `eval` are to call functions which return `()` to get side-effects.
@@ -898,7 +900,7 @@ import Debug;
 main : IO ();
 main = (
     eval assert(|_|"1 is not 2!", 1 == 2);
-    eval "Contradiction: ".borrow_c_str(|ptr| CALL_C[I32 printf(Ptr, ...), ptr]);
+    eval "Contradiction: ".borrow_c_str(|ptr| let _ = CALL_C[I32 printf(Ptr, ...), ptr]; ());
     eval *println("1 is equal to 2!");
     pure()
 );
@@ -906,7 +908,7 @@ main = (
 [Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/?src2=bW9kdWxlIE1haW47DQppbXBvcnQgRGVidWc7DQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgZXZhbCBhc3NlcnQofF98IjEgaXMgbm90IDIhIiwgMSA9PSAyKTsNCiAgICBldmFsICJDb250cmFkaWN0aW9uOiAiLmJvcnJvd19jX3N0cih8cHRyfCBDQUxMX0NbSTMyIHByaW50ZihQdHIsIC4uLiksIHB0cl0pOw0KICAgIGV2YWwgKnByaW50bG4oIjEgaXMgZXF1YWwgdG8gMiEiKTsNCiAgICBwdXJlKCkNCik7)
 
 For detail of `*` operator in front of `print` and `println`, see [Monads](#monads). 
-For CALL_C, see [Calling C functions](#calling-c-functions).
+For CALL_C, see [Calling C functions from Fix](#calling-c-functions-from-fix).
 
 ## Type annotation
 
@@ -1206,6 +1208,92 @@ add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
 
 which won't be compiled, because the inner `bind` requires a function that returns `Option I64` but the function `|y| (pure $ x + y).as_some` has type `I64 -> I64`.
 
+### Chaining IO actions by `eval` and `forget`
+
+The `println : String -> IO ()` function takes a string and returns an IO action which prints the string to the standard output.
+If you want to perform `println` multiple times, you can write as follows using operator `*`.
+
+```
+module Main;
+
+main : IO ();
+main = (
+    let _ = *println("The sum of 1 + 2 is: ");
+    let _ = *println((1 + 2).to_string);
+    pure()
+);
+```
+
+Here, `pure() : IO ()` is an IO action which does nothing and just returns `()`. 
+Since we don't need the result of the IO action `print(...)`, we get the result by a variable named `_` and forget about it.
+
+[The `eval` syntax](#eval-syntax) is a shorter way to write `let _ = `. Using this syntax, the following code can be rewritten as follows.
+
+```
+module Main;
+
+main : IO ();
+main = (
+    eval *println("The sum of 1 + 2 is: ");
+    eval *println((1 + 2).to_string);
+    pure()
+);
+```
+
+Actually, `eval` only accepts an expression of type `()`. It is a syntax sugar of `let _ : () = `. 
+This prevents you writing wrongly as 
+
+```
+module Main;
+
+main : IO ();
+main = (
+    eval *println("The sum of 1 + 2 is: ");
+    eval println((1 + 2).to_string); // Type error!
+    pure()
+);
+```
+
+because `println((1 + 2).to_string) : IO ()` does not match to the type `()`.
+
+Assume that you have `read : IO String` which reads strings from standard input, and write:
+
+```
+module Main;
+
+read : IO String;
+read = read_content(stdin).map(as_ok);
+
+main : IO ();
+main = (
+    eval *read; // Type error!
+    eval *println("You can type!");
+    pure()
+);
+```
+
+Fix failes to compile this, because the type of `*read` is not `()`, but `String`. 
+In this case, the function `Std::Functor::forget : [f : Functor] f a -> f ()` will be useful. 
+When used with `IO` monad, this function converts an `IO a` to `IO ()` by forgetting the result value.
+Using `forget`, the above can be rewritten as 
+
+```
+module Main;
+
+read : IO String;
+read = read_content(stdin).map(as_ok);
+
+main : IO ();
+main = (
+    eval *read.forget; // `forget : IO String -> IO ()`
+    eval *println("You can type!");
+    pure()
+);
+```
+
+which can be compiled successfully. 
+It is even better because it expresses we throw away the result of `read` intentionally.
+
 ## Boxed and unboxed types
 
 Types in Fix are divided into boxed types and unboxed types. Boxed types and unboxed types are similar to things called as "reference types" and "value types" in other languages, respectively.
@@ -1267,7 +1355,8 @@ Example:
 main : IO ();
 main = (
     eval "Hello C function!\n".borrow_c_str(|ptr|
-        CALL_C[I32 printf(Ptr, ...), ptr]
+        let _ = CALL_C[I32 printf(Ptr, ...), ptr]; // Explicitly ignore the result of `printf`.
+        ()
     );
     pure()
 );

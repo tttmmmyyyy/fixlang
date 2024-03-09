@@ -7,8 +7,8 @@ _debug_print_to_stream : IOHandle -> String -> ();
 _debug_print_to_stream = |hdl, msg| (
     msg.borrow_c_str(|str| (
         let hdl = hdl._file_ptr;
-        eval CALL_C[I32 fputs(Ptr, Ptr), str, hdl];
-        eval CALL_C[I32 fflush(Ptr), hdl];
+        let _ = CALL_C[I32 fputs(Ptr, Ptr), str, hdl];
+        let _ = CALL_C[I32 fflush(Ptr), hdl];
         ()
     ))
 );

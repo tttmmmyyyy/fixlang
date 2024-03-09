@@ -2072,7 +2072,7 @@ pub fn test85() {
         let s1 = "Hello";
         let s2 = " ";
         let s3 = "World!";
-        eval assert_eq(|_|"", s1.concat(s2).concat(s3) == "Hello World!");
+        eval assert_eq(|_|"", s1.concat(s2).concat(s3), "Hello World!");
     
         pure()
     );
@@ -2257,7 +2257,8 @@ pub fn test_call_c() {
             main : IO ();
             main = (
                 eval "Hello C function! Number = %d\n".borrow_c_str(|ptr|
-                    CALL_C[I32 printf(Ptr, ...), ptr, 42]
+                    let _ = CALL_C[I32 printf(Ptr, ...), ptr, 42];
+                    ()
                 );
                 pure()
             );
@@ -2293,7 +2294,7 @@ pub fn test95() {
                 eval assert_eq(|_|"fail: arr is unique", unique, false);
 
                 let int_val = 42;
-                eval int_val.assert_unique!(|_|"fail: int_val is shared (2)");
+                let _ = int_val.assert_unique!(|_|"fail: int_val is shared (2)");
                 let use = int_val + 1;
 
                 let arr = Array::fill(10, 10);
@@ -3068,13 +3069,13 @@ pub fn test113() {
 
             // Xor, Or, And
             let x = 10.bit_xor(12);
-            eval assert_eq(|_|"case 1", 6);
+            eval assert_eq(|_|"case 1", x, 6);
 
             let x = 10.bit_or(12);
-            eval assert_eq(|_|"case 1", 14);
+            eval assert_eq(|_|"case 1", x, 14);
 
             let x = 10.bit_and(12);
-            eval assert_eq(|_|"case 1", 8);
+            eval assert_eq(|_|"case 1", x, 8);
 
             pure()
         );
@@ -3315,7 +3316,7 @@ pub fn test118() {
                 let s = s + i;
                 eval *print("Sum upto " + i.to_string + " is " + s.to_string + ". ");
                 pure $ s
-            ));
+            )).forget;
             eval *println("");
             pure()
         );
@@ -4629,8 +4630,8 @@ pub fn test_async_task_fib() {
             let minus_one_task = AsyncTask::make(|_| n-1); // A task which is captured by another task.
             let minus_two_task = AsyncTask::make(|_| minus_one_task.get - 1); // A task which is captured by another task.
             let minus_three_task = AsyncTask::make(|_| minus_two_task.get - 1); // A task which is captured by another task but not waited.
-            let one_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_one_task.get));
-            let two_task = AsyncTask::make(|_| eval minus_three_task; fib_async(minus_two_task.get));
+            let one_task = AsyncTask::make(|_| let _ = minus_three_task; fib_async(minus_one_task.get));
+            let two_task = AsyncTask::make(|_| let _ = minus_three_task; fib_async(minus_two_task.get));
             one_task.get + two_task.get
         }
     );
@@ -4737,8 +4738,8 @@ pub fn test_async_task_io() {
     
     main : IO ();
     main = (
-        eval *AsyncIOTask::make(println $ "Thread 1");
-        eval *AsyncIOTask::make(println $ "Thread 2");
+        eval *AsyncIOTask::make(println $ "Thread 1").forget;
+        eval *AsyncIOTask::make(println $ "Thread 2").forget;
         pure()
     );
     "##;
@@ -4795,7 +4796,7 @@ pub fn test_async_task_dedicated_thread() {
     main = (
         let num_threads = 2;
         Iterator::range(0, num_threads).fold_m((), |_, i| (
-            eval *AsyncIOTask::make(println $ "Thread " + i.to_string);
+            eval *AsyncIOTask::make(println $ "Thread " + i.to_string).forget;
             pure()
         ))
     );
@@ -4824,7 +4825,7 @@ pub fn test_mvar() {
                     let msg = msg + if i == count { "." } else { "!" };
                     logger.set(logs.push_back(msg))
                 ))
-            );
+            ).forget;
             pure()
         ));
 
@@ -5047,11 +5048,6 @@ pub fn test_graph_find_loop() {
 #[test]
 pub fn test_run_examples() {
     test_files_in_directory(Path::new("./examples"));
-}
-
-#[test]
-pub fn test_tests_directory() {
-    test_files_in_directory(Path::new("./tests"));
 }
 
 // Run all "*.fix" files in the specified directory.

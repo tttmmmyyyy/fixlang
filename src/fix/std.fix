@@ -155,7 +155,7 @@ namespace Array {
     borrow_ptr : (Ptr -> b) -> Array a -> b;
     borrow_ptr = |f, arr| (
         let res = f(arr._get_ptr);
-        eval arr; // Use array after calling f
+        let _ = arr; // Use array after calling f
         res
     );
 
@@ -429,7 +429,7 @@ namespace FFI::Destructor {
     borrow : (a -> b) -> Destructor a -> b;
     borrow = |worker, dtor| (
         let res = worker(dtor.@value);
-        eval dtor; // Prolong lifetime of `dtor`.
+        let _ = dtor; // Prolong lifetime of `dtor`.
         res
     );
 
@@ -491,7 +491,8 @@ namespace IO {
     eprint = |str| (
         IO { _data : |_| (
             eval str.borrow_c_str(|c_ptr|
-                CALL_C[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr]
+                let _ = CALL_C[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr];
+                ()
             );
             ()
         )}
@@ -637,7 +638,8 @@ namespace IO {
     print = |str| (
         IO { _data : |_| (
             eval str.borrow_c_str(|c_ptr|
-                CALL_C[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr]
+                let _ = CALL_C[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr];
+                ()
             );
             ()
         )}
@@ -1288,7 +1290,7 @@ namespace PunchedArray {
             loop((arr, 0), |(arr, i)| (
                 if i == size { break $ () };
                 if i == idx { continue $ (arr, i+1) };
-                eval arr._unsafe_get(i); // Release the element.
+                let _ = arr._unsafe_get(i); // Release the element.
                 continue $ (arr, i+1)
             ))
         );
@@ -1366,7 +1368,7 @@ namespace String {
         let len = CALL_C[I64 strlen(Ptr), ptr];
         let buf_len = len + 1;
         let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
-        eval CALL_C[Ptr memcpy(Ptr, Ptr, I64), buf._get_ptr, ptr, buf_len];
+        let _ = CALL_C[Ptr memcpy(Ptr, Ptr, I64), buf._get_ptr, ptr, buf_len];
         String { _data : buf }
     );
 
@@ -1403,12 +1405,12 @@ namespace String {
     find = |tok, start, str| (
         let start = min(start, str.get_size);
         let pos = CALL_C[Ptr strstr(Ptr, Ptr), str._get_c_str.add_offset(start), tok._get_c_str];
-        eval tok; // Prolong lifetime.
+        let _ = tok; // Prolong lifetime.
         if pos == nullptr {
             Option::none()
         };
         let pos = pos.subtract_ptr(str._get_c_str);
-        eval str; // Prolong lifetimes.
+        let _ = str; // Prolong lifetimes.
         Option::some(pos)
     );
 
@@ -1673,6 +1675,11 @@ trait a : FromString {
 
 trait [f : *->*] f : Functor {
     map : (a -> b) -> f a -> f b;
+}
+
+namespace Functor {
+    forget : [f : Functor] f a -> f ();
+    forget = map(|_|());
 }
 
 namespace LessThan {

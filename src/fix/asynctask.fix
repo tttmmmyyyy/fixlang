@@ -22,7 +22,7 @@ get : Task a -> a;
 get = |task| (
     let task_handle = task.@dtor.@value;
     let task_result_ptr = CALL_C[Ptr fixruntime_thread_get_task_result(Ptr), task_handle];
-    eval task; // Do not call destructor before ending working with `task_handle`.
+    let _ = task; // Do not call destructor before ending working with `task_handle`.
     unsafe_get_boxed_value_from_retained_ptr(task_result_ptr).Boxed::@value.as_some
 );
 
@@ -121,8 +121,8 @@ namespace AsyncIOTask {
     //             }
     //         ))
     //     );
-    //     eval *AsyncIOTask::make(print_ten(0));
-    //     eval *AsyncIOTask::make(print_ten(1));
+    //     eval *AsyncIOTask::make(print_ten(0)).forget;
+    //     eval *AsyncIOTask::make(print_ten(1)).forget;
     //     pure()
     // );
     // ```
@@ -180,7 +180,7 @@ namespace Var {
         eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
         let ptr = CALL_C[Ptr fixruntime_thread_var_get(Ptr), handle];
         eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
-        eval dtor; // Do not call destructor before ending working with handle.
+        let _ = dtor; // Do not call destructor before ending working with handle.
         ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value
     ) };
 
@@ -192,7 +192,7 @@ namespace Var {
         let ptr = CALL_C[Ptr fixruntime_thread_var_get(Ptr), handle];
         let res = act(ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value)._unsafe_perform; 
         eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
-        eval dtor; // Do not call destructor before ending working with handle.
+        let _ = dtor; // Do not call destructor before ending working with handle.
         res
     ) };
 
@@ -225,7 +225,7 @@ namespace Var {
         eval CALL_C[() fixruntime_thread_var_set(Ptr, Ptr), handle, ptr];
         eval CALL_C[() fixruntime_thread_var_signalall(Ptr), handle];
         eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
-        eval dtor; // Do not call destructor before ending working with handle.
+        let _ = dtor; // Do not call destructor before ending working with handle.
         ()
     ) };
 
@@ -253,7 +253,7 @@ namespace Var {
         ));
         let res = act(ok_val)._unsafe_perform;
         eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
-        eval dtor; // Do not call destructor before ending working with handle.
+        let _ = dtor; // Do not call destructor before ending working with handle.
         res
     ) };
 }
