@@ -157,7 +157,7 @@ namespace Var {
     //                 let msg = msg + if i == count { "." } else { "!" };
     //                 logger.set(logs.push_back(msg))
     //             ))
-    //         );
+    //         ).forget;
     //         pure()
     //     ));
     //
