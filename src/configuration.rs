@@ -163,7 +163,7 @@ impl Configuration {
         }
     }
 
-    pub fn get_uncurry_optimization(&self) -> bool {
+    pub fn perform_uncurry_optimization(&self) -> bool {
         match self.fix_opt_level {
             FixOptimizationLevel::None => false,
             FixOptimizationLevel::Minimum => false,
@@ -171,7 +171,7 @@ impl Configuration {
         }
     }
 
-    pub fn get_borrowing_optimization(&self) -> bool {
+    pub fn perform_borrowing_optimization(&self) -> bool {
         match self.fix_opt_level {
             FixOptimizationLevel::None => false,
             FixOptimizationLevel::Minimum => false,

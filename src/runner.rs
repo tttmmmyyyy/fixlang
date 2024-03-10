@@ -79,12 +79,12 @@ fn build_module<'c>(
     let main_expr = fix_mod.instantiate_main_function(&typechecker);
 
     // Perform uncurrying optimization.
-    if config.get_uncurry_optimization() {
+    if config.perform_uncurry_optimization() {
         uncurry_optimization(&mut fix_mod);
     }
 
     // Perform borrowing optimization.
-    if config.get_borrowing_optimization() {
+    if config.perform_borrowing_optimization() {
         borrowing_optimization(&mut fix_mod);
     }
 
