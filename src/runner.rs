@@ -105,6 +105,16 @@ fn build_module<'c>(
     // Build runtime functions.
     build_runtime(&mut gc);
 
+    // Determine cache strategy.
+    if config.fix_opt_level != FixOptimizationLevel::Default {
+        let mut symbol_names = fix_mod
+            .instantiated_global_symbols
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        symbol_names.sort();
+    }
+
     // Generate codes.
     fix_mod.generate_code(&mut gc);
 

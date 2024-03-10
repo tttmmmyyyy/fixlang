@@ -23,6 +23,7 @@ mod graph;
 mod llvm_passes;
 mod misc;
 mod object;
+mod object_cache;
 mod parser;
 mod runner;
 mod runtime;

@@ -45,6 +45,16 @@ pub enum FixOptimizationLevel {
     Default, // For fast execution.
 }
 
+impl std::fmt::Display for FixOptimizationLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FixOptimizationLevel::None => write!(f, "None"),
+            FixOptimizationLevel::Minimum => write!(f, "Minimum"),
+            FixOptimizationLevel::Default => write!(f, "Default"),
+        }
+    }
+}
+
 impl Default for Configuration {
     fn default() -> Self {
         Configuration {
@@ -183,5 +193,16 @@ impl Configuration {
         if self.async_task && self.sanitize_memory {
             self.runtime_c_macro.push("TERMINATE_TASKS".to_string());
         }
+    }
+
+    // Get hash value of the configurations that affect the object file generation.
+    pub fn object_generation_hash(&self) -> String {
+        let mut data = String::new();
+        data.push_str(&self.sanitize_memory.to_string());
+        data.push_str(&self.fix_opt_level.to_string());
+        data.push_str(&self.debug_info.to_string());
+        data.push_str(&self.threaded.to_string());
+        data.push_str(&self.async_task.to_string());
+        format!("{:x}", md5::compute(data))
     }
 }
