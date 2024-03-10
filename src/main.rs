@@ -26,6 +26,7 @@ mod object;
 mod parser;
 mod runner;
 mod runtime;
+mod segcache;
 mod sourcefile;
 mod stdlib;
 mod stopwatch;
