@@ -1117,7 +1117,7 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Rc<ExprNode> {
     let mut pairs = pair.into_inner();
     let bound = parse_expr(pairs.next().unwrap(), ctx);
     let val = parse_expr_with_new_do(pairs.next().unwrap(), ctx);
-    let pat = PatternNode::make_var(var_local(EVAL_VAR_NAME), None);
+    let pat = PatternNode::make_var(var_local(EVAL_VAR_NAME), Some(make_unit_ty()));
     expr_let(pat, bound, val, Some(span))
 }
 

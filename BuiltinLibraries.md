@@ -527,9 +527,10 @@
     - [FromString](#fromstring)
       - [`from_string : [a : FromString] String -> Result ErrMsg a`](#from_string--a--fromstring-string---result-errmsg-a)
     - [Functor (\* -\> \*)](#functor----)
-      - [`map : [f : Functor] (a -> b) -> f a -> f b`](#map--f--functor-a---b---f-a---f-b)
+      - [(required) `map : [f : Functor] (a -> b) -> f a -> f b`](#required-map--f--functor-a---b---f-a---f-b)
+      - [`forget : [f : Functor] f a -> f ()`](#forget--f--functor-f-a---f-)
     - [LessThan](#lessthan)
-      - [`less_than : [a : LessThan] a -> a -> a`](#less_than--a--lessthan-a---a---a)
+      - [(required) `less_than : [a : LessThan] a -> a -> a`](#required-less_than--a--lessthan-a---a---a)
       - [`max : [a : LessThan] a -> a -> a`](#max--a--lessthan-a---a---a)
       - [`min : [a : LessThan] a -> a -> a`](#min--a--lessthan-a---a---a)
     - [LessThanOrEq](#lessthanoreq)
@@ -2079,11 +2080,13 @@ NOTE: For primitive types of Fix, `FromString` is implemented using `strto**` fu
 
 ### Functor (* -> *)
 
-#### `map : [f : Functor] (a -> b) -> f a -> f b`
+#### (required) `map : [f : Functor] (a -> b) -> f a -> f b`
+
+#### `forget : [f : Functor] f a -> f ()`
 
 ### LessThan
 
-#### `less_than : [a : LessThan] a -> a -> a`
+#### (required) `less_than : [a : LessThan] a -> a -> a`
 
 #### `max : [a : LessThan] a -> a -> a`
 
@@ -2199,8 +2202,8 @@ main = (
             }
         ))
     );
-    eval *AsyncIOTask::make(print_ten(0));
-    eval *AsyncIOTask::make(print_ten(1));
+    eval (*AsyncIOTask::make(print_ten(0))).get;
+    eval (*AsyncIOTask::make(print_ten(1))).get;
     pure()
 );
 ```
@@ -2229,7 +2232,7 @@ main = (
                 let msg = msg + if i == count { "." } else { "!" };
                 logger.set(logs.push_back(msg))
             ))
-        );
+        ).forget;
         pure()
     ));
 
