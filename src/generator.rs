@@ -1249,7 +1249,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Prepare for borrowing optimization.
-        let borrowing_optimization_data = if self.config.get_borrowing_optimization() {
+        let borrowing_optimization_data = if self.config.perform_borrowing_optimization() {
             borrowing_optimization_evaluating_application(self, fun.clone(), &args)
         } else {
             None
