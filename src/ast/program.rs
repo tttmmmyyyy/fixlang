@@ -245,7 +245,7 @@ pub struct Program {
 
     pub type_defns: Vec<TypeDefn>,
     pub global_values: HashMap<FullName, GlobalValue>,
-    pub instantiated_global_symbols: HashMap<FullName, InstantiatedSymbol>,
+    pub instantiated_symbols: HashMap<FullName, InstantiatedSymbol>,
     pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
     pub trait_env: TraitEnv,
     pub type_env: TypeEnv,
@@ -268,7 +268,7 @@ impl Program {
             visible_mods: Default::default(),
             type_defns: Default::default(),
             global_values: Default::default(),
-            instantiated_global_symbols: Default::default(),
+            instantiated_symbols: Default::default(),
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
             type_env: Default::default(),
@@ -492,7 +492,7 @@ impl Program {
 
         // First, declare accessor function (a function that returns a pointer to the global value) for a global value, or function for global function value.
         let global_objs = self
-            .instantiated_global_symbols
+            .instantiated_symbols
             .iter()
             .map(|(name, sym)| {
                 gc.typeresolver = sym.type_resolver.clone();
@@ -892,7 +892,7 @@ impl Program {
             let mut sym = sym.clone();
             self.instantiate_symbol(&mut sym, tc);
             self.deferred_instantiation.remove(&name);
-            self.instantiated_global_symbols.insert(name, sym);
+            self.instantiated_symbols.insert(name, sym);
         }
     }
 
@@ -990,7 +990,7 @@ impl Program {
     // Require instantiate generic symbol such that it has a specified type.
     pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
         let inst_name = self.determine_instantiated_symbol_name(name, ty);
-        if !self.instantiated_global_symbols.contains_key(&inst_name)
+        if !self.instantiated_symbols.contains_key(&inst_name)
             && !self.deferred_instantiation.contains_key(&inst_name)
         {
             self.deferred_instantiation.insert(

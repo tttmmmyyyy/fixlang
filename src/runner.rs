@@ -108,7 +108,7 @@ fn build_module<'c>(
     // Determine cache strategy.
     if config.fix_opt_level != FixOptimizationLevel::Default {
         let mut symbol_names = fix_mod
-            .instantiated_global_symbols
+            .instantiated_symbols
             .keys()
             .cloned()
             .collect::<Vec<_>>();

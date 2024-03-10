@@ -14,15 +14,11 @@ pub fn borrowing_optimization(program: &mut Program) {
     define_borrowing_functions(program);
 
     // Set `released_params_indices` field for the function of each application expression.
-    let instantiated_global_symbols = program.instantiated_global_symbols.clone();
+    let instantiated_global_symbols = program.instantiated_symbols.clone();
     for (name, sym) in instantiated_global_symbols {
         let expr = sym.expr.as_ref().unwrap();
         let expr = set_released_param_indices(expr, program);
-        program
-            .instantiated_global_symbols
-            .get_mut(&name)
-            .unwrap()
-            .expr = Some(expr);
+        program.instantiated_symbols.get_mut(&name).unwrap().expr = Some(expr);
     }
 
     // NOTE: Replacement of call expressions is handled in `borrowing_optimization_evaluating_application` which is called from `Generator::eval_app`.
@@ -63,7 +59,7 @@ fn create_borrowing_function(
 // Adds a borrowing version of functions in a program.
 pub fn define_borrowing_functions(program: &mut Program) {
     let mut new_functions: HashMap<FullName, InstantiatedSymbol> = Default::default();
-    for (sym_name, sym) in &program.instantiated_global_symbols {
+    for (sym_name, sym) in &program.instantiated_symbols {
         let expr = sym.expr.as_ref().unwrap();
         if !expr.is_lam() {
             continue;
@@ -108,7 +104,7 @@ pub fn define_borrowing_functions(program: &mut Program) {
             );
         }
     }
-    program.instantiated_global_symbols.extend(new_functions);
+    program.instantiated_symbols.extend(new_functions);
 }
 
 pub fn borrowing_optimization_evaluating_application(
@@ -179,7 +175,7 @@ fn set_released_param_indices(expr: &Rc<ExprNode>, program: &Program) -> Rc<Expr
                 let fun_name = fun.get_var().name.clone();
                 if fun_name.is_global() {
                     let lam_expr = program
-                        .instantiated_global_symbols
+                        .instantiated_symbols
                         .get(&fun_name)
                         .unwrap()
                         .expr

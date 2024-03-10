@@ -8,12 +8,12 @@ use super::*;
 
 pub fn uncurry_optimization(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
-    let syms = std::mem::replace(&mut fix_mod.instantiated_global_symbols, Default::default());
+    let syms = std::mem::replace(&mut fix_mod.instantiated_symbols, Default::default());
     for (sym_name, sym) in syms {
         let typeresolver = &sym.type_resolver;
 
         fix_mod
-            .instantiated_global_symbols
+            .instantiated_symbols
             .insert(sym_name.clone(), sym.clone());
 
         // Add function pointer version as long as possible.
@@ -31,7 +31,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
             let ty = expr.ty.clone().unwrap();
             let mut name = sym_name.clone();
             convert_to_funptr_name(name.name_as_mut(), arg_cnt as usize);
-            fix_mod.instantiated_global_symbols.insert(
+            fix_mod.instantiated_symbols.insert(
                 name.clone(),
                 InstantiatedSymbol {
                     template_name: FullName::local(&format!(
@@ -49,10 +49,10 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
 
     // Then replace expressions in the global symbols.
     let mut symbol_names: HashSet<FullName> = Default::default();
-    for (name, _sym) in &fix_mod.instantiated_global_symbols {
+    for (name, _sym) in &fix_mod.instantiated_symbols {
         symbol_names.insert(name.clone());
     }
-    for (_name, sym) in &mut fix_mod.instantiated_global_symbols {
+    for (_name, sym) in &mut fix_mod.instantiated_symbols {
         let expr = replace_closure_call_to_funptr_call_subexprs(
             sym.expr.as_ref().unwrap(),
             &symbol_names,
