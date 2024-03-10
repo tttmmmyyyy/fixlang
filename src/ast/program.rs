@@ -1,5 +1,4 @@
 use build_time::build_time_utc;
-use inkwell::{debug_info::AsDIScope, module::Linkage};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
@@ -491,206 +490,18 @@ impl Program {
         let _sw = StopWatch::new("generate_code", gc.config.show_build_times);
 
         // First, declare accessor function (a function that returns a pointer to the global value) for a global value, or function for global function value.
-        let global_objs = self
+        let syms = self
             .instantiated_symbols
             .iter()
             .map(|(name, sym)| {
-                gc.typeresolver = sym.type_resolver.clone();
-                let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
-                if obj_ty.is_funptr() {
-                    // Declare lambda function.
-                    let lam = sym.expr.as_ref().unwrap().clone();
-                    let lam = lam.set_inferred_type(obj_ty.clone());
-                    let lam_fn = gc.declare_lambda_function(lam, Some(name));
-                    gc.add_global_object(name.clone(), lam_fn, obj_ty.clone());
-                    (name, lam_fn, sym.clone(), obj_ty)
-                } else {
-                    // Declare accessor function.
-                    let acc_fn_name = format!("Get#{}", name.to_string());
-                    let acc_fn_type = ptr_to_object_type(gc.context).fn_type(&[], false);
-                    let acc_fn =
-                        gc.module
-                            .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
-
-                    // Create debug info subprogram
-                    if gc.has_di() {
-                        acc_fn.set_subprogram(gc.create_debug_subprogram(
-                            &acc_fn_name,
-                            sym.expr.as_ref().unwrap().source.clone(),
-                        ));
-                    }
-
-                    // Register the accessor function to gc.
-                    gc.add_global_object(name.clone(), acc_fn, obj_ty.clone());
-
-                    // Return global variable and accessor function.
-                    (name, acc_fn, sym.clone(), obj_ty)
-                }
+                let acc_fn = gc.declare_symbol(name, sym);
+                (name, sym, acc_fn)
             })
             .collect::<Vec<_>>();
 
         // Implement functions.
-        for (name, acc_fn, sym, obj_ty) in global_objs {
-            gc.typeresolver = sym.type_resolver;
-            if obj_ty.is_funptr() {
-                // Implement lambda function.
-                let lam_fn = acc_fn;
-                let lam = sym.expr.as_ref().unwrap().clone();
-                let lam = lam.set_inferred_type(obj_ty);
-                gc.implement_lambda_function(lam, lam_fn, None);
-            } else {
-                // Prepare global variable to store the initialized global value.
-                let obj_embed_ty = obj_ty.get_embedded_type(gc, &vec![]);
-                let global_var_name = format!("GlobalVar#{}", name.to_string());
-                let global_var = gc.module.add_global(obj_embed_ty, None, &global_var_name);
-                global_var.set_initializer(&obj_embed_ty.const_zero());
-                let global_var = global_var.as_basic_value_enum().into_pointer_value();
-
-                // Prepare initialized flag.
-                let flag_name = format!("InitFlag#{}", name.to_string());
-                let (flag_ty, flag_init_val) = if gc.config.threaded {
-                    (
-                        pthread_once_init_flag_type(gc.context),
-                        pthread_once_init_flag_value(gc.context),
-                    )
-                } else {
-                    let ty = gc.context.i8_type();
-                    (ty, ty.const_zero())
-                };
-                let init_flag = gc.module.add_global(flag_ty, None, &flag_name);
-                init_flag.set_initializer(&flag_init_val);
-                let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
-
-                // Start to implement accessor function.
-                let entry_bb = gc.context.append_basic_block(acc_fn, "entry");
-                gc.builder().position_at_end(entry_bb);
-
-                // Push debug info scope.
-                let _di_scope_guard: Option<PopDebugScopeGuard<'_>> = if gc.has_di() {
-                    Some(gc.push_debug_scope(
-                        acc_fn.get_subprogram().map(|sp| sp.as_debug_info_scope()),
-                    ))
-                } else {
-                    None
-                };
-
-                let (init_bb, end_bb, mut init_fun_di_scope_guard) = if !gc.config.threaded {
-                    // In single-threaded mode, we implement `call_once` logic by hand.
-                    let flag = gc
-                        .builder()
-                        .build_load(init_flag, "load_init_flag")
-                        .into_int_value();
-                    let is_zero = gc.builder().build_int_compare(
-                        IntPredicate::EQ,
-                        flag,
-                        flag.get_type().const_zero(),
-                        "flag_is_zero",
-                    );
-                    let init_bb = gc.context.append_basic_block(acc_fn, "flag_is_zero");
-                    let end_bb = gc.context.append_basic_block(acc_fn, "flag_is_nonzero");
-                    gc.builder()
-                        .build_conditional_branch(is_zero, init_bb, end_bb);
-
-                    (init_bb, end_bb, None)
-                } else {
-                    // In threaded mode, we add a function for initialization and call it by `pthread_once`.
-
-                    // Add initialization function.
-                    let init_fn_name = format!("InitOnce#{}", name.to_string());
-                    let init_fn_type = gc.context.void_type().fn_type(&[], false);
-                    let init_fn = gc.module.add_function(
-                        &init_fn_name,
-                        init_fn_type,
-                        Some(Linkage::Internal),
-                    );
-
-                    // Create debug info subprgoram
-                    if gc.has_di() {
-                        init_fn.set_subprogram(gc.create_debug_subprogram(
-                            &init_fn_name,
-                            sym.expr.as_ref().unwrap().source.clone(),
-                        ));
-                    }
-
-                    // In the accessor function, call `init_fn` by `pthread_once`.
-                    gc.call_runtime(
-                        RuntimeFunctions::PthreadOnce,
-                        &[
-                            init_flag.into(),
-                            init_fn.as_global_value().as_pointer_value().into(),
-                        ],
-                    );
-                    // The end block of the accessor function.
-                    let end_bb = gc.context.append_basic_block(acc_fn, "end_bb");
-                    gc.builder().build_unconditional_branch(end_bb);
-
-                    // The entry block for the initialization function.
-                    let init_bb = gc.context.append_basic_block(init_fn, "init_bb");
-
-                    // Push debug info scope for initialization function.
-                    let init_fn_di_scope_guard: Option<PopDebugScopeGuard<'_>> = if gc.has_di() {
-                        Some(gc.push_debug_scope(
-                            init_fn.get_subprogram().map(|sp| sp.as_debug_info_scope()),
-                        ))
-                    } else {
-                        None
-                    };
-                    (init_bb, end_bb, init_fn_di_scope_guard)
-                };
-
-                // Implement initialization code.
-                {
-                    // Evaluate object value and store it to the global variable.
-                    gc.builder().position_at_end(init_bb);
-
-                    // Prepare memory space for rvo.
-                    let rvo = if obj_ty.is_unbox(gc.type_env()) {
-                        Some(Object::new(global_var, obj_ty.clone()))
-                    } else {
-                        None
-                    };
-                    // Execute expression.
-                    let obj = gc.eval_expr(sym.expr.unwrap().clone(), rvo.clone());
-
-                    // Mark the object and all object reachable from it as global.
-                    gc.mark_global(obj.clone());
-
-                    // If we didn't rvo, then store the result to global_ptr.
-                    if rvo.is_none() {
-                        let obj_val = obj.value(gc);
-                        gc.builder().build_store(global_var, obj_val);
-                    }
-                }
-
-                // After initialization,
-                if !gc.config.threaded {
-                    // In unthreaded mode, set the initialized flag 1 by hand.
-                    gc.builder()
-                        .build_store(init_flag, gc.context.i8_type().const_int(1, false));
-
-                    // And jump to the end of accessor function.
-                    gc.builder().build_unconditional_branch(end_bb);
-                } else {
-                    // In threaded mode, simply return from the initialization function.
-                    gc.builder().build_return(None);
-
-                    // Drop di_scope_guard for initialization function.
-                    init_fun_di_scope_guard.take();
-                    gc.set_debug_location(None);
-                }
-
-                // In the end of the accessor function, merely return the object.
-                gc.builder().position_at_end(end_bb);
-                let ret = if obj_ty.is_box(gc.type_env()) {
-                    gc.builder()
-                        .build_load(global_var, "ptr_to_obj")
-                        .into_pointer_value()
-                } else {
-                    global_var
-                };
-                let ret = gc.cast_pointer(ret, ptr_to_object_type(gc.context));
-                gc.builder().build_return(Some(&ret));
-            }
+        for (name, sym, acc_fn) in syms {
+            gc.implement_symbol(name, sym, acc_fn);
         }
     }
 

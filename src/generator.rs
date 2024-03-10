@@ -2035,6 +2035,213 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         self.call_runtime(RuntimeFunctions::CheckLeak, &[]);
     }
+
+    pub fn declare_symbol(
+        &mut self,
+        name: &FullName,
+        sym: &InstantiatedSymbol,
+    ) -> FunctionValue<'c> {
+        self.typeresolver = sym.type_resolver.clone();
+        let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
+        if obj_ty.is_funptr() {
+            // Declare lambda function.
+            let lam = sym.expr.as_ref().unwrap().clone();
+            let lam = lam.set_inferred_type(obj_ty.clone());
+            let lam_fn = self.declare_lambda_function(lam, Some(name));
+            self.add_global_object(name.clone(), lam_fn, obj_ty.clone());
+            lam_fn
+        } else {
+            // Declare accessor function.
+            let acc_fn_name = format!("Get#{}", name.to_string());
+            let acc_fn_type = ptr_to_object_type(self.context).fn_type(&[], false);
+            let acc_fn =
+                self.module
+                    .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
+
+            // Create debug info subprogram
+            if self.has_di() {
+                acc_fn.set_subprogram(self.create_debug_subprogram(
+                    &acc_fn_name,
+                    sym.expr.as_ref().unwrap().source.clone(),
+                ));
+            }
+
+            // Register the accessor function to gc.
+            self.add_global_object(name.clone(), acc_fn, obj_ty.clone());
+
+            // Return the accessor function.
+            acc_fn
+        }
+    }
+
+    pub fn implement_symbol(
+        &mut self,
+        name: &FullName,
+        sym: &InstantiatedSymbol,
+        sym_fn: FunctionValue<'c>,
+    ) {
+        self.typeresolver = sym.type_resolver.clone();
+        let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
+        if obj_ty.is_funptr() {
+            // Implement lambda function.
+            let lam_fn = sym_fn;
+            let lam = sym.expr.as_ref().unwrap().clone();
+            let lam = lam.set_inferred_type(obj_ty);
+            self.implement_lambda_function(lam, lam_fn, None);
+        } else {
+            // Prepare global variable to store the initialized global value.
+            let obj_embed_ty = obj_ty.get_embedded_type(self, &vec![]);
+            let global_var_name = format!("GlobalVar#{}", name.to_string());
+            let global_var = self.module.add_global(obj_embed_ty, None, &global_var_name);
+            global_var.set_initializer(&obj_embed_ty.const_zero());
+            let global_var = global_var.as_basic_value_enum().into_pointer_value();
+
+            // Prepare initialized flag.
+            let flag_name = format!("InitFlag#{}", name.to_string());
+            let (flag_ty, flag_init_val) = if self.config.threaded {
+                (
+                    pthread_once_init_flag_type(self.context),
+                    pthread_once_init_flag_value(self.context),
+                )
+            } else {
+                let ty = self.context.i8_type();
+                (ty, ty.const_zero())
+            };
+            let init_flag = self.module.add_global(flag_ty, None, &flag_name);
+            init_flag.set_initializer(&flag_init_val);
+            let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
+
+            // Start to implement accessor function.
+            let acc_fn = sym_fn;
+            let entry_bb = self.context.append_basic_block(acc_fn, "entry");
+            self.builder().position_at_end(entry_bb);
+
+            // Push debug info scope.
+            let _di_scope_guard: Option<PopDebugScopeGuard<'_>> =
+                if self.has_di() {
+                    Some(self.push_debug_scope(
+                        acc_fn.get_subprogram().map(|sp| sp.as_debug_info_scope()),
+                    ))
+                } else {
+                    None
+                };
+
+            let (init_bb, end_bb, mut init_fun_di_scope_guard) = if !self.config.threaded {
+                // In single-threaded mode, we implement `call_once` logic by hand.
+                let flag = self
+                    .builder()
+                    .build_load(init_flag, "load_init_flag")
+                    .into_int_value();
+                let is_zero = self.builder().build_int_compare(
+                    IntPredicate::EQ,
+                    flag,
+                    flag.get_type().const_zero(),
+                    "flag_is_zero",
+                );
+                let init_bb = self.context.append_basic_block(acc_fn, "flag_is_zero");
+                let end_bb = self.context.append_basic_block(acc_fn, "flag_is_nonzero");
+                self.builder()
+                    .build_conditional_branch(is_zero, init_bb, end_bb);
+
+                (init_bb, end_bb, None)
+            } else {
+                // In threaded mode, we add a function for initialization and call it by `pthread_once`.
+
+                // Add initialization function.
+                let init_fn_name = format!("InitOnce#{}", name.to_string());
+                let init_fn_type = self.context.void_type().fn_type(&[], false);
+                let init_fn =
+                    self.module
+                        .add_function(&init_fn_name, init_fn_type, Some(Linkage::Internal));
+
+                // Create debug info subprgoram
+                if self.has_di() {
+                    init_fn.set_subprogram(self.create_debug_subprogram(
+                        &init_fn_name,
+                        sym.expr.as_ref().unwrap().source.clone(),
+                    ));
+                }
+
+                // In the accessor function, call `init_fn` by `pthread_once`.
+                self.call_runtime(
+                    RuntimeFunctions::PthreadOnce,
+                    &[
+                        init_flag.into(),
+                        init_fn.as_global_value().as_pointer_value().into(),
+                    ],
+                );
+                // The end block of the accessor function.
+                let end_bb = self.context.append_basic_block(acc_fn, "end_bb");
+                self.builder().build_unconditional_branch(end_bb);
+
+                // The entry block for the initialization function.
+                let init_bb = self.context.append_basic_block(init_fn, "init_bb");
+
+                // Push debug info scope for initialization function.
+                let init_fn_di_scope_guard: Option<PopDebugScopeGuard<'_>> = if self.has_di() {
+                    Some(self.push_debug_scope(
+                        init_fn.get_subprogram().map(|sp| sp.as_debug_info_scope()),
+                    ))
+                } else {
+                    None
+                };
+                (init_bb, end_bb, init_fn_di_scope_guard)
+            };
+
+            // Implement initialization code.
+            {
+                // Evaluate object value and store it to the global variable.
+                self.builder().position_at_end(init_bb);
+
+                // Prepare memory space for rvo.
+                let rvo = if obj_ty.is_unbox(self.type_env()) {
+                    Some(Object::new(global_var, obj_ty.clone()))
+                } else {
+                    None
+                };
+                // Execute expression.
+                let obj = self.eval_expr(sym.expr.as_ref().unwrap().clone(), rvo.clone());
+
+                // Mark the object and all object reachable from it as global.
+                self.mark_global(obj.clone());
+
+                // If we didn't rvo, then store the result to global_ptr.
+                if rvo.is_none() {
+                    let obj_val = obj.value(self);
+                    self.builder().build_store(global_var, obj_val);
+                }
+            }
+
+            // After initialization,
+            if !self.config.threaded {
+                // In unthreaded mode, set the initialized flag 1 by hand.
+                self.builder()
+                    .build_store(init_flag, self.context.i8_type().const_int(1, false));
+
+                // And jump to the end of accessor function.
+                self.builder().build_unconditional_branch(end_bb);
+            } else {
+                // In threaded mode, simply return from the initialization function.
+                self.builder().build_return(None);
+
+                // Drop di_scope_guard for initialization function.
+                init_fun_di_scope_guard.take();
+                self.set_debug_location(None);
+            }
+
+            // In the end of the accessor function, return the object.
+            self.builder().position_at_end(end_bb);
+            let ret = if obj_ty.is_box(self.type_env()) {
+                self.builder()
+                    .build_load(global_var, "ptr_to_obj")
+                    .into_pointer_value()
+            } else {
+                global_var
+            };
+            let ret = self.cast_pointer(ret, ptr_to_object_type(self.context));
+            self.builder().build_return(Some(&ret));
+        }
+    }
 }
 
 pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
