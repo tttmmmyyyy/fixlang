@@ -344,9 +344,9 @@ pub fn array_getter_function_name() -> FullName {
 }
 
 // Create source code to define traits such as ToString or Eq for tuples.
-fn make_tuple_traits_source(sizes: Vec<u32>) -> String {
+fn make_tuple_traits_source(sizes: &[u32]) -> String {
     let mut src = "module Std; \n\n".to_string();
-    for size in &sizes {
+    for size in sizes {
         // For unit type, we define necessary traits in "std.fix".
         if *size == 0 || *size == 1 {
             continue;
@@ -481,7 +481,7 @@ fn make_tuple_traits_source(sizes: Vec<u32>) -> String {
 }
 
 // Create module which defines traits such as ToString or Eq for tuples.
-pub fn make_tuple_traits_mod(sizes: Vec<u32>) -> Program {
+pub fn make_tuple_traits_mod(sizes: &[u32]) -> Program {
     let src = make_tuple_traits_source(sizes);
     parse_and_save_to_temporary_file(&src, "std_tuple_traits")
 }

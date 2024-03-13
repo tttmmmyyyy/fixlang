@@ -3340,7 +3340,7 @@ impl InlineLLVMAbortFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Abort
-        gc.call_runtime(RuntimeFunctions::Abort, &[]);
+        gc.call_runtime(RUNTIME_ABORT, &[]);
 
         // Return
         Object::new(

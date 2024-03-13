@@ -2,8 +2,6 @@ use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
-use self::stopwatch::StopWatch;
-
 use super::*;
 
 #[derive(Clone)]
@@ -280,9 +278,21 @@ impl Program {
         fix_mod
     }
 
-    // Add `Std::TupleN` type if not exists.
-    pub fn add_tuple_defn(&mut self, tuple_size: u32) {
+    // Add `Std::TupleN` type
+    fn add_tuple_defn(&mut self, tuple_size: u32) {
         self.type_defns.push(tuple_defn(tuple_size));
+    }
+
+    // Add `Std::TupleN` type for each `n` in `used_tuple_sizes`.
+    pub fn add_tuple_defns(&mut self) {
+        // Make elements of used_tuple_sizes unique.
+        self.used_tuple_sizes.sort();
+        self.used_tuple_sizes.dedup();
+        let used_tuple_sizes = std::mem::replace(&mut self.used_tuple_sizes, vec![]);
+        for tuple_size in &used_tuple_sizes {
+            self.add_tuple_defn(*tuple_size);
+        }
+        self.used_tuple_sizes = used_tuple_sizes;
     }
 
     // If this program consists of single module, returns its name.
@@ -482,26 +492,6 @@ impl Program {
                 )
             }
             self.add_global_value(name, (gv.defn.unwrap().expr, gv.decl.unwrap().ty))
-        }
-    }
-
-    // Generate codes of global symbols.
-    pub fn generate_code(&self, gc: &mut GenerationContext) {
-        let _sw = StopWatch::new("generate_code", gc.config.show_build_times);
-
-        // First, declare accessor function (a function that returns a pointer to the global value) for a global value, or function for global function value.
-        let syms = self
-            .instantiated_symbols
-            .iter()
-            .map(|(name, sym)| {
-                let acc_fn = gc.declare_symbol(name, sym);
-                (name, sym, acc_fn)
-            })
-            .collect::<Vec<_>>();
-
-        // Implement functions.
-        for (name, sym, acc_fn) in syms {
-            gc.implement_symbol(name, sym, acc_fn);
         }
     }
 

@@ -16,7 +16,7 @@ use inkwell::{
     },
     intrinsics::Intrinsic,
     module::Linkage,
-    targets::TargetData,
+    targets::{TargetData, TargetMachine},
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
@@ -53,6 +53,14 @@ impl<'c> VarValue<'c> {
                 };
                 Object::new(ptr, ty.clone())
             }
+        }
+    }
+
+    // Get global object's function value.
+    pub fn get_global_fun(&self) -> FunctionValue<'c> {
+        match self {
+            VarValue::Local(_) => panic!("`\"get_global_fun\"` called for local variable."),
+            VarValue::Global(fun, _) => *fun,
         }
     }
 }
@@ -294,7 +302,6 @@ pub struct GenerationContext<'c, 'm> {
     debug_scope: Rc<RefCell<Vec<Option<DIScope<'c>>>>>, // None implies that currently generating codes for function whose source is unknown.
     debug_location: Vec<Option<Span>>, // None implies that currently generating codes for function whose source is unknown.
     pub global: HashMap<FullName, Variable<'c>>,
-    pub runtimes: HashMap<RuntimeFunctions, FunctionValue<'c>>,
     pub typeresolver: TypeResolver,
     type_env: TypeEnv,
     pub target_data: TargetData,
@@ -389,6 +396,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ptr_size
     }
 
+    pub fn create_module(
+        name: &str,
+        ctx: &'c Context,
+        target_machine: &TargetMachine,
+    ) -> Module<'c> {
+        let module = ctx.create_module(name);
+        module.set_triple(&target_machine.get_triple());
+        module.set_data_layout(&target_machine.get_target_data().get_data_layout());
+        module
+    }
+
     // Create new gc.
     pub fn new(
         ctx: &'c Context,
@@ -406,7 +424,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             debug_info: Default::default(),
             debug_location: vec![],
             global: Default::default(),
-            runtimes: Default::default(),
             typeresolver: Default::default(),
             type_env,
             target_data: target_data,
@@ -925,7 +942,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             };
 
             let obj_ptr = obj.ptr(self);
-            self.call_runtime(RuntimeFunctions::RetainBoxedObject, &[obj_ptr.into()]);
+            self.call_runtime(RUNTIME_RETAIN_BOXED_OBJECT, &[obj_ptr.into()]);
 
             if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1172,13 +1189,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     fn eprint(&self, string: &str) {
         let string_ptr = self.builder().build_global_string_ptr(string, "rust_str");
         let string_ptr = string_ptr.as_pointer_value();
-        self.call_runtime(RuntimeFunctions::Eprint, &[string_ptr.into()]);
+        self.call_runtime(RUNTIME_EPRINT, &[string_ptr.into()]);
     }
 
     // Panic with Rust's &str (i.e, print string and abort.)
     pub fn panic(&self, string: &str) {
         self.eprint(string);
-        self.call_runtime(RuntimeFunctions::Abort, &[]);
+        self.call_runtime(RUNTIME_ABORT, &[]);
     }
 
     // Get object id of a object
@@ -1191,11 +1208,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Call a runtime function.
     pub fn call_runtime(
         &self,
-        func: RuntimeFunctions,
+        func_name: &str,
         args: &[BasicMetadataValueEnum<'c>],
     ) -> CallSiteValue<'c> {
-        self.builder()
-            .build_call(*self.runtimes.get(&func).unwrap(), args, "call_runtime")
+        let func = self
+            .module
+            .get_function(func_name)
+            .unwrap_or_else(|| panic!("Runtime function not found: {}", func_name));
+        self.builder().build_call(func, args, "call_runtime")
     }
 
     // Evaluate expression.
@@ -2031,9 +2051,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         if self.config.async_task {
             // If AsyncTask is used, we need wait for all tasks to be finished before checking leak.
-            self.call_runtime(RuntimeFunctions::ThreadTerminate, &[]);
+            self.call_runtime(RUNTIME_THREAD_TERMINATE, &[]);
         }
-        self.call_runtime(RuntimeFunctions::CheckLeak, &[]);
+        self.call_runtime(RUNTIME_CHECK_LEAK, &[]);
     }
 
     pub fn declare_symbol(
@@ -2074,12 +2094,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    pub fn implement_symbol(
-        &mut self,
-        name: &FullName,
-        sym: &InstantiatedSymbol,
-        sym_fn: FunctionValue<'c>,
-    ) {
+    pub fn implement_symbol(&mut self, name: &FullName, sym: &InstantiatedSymbol) {
+        // Get the function to implement.
+        let global_obj = self.global.get(name);
+        let sym_fn = match global_obj {
+            Some(var) => var.ptr.get_global_fun(),
+            None => self.declare_symbol(name, sym),
+        };
+
         self.typeresolver = sym.type_resolver.clone();
         let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
         if obj_ty.is_funptr() {
@@ -2164,7 +2186,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
                 // In the accessor function, call `init_fn` by `pthread_once`.
                 self.call_runtime(
-                    RuntimeFunctions::PthreadOnce,
+                    RUNTIME_PTHREAD_ONCE,
                     &[
                         init_flag.into(),
                         init_fn.as_global_value().as_pointer_value().into(),

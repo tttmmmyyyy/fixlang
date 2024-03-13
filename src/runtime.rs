@@ -2,34 +2,84 @@ use inkwell::attributes::AttributeLoc;
 
 use super::*;
 
-#[derive(Eq, Hash, PartialEq, Clone)]
-pub enum RuntimeFunctions {
-    Abort,
-    Eprint,
-    Sprintf,
-    ReportMalloc,
-    ReportRetain,
-    ReportRelease,
-    ReportMarkGlobal,
-    CheckLeak,
-    RetainBoxedObject,
-    ReleaseBoxedObject,
-    MarkGlobalBoxedObject,
-    MarkThreadedBoxedObject,
-    SubtractPtr,
-    PtrAddOffset,
-    PthreadOnce,
-    ThreadPrepareTermination,
-    ThreadTerminate,
-    RunFunction,
+pub const RUNTIME_ABORT: &str = "abort";
+pub const RUNTIME_EPRINT: &str = "fixruntime_eprint";
+pub const RUNTIME_SPRINTF: &str = "sprintf";
+pub const RUNTIME_REPORT_MALLOC: &str = "report_malloc";
+pub const RUNTIME_REPORT_RETAIN: &str = "report_retain";
+pub const RUNTIME_REPORT_RELEASE: &str = "report_release";
+pub const RUNTIME_REPORT_MARK_GLOBAL: &str = "report_mark_global";
+pub const RUNTIME_CHECK_LEAK: &str = "check_leak";
+pub const RUNTIME_RETAIN_BOXED_OBJECT: &str = "fixruntime_retain_obj";
+pub const RUNTIME_RELEASE_BOXED_OBJECT: &str = "fixruntime_release_obj";
+pub const RUNTIME_MARK_GLOBAL_BOXED_OBJECT: &str = "fixruntime_mark_global_obj";
+pub const RUNTIME_MARK_THREADED_BOXED_OBJECT: &str = "fixruntime_mark_threaded_obj";
+pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
+pub const RUNTIME_PTR_ADD_OFFSET: &str = "fixruntime_ptr_add_offset";
+pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
+pub const RUNTIME_THREAD_PREPARE_TERMINATION: &str = "fixruntime_thread_prepare_termination";
+pub const RUNTIME_THREAD_TERMINATE: &str = "fixruntime_thread_terminate";
+pub const RUNTIME_RUN_FUNCTION: &str = "fixruntime_run_function_llvm";
+pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
+pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
+
+pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
+    build_abort_function(gc, mode);
+    build_eprintf_function(gc, mode);
+    build_sprintf_function(gc, mode);
+    if gc.config.sanitize_memory {
+        build_report_malloc_function(gc, mode);
+        build_report_retain_function(gc, mode);
+        build_report_release_function(gc, mode);
+        build_check_leak_function(gc, mode);
+        build_report_mark_global_function(gc, mode);
+    }
+    build_retain_boxed_function(gc, mode);
+    build_release_boxed_function(gc, mode);
+    build_mark_global_boxed_object_function(gc, mode);
+    build_subtract_ptr_function(gc, mode);
+    build_ptr_add_offset_function(gc, mode);
+    if gc.config.threaded {
+        build_pthread_once_function(gc, mode);
+        build_mark_threaded_boxed_object_function(gc, mode);
+    }
+    if gc.config.async_task && gc.config.sanitize_memory {
+        build_thread_prepare_termination_function(gc, mode);
+        build_thread_terminate_function(gc, mode);
+    }
+    build_run_function(gc, mode); // This should be built after `build_mark_threaded_boxed_object_function`.
+    build_get_argc_function(gc, mode);
+    build_get_argv_function(gc, mode);
 }
 
-fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+pub enum BuildMode {
+    Declare,
+    Implement,
+}
+
+fn build_abort_function<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_ABORT) {
+        return func;
+    }
+
     let fn_ty = gc.context.void_type().fn_type(&[], false);
-    gc.module.add_function("abort", fn_ty, None)
+    gc.module.add_function(RUNTIME_ABORT, fn_ty, None)
 }
 
-fn build_eprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_eprintf_function<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_EPRINT) {
+        return func;
+    }
+
     let context = gc.context;
     let module = gc.module;
 
@@ -37,12 +87,20 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> Functio
     let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::from(0));
 
     let fn_type = context.void_type().fn_type(&[i8_ptr_type.into()], true);
-    let func = module.add_function("fixruntime_eprint", fn_type, None);
+    let func = module.add_function(RUNTIME_EPRINT, fn_type, None);
 
     func
 }
 
-fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_sprintf_function<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_SPRINTF) {
+        return func;
+    }
+
     let context = gc.context;
     let module = gc.module;
 
@@ -57,12 +115,20 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> Functio
         ],
         true,
     );
-    let func = module.add_function("sprintf", fn_type, None);
+    let func = module.add_function(RUNTIME_SPRINTF, fn_type, None);
 
     func
 }
 
-fn build_report_malloc_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_report_malloc_function<'c, 'm>(
+    gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_REPORT_MALLOC) {
+        return func;
+    }
+
     let fn_ty = gc.context.i64_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
@@ -70,10 +136,18 @@ fn build_report_malloc_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Funct
         ],
         false,
     );
-    gc.module.add_function("report_malloc", fn_ty, None)
+    gc.module.add_function(RUNTIME_REPORT_MALLOC, fn_ty, None)
 }
 
-fn build_report_retain_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_report_retain_function<'c, 'm>(
+    gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_REPORT_RETAIN) {
+        return func;
+    }
+
     let fn_ty = gc.context.void_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
@@ -81,10 +155,18 @@ fn build_report_retain_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Funct
         ],
         false,
     );
-    gc.module.add_function("report_retain", fn_ty, None)
+    gc.module.add_function(RUNTIME_REPORT_RETAIN, fn_ty, None)
 }
 
-fn build_report_release_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_report_release_function<'c, 'm>(
+    gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_REPORT_RELEASE) {
+        return func;
+    }
+
     let fn_ty = gc.context.void_type().fn_type(
         &[
             ptr_to_object_type(gc.context).into(),
@@ -92,30 +174,65 @@ fn build_report_release_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> Func
         ],
         false,
     );
-    gc.module.add_function("report_release", fn_ty, None)
+    gc.module.add_function(RUNTIME_REPORT_RELEASE, fn_ty, None)
 }
 
-fn build_report_mark_global_function<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_report_mark_global_function<'c, 'm>(
+    gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_REPORT_MARK_GLOBAL) {
+        return func;
+    }
+
     let fn_ty = gc
         .context
         .void_type()
         .fn_type(&[obj_id_type(gc.context).into()], false);
-    gc.module.add_function("report_mark_global", fn_ty, None)
+    gc.module
+        .add_function(RUNTIME_REPORT_MARK_GLOBAL, fn_ty, None)
 }
 
-fn build_check_leak_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+fn build_check_leak_function<'c, 'm, 'b>(
+    gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_CHECK_LEAK) {
+        return func;
+    }
+
     let fn_ty = gc.context.void_type().fn_type(&[], false);
-    gc.module.add_function("check_leak", fn_ty, None)
+    gc.module.add_function(RUNTIME_CHECK_LEAK, fn_ty, None)
 }
 
 fn build_retain_boxed_function<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
-    let void_type = context.void_type();
-    let func_type = void_type.fn_type(&[ptr_to_object_type(context).into()], false);
-    let retain_func = module.add_function("fixruntime_retain_obj", func_type, None);
+
+    let retain_func = match mode {
+        BuildMode::Declare => {
+            if let Some(func) = gc.module.get_function(RUNTIME_RETAIN_BOXED_OBJECT) {
+                return func;
+            }
+            let void_type = context.void_type();
+            let func_type = void_type.fn_type(&[ptr_to_object_type(context).into()], false);
+            let retain_func = module.add_function(RUNTIME_RETAIN_BOXED_OBJECT, func_type, None);
+            return retain_func;
+        }
+        BuildMode::Implement => match gc.module.get_function(RUNTIME_RETAIN_BOXED_OBJECT) {
+            Some(func) => func,
+            None => panic!(
+                "Runtime function {} is not declared",
+                RUNTIME_RETAIN_BOXED_OBJECT
+            ),
+        },
+    };
+
     let bb = context.append_basic_block(retain_func, "entry");
 
     let _builder_guard = gc.push_builder();
@@ -135,10 +252,7 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
         // Report retain to sanitizer.
         if gc.config.sanitize_memory {
             let obj_id = gc.get_obj_id(obj_ptr);
-            gc.call_runtime(
-                RuntimeFunctions::ReportRetain,
-                &[obj_ptr.into(), obj_id.into()],
-            );
+            gc.call_runtime(RUNTIME_REPORT_RETAIN, &[obj_ptr.into(), obj_id.into()]);
         }
     }
 
@@ -182,20 +296,36 @@ fn build_retain_boxed_function<'c, 'm, 'b>(
 
 fn build_release_boxed_function<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
-    let void_type = gc.context.void_type();
-    let func_type = void_type.fn_type(
-        &[
-            ptr_to_object_type(gc.context).into(),
-            ObjectFieldType::TraverseFunction
-                .to_basic_type(gc, vec![])
-                .into(),
-        ],
-        false,
-    );
-    let release_func = gc
-        .module
-        .add_function("fixruntime_release_obj", func_type, None);
+    let release_func = match mode {
+        BuildMode::Declare => {
+            if let Some(func) = gc.module.get_function(RUNTIME_RELEASE_BOXED_OBJECT) {
+                return func;
+            }
+            let void_type = gc.context.void_type();
+            let func_type = void_type.fn_type(
+                &[
+                    ptr_to_object_type(gc.context).into(),
+                    ObjectFieldType::TraverseFunction
+                        .to_basic_type(gc, vec![])
+                        .into(),
+                ],
+                false,
+            );
+            return gc
+                .module
+                .add_function(RUNTIME_RELEASE_BOXED_OBJECT, func_type, None);
+        }
+        BuildMode::Implement => match gc.module.get_function(RUNTIME_RELEASE_BOXED_OBJECT) {
+            Some(func) => func,
+            None => panic!(
+                "Runtime function {} is not declared",
+                RUNTIME_RELEASE_BOXED_OBJECT
+            ),
+        },
+    };
+
     let entry_bb = gc.context.append_basic_block(release_func, "entry");
 
     let _builder_guard = gc.push_builder();
@@ -219,10 +349,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(
         // Report release to sanitizer.
         if gc.config.sanitize_memory {
             let obj_id = gc.get_obj_id(obj_ptr);
-            gc.call_runtime(
-                RuntimeFunctions::ReportRelease,
-                &[obj_ptr.into(), obj_id.into()],
-            );
+            gc.call_runtime(RUNTIME_REPORT_RELEASE, &[obj_ptr.into(), obj_id.into()]);
         }
     }
 
@@ -346,23 +473,37 @@ fn build_release_boxed_function<'c, 'm, 'b>(
 fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     mark_global: bool,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
-    let void_type = gc.context.void_type();
-    let func_type = void_type.fn_type(
-        &[
-            ptr_to_object_type(gc.context).into(),
-            ObjectFieldType::TraverseFunction
-                .to_basic_type(gc, vec![])
-                .into(),
-        ],
-        false,
-    );
     let func_name = if mark_global {
-        "fixruntime_mark_global_obj"
+        RUNTIME_MARK_GLOBAL_BOXED_OBJECT
     } else {
-        "fixruntime_mark_threaded_obj"
+        RUNTIME_MARK_THREADED_BOXED_OBJECT
     };
-    let mark_func = gc.module.add_function(func_name, func_type, None);
+
+    let mark_func = match mode {
+        BuildMode::Declare => {
+            if let Some(func) = gc.module.get_function(func_name) {
+                return func;
+            }
+            let void_type = gc.context.void_type();
+            let func_type = void_type.fn_type(
+                &[
+                    ptr_to_object_type(gc.context).into(),
+                    ObjectFieldType::TraverseFunction
+                        .to_basic_type(gc, vec![])
+                        .into(),
+                ],
+                false,
+            );
+            return gc.module.add_function(func_name, func_type, None);
+        }
+        BuildMode::Implement => match gc.module.get_function(func_name) {
+            Some(func) => func,
+            None => panic!("Runtime function {} is not declared", func_name),
+        },
+    };
+
     let bb = gc.context.append_basic_block(mark_func, "entry");
 
     let _builder_guard = gc.push_builder();
@@ -419,7 +560,7 @@ fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
     if mark_global && gc.config.sanitize_memory {
         // Report mark global to sanitizer.
         let obj_id = gc.get_obj_id(ptr_to_obj);
-        gc.call_runtime(RuntimeFunctions::ReportMarkGlobal, &[obj_id.into()]);
+        gc.call_runtime(RUNTIME_REPORT_MARK_GLOBAL, &[obj_id.into()]);
     }
 
     gc.builder().build_return(None);
@@ -429,27 +570,40 @@ fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
 
 fn build_mark_global_boxed_object_function<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
-    build_mark_global_or_threaded_boxed_object_function(gc, true)
+    build_mark_global_or_threaded_boxed_object_function(gc, true, mode)
 }
 
 fn build_mark_threaded_boxed_object_function<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
-    build_mark_global_or_threaded_boxed_object_function(gc, false)
+    build_mark_global_or_threaded_boxed_object_function(gc, false, mode)
 }
 
 fn build_subtract_ptr_function<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
-    let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
-    let fn_ty = gc
-        .context
-        .i64_type()
-        .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
-    let func = gc
-        .module
-        .add_function("fixruntime_subtract_ptr", fn_ty, None);
+    let func = match mode {
+        BuildMode::Declare => {
+            if let Some(func) = gc.module.get_function(RUNTIME_SUBTRACT_PTR) {
+                return func;
+            }
+            let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+            let fn_ty = gc
+                .context
+                .i64_type()
+                .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+            return gc.module.add_function(RUNTIME_SUBTRACT_PTR, fn_ty, None);
+        }
+        BuildMode::Implement => match gc.module.get_function(RUNTIME_SUBTRACT_PTR) {
+            Some(func) => func,
+            None => panic!("Runtime function {} is not declared", RUNTIME_SUBTRACT_PTR),
+        },
+    };
+
     let bb = gc.context.append_basic_block(func, "entry");
     let _builder_guard = gc.push_builder();
 
@@ -465,13 +619,28 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(
 
 fn build_ptr_add_offset_function<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
-    let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
     let i64_ty = gc.context.i64_type();
-    let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
-    let func = gc
-        .module
-        .add_function("fixruntime_ptr_add_offset", fn_ty, None);
+    let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+
+    let func = match mode {
+        BuildMode::Declare => {
+            if let Some(func) = gc.module.get_function(RUNTIME_PTR_ADD_OFFSET) {
+                return func;
+            }
+            let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+            return gc.module.add_function(RUNTIME_PTR_ADD_OFFSET, fn_ty, None);
+        }
+        BuildMode::Implement => match gc.module.get_function(RUNTIME_PTR_ADD_OFFSET) {
+            Some(func) => func,
+            None => panic!(
+                "Runtime function {} is not declared",
+                RUNTIME_PTR_ADD_OFFSET
+            ),
+        },
+    };
+
     let bb = gc.context.append_basic_block(func, "entry");
     let _builder_guard = gc.push_builder();
 
@@ -493,7 +662,13 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(
 
 pub fn build_pthread_once_function<'c, 'm, 'b>(
     gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_PTHREAD_ONCE) {
+        return func;
+    }
+
     let init_flag_ty = pthread_once_init_flag_type(gc.context);
     let init_fn_ty = gc.context.void_type().fn_type(&[], false);
     let pthread_once_ty = gc.context.void_type().fn_type(
@@ -504,16 +679,31 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(
         false,
     );
     gc.module
-        .add_function("pthread_once", pthread_once_ty, None)
+        .add_function(RUNTIME_PTHREAD_ONCE, pthread_once_ty, None)
 }
 
 // Build `fixruntime_run_task` function, which is called from runtime.c.
-pub fn build_run_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
+pub fn build_run_function<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
     let context = gc.context;
     let module = gc.module;
 
-    let fn_type = ptr_to_object_type(context).fn_type(&[ptr_to_object_type(context).into()], false);
-    let func = module.add_function("fixruntime_run_function_llvm", fn_type, None);
+    let func = match mode {
+        BuildMode::Declare => {
+            if let Some(func) = gc.module.get_function(RUNTIME_RUN_FUNCTION) {
+                return func;
+            }
+            let fn_type =
+                ptr_to_object_type(context).fn_type(&[ptr_to_object_type(context).into()], false);
+            return module.add_function(RUNTIME_RUN_FUNCTION, fn_type, None);
+        }
+        BuildMode::Implement => match gc.module.get_function(RUNTIME_RUN_FUNCTION) {
+            Some(func) => func,
+            None => panic!("Runtime function {} is not declared", RUNTIME_RUN_FUNCTION),
+        },
+    };
 
     let bb = context.append_basic_block(func, "entry");
 
@@ -551,28 +741,55 @@ pub fn build_run_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> Functio
 
 fn build_thread_prepare_termination_function<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_THREAD_PREPARE_TERMINATION) {
+        return func;
+    }
+
     let fn_ty = gc.context.void_type().fn_type(&[], false);
     gc.module
-        .add_function("fixruntime_thread_prepare_termination", fn_ty, None)
+        .add_function(RUNTIME_THREAD_PREPARE_TERMINATION, fn_ty, None)
 }
 
 fn build_thread_terminate_function<'c, 'm, 'b>(
     gc: &GenerationContext<'c, 'm>,
+    mode: BuildMode,
 ) -> FunctionValue<'c> {
+    assert_eq!(mode, BuildMode::Declare);
+    if let Some(func) = gc.module.get_function(RUNTIME_THREAD_TERMINATE) {
+        return func;
+    }
+
     let fn_ty = gc.context.void_type().fn_type(&[], false);
     gc.module
-        .add_function("fixruntime_thread_terminate", fn_ty, None)
+        .add_function(RUNTIME_THREAD_TERMINATE, fn_ty, None)
 }
 
-fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
-    // Add GLOBAL_VAR_NAME_ARGC global variable here.
-    let argc_gv_ty = gc.context.i32_type();
-    let argc_gv = gc.module.add_global(argc_gv_ty, None, GLOBAL_VAR_NAME_ARGC);
-    argc_gv.set_initializer(&argc_gv_ty.const_zero());
+fn build_get_argc_function<'c, 'm, 'b>(
+    gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
+    let func = match mode {
+        BuildMode::Declare => {
+            if let Some(func) = gc.module.get_function(RUNTIME_GET_ARGC) {
+                return func;
+            }
+            // Add GLOBAL_VAR_NAME_ARGC global variable here.
+            let argc_gv_ty = gc.context.i32_type();
+            let argc_gv = gc.module.add_global(argc_gv_ty, None, GLOBAL_VAR_NAME_ARGC);
+            argc_gv.set_initializer(&argc_gv_ty.const_zero());
 
-    let fn_ty = argc_gv_ty.fn_type(&[], false);
-    let func = gc.module.add_function("fixruntime_get_argc", fn_ty, None);
+            let fn_ty = argc_gv_ty.fn_type(&[], false);
+            return gc.module.add_function(RUNTIME_GET_ARGC, fn_ty, None);
+        }
+        BuildMode::Implement => match gc.module.get_function(RUNTIME_GET_ARGC) {
+            Some(func) => func,
+            None => panic!("Runtime function {} is not declared", RUNTIME_GET_ARGC),
+        },
+    };
+
     let bb = gc.context.append_basic_block(func, "entry");
 
     let _builder_guard = gc.push_builder();
@@ -589,22 +806,39 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fu
     func
 }
 
-fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> FunctionValue<'c> {
-    // Add GLOBAL_VAR_NAME_ARGV global variable here.
+fn build_get_argv_function<'c, 'm, 'b>(
+    gc: &mut GenerationContext<'c, 'm>,
+    mode: BuildMode,
+) -> FunctionValue<'c> {
     let argv_gv_ty = gc
         .context
         .i8_type()
         .ptr_type(AddressSpace::from(0))
         .ptr_type(AddressSpace::from(0));
-    let argv_gv = gc.module.add_global(argv_gv_ty, None, GLOBAL_VAR_NAME_ARGV);
-    argv_gv.set_initializer(&argv_gv_ty.const_zero());
 
-    let fn_ty = gc
-        .context
-        .i8_type()
-        .ptr_type(AddressSpace::from(0))
-        .fn_type(&[gc.context.i64_type().into()], false);
-    let func = gc.module.add_function("fixruntime_get_argv", fn_ty, None);
+    let func = match mode {
+        BuildMode::Declare => {
+            if let Some(func) = gc.module.get_function(RUNTIME_GET_ARGV) {
+                return func;
+            }
+
+            // Add GLOBAL_VAR_NAME_ARGV global variable here.
+            let argv_gv = gc.module.add_global(argv_gv_ty, None, GLOBAL_VAR_NAME_ARGV);
+            argv_gv.set_initializer(&argv_gv_ty.const_zero());
+
+            let fn_ty = gc
+                .context
+                .i8_type()
+                .ptr_type(AddressSpace::from(0))
+                .fn_type(&[gc.context.i64_type().into()], false);
+            return gc.module.add_function(RUNTIME_GET_ARGV, fn_ty, None);
+        }
+        BuildMode::Implement => match gc.module.get_function(RUNTIME_GET_ARGV) {
+            Some(func) => func,
+            None => panic!("Runtime function {} is not declared", RUNTIME_GET_ARGV),
+        },
+    };
+
     let bb = gc.context.append_basic_block(func, "entry");
 
     let _builder_guard = gc.push_builder();
@@ -634,75 +868,4 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) -> Fu
     gc.builder().build_return(Some(&argv));
 
     func
-}
-
-pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>) {
-    gc.runtimes
-        .insert(RuntimeFunctions::Abort, build_abort_function(gc));
-    gc.runtimes
-        .insert(RuntimeFunctions::Eprint, build_eprintf_function(gc));
-    gc.runtimes
-        .insert(RuntimeFunctions::Sprintf, build_sprintf_function(gc));
-    if gc.config.sanitize_memory {
-        gc.runtimes.insert(
-            RuntimeFunctions::ReportMalloc,
-            build_report_malloc_function(gc),
-        );
-        gc.runtimes.insert(
-            RuntimeFunctions::ReportRetain,
-            build_report_retain_function(gc),
-        );
-        gc.runtimes.insert(
-            RuntimeFunctions::ReportRelease,
-            build_report_release_function(gc),
-        );
-        gc.runtimes
-            .insert(RuntimeFunctions::CheckLeak, build_check_leak_function(gc));
-        gc.runtimes.insert(
-            RuntimeFunctions::ReportMarkGlobal,
-            build_report_mark_global_function(gc),
-        );
-    }
-    let retain_func = build_retain_boxed_function(gc);
-    gc.runtimes
-        .insert(RuntimeFunctions::RetainBoxedObject, retain_func);
-    let release_func = build_release_boxed_function(gc);
-    gc.runtimes
-        .insert(RuntimeFunctions::ReleaseBoxedObject, release_func);
-    let mark_func = build_mark_global_boxed_object_function(gc);
-    gc.runtimes
-        .insert(RuntimeFunctions::MarkGlobalBoxedObject, mark_func);
-    let subtract_ptr_func = build_subtract_ptr_function(gc);
-    gc.runtimes
-        .insert(RuntimeFunctions::SubtractPtr, subtract_ptr_func);
-    let ptr_add_offset_func = build_ptr_add_offset_function(gc);
-    gc.runtimes
-        .insert(RuntimeFunctions::PtrAddOffset, ptr_add_offset_func);
-
-    if gc.config.threaded {
-        let pthread_call_once_func = build_pthread_once_function(gc);
-        gc.runtimes
-            .insert(RuntimeFunctions::PthreadOnce, pthread_call_once_func);
-        let mark_threaded_func = build_mark_threaded_boxed_object_function(gc);
-        gc.runtimes.insert(
-            RuntimeFunctions::MarkThreadedBoxedObject,
-            mark_threaded_func,
-        );
-    }
-    if gc.config.async_task && gc.config.sanitize_memory {
-        let prepare_termination = build_thread_prepare_termination_function(gc);
-        gc.runtimes.insert(
-            RuntimeFunctions::ThreadPrepareTermination,
-            prepare_termination,
-        );
-        let thread_terminate = build_thread_terminate_function(gc);
-        gc.runtimes
-            .insert(RuntimeFunctions::ThreadTerminate, thread_terminate);
-    }
-    let run_function_func = build_run_function(gc); // This should be built after `build_mark_threaded_boxed_object_function`.
-    gc.runtimes
-        .insert(RuntimeFunctions::RunFunction, run_function_func);
-
-    build_get_argc_function(gc);
-    build_get_argv_function(gc);
 }

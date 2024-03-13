@@ -10,21 +10,38 @@ When xs is updated, we need to recalculate f(xs).
 We want to decrease the cost of recalculation by using cached f(xs')'s where xs' is a subsequence of xs in a past calculation.
 */
 
-// The element of X.
-type Key = String;
+pub enum Unit<X> {
+    Cached(Vec<X>),
+    NotCached(Vec<X>),
+}
 
-enum Cache {
-    Available(Vec<Key>),
-    New(Vec<Key>),
+impl<X> Unit<X> {
+    pub fn items(&self) -> Vec<X>
+    where
+        X: Clone,
+    {
+        match self {
+            Unit::Cached(xs) => xs.clone(),
+            Unit::NotCached(xs) => xs.clone(),
+        }
+    }
+
+    pub fn is_cached(&self) -> bool {
+        match self {
+            Unit::Cached(_) => true,
+            Unit::NotCached(_) => false,
+        }
+    }
 }
 
 const MAX_CACHE_LEN: usize = 32;
 
-fn cache_strategy(
-    sequence: Vec<Key>, // sorted
-    is_cached: impl Fn(&[Key]) -> bool,
-) -> Vec<Cache> {
-    fn search_longest_cached_subsequence<'a>(
+// Given a sequence of elements of X, decompose it segments, each of which is either cached or not.
+pub fn split_into_units<X: Clone>(
+    sequence: &[X], // sorted
+    is_cached: impl Fn(&[X]) -> bool,
+) -> Vec<Unit<X>> {
+    fn search_longest_cached_subsequence<'a, Key>(
         sequence: &'a [Key],
         is_cached: impl Fn(&[Key]) -> bool,
     ) -> usize /* length */ {
@@ -47,7 +64,7 @@ fn cache_strategy(
         }
         let cache_len = search_longest_cached_subsequence(&sequence[i..], &is_cached);
         if cache_len > 0 {
-            segments.push(Cache::Available(sequence[i..i + cache_len].to_vec()));
+            segments.push(Unit::Cached(sequence[i..i + cache_len].to_vec()));
             i += cache_len;
         } else {
             let mut j = i + 1;
@@ -64,7 +81,7 @@ fn cache_strategy(
                 }
                 j += 1;
             }
-            segments.push(Cache::New(sequence[i..j].to_vec()));
+            segments.push(Unit::NotCached(sequence[i..j].to_vec()));
             i = j;
         }
     }

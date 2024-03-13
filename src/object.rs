@@ -1297,10 +1297,7 @@ pub fn allocate_obj<'c, 'm>(
             "name_of_obj_i8ptr",
         );
         let ptr = gc.cast_pointer(ptr_to_obj, ptr_to_object_type(gc.context));
-        let obj_id = gc.call_runtime(
-            RuntimeFunctions::ReportMalloc,
-            &[ptr.into(), string_ptr.into()],
-        );
+        let obj_id = gc.call_runtime(RUNTIME_REPORT_MALLOC, &[ptr.into(), string_ptr.into()]);
         object_id = obj_id.try_as_basic_value().unwrap_left().into_int_value();
     }
 

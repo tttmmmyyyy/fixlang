@@ -1,5 +1,6 @@
 use std::{env, path::PathBuf};
 
+use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
 
 use crate::misc::error_exit;
@@ -99,13 +100,13 @@ impl Configuration {
         self.add_dyanmic_library("m");
     }
 
-    pub fn get_output_llvm_ir_path(&self, pre_opt: bool) -> PathBuf {
+    pub fn get_output_llvm_ir_path(&self, pre_opt: bool, unit_name: &str) -> PathBuf {
         match &self.out_file_path {
             None => {
                 if pre_opt {
-                    return PathBuf::from("pre_opt.ll");
+                    return PathBuf::from(format!("pre_opt_{}.ll", unit_name));
                 } else {
-                    return PathBuf::from("post_opt.ll");
+                    return PathBuf::from(format!("post_opt_{}.ll", unit_name));
                 }
             }
             Some(out_file_path) => {
@@ -117,8 +118,10 @@ impl Configuration {
                     ))
                 } else {
                     let file_name = file_name.unwrap().to_str().unwrap();
-                    let file_name =
-                        String::from(if pre_opt { "pre_opt_" } else { "post_opt_" }) + file_name;
+                    let file_name = String::from(if pre_opt { "pre_opt_" } else { "post_opt_" })
+                        + file_name
+                        + "_"
+                        + unit_name;
                     let mut out_file_path = out_file_path.clone();
                     out_file_path.set_file_name(file_name);
                     out_file_path
@@ -203,6 +206,12 @@ impl Configuration {
         data.push_str(&self.debug_info.to_string());
         data.push_str(&self.threaded.to_string());
         data.push_str(&self.async_task.to_string());
+        data.push_str(build_time_utc!()); // Also add build time of the compiler.
         format!("{:x}", md5::compute(data))
+    }
+
+    pub fn use_compilation_cache(&self) -> bool {
+        self.fix_opt_level == FixOptimizationLevel::None
+            || self.fix_opt_level == FixOptimizationLevel::Minimum
     }
 }

@@ -1,6 +1,9 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 
-use crate::{ast::program::Program, configuration::Configuration, runtime::RuntimeFunctions};
+use crate::{
+    ast::program::Program, configuration::Configuration, RUNTIME_MARK_GLOBAL_BOXED_OBJECT,
+    RUNTIME_MARK_THREADED_BOXED_OBJECT, RUNTIME_RELEASE_BOXED_OBJECT,
+};
 
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
@@ -66,6 +69,7 @@ pub const CTRL_BLK_OBJ_ID_IDX: u32 = 2;
 pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const DOT_FIXLANG: &str = ".fixlang";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
+pub const COMPILATION_UNITS_PATH: &str = ".fixlang/intermediate/units";
 
 pub const ASYNCTASK_NAME: &str = "AsyncTask";
 
@@ -81,11 +85,11 @@ impl TraverserWorkType {
     pub fn mark_threaded() -> Self {
         Self(TRAVERSER_WORK_MARK_THREADED)
     }
-    pub fn runtime_function(&self) -> RuntimeFunctions {
+    pub fn runtime_function(&self) -> &str {
         match self.0 {
-            TRAVERSER_WORK_RELEASE => RuntimeFunctions::ReleaseBoxedObject,
-            TRAVERSER_WORK_MARK_GLOBAL => RuntimeFunctions::MarkGlobalBoxedObject,
-            TRAVERSER_WORK_MARK_THREADED => RuntimeFunctions::MarkThreadedBoxedObject,
+            TRAVERSER_WORK_RELEASE => RUNTIME_RELEASE_BOXED_OBJECT,
+            TRAVERSER_WORK_MARK_GLOBAL => RUNTIME_MARK_GLOBAL_BOXED_OBJECT,
+            TRAVERSER_WORK_MARK_THREADED => RUNTIME_MARK_THREADED_BOXED_OBJECT,
             _ => unreachable!(),
         }
     }

@@ -10,119 +10,232 @@ use std::{
 use inkwell::{
     module::Linkage,
     passes::PassManager,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetData, TargetMachine},
+    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
 use stopwatch::StopWatch;
 
+use self::compile_unit::CompileUnit;
+
 use super::*;
 
-fn build_module<'c>(
-    context: &'c Context,
-    module: &Module<'c>,
-    target_data: TargetData,
-    mut fix_mod: Program,
-    config: Configuration,
-) {
+// Compile the program, and returns the path of object files to be linked.
+fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<PathBuf> {
     let _sw = StopWatch::new("build_module", config.show_build_times);
 
-    // Add tuple types used in this program.
-    let mut used_tuple_sizes = fix_mod.used_tuple_sizes.clone();
-    // Make elements of used_tuple_sizes unique.
-    used_tuple_sizes.sort();
-    used_tuple_sizes.dedup();
-    for tuple_size in &used_tuple_sizes {
-        fix_mod.add_tuple_defn(*tuple_size);
-    }
+    let context = Context::create();
+    let target_machine = get_target_machine(config.get_llvm_opt_level());
+
+    // Add tuple definitions.
+    program.add_tuple_defns();
 
     // Add trait implementations for tuples such as ToString or Eq.
-    fix_mod.link(make_tuple_traits_mod(used_tuple_sizes), true);
+    program.link(make_tuple_traits_mod(&program.used_tuple_sizes), true);
 
     // Calculate list of type constructors.
-    fix_mod.calculate_type_env();
+    program.calculate_type_env();
 
     // Infer namespaces of traits and types that appear in declarations (not in expressions).
-    fix_mod.resolve_namespace_in_declaration();
+    program.resolve_namespace_in_declaration();
 
     // Resolve type aliases that appear in declarations (not in expressions).
-    fix_mod.resolve_type_aliases_in_declaration();
+    program.resolve_type_aliases_in_declaration();
 
     // Validate user-defined types.
-    fix_mod.validate_type_defns();
+    program.validate_type_defns();
 
     // Add struct / union methods
-    fix_mod.add_methods();
+    program.add_methods();
 
     // Validate trait env.
-    fix_mod.validate_trait_env();
+    program.validate_trait_env();
 
     // Create symbols.
-    fix_mod.create_trait_method_symbols();
+    program.create_trait_method_symbols();
 
     // Set and check kinds that appear in the module.
-    fix_mod.set_kinds();
+    program.set_kinds();
 
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::new(
-        fix_mod.trait_env.clone(),
-        fix_mod.type_env(),
-        fix_mod.visible_mods.clone(),
+        program.trait_env.clone(),
+        program.type_env(),
+        program.visible_mods.clone(),
     );
 
     // Register type declarations of global symbols to typechecker.
-    for (name, defn) in &fix_mod.global_values {
+    for (name, defn) in &program.global_values {
         typechecker
             .scope
             .add_global(name.name.clone(), &name.namespace, &defn.scm);
     }
 
     // Instantiate main function and all called functions.
-    let main_expr = fix_mod.instantiate_main_function(&typechecker);
+    let main_expr = program.instantiate_main_function(&typechecker);
 
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
-        uncurry_optimization(&mut fix_mod);
+        uncurry_optimization(&mut program);
     }
 
     // Perform borrowing optimization.
     if config.perform_borrowing_optimization() {
-        borrowing_optimization(&mut fix_mod);
+        borrowing_optimization(&mut program);
     }
 
     // Create GenerationContext.
+    let _dummy_module = GenerationContext::create_module("Dummy", &context, &target_machine);
     let mut gc = GenerationContext::new(
         &context,
-        &module,
-        target_data,
+        &_dummy_module,
+        target_machine.get_target_data(),
         config.clone(),
-        fix_mod.type_env(),
+        program.type_env(),
     );
 
-    // In debug mode, create debug infos.
-    if config.debug_info {
-        gc.create_debug_info();
-    }
-
-    // Build runtime functions.
-    build_runtime(&mut gc);
-
-    // Determine cache strategy.
-    if config.fix_opt_level != FixOptimizationLevel::Default {
-        let mut symbol_names = fix_mod
+    // Determine compilation units.
+    let mut units = vec![];
+    {
+        let mut symbol_names = program
             .instantiated_symbols
             .keys()
             .cloned()
             .collect::<Vec<_>>();
         symbol_names.sort();
+        let mods = program.linked_mods();
+        let mut mod_to_hash = HashMap::new();
+        for module in &mods {
+            mod_to_hash.insert(module.clone(), program.hash_of_dependent_codes(&module));
+        }
+        if config.use_compilation_cache() {
+            units = CompileUnit::split_symbols(&symbol_names, &mod_to_hash, &config);
+            // Also add main compilation unit.
+            let main_unit = CompileUnit::new(&[], &mod_to_hash, &config, false);
+            units.push(main_unit);
+        } else {
+            // Implement everything to main compilation unit.
+            let main_unit = CompileUnit::new(&symbol_names, &mod_to_hash, &config, false);
+            units.push(main_unit);
+        }
     }
 
-    // Generate codes.
-    fix_mod.generate_code(&mut gc);
+    // Paths of object files to be linked.
+    let mut obj_paths = vec![];
 
-    // Add main function.
-    let main_fn_type = context.i32_type().fn_type(
+    // Generate codes for compilation units.
+    let units_count = units.len();
+    for (i, unit) in units.iter_mut().enumerate() {
+        obj_paths.push(unit.obj_path());
+
+        // If the object file is cached, skip the generation.
+        if unit.is_cached() {
+            continue;
+        }
+
+        // Set up gc's module.
+        unit.create_module_if_none(&context, &target_machine);
+        gc.module = unit.module();
+
+        // In debug mode, create debug infos.
+        if config.debug_info {
+            gc.create_debug_info();
+        }
+
+        // Declare runtime functions.
+        runtime::build_runtime(&mut gc, BuildMode::Declare);
+
+        if i == units_count - 1 {
+            // In the last,
+            assert!(!unit.is_cached());
+
+            // Implement runtime functions.
+            build_runtime(&mut gc, BuildMode::Implement);
+            // Implement the `main()` function.
+            build_main_function(&mut gc, main_expr.clone(), &config);
+        }
+
+        // Declare all symbols in this program.
+        // TODO: Optimize so that only necessary symbols are declared.
+        for (name, sym) in &program.instantiated_symbols {
+            gc.declare_symbol(name, sym);
+        }
+
+        // Implement all symbols in this unit.
+        for name in unit.symbols() {
+            let sym = program.instantiated_symbols.get(name).unwrap();
+            gc.implement_symbol(name, sym);
+        }
+
+        // If debug info is generated, finalize it.
+        gc.finalize_di();
+
+        if config.emit_llvm {
+            // Print LLVM-IR to file before optimization.
+            emit_llvm(gc.module, &config, true);
+        }
+
+        // LLVM level optimization.
+        optimize_and_verify(gc.module, &config);
+
+        if config.emit_llvm {
+            // Print LLVM-IR to file after optimization.
+            emit_llvm(gc.module, &config, false);
+        }
+
+        // Generate object file.
+        write_to_object_file(gc.module, &target_machine, &unit.obj_path());
+    }
+
+    obj_paths
+}
+
+fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
+    target_machine
+        .write_to_file(&module, inkwell::targets::FileType::Object, obj_path)
+        .map_err(|e| error_exit(&format!("Failed to write to file: {}", e)))
+        .unwrap();
+}
+
+fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, pre_opt: bool) {
+    let unit_name = module.get_name().to_str().unwrap();
+    let path = config.get_output_llvm_ir_path(pre_opt, unit_name);
+    if let Err(e) = module.print_to_file(path) {
+        error_exit(&format!("Failed to emit llvm: {}", e.to_string()));
+    }
+}
+
+fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
+    // Run optimization
+    let passmgr = PassManager::create(());
+
+    passmgr.add_verifier_pass();
+    match config.fix_opt_level {
+        FixOptimizationLevel::None => {}
+        FixOptimizationLevel::Minimum => {
+            passmgr.add_tail_call_elimination_pass();
+        }
+        FixOptimizationLevel::Default => {
+            add_passes(&passmgr);
+        }
+    }
+    passmgr.run_on(module);
+
+    // Verify LLVM module.
+    let verify = module.verify();
+    if verify.is_err() {
+        print!("{}", verify.unwrap_err().to_str().unwrap());
+        panic!("LLVM verify failed!");
+    }
+}
+
+fn build_main_function<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    main_expr: Rc<ExprNode>,
+    config: &Configuration,
+) {
+    let main_fn_type = gc.context.i32_type().fn_type(
         &[
-            context.i32_type().into(), // argc
-            context
+            gc.context.i32_type().into(), // argc
+            gc.context
                 .i8_type()
                 .ptr_type(AddressSpace::from(0))
                 .ptr_type(AddressSpace::from(0))
@@ -130,8 +243,8 @@ fn build_module<'c>(
         ],
         false,
     );
-    let main_function = module.add_function("main", main_fn_type, None);
-    let entry_bb = context.append_basic_block(main_function, "entry");
+    let main_function = gc.module.add_function("main", main_fn_type, None);
+    let entry_bb = gc.context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
 
     // Save argc and argv to global variables.
@@ -166,7 +279,7 @@ fn build_module<'c>(
     );
     run_task_func_ptr.set_externally_initialized(true);
     run_task_func_ptr.set_linkage(Linkage::External);
-    let run_function_func = gc.runtimes.get(&RuntimeFunctions::RunFunction).unwrap();
+    let run_function_func = gc.module.get_function(RUNTIME_RUN_FUNCTION).unwrap();
     gc.builder().build_store(
         run_task_func_ptr.as_pointer_value(),
         run_function_func.as_global_value().as_pointer_value(),
@@ -174,19 +287,19 @@ fn build_module<'c>(
 
     // If both of `AsyncTask` and sanitizer are used, prepare for terminating threads.
     if config.async_task && config.sanitize_memory {
-        gc.call_runtime(RuntimeFunctions::ThreadPrepareTermination, &[]);
+        gc.call_runtime(RUNTIME_THREAD_PREPARE_TERMINATION, &[]);
     }
 
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
-    let main_lambda_val = main_obj.load_field_nocap(&mut gc, 0);
+    let main_lambda_val = main_obj.load_field_nocap(gc, 0);
     let main_lambda_ty = type_fun(make_tuple_ty(vec![]), make_tuple_ty(vec![]));
-    let main_lambda = Object::create_from_value(main_lambda_val, main_lambda_ty, &mut gc);
+    let main_lambda = Object::create_from_value(main_lambda_val, main_lambda_ty, gc);
     let unit = allocate_obj(
         make_tuple_ty(vec![]),
         &vec![],
         None,
-        &mut gc,
+        gc,
         Some("unit_for_main_io"),
     );
     let ret = gc.apply_lambda(main_lambda, vec![unit], None);
@@ -198,49 +311,6 @@ fn build_module<'c>(
     // Return main function.
     gc.builder()
         .build_return(Some(&gc.context.i32_type().const_int(0, false)));
-
-    // If debug info is generated, finalize it.
-    gc.finalize_di();
-
-    // Print LLVM bitcode to file
-    if config.emit_llvm {
-        let path = config.get_output_llvm_ir_path(true);
-        if let Err(e) = module.print_to_file(path) {
-            error_exit(&format!("Failed to emit llvm: {}", e.to_string()));
-        }
-    }
-
-    // Run optimization
-    let passmgr = PassManager::create(());
-
-    passmgr.add_verifier_pass();
-    match config.fix_opt_level {
-        FixOptimizationLevel::None => {}
-        FixOptimizationLevel::Minimum => {
-            passmgr.add_tail_call_elimination_pass();
-        }
-        FixOptimizationLevel::Default => {
-            add_passes(&passmgr);
-        }
-    }
-
-    passmgr.run_on(module);
-
-    // Verify LLVM module.
-    // Maybe not needed at now?
-    let verify = module.verify();
-    if verify.is_err() {
-        print!("{}", verify.unwrap_err().to_str().unwrap());
-        panic!("LLVM verify failed!");
-    }
-
-    // Print LLVM bitcode to file
-    if config.emit_llvm {
-        let path = config.get_output_llvm_ir_path(false);
-        if let Err(e) = module.print_to_file(path) {
-            error_exit(&format!("Failed to emit llvm: {}", e.to_string()));
-        }
-    }
 }
 
 #[allow(dead_code)]
@@ -348,37 +418,13 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
 }
 
 pub fn build_file(mut config: Configuration) {
-    let obj_path =
-        PathBuf::from(INTERMEDIATE_PATH).join(format!("a{}.o", rand::thread_rng().gen::<u64>())); // Add randomness for parallel execution.
     let exec_path = config.get_output_executable_file_path();
 
     // Create intermediate directory.
     fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
 
-    let target_machine = get_target_machine(config.get_llvm_opt_level());
-
-    let fix_mod = load_file(&mut config);
-
-    let ctx = Context::create();
-    let module = ctx.create_module("Main");
-    module.set_triple(&target_machine.get_triple());
-    module.set_data_layout(&target_machine.get_target_data().get_data_layout());
-
-    build_module(
-        &ctx,
-        &module,
-        target_machine.get_target_data(),
-        fix_mod,
-        config.clone(),
-    );
-
-    {
-        let _sw = StopWatch::new("write_to_file", config.show_build_times);
-        target_machine
-            .write_to_file(&module, inkwell::targets::FileType::Object, &obj_path)
-            .map_err(|e| error_exit(&format!("Failed to write to file: {}", e)))
-            .unwrap();
-    }
+    let program = load_file(&mut config);
+    let obj_paths = build_object_files(program, config.clone());
 
     let mut libs_opts = vec![];
     for (lib_name, link_type) in &config.linked_libraries {
@@ -444,11 +490,11 @@ pub fn build_file(mut config: Configuration) {
     } else {
         com.arg("-Wl,--gc-sections");
     }
-    com.arg("-o")
-        .arg(exec_path.to_str().unwrap())
-        .arg(obj_path.to_str().unwrap())
-        .arg(runtime_obj_path.to_str().unwrap())
-        .args(libs_opts);
+    com.arg("-o").arg(exec_path.to_str().unwrap());
+    for obj_path in obj_paths {
+        com.arg(obj_path.to_str().unwrap());
+    }
+    com.arg(runtime_obj_path.to_str().unwrap()).args(libs_opts);
     let output = com.output().expect("Failed to run gcc.");
     if output.stderr.len() > 0 {
         eprintln!(
