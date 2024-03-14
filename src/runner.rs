@@ -143,16 +143,6 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         // Declare runtime functions.
         runtime::build_runtime(&mut gc, BuildMode::Declare);
 
-        if i == units_count - 1 {
-            // In the last,
-            assert!(!unit.is_cached());
-
-            // Implement runtime functions.
-            build_runtime(&mut gc, BuildMode::Implement);
-            // Implement the `main()` function.
-            build_main_function(&mut gc, main_expr.clone(), &config);
-        }
-
         // Declare all symbols in this program.
         // TODO: Optimize so that only necessary symbols are declared.
         for (name, sym) in &program.instantiated_symbols {
@@ -163,6 +153,16 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         for name in unit.symbols() {
             let sym = program.instantiated_symbols.get(name).unwrap();
             gc.implement_symbol(name, sym);
+        }
+
+        if i == units_count - 1 {
+            // In the last,
+            assert!(!unit.is_cached());
+
+            // Implement runtime functions.
+            build_runtime(&mut gc, BuildMode::Implement);
+            // Implement the `main()` function.
+            build_main_function(&mut gc, main_expr.clone(), &config);
         }
 
         // If debug info is generated, finalize it.
