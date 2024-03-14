@@ -189,9 +189,26 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 }
 
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
+    let dir_path = obj_path.parent().unwrap();
+    match fs::create_dir_all(dir_path) {
+        Err(e) => {
+            error_exit(&format!(
+                "Failed to create directory {}: {}",
+                dir_path.display(),
+                e
+            ));
+        }
+        Ok(_) => {}
+    }
     target_machine
         .write_to_file(&module, inkwell::targets::FileType::Object, obj_path)
-        .map_err(|e| error_exit(&format!("Failed to write to file: {}", e)))
+        .map_err(|e| {
+            error_exit(&format!(
+                "Failed to write to file {}: {}",
+                obj_path.display(),
+                e
+            ))
+        })
         .unwrap();
 }
 
