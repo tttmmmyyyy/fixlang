@@ -72,7 +72,7 @@ pub fn split_into_units<X: Clone>(
                 if j >= sequence.len() {
                     break;
                 }
-                if j - i > MAX_CACHE_LEN {
+                if j - i >= MAX_CACHE_LEN {
                     break;
                 }
                 let cache_len_at_j = search_longest_cached_subsequence(&sequence[j..], &is_cached);
