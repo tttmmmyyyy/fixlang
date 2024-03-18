@@ -761,16 +761,12 @@ fn build_thread_terminate_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, m
 }
 
 fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
+    let argc_gv_ty = gc.context.i32_type();
     let func = match mode {
         BuildMode::Declare => {
             if let Some(_func) = gc.module.get_function(RUNTIME_GET_ARGC) {
                 return;
             }
-            // Add GLOBAL_VAR_NAME_ARGC global variable here.
-            let argc_gv_ty = gc.context.i32_type();
-            let argc_gv = gc.module.add_global(argc_gv_ty, None, GLOBAL_VAR_NAME_ARGC);
-            argc_gv.set_initializer(&argc_gv_ty.const_zero());
-
             let fn_ty = argc_gv_ty.fn_type(&[], false);
             gc.module.add_function(RUNTIME_GET_ARGC, fn_ty, None);
             return;
@@ -780,6 +776,9 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
             None => panic!("Runtime function {} is not declared", RUNTIME_GET_ARGC),
         },
     };
+    // Add GLOBAL_VAR_NAME_ARGC global variable.
+    let argc_gv = gc.module.add_global(argc_gv_ty, None, GLOBAL_VAR_NAME_ARGC);
+    argc_gv.set_initializer(&argc_gv_ty.const_zero());
 
     let bb = gc.context.append_basic_block(func, "entry");
 
@@ -810,10 +809,6 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
                 return;
             }
 
-            // Add GLOBAL_VAR_NAME_ARGV global variable here.
-            let argv_gv = gc.module.add_global(argv_gv_ty, None, GLOBAL_VAR_NAME_ARGV);
-            argv_gv.set_initializer(&argv_gv_ty.const_zero());
-
             let fn_ty = gc
                 .context
                 .i8_type()
@@ -827,6 +822,10 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
             None => panic!("Runtime function {} is not declared", RUNTIME_GET_ARGV),
         },
     };
+
+    // Add GLOBAL_VAR_NAME_ARGV global variable.
+    let argv_gv = gc.module.add_global(argv_gv_ty, None, GLOBAL_VAR_NAME_ARGV);
+    argv_gv.set_initializer(&argv_gv_ty.const_zero());
 
     let bb = gc.context.append_basic_block(func, "entry");
 
