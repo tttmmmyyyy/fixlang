@@ -2061,9 +2061,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         name: &FullName,
         sym: &InstantiatedSymbol,
     ) -> FunctionValue<'c> {
-        if self.global.contains_key(name) {
-            return self.global.get(name).unwrap().ptr.get_global_fun();
-        }
         self.typeresolver = sym.type_resolver.clone();
         let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
         if obj_ty.is_funptr() {

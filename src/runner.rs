@@ -82,16 +82,6 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         borrowing_optimization(&mut program);
     }
 
-    // Create GenerationContext.
-    let _dummy_module = GenerationContext::create_module("Dummy", &context, &target_machine);
-    let mut gc = GenerationContext::new(
-        &context,
-        &_dummy_module,
-        target_machine.get_target_data(),
-        config.clone(),
-        program.type_env(),
-    );
-
     // Determine compilation units.
     let mut units = vec![];
     {
@@ -131,9 +121,15 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
             continue;
         }
 
-        // Set up gc's module.
+        // Create GenerationContext.
         unit.create_module_if_none(&context, &target_machine);
-        gc.module = unit.module();
+        let mut gc = GenerationContext::new(
+            &context,
+            &unit.module(),
+            target_machine.get_target_data(),
+            config.clone(),
+            program.type_env(),
+        );
 
         // In debug mode, create debug infos.
         if config.debug_info {
