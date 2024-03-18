@@ -2061,6 +2061,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         name: &FullName,
         sym: &InstantiatedSymbol,
     ) -> FunctionValue<'c> {
+        if self.global.contains_key(name) {
+            return self.global.get(name).unwrap().ptr.get_global_fun();
+        }
         self.typeresolver = sym.type_resolver.clone();
         let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
         if obj_ty.is_funptr() {
@@ -2076,7 +2079,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let acc_fn_type = ptr_to_object_type(self.context).fn_type(&[], false);
             let acc_fn =
                 self.module
-                    .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::Internal));
+                    .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
 
             // Create debug info subprogram
             if self.has_di() {
