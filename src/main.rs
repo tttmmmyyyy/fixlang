@@ -130,6 +130,11 @@ fn main() {
         .short('o')
         .takes_value(true)
         .help("Path to output file.");
+    let verbose = Arg::new("verbose")
+        .long("verbose")
+        .short('v')
+        .takes_value(false)
+        .help("Show verbose messages.");
     let run_subc = App::new("run")
         .about("Executes a Fix program.")
         .arg(source_file.clone())
@@ -138,7 +143,8 @@ fn main() {
         .arg(debug_info.clone())
         .arg(opt_level.clone())
         .arg(emit_llvm.clone())
-        .arg(threaded.clone());
+        .arg(threaded.clone())
+        .arg(verbose.clone());
     let build_subc = App::new("build")
         .about("Builds an executable binary from source files.")
         .arg(source_file.clone())
@@ -148,7 +154,8 @@ fn main() {
         .arg(debug_info.clone())
         .arg(opt_level)
         .arg(emit_llvm.clone())
-        .arg(threaded.clone());
+        .arg(threaded.clone())
+        .arg(verbose.clone());
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
     let app = App::new("Fix-lang")
         .bin_name("fix")
@@ -191,12 +198,12 @@ fn main() {
         config.source_files = read_source_files_options(m);
         config.out_file_path = read_output_file_option(m);
         config.linked_libraries.append(&mut read_library_options(m));
-        if m.contains_id("debug-info") {
-            config.set_debug_info();
-        }
         config.emit_llvm = m.contains_id("emit-llvm");
         if m.contains_id("threaded") {
             config.set_threaded();
+        }
+        if m.contains_id("debug-info") {
+            config.set_debug_info();
         }
         if m.contains_id("opt-level") {
             // These lines should be after calling `set_debug_info`; otherwise, user cannot specify the optimization level while generating debug information.
@@ -207,6 +214,9 @@ fn main() {
                 "default" => config.set_fix_opt_level(FixOptimizationLevel::Default),
                 _ => panic!("Unknown optimization level: {}", opt_level),
             }
+        }
+        if m.contains_id("verbose") {
+            config.verbose = true;
         }
         config
     }

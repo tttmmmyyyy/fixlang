@@ -37,6 +37,8 @@ pub struct Configuration {
     pub runtime_c_macro: Vec<String>,
     // Show times for each build steps.
     pub show_build_times: bool,
+    // Verbose mode.
+    pub verbose: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -70,6 +72,7 @@ impl Default for Configuration {
             async_task: false,
             runtime_c_macro: vec![],
             show_build_times: false,
+            verbose: false,
         }
     }
 }
