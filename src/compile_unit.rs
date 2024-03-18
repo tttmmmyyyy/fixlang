@@ -34,7 +34,7 @@ fn unit_hash(
     format!("{:x}", md5::compute(data))
 }
 
-fn unit_file_list() -> HashSet<PathBuf> {
+fn cache_file_hash_list() -> HashSet<String> {
     let dir_path = PathBuf::from(COMPILATION_UNITS_PATH);
     if !dir_path.exists() {
         return HashSet::new();
@@ -51,7 +51,17 @@ fn unit_file_list() -> HashSet<PathBuf> {
     let mut paths = HashSet::new();
     for entry in dir {
         let entry = entry.unwrap();
-        paths.insert(entry.path());
+        let path = entry.path();
+        if path.is_dir() {
+            continue;
+        }
+        if path.extension().is_none() {
+            continue;
+        }
+        if path.extension().unwrap() != "o" {
+            continue;
+        }
+        paths.insert(path.file_stem().unwrap().to_str().unwrap().to_string());
     }
     paths
 }
@@ -60,18 +70,14 @@ fn is_cached(
     symbol_names: &[FullName],
     mod_to_hash: &HashMap<Name, String>,
     config: &Configuration,
-    cache_file_list: &HashSet<PathBuf>,
+    cache_file_hash_list: &HashSet<String>,
 ) -> bool {
-    cache_file_list.contains(&unit_file_path(&unit_hash(
-        symbol_names,
-        mod_to_hash,
-        config,
-    )))
+    cache_file_hash_list.contains(&unit_hash(symbol_names, mod_to_hash, config))
 }
 
 fn unit_file_path(unit_hash: &str) -> PathBuf {
     let mut path = PathBuf::from(COMPILATION_UNITS_PATH);
-    let file_name = "CU_".to_string() + unit_hash + ".o";
+    let file_name = unit_hash.to_string() + ".o";
     path.push(file_name);
     path
 }
