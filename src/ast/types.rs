@@ -869,7 +869,11 @@ impl TypeNode {
     }
 
     // Get traverser name.
-    pub fn traverser_name(self: &Rc<TypeNode>, capture: &Vec<Rc<TypeNode>>) -> String {
+    pub fn traverser_name(
+        self: &Rc<TypeNode>,
+        capture: &Vec<Rc<TypeNode>>,
+        module_name: &str,
+    ) -> String {
         let mut str = "".to_string();
         str += &self.to_string_normalize();
         if capture.len() > 0 {
@@ -882,6 +886,8 @@ impl TypeNode {
         if capture.len() > 0 {
             str += "]";
         }
+        str += "_in_";
+        str += module_name;
         "trav_".to_string() + &format!("{:x}", md5::compute(str))
     }
 

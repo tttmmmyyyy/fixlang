@@ -1409,7 +1409,7 @@ pub fn create_traverser<'c, 'm>(
     if ty.is_dynamic() && capture.is_empty() {
         return None;
     }
-    let trav_name = ty.traverser_name(capture);
+    let trav_name = ty.traverser_name(capture, gc.module.get_name().to_str().unwrap());
     match gc.module.get_function(&trav_name) {
         Some(fv) => Some(fv),
         None => {
