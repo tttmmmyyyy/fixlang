@@ -99,7 +99,12 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         if config.use_compilation_cache() {
             units = CompileUnit::split_symbols(&symbol_names, &mod_to_hash, &config);
             // Also add main compilation unit.
-            let main_unit = CompileUnit::new(&[], &mod_to_hash, &config, false);
+            let mut main_unit = CompileUnit::new(&[], &mod_to_hash, &config, false);
+            // Since symbols of main_unit is null, its hash takes constant value. To avoid this, set random hash.
+            main_unit.set_unit_hash(format!(
+                "{:x}",
+                md5::compute(rand::thread_rng().gen::<u64>().to_string())
+            ));
             units.push(main_unit);
         } else {
             // Implement everything to main compilation unit.

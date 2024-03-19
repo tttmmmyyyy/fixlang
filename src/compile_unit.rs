@@ -154,6 +154,10 @@ impl<'c> CompileUnit<'c> {
         self.is_cached
     }
 
+    pub fn set_unit_hash(&mut self, hash: String) {
+        self.unit_hash = hash;
+    }
+
     pub fn obj_path(&self) -> PathBuf {
         unit_file_path(&self.unit_hash)
     }
