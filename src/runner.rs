@@ -118,7 +118,16 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
         // If the object file is cached, skip the generation.
         if unit.is_cached() {
+            if config.verbose {
+                eprintln!(
+                    "Skipping generation of object file for {}.",
+                    unit.to_string()
+                );
+            }
             continue;
+        }
+        if config.verbose {
+            eprintln!("Generating object file for {}.", unit.to_string());
         }
 
         // Create GenerationContext.

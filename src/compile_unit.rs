@@ -4,6 +4,7 @@ Cache system for object (*.o) files.
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 
@@ -93,6 +94,19 @@ pub struct CompileUnit<'c> {
     module: Option<Module<'c>>,
 }
 
+impl<'c> fmt::Display for CompileUnit<'c> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "CompileUnit(hash = {}, symbols[0] = {}, symbols[-1] = {}, is_cached = {})",
+            self.unit_hash,
+            self.symbols[0].to_string(),
+            self.symbols[self.symbols.len() - 1].to_string(),
+            self.is_cached
+        )
+    }
+}
+
 impl<'c> CompileUnit<'c> {
     pub fn new(
         symbols: &[FullName],
@@ -113,7 +127,7 @@ impl<'c> CompileUnit<'c> {
             return;
         }
         let module = GenerationContext::create_module(
-            &format!("CU_{}", self.unit_hash),
+            &format!("Module_{}", self.unit_hash),
             ctx,
             target_machine,
         );
@@ -142,18 +156,14 @@ impl<'c> CompileUnit<'c> {
         mod_to_hash: &HashMap<Name, String>,
         config: &Configuration,
     ) -> Vec<CompileUnit<'c>> {
-        let cache_file_list = unit_file_list();
+        let cache_file_list = cache_file_hash_list();
         let is_cached =
             |names: &[FullName]| is_cached(names, mod_to_hash, config, &cache_file_list);
         let units = crate::segcache::split_into_units(symbol_names, is_cached);
         let mut result = vec![];
         for unit in &units {
-            result.push(CompileUnit::new(
-                &unit.items(),
-                mod_to_hash,
-                config,
-                unit.is_cached(),
-            ));
+            let unit = CompileUnit::new(&unit.items(), mod_to_hash, config, unit.is_cached());
+            result.push(unit);
         }
         result
     }
