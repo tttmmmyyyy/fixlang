@@ -435,7 +435,7 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
     );
     match target_machine {
         Some(tm) => tm,
-        None => error_exit("Failed to creeate target machine."),
+        None => error_exit("Failed to create target machine."),
     }
 }
 
