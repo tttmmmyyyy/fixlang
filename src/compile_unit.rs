@@ -100,8 +100,16 @@ impl<'c> fmt::Display for CompileUnit<'c> {
             f,
             "CompileUnit(hash = {}, symbols[0] = {}, symbols[-1] = {}, is_cached = {})",
             self.unit_hash,
-            self.symbols[0].to_string(),
-            self.symbols[self.symbols.len() - 1].to_string(),
+            if self.symbols.len() > 0 {
+                self.symbols[0].to_string()
+            } else {
+                "N/A".to_string()
+            },
+            if self.symbols.len() > 0 {
+                self.symbols[self.symbols.len() - 1].to_string()
+            } else {
+                "N/A".to_string()
+            },
             self.is_cached
         )
     }
