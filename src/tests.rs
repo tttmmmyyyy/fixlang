@@ -5760,8 +5760,16 @@ pub fn test_typedef_specify_kind() {
     module Main;
 
     type [m : *->*] StateT m s a = unbox struct {
-        data : s -> m (a, s)
+        runner : s -> m (a, s)
     };
+
+    impl [m : *->*] StateT m s : Monad {
+        pure = |a| StateT { runner : |s| pure $ (s, a) };
+        bind = |m, f| StateT { runner : |s| (
+            let (a, s) = *m.@runner(s);
+            f(a).@runner(s)
+        ) };
+    }
     
     main : IO ();
     main = pure();
