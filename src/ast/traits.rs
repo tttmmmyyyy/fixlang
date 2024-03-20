@@ -222,6 +222,33 @@ pub struct QualPredicate {
 }
 
 impl QualPredicate {
+    pub fn to_string(&self) -> String {
+        let mut s = String::default();
+        if self.context.len() > 0 || self.kind_preds.len() > 0 {
+            s += "[";
+        }
+        s += &self
+            .kind_preds
+            .iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        if self.context.len() > 0 {
+            s += ", ";
+            s += &self
+                .context
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+        }
+        if self.context.len() > 0 || self.kind_preds.len() > 0 {
+            s += "] ";
+        }
+        s += &self.predicate.to_string();
+        s
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         for p in &mut self.context {
             p.resolve_namespace(ctx);
@@ -406,6 +433,12 @@ pub struct KindPredicate {
     pub name: Name,
     pub kind: Rc<Kind>,
     pub source: Option<Span>,
+}
+
+impl KindPredicate {
+    pub fn to_string(&self) -> String {
+        format!("{} : {}", self.name, self.kind.to_string())
+    }
 }
 
 // Trait environments.
