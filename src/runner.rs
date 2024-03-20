@@ -90,11 +90,22 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
             let instantiated_symbols = &program.instantiated_symbols.values().collect::<Vec<_>>();
             units =
                 CompileUnit::split_symbols(instantiated_symbols, &module_dependency_hash, &config);
+            // Also add main compilation unit.
+            let mut main_unit = CompileUnit::new(vec![], vec![]);
+            main_unit.set_random_unit_hash(); // Recompile main unit every time.
+            units.push(main_unit);
+        } else {
+            // Add main compilation unit, which includes all symbols.
+            let symbols = program
+                .instantiated_symbols
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
+            let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
+            let mut main_unit = CompileUnit::new(symbols, modules);
+            main_unit.set_random_unit_hash(); // Recompile main unit every time.
+            units.push(main_unit);
         }
-        // Also add main compilation unit.
-        let mut main_unit = CompileUnit::new(vec![], vec![]);
-        main_unit.set_random_unit_hash();
-        units.push(main_unit);
     }
 
     // Paths of object files to be linked.
