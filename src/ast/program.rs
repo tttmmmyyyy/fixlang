@@ -614,7 +614,7 @@ impl Program {
         }
 
         // Load type-checking cache file.
-        let hash_of_dependent_codes = self.hash_of_dependent_codes(define_module);
+        let hash_of_dependent_codes = self.module_dependency_hash(define_module);
         let opt_cache = load_cache(name, &hash_of_dependent_codes, required_scheme);
         if opt_cache.is_some() {
             // If cache is available,
@@ -1179,7 +1179,7 @@ impl Program {
     }
 
     // Calculate a hash value of a module which is affected by source codes of all dependent modules.
-    pub fn hash_of_dependent_codes(&self, module: &Name) -> String {
+    pub fn module_dependency_hash(&self, module: &Name) -> String {
         let (importing_graph, mod_to_node) = self.importing_module_graph();
         let mut dependent_module_names = importing_graph
             .reachable_nodes(*mod_to_node.get(module).unwrap())
@@ -1195,12 +1195,12 @@ impl Program {
         format!("{:x}", md5::compute(concatenated_source_hashes))
     }
 
-    pub fn hash_of_dependent_codes_map(&self) -> HashMap<Name, String> {
+    pub fn module_dependency_hash_map(&self) -> HashMap<Name, String> {
         // TODO: Improve time complexity.
         let mods = self.linked_mods();
         let mut mod_to_hash = HashMap::new();
         for module in &mods {
-            mod_to_hash.insert(module.clone(), self.hash_of_dependent_codes(&module));
+            mod_to_hash.insert(module.clone(), self.module_dependency_hash(&module));
         }
         mod_to_hash
     }

@@ -85,28 +85,16 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     // Determine compilation units.
     let mut units = vec![];
     {
-        let mut symbol_names = program
-            .instantiated_symbols
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        symbol_names.sort();
-        let mod_to_hash = program.hash_of_dependent_codes_map();
+        let module_dependency_hash = program.module_dependency_hash_map();
         if config.use_compilation_cache() {
-            units = CompileUnit::split_symbols(&symbol_names, &mod_to_hash, &config);
-            // Also add main compilation unit.
-            let mut main_unit = CompileUnit::new(&[], &mod_to_hash, &config, false);
-            // Since symbols of main_unit is null, its hash takes constant value. To avoid this, set random hash.
-            main_unit.set_unit_hash(format!(
-                "{:x}",
-                md5::compute(rand::thread_rng().gen::<u64>().to_string())
-            ));
-            units.push(main_unit);
-        } else {
-            // Implement everything to main compilation unit.
-            let main_unit = CompileUnit::new(&symbol_names, &mod_to_hash, &config, false);
-            units.push(main_unit);
+            let instantiated_symbols = &program.instantiated_symbols.values().collect::<Vec<_>>();
+            units =
+                CompileUnit::split_symbols(instantiated_symbols, &module_dependency_hash, &config);
         }
+        // Also add main compilation unit.
+        let mut main_unit = CompileUnit::new(vec![], vec![]);
+        main_unit.set_random_unit_hash();
+        units.push(main_unit);
     }
 
     // Paths of object files to be linked.
@@ -115,7 +103,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     // Generate codes for compilation units.
     let units_count = units.len();
     for (i, unit) in units.iter_mut().enumerate() {
-        obj_paths.push(unit.obj_path());
+        obj_paths.push(unit.object_file_path());
 
         // If the object file is cached, skip the generation.
         if unit.is_cached() {
@@ -188,7 +176,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         }
 
         // Generate object file.
-        write_to_object_file(gc.module, &target_machine, &unit.obj_path());
+        write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
     }
 
     obj_paths
