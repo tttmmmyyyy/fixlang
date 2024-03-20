@@ -5758,13 +5758,14 @@ pub fn test_typedef_specify_kind_twice() {
 pub fn test_typedef_higher_kinded_type_variable() {
     let source = r##"
     module Main;
+    import Debug;
 
     type [m : *->*] StateT m s a = unbox struct {
         runner : s -> m (a, s)
     };
 
     impl [m : Monad] StateT m s : Monad {
-        pure = |a| StateT { runner : |s| pure $ (s, a) };
+        pure = |a| StateT { runner : |s| pure $ (a, s) };
         bind = |m, f| StateT { runner : |s| (
             let (a, s) = *m.@runner(s);
             f(a).@runner(s)
@@ -5782,7 +5783,7 @@ pub fn test_typedef_higher_kinded_type_variable() {
         lift : [m : Monad] m a -> StateT m s a;
         lift = |m| StateT { runner : |s| (
             let a = *m;
-            pure $ (s, a)
+            pure $ (a, s)
         ) };
     }
 
