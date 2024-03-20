@@ -223,7 +223,7 @@ pub struct TyConInfo {
     pub kind: Rc<Kind>,
     pub variant: TyConVariant,
     pub is_unbox: bool,
-    pub tyvars: Vec<Name>,
+    pub tyvars: Vec<(Name, Rc<Kind>)>,
     pub fields: Vec<Field>, // For array, element type.
     pub source: Option<Span>,
 }
@@ -246,7 +246,7 @@ impl TyConInfo {
 pub struct TyAliasInfo {
     pub kind: Rc<Kind>,
     pub value: Rc<TypeNode>,
-    pub tyvars: Vec<Name>,
+    pub tyvars: Vec<(Name, Rc<Kind>)>,
     pub source: Option<Span>,
 }
 
@@ -476,13 +476,13 @@ impl TypeNode {
     }
 
     // For structs and unions, return types of fields.
-    // For Array, return element type.
+    // For Array, return the element type.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Rc<TypeNode>> {
         let args = self.collect_type_argments();
         let ti = self.toplevel_tycon_info(type_env);
         assert_eq!(args.len(), ti.tyvars.len());
         let mut s = Substitution::default();
-        for (i, tv) in ti.tyvars.iter().enumerate() {
+        for (i, (tv, _kind)) in ti.tyvars.iter().enumerate() {
             s.add_substitution(&Substitution::single(tv, args[i].clone()));
         }
         ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
@@ -568,7 +568,7 @@ impl TypeNode {
                     let mut s = Substitution::default();
                     let mut src: Option<Span> = toplevel_ty.get_source().clone();
                     for i in 0..ta.tyvars.len() {
-                        let param = &ta.tyvars[i];
+                        let (param, _kind) = &ta.tyvars[i];
                         let arg = app_seq[i + 1].clone();
                         src = Span::unite_opt(&src, arg.get_source());
                         s.add_substitution(&Substitution::single(&param, arg));

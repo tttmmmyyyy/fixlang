@@ -280,7 +280,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
         let (preds, kinds) = parse_predicates(pair, ctx);
         if !preds.is_empty() {
             error_exit_with_src(
-                "The current Fix does not support super-trait; only kinds of the type parameter can be specified as the assumption for trait definition.",
+                "Fix does not support super-trait; only kinds of the type parameter can be specified as the assumption for trait definition.",
                 &preds.first().unwrap().info.source
             );
         }
@@ -515,11 +515,38 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDefn {
     assert_eq!(pair.as_rule(), Rule::type_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
+
+    // Parse predicates to specify kinds of type variables.
+    let mut kinds: HashMap<Name, Rc<Kind>> = HashMap::new();
+    if pairs.peek().unwrap().as_rule() == Rule::predicates {
+        let pair = pairs.next().unwrap();
+        let (preds, kind_preds) = parse_predicates(pair, ctx);
+        if preds.len() > 0 {
+            error_exit_with_src(
+                "In type definition, you cannot specify trait bound on type variable; you can only specify kind of type variable.",
+                &preds.first().unwrap().info.source,
+            );
+        }
+        for kind_pred in kind_preds {
+            if kinds.contains_key(&kind_pred.name) {
+                error_exit_with_src(
+                    &format!(
+                        "Kind of type variable `{}` is specified more than once.",
+                        kind_pred.name
+                    ),
+                    &kind_pred.source,
+                );
+            }
+            kinds.insert(kind_pred.name, kind_pred.kind);
+        }
+    }
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_name);
     let name = pairs.next().unwrap().as_str();
-    let mut tyvars: Vec<Name> = vec![];
+    let mut tyvars: Vec<(Name, Rc<Kind>)> = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::type_var {
-        tyvars.push(pairs.next().unwrap().as_str().to_string());
+        let tyvar_name = pairs.next().unwrap().as_str().to_string();
+        let kind = kinds.get(&tyvar_name).unwrap_or(&kind_star()).clone();
+        tyvars.push((tyvar_name, kind));
     }
     let pair = pairs.next().unwrap();
     let type_value = if pair.as_rule() == Rule::struct_defn {

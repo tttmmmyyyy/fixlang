@@ -350,7 +350,8 @@ impl Program {
     pub fn calculate_type_env(&mut self) {
         let mut tycons = bulitin_tycons();
         let mut aliases: HashMap<TyCon, TyAliasInfo> = HashMap::new();
-        for type_decl in &self.type_defns {
+        for type_decl in &mut self.type_defns {
+            type_decl.set_kinds_in_value();
             let tycon = type_decl.tycon();
             if tycons.contains_key(&tycon) || aliases.contains_key(&tycon) {
                 let other_src = if tycons.contains_key(&tycon) {

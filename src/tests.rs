@@ -5725,3 +5725,46 @@ pub fn test_typedef_unknown_tyvar() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_typedef_trait_precondition() {
+    let source = r##"
+    module Main;
+
+    type [a : ToString] Hoge a = unbox struct { data : a };
+    
+    main : IO ();
+    main = pure();
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_typedef_specify_kind_twice() {
+    let source = r##"
+    module Main;
+
+    type [a : *, a : *->*] Hoge a = unbox struct { data : a };
+    
+    main : IO ();
+    main = pure();
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_typedef_specify_kind() {
+    let source = r##"
+    module Main;
+
+    type [m : *->*] StateT m s a = unbox struct {
+        data : s -> m (a, s)
+    };
+    
+    main : IO ();
+    main = pure();
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}

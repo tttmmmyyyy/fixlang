@@ -5,7 +5,7 @@ use super::*;
 pub struct TypeDefn {
     pub name: FullName,
     pub value: TypeDeclValue,
-    pub tyvars: Vec<Name>,
+    pub tyvars: Vec<(Name, Rc<Kind>)>, // ToDo: change this to Vec<Rc<TyVar>>.
     pub source: Option<Span>,
 }
 
@@ -41,11 +41,10 @@ impl TypeDefn {
     }
 
     // Calculate kind of tycon defined by this type definition.
-    // NOTE: Currently, all type variables appear in type definition have kind "*"".
     pub fn kind(&self) -> Rc<Kind> {
         let mut kind = kind_star();
-        for _ in &self.tyvars {
-            kind = kind_arrow(kind_star(), kind);
+        for (_, tv_kind) in self.tyvars.iter().rev() {
+            kind = kind_arrow(tv_kind.clone(), kind);
         }
         kind
     }
@@ -67,8 +66,8 @@ impl TypeDefn {
 
     pub fn ty(&self) -> Rc<TypeNode> {
         let mut ty = type_tycon(&Rc::new(self.tycon()));
-        for tyvar in &self.tyvars {
-            ty = type_tyapp(ty, type_tyvar(tyvar, &kind_star()));
+        for (tyvar, kind) in &self.tyvars {
+            ty = type_tyapp(ty, type_tyvar(tyvar, kind));
         }
         ty
     }
@@ -108,7 +107,7 @@ impl TypeDefn {
 
     // Check if all of type variables in field types appear in lhs of type definition.
     pub fn check_tyvars(&self) {
-        let tyvars = HashSet::<String>::from_iter(self.tyvars.iter().map(|s| s.clone()));
+        let tyvars = HashSet::<String>::from_iter(self.tyvars.iter().map(|(tv, _kind)| tv.clone()));
         for v in self.free_variables_in_definition() {
             if !tyvars.contains(&v) {
                 error_exit_with_src(
@@ -121,6 +120,12 @@ impl TypeDefn {
                 )
             }
         }
+    }
+
+    // Correct kind of type variables in `self.value` using kind information in `self.tyvars`.
+    pub fn set_kinds_in_value(&mut self) {
+        let kind_scope: HashMap<_, _> = self.tyvars.iter().cloned().collect();
+        self.value.set_kinds(&kind_scope);
     }
 
     pub fn is_alias(&self) -> bool {
@@ -159,6 +164,14 @@ impl TypeDeclValue {
             _ => false,
         }
     }
+
+    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Rc<Kind>>) {
+        match self {
+            TypeDeclValue::Struct(s) => s.set_kinds(kinds),
+            TypeDeclValue::Union(u) => u.set_kinds(kinds),
+            TypeDeclValue::Alias(a) => a.set_kinds(kinds),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -177,6 +190,12 @@ impl Struct {
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
         for f in &mut self.fields {
             f.resolve_type_aliases(type_env);
+        }
+    }
+
+    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Rc<Kind>>) {
+        for f in &mut self.fields {
+            f.set_kinds(kinds);
         }
     }
 }
@@ -199,6 +218,12 @@ impl Union {
             f.resolve_type_aliases(type_env);
         }
     }
+
+    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Rc<Kind>>) {
+        for f in &mut self.fields {
+            f.set_kinds(kinds);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -209,6 +234,10 @@ pub struct TypeAlias {
 impl TypeAlias {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         self.value = self.value.resolve_namespace(ctx);
+    }
+
+    pub fn set_kinds(&mut self, scope: &HashMap<Name, Rc<Kind>>) {
+        self.value = self.value.set_kinds(scope);
     }
 }
 
@@ -227,7 +256,7 @@ impl Field {
         self.ty = self.ty.resolve_type_aliases(type_env);
     }
 
-    // Check if fields are duplicated. If duplication found, it returns the duplicated field.
+    // Check if fields are duplicated. If duplication is found, it returns the duplicated field.
     pub fn check_duplication(fields: &Vec<Field>) -> Option<Name> {
         let mut names: HashSet<Name> = Default::default();
         for field in fields {
@@ -238,5 +267,9 @@ impl Field {
             }
         }
         return None;
+    }
+
+    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Rc<Kind>>) {
+        self.ty = self.ty.set_kinds(kinds);
     }
 }
