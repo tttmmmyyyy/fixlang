@@ -213,7 +213,7 @@ impl Configuration {
         format!("{:x}", md5::compute(data))
     }
 
-    pub fn use_compilation_cache(&self) -> bool {
+    pub fn separate_compilation(&self) -> bool {
         self.fix_opt_level == FixOptimizationLevel::None
             || self.fix_opt_level == FixOptimizationLevel::Minimum
     }
