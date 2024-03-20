@@ -34,18 +34,15 @@ impl<'c> fmt::Display for CompileUnit<'c> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "CompileUnit(hash = {}, first symbol = {}, last symbol = {}, is_cached = {})",
+            "CompileUnit(hash = {}, size = {}, symbols = [{}, ...], dependency = [{}], is_cached = {})",
             self.unit_hash,
+            self.symbols.len(),
             if self.symbols.len() > 0 {
                 self.symbols[0].to_string()
             } else {
                 "N/A".to_string()
             },
-            if self.symbols.len() > 0 {
-                self.symbols[self.symbols.len() - 1].to_string()
-            } else {
-                "N/A".to_string()
-            },
+            self.dependent_modules.join(", "),
             self.is_cached()
         )
     }
