@@ -1025,8 +1025,11 @@ impl TypeNode {
 // Type scheme.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Scheme {
+    // Generalized variables.
     pub vars: HashMap<Name, Rc<Kind>>,
+    // Predicates.
     pub preds: Vec<Predicate>,
+    // Generalized type.
     pub ty: Rc<TypeNode>,
 }
 
@@ -1106,6 +1109,12 @@ impl Scheme {
     pub fn set_kinds(&self, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) -> Rc<Scheme> {
         let mut ret = self.clone();
         let mut scope: HashMap<Name, Rc<Kind>> = Default::default();
+        // If a kind in `self.vars` is not `*`, then the kind is explicitly specified by user, so we insert it into `scope`.
+        for (v, k) in &self.vars {
+            if *k != kind_star() {
+                scope.insert(v.clone(), k.clone());
+            }
+        }
         let res = QualPredicate::extend_kind_scope(&mut scope, &ret.preds, &vec![], trait_kind_map);
         if let Err(msg) = res {
             let mut span = ret.preds[0].info.source.clone();
@@ -1146,7 +1155,6 @@ impl Scheme {
         Rc::new(Scheme { vars, preds, ty })
     }
 
-    #[allow(dead_code)]
     pub fn substitute(&self, s: &Substitution) -> Rc<Scheme> {
         // Generalized variables cannot be replaced.
         for (v, _) in &self.vars {
@@ -1187,7 +1195,6 @@ impl Scheme {
     }
 
     // Get free type variables.
-    #[allow(dead_code)]
     pub fn free_vars(&self) -> HashMap<Name, Rc<Kind>> {
         let mut ret = self.ty.free_vars();
         for var in &self.vars {

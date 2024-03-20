@@ -61,8 +61,8 @@ impl TraitInfo {
     }
 
     // Get type-scheme of a method.
-    // Here, for example, in case "trait a: Show { show: a -> String }",
-    // this function returns "[a: Show] a -> String" as type of "show" method.
+    // Here, for example, in case "trait a: ToString { to_string : a -> String }",
+    // this function returns "[a: ToString] a -> String" as type of "to_string" method.
     pub fn method_scheme(&self, name: &Name) -> Rc<Scheme> {
         let mut ty = self.methods.get(name).unwrap().clone();
         let vars = ty.free_vars();
@@ -75,8 +75,8 @@ impl TraitInfo {
     }
 
     // Get the type of a method.
-    // Here, for example, in case "trait a: Show { show: a -> String }",
-    // this function returns "a -> String" as type of "show" method.
+    // Here, for example, in case "trait a: ToString { to_string: a -> String }",
+    // this function returns "a -> String" as type of "to_string" method.
     pub fn method_ty(&self, name: &Name) -> QualType {
         self.methods.get(name).unwrap().clone()
     }
@@ -151,16 +151,25 @@ impl TraitInstance {
     // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
     // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
     pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Rc<Scheme> {
+        // Create qualtype. Ex. `[] (a, b) -> String`.
         let trait_tyvar = &trait_info.type_var.name; // Ex. tyvar == `t`
         let impl_type = self.qual_pred.predicate.ty.clone(); // Ex. impl_type == `(a, b)`
         let s = Substitution::single(&trait_tyvar, impl_type);
         let mut method_qualty = trait_info.method_ty(method_name); // Ex. method_qualty == `[] t -> String`
         s.substitute_qualtype(&mut method_qualty); // Ex. method_qualty == `[] (a, b) -> String`
 
+        // Prepare `vars`, `ty` and `preds` to be generalized.
         let ty = method_qualty.ty.clone();
-        let vars = ty.free_vars();
+        let mut vars = ty.free_vars();
         let mut preds = self.qual_pred.context.clone();
         preds.append(&mut method_qualty.preds);
+
+        // Apply kind information specified by kind predicates of trait implementation to `vars`.
+        for kind_pred in self.qual_pred.kind_preds.iter() {
+            if vars.contains_key(&kind_pred.name) {
+                vars.insert(kind_pred.name.clone(), kind_pred.kind.clone());
+            }
+        }
 
         // Set source location of the type to the location where the method is implemented.
         let source = self
@@ -240,7 +249,7 @@ impl QualPredicate {
         ) -> Result<(), String> {
             if scope.contains_key(&tyvar) {
                 if scope[&tyvar] != kind {
-                    return Err("Kind mismatch on type variable.".to_string());
+                    return Err(format!("Kind mismatch on type variable `{}`.", tyvar));
                 }
             } else {
                 scope.insert(tyvar, kind);
