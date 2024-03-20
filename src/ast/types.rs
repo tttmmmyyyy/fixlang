@@ -279,19 +279,19 @@ impl std::fmt::Debug for TypeNode {
 
 impl TypeNode {
     // The set of defining modules of type constructors that appear in this type.
-    pub fn dependent_modules(&self, out_set: &mut HashSet<Name>) {
+    pub fn define_modules_of_tycons(&self, out_set: &mut HashSet<Name>) {
         match &self.ty {
             Type::TyVar(_) => {}
             Type::TyCon(tc) => {
                 out_set.insert(tc.name.module());
             }
             Type::TyApp(fun, arg) => {
-                fun.dependent_modules(out_set);
-                arg.dependent_modules(out_set);
+                fun.define_modules_of_tycons(out_set);
+                arg.define_modules_of_tycons(out_set);
             }
             Type::FunTy(src, dst) => {
-                src.dependent_modules(out_set);
-                dst.dependent_modules(out_set);
+                src.define_modules_of_tycons(out_set);
+                dst.define_modules_of_tycons(out_set);
             }
         }
     }

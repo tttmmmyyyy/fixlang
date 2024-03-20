@@ -58,7 +58,7 @@ impl InstantiatedSymbol {
     pub fn dependent_modules(&self) -> HashSet<Name> {
         let mut dep_mods = HashSet::default();
         dep_mods.insert(self.instantiated_name.module());
-        self.ty.dependent_modules(&mut dep_mods);
+        self.ty.define_modules_of_tycons(&mut dep_mods);
         dep_mods
         // Even for implemented trait methods, it is enough to add the module where the trait is defined and the modules where the types of the symbol are defined.
         // This is because,
@@ -1190,6 +1190,7 @@ impl Program {
 
     // Calculate a hash value of a module which is affected by source codes of all dependent modules.
     pub fn module_dependency_hash(&self, module: &Name) -> String {
+        let (importing_graph, mod_to_node) = self.importing_module_graph();
         let mut dependent_module_names = self
             .calculate_dependent_modules(module)
             .iter()
