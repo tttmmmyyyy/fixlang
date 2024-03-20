@@ -5766,7 +5766,7 @@ pub fn test_typedef_higher_kinded_type_variable() {
 
     impl [m : Monad] StateT m s : Monad {
         pure = |a| StateT { runner : |s| pure $ (a, s) };
-        bind = |m, f| StateT { runner : |s| (
+        bind = |f, m| StateT { runner : |s| (
             let (a, s) = *(m.@runner)(s);
             (f(a).@runner)(s)
         ) };
