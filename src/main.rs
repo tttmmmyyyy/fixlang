@@ -138,6 +138,7 @@ fn main() {
     let max_cu_size = Arg::new("max-cu-size")
         .long("max-cu-size")
         .takes_value(true)
+        .default_value(DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR)
         .help(
             "Maximum size of compilation units created by separate compilation.\n\
             Decreasing this value improves parallelism and cache efficiency of compilation, but increases link time.\n\
