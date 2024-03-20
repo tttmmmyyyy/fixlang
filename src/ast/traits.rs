@@ -213,7 +213,7 @@ impl TraitAlias {
     }
 }
 
-// Qualified predicate. Statement such as "Array a : Eq for a : Eq".
+// Qualified predicate. Statement such as "[a : Eq] Array a : Eq".
 #[derive(Clone)]
 pub struct QualPredicate {
     pub context: Vec<Predicate>,
