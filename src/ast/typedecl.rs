@@ -5,7 +5,7 @@ use super::*;
 pub struct TypeDefn {
     pub name: FullName,
     pub value: TypeDeclValue,
-    pub tyvars: Vec<(Name, Rc<Kind>)>, // ToDo: change this to Vec<Rc<TyVar>>.
+    pub tyvars: Vec<Rc<TyVar>>,
     pub source: Option<Span>,
 }
 
@@ -43,8 +43,8 @@ impl TypeDefn {
     // Calculate kind of tycon defined by this type definition.
     pub fn kind(&self) -> Rc<Kind> {
         let mut kind = kind_star();
-        for (_, tv_kind) in self.tyvars.iter().rev() {
-            kind = kind_arrow(tv_kind.clone(), kind);
+        for tv in self.tyvars.iter().rev() {
+            kind = kind_arrow(tv.kind.clone(), kind);
         }
         kind
     }
@@ -66,8 +66,8 @@ impl TypeDefn {
 
     pub fn ty(&self) -> Rc<TypeNode> {
         let mut ty = type_tycon(&Rc::new(self.tycon()));
-        for (tyvar, kind) in &self.tyvars {
-            ty = type_tyapp(ty, type_tyvar(tyvar, kind));
+        for tv in &self.tyvars {
+            ty = type_tyapp(ty, type_from_tyvar(tv.clone()));
         }
         ty
     }
@@ -107,7 +107,7 @@ impl TypeDefn {
 
     // Check if all of type variables in field types appear in lhs of type definition.
     pub fn check_tyvars(&self) {
-        let tyvars = HashSet::<String>::from_iter(self.tyvars.iter().map(|(tv, _kind)| tv.clone()));
+        let tyvars = HashSet::<String>::from_iter(self.tyvars.iter().map(|tv| tv.name.clone()));
         for v in self.free_variables_in_definition() {
             if !tyvars.contains(&v) {
                 error_exit_with_src(
@@ -124,7 +124,11 @@ impl TypeDefn {
 
     // Correct kind of type variables in `self.value` using kind information in `self.tyvars`.
     pub fn set_kinds_in_value(&mut self) {
-        let kind_scope: HashMap<_, _> = self.tyvars.iter().cloned().collect();
+        let kind_scope: HashMap<_, _> = self
+            .tyvars
+            .iter()
+            .map(|tv| (tv.name.clone(), tv.kind.clone()))
+            .collect();
         self.value.set_kinds(&kind_scope);
     }
 

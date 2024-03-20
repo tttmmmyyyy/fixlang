@@ -146,7 +146,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             kind: kind_arrow(kind_star(), kind_star()),
             variant: TyConVariant::Array,
             is_unbox: false,
-            tyvars: vec![("a".to_string(), kind_star())],
+            tyvars: vec![tyvar_from_name("a", &kind_star())],
             fields: vec![Field {
                 name: "array_elem".to_string(), // Unused
                 ty: type_tyvar_star("a"),
@@ -165,7 +165,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                 variant: TyConVariant::Primitive,
                 is_unbox: true,
                 tyvars: (0..arity)
-                    .map(|i| (format!("a{}", i), kind_star()))
+                    .map(|i| (tyvar_from_name(&format!("a{}", i), &kind_star())))
                     .collect(),
                 fields: vec![],
                 source: None,
@@ -457,7 +457,7 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
 pub fn tuple_defn(size: u32) -> TypeDefn {
     assert!(size != 1);
     let tyvars = (0..size)
-        .map(|i| ("t".to_string() + &i.to_string(), kind_star()))
+        .map(|i| tyvar_from_name(&("t".to_string() + &i.to_string()), &kind_star()))
         .collect::<Vec<_>>();
     TypeDefn {
         name: make_tuple_name(size),
@@ -466,7 +466,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
             fields: (0..size)
                 .map(|i| Field {
                     name: i.to_string(),
-                    ty: type_tyvar_star(&tyvars[i as usize].0),
+                    ty: type_from_tyvar(tyvars[i as usize].clone()),
                 })
                 .collect(),
             is_unbox: TUPLE_UNBOX,
@@ -3179,8 +3179,8 @@ pub fn loop_result_defn() -> TypeDefn {
     TypeDefn {
         name: FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME),
         tyvars: vec![
-            ("s".to_string(), kind_star()),
-            ("b".to_string(), kind_star()),
+            tyvar_from_name("s", &kind_star()),
+            tyvar_from_name("b", &kind_star()),
         ],
         value: TypeDeclValue::Union(Union {
             fields: vec![

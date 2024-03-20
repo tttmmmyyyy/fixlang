@@ -542,11 +542,11 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDefn {
     }
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_name);
     let name = pairs.next().unwrap().as_str();
-    let mut tyvars: Vec<(Name, Rc<Kind>)> = vec![];
+    let mut tyvars: Vec<Rc<TyVar>> = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::type_var {
-        let tyvar_name = pairs.next().unwrap().as_str().to_string();
-        let kind = kinds.get(&tyvar_name).unwrap_or(&kind_star()).clone();
-        tyvars.push((tyvar_name, kind));
+        let tyvar_name = pairs.next().unwrap().as_str();
+        let kind = kinds.get(tyvar_name).unwrap_or(&kind_star()).clone();
+        tyvars.push(tyvar_from_name(tyvar_name, &kind));
     }
     let pair = pairs.next().unwrap();
     let type_value = if pair.as_rule() == Rule::struct_defn {

@@ -68,7 +68,7 @@ impl TraitInfo {
         let vars = ty.free_vars();
         let mut preds = vec![Predicate::make(
             self.id.clone(),
-            type_var_from_tyvar(self.type_var.clone()),
+            type_from_tyvar(self.type_var.clone()),
         )];
         preds.append(&mut ty.preds);
         Scheme::generalize(vars, preds, ty.ty)

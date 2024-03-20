@@ -223,7 +223,7 @@ pub struct TyConInfo {
     pub kind: Rc<Kind>,
     pub variant: TyConVariant,
     pub is_unbox: bool,
-    pub tyvars: Vec<(Name, Rc<Kind>)>,
+    pub tyvars: Vec<Rc<TyVar>>,
     pub fields: Vec<Field>, // For array, element type.
     pub source: Option<Span>,
 }
@@ -246,7 +246,7 @@ impl TyConInfo {
 pub struct TyAliasInfo {
     pub kind: Rc<Kind>,
     pub value: Rc<TypeNode>,
-    pub tyvars: Vec<(Name, Rc<Kind>)>,
+    pub tyvars: Vec<Rc<TyVar>>,
     pub source: Option<Span>,
 }
 
@@ -482,8 +482,8 @@ impl TypeNode {
         let ti = self.toplevel_tycon_info(type_env);
         assert_eq!(args.len(), ti.tyvars.len());
         let mut s = Substitution::default();
-        for (i, (tv, _kind)) in ti.tyvars.iter().enumerate() {
-            s.add_substitution(&Substitution::single(tv, args[i].clone()));
+        for (i, tv) in ti.tyvars.iter().enumerate() {
+            s.add_substitution(&Substitution::single(&tv.name, args[i].clone()));
         }
         ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
     }
@@ -568,7 +568,7 @@ impl TypeNode {
                     let mut s = Substitution::default();
                     let mut src: Option<Span> = toplevel_ty.get_source().clone();
                     for i in 0..ta.tyvars.len() {
-                        let (param, _kind) = &ta.tyvars[i];
+                        let param = &ta.tyvars[i].name;
                         let arg = app_seq[i + 1].clone();
                         src = Span::unite_opt(&src, arg.get_source());
                         s.add_substitution(&Substitution::single(&param, arg));
@@ -949,7 +949,7 @@ pub fn type_tyvar_star(var_name: &str) -> Rc<TypeNode> {
     TypeNode::new_arc(Type::TyVar(tyvar_from_name(var_name, &kind_star())))
 }
 
-pub fn type_var_from_tyvar(tyvar: Rc<TyVar>) -> Rc<TypeNode> {
+pub fn type_from_tyvar(tyvar: Rc<TyVar>) -> Rc<TypeNode> {
     TypeNode::new_arc(Type::TyVar(tyvar))
 }
 
