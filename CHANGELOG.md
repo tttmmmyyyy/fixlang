@@ -21,7 +21,7 @@
 - Overflowing integer literals now result in a compile-time error.
 - Now tuple types (`Std::Tuple{N}`) for any large N are defined if they are used. In older versions, only tuples upto N=4 were defined.
 - Module names can contain period so that you can define a module such as `Main.Model.Impl`.
-- Now, in the trait definition, the type of a trait method should contain the type variable of that trait definition.
+- Now, in a trait definition, the type of a trait method should contain the type variable of that trait definition.
 
 ### Fixed
 - Performance improvement of functions in built-in libraries: #6, #30, #31
