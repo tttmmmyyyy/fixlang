@@ -3,7 +3,7 @@ use std::{env, path::PathBuf};
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
 
-use crate::misc::error_exit;
+use crate::{misc::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 
 #[derive(Clone, Copy)]
 pub enum LinkType {
@@ -39,6 +39,8 @@ pub struct Configuration {
     pub show_build_times: bool,
     // Verbose mode.
     pub verbose: bool,
+    // Maximum size of compilation unit.
+    pub max_cu_size: usize,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -73,6 +75,7 @@ impl Default for Configuration {
             runtime_c_macro: vec![],
             show_build_times: false,
             verbose: false,
+            max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
         }
     }
 }

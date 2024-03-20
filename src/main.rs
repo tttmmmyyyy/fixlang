@@ -135,6 +135,14 @@ fn main() {
         .short('v')
         .takes_value(false)
         .help("Show verbose messages.");
+    let max_cu_size = Arg::new("max-cu-size")
+        .long("max-cu-size")
+        .takes_value(true)
+        .help(
+            "Maximum size of compilation units created by separate compilation.\n\
+            Decreasing this value improves parallelism and cache efficiency of compilation, but increases link time.\n\
+            NOTE: Separate compilation is disabled under the default optimization level.",
+        );
     let run_subc = App::new("run")
         .about("Executes a Fix program.")
         .arg(source_file.clone())
@@ -144,7 +152,8 @@ fn main() {
         .arg(opt_level.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
-        .arg(verbose.clone());
+        .arg(verbose.clone())
+        .arg(max_cu_size.clone());
     let build_subc = App::new("build")
         .about("Builds an executable binary from source files.")
         .arg(source_file.clone())
@@ -155,7 +164,8 @@ fn main() {
         .arg(opt_level)
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
-        .arg(verbose.clone());
+        .arg(verbose.clone())
+        .arg(max_cu_size.clone());
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
     let app = App::new("Fix-lang")
         .bin_name("fix")
@@ -218,6 +228,9 @@ fn main() {
         if m.contains_id("verbose") {
             config.verbose = true;
         }
+        config.max_cu_size = *m
+            .get_one::<usize>("max-cu-size")
+            .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
         config
     }
 
