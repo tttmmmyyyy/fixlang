@@ -500,14 +500,17 @@ pub fn build_file(mut config: Configuration) {
         md5::compute(runtime_obj_hash_source)
     ));
     if !runtime_obj_path.exists() {
-        // Create temporary file.
-        let runtime_tmp_path =
-            runtime_obj_path.with_extension(rand::thread_rng().gen::<u64>().to_string() + ".tmp");
+        // Random number for temporary file name.
+        let rand_num = rand::thread_rng().gen::<u64>();
 
-        let runtime_c_path = PathBuf::from(INTERMEDIATE_PATH).join("fixruntime.c");
+        // Create temporary file.
+        let runtime_tmp_path = runtime_obj_path.with_extension(rand_num.to_string() + ".tmp");
+
+        let runtime_c_path =
+            PathBuf::from(INTERMEDIATE_PATH).join(format!("fixruntime.{}.c", rand_num.to_string()));
         fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
         fs::write(&runtime_c_path, include_str!("runtime.c"))
-            .expect(&format!("Failed to generate runtime.c"));
+            .expect(&format!("Failed to generate {}", runtime_c_path.display()));
         // Create library object file.
         let mut com = Command::new("gcc");
         let mut com = com
