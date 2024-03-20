@@ -3,6 +3,7 @@ Cache system for object (*.o) files.
 */
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 
@@ -143,6 +144,7 @@ impl<'c> CompileUnit<'c> {
     pub fn split_symbols(
         symbols: &[&InstantiatedSymbol],
         module_dependency_hash: &HashMap<Name, String>,
+        module_dependency_map: &HashMap<Name, HashSet<Name>>,
         config: &Configuration,
     ) -> Vec<CompileUnit<'c>> {
         let mut units: HashMap<
@@ -151,11 +153,11 @@ impl<'c> CompileUnit<'c> {
         > = HashMap::new();
         for symbol in symbols {
             let name = symbol.instantiated_name.clone();
-            let mut depmods = symbol
-                .dependent_modules()
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>();
+            let mut depmods = HashSet::new();
+            for module in symbol.dependent_modules() {
+                depmods.extend(module_dependency_map[&module].clone());
+            }
+            let mut depmods = depmods.iter().cloned().collect::<Vec<_>>();
             depmods.sort();
             let concat_depmods = depmods.join(", ");
             let unit = if let Some(unit) = units.get_mut(&concat_depmods) {

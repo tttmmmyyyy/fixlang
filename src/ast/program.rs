@@ -55,6 +55,7 @@ pub struct InstantiatedSymbol {
 impl InstantiatedSymbol {
     // The set of modules that this symbol depends on.
     // If any of these modules, or any of their importee are changed, then they are required to be re-compiled.
+    // Note that this set may not be fully spanned in the importing graph.
     pub fn dependent_modules(&self) -> HashSet<Name> {
         let mut dep_mods = HashSet::default();
         dep_mods.insert(self.instantiated_name.module());
@@ -1179,7 +1180,7 @@ impl Program {
     }
 
     // Calculate a set of modules on which a module depends.
-    pub fn calculate_dependent_modules(&self, module: &Name) -> HashSet<Name> {
+    pub fn dependent_modules(&self, module: &Name) -> HashSet<Name> {
         let (importing_graph, mod_to_node) = self.importing_module_graph();
         importing_graph
             .reachable_nodes(*mod_to_node.get(module).unwrap())
@@ -1188,11 +1189,21 @@ impl Program {
             .collect()
     }
 
+    // Calculate a map from a module to a set of modules on which the module depends.
+    pub fn module_dependency_map(&self) -> HashMap<Name, HashSet<Name>> {
+        // TODO: Improve time complexity.
+        let mods = self.linked_mods();
+        let mut dependency = HashMap::new();
+        for module in &mods {
+            dependency.insert(module.clone(), self.dependent_modules(&module));
+        }
+        dependency
+    }
+
     // Calculate a hash value of a module which is affected by source codes of all dependent modules.
     pub fn module_dependency_hash(&self, module: &Name) -> String {
-        let (importing_graph, mod_to_node) = self.importing_module_graph();
         let mut dependent_module_names = self
-            .calculate_dependent_modules(module)
+            .dependent_modules(module)
             .iter()
             .cloned()
             .collect::<Vec<_>>();
@@ -1205,6 +1216,7 @@ impl Program {
         format!("{:x}", md5::compute(concatenated_source_hashes))
     }
 
+    // Calculate a map from a module to a hash value of the module which is affected by source codes of all dependent modules.
     pub fn module_dependency_hash_map(&self) -> HashMap<Name, String> {
         // TODO: Improve time complexity.
         let mods = self.linked_mods();

@@ -86,10 +86,15 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     let mut units = vec![];
     {
         let module_dependency_hash = program.module_dependency_hash_map();
+        let module_dependency_map = program.module_dependency_map();
         if config.use_compilation_cache() {
             let instantiated_symbols = &program.instantiated_symbols.values().collect::<Vec<_>>();
-            units =
-                CompileUnit::split_symbols(instantiated_symbols, &module_dependency_hash, &config);
+            units = CompileUnit::split_symbols(
+                instantiated_symbols,
+                &module_dependency_hash,
+                &module_dependency_map,
+                &config,
+            );
             // Also add main compilation unit.
             let mut main_unit = CompileUnit::new(vec![], vec![]);
             main_unit.set_random_unit_hash(); // Recompile main unit every time.
