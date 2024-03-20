@@ -199,6 +199,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 }
 
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
+    // Create directory if it doesn't exist.
     let dir_path = obj_path.parent().unwrap();
     match fs::create_dir_all(dir_path) {
         Err(e) => {
@@ -210,8 +211,11 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
         }
         Ok(_) => {}
     }
+    // Write to a temporary file.
+    let tmp_file_path =
+        obj_path.with_extension(rand::thread_rng().gen::<u64>().to_string() + ".tmp");
     target_machine
-        .write_to_file(&module, inkwell::targets::FileType::Object, obj_path)
+        .write_to_file(&module, inkwell::targets::FileType::Object, &tmp_file_path)
         .map_err(|e| {
             error_exit(&format!(
                 "Failed to write to file {}: {}",
@@ -220,6 +224,19 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
             ))
         })
         .unwrap();
+
+    // Rename the temporary file to the final file.
+    match fs::rename(&tmp_file_path, obj_path) {
+        Err(e) => {
+            error_exit(&format!(
+                "Failed to rename {} to {}: {}",
+                tmp_file_path.display(),
+                obj_path.display(),
+                e
+            ));
+        }
+        Ok(_) => {}
+    }
 }
 
 fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, pre_opt: bool) {
@@ -483,6 +500,10 @@ pub fn build_file(mut config: Configuration) {
         md5::compute(runtime_obj_hash_source)
     ));
     if !runtime_obj_path.exists() {
+        // Create temporary file.
+        let runtime_tmp_path =
+            runtime_obj_path.with_extension(rand::thread_rng().gen::<u64>().to_string() + ".tmp");
+
         let runtime_c_path = PathBuf::from(INTERMEDIATE_PATH).join("fixruntime.c");
         fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
         fs::write(&runtime_c_path, include_str!("runtime.c"))
@@ -493,7 +514,7 @@ pub fn build_file(mut config: Configuration) {
             .arg("-ffunction-sections")
             .arg("-fdata-sections")
             .arg("-o")
-            .arg(runtime_obj_path.to_str().unwrap())
+            .arg(runtime_tmp_path.to_str().unwrap())
             .arg("-c")
             .arg(runtime_c_path.to_str().unwrap());
         for m in &config.runtime_c_macro {
@@ -508,6 +529,13 @@ pub fn build_file(mut config: Configuration) {
                     .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
             );
         }
+
+        // Rename the temporary file to the final file.
+        fs::rename(&runtime_tmp_path, &runtime_obj_path).expect(&format!(
+            "Failed to rename {} to {}",
+            runtime_tmp_path.display(),
+            runtime_obj_path.display()
+        ));
     }
 
     let mut com = Command::new("gcc");
