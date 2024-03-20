@@ -164,14 +164,14 @@ impl<'c> CompileUnit<'c> {
 
     // Given a sequence of symbols, split it into compilation units, each of which is either cached or not.
     pub fn split_symbols(
-        symbol_names: &[FullName],
+        symbols: &[FullName],
         mod_to_hash: &HashMap<Name, String>,
         config: &Configuration,
     ) -> Vec<CompileUnit<'c>> {
         let cache_file_list = cache_file_hash_list();
         let is_cached =
             |names: &[FullName]| is_cached(names, mod_to_hash, config, &cache_file_list);
-        let units = crate::segcache::split_into_units(symbol_names, is_cached);
+        let units = crate::segcache::split_into_units(symbols, is_cached);
         let mut result = vec![];
         for unit in &units {
             let unit = CompileUnit::new(&unit.items(), mod_to_hash, config, unit.is_cached());
