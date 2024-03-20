@@ -5819,3 +5819,14 @@ pub fn test_typedef_higher_kinded_type_variable() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_split_by_max_size() {
+    let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let result = split_by_max_size(v, 3);
+    assert_eq!(result, vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]]);
+
+    let v = vec![1, 2, 3, 4, 5, 6, 7, 8];
+    let result = split_by_max_size(v, 3);
+    assert_eq!(result, vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8]]);
+}

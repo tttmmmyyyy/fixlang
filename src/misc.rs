@@ -76,3 +76,17 @@ pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
     }
     result
 }
+
+// Given a vector, split it into subvectors, each of which has at most `max_size` elements.
+// Each subvector is nonempty.
+pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
+    v.reverse();
+    let mut result = vec![];
+    while v.len() > 0 {
+        let len = std::cmp::min(max_size, v.len());
+        let mut w = v.split_off(v.len() - len);
+        w.reverse();
+        result.push(w);
+    }
+    result
+}
