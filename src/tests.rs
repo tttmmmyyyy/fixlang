@@ -5693,3 +5693,21 @@ pub fn test_unrelated_trait_method() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_duplicated_symbols() {
+    let source = r##"
+    module Main;
+
+    truth : I64;
+    truth = 42;
+
+    truth : I64;
+    truth = 0;
+    
+    main : IO ();
+    main = pure();
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
