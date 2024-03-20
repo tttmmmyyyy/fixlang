@@ -5755,7 +5755,7 @@ pub fn test_typedef_specify_kind_twice() {
 }
 
 #[test]
-pub fn test_typedef_specify_kind() {
+pub fn test_typedef_higher_kinded_type_variable() {
     let source = r##"
     module Main;
 
@@ -5763,16 +5763,58 @@ pub fn test_typedef_specify_kind() {
         runner : s -> m (a, s)
     };
 
-    impl [m : *->*] StateT m s : Monad {
+    impl [m : Monad] StateT m s : Monad {
         pure = |a| StateT { runner : |s| pure $ (s, a) };
         bind = |m, f| StateT { runner : |s| (
             let (a, s) = *m.@runner(s);
             f(a).@runner(s)
         ) };
     }
+
+    namespace StateT {
+
+        get_state : [m : Monad] StateT m s s;
+        get_state = StateT { runner : |s| pure $ (s, s) };
     
+        set_state : [m : Monad] s -> StateT m s ();
+        set_state = |s| StateT { runner : |_| pure $ ((), s) };
+
+        lift : [m : Monad] m a -> StateT m s a;
+        lift = |m| StateT { runner : |s| (
+            let a = *m;
+            pure $ (s, a)
+        ) };
+    }
+
+    namespace IOCounter {
+
+        increment : StateT IO I64 ();
+        increment = (
+            let state = *get_state;
+            set_state(state + 1)
+        );
+
+        print_counter : StateT IO I64 ();
+        print_counter = (
+            let state = *get_state;
+            lift $ println $ "Counter: " + state.to_string
+        );
+    }
+
     main : IO ();
-    main = pure();
+    main = (
+        let action = do {
+            eval *print_counter;
+            eval *increment;
+            eval *increment;
+            eval *increment;
+            eval *print_counter;
+            pure()
+        };
+        let ((), counter) = *action.@runner(0);
+        eval *assert_eq(|_|"", counter, 3);
+        pure()
+    );
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
