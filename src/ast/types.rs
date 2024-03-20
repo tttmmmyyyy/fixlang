@@ -129,17 +129,21 @@ impl TyCon {
     ) -> Rc<TypeNode> {
         let ti = typechcker.type_env.tycons.get(self).unwrap();
         assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
+
         // Make type variables for type parameters.
-        // Currently type parameters for struct / union must have kind *.
-        let mut tyvars: Vec<Rc<TypeNode>> = vec![];
-        let tyvars_cnt = ti.tyvars.len();
-        for _ in 0..tyvars_cnt {
-            tyvars.push(type_tyvar_star(&typechcker.new_tyvar()));
+        let new_tyvars_kind = ti
+            .tyvars
+            .iter()
+            .map(|tv| tv.kind.clone())
+            .collect::<Vec<_>>();
+        let mut new_tyvars: Vec<Rc<TypeNode>> = vec![];
+        for new_tyvar_kind in new_tyvars_kind {
+            new_tyvars.push(type_tyvar(&typechcker.new_tyvar(), &new_tyvar_kind));
         }
 
         // Make type.
         let mut ty = type_tycon(self);
-        for tv in tyvars {
+        for tv in new_tyvars {
             ty = type_tyapp(ty, tv);
         }
         ty
