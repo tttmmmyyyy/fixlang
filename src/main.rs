@@ -116,7 +116,7 @@ fn main() {
         .help("Set optimization level.\n\
               - none: Perform no optimizations. Since tail recursion optimization is also omitted, programs that use recursion may not work properly.\n\
               - minimum: Perform only few optimizations to minimize compile time.\n\
-              - default: Compile to minimize execution time. This is the default option.").hide_possible_values(true);
+              - default: Compile to minimize execution time. This is the default option. To maximize the effect of optimization, separate compilation is not performed.").hide_possible_values(true);
     let emit_llvm = Arg::new("emit-llvm")
         .long("emit-llvm")
         .takes_value(false)
