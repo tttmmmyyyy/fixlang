@@ -47,8 +47,9 @@ pub struct InstantiatedSymbol {
     pub generic_name: FullName,
     pub ty: Rc<TypeNode>,
     pub expr: Option<Rc<ExprNode>>,
+    // type resolver for types in expr.
     // TODO: we should remove `type_resolver` field by applying it to `expr` and `ty` when they are created.
-    pub type_resolver: TypeResolver, // type resolver for types in expr.
+    pub type_resolver: TypeResolver,
 }
 
 // Declaration (name and type signature) of global value.
