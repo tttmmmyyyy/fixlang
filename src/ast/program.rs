@@ -1194,4 +1194,14 @@ impl Program {
             .join("");
         format!("{:x}", md5::compute(concatenated_source_hashes))
     }
+
+    pub fn hash_of_dependent_codes_map(&self) -> HashMap<Name, String> {
+        // TODO: Improve time complexity.
+        let mods = self.linked_mods();
+        let mut mod_to_hash = HashMap::new();
+        for module in &mods {
+            mod_to_hash.insert(module.clone(), self.hash_of_dependent_codes(&module));
+        }
+        mod_to_hash
+    }
 }

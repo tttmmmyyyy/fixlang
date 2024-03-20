@@ -91,11 +91,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
             .cloned()
             .collect::<Vec<_>>();
         symbol_names.sort();
-        let mods = program.linked_mods();
-        let mut mod_to_hash = HashMap::new();
-        for module in &mods {
-            mod_to_hash.insert(module.clone(), program.hash_of_dependent_codes(&module));
-        }
+        let mod_to_hash = program.hash_of_dependent_codes_map();
         if config.use_compilation_cache() {
             units = CompileUnit::split_symbols(&symbol_names, &mod_to_hash, &config);
             // Also add main compilation unit.
