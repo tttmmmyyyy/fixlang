@@ -34,6 +34,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
             fix_mod.instantiated_symbols.insert(
                 name.clone(),
                 InstantiatedSymbol {
+                    instantiated_name: name.clone(),
                     generic_name: FullName::local(&format!(
                         "{} created by uncurrying optimization from {}",
                         &name.to_string(),

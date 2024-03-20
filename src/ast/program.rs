@@ -43,6 +43,7 @@ impl TypeEnv {
 
 #[derive(Clone)]
 pub struct InstantiatedSymbol {
+    pub instantiated_name: FullName,
     pub generic_name: FullName,
     pub ty: Rc<TypeNode>,
     pub expr: Option<Rc<ExprNode>>,
@@ -798,6 +799,7 @@ impl Program {
             self.deferred_instantiation.insert(
                 inst_name.clone(),
                 InstantiatedSymbol {
+                    instantiated_name: inst_name.clone(),
                     generic_name: name.clone(),
                     ty: ty.clone(),
                     expr: None,
