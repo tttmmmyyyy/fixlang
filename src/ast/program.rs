@@ -1178,18 +1178,27 @@ impl Program {
         (graph, elem_to_idx)
     }
 
-    // Calculate a hash value of a module which is affected by source codes of all dependent modules.
-    pub fn module_dependency_hash(&self, module: &Name) -> String {
+    // Calculate a set of modules on which a module depends.
+    pub fn calculate_dependent_modules(&self, module: &Name) -> HashSet<Name> {
         let (importing_graph, mod_to_node) = self.importing_module_graph();
-        let mut dependent_module_names = importing_graph
+        importing_graph
             .reachable_nodes(*mod_to_node.get(module).unwrap())
             .iter()
-            .map(|idx| importing_graph.get(*idx))
+            .map(|idx| importing_graph.get(*idx).clone())
+            .collect()
+    }
+
+    // Calculate a hash value of a module which is affected by source codes of all dependent modules.
+    pub fn module_dependency_hash(&self, module: &Name) -> String {
+        let mut dependent_module_names = self
+            .calculate_dependent_modules(module)
+            .iter()
+            .cloned()
             .collect::<Vec<_>>();
         dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
         let concatenated_source_hashes = dependent_module_names
             .iter()
-            .map(|mod_name| self.module_to_files.get(*mod_name).unwrap().hash())
+            .map(|mod_name| self.module_to_files.get(mod_name).unwrap().hash())
             .collect::<Vec<_>>()
             .join("");
         format!("{:x}", md5::compute(concatenated_source_hashes))
