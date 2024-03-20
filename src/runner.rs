@@ -501,6 +501,7 @@ pub fn build_file(mut config: Configuration) {
     ));
     if !runtime_obj_path.exists() {
         // Random number for temporary file name.
+        // This is necessary to avoid confliction when multiple compilation processes are running in parallel.
         let rand_num = rand::thread_rng().gen::<u64>();
 
         // Create temporary file.
