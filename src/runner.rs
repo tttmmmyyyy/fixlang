@@ -22,9 +22,6 @@ use super::*;
 fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<PathBuf> {
     let _sw = StopWatch::new("build_module", config.show_build_times);
 
-    let context = Context::create();
-    let target_machine = get_target_machine(config.get_llvm_opt_level());
-
     // Add tuple definitions.
     program.add_tuple_defns();
 
@@ -136,10 +133,16 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         }
 
         // Create GenerationContext.
-        unit.create_module_if_none(&context, &target_machine);
+        let context = Context::create();
+        let target_machine = get_target_machine(config.get_llvm_opt_level());
+        let module = GenerationContext::create_module(
+            &format!("Module_{}", unit.unit_hash()),
+            &context,
+            &target_machine,
+        );
         let mut gc = GenerationContext::new(
             &context,
-            &unit.module(),
+            &module,
             target_machine.get_target_data(),
             config.clone(),
             program.type_env(),
