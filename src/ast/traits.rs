@@ -552,7 +552,7 @@ impl TraitEnv {
                 if trait_def_id != *instance_def_mod && type_def_id != *instance_def_mod {
                     error_exit_with_src(
                         &format!(
-                            "Implementing trait `{}` for type `{}` in module `{}` is not allowed. In general you cannot implement an external trait for an external type.",
+                            "Implementing trait `{}` for type `{}` in module `{}` is not allowed: You cannot implement an external trait for an external type.",
                             trait_id.to_string(),
                             ty.to_string_normalize(),
                             instance_def_mod.to_string(),
