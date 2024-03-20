@@ -5711,3 +5711,17 @@ pub fn test_duplicated_symbols() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_typedef_unknown_tyvar() {
+    let source = r##"
+    module Main;
+
+    type Hoge = unbox struct { data : a };
+    
+    main : IO ();
+    main = pure();
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
