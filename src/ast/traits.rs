@@ -148,15 +148,14 @@ impl TraitInstance {
     }
 
     // Get type-scheme of a method implementation.
-    // Here, for example, in case "impl [a: Show, b: Show] (a, b): Show",
-    // this function returns "[a: Show, b: Show] (a, b) -> String" as the type of "show".
+    // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
+    // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
     pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Rc<Scheme> {
-        let trait_tyvar = &trait_info.type_var.name;
-
-        let impl_type = self.qual_pred.predicate.ty.clone();
+        let trait_tyvar = &trait_info.type_var.name; // Ex. tyvar == `t`
+        let impl_type = self.qual_pred.predicate.ty.clone(); // Ex. impl_type == `(a, b)`
         let s = Substitution::single(&trait_tyvar, impl_type);
-        let mut method_qualty = trait_info.method_ty(method_name);
-        s.substitute_qualtype(&mut method_qualty);
+        let mut method_qualty = trait_info.method_ty(method_name); // Ex. method_qualty == `[] t -> String`
+        s.substitute_qualtype(&mut method_qualty); // Ex. method_qualty == `[] (a, b) -> String`
 
         let ty = method_qualty.ty.clone();
         let vars = ty.free_vars();
