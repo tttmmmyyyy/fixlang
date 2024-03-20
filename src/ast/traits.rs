@@ -227,21 +227,10 @@ impl QualPredicate {
         if self.context.len() > 0 || self.kind_preds.len() > 0 {
             s += "[";
         }
-        s += &self
-            .kind_preds
-            .iter()
-            .map(|p| p.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
-        if self.context.len() > 0 {
-            s += ", ";
-            s += &self
-                .context
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-        }
+        let mut preds = vec![];
+        preds.extend(self.kind_preds.iter().map(|p| p.to_string()));
+        preds.extend(self.context.iter().map(|p| p.to_string()));
+        s += &preds.join(", ");
         if self.context.len() > 0 || self.kind_preds.len() > 0 {
             s += "] ";
         }
