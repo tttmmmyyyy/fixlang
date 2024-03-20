@@ -31,15 +31,13 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
             let ty = expr.ty.clone().unwrap();
             let mut name = sym_name.clone();
             convert_to_funptr_name(name.name_as_mut(), arg_cnt as usize);
+            let mut generic_name = sym.generic_name.clone();
+            convert_to_funptr_name(generic_name.name_as_mut(), arg_cnt as usize);
             fix_mod.instantiated_symbols.insert(
                 name.clone(),
                 InstantiatedSymbol {
                     instantiated_name: name.clone(),
-                    generic_name: FullName::local(&format!(
-                        "{} created by uncurrying optimization from {}",
-                        &name.to_string(),
-                        sym.generic_name.to_string()
-                    )),
+                    generic_name: generic_name,
                     ty,
                     expr: Some(expr.clone()),
                     type_resolver: sym.type_resolver.clone(),

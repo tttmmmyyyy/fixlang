@@ -88,16 +88,14 @@ pub fn define_borrowing_functions(program: &mut Program) {
             let borrowed_params_indices = (0..params.len())
                 .filter(|i| borrowed_vars.contains(&params[*i].name))
                 .collect::<Vec<_>>();
-            convert_to_borrowing_function_name(&mut name, borrowed_params_indices);
+            convert_to_borrowing_function_name(&mut name, borrowed_params_indices.clone());
+            let mut generic_name = sym.generic_name.clone();
+            convert_to_borrowing_function_name(&mut generic_name, borrowed_params_indices);
             new_functions.insert(
                 name.clone(),
                 InstantiatedSymbol {
                     instantiated_name: name.clone(),
-                    generic_name: FullName::local(&format!(
-                        "{} created by borrowing optimization from {}",
-                        name.to_string(),
-                        sym_name.to_string()
-                    )),
+                    generic_name: generic_name,
                     ty: sym.ty.clone(),
                     expr: Some(expr),
                     type_resolver: sym.type_resolver.clone(),
