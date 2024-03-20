@@ -185,7 +185,11 @@ impl<'c> CompileUnit<'c> {
             };
             unit.symbols.push(name);
         }
-        let units = units.into_iter().map(|(_, unit)| unit).collect::<Vec<_>>();
+        let mut units = units.into_iter().map(|(_, unit)| unit).collect::<Vec<_>>();
+        for unit in &mut units {
+            unit.symbols
+                .sort_by(|a, b| a.to_string().partial_cmp(&b.to_string()).unwrap());
+        }
 
         // Split compilation units into smaller ones if they are too large.
         let mut units = units

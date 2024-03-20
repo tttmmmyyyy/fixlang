@@ -141,7 +141,7 @@ fn main() {
         .default_value(DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR)
         .help(
             "Maximum size of compilation units created by separate compilation.\n\
-            Decreasing this value improves parallelism and cache efficiency of compilation, but increases link time.\n\
+            Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
             NOTE: Separate compilation is disabled under the default optimization level.",
         );
     let run_subc = App::new("run")
