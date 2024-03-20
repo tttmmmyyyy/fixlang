@@ -5811,8 +5811,8 @@ pub fn test_typedef_higher_kinded_type_variable() {
             eval *print_counter;
             pure()
         };
-        let ((), counter) = *action.@runner(0);
-        eval *assert_eq(|_|"", counter, 3);
+        let ((), counter) = *(action.@runner)(0);
+        eval assert_eq(|_|"", counter, 3);
         pure()
     );
     "##;
