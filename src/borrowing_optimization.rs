@@ -92,7 +92,7 @@ pub fn define_borrowing_functions(program: &mut Program) {
             new_functions.insert(
                 name.clone(),
                 InstantiatedSymbol {
-                    template_name: FullName::local(&format!(
+                    generic_name: FullName::local(&format!(
                         "{} created by borrowing optimization from {}",
                         name.to_string(),
                         sym_name.to_string()

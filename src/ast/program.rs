@@ -43,7 +43,7 @@ impl TypeEnv {
 
 #[derive(Clone)]
 pub struct InstantiatedSymbol {
-    pub template_name: FullName,
+    pub generic_name: FullName,
     pub ty: Rc<TypeNode>,
     pub expr: Option<Rc<ExprNode>>,
     // TODO: we should remove `type_resolver` field by applying it to `expr` and `ty` when they are created.
@@ -631,18 +631,18 @@ impl Program {
     fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol, tc: &TypeCheckContext) {
         assert!(sym.expr.is_none());
         if !sym.ty.free_vars().is_empty() {
-            error_exit_with_src(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add type annotation.", sym.template_name.to_string(), sym.ty.to_string_normalize()), &sym.expr.as_ref().unwrap().source);
+            error_exit_with_src(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add type annotation.", sym.generic_name.to_string(), sym.ty.to_string_normalize()), &sym.expr.as_ref().unwrap().source);
         }
-        let global_sym = self.global_values.get(&sym.template_name).unwrap();
+        let global_sym = self.global_values.get(&sym.generic_name).unwrap();
         let typed_expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
                 // Perform type-checking.
-                let define_module = sym.template_name.module();
+                let define_module = sym.generic_name.module();
                 let mut e = e.clone();
                 self.resolve_and_check_type(
                     &mut e,
                     &global_sym.scm,
-                    &sym.template_name,
+                    &sym.generic_name,
                     &define_module,
                     tc,
                 );
@@ -668,7 +668,7 @@ impl Program {
                     self.resolve_and_check_type(
                         &mut e,
                         &method.ty,
-                        &sym.template_name,
+                        &sym.generic_name,
                         &define_module,
                         tc,
                     );
@@ -798,7 +798,7 @@ impl Program {
             self.deferred_instantiation.insert(
                 inst_name.clone(),
                 InstantiatedSymbol {
-                    template_name: name.clone(),
+                    generic_name: name.clone(),
                     ty: ty.clone(),
                     expr: None,
                     type_resolver: TypeResolver::default(), // This field will be set in the end of instantiation.

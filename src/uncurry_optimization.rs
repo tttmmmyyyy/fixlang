@@ -19,7 +19,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
         // Add function pointer version as long as possible.
         for arg_cnt in 1..(FUNPTR_ARGS_MAX + 1) {
             let mut expr = funptr_lambda(
-                &sym.template_name,
+                &sym.generic_name,
                 sym.expr.as_ref().unwrap(),
                 typeresolver,
                 arg_cnt as usize,
@@ -34,10 +34,10 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
             fix_mod.instantiated_symbols.insert(
                 name.clone(),
                 InstantiatedSymbol {
-                    template_name: FullName::local(&format!(
+                    generic_name: FullName::local(&format!(
                         "{} created by uncurrying optimization from {}",
                         &name.to_string(),
-                        sym.template_name.to_string()
+                        sym.generic_name.to_string()
                     )),
                     ty,
                     expr: Some(expr.clone()),
@@ -81,12 +81,12 @@ pub fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
 
 // Convert lambda expression to function pointer.
 fn funptr_lambda(
-    template_name: &FullName,
+    generic_name: &FullName,
     expr: &Rc<ExprNode>,
     typeresolver: &TypeResolver, // for resolving types of expr
     vars_count: usize,
 ) -> Option<Rc<ExprNode>> {
-    if exclude(template_name) {
+    if exclude(generic_name) {
         return None;
     }
 
