@@ -423,7 +423,7 @@ impl TraitEnv {
 
     pub fn validate(&mut self, kind_map: &HashMap<TyCon, Rc<Kind>>) {
         // Check name confliction of traits and aliases.
-        fn create_aconflicting_error(env: &TraitEnv, trait_id: &TraitId) {
+        fn create_conflicting_error(env: &TraitEnv, trait_id: &TraitId) {
             let this_src = &env.traits.get(trait_id).unwrap().source;
             let other_src = &env.aliases.get(trait_id).unwrap().source;
             error_exit_with_srcs(
@@ -433,12 +433,12 @@ impl TraitEnv {
         }
         for (trait_id, _) in &self.traits {
             if self.aliases.contains_key(trait_id) {
-                create_aconflicting_error(self, trait_id);
+                create_conflicting_error(self, trait_id);
             }
         }
         for (trait_id, _) in &self.aliases {
             if self.traits.contains_key(trait_id) {
-                create_aconflicting_error(self, trait_id);
+                create_conflicting_error(self, trait_id);
             }
         }
 
