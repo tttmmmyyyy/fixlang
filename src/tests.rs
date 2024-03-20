@@ -5677,3 +5677,19 @@ pub fn test_eval_non_unit() {
     "##;
     run_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_unrelated_trait_method() {
+    let source = r##"
+    module Main;
+
+    trait a : MyTrait {
+        value : I64;
+    }
+    
+    main : IO ();
+    main = pure();
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}

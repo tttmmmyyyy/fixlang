@@ -278,6 +278,16 @@ impl std::fmt::Debug for TypeNode {
 }
 
 impl TypeNode {
+    // Check if the given type variable appears in `self`.
+    pub fn contains_tyvar(&self, tv: &TyVar) -> bool {
+        match &self.ty {
+            Type::TyVar(tv2) => tv.name == tv2.name, // Ignore kind.
+            Type::TyCon(_) => false,
+            Type::TyApp(fun, arg) => fun.contains_tyvar(tv) || arg.contains_tyvar(tv),
+            Type::FunTy(src, dst) => src.contains_tyvar(tv) || dst.contains_tyvar(tv),
+        }
+    }
+
     // Get source.
     pub fn get_source(&self) -> &Option<Span> {
         &self.info.source

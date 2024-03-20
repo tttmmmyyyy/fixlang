@@ -452,6 +452,22 @@ impl TraitEnv {
         }
         // Circular aliasing will be detected in `TraitEnv::resolve_aliases`.
 
+        // Check that the type variable in trait definition appears each of the methods' type.
+        for (_trait_id, trait_info) in &self.traits {
+            for (method_name, method_ty) in &trait_info.methods {
+                if !method_ty.ty.contains_tyvar(&trait_info.type_var) {
+                    error_exit_with_src (
+                        &format!(
+                            "Type variable `{}` used in trait definition has to appear in the type of a method `{}`.",
+                            trait_info.type_var.name,
+                            method_name,
+                        ),
+                        method_ty.ty.get_source()
+                    );
+                }
+            }
+        }
+
         let aliases: HashSet<_> = self.aliases.keys().collect();
         // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {
