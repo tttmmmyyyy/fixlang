@@ -123,6 +123,20 @@ pub struct TraitInstance {
 }
 
 impl TraitInstance {
+    pub fn set_kinds_in_qual_pred(&mut self, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) {
+        let mut scope = HashMap::new();
+        let preds = &self.qual_pred.context;
+        let kind_preds = &self.qual_pred.kind_preds;
+        let res = QualPredicate::extend_kind_scope(&mut scope, preds, kind_preds, trait_kind_map);
+        if res.is_err() {
+            error_exit_with_src(&res.unwrap_err(), &self.source);
+        }
+        self.qual_pred.predicate.set_kinds(&scope);
+        for ctx in &mut self.qual_pred.context {
+            ctx.set_kinds(&scope);
+        }
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         self.qual_pred.resolve_namespace(ctx);
 
@@ -942,7 +956,7 @@ impl TraitEnv {
         self.aliases.contains_key(trait_id)
     }
 
-    // Set kinds in TraitInfo and TraitAlias.
+    // Set kinds in TraitInfo, TraitAlias and TraitInstances.
     pub fn set_kinds(&mut self) {
         for (_id, ti) in &mut self.traits {
             ti.set_trait_kind();
@@ -970,6 +984,12 @@ impl TraitEnv {
                 }
             }
             ta.kind = kind;
+        }
+        let trait_kind_map = self.trait_kind_map();
+        for (_trait_id, trait_impls) in &mut self.instances {
+            for inst in trait_impls {
+                inst.set_kinds_in_qual_pred(&trait_kind_map);
+            }
         }
     }
 
