@@ -236,6 +236,7 @@ pub struct QualPredicate {
 }
 
 impl QualPredicate {
+    #[allow(dead_code)]
     pub fn to_string(&self) -> String {
         let mut s = String::default();
         if self.context.len() > 0 || self.kind_preds.len() > 0 {
