@@ -16,6 +16,7 @@ use crate::ast::name::FullName;
 use crate::ast::name::Name;
 use crate::configuration::Configuration;
 use crate::constants::COMPILATION_UNITS_PATH;
+use crate::split_by_max_size;
 use crate::GenerationContext;
 use crate::InstantiatedSymbol;
 
@@ -137,6 +138,24 @@ impl<'c> CompileUnit<'c> {
         );
     }
 
+    pub fn split_by_max_size(self, max_size: usize) -> Vec<CompileUnit<'c>> {
+        // `unit_hash` is lost after this method is called.
+        assert_eq!(self.unit_hash, "");
+        // `module` is lost after this method is called.
+        assert!(self.module.is_none());
+
+        let symbols = self.symbols;
+        let dependent_modules = self.dependent_modules;
+
+        let split_symbols = split_by_max_size(symbols, max_size);
+        let mut units = vec![];
+        for symbols in split_symbols {
+            units.push(CompileUnit::new(symbols, dependent_modules.clone()));
+        }
+
+        units
+    }
+
     // Given a sequence of symbols, split it into compilation units.
     pub fn split_symbols(
         symbols: &[&InstantiatedSymbol],
@@ -148,6 +167,7 @@ impl<'c> CompileUnit<'c> {
             String, /* concatenated string of dependent modules sorted by their names */
             CompileUnit<'c>,
         > = HashMap::new();
+        // Classify symbols into compilation units depending on their dependent modules.
         for symbol in symbols {
             let name = symbol.instantiated_name.clone();
             let mut depmods = HashSet::new();
@@ -165,10 +185,19 @@ impl<'c> CompileUnit<'c> {
             };
             unit.symbols.push(name);
         }
-        let mut units = units.into_iter().map(|(_, unit)| unit).collect::<Vec<_>>();
+        let units = units.into_iter().map(|(_, unit)| unit).collect::<Vec<_>>();
+
+        // Split compilation units into smaller ones if they are too large.
+        let mut units = units
+            .into_iter()
+            .flat_map(|unit| unit.split_by_max_size(config.max_cu_size))
+            .collect::<Vec<_>>();
+
+        // Set unit hash.
         for unit in &mut units {
             unit.update_unit_hash(module_dependency_hash, config);
         }
+
         units
     }
 }
