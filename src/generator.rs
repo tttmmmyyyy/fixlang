@@ -2078,14 +2078,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.module
                     .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
 
-            // Create debug info subprogram
-            if self.has_di() {
-                acc_fn.set_subprogram(self.create_debug_subprogram(
-                    &acc_fn_name,
-                    sym.expr.as_ref().unwrap().source.clone(),
-                ));
-            }
-
             // Register the accessor function to gc.
             self.add_global_object(name.clone(), acc_fn, obj_ty.clone());
 
@@ -2101,6 +2093,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Some(var) => var.ptr.get_global_fun(),
             None => self.declare_symbol(name, sym),
         };
+
+        // Create debug info subprogram
+        if self.has_di() {
+            sym_fn.set_subprogram(self.create_debug_subprogram(
+                &sym_fn.get_name().to_str().unwrap(),
+                sym.expr.as_ref().unwrap().source.clone(),
+            ));
+        }
 
         self.typeresolver = sym.type_resolver.clone();
         let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
