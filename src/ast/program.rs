@@ -46,6 +46,7 @@ pub struct InstantiatedSymbol {
     pub template_name: FullName,
     pub ty: Rc<TypeNode>,
     pub expr: Option<Rc<ExprNode>>,
+    // TODO: we should remove `type_resolver` field by applying it to `expr` and `ty` when they are created.
     pub type_resolver: TypeResolver, // type resolver for types in expr.
 }
 
