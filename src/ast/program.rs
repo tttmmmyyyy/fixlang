@@ -262,7 +262,7 @@ pub struct Program {
     pub type_defns: Vec<TypeDefn>,
     pub global_values: HashMap<FullName, GlobalValue>,
     pub instantiated_symbols: HashMap<FullName, InstantiatedSymbol>,
-    pub deferred_instantiation: HashMap<FullName, InstantiatedSymbol>,
+    pub deferred_instantiation: Vec<InstantiatedSymbol>,
     pub trait_env: TraitEnv,
     pub type_env: TypeEnv,
 
@@ -708,11 +708,10 @@ impl Program {
     // Instantiate all symbols.
     pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) {
         while !self.deferred_instantiation.is_empty() {
-            let (name, sym) = self.deferred_instantiation.iter().next().unwrap();
-            let name = name.clone();
+            let sym = self.deferred_instantiation.pop().unwrap();
+            let name = sym.instantiated_name.clone();
             let mut sym = sym.clone();
             self.instantiate_symbol(&mut sym, tc);
-            self.deferred_instantiation.remove(&name);
             self.instantiated_symbols.insert(name, sym);
         }
     }
@@ -812,18 +811,18 @@ impl Program {
     pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
         let inst_name = self.determine_instantiated_symbol_name(name, ty);
         if !self.instantiated_symbols.contains_key(&inst_name)
-            && !self.deferred_instantiation.contains_key(&inst_name)
+            && self
+                .deferred_instantiation
+                .iter()
+                .all(|symbol| symbol.instantiated_name != inst_name)
         {
-            self.deferred_instantiation.insert(
-                inst_name.clone(),
-                InstantiatedSymbol {
-                    instantiated_name: inst_name.clone(),
-                    generic_name: name.clone(),
-                    ty: ty.clone(),
-                    expr: None,
-                    type_resolver: TypeResolver::default(), // This field will be set in the end of instantiation.
-                },
-            );
+            self.deferred_instantiation.push(InstantiatedSymbol {
+                instantiated_name: inst_name.clone(),
+                generic_name: name.clone(),
+                ty: ty.clone(),
+                expr: None,
+                type_resolver: TypeResolver::default(), // This field will be set in the end of instantiation.
+            });
         }
         inst_name
     }
