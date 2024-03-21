@@ -81,11 +81,16 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
     // Determine compilation units.
     let mut units = vec![];
+    let instantiated_symbols = program
+        .instantiated_symbols
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
+    let all_symbols = instantiated_symbols.clone();
     {
         let module_dependency_hash = program.module_dependency_hash_map();
         let module_dependency_map = program.module_dependency_map();
         if config.separate_compilation() {
-            let instantiated_symbols = &program.instantiated_symbols.values().collect::<Vec<_>>();
             units = CompileUnit::split_symbols(
                 instantiated_symbols,
                 &module_dependency_hash,
@@ -98,13 +103,8 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
             units.push(main_unit);
         } else {
             // Add main compilation unit, which includes all symbols.
-            let symbols = program
-                .instantiated_symbols
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>();
             let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
-            let mut main_unit = CompileUnit::new(symbols, modules);
+            let mut main_unit = CompileUnit::new(instantiated_symbols, modules);
             main_unit.set_random_unit_hash(); // Recompile main unit every time.
             units.push(main_unit);
         }
@@ -158,14 +158,13 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
         // Declare all symbols in this program.
         // TODO: Optimize so that only necessary symbols are declared.
-        for (name, sym) in &program.instantiated_symbols {
-            gc.declare_symbol(name, sym);
+        for symbol in &all_symbols {
+            gc.declare_symbol(symbol);
         }
 
         // Implement all symbols in this unit.
-        for name in unit.symbols() {
-            let sym = program.instantiated_symbols.get(name).unwrap();
-            gc.implement_symbol(name, sym);
+        for symbol in unit.symbols() {
+            gc.implement_symbol(symbol);
         }
 
         if i == units_count - 1 {

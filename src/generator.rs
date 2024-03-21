@@ -2056,11 +2056,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.call_runtime(RUNTIME_CHECK_LEAK, &[]);
     }
 
-    pub fn declare_symbol(
-        &mut self,
-        name: &FullName,
-        sym: &InstantiatedSymbol,
-    ) -> FunctionValue<'c> {
+    pub fn declare_symbol(&mut self, sym: &InstantiatedSymbol) -> FunctionValue<'c> {
+        let name = &sym.instantiated_name;
         self.typeresolver = sym.type_resolver.clone();
         let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
         if obj_ty.is_funptr() {
@@ -2086,12 +2083,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    pub fn implement_symbol(&mut self, name: &FullName, sym: &InstantiatedSymbol) {
+    pub fn implement_symbol(&mut self, sym: &InstantiatedSymbol) {
+        let name = &sym.instantiated_name;
         // Get the function to implement.
         let global_obj = self.global.get(name);
         let sym_fn = match global_obj {
             Some(var) => var.ptr.get_global_fun(),
-            None => self.declare_symbol(name, sym),
+            None => self.declare_symbol(sym),
         };
 
         // Create debug info subprogram
