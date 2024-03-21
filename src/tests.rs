@@ -5769,6 +5769,24 @@ pub fn test_typedef_kind_mismatch() {
 }
 
 #[test]
+pub fn test_typedef_struct_higher_kinded_type_variable() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    type [m : *->*] X m a = struct { data : m a };
+
+    main : IO ();
+    main = (
+        let x : X IO I64 = X { data : pure(42) };
+        eval assert_eq(|_|"", *x.@data, 42);
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
 pub fn test_state_t() {
     let source = r##"
     module Main;
@@ -5828,29 +5846,6 @@ pub fn test_state_t() {
         };
         let ((), counter) = *(action.@runner)(0);
         eval assert_eq(|_|"", counter, 3);
-        pure()
-    );
-    "##;
-    run_source(&source, Configuration::develop_compiler());
-}
-
-#[test]
-pub fn test_typedef_union_higher_kinded_type_variable() {
-    let source = r##"
-    module Main;
-    import Debug;
-
-    type [m : *->*] X m a = union {
-        a_value : m a,
-        unit_value : m ()
-    };
-
-    main : IO ();
-    main = (
-        let x : X IO I64 = X::a_value $ pure(42);
-        let truth = *x.as_a_value;
-        let y : X IO () = X::unit_value $ println(truth.to_string);
-        eval *y.as_unit_value;
         pure()
     );
     "##;
