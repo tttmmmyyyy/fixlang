@@ -294,7 +294,7 @@ impl QualPredicate {
             let tyvar = match &p.ty.ty {
                 Type::TyVar(tv) => tv.name.clone(),
                 _ => {
-                    panic!("Currently, trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.")
+                    panic!("Trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.")
                 }
             };
             let trait_id = &p.trait_id;

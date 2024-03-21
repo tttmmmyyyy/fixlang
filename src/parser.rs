@@ -392,7 +392,7 @@ fn parse_type_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualType {
         match &pred.ty.ty {
             Type::TyVar(_) => {}
             _ => {
-                error_exit_with_src("Currently, trait bound has to be of the form `tv : SomeTrait` for some type variable `tv`.", &pred.info.source);
+                error_exit_with_src("Trait bound has to be of the form `tv : SomeTrait` for some type variable `tv`.", &pred.info.source);
             }
         }
     }
