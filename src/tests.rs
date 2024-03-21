@@ -5755,7 +5755,7 @@ pub fn test_typedef_specify_kind_twice() {
 }
 
 #[test]
-pub fn test_typedef_higher_kinded_type_variable() {
+pub fn test_typedef_struct_higher_kinded_type_variable() {
     let source = r##"
     module Main;
     import Debug;
@@ -5814,6 +5814,29 @@ pub fn test_typedef_higher_kinded_type_variable() {
         };
         let ((), counter) = *(action.@runner)(0);
         eval assert_eq(|_|"", counter, 3);
+        pure()
+    );
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_typedef_union_higher_kinded_type_variable() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    type [m : *->*] X m a = union {
+        a_value : m a,
+        unit_value : m ()
+    };
+
+    main : IO ();
+    main = (
+        let x : X IO I64 = X::a_value $ pure(42);
+        let truth = *x.as_a_value;
+        let y : X IO () = X::unit_value $ println(truth.to_string);
+        eval *y.as_unit_value;
         pure()
     );
     "##;
