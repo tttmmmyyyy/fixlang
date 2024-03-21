@@ -4193,7 +4193,7 @@ pub fn test131() {
 }
 
 #[test]
-pub fn test132() {
+pub fn test_consumed_time() {
     // Test Debug module
     let source = r#"
         module Main; 
