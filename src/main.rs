@@ -142,7 +142,7 @@ fn main() {
         .help(
             "Maximum size of compilation units created by separate compilation.\n\
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
-            NOTE: Separate compilation is disabled under the default optimization level.",
+            NOTE: Separate compilation is disabled under the default optimization level.\n",
         );
     let run_subc = App::new("run")
         .about("Executes a Fix program.")
