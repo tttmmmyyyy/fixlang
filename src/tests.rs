@@ -5755,7 +5755,21 @@ pub fn test_typedef_specify_kind_twice() {
 }
 
 #[test]
-pub fn test_typedef_struct_higher_kinded_type_variable() {
+#[should_panic]
+pub fn test_typedef_kind_mismatch() {
+    let source = r##"
+    module Main;
+
+    type Hoge a b = unbox struct { data : a b };
+    
+    main : IO ();
+    main = pure();
+    "##;
+    run_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_state_t() {
     let source = r##"
     module Main;
     import Debug;
