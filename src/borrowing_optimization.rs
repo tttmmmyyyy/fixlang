@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // Borrowing optimization.
@@ -45,7 +47,7 @@ pub fn convert_to_borrowing_function_name(
 fn create_borrowing_function(
     function: &ExprNode,
     borrowed_args: Vec<FullName>,
-) -> Option<Rc<ExprNode>> {
+) -> Option<Arc<ExprNode>> {
     let body = function.get_lam_body();
     // Currently, we handle only when `expr_body` is InlineLLVM.
     if !body.is_llvm() {
@@ -108,9 +110,9 @@ pub fn define_borrowing_functions(program: &mut Program) {
 
 pub fn borrowing_optimization_evaluating_application(
     gc: &mut GenerationContext,
-    fun: Rc<ExprNode>,
-    args: &Vec<Rc<ExprNode>>,
-) -> Option<(Rc<ExprNode>, Vec<usize>)> {
+    fun: Arc<ExprNode>,
+    args: &Vec<Arc<ExprNode>>,
+) -> Option<(Arc<ExprNode>, Vec<usize>)> {
     if fun.released_params_indices.is_none() {
         return None; // When `released_params_indices` is unknown, we can not perform borrowing optimization.
     }
@@ -160,7 +162,7 @@ pub fn borrowing_optimization_evaluating_application(
 }
 
 // Set `released_params_indices` field for the function of each application expression.
-fn set_released_param_indices(expr: &Rc<ExprNode>, program: &Program) -> Rc<ExprNode> {
+fn set_released_param_indices(expr: &Arc<ExprNode>, program: &Program) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::LLVM(_) => expr.clone(),

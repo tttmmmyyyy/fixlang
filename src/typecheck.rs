@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -101,7 +103,7 @@ where
 // when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
-    pub data: HashMap<Name, Rc<TypeNode>>,
+    pub data: HashMap<Name, Arc<TypeNode>>,
 }
 
 impl Default for Substitution {
@@ -114,8 +116,8 @@ impl Default for Substitution {
 
 impl Substitution {
     // Make single substitution.
-    pub fn single(var: &str, ty: Rc<TypeNode>) -> Self {
-        let mut data = HashMap::<String, Rc<TypeNode>>::default();
+    pub fn single(var: &str, ty: Arc<TypeNode>) -> Self {
+        let mut data = HashMap::<String, Arc<TypeNode>>::default();
         data.insert(var.to_string(), ty);
         Self { data }
     }
@@ -152,7 +154,7 @@ impl Substitution {
     }
 
     // Apply substitution to type
-    pub fn substitute_type(&self, ty: &Rc<TypeNode>) -> Rc<TypeNode> {
+    pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
                 sub.set_source_if_none(ty.get_source().clone())
@@ -177,9 +179,9 @@ impl Substitution {
 
     // Calculate minimum substitution to unify two types.
     pub fn unify(
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
-        ty1: &Rc<TypeNode>,
-        ty2: &Rc<TypeNode>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
     ) -> Option<Self> {
         match &ty1.ty {
             Type::TyVar(var1) => {
@@ -250,9 +252,9 @@ impl Substitution {
 
     // Subroutine of unify().
     fn unify_tyvar(
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
-        tyvar1: &Rc<TyVar>,
-        ty2: &Rc<TypeNode>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        tyvar1: &Arc<TyVar>,
+        ty2: &Arc<TypeNode>,
     ) -> Option<Self> {
         match &ty2.ty {
             Type::TyVar(tyvar2) => {
@@ -277,9 +279,9 @@ impl Substitution {
 
     // Calculate minimum substitution s such that `s(ty1) = ty2`.
     pub fn matching(
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
-        ty1: &Rc<TypeNode>,
-        ty2: &Rc<TypeNode>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
     ) -> Option<Self> {
         match &ty1.ty {
             Type::TyVar(v1) => {
@@ -365,7 +367,7 @@ pub struct TypeCheckContext {
     // The identifier of type variables.
     tyvar_id: u32,
     // Scoped map of variable name -> scheme. (Assamptions of type inference.)
-    pub scope: Scope<Rc<Scheme>>,
+    pub scope: Scope<Arc<Scheme>>,
     // Type resolver.
     pub resolver: TypeResolver,
     // Collected predicates.
@@ -376,7 +378,7 @@ pub struct TypeCheckContext {
     pub type_env: TypeEnv,
     // A map to represent modules imported by each submodule.
     // To decrease clone-cost, use Rc.
-    pub imported_mod_map: Rc<HashMap<Name, HashSet<Name>>>,
+    pub imported_mod_map: Arc<HashMap<Name, HashSet<Name>>>,
     // In which module is the current expression defined?
     // This is used as a state variable for typechecking.
     pub current_module: Option<Name>,
@@ -388,7 +390,7 @@ pub struct TypeResolver {
     pub substitution: Substitution,
     // Type to kind mapping.
     #[serde(skip)]
-    pub kind_map: HashMap<TyCon, Rc<Kind>>,
+    pub kind_map: HashMap<TyCon, Arc<Kind>>,
 }
 
 impl TypeResolver {
@@ -399,7 +401,7 @@ impl TypeResolver {
 
     // Update substitution to unify two types.
     // When substitution fails, it has no side effect to self.
-    pub fn unify(&mut self, ty1: &Rc<TypeNode>, ty2: &Rc<TypeNode>) -> bool {
+    pub fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         let ty1 = &self.substitute_type(ty1);
         let ty2 = &self.substitute_type(ty2);
         match Substitution::unify(&self.kind_map, ty1, ty2) {
@@ -414,7 +416,7 @@ impl TypeResolver {
     }
 
     // Apply substitution to type.
-    pub fn substitute_type(&self, ty: &Rc<TypeNode>) -> Rc<TypeNode> {
+    pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         self.substitution.substitute_type(ty)
     }
 
@@ -440,7 +442,7 @@ impl TypeCheckContext {
             predicates: Default::default(),
             type_env,
             trait_env,
-            imported_mod_map: Rc::new(imported_mod_map),
+            imported_mod_map: Arc::new(imported_mod_map),
             current_module: None,
         }
     }
@@ -460,7 +462,7 @@ impl TypeCheckContext {
     }
 
     // Apply substitution to type.
-    pub fn substitute_type(&self, ty: &Rc<TypeNode>) -> Rc<TypeNode> {
+    pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         self.resolver.substitute_type(ty)
     }
 
@@ -473,9 +475,9 @@ impl TypeCheckContext {
     // Returns predicates if append_predicates = false or append them to self if append_predicates = true.
     pub fn instantiate_scheme(
         &mut self,
-        scheme: &Rc<Scheme>,
+        scheme: &Arc<Scheme>,
         append_predicates: bool,
-    ) -> (Vec<Predicate>, Rc<TypeNode>) {
+    ) -> (Vec<Predicate>, Arc<TypeNode>) {
         let mut sub = Substitution::default();
         for (var, kind) in &scheme.vars {
             let new_var_name = self.new_tyvar();
@@ -493,7 +495,7 @@ impl TypeCheckContext {
 
     // Update substitution to unify two types.
     // When substitution fails, it has no side effect to self.
-    pub fn unify(&mut self, ty1: &Rc<TypeNode>, ty2: &Rc<TypeNode>) -> bool {
+    pub fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         self.resolver.unify(ty1, ty2)
     }
 
@@ -514,7 +516,7 @@ impl TypeCheckContext {
     // Perform typechecking.
     // Update type substitution so that `ei` has type `ty`.
     // Returns given AST augmented with inferred information.
-    pub fn unify_type_of_expr(&mut self, ei: &Rc<ExprNode>, ty: Rc<TypeNode>) -> Rc<ExprNode> {
+    pub fn unify_type_of_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) -> Arc<ExprNode> {
         let ei = ei.set_inferred_type(ty.clone());
         match &*ei.expr {
             Expr::Var(var) => {
@@ -749,7 +751,7 @@ impl TypeCheckContext {
                 assert_eq!(field_tys.len(), fields.len());
 
                 // Reorder fields as ordering of fields in struct definition.
-                let fields: HashMap<Name, Rc<ExprNode>> =
+                let fields: HashMap<Name, Arc<ExprNode>> =
                     HashMap::from_iter(fields.iter().cloned());
                 let mut fields = field_names
                     .iter()
@@ -815,7 +817,7 @@ impl TypeCheckContext {
 
     // Check if expr has type scm.
     // Returns given AST augmented with inferred information.
-    pub fn check_type(&mut self, expr: Rc<ExprNode>, expect_scm: Rc<Scheme>) -> Rc<ExprNode> {
+    pub fn check_type(&mut self, expr: Arc<ExprNode>, expect_scm: Arc<Scheme>) -> Arc<ExprNode> {
         assert!(self.predicates.is_empty()); // This function is available only when predicates are empty.
         let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone());

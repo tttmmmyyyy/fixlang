@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 
@@ -242,7 +244,7 @@ pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
 
-pub fn make_kind_fun(arity: u32) -> Rc<Kind> {
+pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
     let mut res = kind_star();
     for _ in 0..arity {
         res = kind_arrow(kind_star(), res);
@@ -255,82 +257,82 @@ pub const LOOP_RESULT_NAME: &str = "LoopResult";
 pub const TUPLE_NAME: &str = "Tuple";
 
 // Get Ptr type.
-pub fn make_ptr_ty() -> Rc<TypeNode> {
+pub fn make_ptr_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], PTR_NAME)))
 }
 
 // Get U8 type.
-pub fn make_u8_ty() -> Rc<TypeNode> {
+pub fn make_u8_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U8_NAME)))
 }
 
 // Get I8 type.
-pub fn make_i8_ty() -> Rc<TypeNode> {
+pub fn make_i8_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I8_NAME)))
 }
 
 // Get U16 type.
-pub fn make_u16_ty() -> Rc<TypeNode> {
+pub fn make_u16_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U16_NAME)))
 }
 
 // Get I16 type.
-pub fn make_i16_ty() -> Rc<TypeNode> {
+pub fn make_i16_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I16_NAME)))
 }
 
 // Get I32 type.
-pub fn make_i32_ty() -> Rc<TypeNode> {
+pub fn make_i32_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I32_NAME)))
 }
 
 // Get U32 type.
-pub fn make_u32_ty() -> Rc<TypeNode> {
+pub fn make_u32_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U32_NAME)))
 }
 
 // Get I64 type.
-pub fn make_i64_ty() -> Rc<TypeNode> {
+pub fn make_i64_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I64_NAME)))
 }
 
 // Get U32 type.
-pub fn make_u64_ty() -> Rc<TypeNode> {
+pub fn make_u64_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U64_NAME)))
 }
 
 // Get F32 type.
-pub fn make_f32_ty() -> Rc<TypeNode> {
+pub fn make_f32_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], F32_NAME)))
 }
 
 // Get F64 type.
-pub fn make_f64_ty() -> Rc<TypeNode> {
+pub fn make_f64_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], F64_NAME)))
 }
 
 // Get Bool type.
-pub fn make_bool_ty() -> Rc<TypeNode> {
+pub fn make_bool_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOOL_NAME)))
 }
 
 // Get Array type.
-pub fn make_array_ty() -> Rc<TypeNode> {
+pub fn make_array_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
 // Get String type.
-pub fn make_string_ty() -> Rc<TypeNode> {
+pub fn make_string_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
 }
 
 // Get LoopResult type.
-pub fn make_loop_result_ty() -> Rc<TypeNode> {
+pub fn make_loop_result_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
 }
 
 // Get integral types from its name.
-pub fn make_integral_ty(name: &str) -> Option<Rc<TypeNode>> {
+pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
     if name == I8_NAME {
         Some(make_i8_ty())
     } else if name == U8_NAME {
@@ -375,7 +377,7 @@ pub fn integral_ty_range(name: &str) -> (BigInt, BigInt) {
 }
 
 // Get floating types from its name.
-pub fn make_floating_ty(name: &str) -> Option<Rc<TypeNode>> {
+pub fn make_floating_ty(name: &str) -> Option<Arc<TypeNode>> {
     if name == F32_NAME {
         Some(make_f32_ty())
     } else if name == F64_NAME {
@@ -387,7 +389,7 @@ pub fn make_floating_ty(name: &str) -> Option<Rc<TypeNode>> {
 
 // Get numeric types from its name.
 // Returns (type, is_float)
-pub fn make_numeric_ty(name: &str) -> (Option<Rc<TypeNode>>, bool) {
+pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
     let int_opt = make_integral_ty(name);
     if int_opt.is_some() {
         return (int_opt, false);
@@ -396,7 +398,7 @@ pub fn make_numeric_ty(name: &str) -> (Option<Rc<TypeNode>>, bool) {
 }
 
 // Get dynamic object type.
-pub fn make_dynamic_object_ty() -> Rc<TypeNode> {
+pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(
         &[STD_NAME],
         DYNAMIC_OBJECT_NAME,
@@ -404,7 +406,7 @@ pub fn make_dynamic_object_ty() -> Rc<TypeNode> {
 }
 
 // Get tuple type.
-pub fn make_tuple_ty(tys: Vec<Rc<TypeNode>>) -> Rc<TypeNode> {
+pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     assert!(tys.len() <= FUNPTR_ARGS_MAX as usize);
     let mut ty = type_tycon(&tycon(make_tuple_name(tys.len() as u32)));
     for field_ty in tys {
@@ -420,18 +422,18 @@ pub fn make_tuple_name(size: u32) -> FullName {
 }
 
 // Get Unit type.
-pub fn make_unit_ty() -> Rc<TypeNode> {
+pub fn make_unit_ty() -> Arc<TypeNode> {
     make_tuple_ty(vec![])
 }
 
 // Get Lazy.
-pub fn make_lazy_ty() -> Rc<TypeNode> {
+pub fn make_lazy_ty() -> Arc<TypeNode> {
     let name = FullName::from_strs(&[STD_NAME], LAZY_NAME);
     type_tycon(&tycon(name))
 }
 
 // Make type `IO ()`
-pub fn make_io_unit_ty() -> Rc<TypeNode> {
+pub fn make_io_unit_ty() -> Arc<TypeNode> {
     type_tyapp(
         type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME))),
         make_unit_ty(),
@@ -484,7 +486,7 @@ impl InlineLLVMIntLit {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -510,7 +512,7 @@ impl InlineLLVMIntLit {
     }
 }
 
-pub fn expr_int_lit(val: u64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
+pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::IntLit(InlineLLVMIntLit { val: val as i64 }),
         vec![],
@@ -529,7 +531,7 @@ impl InlineLLVMFloatLit {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -555,7 +557,7 @@ impl InlineLLVMFloatLit {
     }
 }
 
-pub fn expr_float_lit(val: f64, ty: Rc<TypeNode>, source: Option<Span>) -> Rc<ExprNode> {
+pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val }),
         vec![],
@@ -572,7 +574,7 @@ impl InlineLLVMNullPtrLit {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -588,7 +590,7 @@ impl InlineLLVMNullPtrLit {
     }
 }
 
-pub fn expr_nullptr_lit(source: Option<Span>) -> Rc<ExprNode> {
+pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::NullPtrLit(InlineLLVMNullPtrLit {}),
         vec![],
@@ -607,7 +609,7 @@ impl InlineLLVMBoolLit {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -628,7 +630,7 @@ impl InlineLLVMBoolLit {
     }
 }
 
-pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Rc<ExprNode> {
+pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::BoolLit(InlineLLVMBoolLit { val }),
         vec![],
@@ -696,7 +698,7 @@ impl InlineLLVMStringLit {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -719,7 +721,7 @@ impl InlineLLVMStringLit {
     }
 }
 
-pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Rc<ExprNode> {
+pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::StringLit(InlineLLVMStringLit { string }),
         vec![],
@@ -739,7 +741,7 @@ impl InlineLLVMFixBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -769,7 +771,7 @@ impl InlineLLVMFixBody {
     }
 }
 
-fn fix_body(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
+fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
     let name = format!("fix({}, {})", f_str.to_string(), x_str.to_string());
@@ -784,7 +786,7 @@ fn fix_body(b: &str, f: &str, x: &str) -> Rc<ExprNode> {
 }
 
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_body(b, f, x): b
-pub fn fix() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("f")],
         expr_abs(vec![var_local("x")], fix_body("b", "f", "x"), None),
@@ -813,7 +815,7 @@ impl InlineLLVMCastIntegralBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        to_ty: &Rc<TypeNode>,
+        to_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -857,9 +859,9 @@ impl InlineLLVMCastIntegralBody {
 
 // Cast function of integrals
 pub fn cast_between_integral_function(
-    from: Rc<TypeNode>,
-    to: Rc<TypeNode>,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+    from: Arc<TypeNode>,
+    to: Arc<TypeNode>,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
     let is_source_signed = from.toplevel_tycon().unwrap().is_singned_intger();
     let is_target_signed = to.toplevel_tycon().unwrap().is_singned_intger();
@@ -900,7 +902,7 @@ impl InlineLLVMCastFloatBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        to_ty: &Rc<TypeNode>,
+        to_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -943,9 +945,9 @@ impl InlineLLVMCastFloatBody {
 
 // Cast function of integrals
 pub fn cast_between_float_function(
-    from: Rc<TypeNode>,
-    to: Rc<TypeNode>,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+    from: Arc<TypeNode>,
+    to: Arc<TypeNode>,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
     let scm = Scheme::generalize(
         Default::default(),
@@ -983,7 +985,7 @@ impl InlineLLVMCastIntToFloatBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        to_ty: &Rc<TypeNode>,
+        to_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1034,9 +1036,9 @@ impl InlineLLVMCastIntToFloatBody {
 
 // Cast function from int to float.
 pub fn cast_int_to_float_function(
-    from: Rc<TypeNode>,
-    to: Rc<TypeNode>,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+    from: Arc<TypeNode>,
+    to: Arc<TypeNode>,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
     let is_signed = from.toplevel_tycon().unwrap().is_singned_intger();
 
@@ -1077,7 +1079,7 @@ impl InlineLLVMCastFloatToIntBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        to_ty: &Rc<TypeNode>,
+        to_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1128,9 +1130,9 @@ impl InlineLLVMCastFloatToIntBody {
 
 // Cast function from int to float.
 pub fn cast_float_to_int_function(
-    from: Rc<TypeNode>,
-    to: Rc<TypeNode>,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+    from: Arc<TypeNode>,
+    to: Arc<TypeNode>,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
     let is_signed = to.toplevel_tycon().unwrap().is_singned_intger();
 
@@ -1172,7 +1174,7 @@ impl InlineLLVMShiftBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1207,7 +1209,7 @@ impl InlineLLVMShiftBody {
 }
 
 // Shift functions
-pub fn shift_function(ty: Rc<TypeNode>, is_left: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "val";
     const N_NAME: &str = "n";
 
@@ -1272,7 +1274,7 @@ impl InlineLLVMBitwiseOperationBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1318,9 +1320,9 @@ impl InlineLLVMBitwiseOperationBody {
 }
 
 pub fn bitwise_operation_function(
-    ty: Rc<TypeNode>,
+    ty: Arc<TypeNode>,
     op_type: BitOperationType,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const LHS_NAME: &str = "lhs";
     const RHS_NAME: &str = "rhs";
 
@@ -1362,7 +1364,7 @@ impl InlineLLVMFillArrayBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1385,7 +1387,7 @@ impl InlineLLVMFillArrayBody {
 }
 
 // Implementation of Array::fill built-in function.
-fn fill_array_body(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
+fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let size_name = FullName::local(size);
     let value_name = FullName::local(value);
     let name = format!("Array::fill({}, {})", size, value);
@@ -1406,7 +1408,7 @@ fn fill_array_body(a: &str, size: &str, value: &str) -> Rc<ExprNode> {
 
 // "Array::fill : I64 -> a -> Array a" built-in function.
 // Creates an array with same capacity.
-pub fn fill_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn fill_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("size")],
         expr_abs(
@@ -1439,7 +1441,7 @@ impl InlineLLVMMakeEmptyArrayBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        arr_ty: &Rc<TypeNode>,
+        arr_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1468,7 +1470,7 @@ impl InlineLLVMMakeEmptyArrayBody {
 }
 
 // Make an empty array.
-pub fn make_empty() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     const CAP_NAME: &str = "cap";
     const ELEM_TYPE: &str = "a";
 
@@ -1507,7 +1509,7 @@ impl InlineLLVMUnsafeSetArrayBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1530,7 +1532,7 @@ impl InlineLLVMUnsafeSetArrayBody {
 }
 
 // Set an element to an array, with no uniqueness checking and without releasing the old value.
-pub fn unsafe_set_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const VALUE_NAME: &str = "val";
@@ -1588,7 +1590,7 @@ impl InlineLLVMUnsafeGetArrayBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1613,7 +1615,7 @@ impl InlineLLVMUnsafeGetArrayBody {
 }
 
 // Gets a value from an array, without bounds checking and retaining the returned value.
-pub fn unsafe_get_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn unsafe_get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";
@@ -1658,7 +1660,7 @@ impl InlineLLVMUnsafeSetSizeArrayBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1680,7 +1682,7 @@ impl InlineLLVMUnsafeSetSizeArrayBody {
 }
 
 // Set the length of an array, with no uniqueness checking, no validation of size argument.
-pub fn unsafe_set_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "array";
     const LENGTH_NAME: &str = "length";
     const ELEM_TYPE: &str = "a";
@@ -1725,7 +1727,7 @@ impl InlineLLVMArrayGetBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1748,7 +1750,7 @@ impl InlineLLVMArrayGetBody {
 }
 
 // Implementation of Array::get built-in function.
-fn read_array_body(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
+fn read_array_body(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
@@ -1767,7 +1769,7 @@ fn read_array_body(a: &str, array: &str, idx: &str) -> Rc<ExprNode> {
 }
 
 // "Array::get : Array a -> I64 -> a" built-in function.
-pub fn read_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx")],
         expr_abs(
@@ -1871,7 +1873,7 @@ impl InlineLLVMArraySetBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -1902,7 +1904,7 @@ fn set_array_body(
     idx: &str,
     value: &str,
     is_unique_version: bool,
-) -> Rc<ExprNode> {
+) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
@@ -1931,7 +1933,7 @@ fn set_array_body(
 }
 
 // Array::set built-in function.
-pub fn set_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn set_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx")],
         expr_abs(
@@ -1958,12 +1960,12 @@ pub fn set_array_common(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
 }
 
 // set built-in function.
-pub fn write_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn write_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common(false)
 }
 
 // set! built-in function.
-pub fn write_array_unique() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common(true)
 }
 
@@ -1979,7 +1981,7 @@ impl InlineLLVMArrayModBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2020,7 +2022,7 @@ impl InlineLLVMArrayModBody {
     }
 }
 
-pub fn mod_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const MODIFIED_ARRAY_NAME: &str = "arr";
     const MODIFIER_NAME: &str = "f";
     const INDEX_NAME: &str = "idx";
@@ -2087,7 +2089,7 @@ impl InlineLLVMArrayForceUniqueBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2103,7 +2105,7 @@ impl InlineLLVMArrayForceUniqueBody {
     }
 }
 
-pub fn force_unique_array(is_unique_version: bool) -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn force_unique_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
     const ELEM_TYPE: &str = "a";
 
@@ -2145,7 +2147,7 @@ impl InlineLLVMArrayGetPtrBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2181,7 +2183,7 @@ impl InlineLLVMArrayGetPtrBody {
 }
 
 // `get_ptr` function for Array.
-pub fn get_ptr_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
     const ELEM_TYPE: &str = "a";
 
@@ -2218,7 +2220,7 @@ impl InlineLLVMArrayGetSizeBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2246,7 +2248,7 @@ impl InlineLLVMArrayGetSizeBody {
 }
 
 // `get_size` built-in function for Array.
-pub fn get_size_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
     let expr = expr_abs(
@@ -2280,7 +2282,7 @@ impl InlineLLVMArrayGetCapacityBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2302,7 +2304,7 @@ impl InlineLLVMArrayGetCapacityBody {
 }
 
 // `Array::get_capacity : Array a -> I64` built-in function.
-pub fn get_capacity_array() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_capacity_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
     let expr = expr_abs(
@@ -2337,7 +2339,7 @@ impl InlineLLVMStructGetBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2351,10 +2353,10 @@ impl InlineLLVMStructGetBody {
 pub fn struct_get_body(
     var_name: &str,
     field_idx: usize,
-    field_ty: Rc<TypeNode>,
+    field_ty: Arc<TypeNode>,
     struct_name: &FullName,
     field_name: &str,
-) -> Rc<ExprNode> {
+) -> Arc<ExprNode> {
     let var_name_clone = FullName::local(var_name);
     let free_vars = vec![FullName::local(var_name)];
     let name = format!(
@@ -2380,7 +2382,7 @@ pub fn struct_get(
     struct_name: &FullName,
     definition: &TypeDefn,
     field_name: &str,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let field = definition.get_field_by_name(field_name);
     if field.is_none() {
@@ -2423,7 +2425,7 @@ impl InlineLLVMStructModBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2463,7 +2465,7 @@ pub fn struct_mod_body(
     struct_defn: &TypeDefn,
     field_name: &str,
     is_unique_version: bool,
-) -> Rc<ExprNode> {
+) -> Arc<ExprNode> {
     let name = format!(
         "{}.mod_{}{}({}, {})",
         struct_name.to_string(),
@@ -2496,7 +2498,7 @@ pub fn struct_mod(
     definition: &TypeDefn,
     field_name: &str,
     is_unique_version: bool,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let field = definition.get_field_by_name(field_name);
     if field.is_none() {
@@ -2609,7 +2611,7 @@ impl InlineLLVMStructSetBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        str_ty: &Rc<TypeNode>,
+        str_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2647,7 +2649,7 @@ pub fn struct_set(
     definition: &TypeDefn,
     field_name: &str,
     is_unique_version: bool,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "val";
     const STRUCT_NAME: &str = "str";
 
@@ -2708,7 +2710,7 @@ impl InlineLLVMMakeUnionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2752,7 +2754,7 @@ pub fn union_new_body(
     union_defn: &TypeDefn,
     field_name: &Name,
     field_idx: usize,
-) -> Rc<ExprNode> {
+) -> Arc<ExprNode> {
     let free_vars = vec![FullName::local(field_name)];
     let name = format!("{}.new_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
@@ -2775,7 +2777,7 @@ pub fn union_new(
     union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
     for field in union.fields() {
@@ -2808,7 +2810,7 @@ pub fn union_as(
     union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
     for field in union.fields() {
@@ -2853,7 +2855,7 @@ impl InlineLLVMUnionAsBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -2885,8 +2887,8 @@ pub fn union_as_body(
     union_arg_name: &Name,
     field_name: &Name,
     field_idx: usize,
-    field_ty: Rc<TypeNode>,
-) -> Rc<ExprNode> {
+    field_ty: Arc<TypeNode>,
+) -> Arc<ExprNode> {
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
     let free_vars = vec![FullName::local(union_arg_name)];
     let union_arg_name = union_arg_name.clone();
@@ -2907,7 +2909,7 @@ pub fn union_is(
     union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let mut field_idx = 0;
     for field in union.fields() {
@@ -2946,7 +2948,7 @@ impl InlineLLVMUnionIsBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3013,7 +3015,7 @@ pub fn union_is_body(
     union_arg_name: &Name,
     field_name: &Name,
     field_idx: usize,
-) -> Rc<ExprNode> {
+) -> Arc<ExprNode> {
     let name = format!("{}.is_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
     let free_vars = vec![FullName::local(union_arg_name)];
@@ -3042,7 +3044,7 @@ impl InlineLLVMUnionModBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        union_ty: &Rc<TypeNode>,
+        union_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3131,7 +3133,7 @@ pub fn union_mod_function(
     union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
-) -> (Rc<ExprNode>, Rc<Scheme>) {
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const UNION_NAME: &str = "union_value";
     const MODIFIER_NAME: &str = "modifier";
 
@@ -3209,7 +3211,7 @@ impl InlineLLVMLoopFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3285,7 +3287,7 @@ impl InlineLLVMLoopFunctionBody {
 
 // `loop` built-in function.
 // loop : s -> (s -> LoopResult s b) -> b;
-pub fn state_loop() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     const S_NAME: &str = "s";
     const B_NAME: &str = "b";
     const INITIAL_STATE_NAME: &str = "initial_state";
@@ -3340,7 +3342,7 @@ impl InlineLLVMAbortFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         _rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3358,7 +3360,7 @@ impl InlineLLVMAbortFunctionBody {
 }
 
 // `abort` built-in function
-pub fn abort_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn abort_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
     const UNIT_NAME: &str = "unit";
     let expr = expr_abs(
@@ -3389,7 +3391,7 @@ impl InlineLLVMIsUniqueFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ret_ty: &Rc<TypeNode>,
+        ret_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3454,7 +3456,7 @@ impl InlineLLVMIsUniqueFunctionBody {
 }
 
 // Std::is_unique : a -> (Bool, a)
-pub fn is_unique_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
@@ -3489,7 +3491,7 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ret_ty: &Rc<TypeNode>,
+        _ret_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3518,7 +3520,7 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
     }
 }
 
-pub fn get_retained_ptr_of_boxed_value_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
@@ -3555,7 +3557,7 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ret_ty: &Rc<TypeNode>,
+        ret_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3574,7 +3576,7 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
     }
 }
 
-pub fn get_boxed_value_from_retained_ptr_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_boxed_value_from_retained_ptr_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
@@ -3614,7 +3616,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ret_ty: &Rc<TypeNode>,
+        _ret_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3677,7 +3679,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     }
 }
 
-pub fn get_release_function_of_boxed_value() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
@@ -3714,7 +3716,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ret_ty: &Rc<TypeNode>,
+        _ret_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3777,7 +3779,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     }
 }
 
-pub fn get_retain_function_of_boxed_value() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
@@ -3814,7 +3816,7 @@ impl InlineLLVMMarkThreadedFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ret_ty: &Rc<TypeNode>,
+        _ret_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -3833,7 +3835,7 @@ impl InlineLLVMMarkThreadedFunctionBody {
     }
 }
 
-pub fn mark_threaded_function() -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
@@ -3859,7 +3861,7 @@ pub fn mark_threaded_function() -> (Rc<ExprNode>, Rc<Scheme>) {
 }
 
 // `infinity` built-in value
-pub fn infinity_value(type_name: &str) -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn infinity_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let ty = make_floating_ty(type_name).unwrap();
     let expr = expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: f64::INFINITY }),
@@ -3873,7 +3875,7 @@ pub fn infinity_value(type_name: &str) -> (Rc<ExprNode>, Rc<Scheme>) {
 }
 
 // `quiet_nan` built-in value
-pub fn quiet_nan_value(type_name: &str) -> (Rc<ExprNode>, Rc<Scheme>) {
+pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let quet_nan_bits = u64::MAX ^ (1 << 63);
     let nan_val: f64 = unsafe { std::mem::transmute(quet_nan_bits) };
 
@@ -3915,8 +3917,8 @@ const UNARY_OPERATOR_RHS_NAME: &str = "rhs";
 pub fn unary_opeartor_instance(
     trait_id: TraitId,
     method_name: &Name,
-    operand_ty: Rc<TypeNode>,
-    result_ty: Rc<TypeNode>,
+    operand_ty: Arc<TypeNode>,
+    result_ty: Arc<TypeNode>,
     generator: LLVMGenerator,
 ) -> TraitInstance {
     TraitInstance {
@@ -3947,7 +3949,7 @@ pub fn unary_opeartor_instance(
 pub fn binary_operator_trait(
     trait_id: TraitId,
     method_name: Name,
-    output_ty: Option<Rc<TypeNode>>,
+    output_ty: Option<Arc<TypeNode>>,
 ) -> TraitInfo {
     const TYVAR_NAME: &str = "a";
     let kind = kind_star();
@@ -3979,8 +3981,8 @@ const BINARY_OPERATOR_RHS_NAME: &str = "rhs";
 pub fn binary_opeartor_instance(
     trait_id: TraitId,
     method_name: &Name,
-    operand_ty: Rc<TypeNode>,
-    result_ty: Rc<TypeNode>,
+    operand_ty: Arc<TypeNode>,
+    result_ty: Arc<TypeNode>,
     generator: LLVMGenerator,
 ) -> TraitInstance {
     TraitInstance {
@@ -4039,7 +4041,7 @@ impl InlineLLVMIntEqBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4077,7 +4079,7 @@ impl InlineLLVMIntEqBody {
     }
 }
 
-pub fn eq_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
@@ -4094,7 +4096,7 @@ impl InlineLLVMPtrEqBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4138,7 +4140,7 @@ impl InlineLLVMPtrEqBody {
     }
 }
 
-pub fn eq_trait_instance_ptr(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
@@ -4155,7 +4157,7 @@ impl InlineLLVMFloatEqBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4196,7 +4198,7 @@ impl InlineLLVMFloatEqBody {
     }
 }
 
-pub fn eq_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
@@ -4230,7 +4232,7 @@ impl InlineLLVMIntLessThanBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4276,7 +4278,7 @@ impl InlineLLVMIntLessThanBody {
     }
 }
 
-pub fn less_than_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         less_than_trait_id(),
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
@@ -4293,7 +4295,7 @@ impl InlineLLVMFloatLessThanBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4334,7 +4336,7 @@ impl InlineLLVMFloatLessThanBody {
     }
 }
 
-pub fn less_than_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         less_than_trait_id(),
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
@@ -4368,7 +4370,7 @@ impl InlineLLVMIntLessThanOrEqBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4415,7 +4417,7 @@ impl InlineLLVMIntLessThanOrEqBody {
     }
 }
 
-pub fn less_than_or_equal_to_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         less_than_or_equal_to_trait_id(),
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
@@ -4432,7 +4434,7 @@ impl InlineLLVMFloatLessThanOrEqBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4473,7 +4475,7 @@ impl InlineLLVMFloatLessThanOrEqBody {
     }
 }
 
-pub fn less_than_or_equal_to_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         less_than_or_equal_to_trait_id(),
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
@@ -4503,7 +4505,7 @@ impl InlineLLVMIntAddBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4534,7 +4536,7 @@ impl InlineLLVMIntAddBody {
     }
 }
 
-pub fn add_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         add_trait_id(),
         &ADD_TRAIT_ADD_NAME.to_string(),
@@ -4551,7 +4553,7 @@ impl InlineLLVMFloatAddBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4582,7 +4584,7 @@ impl InlineLLVMFloatAddBody {
     }
 }
 
-pub fn add_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         add_trait_id(),
         &ADD_TRAIT_ADD_NAME.to_string(),
@@ -4616,7 +4618,7 @@ impl InlineLLVMIntSubBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4647,7 +4649,7 @@ impl InlineLLVMIntSubBody {
     }
 }
 
-pub fn subtract_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         subtract_trait_id(),
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
@@ -4664,7 +4666,7 @@ impl InlineLLVMFloatSubBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4695,7 +4697,7 @@ impl InlineLLVMFloatSubBody {
     }
 }
 
-pub fn subtract_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         subtract_trait_id(),
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
@@ -4729,7 +4731,7 @@ impl InlineLLVMIntMulBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4760,7 +4762,7 @@ impl InlineLLVMIntMulBody {
     }
 }
 
-pub fn multiply_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         multiply_trait_id(),
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
@@ -4777,7 +4779,7 @@ impl InlineLLVMFloatMulBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4808,7 +4810,7 @@ impl InlineLLVMFloatMulBody {
     }
 }
 
-pub fn multiply_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         multiply_trait_id(),
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
@@ -4842,7 +4844,7 @@ impl InlineLLVMIntDivBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4879,7 +4881,7 @@ impl InlineLLVMIntDivBody {
     }
 }
 
-pub fn divide_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         divide_trait_id(),
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
@@ -4896,7 +4898,7 @@ impl InlineLLVMFloatDivBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4927,7 +4929,7 @@ impl InlineLLVMFloatDivBody {
     }
 }
 
-pub fn divide_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         divide_trait_id(),
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
@@ -4961,7 +4963,7 @@ impl InlineLLVMIntRemBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4998,7 +5000,7 @@ impl InlineLLVMIntRemBody {
     }
 }
 
-pub fn remainder_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     binary_opeartor_instance(
         remainder_trait_id(),
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
@@ -5028,7 +5030,7 @@ impl InlineLLVMIntNegBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -5055,7 +5057,7 @@ impl InlineLLVMIntNegBody {
     }
 }
 
-pub fn negate_trait_instance_int(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
     unary_opeartor_instance(
         negate_trait_id(),
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
@@ -5072,7 +5074,7 @@ impl InlineLLVMFloatNegBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -5099,7 +5101,7 @@ impl InlineLLVMFloatNegBody {
     }
 }
 
-pub fn negate_trait_instance_float(ty: Rc<TypeNode>) -> TraitInstance {
+pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
     unary_opeartor_instance(
         negate_trait_id(),
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
@@ -5129,7 +5131,7 @@ impl InlineLLVMBoolNegBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Rc<TypeNode>,
+        _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {

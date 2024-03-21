@@ -1,22 +1,22 @@
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::{io::Write, sync::Arc};
 
 use super::*;
 
 #[derive(Clone)]
 pub struct TypeEnv {
     // List of type constructors including user-defined types.
-    pub tycons: Rc<HashMap<TyCon, TyConInfo>>,
+    pub tycons: Arc<HashMap<TyCon, TyConInfo>>,
     // List of type aliases.
-    pub aliases: Rc<HashMap<TyCon, TyAliasInfo>>,
+    pub aliases: Arc<HashMap<TyCon, TyAliasInfo>>,
 }
 
 impl Default for TypeEnv {
     fn default() -> Self {
         Self {
-            tycons: Rc::new(Default::default()),
-            aliases: Rc::new(Default::default()),
+            tycons: Arc::new(Default::default()),
+            aliases: Arc::new(Default::default()),
         }
     }
 }
@@ -24,12 +24,12 @@ impl Default for TypeEnv {
 impl TypeEnv {
     pub fn new(tycons: HashMap<TyCon, TyConInfo>, aliases: HashMap<TyCon, TyAliasInfo>) -> TypeEnv {
         TypeEnv {
-            tycons: Rc::new(tycons),
-            aliases: Rc::new(aliases),
+            tycons: Arc::new(tycons),
+            aliases: Arc::new(aliases),
         }
     }
 
-    pub fn kinds(&self) -> HashMap<TyCon, Rc<Kind>> {
+    pub fn kinds(&self) -> HashMap<TyCon, Arc<Kind>> {
         let mut res = HashMap::default();
         for (tc, ti) in self.tycons.as_ref().iter() {
             res.insert(tc.clone(), ti.kind.clone());
@@ -45,8 +45,8 @@ impl TypeEnv {
 pub struct InstantiatedSymbol {
     pub instantiated_name: FullName,
     pub generic_name: FullName,
-    pub ty: Rc<TypeNode>,
-    pub expr: Option<Rc<ExprNode>>,
+    pub ty: Arc<TypeNode>,
+    pub expr: Option<Arc<ExprNode>>,
     // type resolver for types in expr.
     // TODO: we should remove `type_resolver` field by applying it to `expr` and `ty` when they are created.
     pub type_resolver: TypeResolver,
@@ -72,7 +72,7 @@ impl InstantiatedSymbol {
 // `main : IO()`
 pub struct GlobalValueDecl {
     pub name: FullName,
-    pub ty: Rc<Scheme>,
+    pub ty: Arc<Scheme>,
     pub src: Option<Span>,
 }
 
@@ -80,7 +80,7 @@ pub struct GlobalValueDecl {
 // `main = println("Hello World")`
 pub struct GlobalValueDefn {
     pub name: FullName,
-    pub expr: Rc<ExprNode>,
+    pub expr: Arc<ExprNode>,
     pub src: Option<Span>,
 }
 
@@ -88,7 +88,7 @@ pub struct GlobalValue {
     // Type of this symbol.
     // For example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String for a: Show",
-    pub scm: Rc<Scheme>,
+    pub scm: Arc<Scheme>,
     pub expr: SymbolExpr,
     // TODO: add ty_src: Span
     // TODO: add expr_src: Span
@@ -108,8 +108,8 @@ impl GlobalValue {
 
     pub fn set_kinds(
         &mut self,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
     ) {
         self.scm = self.scm.set_kinds(trait_kind_map);
         self.scm.check_kinds(kind_map, trait_kind_map);
@@ -148,12 +148,12 @@ impl SymbolExpr {
 // Pair of expression and type resolver for it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
-    pub expr: Rc<ExprNode>,
+    pub expr: Arc<ExprNode>,
     pub type_resolver: TypeResolver,
 }
 
 impl TypedExpr {
-    pub fn from_expr(expr: Rc<ExprNode>) -> Self {
+    pub fn from_expr(expr: Arc<ExprNode>) -> Self {
         TypedExpr {
             expr,
             type_resolver: TypeResolver::default(),
@@ -165,7 +165,7 @@ impl TypedExpr {
     }
 
     // When unification fails, it has no side effect to self.
-    pub fn unify_to(&mut self, target_ty: &Rc<TypeNode>) -> bool {
+    pub fn unify_to(&mut self, target_ty: &Arc<TypeNode>) -> bool {
         return self
             .type_resolver
             .unify(&self.expr.ty.as_ref().unwrap(), target_ty);
@@ -178,7 +178,7 @@ pub struct MethodImpl {
     // Type of this method.
     // For example, in case "impl [a: Show, b: Show] (a, b): Show {...}",
     // the type of method "show" is "[a: Show, b: Show] (a, b) -> String",
-    pub ty: Rc<Scheme>,
+    pub ty: Arc<Scheme>,
     // Expression of this implementation
     pub expr: TypedExpr,
     // Module where this implmentation is given.
@@ -401,7 +401,7 @@ impl Program {
     }
 
     // Add a global value.
-    pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Rc<ExprNode>, Rc<Scheme>)) {
+    pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
         if self.global_values.contains_key(&name) {
             error_exit_with_src(
                 &format!(
@@ -522,7 +522,7 @@ impl Program {
     fn resolve_and_check_type(
         &self,
         te: &mut TypedExpr,
-        required_scheme: &Rc<Scheme>,
+        required_scheme: &Arc<Scheme>,
         name: &FullName,
         define_module: &Name,
         tc: &TypeCheckContext,
@@ -530,7 +530,7 @@ impl Program {
         fn cache_file_name(
             name: &FullName,
             hash_of_dependent_codes: &str,
-            scheme: &Rc<Scheme>,
+            scheme: &Arc<Scheme>,
         ) -> String {
             let data = format!(
                 "{}_{}_{}_{}",
@@ -544,7 +544,7 @@ impl Program {
         fn load_cache(
             name: &FullName,
             hash_of_dependent_codes: &str,
-            required_scheme: &Rc<Scheme>,
+            required_scheme: &Arc<Scheme>,
         ) -> Option<TypedExpr> {
             let cache_file_name = cache_file_name(name, hash_of_dependent_codes, required_scheme);
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
@@ -585,7 +585,7 @@ impl Program {
 
         fn save_cache(
             te: &TypedExpr,
-            required_scheme: &Rc<Scheme>,
+            required_scheme: &Arc<Scheme>,
             name: &FullName,
             hash_of_dependent_codes: &str,
         ) {
@@ -717,7 +717,7 @@ impl Program {
     }
 
     // Instantiate main function.
-    pub fn instantiate_main_function(&mut self, tc: &TypeCheckContext) -> Rc<ExprNode> {
+    pub fn instantiate_main_function(&mut self, tc: &TypeCheckContext) -> Arc<ExprNode> {
         let main_func_name = FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME);
         if !self.global_values.contains_key(&main_func_name) {
             error_exit(&format!("{} not found.", main_func_name.to_string()));
@@ -729,7 +729,7 @@ impl Program {
     }
 
     // Instantiate expression.
-    fn instantiate_expr(&mut self, tr: &TypeResolver, expr: &Rc<ExprNode>) -> Rc<ExprNode> {
+    fn instantiate_expr(&mut self, tr: &TypeResolver, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
                 if v.name.is_local() {
@@ -808,7 +808,7 @@ impl Program {
     }
 
     // Require instantiate generic symbol such that it has a specified type.
-    pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
+    pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
         let inst_name = self.determine_instantiated_symbol_name(name, ty);
         if !self.instantiated_symbols.contains_key(&inst_name)
             && self
@@ -829,7 +829,7 @@ impl Program {
 
     // Determine the name of instantiated generic symbol so that it has a specified type.
     // tc: a typechecker (substituion) under which ty should be interpreted.
-    fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Rc<TypeNode>) -> FullName {
+    fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
         let ty = ty.resolve_type_aliases(&self.type_env());
         let hash = ty.hash();
         let mut name = name.clone();
@@ -892,7 +892,7 @@ impl Program {
                 ctx.imported_modules = self.visible_mods[&tc.name.module()].clone();
                 ti.resolve_namespace(&ctx);
             }
-            self.type_env.tycons = Rc::new(tycons);
+            self.type_env.tycons = Arc::new(tycons);
         }
         // Resolve namespaces in type aliases.
         {
@@ -901,7 +901,7 @@ impl Program {
                 ctx.imported_modules = self.visible_mods[&tc.name.module()].clone();
                 ta.resolve_namespace(&ctx);
             }
-            self.type_env.aliases = Rc::new(aliases);
+            self.type_env.aliases = Arc::new(aliases);
         }
 
         self.trait_env
@@ -925,7 +925,7 @@ impl Program {
             for (_, ti) in &mut tycons {
                 ti.resolve_type_aliases(&type_env);
             }
-            self.type_env.tycons = Rc::new(tycons);
+            self.type_env.tycons = Arc::new(tycons);
         }
         let type_env = self.type_env();
         self.trait_env.resolve_type_aliases(&type_env);

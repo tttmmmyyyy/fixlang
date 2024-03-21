@@ -76,7 +76,6 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
@@ -139,6 +138,7 @@ fn main() {
         .long("max-cu-size")
         .takes_value(true)
         .default_value(DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR)
+        .value_parser(clap::value_parser!(usize))
         .help(
             "Maximum size of compilation units created by separate compilation.\n\
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\

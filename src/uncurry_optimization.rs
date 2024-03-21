@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::typecheck::Scope;
 
 use super::*;
@@ -81,10 +83,10 @@ pub fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
 // Convert lambda expression to function pointer.
 fn funptr_lambda(
     generic_name: &FullName,
-    expr: &Rc<ExprNode>,
+    expr: &Arc<ExprNode>,
     typeresolver: &TypeResolver, // for resolving types of expr
     vars_count: usize,
-) -> Option<Rc<ExprNode>> {
+) -> Option<Arc<ExprNode>> {
     if exclude(generic_name) {
         return None;
     }
@@ -116,12 +118,12 @@ fn funptr_lambda(
 }
 
 // Decompose expression |x, y| z to ([x, y], z).
-fn collect_abs(expr: &Rc<ExprNode>, vars_limit: usize) -> (Vec<Rc<Var>>, Rc<ExprNode>) {
+fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
     fn collect_abs_inner(
-        expr: &Rc<ExprNode>,
-        vars: &mut Vec<Rc<Var>>,
+        expr: &Arc<ExprNode>,
+        vars: &mut Vec<Arc<Var>>,
         vars_limit: usize,
-    ) -> Rc<ExprNode> {
+    ) -> Arc<ExprNode> {
         match &*expr.expr {
             Expr::Lam(vs, val) => {
                 if vars.len() + vs.len() > vars_limit {
@@ -134,18 +136,18 @@ fn collect_abs(expr: &Rc<ExprNode>, vars_limit: usize) -> (Vec<Rc<Var>>, Rc<Expr
         }
     }
 
-    let mut vars: Vec<Rc<Var>> = vec![];
+    let mut vars: Vec<Arc<Var>> = vec![];
     let val = collect_abs_inner(expr, &mut vars, vars_limit);
     (vars, val)
 }
 
 // Convert A -> B -> C to ([A, B], C)
-fn collect_app_src(ty: &Rc<TypeNode>, vars_limit: usize) -> (Vec<Rc<TypeNode>>, Rc<TypeNode>) {
+fn collect_app_src(ty: &Arc<TypeNode>, vars_limit: usize) -> (Vec<Arc<TypeNode>>, Arc<TypeNode>) {
     fn collect_app_src_inner(
-        ty: &Rc<TypeNode>,
-        vars: &mut Vec<Rc<TypeNode>>,
+        ty: &Arc<TypeNode>,
+        vars: &mut Vec<Arc<TypeNode>>,
         vars_limit: usize,
-    ) -> Rc<TypeNode> {
+    ) -> Arc<TypeNode> {
         match &ty.ty {
             Type::FunTy(var, val) => {
                 vars.push(var.clone());
@@ -169,17 +171,17 @@ fn collect_app_src(ty: &Rc<TypeNode>, vars_limit: usize) -> (Vec<Rc<TypeNode>>, 
         }
     }
 
-    let mut vars: Vec<Rc<TypeNode>> = vec![];
+    let mut vars: Vec<Arc<TypeNode>> = vec![];
     let val = collect_app_src_inner(ty, &mut vars, vars_limit);
     (vars, val)
 }
 
 // Replace "call closure" expression to "call function pointer" expression.
 fn replace_closure_call_to_funptr_call(
-    expr: &Rc<ExprNode>,
+    expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
     typechcker: &TypeResolver,
-) -> Rc<ExprNode> {
+) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
     let fun_ty = typechcker.substitute_type(fun.ty.as_ref().unwrap());
     if fun_ty.is_funptr() {
@@ -217,10 +219,10 @@ fn replace_closure_call_to_funptr_call(
 
 // Replace all "call closure" subexpressions to "call function pointer" expression.
 fn replace_closure_call_to_funptr_call_subexprs(
-    expr: &Rc<ExprNode>,
+    expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
     typeresolver: &TypeResolver,
-) -> Rc<ExprNode> {
+) -> Arc<ExprNode> {
     let expr = replace_closure_call_to_funptr_call(expr, symbols, typeresolver);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
@@ -312,7 +314,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
 
 // Convert `let a = x in |b| y` to `|b| let a = x in y` if possible.
 // NOTE: if name `b` is contained in x, then first we need to replace `b` to another name.
-fn move_abs_front_let_one(expr: &Rc<ExprNode>) -> Rc<ExprNode> {
+fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Let(let_var, let_bound, let_val) => {
             let let_val = move_abs_front_let_one(let_val);
@@ -384,7 +386,7 @@ fn move_abs_front_let_one(expr: &Rc<ExprNode>) -> Rc<ExprNode> {
 }
 
 // apply move_abs_front_let_one repeatedly at the head.
-fn move_abs_front_let_all(expr: &Rc<ExprNode>) -> Rc<ExprNode> {
+fn move_abs_front_let_all(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Lam(_, val) => {
             let val = move_abs_front_let_all(val);
@@ -404,11 +406,11 @@ fn move_abs_front_let_all(expr: &Rc<ExprNode>) -> Rc<ExprNode> {
 // Replace the name of a free variable in an expression.
 // If the name `to` is bound at the place `from` appears, returns Err.
 fn replace_free_var(
-    expr: &Rc<ExprNode>,
+    expr: &Arc<ExprNode>,
     from: &FullName,
     to: &FullName,
     scope: &mut Scope<()>,
-) -> Result<Rc<ExprNode>, ()> {
+) -> Result<Arc<ExprNode>, ()> {
     match &*expr.expr {
         Expr::Var(v) => {
             if v.name == *from {
@@ -501,9 +503,9 @@ fn replace_free_var(
 }
 
 // fn replace_travarsally(
-//     expr: Rc<ExprNode>,
-//     replace: &impl Fn(Rc<ExprNode>) -> Rc<ExprNode>,
-// ) -> Rc<ExprNode> {
+//     expr: Arc<ExprNode>,
+//     replace: &impl Fn(Arc<ExprNode>) -> Arc<ExprNode>,
+// ) -> Arc<ExprNode> {
 //     match &*expr.expr {
 //         Expr::Var(_) => replace(expr.clone()),
 //         Expr::Lit(_) => replace(expr.clone()),

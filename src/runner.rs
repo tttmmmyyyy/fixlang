@@ -5,6 +5,7 @@ use std::{
     fs::{self, create_dir_all, remove_dir_all},
     path::PathBuf,
     process::{Command, Stdio},
+    sync::Arc,
 };
 
 use inkwell::{
@@ -113,11 +114,11 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     // Paths of object files to be linked.
     let mut obj_paths = vec![];
 
-    // Generate codes for compilation units.
+    // Generate object files in parallel.
+    let mut threads = vec![];
     let units_count = units.len();
-    for (i, unit) in units.iter_mut().enumerate() {
+    for (i, unit) in units.into_iter().enumerate() {
         obj_paths.push(unit.object_file_path());
-
         // If the object file is cached, skip the generation.
         if unit.is_cached() {
             if config.verbose {
@@ -132,69 +133,80 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
             eprintln!("Generating object file for {}.", unit.to_string());
         }
 
-        // Create GenerationContext.
-        let context = Context::create();
-        let target_machine = get_target_machine(config.get_llvm_opt_level());
-        let module = GenerationContext::create_module(
-            &format!("Module_{}", unit.unit_hash()),
-            &context,
-            &target_machine,
-        );
-        let mut gc = GenerationContext::new(
-            &context,
-            &module,
-            target_machine.get_target_data(),
-            config.clone(),
-            program.type_env(),
-        );
+        let all_symbols = all_symbols.clone();
+        let config = config.clone();
+        let units_count = units_count.clone();
+        let type_env = program.type_env();
+        let main_expr = main_expr.clone();
+        threads.push(std::thread::spawn(move || {
+            // Create GenerationContext.
+            let context = Context::create();
+            let target_machine = get_target_machine(config.get_llvm_opt_level());
+            let module = GenerationContext::create_module(
+                &format!("Module_{}", unit.unit_hash()),
+                &context,
+                &target_machine,
+            );
+            let mut gc = GenerationContext::new(
+                &context,
+                &module,
+                target_machine.get_target_data(),
+                config.clone(),
+                type_env,
+            );
 
-        // In debug mode, create debug infos.
-        if config.debug_info {
-            gc.create_debug_info();
-        }
+            // In debug mode, create debug infos.
+            if config.debug_info {
+                gc.create_debug_info();
+            }
 
-        // Declare runtime functions.
-        runtime::build_runtime(&mut gc, BuildMode::Declare);
+            // Declare runtime functions.
+            runtime::build_runtime(&mut gc, BuildMode::Declare);
 
-        // Declare all symbols in this program.
-        // TODO: Optimize so that only necessary symbols are declared.
-        for symbol in &all_symbols {
-            gc.declare_symbol(symbol);
-        }
+            // Declare all symbols in this program.
+            // TODO: Optimize so that only necessary symbols are declared.
+            for symbol in &all_symbols {
+                gc.declare_symbol(symbol);
+            }
 
-        // Implement all symbols in this unit.
-        for symbol in unit.symbols() {
-            gc.implement_symbol(symbol);
-        }
+            // Implement all symbols in this unit.
+            for symbol in unit.symbols() {
+                gc.implement_symbol(symbol);
+            }
 
-        if i == units_count - 1 {
-            // In the last,
-            assert!(!unit.is_cached());
+            if i == units_count - 1 {
+                // In the last,
+                assert!(!unit.is_cached());
 
-            // Implement runtime functions.
-            build_runtime(&mut gc, BuildMode::Implement);
-            // Implement the `main()` function.
-            build_main_function(&mut gc, main_expr.clone(), &config);
-        }
+                // Implement runtime functions.
+                build_runtime(&mut gc, BuildMode::Implement);
+                // Implement the `main()` function.
+                build_main_function(&mut gc, main_expr.clone(), &config);
+            }
 
-        // If debug info is generated, finalize it.
-        gc.finalize_di();
+            // If debug info is generated, finalize it.
+            gc.finalize_di();
 
-        if config.emit_llvm {
-            // Print LLVM-IR to file before optimization.
-            emit_llvm(gc.module, &config, true);
-        }
+            if config.emit_llvm {
+                // Print LLVM-IR to file before optimization.
+                emit_llvm(gc.module, &config, true);
+            }
 
-        // LLVM level optimization.
-        optimize_and_verify(gc.module, &config);
+            // LLVM level optimization.
+            optimize_and_verify(gc.module, &config);
 
-        if config.emit_llvm {
-            // Print LLVM-IR to file after optimization.
-            emit_llvm(gc.module, &config, false);
-        }
+            if config.emit_llvm {
+                // Print LLVM-IR to file after optimization.
+                emit_llvm(gc.module, &config, false);
+            }
 
-        // Generate object file.
-        write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
+            // Generate object file.
+            write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
+        }));
+    }
+    // Wait for all threads to finish.
+    for t in threads {
+        t.join().unwrap();
     }
 
     obj_paths
@@ -275,7 +287,7 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
 
 fn build_main_function<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
-    main_expr: Rc<ExprNode>,
+    main_expr: Arc<ExprNode>,
     config: &Configuration,
 ) {
     let main_fn_type = gc.context.i32_type().fn_type(

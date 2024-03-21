@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -70,7 +72,7 @@ impl LLVMGenerator {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Rc<TypeNode>,
+        ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         bvs: &Vec<FullName>, // borrowed variables
     ) -> Object<'c> {
@@ -163,5 +165,5 @@ pub struct InlineLLVM {
     // Set of variables which is contained in the list `released_vars()` but should not be released.
     pub borrowed_vars: Vec<FullName>,
     pub name: String,
-    pub ty: Rc<TypeNode>,
+    pub ty: Arc<TypeNode>,
 }

@@ -1,4 +1,4 @@
-use std::{path::PathBuf, rc::Rc};
+use std::{path::PathBuf, sync::Arc};
 
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,7 @@ use crate::{parser::Rule, runner::read_file};
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
     #[serde(skip)]
-    pub string: Option<Rc<String>>,
+    pub string: Option<Arc<String>>,
     #[serde(skip)]
     pub hash: Option<String>,
     pub file_path: PathBuf,
@@ -40,7 +40,7 @@ impl SourceFile {
     pub fn read_file(&mut self) {
         if self.string.is_none() {
             self.string = match read_file(&self.file_path) {
-                Ok(source) => Option::Some(Rc::new(source)),
+                Ok(source) => Option::Some(Arc::new(source)),
                 Err(e) => panic!("{}", e),
             };
         }

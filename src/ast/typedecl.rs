@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // Declaration of user-defind types.
@@ -5,7 +7,7 @@ use super::*;
 pub struct TypeDefn {
     pub name: FullName,
     pub value: TypeDeclValue,
-    pub tyvars: Vec<Rc<TyVar>>,
+    pub tyvars: Vec<Arc<TyVar>>,
     pub source: Option<Span>,
 }
 
@@ -41,7 +43,7 @@ impl TypeDefn {
     }
 
     // Calculate kind of tycon defined by this type definition.
-    pub fn kind(&self) -> Rc<Kind> {
+    pub fn kind(&self) -> Arc<Kind> {
         let mut kind = kind_star();
         for tv in self.tyvars.iter().rev() {
             kind = kind_arrow(tv.kind.clone(), kind);
@@ -64,8 +66,8 @@ impl TypeDefn {
         }
     }
 
-    pub fn ty(&self) -> Rc<TypeNode> {
-        let mut ty = type_tycon(&Rc::new(self.tycon()));
+    pub fn ty(&self) -> Arc<TypeNode> {
+        let mut ty = type_tycon(&Arc::new(self.tycon()));
         for tv in &self.tyvars {
             ty = type_tyapp(ty, type_from_tyvar(tv.clone()));
         }
@@ -169,7 +171,7 @@ impl TypeDeclValue {
         }
     }
 
-    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Rc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
         match self {
             TypeDeclValue::Struct(s) => s.set_kinds(kinds),
             TypeDeclValue::Union(u) => u.set_kinds(kinds),
@@ -197,7 +199,7 @@ impl Struct {
         }
     }
 
-    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Rc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
         for f in &mut self.fields {
             f.set_kinds(kinds);
         }
@@ -223,7 +225,7 @@ impl Union {
         }
     }
 
-    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Rc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
         for f in &mut self.fields {
             f.set_kinds(kinds);
         }
@@ -232,7 +234,7 @@ impl Union {
 
 #[derive(Clone)]
 pub struct TypeAlias {
-    pub value: Rc<TypeNode>,
+    pub value: Arc<TypeNode>,
 }
 
 impl TypeAlias {
@@ -240,7 +242,7 @@ impl TypeAlias {
         self.value = self.value.resolve_namespace(ctx);
     }
 
-    pub fn set_kinds(&mut self, scope: &HashMap<Name, Rc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
         self.value = self.value.set_kinds(scope);
     }
 }
@@ -248,7 +250,7 @@ impl TypeAlias {
 #[derive(Clone)]
 pub struct Field {
     pub name: Name,
-    pub ty: Rc<TypeNode>,
+    pub ty: Arc<TypeNode>,
 }
 
 impl Field {
@@ -273,7 +275,7 @@ impl Field {
         return None;
     }
 
-    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Rc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
         self.ty = self.ty.set_kinds(kinds);
     }
 }

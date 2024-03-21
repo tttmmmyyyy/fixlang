@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -66,7 +68,7 @@ impl PatternNode {
         }
     }
 
-    pub fn resolve_namespace(self: &PatternNode, ctx: &NameResolutionContext) -> Rc<PatternNode> {
+    pub fn resolve_namespace(self: &PatternNode, ctx: &NameResolutionContext) -> Arc<PatternNode> {
         match &self.pattern {
             Pattern::Var(_, ty) => {
                 self.set_var_tyanno(ty.as_ref().map(|ty| ty.resolve_namespace(ctx)))
@@ -81,7 +83,7 @@ impl PatternNode {
                     .iter()
                     .map(|(field_name, pat)| (field_name.clone(), pat.resolve_namespace(ctx)))
                     .collect::<Vec<_>>();
-                self.set_struct_tycon(Rc::new(tc))
+                self.set_struct_tycon(Arc::new(tc))
                     .set_struct_field_to_pat(field_to_pat)
             }
             Pattern::Union(tc, _, pat) => {
@@ -90,13 +92,13 @@ impl PatternNode {
                 if resolve_result.is_err() {
                     error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
                 }
-                self.set_union_tycon(Rc::new(tc))
+                self.set_union_tycon(Arc::new(tc))
                     .set_union_pat(pat.resolve_namespace(ctx))
             }
         }
     }
 
-    pub fn resolve_type_aliases(self: &PatternNode, type_env: &TypeEnv) -> Rc<PatternNode> {
+    pub fn resolve_type_aliases(self: &PatternNode, type_env: &TypeEnv) -> Arc<PatternNode> {
         match &self.pattern {
             Pattern::Var(_, ty) => {
                 self.set_var_tyanno(ty.as_ref().map(|ty| ty.resolve_type_aliases(type_env)))
@@ -128,7 +130,7 @@ impl PatternNode {
         }
     }
 
-    pub fn set_var_tyanno(self: &PatternNode, tyanno: Option<Rc<TypeNode>>) -> Rc<PatternNode> {
+    pub fn set_var_tyanno(self: &PatternNode, tyanno: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
             Pattern::Var(v, _) => {
@@ -136,10 +138,10 @@ impl PatternNode {
             }
             _ => panic!(),
         }
-        Rc::new(node)
+        Arc::new(node)
     }
 
-    pub fn set_struct_tycon(self: &PatternNode, tc: Rc<TyCon>) -> Rc<PatternNode> {
+    pub fn set_struct_tycon(self: &PatternNode, tc: Arc<TyCon>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
             Pattern::Struct(_, field_to_pat) => {
@@ -147,13 +149,13 @@ impl PatternNode {
             }
             _ => panic!(),
         }
-        Rc::new(node)
+        Arc::new(node)
     }
 
     pub fn set_struct_field_to_pat(
         self: &PatternNode,
-        field_to_pat: Vec<(Name, Rc<PatternNode>)>,
-    ) -> Rc<PatternNode> {
+        field_to_pat: Vec<(Name, Arc<PatternNode>)>,
+    ) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
             Pattern::Struct(tc, _) => {
@@ -161,10 +163,10 @@ impl PatternNode {
             }
             _ => panic!(),
         }
-        Rc::new(node)
+        Arc::new(node)
     }
 
-    pub fn set_union_tycon(self: &PatternNode, tc: Rc<TyCon>) -> Rc<PatternNode> {
+    pub fn set_union_tycon(self: &PatternNode, tc: Arc<TyCon>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
             Pattern::Union(_, field_name, pat) => {
@@ -172,10 +174,10 @@ impl PatternNode {
             }
             _ => panic!(),
         }
-        Rc::new(node)
+        Arc::new(node)
     }
 
-    pub fn set_union_pat(self: &PatternNode, pat: Rc<PatternNode>) -> Rc<PatternNode> {
+    pub fn set_union_pat(self: &PatternNode, pat: Arc<PatternNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
             Pattern::Union(tc, field_name, _) => {
@@ -183,31 +185,38 @@ impl PatternNode {
             }
             _ => panic!(),
         }
-        Rc::new(node)
+        Arc::new(node)
     }
 
-    pub fn set_source(self: &PatternNode, src: Span) -> Rc<PatternNode> {
+    pub fn set_source(self: &PatternNode, src: Span) -> Arc<PatternNode> {
         let mut node = self.clone();
         node.info.source = Some(src);
-        Rc::new(node)
+        Arc::new(node)
     }
 
-    pub fn make_var(var: Rc<Var>, ty: Option<Rc<TypeNode>>) -> Rc<PatternNode> {
-        Rc::new(PatternNode {
+    pub fn make_var(var: Arc<Var>, ty: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
+        Arc::new(PatternNode {
             pattern: Pattern::Var(var, ty),
             info: PatternInfo { source: None },
         })
     }
 
-    pub fn make_struct(tycon: Rc<TyCon>, fields: Vec<(Name, Rc<PatternNode>)>) -> Rc<PatternNode> {
-        Rc::new(PatternNode {
+    pub fn make_struct(
+        tycon: Arc<TyCon>,
+        fields: Vec<(Name, Arc<PatternNode>)>,
+    ) -> Arc<PatternNode> {
+        Arc::new(PatternNode {
             pattern: Pattern::Struct(tycon, fields),
             info: PatternInfo { source: None },
         })
     }
 
-    pub fn make_union(tycon: Rc<TyCon>, field: Name, subpat: Rc<PatternNode>) -> Rc<PatternNode> {
-        Rc::new(PatternNode {
+    pub fn make_union(
+        tycon: Arc<TyCon>,
+        field: Name,
+        subpat: Arc<PatternNode>,
+    ) -> Arc<PatternNode> {
+        Arc::new(PatternNode {
             pattern: Pattern::Union(tycon, field, subpat),
             info: PatternInfo { source: None },
         })
@@ -221,16 +230,16 @@ pub struct PatternInfo {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Pattern {
-    Var(Rc<Var>, Option<Rc<TypeNode>>),
-    Struct(Rc<TyCon>, Vec<(Name, Rc<PatternNode>)>),
-    Union(Rc<TyCon>, Name, Rc<PatternNode>),
+    Var(Arc<Var>, Option<Arc<TypeNode>>),
+    Struct(Arc<TyCon>, Vec<(Name, Arc<PatternNode>)>),
+    Union(Arc<TyCon>, Name, Arc<PatternNode>),
 }
 
 impl Pattern {
     // Make basic variable pattern.
     #[allow(dead_code)]
-    pub fn var_pattern(var: Rc<Var>) -> Rc<Pattern> {
-        Rc::new(Pattern::Var(var, None))
+    pub fn var_pattern(var: Arc<Var>) -> Arc<Pattern> {
+        Arc::new(Pattern::Var(var, None))
     }
 
     // Check if variables defined in this pattern is duplicated or not.
@@ -258,7 +267,7 @@ impl Pattern {
     pub fn get_type(
         &self,
         typechcker: &mut TypeCheckContext,
-    ) -> (Rc<TypeNode>, HashMap<FullName, Rc<TypeNode>>) {
+    ) -> (Arc<TypeNode>, HashMap<FullName, Arc<TypeNode>>) {
         match self {
             Pattern::Var(v, ty) => {
                 let var_name = v.name.clone();

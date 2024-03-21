@@ -91,6 +91,7 @@ impl Configuration {
     pub fn develop_compiler() -> Configuration {
         let mut config = Self::default();
         config.set_sanitize_memory();
+        config.fix_opt_level = FixOptimizationLevel::Minimum;
         config
     }
 

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -33,7 +35,7 @@ pub struct TraitInfo {
     // Identifier of this trait (i.e. the name).
     pub id: TraitId,
     // Type variable used in trait definition.
-    pub type_var: Rc<TyVar>,
+    pub type_var: Arc<TyVar>,
     // Methods of this trait.
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String",
@@ -63,7 +65,7 @@ impl TraitInfo {
     // Get type-scheme of a method.
     // Here, for example, in case "trait a: ToString { to_string : a -> String }",
     // this function returns "[a: ToString] a -> String" as type of "to_string" method.
-    pub fn method_scheme(&self, name: &Name) -> Rc<Scheme> {
+    pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
         let mut ty = self.methods.get(name).unwrap().clone();
         let vars = ty.free_vars();
         let mut preds = vec![Predicate::make(
@@ -115,7 +117,7 @@ pub struct TraitInstance {
     // Statement such as "(a, b): Show for a: Show, b: Show".
     pub qual_pred: QualPredicate,
     // Method implementation.
-    pub methods: HashMap<Name, Rc<ExprNode>>,
+    pub methods: HashMap<Name, Arc<ExprNode>>,
     // Module where this instance is defined.
     pub define_module: Name,
     // Source location where this instance is defined.
@@ -123,7 +125,7 @@ pub struct TraitInstance {
 }
 
 impl TraitInstance {
-    pub fn set_kinds_in_qual_pred(&mut self, trait_kind_map: &HashMap<TraitId, Rc<Kind>>) {
+    pub fn set_kinds_in_qual_pred(&mut self, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
         let mut scope = HashMap::new();
         let preds = &self.qual_pred.context;
         let kind_preds = &self.qual_pred.kind_preds;
@@ -164,7 +166,7 @@ impl TraitInstance {
     // Get type-scheme of a method implementation.
     // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
     // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
-    pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Rc<Scheme> {
+    pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
         // Create qualtype. Ex. `[] (a, b) -> String`.
         let trait_tyvar = &trait_info.type_var.name; // Ex. tyvar == `t`
         let impl_type = self.qual_pred.predicate.ty.clone(); // Ex. impl_type == `(a, b)`
@@ -197,7 +199,7 @@ impl TraitInstance {
     }
 
     // Get expression that implements a method.
-    pub fn method_expr(&self, name: &Name) -> Rc<ExprNode> {
+    pub fn method_expr(&self, name: &Name) -> Arc<ExprNode> {
         self.methods.get(name).unwrap().clone()
     }
 }
@@ -212,7 +214,7 @@ pub struct TraitAlias {
     // Source location of alias definition.
     pub source: Option<Span>,
     // Kind of this trait alias.
-    pub kind: Rc<Kind>,
+    pub kind: Arc<Kind>,
 }
 
 impl TraitAlias {
@@ -268,15 +270,15 @@ impl QualPredicate {
     }
 
     pub fn extend_kind_scope(
-        scope: &mut HashMap<Name, Rc<Kind>>,
+        scope: &mut HashMap<Name, Arc<Kind>>,
         preds: &Vec<Predicate>,
         kind_preds: &Vec<KindPredicate>,
-        trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
     ) -> Result<(), String> {
         fn insert(
-            scope: &mut HashMap<Name, Rc<Kind>>,
+            scope: &mut HashMap<Name, Arc<Kind>>,
             tyvar: String,
-            kind: Rc<Kind>,
+            kind: Arc<Kind>,
         ) -> Result<(), String> {
             if scope.contains_key(&tyvar) {
                 if scope[&tyvar] != kind {
@@ -315,7 +317,7 @@ impl QualPredicate {
 pub struct QualType {
     pub preds: Vec<Predicate>,
     pub kind_preds: Vec<KindPredicate>,
-    pub ty: Rc<TypeNode>,
+    pub ty: Arc<TypeNode>,
 }
 
 impl QualType {
@@ -336,7 +338,7 @@ impl QualType {
     }
 
     // Calculate free type variables.
-    pub fn free_vars(&self) -> HashMap<Name, Rc<Kind>> {
+    pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
         self.ty.free_vars()
     }
 }
@@ -345,7 +347,7 @@ impl QualType {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Predicate {
     pub trait_id: TraitId,
-    pub ty: Rc<TypeNode>,
+    pub ty: Arc<TypeNode>,
     pub info: PredicateInfo,
 }
 
@@ -354,7 +356,7 @@ impl Predicate {
         self.info.source = Some(source);
     }
 
-    pub fn make(trait_id: TraitId, ty: Rc<TypeNode>) -> Self {
+    pub fn make(trait_id: TraitId, ty: Arc<TypeNode>) -> Self {
         Predicate {
             trait_id,
             ty,
@@ -386,14 +388,14 @@ impl Predicate {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
 
-    pub fn set_kinds(&mut self, scope: &HashMap<Name, Rc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
         self.ty = self.ty.set_kinds(scope);
     }
 
     pub fn check_kinds(
         &self,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
     ) {
         let expected = &trait_kind_map[&self.trait_id];
         let found = self.ty.kind(kind_map);
@@ -435,7 +437,7 @@ pub struct PredicateInfo {
 #[derive(Clone)]
 pub struct KindPredicate {
     pub name: Name,
-    pub kind: Rc<Kind>,
+    pub kind: Arc<Kind>,
     pub source: Option<Span>,
 }
 
@@ -466,7 +468,7 @@ impl TraitEnv {
         res
     }
 
-    pub fn validate(&mut self, kind_map: &HashMap<TyCon, Rc<Kind>>) {
+    pub fn validate(&mut self, kind_map: &HashMap<TyCon, Arc<Kind>>) {
         // Check name confliction of traits and aliases.
         fn create_conflicting_error(env: &TraitEnv, trait_id: &TraitId) {
             let this_src = &env.traits.get(trait_id).unwrap().source;
@@ -771,7 +773,7 @@ impl TraitEnv {
     fn reduce_to_context_of_instance(
         &self,
         p: &Predicate,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
     ) -> Option<Vec<Predicate>> {
         let insntances = self.instances.get(&p.trait_id);
         if let Some(instances) = insntances {
@@ -801,7 +803,7 @@ impl TraitEnv {
         &self,
         ps: &Vec<Predicate>,
         p: &Predicate,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
     ) -> bool {
         // Resolve trait aliases in ps.
         let mut resolved_ps = vec![];
@@ -821,7 +823,7 @@ impl TraitEnv {
         &self,
         ps: &Vec<Predicate>,
         p: &Predicate,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
     ) -> bool {
         // If p is in ps, then ok.
         for q in ps {
@@ -850,7 +852,7 @@ impl TraitEnv {
     fn reduce_to_hnfs(
         &self,
         p: &Predicate,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
     ) -> Result<Vec<Predicate>, Predicate> {
         if p.ty.is_hnf() {
             return Ok(vec![p.clone()]);
@@ -866,7 +868,7 @@ impl TraitEnv {
     fn reduce_to_hnfs_many(
         &self,
         ps: &Vec<Predicate>,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
     ) -> Result<Vec<Predicate>, Predicate> {
         let mut ret: Vec<Predicate> = Default::default();
         for p in ps {
@@ -879,7 +881,7 @@ impl TraitEnv {
     fn reduce_predicates_by_entail(
         &self,
         ps: &Vec<Predicate>,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
     ) -> Vec<Predicate> {
         let mut ps = ps.clone();
         let mut i = 0 as usize;
@@ -906,7 +908,7 @@ impl TraitEnv {
     pub fn reduce(
         &self,
         ps: &Vec<Predicate>,
-        kind_map: &HashMap<TyCon, Rc<Kind>>,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
     ) -> Result<Vec<Predicate>, Predicate> {
         // Resolve trait aliases in ps.
         let mut resolved_ps = vec![];
@@ -994,8 +996,8 @@ impl TraitEnv {
         }
     }
 
-    pub fn trait_kind_map(&self) -> HashMap<TraitId, Rc<Kind>> {
-        let mut res: HashMap<TraitId, Rc<Kind>> = HashMap::default();
+    pub fn trait_kind_map(&self) -> HashMap<TraitId, Arc<Kind>> {
+        let mut res: HashMap<TraitId, Arc<Kind>> = HashMap::default();
         for (id, ti) in &self.traits {
             res.insert(id.clone(), ti.type_var.kind.clone());
         }

@@ -2,11 +2,7 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
-use std::{
-    cell::RefCell,
-    env::{self},
-    rc::Rc,
-};
+use std::{cell::RefCell, env, sync::Arc};
 
 use either::Either;
 use inkwell::{
@@ -32,7 +28,7 @@ pub struct Variable<'c> {
 #[derive(Clone)]
 pub enum VarValue<'c> {
     Local(Object<'c>),
-    Global(FunctionValue<'c>, Rc<TypeNode>),
+    Global(FunctionValue<'c>, Arc<TypeNode>),
 }
 
 impl<'c> VarValue<'c> {
@@ -68,11 +64,11 @@ impl<'c> VarValue<'c> {
 #[derive(Clone)]
 pub struct Object<'c> {
     ptr: PointerValue<'c>,
-    pub ty: Rc<TypeNode>,
+    pub ty: Arc<TypeNode>,
 }
 
 impl<'c> Object<'c> {
-    pub fn new(ptr: PointerValue<'c>, ty: Rc<TypeNode>) -> Self {
+    pub fn new(ptr: PointerValue<'c>, ty: Arc<TypeNode>) -> Self {
         assert!(ty.free_vars().is_empty());
         Object { ptr, ty }
     }
@@ -81,7 +77,7 @@ impl<'c> Object<'c> {
     // If unboxed type, then store the value to stack and create Object.
     pub fn create_from_value<'m>(
         val: BasicValueEnum<'c>,
-        ty: Rc<TypeNode>,
+        ty: Arc<TypeNode>,
         gc: &mut GenerationContext<'c, 'm>,
     ) -> Object<'c> {
         let ptr = if ty.is_box(gc.type_env()) || ty.is_funptr() {
@@ -296,10 +292,10 @@ fn add_i32_to_u32(u: u32, i: i32) -> u32 {
 pub struct GenerationContext<'c, 'm> {
     pub context: &'c Context,
     pub module: &'m Module<'c>,
-    builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
-    scope: Rc<RefCell<Vec<Scope<'c>>>>,
+    builders: Arc<RefCell<Vec<Arc<Builder<'c>>>>>,
+    scope: Arc<RefCell<Vec<Scope<'c>>>>,
     debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
-    debug_scope: Rc<RefCell<Vec<Option<DIScope<'c>>>>>, // None implies that currently generating codes for function whose source is unknown.
+    debug_scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>, // None implies that currently generating codes for function whose source is unknown.
     debug_location: Vec<Option<Span>>, // None implies that currently generating codes for function whose source is unknown.
     pub global: HashMap<FullName, Variable<'c>>,
     pub typeresolver: TypeResolver,
@@ -309,7 +305,7 @@ pub struct GenerationContext<'c, 'm> {
 }
 
 pub struct PopBuilderGuard<'c> {
-    builders: Rc<RefCell<Vec<Rc<Builder<'c>>>>>,
+    builders: Arc<RefCell<Vec<Arc<Builder<'c>>>>>,
 }
 
 impl<'c> Drop for PopBuilderGuard<'c> {
@@ -319,7 +315,7 @@ impl<'c> Drop for PopBuilderGuard<'c> {
 }
 
 pub struct PopScopeGuard<'c> {
-    scope: Rc<RefCell<Vec<Scope<'c>>>>,
+    scope: Arc<RefCell<Vec<Scope<'c>>>>,
 }
 
 impl<'c> Drop for PopScopeGuard<'c> {
@@ -329,7 +325,7 @@ impl<'c> Drop for PopScopeGuard<'c> {
 }
 
 pub struct PopDebugScopeGuard<'c> {
-    scope: Rc<RefCell<Vec<Option<DIScope<'c>>>>>,
+    scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>,
 }
 
 impl<'c> Drop for PopDebugScopeGuard<'c> {
@@ -418,9 +414,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ret = Self {
             context: ctx,
             module,
-            builders: Rc::new(RefCell::new(vec![Rc::new(ctx.create_builder())])),
-            scope: Rc::new(RefCell::new(vec![Default::default()])),
-            debug_scope: Rc::new(RefCell::new(vec![])),
+            builders: Arc::new(RefCell::new(vec![Arc::new(ctx.create_builder())])),
+            scope: Arc::new(RefCell::new(vec![Default::default()])),
+            debug_scope: Arc::new(RefCell::new(vec![])),
             debug_info: Default::default(),
             debug_location: vec![],
             global: Default::default(),
@@ -465,7 +461,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get builder.
-    pub fn builder(&self) -> Rc<Builder<'c>> {
+    pub fn builder(&self) -> Arc<Builder<'c>> {
         self.builders.borrow().last().unwrap().clone()
     }
 
@@ -473,7 +469,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     pub fn push_builder(&mut self) -> PopBuilderGuard<'c> {
         self.builders
             .borrow_mut()
-            .push(Rc::new(self.context.create_builder()));
+            .push(Arc::new(self.context.create_builder()));
         PopBuilderGuard {
             builders: self.builders.clone(),
         }
@@ -484,7 +480,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         &mut self,
         name: FullName,
         function: FunctionValue<'c>,
-        ty: Rc<TypeNode>,
+        ty: Arc<TypeNode>,
     ) {
         if self.global.contains_key(&name) {
             error_exit(&format!("Duplicate symbol: {}", name.to_string()));
@@ -1219,7 +1215,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate expression.
-    pub fn eval_expr(&mut self, expr: Rc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
+    pub fn eval_expr(&mut self, expr: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
         let expr =
             expr.set_inferred_type(self.typeresolver.substitute_type(&expr.ty.clone().unwrap()));
         assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
@@ -1257,15 +1253,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate variable.
-    fn eval_var(&mut self, var: Rc<Var>, rvo: Option<Object<'c>>) -> Object<'c> {
+    fn eval_var(&mut self, var: Arc<Var>, rvo: Option<Object<'c>>) -> Object<'c> {
         self.get_var_retained_if_used_later(&var.name, rvo)
     }
 
     // Evaluate application
     fn eval_app(
         &mut self,
-        mut fun: Rc<ExprNode>,
-        args: Vec<Rc<ExprNode>>,
+        mut fun: Arc<ExprNode>,
+        args: Vec<Arc<ExprNode>>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Prepare for borrowing optimization.
@@ -1314,8 +1310,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate literal
     fn eval_llvm(
         &mut self,
-        llvm: Rc<InlineLLVM>,
-        ty: Rc<TypeNode>,
+        llvm: Arc<InlineLLVM>,
+        ty: Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         llvm.generator.generate(self, &ty, rvo, &llvm.borrowed_vars)
@@ -1325,8 +1321,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Normalize its orderings.
     pub fn calculate_captured_vars_of_lambda(
         &mut self,
-        lam: Rc<ExprNode>,
-    ) -> Vec<(FullName, Rc<TypeNode>)> {
+        lam: Arc<ExprNode>,
+    ) -> Vec<(FullName, Arc<TypeNode>)> {
         let (args, body) = lam.destructure_lam();
 
         let mut cap_names = body.free_vars().clone();
@@ -1355,7 +1351,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Declare function of lambda expression
     pub fn declare_lambda_function(
         &mut self,
-        lam: Rc<ExprNode>,
+        lam: Arc<ExprNode>,
         name: Option<&FullName>,
     ) -> FunctionValue<'c> {
         let lam_ty = lam.ty.clone().unwrap();
@@ -1441,9 +1437,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Implement function of lambda expression
     pub fn implement_lambda_function(
         &mut self,
-        lam: Rc<ExprNode>,
+        lam: Arc<ExprNode>,
         lam_fn: FunctionValue<'c>,
-        cap_vars: Option<Vec<(FullName, Rc<TypeNode>)>>,
+        cap_vars: Option<Vec<(FullName, Arc<TypeNode>)>>,
     ) {
         let lam_ty = lam.ty.clone().unwrap();
         let (args, body) = lam.destructure_lam();
@@ -1557,7 +1553,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate lambda abstraction.
-    fn eval_lam(&mut self, lam: Rc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
+    fn eval_lam(&mut self, lam: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
         let (args, body) = lam.destructure_lam();
         let lam_ty = lam.ty.clone().unwrap();
 
@@ -1642,9 +1638,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate let
     fn eval_let(
         &mut self,
-        pat: &Rc<PatternNode>,
-        bound: Rc<ExprNode>,
-        val: Rc<ExprNode>,
+        pat: &Arc<PatternNode>,
+        bound: Arc<ExprNode>,
+        val: Arc<ExprNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let vars = pat.pattern.vars();
@@ -1679,7 +1675,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Destructure object by pattern
     fn destructure_object_by_pattern(
         &mut self,
-        pat: &Rc<PatternNode>,
+        pat: &Arc<PatternNode>,
         obj: &Object<'c>,
     ) -> Vec<(FullName, Object<'c>)> {
         let mut ret = vec![];
@@ -1744,9 +1740,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate if
     fn eval_if(
         &mut self,
-        cond_expr: Rc<ExprNode>,
-        then_expr: Rc<ExprNode>,
-        else_expr: Rc<ExprNode>,
+        cond_expr: Arc<ExprNode>,
+        then_expr: Arc<ExprNode>,
+        else_expr: Arc<ExprNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let mut used_then_or_else = then_expr.free_vars().clone();
@@ -1814,8 +1810,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate make pair
     fn eval_make_struct(
         &mut self,
-        fields: Vec<(Name, Rc<ExprNode>)>,
-        struct_ty: Rc<TypeNode>,
+        fields: Vec<(Name, Arc<ExprNode>)>,
+        struct_ty: Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let pair = if rvo.is_some() {
@@ -1860,12 +1856,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     fn eval_call_c(
         &mut self,
-        expr: &Rc<ExprNode>,
+        expr: &Arc<ExprNode>,
         fun_name: &Name,
-        ret_ty: &Rc<TyCon>,
-        param_tys: &Vec<Rc<TyCon>>,
+        ret_ty: &Arc<TyCon>,
+        param_tys: &Vec<Arc<TyCon>>,
         is_va_args: bool,
-        args: &Vec<Rc<ExprNode>>,
+        args: &Vec<Arc<ExprNode>>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Prepare return object.
@@ -1935,8 +1931,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     fn eval_array_lit(
         &mut self,
-        elems: &Vec<Rc<ExprNode>>,
-        array_ty: Rc<TypeNode>,
+        elems: &Vec<Arc<ExprNode>>,
+        array_ty: Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         assert!(rvo.is_none());

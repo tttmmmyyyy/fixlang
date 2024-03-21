@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
@@ -10,7 +12,7 @@ use super::*;
 pub enum ObjectFieldType {
     ControlBlock,
     TraverseFunction,
-    LambdaFunction(Rc<TypeNode>), // Specify type of lambda
+    LambdaFunction(Arc<TypeNode>), // Specify type of lambda
     Ptr,
     I8,
     U8,
@@ -22,10 +24,10 @@ pub enum ObjectFieldType {
     U64,
     F32,
     F64,
-    SubObject(Rc<TypeNode>),
-    UnionBuf(Vec<Rc<TypeNode>>), // Embedded union.
+    SubObject(Arc<TypeNode>),
+    UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
     UnionTag,
-    Array(Rc<TypeNode>), // field to store capacity (size) and buffer for elements.
+    Array(Arc<TypeNode>), // field to store capacity (size) and buffer for elements.
 }
 
 impl ObjectFieldType {
@@ -361,7 +363,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
-        elem_ty: Rc<TypeNode>,
+        elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
     ) {
         // In loop body, release object of idx = counter_val.
@@ -466,7 +468,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
-        elem_ty: Rc<TypeNode>,
+        elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
@@ -501,7 +503,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
-        elem_ty: Rc<TypeNode>,
+        elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
@@ -554,7 +556,7 @@ impl ObjectFieldType {
         len: IntValue<'c>,
         src_buffer: PointerValue<'c>,
         dst_buffer: PointerValue<'c>,
-        elem_ty: Rc<TypeNode>,
+        elem_ty: Arc<TypeNode>,
     ) {
         // Clone each elements.
         {
@@ -597,7 +599,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         tag: IntValue<'c>,
-        field_types: &Vec<Rc<TypeNode>>,
+        field_types: &Vec<Arc<TypeNode>>,
         work_type: Option<TraverserWorkType>, // None for retain, and Some for release or mark global threaded.
     ) {
         // Retain or release field.
@@ -669,7 +671,7 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
         tag: IntValue<'c>,
-        field_types: &Vec<Rc<TypeNode>>,
+        field_types: &Vec<Arc<TypeNode>>,
     ) {
         ObjectFieldType::retain_release_mark_union_buf(gc, buf, tag, field_types, None);
     }
@@ -688,7 +690,7 @@ impl ObjectFieldType {
     pub fn get_union_field<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         union: Object<'c>,
-        elem_ty: &Rc<TypeNode>,
+        elem_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let is_unbox = union.ty.is_unbox(gc.type_env());
@@ -717,7 +719,7 @@ impl ObjectFieldType {
     pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         buf: PointerValue<'c>,
-        elem_ty: &Rc<TypeNode>,
+        elem_ty: &Arc<TypeNode>,
     ) -> BasicValueEnum<'c> {
         let elem_ptr_ty = elem_ty
             .get_embedded_type(gc, &vec![])
@@ -1094,7 +1096,7 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut GenerationContext<'c, 'm>) -> DI
 }
 
 pub fn lambda_function_type<'c, 'm>(
-    ty: &Rc<TypeNode>,
+    ty: &Arc<TypeNode>,
     gc: &mut GenerationContext<'c, 'm>,
 ) -> FunctionType<'c> {
     // Any lamba takes argments.
@@ -1130,8 +1132,8 @@ pub fn struct_field_idx(is_unbox: bool) -> u32 {
 }
 
 pub fn ty_to_object_ty(
-    ty: &Rc<TypeNode>,
-    capture: &Vec<Rc<TypeNode>>,
+    ty: &Arc<TypeNode>,
+    capture: &Vec<Arc<TypeNode>>,
     type_env: &TypeEnv,
 ) -> ObjectType {
     assert!(ty.free_vars().is_empty());
@@ -1252,8 +1254,8 @@ pub fn ty_to_object_ty(
 
 // Allocate an object.
 pub fn allocate_obj<'c, 'm>(
-    ty: Rc<TypeNode>,
-    capture: &Vec<Rc<TypeNode>>,     // used in dynamic object
+    ty: Arc<TypeNode>,
+    capture: &Vec<Arc<TypeNode>>,    // used in dynamic object
     array_cap: Option<IntValue<'c>>, // used in array
     gc: &mut GenerationContext<'c, 'm>,
     name: Option<&str>,
@@ -1384,8 +1386,8 @@ pub fn allocate_obj<'c, 'm>(
 }
 
 pub fn get_traverser_ptr<'c, 'm>(
-    ty: &Rc<TypeNode>,
-    capture: &Vec<Rc<TypeNode>>, // used in destructor of lambda
+    ty: &Arc<TypeNode>,
+    capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
     gc: &mut GenerationContext<'c, 'm>,
 ) -> PointerValue<'c> {
     match create_traverser(ty, capture, gc) {
@@ -1400,8 +1402,8 @@ pub fn get_traverser_ptr<'c, 'm>(
 // If `work` is 1, then traverser function marks all reachable objects as global.
 // If `work` is 2, then traverser function marks all reachable objects as threaded.
 pub fn create_traverser<'c, 'm>(
-    ty: &Rc<TypeNode>,
-    capture: &Vec<Rc<TypeNode>>, // used in destructor of dynamic object.
+    ty: &Arc<TypeNode>,
+    capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
     gc: &mut GenerationContext<'c, 'm>,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());
@@ -1545,7 +1547,7 @@ pub fn create_traverser<'c, 'm>(
 }
 
 pub fn ty_to_debug_embedded_ty<'c, 'm>(
-    ty: Rc<TypeNode>,
+    ty: Arc<TypeNode>,
     gc: &mut GenerationContext<'c, 'm>,
 ) -> DIType<'c> {
     let debug_str_ty = ty_to_debug_struct_ty(ty.clone(), gc);
@@ -1568,7 +1570,7 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
 }
 
 pub fn ty_to_debug_struct_ty<'c, 'm>(
-    ty: Rc<TypeNode>,
+    ty: Arc<TypeNode>,
     gc: &mut GenerationContext<'c, 'm>,
 ) -> DIType<'c> {
     let name = &ty.to_string();
