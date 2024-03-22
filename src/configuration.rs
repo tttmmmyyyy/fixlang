@@ -127,7 +127,8 @@ impl Configuration {
                     let file_name = String::from(if pre_opt { "pre_opt_" } else { "post_opt_" })
                         + file_name
                         + "_"
-                        + unit_name;
+                        + unit_name
+                        + ".ll";
                     let mut out_file_path = out_file_path.clone();
                     out_file_path.set_file_name(file_name);
                     out_file_path
