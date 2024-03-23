@@ -1361,9 +1361,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             format!("closure[{}]", lam_ty.to_string_normalize())
         };
-        let lam_fn = self
-            .module
-            .add_function(&name, lam_fn_ty, Some(Linkage::Internal));
+        let linkage = if lam_ty.is_funptr() {
+            Linkage::External
+        } else {
+            Linkage::Internal // For closure function, we specify `Internal` so that LLVM avoids name collision automatically.
+        };
+        let lam_fn = self.module.add_function(&name, lam_fn_ty, Some(linkage));
         // Create and set debug info subprogram.
         if self.has_di() {
             let fn_name = lam_fn.get_name().to_str().unwrap();

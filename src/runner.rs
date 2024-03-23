@@ -189,7 +189,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
             if config.emit_llvm {
                 // Print LLVM-IR to file before optimization.
-                emit_llvm(gc.module, &config, true);
+                emit_llvm(gc.module, &config, false);
             }
 
             // LLVM level optimization.
@@ -197,7 +197,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
             if config.emit_llvm {
                 // Print LLVM-IR to file after optimization.
-                emit_llvm(gc.module, &config, false);
+                emit_llvm(gc.module, &config, true);
             }
 
             // Generate object file.
@@ -253,11 +253,11 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     }
 }
 
-fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, pre_opt: bool) {
+fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     let unit_name = module.get_name().to_str().unwrap();
-    let path = config.get_output_llvm_ir_path(pre_opt, unit_name);
-    if let Err(e) = module.print_to_file(path) {
-        error_exit(&format!("Failed to emit llvm: {}", e.to_string()));
+    let path = config.get_output_llvm_ir_path(optimized, unit_name);
+    if let Err(e) = module.print_to_file(path.clone()) {
+        error_exit(&format!("Failed to emit LLVM-IR: {}", e.to_string()));
     }
 }
 
@@ -265,24 +265,21 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
     // Run optimization
     let passmgr = PassManager::create(());
 
-    passmgr.add_verifier_pass();
+    passmgr.add_verifier_pass(); // Verification before optimization.
     match config.fix_opt_level {
         FixOptimizationLevel::None => {}
         FixOptimizationLevel::Minimum => {
             passmgr.add_tail_call_elimination_pass();
         }
+        FixOptimizationLevel::Separated => {
+            add_passes(&passmgr);
+        }
         FixOptimizationLevel::Default => {
             add_passes(&passmgr);
         }
     }
+    passmgr.add_verifier_pass(); // Verification after optimization.
     passmgr.run_on(module);
-
-    // Verify LLVM module.
-    let verify = module.verify();
-    if verify.is_err() {
-        print!("{}", verify.unwrap_err().to_str().unwrap());
-        panic!("LLVM verify failed!");
-    }
 }
 
 fn build_main_function<'c, 'm>(
@@ -581,5 +578,5 @@ pub fn build_file(mut config: Configuration) {
 // A function implementing `fix clean` command.
 pub fn clean_command() {
     // Delete `.fixlang` directory.
-    remove_dir_all(DOT_FIXLANG).expect(&format!("Failed to remove `{}` directory.", DOT_FIXLANG));
+    let _ = remove_dir_all(DOT_FIXLANG);
 }
