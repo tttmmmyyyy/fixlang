@@ -189,7 +189,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
             if config.emit_llvm {
                 // Print LLVM-IR to file before optimization.
-                emit_llvm(gc.module, &config, true);
+                emit_llvm(gc.module, &config, false);
             }
 
             // LLVM level optimization.
@@ -197,7 +197,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
             if config.emit_llvm {
                 // Print LLVM-IR to file after optimization.
-                emit_llvm(gc.module, &config, false);
+                emit_llvm(gc.module, &config, true);
             }
 
             // Generate object file.
