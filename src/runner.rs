@@ -265,24 +265,21 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
     // Run optimization
     let passmgr = PassManager::create(());
 
-    passmgr.add_verifier_pass();
+    passmgr.add_verifier_pass(); // Verification before optimization.
     match config.fix_opt_level {
         FixOptimizationLevel::None => {}
         FixOptimizationLevel::Minimum => {
             passmgr.add_tail_call_elimination_pass();
         }
+        FixOptimizationLevel::Balanced => {
+            add_passes(&passmgr);
+        }
         FixOptimizationLevel::Default => {
             add_passes(&passmgr);
         }
     }
+    passmgr.add_verifier_pass(); // Verification after optimization.
     passmgr.run_on(module);
-
-    // Verify LLVM module.
-    let verify = module.verify();
-    if verify.is_err() {
-        print!("{}", verify.unwrap_err().to_str().unwrap());
-        panic!("LLVM verify failed!");
-    }
 }
 
 fn build_main_function<'c, 'm>(
