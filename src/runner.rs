@@ -253,11 +253,11 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     }
 }
 
-fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, pre_opt: bool) {
+fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     let unit_name = module.get_name().to_str().unwrap();
-    let path = config.get_output_llvm_ir_path(pre_opt, unit_name);
-    if let Err(e) = module.print_to_file(path) {
-        error_exit(&format!("Failed to emit llvm: {}", e.to_string()));
+    let path = config.get_output_llvm_ir_path(optimized, unit_name);
+    if let Err(e) = module.print_to_file(path.clone()) {
+        error_exit(&format!("Failed to emit LLVM-IR: {}", e.to_string()));
     }
 }
 
@@ -271,7 +271,7 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
         FixOptimizationLevel::Minimum => {
             passmgr.add_tail_call_elimination_pass();
         }
-        FixOptimizationLevel::Balanced => {
+        FixOptimizationLevel::Separated => {
             add_passes(&passmgr);
         }
         FixOptimizationLevel::Default => {

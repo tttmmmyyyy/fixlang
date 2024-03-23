@@ -45,9 +45,10 @@ pub struct Configuration {
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum FixOptimizationLevel {
-    None,    // For debugging; skip even tail call optimization.
-    Minimum, // For fast compilation.
-    Default, // For fast execution.
+    None,      // For debugging; skip even tail call optimization.
+    Minimum,   // For fast compilation.
+    Separated, // Perform almost all of the optimizations except for LLVM-level LTO.
+    Default,   // For fast execution.
 }
 
 impl std::fmt::Display for FixOptimizationLevel {
@@ -55,6 +56,7 @@ impl std::fmt::Display for FixOptimizationLevel {
         match self {
             FixOptimizationLevel::None => write!(f, "None"),
             FixOptimizationLevel::Minimum => write!(f, "Minimum"),
+            FixOptimizationLevel::Separated => write!(f, "Separated"),
             FixOptimizationLevel::Default => write!(f, "Default"),
         }
     }
@@ -178,6 +180,7 @@ impl Configuration {
         match self.fix_opt_level {
             FixOptimizationLevel::None => OptimizationLevel::None,
             FixOptimizationLevel::Minimum => OptimizationLevel::Less,
+            FixOptimizationLevel::Separated => OptimizationLevel::Default,
             FixOptimizationLevel::Default => OptimizationLevel::Default,
         }
     }
@@ -186,6 +189,7 @@ impl Configuration {
         match self.fix_opt_level {
             FixOptimizationLevel::None => false,
             FixOptimizationLevel::Minimum => false,
+            FixOptimizationLevel::Separated => true,
             FixOptimizationLevel::Default => true,
         }
     }
@@ -194,6 +198,7 @@ impl Configuration {
         match self.fix_opt_level {
             FixOptimizationLevel::None => false,
             FixOptimizationLevel::Minimum => false,
+            FixOptimizationLevel::Separated => true,
             FixOptimizationLevel::Default => true,
         }
     }
@@ -217,7 +222,6 @@ impl Configuration {
     }
 
     pub fn separate_compilation(&self) -> bool {
-        self.fix_opt_level == FixOptimizationLevel::None
-            || self.fix_opt_level == FixOptimizationLevel::Minimum
+        self.fix_opt_level != FixOptimizationLevel::Default
     }
 }
