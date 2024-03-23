@@ -578,5 +578,5 @@ pub fn build_file(mut config: Configuration) {
 // A function implementing `fix clean` command.
 pub fn clean_command() {
     // Delete `.fixlang` directory.
-    remove_dir_all(DOT_FIXLANG).expect(&format!("Failed to remove `{}` directory.", DOT_FIXLANG));
+    let _ = remove_dir_all(DOT_FIXLANG);
 }
