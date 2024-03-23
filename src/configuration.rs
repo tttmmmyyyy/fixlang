@@ -110,9 +110,9 @@ impl Configuration {
         match &self.out_file_path {
             None => {
                 if pre_opt {
-                    return PathBuf::from(format!("pre_opt_{}.ll", unit_name));
+                    return PathBuf::from(format!("{}.ll", unit_name));
                 } else {
-                    return PathBuf::from(format!("post_opt_{}.ll", unit_name));
+                    return PathBuf::from(format!("{}_optimized.ll", unit_name));
                 }
             }
             Some(out_file_path) => {
@@ -124,11 +124,10 @@ impl Configuration {
                     ))
                 } else {
                     let file_name = file_name.unwrap().to_str().unwrap();
-                    let file_name = String::from(if pre_opt { "pre_opt_" } else { "post_opt_" })
-                        + file_name
+                    let file_name = file_name.to_string()
                         + "_"
                         + unit_name
-                        + ".ll";
+                        + if pre_opt { ".ll" } else { "_optimized.ll" };
                     let mut out_file_path = out_file_path.clone();
                     out_file_path.set_file_name(file_name);
                     out_file_path
