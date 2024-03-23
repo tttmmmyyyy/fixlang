@@ -106,13 +106,13 @@ impl Configuration {
         self.add_dyanmic_library("m");
     }
 
-    pub fn get_output_llvm_ir_path(&self, pre_opt: bool, unit_name: &str) -> PathBuf {
+    pub fn get_output_llvm_ir_path(&self, optimized: bool, unit_name: &str) -> PathBuf {
         match &self.out_file_path {
             None => {
-                if pre_opt {
-                    return PathBuf::from(format!("{}.ll", unit_name));
-                } else {
+                if optimized {
                     return PathBuf::from(format!("{}_optimized.ll", unit_name));
+                } else {
+                    return PathBuf::from(format!("{}.ll", unit_name));
                 }
             }
             Some(out_file_path) => {
@@ -127,7 +127,7 @@ impl Configuration {
                     let file_name = file_name.to_string()
                         + "_"
                         + unit_name
-                        + if pre_opt { ".ll" } else { "_optimized.ll" };
+                        + if optimized { "_optimized.ll" } else { ".ll" };
                     let mut out_file_path = out_file_path.clone();
                     out_file_path.set_file_name(file_name);
                     out_file_path
