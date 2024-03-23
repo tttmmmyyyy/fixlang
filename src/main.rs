@@ -48,6 +48,7 @@ use ast::types::*;
 use borrowing_optimization::*;
 use builtin::*;
 use clap::ArgMatches;
+use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
 use configuration::*;
 use constants::*;
@@ -109,13 +110,12 @@ fn main() {
         .long("opt-level")
         .short('O')
         .takes_value(true)
-        .value_parser(["none", "minimum", "default"])
+        .possible_value(PossibleValue::new("none").help("Perform no optimizations. Good for debugging, but tail call recursion is not optimized and may cause stack overflow."))
+        .possible_value(PossibleValue::new("minimum").help("Perform only few optimizations for fast compilation. Tail call recursion is optimized."))
+        .possible_value(PossibleValue::new("separated").help("Perform optimizations which can be done under separate compilation."))
+        .possible_value(PossibleValue::new("default").help("Perform all optimizations to minimize runtime. Separate compilation is disabled."))
         // .default_value("default") // we do not set default value because we want to check if this option is specified by user.
-        .next_line_help(true)
-        .help("Set optimization level.\n\
-              - none: Perform no optimizations. Since tail recursion optimization is also omitted, programs that use recursion may not work properly.\n\
-              - minimum: Perform only few optimizations to minimize compile time.\n\
-              - default: Compile to minimize execution time. This is the default option. To maximize the effect of optimization, separate compilation is not performed.").hide_possible_values(true);
+        .help("Optimization level.");
     let emit_llvm = Arg::new("emit-llvm")
         .long("emit-llvm")
         .takes_value(false)
@@ -222,6 +222,7 @@ fn main() {
             match opt_level.as_str() {
                 "none" => config.set_fix_opt_level(FixOptimizationLevel::None),
                 "minimum" => config.set_fix_opt_level(FixOptimizationLevel::Minimum),
+                "separated" => config.set_fix_opt_level(FixOptimizationLevel::Separated),
                 "default" => config.set_fix_opt_level(FixOptimizationLevel::Default),
                 _ => panic!("Unknown optimization level: {}", opt_level),
             }
