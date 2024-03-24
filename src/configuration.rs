@@ -91,7 +91,10 @@ impl Configuration {
     // Usual configuration for compiler development
     #[allow(dead_code)]
     pub fn develop_compiler() -> Configuration {
-        let config = Self::default();
+        #[allow(unused_mut)]
+        let mut config = Self::default();
+        // config.fix_opt_level = FixOptimizationLevel::Separated;
+        // config.sanitize_memory();
         config
     }
 
