@@ -94,7 +94,8 @@ impl Configuration {
         #[allow(unused_mut)]
         let mut config = Self::default();
         // config.fix_opt_level = FixOptimizationLevel::Separated;
-        // config.sanitize_memory();
+        // config.set_sanitize_memory();
+        // config.emit_llvm = true;
         config
     }
 
