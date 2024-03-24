@@ -1361,11 +1361,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             format!("closure[{}]", lam_ty.to_string_normalize())
         };
-        let linkage = if lam_ty.is_funptr() {
-            Linkage::External
-        } else {
-            Linkage::Internal // For closure function, we specify `Internal` so that LLVM avoids name collision automatically.
-        };
+        let linkage =
+            if lam_ty.is_funptr() && self.config.fix_opt_level != FixOptimizationLevel::Default {
+                Linkage::External
+            } else {
+                Linkage::Internal // For closure function, we specify `Internal` so that LLVM avoids name collision automatically.
+            };
         let lam_fn = self.module.add_function(&name, lam_fn_ty, Some(linkage));
         // Create and set debug info subprogram.
         if self.has_di() {

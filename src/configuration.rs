@@ -91,8 +91,7 @@ impl Configuration {
     // Usual configuration for compiler development
     #[allow(dead_code)]
     pub fn develop_compiler() -> Configuration {
-        let mut config = Self::default();
-        config.set_sanitize_memory();
+        let config = Self::default();
         config
     }
 
@@ -162,6 +161,7 @@ impl Configuration {
         self.add_terminate_tasks_macro_if_needed();
     }
 
+    #[allow(dead_code)]
     pub fn set_sanitize_memory(&mut self) {
         self.sanitize_memory = true;
         self.add_terminate_tasks_macro_if_needed();
