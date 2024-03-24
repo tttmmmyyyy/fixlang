@@ -31,6 +31,7 @@ run_string = |com, args, input| (
 // * `worker : (IOHandle, IOHandle, IOHandle) -> IOFail a` - Receives three `IOHandle`s which are piped to stdin, stdout and stderr of the running command.
 run_with_stream : String -> Array String -> ((IOHandle, IOHandle, IOHandle) -> IOFail a) -> IOFail (a, ExitStatus);
 run_with_stream = |com, args, worker| (
+    eval *pure();
     // Convert `args : Array String` to `Array Ptr`, and prolong lifetime so that elements will not be released.
     // Also, add NULL terminator to `args`.
     args.borrow_ptr(|_| args.map(_get_c_str).push_back(nullptr).borrow_ptr(|args: Ptr| com.borrow_c_str(|com : Ptr| (
