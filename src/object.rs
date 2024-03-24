@@ -3,6 +3,7 @@ use std::sync::Arc;
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
+    module::Linkage,
     types::{BasicMetadataTypeEnum, BasicType},
 };
 
@@ -1411,7 +1412,7 @@ pub fn create_traverser<'c, 'm>(
     if ty.is_dynamic() && capture.is_empty() {
         return None;
     }
-    let trav_name = ty.traverser_name(capture, gc.module.get_name().to_str().unwrap());
+    let trav_name = ty.traverser_name(capture);
     match gc.module.get_function(&trav_name) {
         Some(fv) => Some(fv),
         None => {
@@ -1419,7 +1420,9 @@ pub fn create_traverser<'c, 'm>(
             let object_type = ty_to_object_ty(ty, capture, gc.type_env());
             let struct_type = object_type.to_struct_type(gc, vec![]);
             let func_type = traverser_type(gc.context);
-            let func = gc.module.add_function(&trav_name, func_type, None);
+            let func = gc
+                .module
+                .add_function(&trav_name, func_type, Some(Linkage::Internal));
             let bb = gc.context.append_basic_block(func, "entry");
 
             let _builder_guard = gc.push_builder();
