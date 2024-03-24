@@ -82,11 +82,12 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
     // Determine compilation units.
     let mut units = vec![];
-    let instantiated_symbols = program
+    let mut instantiated_symbols = program
         .instantiated_symbols
         .values()
         .cloned()
         .collect::<Vec<_>>();
+    instantiated_symbols.sort_by(|a, b| a.instantiated_name.cmp(&b.instantiated_name));
     let all_symbols = instantiated_symbols.clone();
     {
         let module_dependency_hash = program.module_dependency_hash_map();

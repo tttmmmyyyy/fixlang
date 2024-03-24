@@ -807,6 +807,7 @@ namespace IO::IOHandle {
     _unsafe_close : IOHandle -> ();
     _unsafe_close = |handle| (
         eval handle.@_data.borrow(|handle_ptr| CALL_C[() fixruntime_iohandle_close(Ptr), handle_ptr]);
+        let _ = handle; // workaround for #40
         ()
     );
 
@@ -1374,7 +1375,11 @@ namespace String {
 
     // Call a function with a null-terminated C string.
     borrow_c_str : (Ptr -> a) -> String -> a;
-    borrow_c_str = |f, str| str.@_data.borrow_ptr(f);
+    borrow_c_str = |f, str| (
+        let res = str.@_data.borrow_ptr(f);
+        let _ = str; // workaround for #40
+        res
+    );
 
     // Concatenate two strings.
     // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
