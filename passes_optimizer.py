@@ -102,6 +102,7 @@ ALLOWED_DEGRATION_ON_MINIMIZE = 0.99
 #  add_licm_pass (breaks program)
 #  add_early_cse_mem_ssa_pass (breaks program (Random module))
 #  add_merge_functions_pass (breaks program)
+#  add_jump_threading_pass (breaks program; #40)
 PASSES = '''
 add_instruction_combining_pass
 add_memcpy_optimize_pass
@@ -125,7 +126,6 @@ add_global_optimizer_pass
 add_ind_var_simplify_pass
 add_instruction_simplify_pass
 add_ipsccp_pass
-add_jump_threading_pass
 add_loop_deletion_pass
 add_loop_idiom_pass
 add_loop_reroll_pass
