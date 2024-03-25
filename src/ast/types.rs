@@ -689,6 +689,24 @@ impl TypeNode {
         !self.is_unbox(type_env)
     }
 
+    // Check if `self` is fully unboxed.
+    // Here, a type is fully unboxed if and only if it does not contain any boxed type.
+    pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
+        if self.is_box(type_env) {
+            return false;
+        }
+        if self.is_closure() {
+            return false;
+        }
+        if self.is_funptr() {
+            return true;
+        }
+        let field_types = self.field_types(type_env);
+        field_types
+            .iter()
+            .all(|field_ty| field_ty.is_fully_unboxed(type_env))
+    }
+
     // Create new type node with default info.
     fn new(ty: Type) -> Self {
         Self {
