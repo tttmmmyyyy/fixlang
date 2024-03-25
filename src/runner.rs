@@ -144,7 +144,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
             let context = Context::create();
             let target_machine = get_target_machine(config.get_llvm_opt_level());
             let module = GenerationContext::create_module(
-                &format!("Module_{}", unit.unit_hash()),
+                &format!("Module-{}", unit.unit_hash()),
                 &context,
                 &target_machine,
             );
