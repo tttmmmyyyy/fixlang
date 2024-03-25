@@ -1769,7 +1769,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         self.builder().position_at_end(then_bb);
         // Release variables used only in the else block.
-        for var_name in else_expr.free_vars() {
+        for var_name in &else_expr.free_vars_sorted() {
+            // Here we use sorted free variables to fix the binary code.
             if !then_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
                 self.release(self.get_var(var_name).ptr.get(self));
             }
@@ -1781,7 +1782,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         self.builder().position_at_end(else_bb);
         // Release variables used only in the then block.
-        for var_name in then_expr.free_vars() {
+        for var_name in &then_expr.free_vars_sorted() {
+            // Here we use sorted free variables to fix the binary code.
             if !else_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
                 self.release(self.get_var(var_name).ptr.get(self));
             }

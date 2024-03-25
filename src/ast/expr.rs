@@ -41,6 +41,13 @@ impl ExprNode {
         self.free_vars.as_ref().unwrap()
     }
 
+    // Get sorted free vars
+    pub fn free_vars_sorted(self: &Self) -> Vec<FullName> {
+        let mut free_vars = self.free_vars().iter().cloned().collect::<Vec<_>>();
+        free_vars.sort();
+        free_vars
+    }
+
     // Set source
     pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone();
