@@ -22,6 +22,7 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_scalar_repl_aggregates_pass();
     passmgr.add_tail_call_elimination_pass();
     passmgr.add_promote_memory_to_register_pass();
+    // passmgr.add_jump_threading_pass // Bad position; see #40.
     passmgr.add_ipsccp_pass();
     passmgr.add_loop_rotate_pass();
     passmgr.add_loop_vectorize_pass();
