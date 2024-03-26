@@ -647,9 +647,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let current_func = current_bb.get_parent().unwrap();
 
         let unique_bb = self.context.append_basic_block(current_func, "unique_bb");
-        let unique_threaded_bb = self
-            .context
-            .append_basic_block(current_func, "unique_threaded_bb");
         let shared_bb = self.context.append_basic_block(current_func, "shared_bb");
 
         // Branch by refcnt_state.
@@ -672,36 +669,43 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .build_conditional_branch(is_unique, unique_bb, shared_bb);
 
         // Implement threaded_bb.
-        self.builder().position_at_end(threaded_bb);
-        // Load refcnt atomically with monotonic ordering.
-        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-        let refcnt = self
-            .builder()
-            .build_load(ptr_to_refcnt, "refcnt")
-            .into_int_value();
-        refcnt
-            .as_instruction_value()
-            .unwrap()
-            .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
-            .expect("Set atomic ordering failed");
-        // Jump to shared_bb if refcnt > 1.
-        let is_unique =
-            self.builder()
-                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
-        self.builder()
-            .build_conditional_branch(is_unique, unique_threaded_bb, shared_bb);
+        if threaded_bb.is_some() {
+            let threaded_bb = threaded_bb.clone().unwrap();
+            let unique_threaded_bb = self
+                .context
+                .append_basic_block(current_func, "unique_threaded_bb");
 
-        // Implement unique_threaded_bb.
-        self.builder().position_at_end(unique_threaded_bb);
-        // We need to build acquire fence to avoid data race between
-        // - write / modify operations which will follow in this thread and
-        // - read operations done before another thread releases this object.
-        self.builder()
-            .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
-        // Mark the object as non_threaded.
-        self.mark_as_local_one(obj_ptr);
-        // And jump to unique_bb.
-        self.builder().build_unconditional_branch(unique_bb);
+            self.builder().position_at_end(threaded_bb);
+            // Load refcnt atomically with monotonic ordering.
+            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+            let refcnt = self
+                .builder()
+                .build_load(ptr_to_refcnt, "refcnt")
+                .into_int_value();
+            refcnt
+                .as_instruction_value()
+                .unwrap()
+                .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
+                .expect("Set atomic ordering failed");
+            // Jump to shared_bb if refcnt > 1.
+            let is_unique =
+                self.builder()
+                    .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+            self.builder()
+                .build_conditional_branch(is_unique, unique_threaded_bb, shared_bb);
+
+            // Implement unique_threaded_bb.
+            self.builder().position_at_end(unique_threaded_bb);
+            // We need to build acquire fence to avoid data race between
+            // - write / modify operations which will follow in this thread and
+            // - read operations done before another thread releases this object.
+            self.builder()
+                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+            // Mark the object as non_threaded.
+            self.mark_as_local_one(obj_ptr);
+            // And jump to unique_bb.
+            self.builder().build_unconditional_branch(unique_bb);
+        }
 
         // Implement global_bb.
         self.builder().position_at_end(global_bb);
@@ -716,7 +720,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     pub fn build_branch_by_refcnt_state(
         self: &mut GenerationContext<'c, 'm>,
         obj_ptr: PointerValue<'c>,
-    ) -> (BasicBlock<'c>, BasicBlock<'c>, BasicBlock<'c>) {
+    ) -> (BasicBlock<'c>, Option<BasicBlock<'c>>, BasicBlock<'c>) {
         // Load refcnt_state.
         let current_bb = self.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
@@ -728,7 +732,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Add three basic blocks.
         let local_bb = self.context.append_basic_block(current_func, "local_bb");
-        let threaded_bb = self.context.append_basic_block(current_func, "threaded_bb");
+        let mut threaded_bb: Option<BasicBlock<'_>> = None;
         let global_bb = self.context.append_basic_block(current_func, "global_bb");
 
         if !self.config.threaded {
@@ -745,6 +749,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb);
         } else {
             // In multi-threaded program,
+            let th_bb = self.context.append_basic_block(current_func, "threaded_bb");
+            threaded_bb = Some(th_bb);
+            let threaded_bb = threaded_bb.clone().unwrap();
+
             let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
 
             let is_refcnt_state_local = self.builder().build_int_compare(

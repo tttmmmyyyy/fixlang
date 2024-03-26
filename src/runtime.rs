@@ -266,20 +266,24 @@ fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
     gc.builder().build_return(None);
 
     // Implement threaded_bb.
-    gc.builder().position_at_end(threaded_bb);
-    // Increment refcnt atomically and jump to `end_bb`.
-    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-    let _old_refcnt_threaded = gc
-        .builder()
-        .build_atomicrmw(
-            inkwell::AtomicRMWBinOp::Add,
-            ptr_to_refcnt,
-            refcnt_type(gc.context).const_int(1, false),
-            inkwell::AtomicOrdering::Monotonic,
-        )
-        .unwrap();
-    report_retain_to_sanitizer(gc, obj_ptr);
-    gc.builder().build_return(None);
+    if threaded_bb.is_some() {
+        let threaded_bb = threaded_bb.unwrap();
+
+        gc.builder().position_at_end(threaded_bb);
+        // Increment refcnt atomically and jump to `end_bb`.
+        let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+        let _old_refcnt_threaded = gc
+            .builder()
+            .build_atomicrmw(
+                inkwell::AtomicRMWBinOp::Add,
+                ptr_to_refcnt,
+                refcnt_type(gc.context).const_int(1, false),
+                inkwell::AtomicOrdering::Monotonic,
+            )
+            .unwrap();
+        report_retain_to_sanitizer(gc, obj_ptr);
+        gc.builder().build_return(None);
+    }
 
     // Implement global_bb.
     gc.builder().position_at_end(global_bb);
@@ -369,38 +373,42 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
         .build_conditional_branch(is_refcnt_one, destruction_bb, end_bb);
 
     // Implement threaded_bb.
-    gc.builder().position_at_end(threaded_bb);
-    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-    // Decrement refcnt atomically.
-    let old_refcnt = gc
-        .builder()
-        .build_atomicrmw(
-            inkwell::AtomicRMWBinOp::Sub,
-            ptr_to_refcnt,
+    if threaded_bb.is_some() {
+        let threaded_bb = threaded_bb.unwrap();
+
+        gc.builder().position_at_end(threaded_bb);
+        let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+        // Decrement refcnt atomically.
+        let old_refcnt = gc
+            .builder()
+            .build_atomicrmw(
+                inkwell::AtomicRMWBinOp::Sub,
+                ptr_to_refcnt,
+                refcnt_type(gc.context).const_int(1, false),
+                inkwell::AtomicOrdering::Release,
+            )
+            .unwrap();
+        report_release_to_sanitizer(gc, obj_ptr);
+
+        // Branch to `threaded_destruction_bb` if old_refcnt is one.
+        let threaded_destruction_bb = gc
+            .context
+            .append_basic_block(release_func, "threaded_destruction_bb");
+        let is_refcnt_one = gc.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            old_refcnt,
             refcnt_type(gc.context).const_int(1, false),
-            inkwell::AtomicOrdering::Release,
-        )
-        .unwrap();
-    report_release_to_sanitizer(gc, obj_ptr);
+            "is_refcnt_one",
+        );
+        gc.builder()
+            .build_conditional_branch(is_refcnt_one, threaded_destruction_bb, end_bb);
 
-    // Branch to `threaded_destruction_bb` if old_refcnt is one.
-    let threaded_destruction_bb = gc
-        .context
-        .append_basic_block(release_func, "threaded_destruction_bb");
-    let is_refcnt_one = gc.builder().build_int_compare(
-        inkwell::IntPredicate::EQ,
-        old_refcnt,
-        refcnt_type(gc.context).const_int(1, false),
-        "is_refcnt_one",
-    );
-    gc.builder()
-        .build_conditional_branch(is_refcnt_one, threaded_destruction_bb, end_bb);
-
-    // Implement `threaded_destruction_bb`.
-    gc.builder().position_at_end(threaded_destruction_bb);
-    gc.builder()
-        .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
-    gc.builder().build_unconditional_branch(destruction_bb);
+        // Implement `threaded_destruction_bb`.
+        gc.builder().position_at_end(threaded_destruction_bb);
+        gc.builder()
+            .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+        gc.builder().build_unconditional_branch(destruction_bb);
+    }
 
     // Implement `destruction_bb`
     gc.builder().position_at_end(destruction_bb);
