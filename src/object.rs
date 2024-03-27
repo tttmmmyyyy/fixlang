@@ -58,7 +58,7 @@ impl ObjectFieldType {
             ObjectFieldType::U64 => gc.context.i64_type().into(),
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
-            ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
+            ObjectFieldType::Array(_) => array_capacity_type(gc), // Capacity field.
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut size = 0;
@@ -329,7 +329,7 @@ impl ObjectFieldType {
         gc.builder().position_at_end(loop_check_bb);
         let counter_val = gc
             .builder()
-            .build_load(counter_ptr, "counter_val")
+            .build_load(counter_type, counter_ptr, "counter_val")
             .into_int_value();
         let is_end = gc
             .builder()
@@ -367,6 +367,7 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
     ) {
+        let elem_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
         // In loop body, release object of idx = counter_val.
         let loop_body = |gc: &mut GenerationContext<'c, 'm>,
                          idx: Object<'c>,
@@ -375,11 +376,11 @@ impl ObjectFieldType {
             let idx = idx.load_field_nocap(gc, 0).into_int_value();
             let ptr = unsafe {
                 gc.builder()
-                    .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
+                    .build_gep(elem_basic_ty, ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
             };
             let obj = if elem_ty.is_box(gc.type_env()) {
                 gc.builder()
-                    .build_load(ptr, "elem_of_array")
+                    .build_load(elem_basic_ty, ptr, "elem_of_array")
                     .into_pointer_value()
             } else {
                 ptr
@@ -408,38 +409,39 @@ impl ObjectFieldType {
         buffer: PointerValue<'c>,
         value: Object<'c>,
     ) {
-        // Initialize elements
         {
-            // In loop body, retain value and store it at idx.
-            let loop_body = |gc: &mut GenerationContext<'c, 'm>,
-                             idx: Object<'c>,
-                             _size: IntValue<'c>,
-                             ptr_to_buffer: PointerValue<'c>| {
-                let idx = idx.load_field_nocap(gc, 0).into_int_value();
-                gc.retain(value.clone());
-                let ptr_to_obj_ptr = unsafe {
-                    gc.builder()
-                        .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
-                };
-                if value.is_box(gc.type_env()) {
-                    gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
-                } else {
-                    gc.builder()
-                        .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
-                }
-            };
+        // Initialize elements
+        let elem_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
 
-            // After loop, release value.
-            let after_loop = |gc: &mut GenerationContext<'c, 'm>,
-                              _size: IntValue<'c>,
-                              _ptr_to_buffer: PointerValue<'c>| {
-                gc.release(value.clone());
+        // In loop body, retain value and store it at idx.
+        let loop_body = |gc: &mut GenerationContext<'c, 'm>,
+                         idx: Object<'c>,
+                         _size: IntValue<'c>,
+                         ptr_to_buffer: PointerValue<'c>| {
+            let idx = idx.load_field_nocap(gc, 0).into_int_value();
+            gc.retain(value.clone());
+            let ptr_to_obj_ptr = unsafe {
+                gc.builder()
+                    .build_gep(elem_basic_ty, ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
             };
+            if value.is_box(gc.type_env()) {
+                gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
+            } else {
+                gc.builder()
+                    .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
+            }
+        };
 
-            // Generate loop.
-            // NOTE: if you see error at here, try `cargo clean`.
-            Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
-        }
+        // After loop, release value.
+        let after_loop = |gc: &mut GenerationContext<'c, 'm>,
+                          _size: IntValue<'c>,
+                          _ptr_to_buffer: PointerValue<'c>| {
+            gc.release(value.clone());
+        };
+
+        // Generate loop.
+        Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
+    }
     }
 
     // Panic if idx is out_of_range for the array.
@@ -479,13 +481,14 @@ impl ObjectFieldType {
         }
 
         // Get element.
+        let elem_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
         let ptr_to_elem = unsafe {
             gc.builder()
-                .build_gep(buffer, &[idx.into()], "ptr_to_elem_of_array")
+                .build_gep(elem_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
         };
 
         // Get value
-        let elem_val = gc.builder().build_load(ptr_to_elem, "elem");
+        let elem_val = gc.builder().build_load(elem_basic_ty, ptr_to_elem, "elem");
 
         // Return value
         let elem_obj = if rvo.is_some() {
@@ -524,6 +527,7 @@ impl ObjectFieldType {
         release_old_value: bool,
     ) {
         let elem_ty = value.ty.clone();
+        let elem_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
 
         // Panic if out_of_range.
         if len.is_some() {
@@ -533,13 +537,15 @@ impl ObjectFieldType {
         // Get ptr to the place at idx.
         let place = unsafe {
             gc.builder()
-                .build_gep(buffer, &[idx.into()], "ptr_to_elem_of_array")
+                .build_gep(elem_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
         };
 
         // Release element that is already at the place (if required).
         if release_old_value {
             let elem = if elem_ty.is_box(gc.type_env()) {
-                gc.builder().build_load(place, "elem").into_pointer_value()
+                gc.builder()
+                    .build_load(elem_basic_ty, place, "elem")
+                    .into_pointer_value()
             } else {
                 place
             };
@@ -560,39 +566,46 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
     ) {
         // Clone each elements.
-        {
-            // In loop body, retain value and store it at idx.
-            let loop_body = |gc: &mut GenerationContext<'c, 'm>,
-                             idx: Object<'c>,
-                             _len: IntValue<'c>,
-                             _ptr_to_buffer: PointerValue<'c>| {
-                let idx = idx.load_field_nocap(gc, 0).into_int_value();
-                let ptr_to_src_elem = unsafe {
-                    gc.builder()
-                        .build_gep(src_buffer, &[idx.into()], "ptr_to_src_elem")
-                };
-                let ptr_to_dst_elem = unsafe {
-                    gc.builder()
-                        .build_gep(dst_buffer, &[idx.into()], "ptr_to_dst_elem")
-                };
-                let src_elem = gc.builder().build_load(ptr_to_src_elem, "src_elem");
-                gc.builder().build_store(ptr_to_dst_elem, src_elem);
-                let src_elem = if elem_ty.is_box(gc.type_env()) {
-                    src_elem.into_pointer_value()
-                } else {
-                    ptr_to_dst_elem
-                };
-                let src_obj = Object::new(src_elem, elem_ty.clone());
-                gc.retain(src_obj);
-            };
+        let elem_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
 
-            // After loop, do nothing.
-            let after_loop = |_gc: &mut GenerationContext<'c, 'm>,
-                              _len: IntValue<'c>,
-                              _ptr_to_buffer: PointerValue<'c>| {};
+        // In loop body, retain value and store it at idx.
+        let loop_body = |gc: &mut GenerationContext<'c, 'm>,
+                         idx: Object<'c>,
+                         _len: IntValue<'c>,
+                         _ptr_to_buffer: PointerValue<'c>| {
+            let idx = idx.load_field_nocap(gc, 0).into_int_value();
+            let ptr_to_src_elem = unsafe {
+                gc.builder()
+                    .build_gep(elem_basic_ty, src_buffer, &[idx.into()], "ptr_to_src_elem")
+            };
+            let ptr_to_dst_elem = unsafe {
+                gc.builder()
+                    .build_gep(elem_basic_ty, dst_buffer, &[idx.into()], "ptr_to_dst_elem")
+            };
+            let src_elem = gc
+                .builder()
+                .build_load(elem_basic_ty, ptr_to_src_elem, "src_elem");
+            gc.builder().build_store(ptr_to_dst_elem, src_elem);
+            let src_elem = if elem_ty.is_box(gc.type_env()) {
+                src_elem.into_pointer_value()
+            } else {
+                ptr_to_dst_elem
+            };
+            let src_obj = Object::new(src_elem, elem_ty.clone());
+            gc.retain(src_obj);
+        };
+
+        // After loop, do nothing.
+        let after_loop = |_gc: &mut GenerationContext<'c, 'm>,
+                          _len: IntValue<'c>,
+                          _ptr_to_buffer: PointerValue<'c>| {};
 
             Self::loop_over_array_buf(gc, len, src_buffer, loop_body, after_loop);
+            Self::loop_over_array_buf(gc, len, src_buffer, loop_body, after_loop);
         }
+        
+        Self::loop_over_array_buf(gc, len, src_buffer, loop_body, after_loop);
+        
     }
 
     // Perform retain or release or mark global or mark threaded on an object included in a union buffer.
@@ -640,8 +653,9 @@ impl ObjectFieldType {
                     buf,
                     ptr_to_object_type(gc.context).ptr_type(AddressSpace::from(0)),
                 );
+                let field_basic_ty = field_ty.get_embedded_type(gc, &vec![]);
                 gc.builder()
-                    .build_load(buf, "load_boxed_buf")
+                    .build_load(field_basic_ty, buf, "load_boxed_buf")
                     .into_pointer_value()
             } else {
                 buf
@@ -722,11 +736,11 @@ impl ObjectFieldType {
         buf: PointerValue<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> BasicValueEnum<'c> {
-        let elem_ptr_ty = elem_ty
-            .get_embedded_type(gc, &vec![])
-            .ptr_type(AddressSpace::from(0));
+        let elem_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let elem_ptr_ty = elem_basic_ty.ptr_type(AddressSpace::from(0));
         let buf = gc.cast_pointer(buf, elem_ptr_ty);
-        gc.builder().build_load(buf, "value_at_union_buf")
+        gc.builder()
+            .build_load(elem_basic_ty, buf, "value_at_union_buf")
     }
 
     pub fn panic_if_union_tag_unmatch<'c, 'm>(
@@ -923,7 +937,7 @@ impl ObjectType {
             );
             let ptr_to_first_elem = gc
                 .builder()
-                .build_struct_gep(null, ARRAY_BUF_IDX, "gep_first_elem_size_of")
+                .build_struct_gep(struct_ty, null, ARRAY_BUF_IDX, "gep_first_elem_size_of")
                 .unwrap();
             let ptr_to_first_elem =
                 gc.builder()
@@ -1094,6 +1108,10 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut GenerationContext<'c, 'm>) -> DI
         .create_basic_type(name, size_in_bits, DW_ATE_ADDRESS, 0)
         .unwrap()
         .as_type()
+}
+
+pub fn array_capacity_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> IntType<'c> {
+    gc.context.i64_type()
 }
 
 pub fn lambda_function_type<'c, 'm>(
@@ -1312,13 +1330,18 @@ pub fn allocate_obj<'c, 'm>(
                 // Get pointer to control block.
                 let ptr_to_control_block = gc
                     .builder()
-                    .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_control_block")
+                    .build_struct_gep(struct_type, ptr_to_obj, i as u32, "ptr_to_control_block")
                     .unwrap();
 
                 // Initialize the reference counter 1.
                 let ptr_to_refcnt = gc
                     .builder()
-                    .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
+                    .build_struct_gep(
+                        control_block_type(gc),
+                        ptr_to_control_block,
+                        CTRL_BLK_REFCNT_IDX,
+                        "ptr_to_refcnt",
+                    )
                     .unwrap();
                 gc.builder()
                     .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
@@ -1326,7 +1349,12 @@ pub fn allocate_obj<'c, 'm>(
                 // Initialize the reference counter state to REFCNT_STATE_LOCAL.
                 let ptr_to_refcnt_state = gc
                     .builder()
-                    .build_struct_gep(ptr_to_control_block, 1, "ptr_to_refcnt_state")
+                    .build_struct_gep(
+                        control_block_type(gc),
+                        ptr_to_control_block,
+                        CTRL_BLK_REFCNT_STATE_IDX,
+                        "ptr_to_refcnt_state",
+                    )
                     .unwrap();
                 gc.builder().build_store(
                     ptr_to_refcnt_state,
@@ -1338,6 +1366,7 @@ pub fn allocate_obj<'c, 'm>(
                     let ptr_to_obj_id = gc
                         .builder()
                         .build_struct_gep(
+                            control_block_type(gc),
                             ptr_to_control_block,
                             CTRL_BLK_OBJ_ID_IDX,
                             "ptr_to_obj_id",
@@ -1361,19 +1390,19 @@ pub fn allocate_obj<'c, 'm>(
             ObjectFieldType::LambdaFunction(_) => {}
             ObjectFieldType::Array(_) => {
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
-                // Set array size.
-                let ptr_to_size_field = gc
+                // Set array capacity.
+                let ptr_to_cap_field = gc
                     .builder()
-                    .build_struct_gep(ptr_to_obj, ARRAY_CAP_IDX, "ptr_to_size_field")
+                    .build_struct_gep(struct_type,ptr_to_obj, ARRAY_CAP_IDX, "ptr_to_cap_field")
                     .unwrap();
                 gc.builder()
-                    .build_store(ptr_to_size_field, array_cap.unwrap());
+                    .build_store(ptr_to_cap_field, array_cap.unwrap());
             }
             ObjectFieldType::TraverseFunction => {
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 let ptr_to_dtor_field = gc
                     .builder()
-                    .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_dtor_field")
+                    .build_struct_gep(struct_type,ptr_to_obj, i as u32, "ptr_to_dtor_field")
                     .unwrap();
                 let dtor = get_traverser_ptr(&ty, capture, gc);
                 gc.builder().build_store(ptr_to_dtor_field, dtor);
@@ -1441,6 +1470,7 @@ pub fn create_traverser<'c, 'm>(
                     let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
                     gc.builder()
                         .build_struct_gep(
+                            struct_type,
                             ptr_to_struct,
                             field_idx,
                             &format!("ptr_to_{}th_field", field_idx),

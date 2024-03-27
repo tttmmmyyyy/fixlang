@@ -145,7 +145,7 @@ impl<'c> Object<'c> {
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder()
-            .build_load(ptr, "load_unbox")
+            .build_load(struct_ty, ptr, "load_unbox")
             .into_struct_value()
     }
 
@@ -168,7 +168,7 @@ impl<'c> Object<'c> {
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder()
-            .build_struct_gep(ptr, field_idx, "ptr_to_field_nocap")
+            .build_struct_gep(struct_ty, ptr, field_idx, "ptr_to_field_nocap")
             .unwrap()
     }
 
@@ -633,7 +633,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     pub fn get_refcnt_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         let ptr_control_block = self.get_control_block_ptr(obj);
         self.builder()
-            .build_struct_gep(ptr_control_block, CTRL_BLK_REFCNT_IDX, "ptr_to_refcnt")
+            .build_struct_gep(
+                control_block_type(self),
+                ptr_control_block,
+                CTRL_BLK_REFCNT_IDX,
+                "ptr_to_refcnt",
+            )
             .unwrap()
     }
 
@@ -658,7 +663,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
         let refcnt = self
             .builder()
-            .build_load(ptr_to_refcnt, "refcnt")
+            .build_load(refcnt_type(self.context), ptr_to_refcnt, "refcnt")
             .into_int_value();
         // Jump to shared_bb if refcnt > 1.
         let one = refcnt_type(self.context).const_int(1, false);
@@ -680,7 +685,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
             let refcnt = self
                 .builder()
-                .build_load(ptr_to_refcnt, "refcnt")
+                .build_load(refcnt_type(self.context), ptr_to_refcnt, "refcnt")
                 .into_int_value();
             refcnt
                 .as_instruction_value()
@@ -727,7 +732,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
             .builder()
-            .build_load(refcnt_state_ptr, "refcnt_state")
+            .build_load(
+                refcnt_state_type(self.context),
+                refcnt_state_ptr,
+                "refcnt_state",
+            )
             .into_int_value();
 
         // Add three basic blocks.
@@ -786,6 +795,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr_control_block = self.get_control_block_ptr(obj);
         self.builder()
             .build_struct_gep(
+                control_block_type(self),
                 ptr_control_block,
                 CTRL_BLK_REFCNT_STATE_IDX,
                 "ptr_to_refcnt_state",
@@ -803,9 +813,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr = self.cast_pointer(obj, ptr_type(ty));
         let ptr_to_field = self
             .builder()
-            .build_struct_gep(ptr, index, "ptr_to_field")
+            .build_struct_gep(ty, ptr, index, "ptr_to_field")
             .unwrap();
-        self.builder().build_load(ptr_to_field, "field_value")
+        self.builder().build_load(
+            ty.get_field_type_at_index(index),
+            ptr_to_field,
+            "field_value",
+        )
     }
 
     // Take an pointer of struct and store a value into a pointer field.
@@ -821,7 +835,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr = self.cast_pointer(obj, ptr_type(ty));
         let ptr_to_field = self
             .builder()
-            .build_struct_gep(ptr, index, "ptr_to_field")
+            .build_struct_gep(ty, ptr, index, "ptr_to_field")
             .unwrap();
         self.builder().build_store(ptr_to_field, value);
     }
@@ -982,7 +996,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                                 .into_pointer_value()
                         } else {
                             self.builder()
-                                .build_struct_gep(ptr, i as u32, &format!("ptr_to_{}th_field", i))
+                                .build_struct_gep(
+                                    struct_type,
+                                    ptr,
+                                    i as u32,
+                                    &format!("ptr_to_{}th_field", i),
+                                )
                                 .unwrap()
                         };
                         self.retain(Object::new(ptr, ty.clone()));
@@ -1150,7 +1169,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr_refcnt_state = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
             .builder()
-            .build_load(ptr_refcnt_state, "refcnt_state")
+            .build_load(
+                refcnt_state_type(self.context),
+                ptr_refcnt_state,
+                "refcnt_state",
+            )
             .into_int_value();
 
         // Branch by whether or not the refcnt state is `REFCNT_STATE_LOCAL`.
@@ -1436,7 +1459,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 debug_scope,
                 None,
             );
-            self.builder().set_current_debug_location(self.context, loc);
+            self.builder().set_current_debug_location(loc);
         } else {
             self.builder().unset_current_debug_location();
         }
@@ -2160,7 +2183,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // In single-threaded mode, we implement `call_once` logic by hand.
                 let flag = self
                     .builder()
-                    .build_load(init_flag, "load_init_flag")
+                    .build_load(flag_ty, init_flag, "load_init_flag")
                     .into_int_value();
                 let is_zero = self.builder().build_int_compare(
                     IntPredicate::EQ,
@@ -2263,7 +2286,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().position_at_end(end_bb);
             let ret = if obj_ty.is_box(self.type_env()) {
                 self.builder()
-                    .build_load(global_var, "ptr_to_obj")
+                    .build_load(obj_embed_ty, global_var, "ptr_to_obj")
                     .into_pointer_value()
             } else {
                 global_var

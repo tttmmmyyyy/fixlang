@@ -4108,9 +4108,13 @@ impl InlineLLVMPtrEqBody {
         gc.release(lhs_obj);
         let rhs_val = rhs_obj.load_field_nocap(gc, 0).into_pointer_value();
         gc.release(rhs_obj);
-        let diff = gc
-            .builder()
-            .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr");
+        let pointee_ty = ObjectFieldType::Ptr.to_basic_type(gc, vec![]);
+        let diff = gc.builder().build_ptr_diff(
+            pointee_ty,
+            lhs_val,
+            rhs_val,
+            "ptr_diff@eq_trait_instance_ptr",
+        );
         let value = gc.builder().build_int_compare(
             IntPredicate::EQ,
             diff,
