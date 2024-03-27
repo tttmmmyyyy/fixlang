@@ -255,7 +255,10 @@ fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
     gc.builder().position_at_end(local_bb);
     // Increment refcnt and return.
     let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-    let old_refcnt_local = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
+    let old_refcnt_local = gc
+        .builder()
+        .build_load(refcnt_type(gc.context), ptr_to_refcnt, "")
+        .into_int_value();
     let new_refcnt = gc.builder().build_int_nsw_add(
         old_refcnt_local,
         refcnt_type(gc.context).const_int(1, false).into(),
@@ -353,7 +356,10 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
     gc.builder().position_at_end(local_bb);
     let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
     // Decrement refcnt.
-    let old_refcnt = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
+    let old_refcnt = gc
+        .builder()
+        .build_load(refcnt_type(gc.context), ptr_to_refcnt, "")
+        .into_int_value();
     let new_refcnt = gc.builder().build_int_nsw_sub(
         old_refcnt,
         refcnt_type(gc.context).const_int(1, false).into(),

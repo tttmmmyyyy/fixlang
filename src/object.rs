@@ -58,7 +58,7 @@ impl ObjectFieldType {
             ObjectFieldType::U64 => gc.context.i64_type().into(),
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
-            ObjectFieldType::Array(_) => array_capacity_type(gc), // Capacity field.
+            ObjectFieldType::Array(_) => array_capacity_type(gc).into(), // Capacity field.
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut size = 0;
@@ -410,38 +410,43 @@ impl ObjectFieldType {
         value: Object<'c>,
     ) {
         {
-        // Initialize elements
-        let elem_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
+            // Initialize elements
+            let elem_ty = value.ty.clone();
+            let elem_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
 
-        // In loop body, retain value and store it at idx.
-        let loop_body = |gc: &mut GenerationContext<'c, 'm>,
-                         idx: Object<'c>,
-                         _size: IntValue<'c>,
-                         ptr_to_buffer: PointerValue<'c>| {
-            let idx = idx.load_field_nocap(gc, 0).into_int_value();
-            gc.retain(value.clone());
-            let ptr_to_obj_ptr = unsafe {
-                gc.builder()
-                    .build_gep(elem_basic_ty, ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
+            // In loop body, retain value and store it at idx.
+            let loop_body = |gc: &mut GenerationContext<'c, 'm>,
+                             idx: Object<'c>,
+                             _size: IntValue<'c>,
+                             ptr_to_buffer: PointerValue<'c>| {
+                let idx = idx.load_field_nocap(gc, 0).into_int_value();
+                gc.retain(value.clone());
+                let ptr_to_obj_ptr = unsafe {
+                    gc.builder().build_gep(
+                        elem_basic_ty,
+                        ptr_to_buffer,
+                        &[idx],
+                        "ptr_to_elem_of_array",
+                    )
+                };
+                if value.is_box(gc.type_env()) {
+                    gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
+                } else {
+                    gc.builder()
+                        .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
+                }
             };
-            if value.is_box(gc.type_env()) {
-                gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
-            } else {
-                gc.builder()
-                    .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
-            }
-        };
 
-        // After loop, release value.
-        let after_loop = |gc: &mut GenerationContext<'c, 'm>,
-                          _size: IntValue<'c>,
-                          _ptr_to_buffer: PointerValue<'c>| {
-            gc.release(value.clone());
-        };
+            // After loop, release value.
+            let after_loop = |gc: &mut GenerationContext<'c, 'm>,
+                              _size: IntValue<'c>,
+                              _ptr_to_buffer: PointerValue<'c>| {
+                gc.release(value.clone());
+            };
 
-        // Generate loop.
-        Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
-    }
+            // Generate loop.
+            Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
+        }
     }
 
     // Panic if idx is out_of_range for the array.
@@ -600,12 +605,7 @@ impl ObjectFieldType {
                           _len: IntValue<'c>,
                           _ptr_to_buffer: PointerValue<'c>| {};
 
-            Self::loop_over_array_buf(gc, len, src_buffer, loop_body, after_loop);
-            Self::loop_over_array_buf(gc, len, src_buffer, loop_body, after_loop);
-        }
-        
         Self::loop_over_array_buf(gc, len, src_buffer, loop_body, after_loop);
-        
     }
 
     // Perform retain or release or mark global or mark threaded on an object included in a union buffer.
@@ -1393,7 +1393,7 @@ pub fn allocate_obj<'c, 'm>(
                 // Set array capacity.
                 let ptr_to_cap_field = gc
                     .builder()
-                    .build_struct_gep(struct_type,ptr_to_obj, ARRAY_CAP_IDX, "ptr_to_cap_field")
+                    .build_struct_gep(struct_type, ptr_to_obj, ARRAY_CAP_IDX, "ptr_to_cap_field")
                     .unwrap();
                 gc.builder()
                     .build_store(ptr_to_cap_field, array_cap.unwrap());
@@ -1402,7 +1402,7 @@ pub fn allocate_obj<'c, 'm>(
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 let ptr_to_dtor_field = gc
                     .builder()
-                    .build_struct_gep(struct_type,ptr_to_obj, i as u32, "ptr_to_dtor_field")
+                    .build_struct_gep(struct_type, ptr_to_obj, i as u32, "ptr_to_dtor_field")
                     .unwrap();
                 let dtor = get_traverser_ptr(&ty, capture, gc);
                 gc.builder().build_store(ptr_to_dtor_field, dtor);

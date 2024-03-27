@@ -816,7 +816,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .build_struct_gep(ty, ptr, index, "ptr_to_field")
             .unwrap();
         self.builder().build_load(
-            ty.get_field_type_at_index(index),
+            ty.get_field_type_at_index(index).unwrap(),
             ptr_to_field,
             "field_value",
         )
@@ -877,7 +877,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Get function.
         let ptr_to_func = self.get_lambda_func_ptr(fun.clone());
-        let func = CallableValue::try_from(ptr_to_func).unwrap();
 
         // Call function.
         if ret_ty.is_unbox(self.type_env()) {
@@ -907,7 +906,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
             call_args.push(rvo_ptr.into());
 
-            let ret = self.builder().build_call(func, &call_args, "call_lambda");
+            // let ret = self.builder().build_call(func, &call_args, "call_lambda");
+            let ret = self.builder().build_indirect_call(
+                function_type,
+                ptr_to_func,
+                &call_args,
+                "call_lambda",
+            );
             ret.set_tail_call(!self.has_di());
             rvo
         } else {

@@ -39,7 +39,7 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_simplify_lib_calls_pass();
     passmgr.add_instruction_combining_pass();
     passmgr.add_ind_var_simplify_pass();
-    passmgr.add_aggressive_inst_combiner_pass();
+    // passmgr.add_aggressive_inst_combiner_pass();
     passmgr.add_dead_store_elimination_pass();
     passmgr.add_always_inliner_pass();
     passmgr.add_early_cse_pass();
@@ -65,7 +65,7 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_promote_memory_to_register_pass();
     passmgr.add_basic_alias_analysis_pass();
     passmgr.add_slp_vectorize_pass();
-    passmgr.add_aggressive_inst_combiner_pass();
+    // passmgr.add_aggressive_inst_combiner_pass();
     passmgr.add_instruction_simplify_pass();
     passmgr.add_basic_alias_analysis_pass();
     passmgr.add_loop_unroll_pass();

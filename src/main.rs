@@ -59,9 +59,7 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::passes::PassManager;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructType};
-use inkwell::values::{
-    BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
-};
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 use llvm_passes::*;
 use misc::*;
