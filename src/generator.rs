@@ -876,7 +876,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let args = args.iter().map(|arg| arg.value(self)).collect::<Vec<_>>();
 
         // Get function.
-        let ptr_to_func = self.get_lambda_func_ptr(fun.clone());
+        let func_ptr = self.get_lambda_func_ptr(fun.clone());
 
         // Call function.
         if ret_ty.is_unbox(self.type_env()) {
@@ -898,21 +898,26 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // Call function pointer with arguments, CAP if closure, and rvo.
             let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
+            let mut call_args_ty: Vec<BasicMetadataTypeEnum<'c>> = vec![];
             for arg in args {
-                call_args.push(arg.into())
+                call_args.push(arg.into());
+                call_args_ty.push(arg.get_type().into());
             }
             if fun.ty.is_closure() {
-                call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
+                let capture = fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX);
+                call_args.push(capture.into());
+                call_args_ty.push(capture.get_type().into());
             }
             call_args.push(rvo_ptr.into());
+            call_args_ty.push(rvo_ptr.get_type().into());
 
-            // let ret = self.builder().build_call(func, &call_args, "call_lambda");
-            let ret = self.builder().build_indirect_call(
-                function_type,
-                ptr_to_func,
-                &call_args,
-                "call_lambda",
-            );
+            // Prepare llvm function type.
+            let func_ty = self.context.void_type().fn_type(&call_args_ty, false);
+
+            // Call the lambda function.
+            let ret =
+                self.builder()
+                    .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda");
             ret.set_tail_call(!self.has_di());
             rvo
         } else {
@@ -921,14 +926,27 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // Call function pointer with arguments, CAP if closure.
             let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
+            let mut call_args_ty: Vec<BasicMetadataTypeEnum<'c>> = vec![];
             for arg in args {
-                call_args.push(arg.into())
+                call_args.push(arg.into());
+                call_args_ty.push(arg.get_type().into());
             }
             if fun.ty.is_closure() {
                 call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
+                call_args_ty.push(
+                    fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX)
+                        .get_type()
+                        .into(),
+                );
             }
 
-            let ret = self.builder().build_call(func, &call_args, "call_lambda");
+            // Prepare llvm function type.
+            let func_ret_ty = ret_ty.get_embedded_type(self, &vec![]);
+            let func_ty = func_ret_ty.fn_type(&call_args_ty, false);
+
+            let ret =
+                self.builder()
+                    .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda");
             ret.set_tail_call(!self.has_di());
             let ret = ret.try_as_basic_value().unwrap_left();
             Object::create_from_value(ret, ret_ty, self)

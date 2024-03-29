@@ -1001,7 +1001,7 @@ pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     context.i8_type().ptr_type(AddressSpace::from(0))
 }
 
-fn traverser_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
+pub fn traverser_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
     context.void_type().fn_type(
         &[
             ptr_to_object_type(context).into(),  // Pointer to object.

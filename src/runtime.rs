@@ -420,28 +420,31 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
     gc.builder().position_at_end(destruction_bb);
 
     // Get dtor.
-    let ptr_to_dtor = release_func.get_nth_param(1).unwrap().into_pointer_value();
+    let trav_func_ptr = release_func.get_nth_param(1).unwrap().into_pointer_value();
 
     // If dtor is null, then skip calling dtor and jump to free_bb.
     let free_bb = gc.context.append_basic_block(release_func, "free");
     let call_dtor_bb = gc.context.append_basic_block(release_func, "call_dtor");
-    let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-    let is_dtor_null = gc.builder().build_int_compare(
-        IntPredicate::EQ,
-        gc.builder()
-            .build_ptr_to_int(ptr_to_dtor, ptr_int_ty, "ptr_to_dtor"),
-        ptr_int_ty.const_zero(),
-        "is_dtor_null",
-    );
+    let is_trav_null = gc
+        .builder()
+        .build_is_null(trav_func_ptr, "is_trav_func_ptr_null");
+    // let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
+    // let is_dtor_null = gc.builder().build_int_compare(
+    //     IntPredicate::EQ,
+    //     gc.builder()
+    //         .build_ptr_to_int(trav_func_ptr, ptr_int_ty, "ptr_to_dtor"),
+    //     ptr_int_ty.const_zero(),
+    //     "is_dtor_null",
+    // );
     gc.builder()
-        .build_conditional_branch(is_dtor_null, free_bb, call_dtor_bb);
+        .build_conditional_branch(is_trav_null, free_bb, call_dtor_bb);
 
     // Implement `call_dtor_bb`.
     gc.builder().position_at_end(call_dtor_bb);
     // Call dtor and jump to free_bb.
-    let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
-    gc.builder().build_call(
-        dtor_func,
+    gc.builder().build_indirect_call(
+        traverser_type(gc.context),
+        trav_func_ptr,
         &[
             obj_ptr.into(),
             traverser_work_type(gc.context)
@@ -538,14 +541,14 @@ fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
 
     // Call traverser to mark all subobjects as global.
     gc.builder().position_at_end(call_traverser_bb);
-    let traverser = CallableValue::try_from(ptr_to_traverser).unwrap();
     let work = if mark_global {
         TRAVERSER_WORK_MARK_GLOBAL
     } else {
         TRAVERSER_WORK_MARK_THREADED
     };
-    gc.builder().build_call(
-        traverser,
+    gc.builder().build_indirect_call(
+        traverser_type(gc.context),
+        ptr_to_traverser,
         &[
             ptr_to_obj.into(),
             traverser_work_type(gc.context)
@@ -615,9 +618,12 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
     gc.builder().position_at_end(bb);
     let lhs = func.get_first_param().unwrap().into_pointer_value();
     let rhs = func.get_nth_param(1).unwrap().into_pointer_value();
-    let res = gc
-        .builder()
-        .build_ptr_diff(lhs, rhs, "ptr_diff@fixruntime_subtract_ptr");
+    let res = gc.builder().build_ptr_diff(
+        gc.context.i8_type(),
+        lhs,
+        rhs,
+        "ptr_diff@fixruntime_subtract_ptr",
+    );
     gc.builder().build_return(Some(&res));
     return;
 }
@@ -804,7 +810,10 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
         .unwrap()
         .as_basic_value_enum()
         .into_pointer_value();
-    let argc = gc.builder().build_load(argc_ptr, "argc").into_int_value();
+    let argc = gc
+        .builder()
+        .build_load(argc_gv_ty, argc_ptr, "argc")
+        .into_int_value();
     gc.builder().build_return(Some(&argc));
 
     return;
@@ -852,7 +861,10 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
         .unwrap()
         .as_basic_value_enum()
         .into_pointer_value();
-    let argv = gc.builder().build_load(argv, "argv").into_pointer_value();
+    let argv = gc
+        .builder()
+        .build_load(argv_gv_ty, argv, "argv")
+        .into_pointer_value();
 
     // Get argv[idx].
     // First, offset argv by idx * size_of_pointer.
@@ -866,7 +878,10 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
     let argv = gc.builder().build_int_add(argv, offset, "argv");
     let argv = gc.builder().build_int_to_ptr(argv, argv_gv_ty, "argv");
     // Then, load argv[idx].
-    let argv = gc.builder().build_load(argv, "argv").into_pointer_value();
+    let argv = gc
+        .builder()
+        .build_load(argv_gv_ty, argv, "argv")
+        .into_pointer_value();
     gc.builder().build_return(Some(&argv));
 
     return;
