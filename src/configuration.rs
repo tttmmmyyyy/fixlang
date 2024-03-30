@@ -109,7 +109,6 @@ impl Configuration {
 
     pub fn set_run_with_valgrind(&mut self) {
         self.run_with_valgrind = true;
-        self.add_terminate_tasks_macro_if_needed();
     }
 
     // Add dynamically linked library.
@@ -223,7 +222,11 @@ impl Configuration {
     pub fn should_terminate_tasks(&self) -> bool {
         // Sanitizer and valgrind may detect detached thread as a memory leak.
         // To avoid this, wait for termination of detached threads before the program exits.
-        self.async_task && (self.sanitize_memory || self.run_with_valgrind)
+        self.async_task && self.sanitize_memory
+
+        // Leak checking by valgrind has a similar problem that it may detect detached thread as a memory leak.
+        // This is not resolved by waiting for the termination of detached threads.
+        // We handle this problem just by ignoring `possibly lost` leaks.
     }
 
     fn add_terminate_tasks_macro_if_needed(&mut self) {
@@ -258,6 +261,9 @@ impl Configuration {
         let mut com = Command::new("valgrind");
         com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
         com.arg("--leak-check=full"); // This optsion turns memory leak into error.
+        if self.run_with_valgrind && self.async_task {
+            com.arg("--show-possibly-lost=no"); // Ignore `possibly lost` leaks, which are caused by detached threads.
+        }
         com
     }
 }
