@@ -461,12 +461,12 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
     gc.builder().build_return(None);
 
     // Workaround for #14.
-    if gc.config.threaded {
-        release_func.add_attribute(
-            AttributeLoc::Function,
-            gc.context.create_enum_attribute(25 /* noinline */, 0),
-        );
-    }
+    // if gc.config.threaded {
+    //     release_func.add_attribute(
+    //         AttributeLoc::Function,
+    //         gc.context.create_enum_attribute(25 /* noinline */, 0),
+    //     );
+    // }
     return;
 }
 
