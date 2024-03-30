@@ -41,7 +41,7 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: Build
         build_pthread_once_function(gc, mode);
         build_mark_threaded_boxed_object_function(gc, mode);
     }
-    if gc.config.async_task && gc.config.sanitize_memory {
+    if gc.config.should_terminate_tasks() {
         build_thread_prepare_termination_function(gc, mode);
         build_thread_terminate_function(gc, mode);
     }

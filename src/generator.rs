@@ -2057,10 +2057,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if !self.config.sanitize_memory {
             return;
         }
-        if self.config.async_task {
-            // If AsyncTask is used, we need wait for all tasks to be finished before checking leak.
-            self.call_runtime(RUNTIME_THREAD_TERMINATE, &[]);
-        }
         self.call_runtime(RUNTIME_CHECK_LEAK, &[]);
     }
 

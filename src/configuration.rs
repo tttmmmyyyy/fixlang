@@ -98,12 +98,17 @@ impl Configuration {
     pub fn develop_compiler() -> Configuration {
         #[allow(unused_mut)]
         let mut config = Self::default();
-        config.run_with_valgrind = true;
+        config.set_run_with_valgrind();
         // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;
         config
+    }
+
+    pub fn set_run_with_valgrind(&mut self) {
+        self.run_with_valgrind = true;
+        self.add_terminate_tasks_macro_if_needed();
     }
 
     // Add dynamically linked library.
@@ -214,8 +219,14 @@ impl Configuration {
         }
     }
 
+    pub fn should_terminate_tasks(&self) -> bool {
+        // Sanitizer and valgrind may detect detached thread as a memory leak.
+        // To avoid this, wait for termination of detached threads before the program exits.
+        self.async_task && (self.sanitize_memory || self.run_with_valgrind)
+    }
+
     fn add_terminate_tasks_macro_if_needed(&mut self) {
-        if self.async_task && self.sanitize_memory {
+        if self.should_terminate_tasks() {
             self.runtime_c_macro.push("TERMINATE_TASKS".to_string());
         }
     }

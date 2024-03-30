@@ -362,6 +362,9 @@ fn build_main_function<'c, 'm>(
     gc.release(ret);
 
     // Perform leak check
+    if config.should_terminate_tasks() {
+        gc.call_runtime(RUNTIME_THREAD_TERMINATE, &[]);
+    }
     gc.check_leak();
 
     // Return main function.
