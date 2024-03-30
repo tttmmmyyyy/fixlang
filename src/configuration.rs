@@ -41,6 +41,8 @@ pub struct Configuration {
     pub verbose: bool,
     // Maximum size of compilation unit.
     pub max_cu_size: usize,
+    // Run program with valgrind. Effective only in `run` mode.
+    pub run_with_valgrind: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -78,6 +80,7 @@ impl Default for Configuration {
             show_build_times: false,
             verbose: false,
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
+            run_with_valgrind: false,
         }
     }
 }
@@ -96,6 +99,7 @@ impl Configuration {
         // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
+        // config.run_with_valgrind = true;
         config
     }
 

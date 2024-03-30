@@ -432,7 +432,13 @@ pub fn run_file(mut config: Configuration) {
     build_file(config.clone());
 
     // Run the executable file.
-    let mut com = Command::new(a_out_path.clone());
+    let mut com = if !config.run_with_valgrind {
+        Command::new(a_out_path.clone())
+    } else {
+        let mut com = Command::new("valgrind");
+        com.arg(a_out_path.clone());
+        com
+    };
     com.stdout(Stdio::inherit())
         .stdin(Stdio::inherit())
         .stderr(Stdio::inherit());
