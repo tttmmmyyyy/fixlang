@@ -102,6 +102,7 @@ impl Configuration {
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.run_with_valgrind = true;
+        // config.debug_info = true;
         config
     }
 
