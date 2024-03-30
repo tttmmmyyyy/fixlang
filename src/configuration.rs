@@ -3,6 +3,8 @@ use std::{env, path::PathBuf};
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
 
+use crate::cpu_features::CpuFeatures;
+
 use crate::{misc::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 
 #[derive(Clone, Copy)]
@@ -231,5 +233,11 @@ impl Configuration {
 
     pub fn separate_compilation(&self) -> bool {
         self.fix_opt_level != FixOptimizationLevel::Default
+    }
+
+    pub fn edit_features(&self, features: &mut CpuFeatures) {
+        if self.run_with_valgrind {
+            features.disable_avx512(); // Valgrind-3.22.0 does not support AVX-512 (#41).
+        }
     }
 }

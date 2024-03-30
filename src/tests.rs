@@ -2507,8 +2507,7 @@ pub fn test99_5() {
             pure()
         );
     "#;
-    let mut config = Configuration::develop_compiler();
-    config.run_with_valgrind = false;
+    let config = Configuration::develop_compiler();
     run_source(&source, config);
 }
 
@@ -2541,8 +2540,7 @@ pub fn test99_51() {
             pure()
         );
     "#;
-    let mut config = Configuration::develop_compiler();
-    config.run_with_valgrind = false;
+    let config = Configuration::develop_compiler();
     run_source(&source, config);
 }
 
@@ -2929,9 +2927,8 @@ pub fn test110a() {
             pure()
         );
     "#;
-    let mut config = Configuration::develop_compiler();
-    config.run_with_valgrind = false; // workaround for #41
-    run_source(&source, Configuration::develop_compiler());
+    let config = Configuration::develop_compiler();
+    run_source(&source, config);
 }
 
 #[test]
@@ -2997,7 +2994,8 @@ pub fn test110b() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    let config = Configuration::develop_compiler();
+    run_source(&source, config);
 }
 
 #[test]
@@ -4041,7 +4039,8 @@ pub fn test129() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    let config = Configuration::develop_compiler();
+    run_source(&source, config);
 }
 
 #[test]
@@ -4080,8 +4079,7 @@ pub fn test130() {
             pure()
         );
     "#;
-    let mut config = Configuration::develop_compiler();
-    config.run_with_valgrind = false; // #41
+    let config = Configuration::develop_compiler();
     run_source(&source, config);
 }
 
@@ -4946,8 +4944,7 @@ pub fn test_random() {
         pure()
     );
     "##;
-    let mut config = Configuration::develop_compiler();
-    config.run_with_valgrind = false;
+    let config = Configuration::develop_compiler();
     run_source(&source, config);
 }
 
@@ -4978,9 +4975,7 @@ pub fn test_float_inf_nan() {
         pure()
     );
     "##;
-    let mut config = Configuration::develop_compiler();
-    config.run_with_valgrind = false; // workaround for #41
-    run_source(&source, config);
+    run_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
