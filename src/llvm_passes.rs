@@ -59,7 +59,6 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_simplify_lib_calls_pass();
     passmgr.add_strip_dead_prototypes_pass();
     passmgr.add_type_based_alias_analysis_pass();
-    passmgr.add_jump_threading_pass();
     passmgr.add_ind_var_simplify_pass();
     passmgr.add_strip_dead_prototypes_pass();
     passmgr.add_global_optimizer_pass();
