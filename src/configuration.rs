@@ -98,10 +98,10 @@ impl Configuration {
     pub fn develop_compiler() -> Configuration {
         #[allow(unused_mut)]
         let mut config = Self::default();
+        config.run_with_valgrind = true;
         // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
-        // config.run_with_valgrind = true;
         // config.debug_info = true;
         config
     }
