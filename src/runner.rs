@@ -437,8 +437,8 @@ pub fn run_file(mut config: Configuration) -> i32 {
         Command::new(a_out_path.clone())
     } else {
         let mut com = Command::new("valgrind");
-        com.arg("--error-exitcode=1");
-        com.arg("--leak-check=full");
+        com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
+        com.arg("--leak-check=full"); // This optsion turns memory leak into error.
         com.arg(a_out_path.clone());
         com
     };
