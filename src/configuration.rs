@@ -1,3 +1,4 @@
+use std::process::Command;
 use std::{env, path::PathBuf};
 
 use build_time::build_time_utc;
@@ -251,5 +252,12 @@ impl Configuration {
         if self.run_with_valgrind {
             features.disable_avx512(); // Valgrind-3.22.0 does not support AVX-512 (#41).
         }
+    }
+
+    pub fn valgrind_command(&self) -> Command {
+        let mut com = Command::new("valgrind");
+        com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
+        com.arg("--leak-check=full"); // This optsion turns memory leak into error.
+        com
     }
 }
