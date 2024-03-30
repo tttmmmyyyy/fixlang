@@ -1,5 +1,3 @@
-use inkwell::attributes::AttributeLoc;
-
 use super::*;
 
 pub const RUNTIME_ABORT: &str = "abort";
