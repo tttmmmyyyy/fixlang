@@ -370,12 +370,12 @@ fn build_main_function<'c, 'm>(
 }
 
 #[allow(dead_code)]
-pub fn run_source(source: &str, mut config: Configuration) {
+pub fn test_source(source: &str, mut config: Configuration) {
     const MAIN_RUN: &str = "main_run";
     let source_hash = format!("{:x}", md5::compute(source));
     save_temporary_source(source, MAIN_RUN, &source_hash);
     config.source_files = vec![temporary_source_path(MAIN_RUN, &source_hash)];
-    run_file(config);
+    assert_eq!(run_file(config), 0);
 }
 
 // Return file content and last modified.
@@ -421,7 +421,8 @@ pub fn load_file(config: &mut Configuration) -> Program {
     target_mod
 }
 
-pub fn run_file(mut config: Configuration) {
+// Run the program specified in the configuration, and return the exit code.
+pub fn run_file(mut config: Configuration) -> i32 {
     fs::create_dir_all(DOT_FIXLANG).expect("Failed to create \".fixlang\" directory.");
 
     // For parallel execution, use different file name for each execution.
@@ -436,6 +437,8 @@ pub fn run_file(mut config: Configuration) {
         Command::new(a_out_path.clone())
     } else {
         let mut com = Command::new("valgrind");
+        com.arg("--error-exitcode=1");
+        com.arg("--leak-check=full");
         com.arg(a_out_path.clone());
         com
     };
@@ -449,8 +452,10 @@ pub fn run_file(mut config: Configuration) {
     // Remove the executable file.
     fs::remove_file(a_out_path.clone()).expect(&format!("Failed to remove \"{}\".", a_out_path));
 
-    if output.status.code().is_none() {
-        error_exit("Program terminated abnormally.");
+    if let Some(code) = output.status.code() {
+        code
+    } else {
+        error_exit("Program terminated abnormally.")
     }
 }
 

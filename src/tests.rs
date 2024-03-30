@@ -16,7 +16,7 @@ pub fn test0() {
                 pure()
             );
         "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -31,7 +31,7 @@ pub fn test1() {
                 pure()
             );
         "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -46,7 +46,7 @@ pub fn test2() {
                 pure()
             );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -61,7 +61,7 @@ pub fn test3() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -76,7 +76,7 @@ pub fn test4() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -91,7 +91,7 @@ pub fn test5() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -104,7 +104,7 @@ pub fn test6() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -117,7 +117,7 @@ pub fn test7() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -131,7 +131,7 @@ pub fn test8() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -147,7 +147,7 @@ pub fn test9_5() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -161,7 +161,7 @@ pub fn test10() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -177,7 +177,7 @@ pub fn test11() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -195,7 +195,7 @@ pub fn test12() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -209,7 +209,7 @@ pub fn test13() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -223,7 +223,7 @@ pub fn test13_5() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -239,7 +239,7 @@ pub fn test14() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -253,7 +253,7 @@ pub fn test15() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -268,7 +268,7 @@ pub fn test15_5() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -282,7 +282,7 @@ pub fn test16() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -295,7 +295,7 @@ pub fn test17() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -308,7 +308,7 @@ pub fn test18() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -321,7 +321,7 @@ pub fn test19() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -334,7 +334,7 @@ pub fn test20() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -356,7 +356,7 @@ pub fn test20_5() {
             pure ()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -371,7 +371,7 @@ pub fn test21() {
                 pure()
             );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -399,7 +399,7 @@ pub fn test22() {
         n,
         (n * (n + 1)) / 2
     );
-    run_source(source.as_str(), Configuration::release());
+    test_source(source.as_str(), Configuration::release());
 }
 
 #[test]
@@ -422,7 +422,7 @@ pub fn test22_5() {
                 pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -448,7 +448,7 @@ pub fn test22_7() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -462,7 +462,7 @@ pub fn test23() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -477,7 +477,7 @@ pub fn test24() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -493,7 +493,7 @@ pub fn test25() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -509,7 +509,7 @@ pub fn test26() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -525,7 +525,7 @@ pub fn test27() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -541,7 +541,7 @@ pub fn test27_5() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -569,7 +569,7 @@ pub fn test28() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -586,7 +586,7 @@ pub fn test29() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -603,7 +603,7 @@ pub fn test30() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -620,7 +620,7 @@ pub fn test31() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -635,7 +635,7 @@ pub fn test32() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -653,7 +653,7 @@ pub fn test33() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -671,7 +671,7 @@ pub fn test34_5() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -691,7 +691,7 @@ pub fn test34() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -712,7 +712,7 @@ pub fn test35() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -733,7 +733,7 @@ pub fn test36() {
             pure ()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -754,7 +754,7 @@ pub fn test37() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -775,7 +775,7 @@ pub fn test37_5() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -797,7 +797,7 @@ pub fn test38() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -819,7 +819,7 @@ pub fn test39() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -841,7 +841,7 @@ pub fn test40() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -858,7 +858,7 @@ pub fn test41() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -875,7 +875,7 @@ pub fn test41_5() {
             pure()
         );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -899,7 +899,7 @@ pub fn test42() {
         n,
         (n * (n + 1)) / 2
     );
-    run_source(source.as_str(), Configuration::develop_compiler());
+    test_source(source.as_str(), Configuration::develop_compiler());
 }
 
 #[test]
@@ -923,7 +923,7 @@ pub fn test43() {
         n,
         (n * (n + 1)) / 2
     );
-    run_source(source.as_str(), Configuration::release());
+    test_source(source.as_str(), Configuration::release());
 }
 
 #[test]
@@ -967,7 +967,7 @@ pub fn test44() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -993,7 +993,7 @@ pub fn test44_5() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1030,7 +1030,7 @@ pub fn test45() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1052,7 +1052,7 @@ pub fn test46() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1074,7 +1074,7 @@ pub fn test47() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1096,7 +1096,7 @@ pub fn test47_2() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1117,7 +1117,7 @@ pub fn test47_5() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1142,7 +1142,7 @@ pub fn test47_6() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1164,7 +1164,7 @@ pub fn test48() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1191,7 +1191,7 @@ pub fn test49() {
             pure()
         );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1222,7 +1222,7 @@ pub fn test50() {
         n,
         (n * (n - 1)) / 2
     );
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1250,7 +1250,7 @@ pub fn test50_3() {
             pure()
         );
             "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1282,7 +1282,7 @@ pub fn test51() {
         pure()
     );
         "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1339,7 +1339,7 @@ pub fn test52() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1360,7 +1360,7 @@ pub fn test53() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1381,7 +1381,7 @@ pub fn test54() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1405,7 +1405,7 @@ pub fn test55() {
         pure ()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1427,7 +1427,7 @@ pub fn test56() {
         pure ()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1449,7 +1449,7 @@ pub fn test57() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1471,7 +1471,7 @@ pub fn test58() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1503,7 +1503,7 @@ pub fn test59() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1518,7 +1518,7 @@ pub fn test60() {
     main : IO ();
     main = let u = unit; pure ();
     ";
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1540,7 +1540,7 @@ pub fn test61() {
     main : IO ();
     main = main_loop(3);
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1558,7 +1558,7 @@ pub fn test61_5() {
         ))
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1574,7 +1574,7 @@ pub fn test62() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1591,7 +1591,7 @@ pub fn test63() {
         println $ min.to_string
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1605,7 +1605,7 @@ pub fn test64() {
         println $ "\u2764"
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1628,7 +1628,7 @@ pub fn test65() {
         pure ()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1653,7 +1653,7 @@ pub fn test66() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1678,7 +1678,7 @@ pub fn test67() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1700,7 +1700,7 @@ pub fn test72() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1719,7 +1719,7 @@ pub fn test73() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1757,7 +1757,7 @@ pub fn test74() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1782,7 +1782,7 @@ pub fn test75() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1799,7 +1799,7 @@ pub fn test76() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1828,7 +1828,7 @@ pub fn test77() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1846,7 +1846,7 @@ pub fn test78() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1866,7 +1866,7 @@ pub fn test79() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1885,7 +1885,7 @@ pub fn test80() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1903,7 +1903,7 @@ pub fn test81() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -1973,7 +1973,7 @@ pub fn test82() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2028,7 +2028,7 @@ pub fn test83() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2058,7 +2058,7 @@ pub fn test84() {
         pure()
     );
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2078,7 +2078,7 @@ pub fn test85() {
     );
     
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2095,7 +2095,7 @@ pub fn test86() {
     );
     
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2122,7 +2122,7 @@ pub fn test87() {
     );
     
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2149,7 +2149,7 @@ pub fn test88() {
     );
     
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2180,7 +2180,7 @@ pub fn test89() {
     );
     
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2207,7 +2207,7 @@ pub fn test90() {
     );
     
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2225,7 +2225,7 @@ pub fn test92() {
     );
 
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2245,7 +2245,7 @@ pub fn test93() {
     );
 
     "#;
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2263,7 +2263,7 @@ pub fn test_call_c() {
                 pure()
             );
         "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2304,7 +2304,7 @@ pub fn test95() {
                 pure()
             );
         "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2327,7 +2327,7 @@ pub fn test96() {
                 pure()
             );
         "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2357,7 +2357,7 @@ pub fn test97() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2422,7 +2422,7 @@ pub fn test98() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2475,7 +2475,7 @@ pub fn test99() {
         "#,
         cases.join("\n")
     );
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2507,8 +2507,7 @@ pub fn test99_5() {
             pure()
         );
     "#;
-    let config = Configuration::develop_compiler();
-    run_source(&source, config);
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2540,8 +2539,7 @@ pub fn test99_51() {
             pure()
         );
     "#;
-    let config = Configuration::develop_compiler();
-    run_source(&source, config);
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2559,7 +2557,7 @@ pub fn test100() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2585,7 +2583,7 @@ pub fn test101() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2613,7 +2611,7 @@ pub fn test102() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2632,7 +2630,7 @@ pub fn test103() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2649,7 +2647,7 @@ pub fn test104() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2670,7 +2668,7 @@ pub fn test105() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2700,7 +2698,7 @@ pub fn test106() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2727,7 +2725,7 @@ pub fn test107() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2757,7 +2755,7 @@ pub fn test108() {
             }.try(exit_with_msg(1))
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
     remove_file("test_uAfQDPwJ7sS6.txt").unwrap();
 }
 
@@ -2787,7 +2785,7 @@ pub fn test_is_eof() {
             }.try(exit_with_msg(1))
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
     remove_file("test_bUeW9baGGZmE.txt").unwrap();
 }
 
@@ -2811,7 +2809,7 @@ pub fn test108_5() {
             }.try(exit_with_msg(1))
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
     remove_file("test_vgZNhmj4gPbF.dat").unwrap();
 }
 
@@ -2862,7 +2860,7 @@ pub fn test109() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2927,8 +2925,7 @@ pub fn test110a() {
             pure()
         );
     "#;
-    let config = Configuration::develop_compiler();
-    run_source(&source, config);
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -2994,8 +2991,7 @@ pub fn test110b() {
             pure()
         );
     "#;
-    let config = Configuration::develop_compiler();
-    run_source(&source, config);
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3018,7 +3014,7 @@ pub fn test111() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3040,7 +3036,7 @@ pub fn test112() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3074,7 +3070,7 @@ pub fn test113() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3096,7 +3092,7 @@ pub fn test114() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3144,7 +3140,7 @@ pub fn test115() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3232,7 +3228,7 @@ pub fn test115_5() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3278,7 +3274,7 @@ pub fn test116() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3295,7 +3291,7 @@ pub fn test117() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3315,7 +3311,7 @@ pub fn test118() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3343,7 +3339,7 @@ pub fn test119() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3363,7 +3359,7 @@ pub fn test120() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3443,7 +3439,7 @@ pub fn test121() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3542,7 +3538,7 @@ pub fn test122() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3670,7 +3666,7 @@ pub fn test123() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3717,7 +3713,7 @@ pub fn test123_5() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3768,7 +3764,7 @@ pub fn test124() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3787,7 +3783,7 @@ pub fn test125() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3807,7 +3803,7 @@ pub fn test126() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3896,7 +3892,7 @@ pub fn test127() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -3944,7 +3940,7 @@ pub fn test128() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4039,8 +4035,7 @@ pub fn test129() {
             pure()
         );
     "#;
-    let config = Configuration::develop_compiler();
-    run_source(&source, config);
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4079,8 +4074,7 @@ pub fn test130() {
             pure()
         );
     "#;
-    let config = Configuration::develop_compiler();
-    run_source(&source, config);
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4185,7 +4179,7 @@ pub fn test131() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4213,7 +4207,7 @@ pub fn test_consumed_time() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
     remove_file("test_tMB3iCfTeeES.txt").unwrap();
 }
 
@@ -4239,7 +4233,7 @@ pub fn test_signed_integral_abs() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4260,7 +4254,7 @@ pub fn test_float_to_string_precision() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4279,7 +4273,7 @@ pub fn test_float_to_string_exp() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4300,7 +4294,7 @@ pub fn test_float_to_string_exp_precision() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4317,7 +4311,7 @@ pub fn test_string_unsafe_from_c_str_ptr() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4348,7 +4342,7 @@ pub fn test_subprocess_run_stream() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4391,7 +4385,7 @@ pub fn test_loop_lines() {
         }.try(exit_with_msg(1))
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
     remove_file("test_GndeZP399tLX.txt").unwrap();
 }
 
@@ -4426,7 +4420,7 @@ pub fn test_array_get_sub() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4448,7 +4442,7 @@ pub fn test_string_get_sub() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4469,7 +4463,7 @@ pub fn test_string_strip_first_spaces() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4502,7 +4496,7 @@ pub fn test_loop_lines_io() {
         }.try(exit_with_msg(1))
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
     remove_file("test_MsuHh3QEXKYN.txt").unwrap();
     remove_file("test_9A5bu4U57xTd.txt").unwrap();
 }
@@ -4542,7 +4536,7 @@ pub fn test_string_find() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4571,7 +4565,7 @@ pub fn test_names_literal_prefix() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4592,7 +4586,7 @@ pub fn test_string_split() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4607,7 +4601,7 @@ pub fn test_ptr_to_string() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4639,7 +4633,7 @@ pub fn test_async_task_fib() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4703,7 +4697,7 @@ pub fn test_async_shared_array() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4723,7 +4717,7 @@ pub fn test_async_task_array_result() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4739,7 +4733,7 @@ pub fn test_async_task_io() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4767,7 +4761,7 @@ pub fn test_tarai() {
         pure()
     );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4779,7 +4773,7 @@ pub fn test_number_of_processors() {
     main : IO ();
     main = ("Number of processors: " + AsyncTask::number_of_processors.to_string).println;
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4797,7 +4791,7 @@ pub fn test_async_task_dedicated_thread() {
         ))
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4831,7 +4825,7 @@ pub fn test_mvar() {
         println $ (*logger.get).to_iter.join("\n")
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4866,7 +4860,7 @@ pub fn test_mvar_of_shared_object() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4880,7 +4874,7 @@ pub fn test_get_args() {
         args.to_iter.join(", ").println
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4904,7 +4898,7 @@ pub fn test_regression_issue_14() {
     let mut config = Configuration::develop_compiler();
     config.set_threaded();
     config.sanitize_memory = false;
-    run_source(&source, config);
+    test_source(&source, config);
 }
 
 #[test]
@@ -4945,7 +4939,7 @@ pub fn test_random() {
     );
     "##;
     let config = Configuration::develop_compiler();
-    run_source(&source, config);
+    test_source(&source, config);
 }
 
 #[test]
@@ -4975,7 +4969,7 @@ pub fn test_float_inf_nan() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -4990,7 +4984,7 @@ pub fn test_large_tuple() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5104,7 +5098,7 @@ pub fn test_comment_0() {
             pure()
         );
         /*tail*/";
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5122,7 +5116,7 @@ pub fn test_comment_1() {
             pure()
         //
         );";
-    run_source(source, Configuration::develop_compiler());
+    test_source(source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5165,7 +5159,7 @@ pub fn test_hex_oct_bin_lit() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5192,7 +5186,7 @@ pub fn test_regexp() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5208,7 +5202,7 @@ pub fn test_array_to_string() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5224,7 +5218,7 @@ pub fn test_option_to_string() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5241,7 +5235,7 @@ pub fn test_unit_tuple_to_string() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5265,7 +5259,7 @@ pub fn test_unit_tuple_eq() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5291,7 +5285,7 @@ pub fn test_tuple_less_than_and_less_than_or_eq() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5309,7 +5303,7 @@ pub fn test_result_to_string() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5344,7 +5338,7 @@ pub fn test_result_eq() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5377,7 +5371,7 @@ pub fn test_array_less_than_and_less_than_or_eq() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5410,7 +5404,7 @@ pub fn test_string_less_than_and_less_than_or_eq() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5437,7 +5431,7 @@ pub fn test_overlapping_trait_and_function() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5455,7 +5449,7 @@ pub fn test_orphan_rule_1() {
         println $ [1,2,3].to_string
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5475,7 +5469,7 @@ pub fn test_orphan_rule_2() {
         println $ [1,2,3].to_string
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5495,7 +5489,7 @@ pub fn test_orphan_rule_3() {
         println $ [1,2,3].to_string
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5518,7 +5512,7 @@ pub fn test_implement_trait_on_arrow_1() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5541,7 +5535,7 @@ pub fn test_implement_trait_on_arrow_2() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5569,7 +5563,7 @@ pub fn test_overlapping_instances_1() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5597,7 +5591,7 @@ pub fn test_overlapping_instances_2() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5625,7 +5619,7 @@ pub fn test_overlapping_instances_3() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5657,7 +5651,7 @@ pub fn test_overlapping_instances_4() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5672,7 +5666,7 @@ pub fn test_eval_non_unit() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5688,7 +5682,7 @@ pub fn test_unrelated_trait_method() {
     main : IO ();
     main = pure();
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5706,7 +5700,7 @@ pub fn test_duplicated_symbols() {
     main : IO ();
     main = pure();
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5720,7 +5714,7 @@ pub fn test_typedef_unknown_tyvar() {
     main : IO ();
     main = pure();
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5734,7 +5728,7 @@ pub fn test_typedef_trait_precondition() {
     main : IO ();
     main = pure();
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5748,7 +5742,7 @@ pub fn test_typedef_specify_kind_twice() {
     main : IO ();
     main = pure();
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5762,7 +5756,7 @@ pub fn test_typedef_kind_mismatch() {
     main : IO ();
     main = pure();
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5780,7 +5774,7 @@ pub fn test_typedef_struct_higher_kinded_type_variable() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
@@ -5846,7 +5840,7 @@ pub fn test_state_t() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    test_source(&source, Configuration::develop_compiler());
 }
 
 #[test]
