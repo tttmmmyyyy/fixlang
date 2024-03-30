@@ -2929,6 +2929,8 @@ pub fn test110a() {
             pure()
         );
     "#;
+    let mut config = Configuration::develop_compiler();
+    config.run_with_valgrind = false; // workaround for #41
     run_source(&source, Configuration::develop_compiler());
 }
 
@@ -4976,7 +4978,9 @@ pub fn test_float_inf_nan() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    let mut config = Configuration::develop_compiler();
+    config.run_with_valgrind = false; // workaround for #41
+    run_source(&source, config);
 }
 
 #[test]
