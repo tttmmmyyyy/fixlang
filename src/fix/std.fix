@@ -1869,7 +1869,7 @@ impl U64 : FromBytes {
 }
 impl U64 : ToString {
     to_string = |v| (
-        let data = Array::empty(20);
+        let data = Array::empty(21);
         eval data.borrow_ptr(|ptr| (
             CALL_C[() fixruntime_u64_to_str(Ptr, U64), ptr, v]
         ));
