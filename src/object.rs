@@ -1231,15 +1231,8 @@ pub fn ty_to_object_ty(
                 }
                 assert_eq!(ret.field_types.len(), struct_field_idx(is_unbox) as usize);
                 let field_types = ty.field_types(type_env);
-                if field_types.is_empty() {
-                    // if this struct has no field, then this is unit `()`.
-                    if is_unbox {
-                        ret.field_types.push(ObjectFieldType::I8); // Avoid empty struct.
-                    }
-                } else {
-                    for field_ty in field_types {
-                        ret.field_types.push(ObjectFieldType::SubObject(field_ty));
-                    }
+                for field_ty in field_types {
+                    ret.field_types.push(ObjectFieldType::SubObject(field_ty));
                 }
             }
             TyConVariant::Union => {

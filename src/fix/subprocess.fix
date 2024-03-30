@@ -72,6 +72,14 @@ run_with_stream = |com, args, worker| (
             out_exit_status._get_ptr, out_exit_status_available._get_ptr, 
             out_stop_signal._get_ptr, out_stop_signal_available._get_ptr
         ];
+        // Extends lifetime of output variables
+        let _ = out_is_timeout;
+        let _ = out_wait_failed;
+        let _ = out_exit_status;
+        let _ = out_exit_status_available;
+        let _ = out_stop_signal;
+        let _ = out_stop_signal_available;
+
         let exit_status = if out_wait_failed.@(0) == 1_U8 { 
             ExitStatus::wait_failed()
         } else if out_exit_status_available.@(0) == 1_U8 {

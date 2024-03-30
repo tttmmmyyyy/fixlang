@@ -28,6 +28,7 @@ mod parser;
 mod runner;
 mod runtime;
 // mod segcache;
+mod cpu_features;
 mod sourcefile;
 mod stdlib;
 mod stopwatch;

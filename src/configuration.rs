@@ -3,6 +3,8 @@ use std::{env, path::PathBuf};
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
 
+use crate::cpu_features::CpuFeatures;
+
 use crate::{misc::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 
 #[derive(Clone, Copy)]
@@ -41,6 +43,8 @@ pub struct Configuration {
     pub verbose: bool,
     // Maximum size of compilation unit.
     pub max_cu_size: usize,
+    // Run program with valgrind. Effective only in `run` mode.
+    pub run_with_valgrind: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -78,6 +82,7 @@ impl Default for Configuration {
             show_build_times: false,
             verbose: false,
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
+            run_with_valgrind: false,
         }
     }
 }
@@ -96,6 +101,8 @@ impl Configuration {
         // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
+        // config.run_with_valgrind = true;
+        // config.debug_info = true;
         config
     }
 
@@ -227,5 +234,11 @@ impl Configuration {
 
     pub fn separate_compilation(&self) -> bool {
         self.fix_opt_level != FixOptimizationLevel::Default
+    }
+
+    pub fn edit_features(&self, features: &mut CpuFeatures) {
+        if self.run_with_valgrind {
+            features.disable_avx512(); // Valgrind-3.22.0 does not support AVX-512 (#41).
+        }
     }
 }

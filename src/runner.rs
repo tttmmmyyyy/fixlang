@@ -15,7 +15,7 @@ use inkwell::{
 };
 use stopwatch::StopWatch;
 
-use self::compile_unit::CompileUnit;
+use self::{compile_unit::CompileUnit, cpu_features::CpuFeatures};
 
 use super::*;
 
@@ -142,7 +142,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         threads.push(std::thread::spawn(move || {
             // Create GenerationContext.
             let context = Context::create();
-            let target_machine = get_target_machine(config.get_llvm_opt_level());
+            let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
             let module = GenerationContext::create_module(
                 &format!("Module-{}", unit.unit_hash()),
                 &context,
@@ -432,7 +432,13 @@ pub fn run_file(mut config: Configuration) {
     build_file(config.clone());
 
     // Run the executable file.
-    let mut com = Command::new(a_out_path.clone());
+    let mut com = if !config.run_with_valgrind {
+        Command::new(a_out_path.clone())
+    } else {
+        let mut com = Command::new("valgrind");
+        com.arg(a_out_path.clone());
+        com
+    };
     com.stdout(Stdio::inherit())
         .stdin(Stdio::inherit())
         .stderr(Stdio::inherit());
@@ -448,7 +454,7 @@ pub fn run_file(mut config: Configuration) {
     }
 }
 
-fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
+fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> TargetMachine {
     let _native = Target::initialize_native(&InitializationConfig::default())
         .map_err(|e| error_exit(&format!("failed to initialize native: {}", e)))
         .unwrap();
@@ -459,10 +465,12 @@ fn get_target_machine(opt_level: OptimizationLevel) -> TargetMachine {
         })
         .unwrap();
     let cpu_name = TargetMachine::get_host_cpu_name();
+    let mut features = CpuFeatures::parse(TargetMachine::get_host_cpu_features().to_str().unwrap());
+    config.edit_features(&mut features);
     let target_machine = target.create_target_machine(
         &triple,
         cpu_name.to_str().unwrap(),
-        TargetMachine::get_host_cpu_features().to_str().unwrap(),
+        &features.to_string(),
         opt_level,
         RelocMode::Default,
         CodeModel::Default,
