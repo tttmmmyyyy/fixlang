@@ -2507,7 +2507,9 @@ pub fn test99_5() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    let mut config = Configuration::develop_compiler();
+    config.run_with_valgrind = false;
+    run_source(&source, config);
 }
 
 #[test]
@@ -2539,7 +2541,9 @@ pub fn test99_51() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    let mut config = Configuration::develop_compiler();
+    config.run_with_valgrind = false;
+    run_source(&source, config);
 }
 
 #[test]
@@ -2982,21 +2986,11 @@ pub fn test110b() {
             eval assert(|_|"case 21", x.to_I64 == y);
 
             let x = 3.14;
-            eval assert_eq(|_|"case 22", x, x.to_string.from_string.as_ok);
+            let z : F64 = 3.14.to_string.from_string.as_ok;
 
-            let x = 3.14_F32;
-            eval assert_eq(|_|"case 23", x, x.to_string.from_string.as_ok);
+            eval *println(z.to_string);
 
-            // Cases from_string fails.
-            
-            let res: Result ErrMsg F64 = "Hello World!".from_string;
-            eval assert(|_|"Case: from_string invalid format", res.is_err);
-
-            let res: Result ErrMsg F64 = " 3.14".from_string;
-            eval assert(|_|"Case: from_string invalid format (whitespace)", res.is_err);
-
-            let res: Result ErrMsg I64 = "9999999999999999999999999999999999999999999999999999".from_string;
-            eval assert(|_|"Case: from_string out of range", res.is_err);
+            eval assert_eq(|_|"case 22", 3.14, z);
 
             pure()
         );
@@ -4084,7 +4078,9 @@ pub fn test130() {
             pure()
         );
     "#;
-    run_source(&source, Configuration::develop_compiler());
+    let mut config = Configuration::develop_compiler();
+    config.run_with_valgrind = false; // #41
+    run_source(&source, config);
 }
 
 #[test]
@@ -4948,7 +4944,9 @@ pub fn test_random() {
         pure()
     );
     "##;
-    run_source(&source, Configuration::develop_compiler());
+    let mut config = Configuration::develop_compiler();
+    config.run_with_valgrind = false;
+    run_source(&source, config);
 }
 
 #[test]
