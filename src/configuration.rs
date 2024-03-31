@@ -260,10 +260,14 @@ impl Configuration {
     pub fn valgrind_command(&self) -> Command {
         let mut com = Command::new("valgrind");
         com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
-        com.arg("--leak-check=full"); // This optsion turns memory leak into error.
-        if self.run_with_valgrind && self.async_task {
-            com.arg("--show-possibly-lost=no"); // Ignore `possibly lost` leaks, which are caused by detached threads.
+
+        // Check memory leaks.
+        com.arg("--tool=memcheck");
+        com.arg("--leak-check=yes"); // This option turns memory leak into error.
+        if self.async_task {
+            com.arg("--errors-for-leak-kinds=definite"); // Ignore `possibly lost` leaks, which are caused by detached threads.
         }
+
         com
     }
 }

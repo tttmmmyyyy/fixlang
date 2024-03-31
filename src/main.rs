@@ -242,7 +242,7 @@ fn main() {
             run_file(create_config_from_matches(m));
         }
         Some(("build", m)) => {
-            build_file(create_config_from_matches(m));
+            build_file(&mut create_config_from_matches(m));
         }
         Some(("clean", _m)) => {
             clean_command();

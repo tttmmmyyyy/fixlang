@@ -433,7 +433,7 @@ pub fn run_file(mut config: Configuration) -> i32 {
     config.out_file_path = Some(PathBuf::from(a_out_path.clone()));
 
     // Build executable file.
-    build_file(config.clone());
+    build_file(&mut config);
 
     // Run the executable file.
     let mut com = if !config.run_with_valgrind {
@@ -487,13 +487,13 @@ fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> T
     }
 }
 
-pub fn build_file(mut config: Configuration) {
+pub fn build_file(config: &mut Configuration) {
     let exec_path = config.get_output_executable_file_path();
 
     // Create intermediate directory.
     fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
 
-    let program = load_file(&mut config);
+    let program = load_file(config);
     let obj_paths = build_object_files(program, config.clone());
 
     let mut libs_opts = vec![];
