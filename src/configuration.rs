@@ -53,7 +53,7 @@ pub struct Configuration {
     // Maximum size of compilation unit.
     pub max_cu_size: usize,
     // Run program with valgrind. Effective only in `run` mode.
-    pub run_with_valgrind: ValGrindTool,
+    pub valgrind_tool: ValGrindTool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -91,7 +91,7 @@ impl Default for Configuration {
             show_build_times: false,
             verbose: false,
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
-            run_with_valgrind: ValGrindTool::None,
+            valgrind_tool: ValGrindTool::None,
         }
     }
 }
@@ -116,7 +116,7 @@ impl Configuration {
     }
 
     pub fn set_valgrind(&mut self, tool: ValGrindTool) -> &mut Configuration {
-        self.run_with_valgrind = tool;
+        self.valgrind_tool = tool;
         self
     }
 
@@ -261,7 +261,7 @@ impl Configuration {
     }
 
     pub fn edit_features(&self, features: &mut CpuFeatures) {
-        if self.run_with_valgrind != ValGrindTool::None {
+        if self.valgrind_tool != ValGrindTool::None {
             features.disable_avx512(); // Valgrind-3.22.0 does not support AVX-512 (#41).
         }
     }
@@ -269,7 +269,7 @@ impl Configuration {
     pub fn valgrind_command(&self) -> Command {
         let mut com = Command::new("valgrind");
         com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
-        match self.run_with_valgrind {
+        match self.valgrind_tool {
             ValGrindTool::None => {
                 error_exit("Valgrind tool is not specified.");
             }
