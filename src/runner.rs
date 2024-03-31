@@ -436,7 +436,7 @@ pub fn run_file(mut config: Configuration) -> i32 {
     build_file(&mut config);
 
     // Run the executable file.
-    let mut com = if !config.run_with_valgrind {
+    let mut com = if config.run_with_valgrind == ValGrindTool::None {
         Command::new(a_out_path.clone())
     } else {
         let mut com = config.valgrind_command();
