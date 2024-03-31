@@ -18,8 +18,10 @@ pub enum LinkType {
 pub enum ValgrindTool {
     None,
     MemCheck,
-    #[allow(dead_code)]
-    DataRaceDetection,
+    // Currently, we cannot use DRD or helgrind because valgrind does not understand atomic operations.
+    // In C/C++ program, we can use `ANNOTATE_HAPPENS_BEFORE` and `ANNOTATE_HAPPENS_AFTER` to tell helgrind happens-before relations,
+    // but how can we do similar things in Fix?
+    // DataRaceDetection,
 }
 
 #[derive(Clone)]
@@ -281,10 +283,6 @@ impl Configuration {
                 if self.async_task {
                     com.arg("--errors-for-leak-kinds=definite"); // Ignore `possibly lost` leaks, which are caused by detached threads.
                 }
-            }
-            ValgrindTool::DataRaceDetection => {
-                // Check data race.
-                com.arg("--tool=drd");
             }
         }
         com

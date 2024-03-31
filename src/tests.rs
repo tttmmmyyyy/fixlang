@@ -4634,12 +4634,6 @@ pub fn test_async_task_fib() {
     );
     "#;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
@@ -4704,12 +4698,6 @@ pub fn test_async_shared_array() {
     );
     "#;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
@@ -4730,12 +4718,6 @@ pub fn test_async_task_array_result() {
     );
     "#;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
@@ -4752,12 +4734,6 @@ pub fn test_async_task_io() {
     );
     "##;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
@@ -4798,12 +4774,6 @@ pub fn test_number_of_processors() {
     main = ("Number of processors: " + AsyncTask::number_of_processors.to_string).println;
     "##;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
@@ -4822,12 +4792,6 @@ pub fn test_async_task_dedicated_thread() {
     );
     "##;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
@@ -4862,12 +4826,6 @@ pub fn test_mvar() {
     );
     "##;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
@@ -4903,12 +4861,6 @@ pub fn test_mvar_of_shared_object() {
     );
     "##;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
@@ -4945,12 +4897,6 @@ pub fn test_regression_issue_14() {
     );
     "##;
     test_source(&source, Configuration::develop_compiler());
-    test_source(
-        &source,
-        Configuration::develop_compiler()
-            .set_valgrind(ValgrindTool::DataRaceDetection)
-            .clone(),
-    );
 }
 
 #[test]
