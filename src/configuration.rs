@@ -15,7 +15,7 @@ pub enum LinkType {
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
-pub enum ValGrindTool {
+pub enum ValgrindTool {
     None,
     MemCheck,
     #[allow(dead_code)]
@@ -53,7 +53,7 @@ pub struct Configuration {
     // Maximum size of compilation unit.
     pub max_cu_size: usize,
     // Run program with valgrind. Effective only in `run` mode.
-    pub valgrind_tool: ValGrindTool,
+    pub valgrind_tool: ValgrindTool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -91,7 +91,7 @@ impl Default for Configuration {
             show_build_times: false,
             verbose: false,
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
-            valgrind_tool: ValGrindTool::None,
+            valgrind_tool: ValgrindTool::None,
         }
     }
 }
@@ -107,7 +107,7 @@ impl Configuration {
     pub fn develop_compiler() -> Configuration {
         #[allow(unused_mut)]
         let mut config = Self::default();
-        config.set_valgrind(ValGrindTool::MemCheck);
+        config.set_valgrind(ValgrindTool::MemCheck);
         // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
@@ -115,7 +115,7 @@ impl Configuration {
         config
     }
 
-    pub fn set_valgrind(&mut self, tool: ValGrindTool) -> &mut Configuration {
+    pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         self.valgrind_tool = tool;
         self
     }
@@ -261,7 +261,7 @@ impl Configuration {
     }
 
     pub fn edit_features(&self, features: &mut CpuFeatures) {
-        if self.valgrind_tool != ValGrindTool::None {
+        if self.valgrind_tool != ValgrindTool::None {
             features.disable_avx512(); // Valgrind-3.22.0 does not support AVX-512 (#41).
         }
     }
@@ -270,10 +270,10 @@ impl Configuration {
         let mut com = Command::new("valgrind");
         com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
         match self.valgrind_tool {
-            ValGrindTool::None => {
+            ValgrindTool::None => {
                 error_exit("Valgrind tool is not specified.");
             }
-            ValGrindTool::MemCheck => {
+            ValgrindTool::MemCheck => {
                 // Check memory leaks.
                 com.arg("--tool=memcheck");
                 com.arg("--leak-check=yes"); // This option turns memory leak into error.
@@ -281,7 +281,7 @@ impl Configuration {
                     com.arg("--errors-for-leak-kinds=definite"); // Ignore `possibly lost` leaks, which are caused by detached threads.
                 }
             }
-            ValGrindTool::DataRaceDetection => {
+            ValgrindTool::DataRaceDetection => {
                 // Check data race.
                 com.arg("--tool=drd");
             }
