@@ -268,6 +268,11 @@ impl Configuration {
             com.arg("--errors-for-leak-kinds=definite"); // Ignore `possibly lost` leaks, which are caused by detached threads.
         }
 
+        // Check data race.
+        if self.threaded {
+            com.arg("--tool=drd");
+        }
+
         com
     }
 }
