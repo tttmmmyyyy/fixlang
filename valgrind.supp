@@ -1,0 +1,9 @@
+# Suppress data race by fputs. See: https://bugs.kde.org/show_bug.cgi?id=450962
+{
+   <DRD fputs>
+   drd:ConflictingAccess
+   fun:mempcpy
+   fun:_IO_new_file_xsputn
+   fun:_IO_file_xsputn@@GLIBC_2.2.5
+   fun:fputs
+}

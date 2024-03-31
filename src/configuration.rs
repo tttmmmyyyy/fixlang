@@ -269,6 +269,7 @@ impl Configuration {
     pub fn valgrind_command(&self) -> Command {
         let mut com = Command::new("valgrind");
         com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
+        com.arg("--suppressions=valgrind.supp");
         match self.valgrind_tool {
             ValgrindTool::None => {
                 error_exit("Valgrind tool is not specified.");
