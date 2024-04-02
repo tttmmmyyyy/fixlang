@@ -1435,7 +1435,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 debug_scope,
                 None,
             );
-            self.builder().set_current_debug_location(self.context, loc);
+            self.builder().set_current_debug_location(loc);
         } else {
             self.builder().unset_current_debug_location();
         }
