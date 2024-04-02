@@ -110,7 +110,7 @@ pub fn add_internalize_and_strip_passes<T: PassManagerSubType>(passmgr: &PassMan
     passmgr.add_strip_symbol_pass();
 }
 
-pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
+pub fn add_optimization_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
 '''
 
 FOOTER = '''
