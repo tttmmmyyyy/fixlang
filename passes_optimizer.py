@@ -96,7 +96,7 @@ ALLOWED_DEGRATION_ON_MINIMIZE = 0.99
 # All passes
 # Exclude:
 #  add_scalar_repl_aggregates_pass_with_threshold (because requires parameter),
-#  add_internalize_pass (because requires parameter),
+#  add_internalize_pass (because requires parameter), TODO: we should add this pass with true.
 #  add_gvn_pass (segfaults),
 #  add_new_gvn_pass (breaks program)
 #  add_licm_pass (breaks program)

@@ -273,10 +273,12 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
             passmgr.add_tail_call_elimination_pass();
         }
         FixOptimizationLevel::Separated => {
-            add_passes(&passmgr);
+            llvm_passes::add_optimization_passes(&passmgr);
         }
         FixOptimizationLevel::Default => {
-            add_passes(&passmgr);
+            llvm_passes::add_internalize_and_strip_passes(&passmgr);
+            llvm_passes::add_optimization_passes(&passmgr);
+            llvm_passes::add_internalize_and_strip_passes(&passmgr);
         }
     }
     passmgr.add_verifier_pass(); // Verification after optimization.
