@@ -3,7 +3,12 @@
 use super::*;
 use inkwell::passes::PassManagerSubType;
 
-pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
+pub fn add_internalize_and_strip_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
+    passmgr.add_internalize_pass(true);
+    passmgr.add_strip_symbol_pass();
+}
+
+pub fn add_optimization_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_early_cse_pass();
     passmgr.add_scalar_repl_aggregates_pass_ssa();
     passmgr.add_global_optimizer_pass();
@@ -14,7 +19,6 @@ pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
     passmgr.add_early_cse_pass();
     passmgr.add_loop_deletion_pass();
     passmgr.add_constant_merge_pass();
-    passmgr.add_strip_symbol_pass();
     passmgr.add_dead_store_elimination_pass();
     passmgr.add_constant_merge_pass();
     passmgr.add_function_inlining_pass();

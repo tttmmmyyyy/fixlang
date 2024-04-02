@@ -64,7 +64,6 @@ use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
-use llvm_passes::*;
 use misc::*;
 use object::*;
 use parser::*;
