@@ -1298,6 +1298,8 @@ impl Program {
     }
 
     pub fn check_type_and_trait_name_collision(&self) {
+        // In fact, this validation is not necessary for almost all behavior of Fix;
+        // This is effective only for avoiding ambiguous import statement.
         let type_names = self.tycon_names_with_aliases_vec();
         let trait_names = self.trait_names_with_aliases();
         for ty_name in type_names {
