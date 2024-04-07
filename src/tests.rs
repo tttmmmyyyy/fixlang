@@ -5869,3 +5869,27 @@ pub fn test_duplicated_struct_name() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_ambiguous_struct_name() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    namespace A {
+        type Hoge = unbox struct { data : I64 };
+    }
+
+    namespace B {
+        type Hoge = unbox struct { data : I64 };
+    }
+
+    main : IO ();
+    main = (
+        let x = Hoge { data : 42 };
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
