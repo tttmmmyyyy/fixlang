@@ -499,7 +499,9 @@ impl TraitEnv {
         }
         // Circular aliasing will be detected in `TraitEnv::resolve_aliases`.
 
+        // Forbid unrelated trait method:
         // Check that the type variable in trait definition appears each of the methods' type.
+        // This assumption is used in `InstanciatedSymbol::dependent_modules`.
         for (_trait_id, trait_info) in &self.traits {
             for (method_name, method_ty) in &trait_info.methods {
                 if !method_ty.ty.contains_tyvar(&trait_info.type_var) {
