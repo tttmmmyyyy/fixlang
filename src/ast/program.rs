@@ -284,7 +284,7 @@ pub struct Program {
     // Import statements. Key is the name of the importer module.
     // Each module implicitly imports itself.
     // This is used to namespace resolution and overloading resolution.
-    pub import_statements: HashMap<Name, Vec<ImportStatement>>,
+    pub mod_to_import_stmts: HashMap<Name, Vec<ImportStatement>>,
     // For each module, the path to the source file.
     pub module_to_files: HashMap<Name, SourceFile>,
 }
@@ -293,7 +293,7 @@ impl Program {
     // Create a program consists of single module.
     pub fn single_module(module_name: Name, src: &SourceFile) -> Program {
         let mut fix_mod = Program {
-            import_statements: Default::default(),
+            mod_to_import_stmts: Default::default(),
             type_defns: Default::default(),
             global_values: Default::default(),
             instantiated_symbols: Default::default(),
@@ -339,6 +339,10 @@ impl Program {
         panic!("")
     }
 
+    pub fn is_linked(&self, mod_name: &Name) -> bool {
+        self.mod_to_import_stmts.contains_key(mod_name)
+    }
+
     // Add import statements.
     pub fn add_import_statements(&mut self, imports: Vec<ImportStatement>) {
         for stmt in imports {
@@ -361,7 +365,7 @@ impl Program {
         // When user imports `Std` explicitly, remove implicit `Std` import statement.
         if import_statement.module == STD_NAME {
             let stmts = self
-                .import_statements
+                .mod_to_import_stmts
                 .get_mut(&import_statement.importer)
                 .unwrap();
             *stmts = std::mem::replace(stmts, vec![])
@@ -375,12 +379,20 @@ impl Program {
 
     pub fn add_import_statement_no_verify(&mut self, import_statement: ImportStatement) {
         let importer = &import_statement.importer;
-        if let Some(stmts) = self.import_statements.get_mut(importer) {
+        if let Some(stmts) = self.mod_to_import_stmts.get_mut(importer) {
             stmts.push(import_statement);
         } else {
-            self.import_statements
+            self.mod_to_import_stmts
                 .insert(importer.clone(), vec![import_statement]);
         }
+    }
+
+    pub fn import_statements(&self) -> Vec<ImportStatement> {
+        self.mod_to_import_stmts
+            .values()
+            .flat_map(|stmts| stmts.iter())
+            .cloned()
+            .collect()
     }
 
     // Add traits.
@@ -681,7 +693,7 @@ impl Program {
         let nrctx = NameResolutionContext {
             types: self.tycon_names_with_aliases(),
             traits: self.trait_names_with_aliases(),
-            import_statements: self.import_statements[define_module].clone(),
+            import_statements: self.mod_to_import_stmts[define_module].clone(),
         };
         te.expr = te.expr.resolve_namespace(&nrctx);
 
@@ -941,7 +953,7 @@ impl Program {
         {
             let mut tycons = (*self.type_env.tycons).clone();
             for (tc, ti) in &mut tycons {
-                ctx.import_statements = self.import_statements[&tc.name.module()].clone();
+                ctx.import_statements = self.mod_to_import_stmts[&tc.name.module()].clone();
                 ti.resolve_namespace(&ctx);
             }
             self.type_env.tycons = Arc::new(tycons);
@@ -950,20 +962,20 @@ impl Program {
         {
             let mut aliases = (*self.type_env.aliases).clone();
             for (tc, ta) in &mut aliases {
-                ctx.import_statements = self.import_statements[&tc.name.module()].clone();
+                ctx.import_statements = self.mod_to_import_stmts[&tc.name.module()].clone();
                 ta.resolve_namespace(&ctx);
             }
             self.type_env.aliases = Arc::new(aliases);
         }
 
         self.trait_env
-            .resolve_namespace(&mut ctx, &self.import_statements);
+            .resolve_namespace(&mut ctx, &self.mod_to_import_stmts);
         for decl in &mut self.type_defns {
-            ctx.import_statements = self.import_statements[&decl.name.module()].clone();
+            ctx.import_statements = self.mod_to_import_stmts[&decl.name.module()].clone();
             decl.resolve_namespace(&ctx);
         }
         for (name, sym) in &mut self.global_values {
-            ctx.import_statements = self.import_statements[&name.module()].clone();
+            ctx.import_statements = self.mod_to_import_stmts[&name.module()].clone();
             sym.resolve_namespace_in_declaration(&ctx);
         }
     }
@@ -1101,7 +1113,7 @@ impl Program {
     }
 
     pub fn linked_mods(&self) -> HashSet<Name> {
-        self.import_statements.keys().cloned().collect()
+        self.mod_to_import_stmts.keys().cloned().collect()
     }
 
     // Link an module.
@@ -1136,11 +1148,11 @@ impl Program {
         }
 
         // Merge visible_mods.
-        for (importer, importee) in &other.import_statements {
-            if let Some(old_importee) = self.import_statements.get_mut(importer) {
+        for (importer, importee) in &other.mod_to_import_stmts {
+            if let Some(old_importee) = self.mod_to_import_stmts.get_mut(importer) {
                 old_importee.extend(importee.iter().cloned());
             } else {
-                self.import_statements
+                self.mod_to_import_stmts
                     .insert(importer.clone(), importee.clone());
             }
         }
@@ -1166,16 +1178,17 @@ impl Program {
     // Link built-in modules following unsolved import statements.
     // This function may mutate config to add dynamically linked libraries.
     pub fn resolve_imports(&mut self, config: &mut Configuration) {
-        let mut import_stmts = vec![];
-        for (_mod_name, stmts) in &self.import_statements {
-            import_stmts.append(&mut stmts.clone());
-        }
+        let mut unresolved_imports = self.import_statements();
 
-        for import_stmt in import_stmts {
+        loop {
+            if unresolved_imports.is_empty() {
+                break;
+            }
+            let import_stmt = unresolved_imports.pop().unwrap();
             let module = import_stmt.module;
 
             // If import is already resolved, do nothing.
-            if self.import_statements.contains_key(&module) {
+            if self.is_linked(&module) {
                 continue;
             }
 
@@ -1189,6 +1202,7 @@ impl Program {
                     if let Some(mod_modifier) = mod_modifier {
                         mod_modifier(&mut fixmod);
                     }
+                    unresolved_imports.append(&mut fixmod.import_statements());
                     self.link(fixmod, false);
                     if let Some(config_modifier) = config_modifier {
                         config_modifier(config);
@@ -1211,7 +1225,7 @@ impl Program {
     // Create a graph of modules. If module A imports module B, an edge from A to B is added.
     pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
-        for (importer, stmts) in &self.import_statements {
+        for (importer, stmts) in &self.mod_to_import_stmts {
             for stmt in stmts {
                 graph.connect(
                     *elem_to_idx.get(importer).unwrap(),
