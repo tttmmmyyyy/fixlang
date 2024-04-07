@@ -6079,3 +6079,22 @@ pub fn test_import_hiding_unnecessary() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_type_and_trait_name_collision() {
+    let source = r##"
+    module Main;
+
+    type Piyo = unbox struct { data : String };
+    trait a : Piyo {
+        val : a;
+    }
+
+    main : IO ();
+    main = (
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
