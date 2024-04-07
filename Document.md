@@ -777,6 +777,87 @@ There is one special module: `Std`. This is a module of built-in entities. `Std`
 
 There are also other convenient modules which is included in fix's compiler, such as `Debug` or `HashMap`. To import these modules, you need to write import statements explicitly, but no need for adding source files to arguments of `fix run` or `fix build` command.
 
+By writing `module {module_name};`, all entities defined in a module is imported. 
+It is also possible to import only certain entities, or exclude certain entities.
+
+For example, in the following program, three types `Std::IO`, `Std::Tuple0` (which is the textual name of `()`), `Std::String` and a symbol `Std::IO::println` are used.
+
+```
+module Main;
+
+main : IO ();
+main = (
+    println("Hello, World!")
+);
+```
+
+If you want to import only entities that are actually used, you can write:
+
+```
+module Main;
+import Std::{IO, Tuple0, String, IO::println};
+
+main : IO ();
+main = (
+    println("Hello, World!")
+);
+```
+
+If importing any entities in the `Std::IO` namespace is OK, you can write:
+
+```
+module Main;
+import Std::{IO, Tuple0, String, IO::*};
+
+main : IO ();
+main = (
+    println("Hello, World!")
+);
+```
+
+Writing `import Std::*;` has the same effect as writing `import Std;`.
+
+The `Std` module provides a type `Tuple2`, whose value is constructed by writing `(x, y)`. 
+Assume that you are defining and using your own `Tuple2`:
+
+```
+module Main;
+
+type Tuple2 a b = struct { fst : a, snd : b };
+
+impl [a : ToString, b : ToString] Tuple2 a b : ToString {
+    to_string = |t| "(" + t.@fst.to_string + ", " + t.@snd.to_string + ")";
+}
+
+main : IO ();
+main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
+```
+
+The above code cannot be compiled because there are two types named as `Tuple2`.
+
+```
+error: Type name `Tuple2` is ambiguous. There are `Main::Tuple2`, `Std::Tuple2`.
+```
+
+One solution for this issue is adding `import Std` explicitly and hiding `Tuple2`:
+
+```
+module Main;
+
+import Std hiding Tuple2;
+
+type Tuple2 a b = struct { fst : a, snd : b };
+
+impl [a : ToString, b : ToString] Tuple2 a b : ToString {
+    to_string = |t| "(" + t.@fst.to_string + ", " + t.@snd.to_string + ")";
+}
+
+main : IO ();
+main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
+```
+
+Of course, you can also resolve this issue by adding `Main::` in front of each occurrence of `Tuple2`.
+
 ## Namespaces and overloading
 
 Entities (global values, types and traits) in Fix can be overloaded in the sense that they can have conflicting name. 

@@ -6066,7 +6066,7 @@ pub fn test_import_hiding_necessary() {
 pub fn test_import_hiding_unnecessary() {
     let source = r##"
     module Main;
-    import Std hiding {Array, Tuple2};
+    import Std hiding Tuple2;
 
     type Tuple2 a b = struct { fst : a, snd : b };
 
@@ -6075,9 +6075,7 @@ pub fn test_import_hiding_unnecessary() {
     }
 
     main : IO ();
-    main = (
-        println(Tuple2 { fst : "Hello", snd : "World!" }.to_string)
-    );
+    main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
