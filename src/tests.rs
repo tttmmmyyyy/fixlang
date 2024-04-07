@@ -5945,3 +5945,17 @@ pub fn test_ambiguous_trait_name() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_import_unknown_module() {
+    let source = r##"
+    module Main;
+
+    import Piyo;
+
+    main : IO ();
+    main = pure();
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}

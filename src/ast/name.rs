@@ -159,4 +159,14 @@ impl FullName {
     pub fn name_as_mut(&mut self) -> &mut Name {
         &mut self.name
     }
+
+    // Pop the first component.
+    // If the namespace is empty, return false.
+    pub fn pop_front_namespace(&mut self) -> bool {
+        if self.namespace.names.is_empty() {
+            return false;
+        }
+        self.namespace.names.remove(0);
+        true
+    }
 }

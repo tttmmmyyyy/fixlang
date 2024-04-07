@@ -1703,11 +1703,56 @@ fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
 fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportStatement {
     assert_eq!(pair.as_rule(), Rule::import_statement);
     let span = Span::from_pair(&ctx.source, &pair);
-    let target_module = pair.into_inner().next().unwrap().as_str().to_string();
-    ImportStatement {
-        source_module: ctx.module_name.clone(),
-        target_module,
+    let mut pairs = pair.into_inner();
+    let module = pairs.next().unwrap().as_str().to_string();
+    let mut stmt = ImportStatement {
+        importer: ctx.module_name.clone(),
+        module,
+        items: vec![ImportItem::Any],
+        hiding: vec![],
         source: Some(span),
+        implicit: false,
+    };
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::import_items_positive => {
+                stmt.items = parse_import_items(pair.into_inner().next().unwrap(), ctx);
+            }
+            Rule::import_items_negative => {
+                stmt.hiding = parse_import_items(pair.into_inner().next().unwrap(), ctx);
+            }
+            _ => unreachable!(),
+        }
+    }
+    stmt
+}
+
+fn parse_import_items(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportItem> {
+    assert!(
+        pair.as_rule() == Rule::import_items_positive
+            || pair.as_rule() == Rule::import_items_negative
+    );
+    pair.into_inner()
+        .map(|pair| parse_import_item(pair, ctx))
+        .collect()
+}
+
+fn parse_import_item(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportItem {
+    assert_eq!(pair.as_rule(), Rule::import_item);
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::import_item_any => ImportItem::Any,
+        Rule::import_item_symbol => ImportItem::Symbol(pair.as_str().to_string()),
+        Rule::import_item_capital_item => {
+            let mut pairs = pair.into_inner();
+            let capital_name = pairs.next().unwrap().as_str().to_string();
+            if let Some(pair) = pairs.next() {
+                ImportItem::NameSpace(capital_name, parse_import_items(pair, ctx))
+            } else {
+                ImportItem::TypeOrTrait(capital_name)
+            }
+        }
+        _ => unreachable!(),
     }
 }
 

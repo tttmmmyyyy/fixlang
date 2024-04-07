@@ -235,7 +235,23 @@ global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semi
 global_name_defn = { var ~ sep+ ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
 
 // === Import statements === 
-import_statement = { "import" ~ sep+ ~ namespace_item ~ sep* ~ semicolon }
+import_statement = { "import" ~ sep+ ~ importee ~ sep* ~ semicolon }
+
+importee = { namespace_item ~ (sep* ~ import_items_positive)? ~ (sep* ~ import_items_negative)? }
+
+import_items_positive = { "::" ~ sep* ~ import_items }
+
+import_items_negative = { "hiding" ~ sep+ ~ import_items }
+
+import_items = { import_item | ("{" ~ sep* ~ (import_item ~ (sep* ~ "," ~ sep* ~ import_item)*)? ~ sep* ~ "}") }
+
+import_item = { import_item_any | import_item_symbol | import_item_capital_item } 
+
+import_item_any = { "*" }
+
+import_item_symbol = { var }
+
+import_item_capital_item = { namespace_item ~ (sep* ~ "::" ~ sep* ~ import_items)? } // Type name and trait name also matches to `namespace_item`.
 
 // === Module ===
 module_defn = { "module" ~ sep+ ~ namespace_item ~ sep* ~ semicolon }

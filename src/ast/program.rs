@@ -1,6 +1,6 @@
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
-use std::{io::Write, sync::Arc};
+use std::{io::Write, sync::Arc, vec};
 
 use super::*;
 
@@ -198,7 +198,7 @@ impl MethodImpl {
 pub struct NameResolutionContext {
     pub types: HashSet<FullName>,
     pub traits: HashSet<FullName>,
-    pub imported_modules: HashSet<Name>,
+    pub import_statements: Vec<ImportStatement>,
 }
 
 #[derive(PartialEq)]
@@ -220,7 +220,7 @@ impl<'a> NameResolutionContext {
         };
         let candidates = candidates
             .iter()
-            .filter(|name| self.imported_modules.contains(&name.module()))
+            .filter(|name| import::is_accessible(&self.import_statements, name))
             .filter_map(|id| {
                 if ns.is_suffix(id) {
                     Some(id.clone())
@@ -281,12 +281,10 @@ pub struct Program {
     pub trait_env: TraitEnv,
     pub type_env: TypeEnv,
 
-    // Import statements to be resolved.
-    pub unresolved_imports: Vec<ImportStatement>,
-    // For each linked module `m`, `visible_mods[m]` is the set of modules imported by `m`.
-    // Each module imports itself.
+    // Import statements. Key is the name of the importer module.
+    // Each module implicitly imports itself.
     // This is used to namespace resolution and overloading resolution.
-    pub visible_mods: HashMap<Name, HashSet<Name>>,
+    pub import_statements: HashMap<Name, Vec<ImportStatement>>,
     // For each module, the path to the source file.
     pub module_to_files: HashMap<Name, SourceFile>,
 }
@@ -295,8 +293,7 @@ impl Program {
     // Create a program consists of single module.
     pub fn single_module(module_name: Name, src: &SourceFile) -> Program {
         let mut fix_mod = Program {
-            unresolved_imports: vec![],
-            visible_mods: Default::default(),
+            import_statements: Default::default(),
             type_defns: Default::default(),
             global_values: Default::default(),
             instantiated_symbols: Default::default(),
@@ -306,8 +303,12 @@ impl Program {
             used_tuple_sizes: (0..=TUPLE_SIZE_BASE).filter(|i| *i != 1).collect(),
             module_to_files: Default::default(),
         };
-        fix_mod.add_visible_mod(&module_name, &module_name);
-        fix_mod.add_visible_mod(&module_name, &STD_NAME.to_string());
+        fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
+            module_name.clone(),
+        ));
+        fix_mod.add_import_statement_no_verify(ImportStatement::implicit_std_import(
+            module_name.clone(),
+        ));
         fix_mod.module_to_files.insert(module_name, src.clone());
         fix_mod
     }
@@ -339,11 +340,47 @@ impl Program {
     }
 
     // Add import statements.
-    pub fn add_import_statements(&mut self, mut imports: Vec<ImportStatement>) {
-        for import in &imports {
-            self.add_visible_mod(&import.source_module, &import.target_module);
+    pub fn add_import_statements(&mut self, imports: Vec<ImportStatement>) {
+        for stmt in imports {
+            self.add_import_statement(stmt);
         }
-        self.unresolved_imports.append(&mut imports);
+    }
+
+    pub fn add_import_statement(&mut self, import_statement: ImportStatement) {
+        // Refuse importing the module itself.
+        if import_statement.module == import_statement.importer {
+            error_exit_with_src(
+                &format!(
+                    "Module `{}` cannot import itself.",
+                    import_statement.module.to_string()
+                ),
+                &import_statement.source,
+            );
+        }
+
+        // When user imports `Std` explicitly, remove implicit `Std` import statement.
+        if import_statement.module == STD_NAME {
+            let stmts = self
+                .import_statements
+                .get_mut(&import_statement.importer)
+                .unwrap();
+            *stmts = std::mem::replace(stmts, vec![])
+                .into_iter()
+                .filter(|stmt| !(stmt.module == STD_NAME && stmt.implicit))
+                .collect();
+        }
+
+        self.add_import_statement_no_verify(import_statement);
+    }
+
+    pub fn add_import_statement_no_verify(&mut self, import_statement: ImportStatement) {
+        let importer = &import_statement.importer;
+        if let Some(stmts) = self.import_statements.get_mut(importer) {
+            stmts.push(import_statement);
+        } else {
+            self.import_statements
+                .insert(importer.clone(), vec![import_statement]);
+        }
     }
 
     // Add traits.
@@ -644,7 +681,7 @@ impl Program {
         let nrctx = NameResolutionContext {
             types: self.tycon_names_with_aliases(),
             traits: self.trait_names_with_aliases(),
-            imported_modules: self.visible_mods[define_module].clone(),
+            import_statements: self.import_statements[define_module].clone(),
         };
         te.expr = te.expr.resolve_namespace(&nrctx);
 
@@ -898,13 +935,13 @@ impl Program {
         let mut ctx = NameResolutionContext {
             types: self.tycon_names_with_aliases(),
             traits: self.trait_names_with_aliases(),
-            imported_modules: HashSet::default(),
+            import_statements: vec![],
         };
         // Resolve namespaces in type constructors.
         {
             let mut tycons = (*self.type_env.tycons).clone();
             for (tc, ti) in &mut tycons {
-                ctx.imported_modules = self.visible_mods[&tc.name.module()].clone();
+                ctx.import_statements = self.import_statements[&tc.name.module()].clone();
                 ti.resolve_namespace(&ctx);
             }
             self.type_env.tycons = Arc::new(tycons);
@@ -913,20 +950,20 @@ impl Program {
         {
             let mut aliases = (*self.type_env.aliases).clone();
             for (tc, ta) in &mut aliases {
-                ctx.imported_modules = self.visible_mods[&tc.name.module()].clone();
+                ctx.import_statements = self.import_statements[&tc.name.module()].clone();
                 ta.resolve_namespace(&ctx);
             }
             self.type_env.aliases = Arc::new(aliases);
         }
 
         self.trait_env
-            .resolve_namespace(&mut ctx, &self.visible_mods);
+            .resolve_namespace(&mut ctx, &self.import_statements);
         for decl in &mut self.type_defns {
-            ctx.imported_modules = self.visible_mods[&decl.name.module()].clone();
+            ctx.import_statements = self.import_statements[&decl.name.module()].clone();
             decl.resolve_namespace(&ctx);
         }
         for (name, sym) in &mut self.global_values {
-            ctx.imported_modules = self.visible_mods[&name.module()].clone();
+            ctx.import_statements = self.import_statements[&name.module()].clone();
             sym.resolve_namespace_in_declaration(&ctx);
         }
     }
@@ -1064,7 +1101,7 @@ impl Program {
     }
 
     pub fn linked_mods(&self) -> HashSet<Name> {
-        self.visible_mods.keys().cloned().collect()
+        self.import_statements.keys().cloned().collect()
     }
 
     // Link an module.
@@ -1099,17 +1136,14 @@ impl Program {
         }
 
         // Merge visible_mods.
-        for (importer, importee) in &other.visible_mods {
-            if let Some(old_importee) = self.visible_mods.get_mut(importer) {
+        for (importer, importee) in &other.import_statements {
+            if let Some(old_importee) = self.import_statements.get_mut(importer) {
                 old_importee.extend(importee.iter().cloned());
             } else {
-                self.visible_mods.insert(importer.clone(), importee.clone());
+                self.import_statements
+                    .insert(importer.clone(), importee.clone());
             }
         }
-
-        // Merge unresolved_imports.
-        self.unresolved_imports
-            .append(&mut other.unresolved_imports);
 
         // Merge types.
         self.add_type_defns(other.type_defns);
@@ -1132,11 +1166,16 @@ impl Program {
     // Link built-in modules following unsolved import statements.
     // This function may mutate config to add dynamically linked libraries.
     pub fn resolve_imports(&mut self, config: &mut Configuration) {
-        while self.unresolved_imports.len() > 0 {
-            let import = self.unresolved_imports.pop().unwrap();
+        let mut import_stmts = vec![];
+        for (_mod_name, stmts) in &self.import_statements {
+            import_stmts.append(&mut stmts.clone());
+        }
+
+        for import_stmt in import_stmts {
+            let module = import_stmt.module;
 
             // If import is already resolved, do nothing.
-            if self.visible_mods.contains_key(&import.target_module) {
+            if self.import_statements.contains_key(&module) {
                 continue;
             }
 
@@ -1145,7 +1184,7 @@ impl Program {
             for (mod_name, source_content, file_name, config_modifier, mod_modifier) in
                 STANDARD_LIBRARIES
             {
-                if import.target_module == *mod_name {
+                if module == *mod_name {
                     let mut fixmod = parse_and_save_to_temporary_file(source_content, file_name);
                     if let Some(mod_modifier) = mod_modifier {
                         mod_modifier(&mut fixmod);
@@ -1163,31 +1202,20 @@ impl Program {
             }
 
             error_exit_with_src(
-                &format!("Cannot find module `{}`", import.target_module),
-                &import.source,
+                &format!("Cannot find module `{}`", module),
+                &import_stmt.source,
             );
         }
-    }
-
-    pub fn add_visible_mod(&mut self, importer: &Name, imported: &Name) {
-        if !self.visible_mods.contains_key(importer) {
-            self.visible_mods
-                .insert(importer.clone(), Default::default());
-        }
-        self.visible_mods
-            .get_mut(importer)
-            .unwrap()
-            .insert(imported.clone());
     }
 
     // Create a graph of modules. If module A imports module B, an edge from A to B is added.
     pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
-        for (importer, importees) in &self.visible_mods {
-            for importee in importees {
+        for (importer, stmts) in &self.import_statements {
+            for stmt in stmts {
                 graph.connect(
                     *elem_to_idx.get(importer).unwrap(),
-                    *elem_to_idx.get(importee).unwrap(),
+                    *elem_to_idx.get(&stmt.module).unwrap(),
                 );
             }
         }

@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use self::ast::import;
+
 use super::*;
 
 #[derive(Clone)]
@@ -79,7 +81,7 @@ where
     fn overloaded_candidates(
         &self,
         name: &FullName,
-        imported_modules: &HashSet<Name>,
+        import_stmts: &[ImportStatement],
     ) -> Vec<(NameSpace, T)> {
         if !self.var.contains_key(&name.name) {
             return vec![];
@@ -90,7 +92,9 @@ where
         } else {
             sv.global
                 .iter()
-                .filter(|(ns, _)| imported_modules.contains(&ns.module()))
+                .filter(|(ns, _)| {
+                    import::is_accessible(import_stmts, &FullName::new(ns, &name.name))
+                })
                 .filter(|(ns, _)| name.namespace.is_suffix(ns))
                 .map(|(ns, v)| (ns.clone(), v.clone()))
                 .collect()
@@ -376,9 +380,9 @@ pub struct TypeCheckContext {
     trait_env: TraitEnv,
     // List of type constructors.
     pub type_env: TypeEnv,
-    // A map to represent modules imported by each submodule.
-    // To decrease clone-cost, use Rc.
-    pub imported_mod_map: Arc<HashMap<Name, HashSet<Name>>>,
+    // A map from a module to the import statements.
+    // To decrease clone-cost, wrap it in reference counter.
+    pub import_statements: Arc<HashMap<Name, Vec<ImportStatement>>>,
     // In which module is the current expression defined?
     // This is used as a state variable for typechecking.
     pub current_module: Option<Name>,
@@ -431,7 +435,7 @@ impl TypeCheckContext {
     pub fn new(
         trait_env: TraitEnv,
         type_env: TypeEnv,
-        imported_mod_map: HashMap<Name, HashSet<Name>>,
+        import_statements: HashMap<Name, Vec<ImportStatement>>,
     ) -> Self {
         let mut resolver = TypeResolver::default();
         resolver.set_type_env(type_env.clone());
@@ -442,14 +446,14 @@ impl TypeCheckContext {
             predicates: Default::default(),
             type_env,
             trait_env,
-            imported_mod_map: Arc::new(imported_mod_map),
+            import_statements: Arc::new(import_statements),
             current_module: None,
         }
     }
 
     // Get modules imported by current module.
-    pub fn imported_modules(&self) -> &HashSet<Name> {
-        self.imported_mod_map
+    pub fn imported_statements(&self) -> &Vec<ImportStatement> {
+        self.import_statements
             .get(self.current_module.as_ref().unwrap())
             .unwrap()
     }
@@ -522,7 +526,7 @@ impl TypeCheckContext {
             Expr::Var(var) => {
                 let candidates = self
                     .scope
-                    .overloaded_candidates(&var.name, self.imported_modules());
+                    .overloaded_candidates(&var.name, self.imported_statements());
                 if candidates.is_empty() {
                     error_exit_with_src(
                         &format!("No value `{}` is found.", var.name.to_string()),

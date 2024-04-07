@@ -642,17 +642,17 @@ impl TraitEnv {
     pub fn resolve_namespace(
         &mut self,
         ctx: &mut NameResolutionContext,
-        imported_modules: &HashMap<Name, HashSet<Name>>,
+        imported_modules: &HashMap<Name, Vec<ImportStatement>>,
     ) {
         // Resolve names in trait aliases.
         for (trait_id, alias_info) in &mut self.aliases {
-            ctx.imported_modules = imported_modules[&trait_id.name.module()].clone();
+            ctx.import_statements = imported_modules[&trait_id.name.module()].clone();
             alias_info.resolve_namespace(ctx);
         }
 
         // Resolve names in trait definitions.
         for (trait_id, trait_info) in &mut self.traits {
-            ctx.imported_modules = imported_modules[&trait_id.name.module()].clone();
+            ctx.import_statements = imported_modules[&trait_id.name.module()].clone();
             // Keys in self.traits should already be resolved.
             assert!(
                 trait_id.name
@@ -669,7 +669,7 @@ impl TraitEnv {
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Set up NameResolutionContext.
-                ctx.imported_modules = imported_modules[&inst.define_module].clone();
+                ctx.import_statements = imported_modules[&inst.define_module].clone();
 
                 // Resolve trait_id's namespace.
                 let mut trait_id = trait_id.clone();

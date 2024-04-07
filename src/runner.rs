@@ -57,7 +57,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     let mut typechecker = TypeCheckContext::new(
         program.trait_env.clone(),
         program.type_env(),
-        program.visible_mods.clone(),
+        program.import_statements.clone(),
     );
 
     // Register type declarations of global symbols to typechecker.
