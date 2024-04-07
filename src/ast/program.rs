@@ -459,6 +459,19 @@ impl Program {
         res
     }
 
+    // Get of list of tycons that can be used for namespace resolution.
+    pub fn tycon_names_with_aliases_vec(&self) -> Vec<FullName> {
+        let mut res: Vec<FullName> = Default::default();
+        res.reserve_exact(self.type_env.tycons.len() + self.type_env.aliases.len());
+        for (k, _) in self.type_env().tycons.iter() {
+            res.push(k.name.clone());
+        }
+        for (k, _) in self.type_env().aliases.iter() {
+            res.push(k.name.clone());
+        }
+        res
+    }
+
     // Get of list of traits that can be used for namespace resolution.
     pub fn trait_names_with_aliases(&self) -> HashSet<FullName> {
         self.trait_env.trait_names()
@@ -1282,5 +1295,18 @@ impl Program {
             mod_to_hash.insert(module.clone(), self.module_dependency_hash(&module));
         }
         mod_to_hash
+    }
+
+    pub fn check_type_and_trait_name_collision(&self) {
+        let type_names = self.tycon_names_with_aliases_vec();
+        let trait_names = self.trait_names_with_aliases();
+        for ty_name in type_names {
+            if trait_names.contains(&ty_name) {
+                error_exit(&format!(
+                    "Type and trait cannot have the same name: `{}`.",
+                    ty_name.to_string()
+                ));
+            }
+        }
     }
 }
