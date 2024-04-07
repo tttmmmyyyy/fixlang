@@ -5851,3 +5851,21 @@ pub fn test_split_by_max_size() {
     let result = split_by_max_size(v, 3);
     assert_eq!(result, vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8]]);
 }
+
+#[test]
+#[should_panic]
+pub fn test_duplicated_struct_name() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    type Hoge = unbox struct { data : I64 };
+    type Hoge = unbox struct { data : I32 };
+
+    main : IO ();
+    main = (
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
