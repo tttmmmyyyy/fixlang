@@ -243,10 +243,25 @@ impl<'a> NameResolutionContext {
             Ok(candidates[0].clone())
         } else {
             // candidates.len() >= 2
+            let mut candidates = candidates
+                .iter()
+                .map(|id| "`".to_string() + &id.to_string() + "`")
+                .collect::<Vec<_>>();
+            candidates.sort(); // Sort for deterministic error message.
+            let candidates = candidates.join(", ");
+
             let msg = if type_or_trait == NameResolutionType::Type {
-                format!("Type name `{}` is ambiguous.", ns.to_string())
+                format!(
+                    "Type name `{}` is ambiguous. There are {}.",
+                    ns.to_string(),
+                    candidates
+                )
             } else {
-                format!("Trait name `{}` is ambiguous.", ns.to_string())
+                format!(
+                    "Trait name `{}` is ambiguous. There are {}.",
+                    ns.to_string(),
+                    candidates
+                )
             };
             Err(msg)
         }
