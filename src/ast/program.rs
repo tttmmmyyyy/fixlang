@@ -210,7 +210,7 @@ pub enum NameResolutionType {
 impl<'a> NameResolutionContext {
     pub fn resolve(
         &self,
-        ns: &FullName,
+        short_name: &FullName,
         type_or_trait: NameResolutionType,
     ) -> Result<FullName, String> {
         let candidates = if type_or_trait == NameResolutionType::Type {
@@ -222,7 +222,7 @@ impl<'a> NameResolutionContext {
             .iter()
             .filter(|name| import::is_accessible(&self.import_statements, name))
             .filter_map(|id| {
-                if ns.is_suffix(id) {
+                if short_name.is_suffix(id) {
                     Some(id.clone())
                 } else {
                     None
@@ -232,10 +232,10 @@ impl<'a> NameResolutionContext {
         if candidates.len() == 0 {
             let msg = match type_or_trait {
                 NameResolutionType::Type => {
-                    format!("Unknown type name `{}`.", ns.to_string())
+                    format!("Unknown type name `{}`.", short_name.to_string())
                 }
                 NameResolutionType::Trait => {
-                    format!("Unknown trait name `{}`.", ns.to_string())
+                    format!("Unknown trait name `{}`.", short_name.to_string())
                 }
             };
             Err(msg)
@@ -253,13 +253,13 @@ impl<'a> NameResolutionContext {
             let msg = if type_or_trait == NameResolutionType::Type {
                 format!(
                     "Type name `{}` is ambiguous. There are {}.",
-                    ns.to_string(),
+                    short_name.to_string(),
                     candidates
                 )
             } else {
                 format!(
                     "Trait name `{}` is ambiguous. There are {}.",
-                    ns.to_string(),
+                    short_name.to_string(),
                     candidates
                 )
             };
