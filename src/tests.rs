@@ -5961,6 +5961,21 @@ pub fn test_import_unknown_module() {
 }
 
 #[test]
+#[should_panic]
+pub fn test_import_empty() {
+    let source = r##"
+    module Main;
+    import Std::{};
+
+    main : IO ();
+    main = (
+        println("Hello, World!")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
 pub fn test_import_any() {
     let source = r##"
     module Main;
@@ -5969,6 +5984,99 @@ pub fn test_import_any() {
     main : IO ();
     main = (
         println("Hello, World!")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_import_hiding_any() {
+    let source = r##"
+    module Main;
+    import Std::* hiding *;
+
+    main : IO ();
+    main = (
+        println("Hello, World!")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_import_only_necessary() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, String, IO::println};
+
+    main : IO ();
+    main = (
+        println("Hello, World!") // Cannot use `println`.
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_import_any_in_namespace() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, String, IO::*};
+
+    main : IO ();
+    main = (
+        println("Hello, World!")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_import_insufficient() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, IO::println};
+
+    main : IO ();
+    main = (
+        println("Hello, World!")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_import_hiding_necessary() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, String, IO::println} hiding IO;
+
+    main : IO ();
+    main = (
+        println("Hello, World!")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_import_hiding_unnecessary() {
+    let source = r##"
+    module Main;
+    import Std hiding {Array, Tuple2};
+
+    type Tuple2 a b = struct { fst : a, snd : b };
+
+    impl [a : ToString, b : ToString] Tuple2 a b : ToString {
+        to_string = |t| "(" + t.@fst.to_string + ", " + t.@snd.to_string + ")";
+    }
+
+    main : IO ();
+    main = (
+        println(Tuple2 { fst : "Hello", snd : "World!" }.to_string)
     );
     "##;
     test_source(&source, Configuration::develop_compiler());

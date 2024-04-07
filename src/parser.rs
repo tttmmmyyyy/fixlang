@@ -1718,10 +1718,10 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
     for pair in importee_pairs {
         match pair.as_rule() {
             Rule::import_items_positive => {
-                stmt.items = parse_import_items(pair, ctx);
+                stmt.items = parse_import_items_positive(pair, ctx);
             }
             Rule::import_items_negative => {
-                stmt.hiding = parse_import_items(pair, ctx);
+                stmt.hiding = parse_import_items_negative(pair, ctx);
             }
             _ => unreachable!(),
         }
@@ -1729,13 +1729,20 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
     stmt
 }
 
-fn parse_import_items(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportItem> {
-    assert!(
-        pair.as_rule() == Rule::import_items_positive
-            || pair.as_rule() == Rule::import_items_negative
-    );
+fn parse_import_items_positive(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportItem> {
+    assert_eq!(pair.as_rule(), Rule::import_items_positive);
     let pair = pair.into_inner().next().unwrap();
-    assert_eq!(pair.as_rule(), Rule::import_items);
+    parse_import_items(pair, ctx)
+}
+
+fn parse_import_items_negative(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportItem> {
+    assert_eq!(pair.as_rule(), Rule::import_items_negative);
+    let pair = pair.into_inner().next().unwrap();
+    parse_import_items(pair, ctx)
+}
+
+fn parse_import_items(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportItem> {
+    assert!(pair.as_rule() == Rule::import_items);
     pair.into_inner()
         .map(|pair| parse_import_item(pair, ctx))
         .collect()
