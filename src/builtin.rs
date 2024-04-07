@@ -1499,13 +1499,13 @@ pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafeSetArrayBody {
+pub struct InlineLLVMArrayUnsafeSetBody {
     arr_name: String,
     idx_name: String,
     value_name: String,
 }
 
-impl InlineLLVMUnsafeSetArrayBody {
+impl InlineLLVMArrayUnsafeSetBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1548,7 +1548,7 @@ pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             expr_abs(
                 vec![var_local(ARR_NAME)],
                 expr_llvm(
-                    LLVMGenerator::UnsafeSetArrayBody(InlineLLVMUnsafeSetArrayBody {
+                    LLVMGenerator::ArrayUnsafeSetBody(InlineLLVMArrayUnsafeSetBody {
                         arr_name: ARR_NAME.to_string(),
                         idx_name: IDX_NAME.to_string(),
                         value_name: VALUE_NAME.to_string(),
@@ -1581,21 +1581,22 @@ pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafeGetArrayBody {
+pub struct InlineLLVMArrayUnsafeGetBody {
     arr_name: String,
     idx_name: String,
 }
 
-impl InlineLLVMUnsafeGetArrayBody {
+impl InlineLLVMArrayUnsafeGetBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
-        _borrowed_vars: &Vec<FullName>,
+        borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
+        let arr_name = FullName::local(&self.arr_name);
+        let array = gc.get_var(&arr_name).ptr.get(gc);
         let idx = gc
             .get_var_field(&FullName::local(&self.idx_name), 0)
             .into_int_value();
@@ -1608,9 +1609,15 @@ impl InlineLLVMUnsafeGetArrayBody {
             ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx, rvo);
 
         // Release the array.
-        gc.release(array);
+        if !borrowed_vars.contains(&arr_name) {
+            gc.release(array);
+        }
 
         elem
+    }
+
+    pub fn released_vars(&self) -> Vec<FullName> {
+        vec![FullName::local(&self.arr_name)]
     }
 }
 
@@ -1628,7 +1635,7 @@ pub fn unsafe_get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_llvm(
-                LLVMGenerator::UnsafeGetArrayBody(InlineLLVMUnsafeGetArrayBody {
+                LLVMGenerator::ArrayUnsafeGetBody(InlineLLVMArrayUnsafeGetBody {
                     arr_name: ARR_NAME.to_string(),
                     idx_name: IDX_NAME.to_string(),
                 }),
@@ -1651,12 +1658,12 @@ pub fn unsafe_get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafeSetSizeArrayBody {
+pub struct InlineLLVMArrayUnsafeSetSizeBody {
     arr_name: String,
     len_name: String,
 }
 
-impl InlineLLVMUnsafeSetSizeArrayBody {
+impl InlineLLVMArrayUnsafeSetSizeBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1695,7 +1702,7 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_llvm(
-                LLVMGenerator::UnsafeSetSizeArrayBody(InlineLLVMUnsafeSetSizeArrayBody {
+                LLVMGenerator::ArrayUnsafeSetSizeBody(InlineLLVMArrayUnsafeSetSizeBody {
                     arr_name: ARR_NAME.to_string(),
                     len_name: LENGTH_NAME.to_string(),
                 }),
@@ -2149,10 +2156,11 @@ impl InlineLLVMArrayGetPtrBody {
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
-        _borrowed_vars: &Vec<FullName>,
+        borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argment
-        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
+        let arr_name = FullName::local(&self.arr_name);
+        let array = gc.get_var(&arr_name).ptr.get(gc);
 
         // Get pointer
         let ptr = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
@@ -2162,7 +2170,9 @@ impl InlineLLVMArrayGetPtrBody {
         let ptr = gc.cast_pointer(ptr, ptr_ty);
 
         // Release array
-        gc.release(array);
+        if !borrowed_vars.contains(&arr_name) {
+            gc.release(array);
+        }
 
         // Make returned object
         let obj = if rvo.is_some() {
@@ -2179,6 +2189,10 @@ impl InlineLLVMArrayGetPtrBody {
         obj.store_field_nocap(gc, 0, ptr);
 
         obj
+    }
+
+    pub fn released_vars(&self) -> Vec<FullName> {
+        vec![FullName::local(&self.arr_name)]
     }
 }
 
@@ -2284,15 +2298,20 @@ impl InlineLLVMArrayGetCapacityBody {
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
-        _borrowed_vars: &Vec<FullName>,
+        borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let arr_name = FullName::local(&self.arr_name);
+
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
         let len = array_obj
             .load_field_nocap(gc, ARRAY_CAP_IDX)
             .into_int_value();
-        gc.release(array_obj);
+
+        if !borrowed_vars.contains(&arr_name) {
+            gc.release(array_obj);
+        }
+
         let int_obj = if rvo.is_none() {
             allocate_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"))
         } else {
@@ -2300,6 +2319,10 @@ impl InlineLLVMArrayGetCapacityBody {
         };
         int_obj.store_field_nocap(gc, 0, len);
         int_obj
+    }
+
+    pub fn released_vars(&self) -> Vec<FullName> {
+        vec![FullName::local(&self.arr_name)]
     }
 }
 
