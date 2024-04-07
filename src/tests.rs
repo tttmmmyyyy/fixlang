@@ -5959,3 +5959,17 @@ pub fn test_import_unknown_module() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_import_any() {
+    let source = r##"
+    module Main;
+    import Std::*;
+
+    main : IO ();
+    main = (
+        println("Hello, World!")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}

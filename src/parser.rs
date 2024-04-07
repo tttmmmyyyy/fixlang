@@ -1703,8 +1703,10 @@ fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
 fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportStatement {
     assert_eq!(pair.as_rule(), Rule::import_statement);
     let span = Span::from_pair(&ctx.source, &pair);
-    let mut pairs = pair.into_inner();
-    let module = pairs.next().unwrap().as_str().to_string();
+    let pair = pair.into_inner().next().unwrap();
+    assert_eq!(pair.as_rule(), Rule::importee);
+    let mut importee_pairs = pair.into_inner();
+    let module = importee_pairs.next().unwrap().as_str().to_string();
     let mut stmt = ImportStatement {
         importer: ctx.module_name.clone(),
         module,
@@ -1713,13 +1715,13 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
         source: Some(span),
         implicit: false,
     };
-    for pair in pairs {
+    for pair in importee_pairs {
         match pair.as_rule() {
             Rule::import_items_positive => {
-                stmt.items = parse_import_items(pair.into_inner().next().unwrap(), ctx);
+                stmt.items = parse_import_items(pair, ctx);
             }
             Rule::import_items_negative => {
-                stmt.hiding = parse_import_items(pair.into_inner().next().unwrap(), ctx);
+                stmt.hiding = parse_import_items(pair, ctx);
             }
             _ => unreachable!(),
         }
@@ -1732,6 +1734,8 @@ fn parse_import_items(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportIte
         pair.as_rule() == Rule::import_items_positive
             || pair.as_rule() == Rule::import_items_negative
     );
+    let pair = pair.into_inner().next().unwrap();
+    assert_eq!(pair.as_rule(), Rule::import_items);
     pair.into_inner()
         .map(|pair| parse_import_item(pair, ctx))
         .collect()
