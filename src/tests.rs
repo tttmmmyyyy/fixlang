@@ -5893,3 +5893,55 @@ pub fn test_ambiguous_struct_name() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+#[should_panic]
+pub fn test_duplicated_trait_name() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    trait a : Hoge {
+        val : a;
+    }
+    trait a : Hoge {
+        val : a;
+    }
+
+    main : IO ();
+    main = (
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_ambiguous_trait_name() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    namespace A {
+        trait a : Hoge {
+            val : a;
+        }
+    }
+
+    namespace B {
+        trait a : Hoge {
+            val : a;
+        }
+    }
+
+    get_val : [a : Hoge] a;
+    get_val = val;
+
+    main : IO ();
+    main = (
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
