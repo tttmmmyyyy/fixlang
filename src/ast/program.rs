@@ -220,10 +220,10 @@ impl<'a> NameResolutionContext {
         };
         let candidates = candidates
             .iter()
-            .filter(|name| import::is_accessible(&self.import_statements, name))
-            .filter_map(|id| {
-                if short_name.is_suffix(id) {
-                    Some(id.clone())
+            .filter(|full_name| import::is_accessible(&self.import_statements, full_name))
+            .filter_map(|full_name| {
+                if short_name.is_suffix(full_name) {
+                    Some(full_name.clone())
                 } else {
                     None
                 }
