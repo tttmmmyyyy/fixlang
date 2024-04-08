@@ -943,7 +943,7 @@ main : IO ();
 main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
 ```
 
-You can hide multiple entities by writing such as `import Std hiding {symbol0, type1, Namespace2::*}`.
+You can hide multiple entities by writing such as `import Std hiding {symbol0, Type1, Namespace2::*}`.
 
 ## Recursion
 
