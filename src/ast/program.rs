@@ -271,21 +271,31 @@ impl<'a> NameResolutionContext {
 // Program of fix a collection of modules.
 // A program can link another program which consists of a single module.
 pub struct Program {
+    /* AST */
+    // Global values.
+    pub global_values: HashMap<FullName, GlobalValue>,
+    // Type definitions.
+    pub type_defns: Vec<TypeDefn>,
+    // Type environment, which is calculated from `type_defns` once and cached.
+    pub type_env: TypeEnv,
+    // Trait environment.
+    pub trait_env: TraitEnv,
     // List of tuple sizes used in this program.
     pub used_tuple_sizes: Vec<u32>,
-
-    pub type_defns: Vec<TypeDefn>,
-    pub global_values: HashMap<FullName, GlobalValue>,
-    pub instantiated_symbols: HashMap<FullName, InstantiatedSymbol>,
-    pub deferred_instantiation: Vec<InstantiatedSymbol>,
-    pub trait_env: TraitEnv,
-    pub type_env: TypeEnv,
-
-    // Import statements. Key is the name of the importer module.
+    // Import statements.
+    // Key is the name of the importer module.
     // Each module implicitly imports itself.
     // This is used to namespace resolution and overloading resolution.
     pub mod_to_import_stmts: HashMap<Name, Vec<ImportStatement>>,
-    // For each module, the path to the source file.
+
+    /* Instantiation */
+    // Instantiated symbols.
+    pub instantiated_symbols: HashMap<FullName, InstantiatedSymbol>,
+    // Deferred instantiation, which is a state variable for the instantiation process.
+    pub deferred_instantiation: Vec<InstantiatedSymbol>,
+
+    /* Dependency information */
+    // A map from module name to source file.
     pub module_to_files: HashMap<Name, SourceFile>,
 }
 
