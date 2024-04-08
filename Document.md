@@ -815,6 +815,7 @@ main : IO ();
 main = println("Hello, World!");
 ```
 
+Let's see another example. 
 The `Std` module provides a type `Tuple2`, whose value is constructed by writing `(x, y)`. 
 Assume that you are defining and using your own `Tuple2`:
 
