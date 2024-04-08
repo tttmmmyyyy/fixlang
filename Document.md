@@ -860,7 +860,8 @@ In this case, an entity whose full name is `Main.Model.Impl::truth` can be refer
 By writing `module {module_name};`, all entities defined in a module is imported. 
 It is also possible to import only certain entities, or exclude certain entities.
 
-For example, in the following program, three types `Std::IO`, `Std::Tuple0` (which is the textual name of `()`), `Std::String` and a symbol `Std::IO::println` from `Std` module are used.
+For example, in the following program, every entity in the module `Std` is implicitly imported.
+In fact, three types `Std::IO`, `Std::Tuple0` (which is the textual name of `()`), `Std::String` and a symbol `Std::IO::println` from `Std` module are used.
 
 ```
 module Main;
@@ -942,7 +943,7 @@ main : IO ();
 main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
 ```
 
-Of course, you can hide multiple entities by writing such as `import Std hiding {Entity0, Entity1, Namespace0::*}`.
+You can hide multiple entities by writing such as `import Std hiding {Entity0, Entity1, Namespace0::*}`.
 
 ## Recursion
 
