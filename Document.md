@@ -36,9 +36,8 @@
     - [`as_{variant_name} : {union} -> {variant_type}`](#as_variant_name--union---variant_type)
     - [`mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`](#mod_variant_name--variant_type---variant_type---union---union)
   - [Modules and import statements](#modules-and-import-statements)
-    - [Basics](#basics)
-    - [Filtering imported entities](#filtering-imported-entities)
   - [Namespaces and overloading](#namespaces-and-overloading)
+  - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
   - [Recursion](#recursion)
   - [`eval` syntax](#eval-syntax)
   - [Type annotation](#type-annotation)
@@ -739,8 +738,6 @@ Modify a union value by a function acting on a variant. It is assured that if yo
 
 ## Modules and import statements
 
-### Basics
-
 In Fix, all entities (global values, types, traits) defined in a source file is collected to form a module.
 Each source file has to declare the name of the module by `module {module_name};`.
 The first letter of a module name must be capitalized.
@@ -780,82 +777,6 @@ This program consists of two modules, `Lib` and `Main`.
 There is one special module: `Std`. This is a module of built-in entities. `Std` module is implicitly imported from all modules and you don't need to write `import Std` explicitly.
 
 There are also other convenient modules which is included in fix's compiler, such as `Debug` or `HashMap`. To import these modules, you need to write import statements explicitly, but no need for adding source files to arguments of `fix run` or `fix build` command.
-
-### Filtering imported entities
-
-By writing `module {module_name};`, all entities defined in a module is imported. 
-It is also possible to import only certain entities, or exclude certain entities.
-
-For example, in the following program, three types `Std::IO`, `Std::Tuple0` (which is the textual name of `()`), `Std::String` and a symbol `Std::IO::println` from `Std` module are used.
-
-```
-module Main;
-
-main : IO ();
-main = println("Hello, World!");
-```
-
-If you want to import only entities that are actually used, you should write:
-
-```
-module Main;
-import Std::{IO, Tuple0, String, IO::println};
-
-main : IO ();
-main = println("Hello, World!");
-```
-
-If importing any entities in the `Std::IO` namespace is OK, you can write:
-
-```
-module Main;
-import Std::{IO, Tuple0, String, IO::*};
-
-main : IO ();
-main = println("Hello, World!");
-```
-
-Let's see another example. 
-The `Std` module provides a type `Tuple2`, whose value is constructed by writing `(x, y)`. 
-Assume that you are defining and using your own `Tuple2`:
-
-```
-module Main;
-
-type Tuple2 a b = struct { fst : a, snd : b };
-
-impl [a : ToString, b : ToString] Tuple2 a b : ToString {
-    to_string = |t| "(" + t.@fst.to_string + ", " + t.@snd.to_string + ")";
-}
-
-main : IO ();
-main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
-```
-
-The above code cannot be compiled because there are two types named as `Tuple2`.
-
-```
-error: Type name `Tuple2` is ambiguous. There are `Main::Tuple2`, `Std::Tuple2`.
-```
-
-One solution for this issue is importing `Std` explicitly and hiding `Tuple2`:
-
-```
-module Main;
-
-import Std hiding Tuple2;
-
-type Tuple2 a b = struct { fst : a, snd : b };
-
-impl [a : ToString, b : ToString] Tuple2 a b : ToString {
-    to_string = |t| "(" + t.@fst.to_string + ", " + t.@snd.to_string + ")";
-}
-
-main : IO ();
-main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
-```
-
-Of course, you can also resolve this issue by adding `Main::` in front of each occurrence of `Tuple2`.
 
 ## Namespaces and overloading
 
@@ -933,6 +854,95 @@ will compile because Fix can infer the type of `truth` by the fact that it can b
 
 A module name can be a string created by concatenating strings with capital initials by periods (e.g. `Main.Model.Impl`).
 In this case, an entity whose full name is `Main.Model.Impl::truth` can be referred to as `Impl::truth` or `Model.Impl::truth`.
+
+## More on import statements: filtering entities
+
+By writing `module {module_name};`, all entities defined in a module is imported. 
+It is also possible to import only certain entities, or exclude certain entities.
+
+For example, in the following program, three types `Std::IO`, `Std::Tuple0` (which is the textual name of `()`), `Std::String` and a symbol `Std::IO::println` from `Std` module are used.
+
+```
+module Main;
+
+main : IO ();
+main = println("Hello, World!");
+```
+
+If you want to import only entities that are actually used, you should write:
+
+```
+module Main;
+import Std::{IO, Tuple0, String, IO::println};
+
+main : IO ();
+main = println("Hello, World!");
+```
+
+If you want to import `Std::IO::eprintln` in addition, you can write:
+
+```
+import Std::{IO, Tuple0, String, IO::println, IO::eprintln};
+```
+
+or
+
+```
+import Std::{IO, Tuple0, String, IO::{println, eprintln}};
+```
+
+If importing any entities in the `Std::IO` namespace is OK, you can write:
+
+```
+module Main;
+import Std::{IO, Tuple0, String, IO::*};
+
+main : IO ();
+main = println("Hello, World!");
+```
+
+Let's see another example. 
+The `Std` module provides a type `Tuple2`, whose value is constructed by writing `(x, y)`. 
+Assume that you are defining and using your own `Tuple2`:
+
+```
+module Main;
+
+type Tuple2 a b = struct { fst : a, snd : b };
+
+impl [a : ToString, b : ToString] Tuple2 a b : ToString {
+    to_string = |t| "(" + t.@fst.to_string + ", " + t.@snd.to_string + ")";
+}
+
+main : IO ();
+main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
+```
+
+The above code cannot be compiled because there are two types named as `Tuple2`.
+
+```
+error: Type name `Tuple2` is ambiguous. There are `Main::Tuple2`, `Std::Tuple2`.
+```
+
+Of course, you can also resolve this issue by adding `Main::` in front of each occurrence of `Tuple2`.
+Another solution for this issue is importing `Std` explicitly and hiding `Tuple2`:
+
+```
+module Main;
+
+import Std hiding Tuple2;
+
+type Tuple2 a b = struct { fst : a, snd : b };
+
+impl [a : ToString, b : ToString] Tuple2 a b : ToString {
+    to_string = |t| "(" + t.@fst.to_string + ", " + t.@snd.to_string + ")";
+}
+
+main : IO ();
+main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
+```
+
+Of course, you can hide multiple entities by writing such as `import Std hiding {Entity0, Entity1, Namespace0::*}`.
 
 ## Recursion
 
