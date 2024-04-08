@@ -35,9 +35,6 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     // Check if there is a name collision between types and traits.
     program.validate_type_and_trait_name_collision();
 
-    // Check if all items referred in import statements are defined.
-    program.validate_import_statements();
-
     // Infer namespaces of traits and types that appear in declarations (not in expressions).
     program.resolve_namespace_in_declaration();
 
@@ -55,6 +52,10 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
     // Create symbols.
     program.create_trait_method_symbols();
+
+    // Check if all items referred in import statements are defined.
+    // This check should be done after `add_methods` and `create_trait_method_symbols`.
+    program.validate_import_statements();
 
     // Set and check kinds that appear in the module.
     program.set_kinds();

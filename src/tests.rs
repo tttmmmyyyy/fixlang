@@ -5948,20 +5948,6 @@ pub fn test_ambiguous_trait_name() {
 
 #[test]
 #[should_panic]
-pub fn test_import_unknown_module() {
-    let source = r##"
-    module Main;
-
-    import Piyo;
-
-    main : IO ();
-    main = pure();
-    "##;
-    test_source(&source, Configuration::develop_compiler());
-}
-
-#[test]
-#[should_panic]
 pub fn test_import_empty() {
     let source = r##"
     module Main;
@@ -6095,6 +6081,72 @@ pub fn test_type_and_trait_name_collision() {
     main = (
         pure()
     );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_import_unknown_module() {
+    let source = r##"
+    module Main;
+
+    import Piyo;
+
+    main : IO ();
+    main = pure();
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_import_unknown_symbol() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, Monad::pure, piyo};
+
+    main : IO ();
+    main = pure();
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_import_unknown_symbol_hiding() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, Monad::pure} hiding piyo;
+
+    main : IO ();
+    main = pure();
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_import_unknown_type_or_trait() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, Monad::pure, Piyo};
+
+    main : IO ();
+    main = pure();
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_import_unknown_namespace() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, Monad::pure, Piyo::*};
+
+    main : IO ();
+    main = pure();
     "##;
     test_source(&source, Configuration::develop_compiler());
 }

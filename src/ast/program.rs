@@ -1326,12 +1326,15 @@ impl Program {
     pub fn validate_import_statements(&self) {
         let stmts = self.import_statements();
         let items = stmts.iter().map(|stmt| stmt.referred_items()).flatten();
+
+        let values = self.global_values.keys().collect::<HashSet<_>>();
         let types = self.tycon_names_with_aliases();
         let traits = self.trait_names_with_aliases();
+
         for item in items {
             match item {
                 ImportItem::Symbol(name, src) => {
-                    if self.global_values.contains_key(&name) {
+                    if values.contains(&name) {
                         continue;
                     }
                     error_exit_with_src(
@@ -1350,20 +1353,14 @@ impl Program {
                 }
                 ImportItem::NameSpace(namespace, src) => {
                     // Search for an entity that is in the namespace.
-                    for name in self.global_values.keys() {
-                        if name.is_in_namespace(&namespace) {
-                            continue;
-                        }
+                    if values.iter().any(|name| name.is_in_namespace(&namespace)) {
+                        continue;
                     }
-                    for name in &types {
-                        if name.is_in_namespace(&namespace) {
-                            continue;
-                        }
+                    if types.iter().any(|name| name.is_in_namespace(&namespace)) {
+                        continue;
                     }
-                    for name in &traits {
-                        if name.is_in_namespace(&namespace) {
-                            continue;
-                        }
+                    if traits.iter().any(|name| name.is_in_namespace(&namespace)) {
+                        continue;
                     }
                     error_exit_with_src(
                         &format!(

@@ -1797,6 +1797,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::operator_cmp => join_by_or(&["==", "!=", "<=", ">=", "<", ">"]),
         Rule::trait_impl => "`impl`".to_string(),
         Rule::import_statement => "`import`".to_string(),
+        Rule::module_defn => "module declaration".to_string(),
         _ => format!("{:?}", r),
     }
 }
