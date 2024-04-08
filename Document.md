@@ -870,7 +870,7 @@ main : IO ();
 main = println("Hello, World!");
 ```
 
-To import only entities that are actually used, write:
+To import only entities that are actually used, you need to import `Std` explicitly and write:
 
 ```
 module Main;
