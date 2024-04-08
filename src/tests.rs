@@ -5998,7 +5998,20 @@ pub fn test_import_only_necessary() {
 
     main : IO ();
     main = (
-        println("Hello, World!") // Cannot use `println`.
+        println("Hello, World!")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+#[test]
+pub fn test_import_recursive_group() {
+    let source = r##"
+    module Main;
+    import Std::{IO, Tuple0, String, IO::{println, eprintln}};
+
+    main : IO ();
+    main = (
+        println("Hello, World!")
     );
     "##;
     test_source(&source, Configuration::develop_compiler());
