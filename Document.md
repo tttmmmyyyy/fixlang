@@ -792,9 +792,7 @@ For example, in the following program, three types `Std::IO`, `Std::Tuple0` (whi
 module Main;
 
 main : IO ();
-main = (
-    println("Hello, World!")
-);
+main = println("Hello, World!");
 ```
 
 If you want to import only entities that are actually used, you should write:
@@ -804,9 +802,7 @@ module Main;
 import Std::{IO, Tuple0, String, IO::println};
 
 main : IO ();
-main = (
-    println("Hello, World!")
-);
+main = println("Hello, World!");
 ```
 
 If importing any entities in the `Std::IO` namespace is OK, you can write:
@@ -816,9 +812,7 @@ module Main;
 import Std::{IO, Tuple0, String, IO::*};
 
 main : IO ();
-main = (
-    println("Hello, World!")
-);
+main = println("Hello, World!");
 ```
 
 The `Std` module provides a type `Tuple2`, whose value is constructed by writing `(x, y)`. 
