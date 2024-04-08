@@ -95,7 +95,7 @@ where
                 .filter(|(ns, _)| {
                     import::is_accessible(import_stmts, &FullName::new(ns, &name.name))
                 })
-                .filter(|(ns, _)| name.namespace.is_suffix(ns))
+                .filter(|(ns, _)| name.namespace.is_suffix_of(ns))
                 .map(|(ns, v)| (ns.clone(), v.clone()))
                 .collect()
         }

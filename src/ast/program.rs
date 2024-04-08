@@ -1307,7 +1307,7 @@ impl Program {
         mod_to_hash
     }
 
-    pub fn check_type_and_trait_name_collision(&self) {
+    pub fn validate_type_and_trait_name_collision(&self) {
         // In fact, this validation is not necessary for almost all behavior of Fix;
         // This is effective only for avoiding ambiguous import statement.
         let type_names = self.tycon_names_with_aliases_vec();
@@ -1318,6 +1318,61 @@ impl Program {
                     "Type and trait cannot have the same name: `{}`.",
                     ty_name.to_string()
                 ));
+            }
+        }
+    }
+
+    // Check if all items referred in import statements are defined.
+    pub fn validate_import_statements(&self) {
+        let stmts = self.import_statements();
+        let items = stmts.iter().map(|stmt| stmt.referred_items()).flatten();
+        let types = self.tycon_names_with_aliases();
+        let traits = self.trait_names_with_aliases();
+        for item in items {
+            match item {
+                ImportItem::Symbol(name, src) => {
+                    if self.global_values.contains_key(&name) {
+                        continue;
+                    }
+                    error_exit_with_src(
+                        &format!("Cannot find value named `{}`.", name.to_string()),
+                        &src,
+                    );
+                }
+                ImportItem::TypeOrTrait(name, src) => {
+                    if types.contains(&name) || traits.contains(&name) {
+                        continue;
+                    }
+                    error_exit_with_src(
+                        &format!("Cannot find entity named `{}`.", name.to_string()),
+                        &src,
+                    );
+                }
+                ImportItem::NameSpace(namespace, src) => {
+                    // Search for an entity that is in the namespace.
+                    for name in self.global_values.keys() {
+                        if name.is_in_namespace(&namespace) {
+                            continue;
+                        }
+                    }
+                    for name in &types {
+                        if name.is_in_namespace(&namespace) {
+                            continue;
+                        }
+                    }
+                    for name in &traits {
+                        if name.is_in_namespace(&namespace) {
+                            continue;
+                        }
+                    }
+                    error_exit_with_src(
+                        &format!(
+                            "Namespace `{}` is not defined or empty.",
+                            namespace.to_string()
+                        ),
+                        &src,
+                    );
+                }
             }
         }
     }

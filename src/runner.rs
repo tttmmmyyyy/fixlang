@@ -33,7 +33,10 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     program.calculate_type_env();
 
     // Check if there is a name collision between types and traits.
-    program.check_type_and_trait_name_collision();
+    program.validate_type_and_trait_name_collision();
+
+    // Check if all items referred in import statements are defined.
+    program.validate_import_statements();
 
     // Infer namespaces of traits and types that appear in declarations (not in expressions).
     program.resolve_namespace_in_declaration();

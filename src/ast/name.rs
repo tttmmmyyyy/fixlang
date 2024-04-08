@@ -32,7 +32,7 @@ impl NameSpace {
 
     // Checks if `self` is a suffix of the argument.
     // "Name::entity" is not suffix of "ModName::entity", but should be suffix of "Mod.Name::entity".
-    pub fn is_suffix(&self, rhs: &NameSpace) -> bool {
+    pub fn is_suffix_of(&self, rhs: &NameSpace) -> bool {
         // Splits `Mod.Name::entity` into `[Mod, Name, entity]`.
         fn to_components(namespace: &NameSpace) -> Vec<String> {
             if namespace.names.is_empty() {
@@ -59,6 +59,20 @@ impl NameSpace {
         return true;
     }
 
+    pub fn is_prefix_of(&self, rhs: &NameSpace) -> bool {
+        let n = self.names.len();
+        let m = rhs.names.len();
+        if n > m {
+            return false;
+        }
+        for i in 0..n {
+            if self.names[i] != rhs.names[i] {
+                return false;
+            }
+        }
+        return true;
+    }
+
     #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.names.len()
@@ -72,6 +86,18 @@ impl NameSpace {
         let mut names = self.names.clone();
         names.append(&mut rhs.names);
         NameSpace::new(names)
+    }
+
+    pub fn pop_front(&mut self) -> bool {
+        if self.names.is_empty() {
+            return false;
+        }
+        self.names.remove(0);
+        true
+    }
+
+    pub fn push_front(&mut self, name: Name) {
+        self.names.insert(0, name);
     }
 }
 
@@ -143,7 +169,7 @@ impl FullName {
     }
 
     pub fn is_suffix(&self, other: &FullName) -> bool {
-        self.name == other.name && self.namespace.is_suffix(&other.namespace)
+        self.name == other.name && self.namespace.is_suffix_of(&other.namespace)
     }
 
     pub fn to_namespace(&self) -> NameSpace {
@@ -163,10 +189,14 @@ impl FullName {
     // Pop the first component.
     // If the namespace is empty, return false.
     pub fn pop_front_namespace(&mut self) -> bool {
-        if self.namespace.names.is_empty() {
-            return false;
-        }
-        self.namespace.names.remove(0);
-        true
+        self.namespace.pop_front()
+    }
+
+    pub fn push_front(&mut self, name: Name) {
+        self.namespace.push_front(name);
+    }
+
+    pub fn is_in_namespace(&self, namespace: &NameSpace) -> bool {
+        namespace.is_prefix_of(&self.namespace)
     }
 }

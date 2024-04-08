@@ -1706,11 +1706,13 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
     let pair = pair.into_inner().next().unwrap();
     assert_eq!(pair.as_rule(), Rule::importee);
     let mut importee_pairs = pair.into_inner();
-    let module = importee_pairs.next().unwrap().as_str().to_string();
+    let module_pair = importee_pairs.next().unwrap();
+    let module_span = Span::from_pair(&ctx.source, &module_pair);
+    let module = module_pair.as_str().to_string();
     let mut stmt = ImportStatement {
         importer: ctx.module_name.clone(),
         module,
-        items: vec![ImportItem::Any],
+        items: vec![ImportTreeNode::Any(Some(module_span))],
         hiding: vec![],
         source: Some(span),
         implicit: false,
@@ -1729,38 +1731,39 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
     stmt
 }
 
-fn parse_import_items_positive(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportItem> {
+fn parse_import_items_positive(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportTreeNode> {
     assert_eq!(pair.as_rule(), Rule::import_items_positive);
     let pair = pair.into_inner().next().unwrap();
     parse_import_items(pair, ctx)
 }
 
-fn parse_import_items_negative(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportItem> {
+fn parse_import_items_negative(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportTreeNode> {
     assert_eq!(pair.as_rule(), Rule::import_items_negative);
     let pair = pair.into_inner().next().unwrap();
     parse_import_items(pair, ctx)
 }
 
-fn parse_import_items(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportItem> {
+fn parse_import_items(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<ImportTreeNode> {
     assert!(pair.as_rule() == Rule::import_items);
     pair.into_inner()
-        .map(|pair| parse_import_item(pair, ctx))
+        .map(|pair| parse_import_item_node(pair, ctx))
         .collect()
 }
 
-fn parse_import_item(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportItem {
-    assert_eq!(pair.as_rule(), Rule::import_item);
+fn parse_import_item_node(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportTreeNode {
+    assert_eq!(pair.as_rule(), Rule::import_item_node);
     let pair = pair.into_inner().next().unwrap();
+    let span = Span::from_pair(&ctx.source, &pair);
     match pair.as_rule() {
-        Rule::import_item_any => ImportItem::Any,
-        Rule::import_item_symbol => ImportItem::Symbol(pair.as_str().to_string()),
+        Rule::import_item_any => ImportTreeNode::Any(Some(span)),
+        Rule::import_item_symbol => ImportTreeNode::Symbol(pair.as_str().to_string(), Some(span)),
         Rule::import_item_capital_item => {
             let mut pairs = pair.into_inner();
             let capital_name = pairs.next().unwrap().as_str().to_string();
             if let Some(pair) = pairs.next() {
-                ImportItem::NameSpace(capital_name, parse_import_items(pair, ctx))
+                ImportTreeNode::NameSpace(capital_name, parse_import_items(pair, ctx), Some(span))
             } else {
-                ImportItem::TypeOrTrait(capital_name)
+                ImportTreeNode::TypeOrTrait(capital_name, Some(span))
             }
         }
         _ => unreachable!(),

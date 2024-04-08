@@ -243,9 +243,9 @@ import_items_positive = { "::" ~ sep* ~ import_items }
 
 import_items_negative = { "hiding" ~ sep+ ~ import_items }
 
-import_items = { import_item | ("{" ~ sep* ~ (import_item ~ (sep* ~ "," ~ sep* ~ import_item)*)? ~ sep* ~ "}") }
+import_items = { import_item_node | ("{" ~ sep* ~ (import_item_node ~ (sep* ~ "," ~ sep* ~ import_item_node)*)? ~ sep* ~ "}") }
 
-import_item = { import_item_any | import_item_symbol | import_item_capital_item } 
+import_item_node = { import_item_any | import_item_symbol | import_item_capital_item } 
 
 import_item_any = { "*" }
 
