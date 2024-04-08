@@ -741,7 +741,7 @@ Modify a union value by a function acting on a variant. It is assured that if yo
 
 ### Basics
 
-In Fix, all entities (values, types, traits) defined in a source file is collected to form a module.
+In Fix, all entities (global values, types, traits) defined in a source file is collected to form a module.
 Each source file has to declare the name of the module by `module {module_name};`.
 The first letter of a module name must be capitalized.
 Module name is used as the top-level namespace of entities defined in a source file.
