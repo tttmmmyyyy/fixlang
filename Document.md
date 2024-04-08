@@ -36,6 +36,8 @@
     - [`as_{variant_name} : {union} -> {variant_type}`](#as_variant_name--union---variant_type)
     - [`mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`](#mod_variant_name--variant_type---variant_type---union---union)
   - [Modules and import statements](#modules-and-import-statements)
+    - [Basics](#basics)
+    - [Filtering imported entities](#filtering-imported-entities)
   - [Namespaces and overloading](#namespaces-and-overloading)
   - [Recursion](#recursion)
   - [`eval` syntax](#eval-syntax)
@@ -737,6 +739,8 @@ Modify a union value by a function acting on a variant. It is assured that if yo
 
 ## Modules and import statements
 
+### Basics
+
 In Fix, all entities (values, types, traits) defined in a source file is collected to form a module.
 Each source file has to declare the name of the module by `module {module_name};`.
 The first letter of a module name must be capitalized.
@@ -777,6 +781,8 @@ There is one special module: `Std`. This is a module of built-in entities. `Std`
 
 There are also other convenient modules which is included in fix's compiler, such as `Debug` or `HashMap`. To import these modules, you need to write import statements explicitly, but no need for adding source files to arguments of `fix run` or `fix build` command.
 
+### Filtering imported entities
+
 By writing `module {module_name};`, all entities defined in a module is imported. 
 It is also possible to import only certain entities, or exclude certain entities.
 
@@ -791,7 +797,7 @@ main = (
 );
 ```
 
-If you want to import only entities that are actually used, you can write:
+If you want to import only entities that are actually used, you should write:
 
 ```
 module Main;
@@ -815,8 +821,6 @@ main = (
 );
 ```
 
-Writing `import Std::*;` has the same effect as writing `import Std;`.
-
 The `Std` module provides a type `Tuple2`, whose value is constructed by writing `(x, y)`. 
 Assume that you are defining and using your own `Tuple2`:
 
@@ -839,7 +843,7 @@ The above code cannot be compiled because there are two types named as `Tuple2`.
 error: Type name `Tuple2` is ambiguous. There are `Main::Tuple2`, `Std::Tuple2`.
 ```
 
-One solution for this issue is adding `import Std` explicitly and hiding `Tuple2`:
+One solution for this issue is importing `Std` explicitly and hiding `Tuple2`:
 
 ```
 module Main;
