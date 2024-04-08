@@ -786,7 +786,7 @@ There are also other convenient modules which is included in fix's compiler, suc
 By writing `module {module_name};`, all entities defined in a module is imported. 
 It is also possible to import only certain entities, or exclude certain entities.
 
-For example, in the following program, three types `Std::IO`, `Std::Tuple0` (which is the textual name of `()`), `Std::String` and a symbol `Std::IO::println` are used.
+For example, in the following program, three types `Std::IO`, `Std::Tuple0` (which is the textual name of `()`), `Std::String` and a symbol `Std::IO::println` from `Std` module are used.
 
 ```
 module Main;
