@@ -869,7 +869,7 @@ main : IO ();
 main = println("Hello, World!");
 ```
 
-If you want to import only entities that are actually used, you should write:
+To import only entities that are actually used, write:
 
 ```
 module Main;
