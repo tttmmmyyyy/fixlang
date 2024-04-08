@@ -857,7 +857,7 @@ In this case, an entity whose full name is `Main.Model.Impl::truth` can be refer
 
 ## More on import statements: filtering entities
 
-By writing `module {module_name};`, all entities defined in a module is imported. 
+By writing `module {module_name};`, all entities defined in a module are imported. 
 It is also possible to import only certain entities, or exclude certain entities.
 
 For example, in the following program, every entity in the module `Std` is implicitly imported.
