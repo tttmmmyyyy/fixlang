@@ -217,14 +217,22 @@ trait_fullname = { capital_fullname }
 
 trait_defn = { "trait" ~ sep+ ~ predicates? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 
-trait_member_defn = { trait_member_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
+trait_member_defn = { trait_member_value_defn | trait_member_type_defn }
 
-trait_member_name = _{ var }
+trait_member_value_defn = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
+
+trait_member_value_name = _{ var }
+
+trait_member_type_defn = { "type" ~ sep+ ~ type_expr ~ (sep* ~ ":" ~ sep* ~ kind)? ~ sep* ~ semicolon }
 
 // === Trait implementations ===
 trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
 
-trait_member_impl = { trait_member_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
+trait_member_impl = { trait_member_value_impl | trait_member_type_impl }
+
+trait_member_value_impl = { trait_member_value_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
+
+trait_member_type_impl = { "type" ~ sep+ ~ type_expr ~ sep* ~ "=" ~ sep* ~ type_expr ~ sep* ~ semicolon }
 
 // === Trait aliases ===
 trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ semicolon }
