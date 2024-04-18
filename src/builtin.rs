@@ -3930,6 +3930,7 @@ pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
                 ty: type_fun(tv_type.clone(), tv_type.clone()),
             },
         )]),
+        assoc_types: HashMap::new(),
         kind_predicates: vec![],
         source: None,
     }
@@ -3964,6 +3965,7 @@ pub fn unary_opeartor_instance(
                 None,
             ),
         )]),
+        assoc_types: HashMap::new(),
         define_module: STD_NAME.to_string(),
         source: None,
     }
@@ -3993,6 +3995,7 @@ pub fn binary_operator_trait(
                 ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
             },
         )]),
+        assoc_types: HashMap::default(),
         kind_predicates: vec![],
         source: None,
     }
@@ -4035,6 +4038,7 @@ pub fn binary_opeartor_instance(
                 None,
             ),
         )]),
+        assoc_types: HashMap::new(),
         define_module: STD_NAME.to_string(),
         source: None,
     }

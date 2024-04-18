@@ -51,7 +51,7 @@ pub struct TraitInfo {
     // and not "a -> String for a : Show".
     pub methods: HashMap<Name, QualType>,
     // Associated type synonyms.
-    pub type_syns: HashMap<Name, AssocTypeSynInfo>,
+    pub assoc_types: HashMap<Name, AssocTypeSynInfo>,
     // Predicates at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_predicates: Vec<KindPredicate>,
     // Source location of trait definition.

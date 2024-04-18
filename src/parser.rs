@@ -295,7 +295,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
     let mut methods: HashMap<Name, QualType> = HashMap::new();
     let mut type_syns: HashMap<Name, AssocTypeSynInfo> = HashMap::new();
     for pair in pairs {
-        match parse_trait_member_defn(pair, &tyvar, ctx) {
+        match parse_trait_member_defn(pair, ctx) {
             Either::Left((name, qual_type)) => {
                 if methods.contains_key(&name) {
                     error_exit_with_src(
@@ -323,7 +323,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
         id: TraitId::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
-        type_syns,
+        assoc_types: type_syns,
         kind_predicates: kinds,
         source: Some(span),
     }
@@ -331,7 +331,6 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
 
 fn parse_trait_member_defn(
     pair: Pair<Rule>,
-    tyvar_trait_defined: &Name,
     ctx: &mut ParseContext,
 ) -> Either<(Name, QualType), AssocTypeSynInfo> {
     assert_eq!(pair.as_rule(), Rule::trait_member_defn);
@@ -342,7 +341,7 @@ fn parse_trait_member_defn(
             Either::Left((name, qual_type))
         }
         Rule::trait_member_type_defn => {
-            let assoc_type = parse_trait_member_type_defn(pair, &tyvar_trait_defined, ctx);
+            let assoc_type = parse_trait_member_type_defn(pair, ctx);
             Either::Right(assoc_type)
         }
         _ => unreachable!(),
@@ -357,11 +356,7 @@ fn parse_trait_member_value_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> (N
     (method_name, qual_type)
 }
 
-fn parse_trait_member_type_defn(
-    pair: Pair<Rule>,
-    tyvar_trait_defined: &Name,
-    ctx: &mut ParseContext,
-) -> AssocTypeSynInfo {
+fn parse_trait_member_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> AssocTypeSynInfo {
     assert_eq!(pair.as_rule(), Rule::trait_member_type_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
