@@ -29,7 +29,16 @@ impl TraitId {
     }
 }
 
-// Traits.
+// Definition of associated type synonym.
+#[derive(Clone)]
+pub struct AssocTypeSynInfo {
+    pub name: Name,
+    // The kind of the application of the associated type synonym.
+    pub kind_applied: Arc<Kind>,
+    pub src: Option<Span>,
+}
+
+// Traits definitions.
 #[derive(Clone)]
 pub struct TraitInfo {
     // Identifier of this trait (i.e. the name).
@@ -41,6 +50,8 @@ pub struct TraitInfo {
     // the type of method "show" is "a -> String",
     // and not "a -> String for a : Show".
     pub methods: HashMap<Name, QualType>,
+    // Associated type synonyms.
+    pub type_syns: HashMap<Name, AssocTypeSynInfo>,
     // Predicates at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_predicates: Vec<KindPredicate>,
     // Source location of trait definition.
@@ -114,10 +125,12 @@ impl TraitInfo {
 // Trait instance.
 #[derive(Clone)]
 pub struct TraitInstance {
-    // Statement such as "(a, b): Show for a: Show, b: Show".
+    // Statement such as "[a: Show, b: Show] (a, b): Show".
     pub qual_pred: QualPredicate,
     // Method implementation.
     pub methods: HashMap<Name, Arc<ExprNode>>,
+    // Associated type synonym implementation.
+    pub assoc_types: HashMap<Name, Arc<TypeNode>>,
     // Module where this instance is defined.
     pub define_module: Name,
     // Source location where this instance is defined.

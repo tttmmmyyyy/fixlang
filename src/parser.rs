@@ -2,6 +2,7 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
+use either::Either;
 use num_bigint::BigInt;
 use std::{cmp::min, mem::swap, sync::Arc};
 
@@ -291,24 +292,90 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
     let tyvar = pairs.next().unwrap().as_str().to_string();
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
     let trait_name = pairs.next().unwrap().as_str().to_string();
-    let methods: HashMap<Name, QualType> = pairs
-        .map(|pair| parse_trait_member_defn(pair, ctx))
-        .collect();
+    let mut methods: HashMap<Name, QualType> = HashMap::new();
+    let mut type_syns: HashMap<Name, AssocTypeSynInfo> = HashMap::new();
+    for pair in pairs {
+        match parse_trait_member_defn(pair, &tyvar, ctx) {
+            Either::Left((name, qual_type)) => {
+                if methods.contains_key(&name) {
+                    error_exit_with_src(
+                        &format!("Duplicate definition of member `{}`.", name),
+                        &Some(span),
+                    );
+                }
+                methods.insert(name, qual_type);
+            }
+            Either::Right(assoc_type) => {
+                if type_syns.contains_key(&assoc_type.name.to_string()) {
+                    error_exit_with_src(
+                        &format!(
+                            "Duplicate definition of associated type `{}`.",
+                            assoc_type.name.to_string()
+                        ),
+                        &Some(span),
+                    );
+                }
+                type_syns.insert(assoc_type.name.to_string(), assoc_type);
+            }
+        }
+    }
     TraitInfo {
         id: TraitId::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
         type_var: tyvar_from_name(&tyvar, &kind_star()),
         methods,
+        type_syns,
         kind_predicates: kinds,
         source: Some(span),
     }
 }
 
-fn parse_trait_member_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> (Name, QualType) {
+fn parse_trait_member_defn(
+    pair: Pair<Rule>,
+    tyvar_trait_defined: &Name,
+    ctx: &mut ParseContext,
+) -> Either<(Name, QualType), AssocTypeSynInfo> {
     assert_eq!(pair.as_rule(), Rule::trait_member_defn);
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::trait_member_value_defn => {
+            let (name, qual_type) = parse_trait_member_value_defn(pair, ctx);
+            Either::Left((name, qual_type))
+        }
+        Rule::trait_member_type_defn => {
+            let assoc_type = parse_trait_member_type_defn(pair, &tyvar_trait_defined, ctx);
+            Either::Right(assoc_type)
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn parse_trait_member_value_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> (Name, QualType) {
+    assert_eq!(pair.as_rule(), Rule::trait_member_value_defn);
     let mut pairs = pair.into_inner();
     let method_name = pairs.next().unwrap().as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx);
     (method_name, qual_type)
+}
+
+fn parse_trait_member_type_defn(
+    pair: Pair<Rule>,
+    tyvar_trait_defined: &Name,
+    ctx: &mut ParseContext,
+) -> AssocTypeSynInfo {
+    assert_eq!(pair.as_rule(), Rule::trait_member_type_defn);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
+    let assoc_type_syn = pairs.next().unwrap().to_string();
+    let kind = if let Some(pair) = pairs.next() {
+        parse_kind(pair, ctx)
+    } else {
+        kind_star()
+    };
+    AssocTypeSynInfo {
+        name: assoc_type_syn,
+        kind_applied: kind,
+        src: Some(span),
+    }
 }
 
 fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInstance {
@@ -316,23 +383,75 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInstance {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let qual_pred = parse_predicate_qualified(pairs.next().unwrap(), ctx);
-    let methods: HashMap<Name, Arc<ExprNode>> = pairs
-        .map(|pair| parse_trait_member_impl(pair, ctx))
-        .collect();
+    let mut methods: HashMap<Name, Arc<ExprNode>> = HashMap::default();
+    let mut assoc_types: HashMap<Name, Arc<TypeNode>> = HashMap::default();
+    for pair in pairs {
+        match parse_trait_member_impl(pair, ctx) {
+            Either::Left((name, expr)) => {
+                if methods.contains_key(&name) {
+                    error_exit_with_src(
+                        &format!("Duplicate definition of member `{}`.", name),
+                        &Some(span),
+                    );
+                }
+                methods.insert(name, expr);
+            }
+            Either::Right((name, ty)) => {
+                if assoc_types.contains_key(&name) {
+                    error_exit_with_src(
+                        &format!("Duplicate definition of associated type `{}`.", name),
+                        &Some(span),
+                    );
+                }
+                assoc_types.insert(name, ty);
+            }
+        }
+    }
     TraitInstance {
         qual_pred,
         methods,
+        assoc_types,
         define_module: ctx.module_name.clone(),
         source: Some(span),
     }
 }
 
-fn parse_trait_member_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> (Name, Arc<ExprNode>) {
+fn parse_trait_member_impl(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Either<(Name, Arc<ExprNode>), (Name, Arc<TypeNode>)> {
     assert_eq!(pair.as_rule(), Rule::trait_member_impl);
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::trait_member_value_impl => {
+            let (name, expr) = parse_trait_member_value_impl(pair, ctx);
+            Either::Left((name, expr))
+        }
+        Rule::trait_member_type_impl => {
+            let (name, ty) = parse_trait_member_type_impl(pair, ctx);
+            Either::Right((name, ty))
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn parse_trait_member_value_impl(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> (Name, Arc<ExprNode>) {
+    assert_eq!(pair.as_rule(), Rule::trait_member_value_impl);
     let mut pairs = pair.into_inner();
     let method_name = pairs.next().unwrap().as_str().to_string();
     let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx);
     (method_name, expr)
+}
+
+fn parse_trait_member_type_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> (Name, Arc<TypeNode>) {
+    assert_eq!(pair.as_rule(), Rule::trait_member_type_impl);
+    let mut pairs = pair.into_inner();
+    let assoc_type_name = pairs.next().unwrap().as_str().to_string();
+    let type_value = parse_type(pairs.next().unwrap(), ctx);
+    (assoc_type_name, type_value)
 }
 
 fn parse_predicate_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualPredicate {
