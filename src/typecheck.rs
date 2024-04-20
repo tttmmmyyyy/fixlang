@@ -186,7 +186,7 @@ impl Substitution {
         kind_map: &HashMap<TyCon, Arc<Kind>>,
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
-    ) -> Option<Self> {
+    ) -> Option<Substitution> {
         match &ty1.ty {
             Type::TyVar(var1) => {
                 return Self::unify_tyvar(kind_map, &var1, ty2);
