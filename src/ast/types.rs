@@ -101,8 +101,8 @@ impl<'de> serde::de::Visitor<'de> for TyConVisitor {
 }
 
 impl TyCon {
-    pub fn new(nsn: FullName) -> TyCon {
-        TyCon { name: nsn }
+    pub fn new(fullname: FullName) -> TyCon {
+        TyCon { name: fullname }
     }
 
     pub fn to_string(&self) -> String {

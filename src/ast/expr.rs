@@ -792,9 +792,9 @@ impl Var {
         Arc::new(ret)
     }
 
-    pub fn set_name(&self, nsn: FullName) -> Arc<Self> {
+    pub fn set_name(&self, fullname: FullName) -> Arc<Self> {
         let mut ret = self.clone();
-        ret.name = nsn;
+        ret.name = fullname;
         Arc::new(ret)
     }
 }
