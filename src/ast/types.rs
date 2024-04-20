@@ -551,7 +551,7 @@ impl TypeNode {
                     // Check recursive aliasing.
                     if path.contains(&tc.name.to_string()) {
                         error_exit(&format!(
-                            "Cannot resolve type aliasing in `{}`. There is circular aliasing.",
+                            "Cannot resolve type aliasing in `{}`. Circular aliasing is found.",
                             entry_typename
                         ))
                     }
@@ -561,7 +561,7 @@ impl TypeNode {
                     if app_seq.len() - 1 < ta.tyvars.len() {
                         error_exit_with_src(
                             &format!(
-                                "Cannot resolve type alias `{}` in `{}`",
+                                "Cannot resolve type alias `{}` in `{}` because it is not fully applied.",
                                 tc.to_string(),
                                 Arc::new(self.clone()).to_string_normalize()
                             ),
