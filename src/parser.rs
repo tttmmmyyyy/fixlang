@@ -566,7 +566,7 @@ fn parse_predicate_kind(pair: Pair<Rule>, ctx: &mut ParseContext) -> KindPredica
     let name = pairs.next().unwrap().as_str().to_string();
     let kind = parse_kind(pairs.next().unwrap(), ctx);
     KindPredicate {
-        name,
+        tyvar: name,
         kind,
         source: Some(span),
     }
@@ -662,16 +662,16 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDefn {
             );
         }
         for kind_pred in kind_preds {
-            if kinds.contains_key(&kind_pred.name) {
+            if kinds.contains_key(&kind_pred.tyvar) {
                 error_exit_with_src(
                     &format!(
                         "Kind of type variable `{}` is specified more than once.",
-                        kind_pred.name
+                        kind_pred.tyvar
                     ),
                     &kind_pred.source,
                 );
             }
-            kinds.insert(kind_pred.name, kind_pred.kind);
+            kinds.insert(kind_pred.tyvar, kind_pred.kind);
         }
     }
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_name);

@@ -115,7 +115,7 @@ impl TraitInfo {
             );
         }
         if self.kind_predicates.len() > 0 {
-            if self.kind_predicates[0].name != self.type_var.name {
+            if self.kind_predicates[0].tyvar != self.type_var.name {
                 error_exit_with_src(
                     &format!(
                         "The type variable used in the assumption of trait `{}` has to be `{}`.",
@@ -203,8 +203,8 @@ impl TraitInstance {
 
         // Apply kind information specified by kind predicates of trait implementation to `vars`.
         for kind_pred in self.qual_pred.kind_preds.iter() {
-            if vars.contains_key(&kind_pred.name) {
-                vars.insert(kind_pred.name.clone(), kind_pred.kind.clone());
+            if vars.contains_key(&kind_pred.tyvar) {
+                vars.insert(kind_pred.tyvar.clone(), kind_pred.kind.clone());
             }
         }
 
@@ -326,7 +326,7 @@ impl QualPredicate {
             insert(scope, tyvar, kind)?;
         }
         for kp in kind_preds {
-            let tyvar = kp.name.clone();
+            let tyvar = kp.tyvar.clone();
             let kind = kp.kind.clone();
             insert(scope, tyvar, kind)?;
         }
@@ -452,14 +452,14 @@ impl Predicate {
 // Statement such as "f: * -> *".
 #[derive(Clone)]
 pub struct KindPredicate {
-    pub name: Name,
+    pub tyvar: Name,
     pub kind: Arc<Kind>,
     pub source: Option<Span>,
 }
 
 impl KindPredicate {
     pub fn to_string(&self) -> String {
-        format!("{} : {}", self.name, self.kind.to_string())
+        format!("{} : {}", self.tyvar, self.kind.to_string())
     }
 }
 
