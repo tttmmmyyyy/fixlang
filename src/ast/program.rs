@@ -768,7 +768,7 @@ impl Program {
                     // and we do not need to check whether predicates or equality constraints are satisfiable or not.
                     let mut tc0 = tc.clone();
                     let (_, method_ty) = tc0.instantiate_scheme(&method.ty, false);
-                    if Substitution::unify(&tc.type_env.kinds(), &method_ty, &sym.ty).is_none() {
+                    if Unification::unify(&tc.type_env.kinds(), &method_ty, &sym.ty).is_none() {
                         continue;
                     }
                     // Perform type-checking.

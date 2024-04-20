@@ -31,8 +31,9 @@ impl TraitId {
 
 // Definition of associated type synonym.
 #[derive(Clone)]
-pub struct AssocTypeSynInfo {
+pub struct AssocTypeDefn {
     pub name: Name,
+    pub arity: usize, // This arity includes `self`.
     // The kind of the application of the associated type synonym.
     pub kind_applied: Arc<Kind>,
     pub src: Option<Span>,
@@ -47,6 +48,14 @@ pub struct AssocTypeImpl {
     pub source: Option<Span>,
 }
 
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct AssocTypeInfo {
+//     pub name: FullName,
+//     pub arity: usize,
+//     pub kind: Arc<Kind>,
+//     pub source: Option<Span>,
+// }
+
 // Traits definitions.
 #[derive(Clone)]
 pub struct TraitInfo {
@@ -60,7 +69,7 @@ pub struct TraitInfo {
     // and not "a -> String for a : Show".
     pub methods: HashMap<Name, QualType>,
     // Associated type synonyms.
-    pub assoc_types: HashMap<Name, AssocTypeSynInfo>,
+    pub assoc_types: HashMap<Name, AssocTypeDefn>,
     // Predicates at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_predicates: Vec<KindPredicate>,
     // Source location of trait definition.
@@ -129,6 +138,15 @@ impl TraitInfo {
             self.type_var = self.type_var.set_kind(self.kind_predicates[0].kind.clone());
         }
     }
+
+    // pub fn assoc_type_info(&self, assoc_type_name: &Name) -> AssocTypeInfo {
+    //     let assoc_type = self.assoc_types.get(assoc_type_name).unwrap();
+    //     AssocTypeInfo {
+    //         name: FullName::new(&self.id.name.to_namespace(), assoc_type_name),
+    //         kind: kind_arrow(self.type_var.kind.clone(), assoc_type.kind_applied.clone()),
+    //         source: assoc_type.src.clone(),
+    //     }
+    // }
 }
 
 // Trait instance.
@@ -228,29 +246,6 @@ impl TraitInstance {
     // Get the type implementing the trait.
     pub fn impl_type(&self) -> Arc<TypeNode> {
         self.qual_pred.predicate.ty.clone()
-    }
-
-    // From implementation of associated types, get generalized type equalities.
-    pub fn type_equalities(&self) -> Vec<EqualityScheme> {
-        self.assoc_types
-            .iter()
-            .map(|(assoc_type_name, assoc_type_impl)| {
-                let assoc_type_namespace = self.trait_id().name.to_namespace();
-                let assoc_type_fullname = FullName::new(&assoc_type_namespace, assoc_type_name);
-                let equality = Equality {
-                    assoc_type: assoc_type_fullname,
-                    impl_type: self.impl_type(),
-                    args: assoc_type_impl
-                        .params
-                        .iter()
-                        .map(|tv| type_from_tyvar(tv.clone()))
-                        .collect(),
-                    value: assoc_type_impl.value.clone(),
-                    source: assoc_type_impl.source.clone(),
-                };
-                equality.generalize()
-            })
-            .collect()
     }
 }
 
@@ -497,14 +492,32 @@ impl KindPredicate {
 // Equality predicate `AssociateType arg0 arg1 = value`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Equality {
-    assoc_type: FullName,
-    impl_type: Arc<TypeNode>,
-    args: Vec<Arc<TypeNode>>,
-    value: Arc<TypeNode>,
-    source: Option<Span>,
+    pub assoc_type: FullName,
+    pub impl_type: Arc<TypeNode>,
+    pub args: Vec<Arc<TypeNode>>,
+    pub value: Arc<TypeNode>,
+    pub source: Option<Span>,
 }
 
 impl Equality {
+    // Get the type of the left-hand side of the equality.
+    pub fn lhs(&self) -> Arc<TypeNode> {
+        let mut ty = type_tycon(&tycon(self.assoc_type.clone()));
+        ty = type_tyapp(ty, self.impl_type);
+        for arg in self.args {
+            ty = type_tyapp(ty, arg.clone());
+        }
+        ty
+    }
+
+    pub fn substitute(&mut self, subst: &Substitution) {
+        self.impl_type = subst.substitute_type(&self.impl_type);
+        for arg in &mut self.args {
+            *arg = subst.substitute_type(arg);
+        }
+        self.value = subst.substitute_type(&self.value);
+    }
+
     pub fn generalize(&self) -> EqualityScheme {
         let mut tyvars = vec![];
         self.impl_type.free_vars_vec(&mut tyvars);
@@ -845,6 +858,43 @@ impl TraitEnv {
             );
         }
         self.aliases.insert(alias.id.clone(), alias);
+    }
+
+    // From implementation of associated types, get generalized type equalities.
+    pub fn type_equalities(&self) -> Vec<EqualityScheme> {
+        let mut eq_scms = vec![];
+        for (trait_id, insts) in &self.instances {
+            for inst in insts {
+                for (assoc_type_name, assoc_type_impl) in &inst.assoc_types {
+                    let assoc_type_namespace = trait_id.name.to_namespace();
+                    let assoc_type_fullname = FullName::new(&assoc_type_namespace, assoc_type_name);
+                    let impl_type = inst.impl_type();
+                    // let trait_info = self.traits.get(&trait_id).unwrap();
+                    // let assoc_type_defn = trait_info.assoc_types.get(assoc_type_name).unwrap();
+                    // let assoc_type_info = AssocTypeInfo {
+                    //     name: assoc_type_fullname.clone(),
+                    //     kind: kind_arrow(
+                    //         trait_info.type_var.kind.clone(),
+                    //         assoc_type_defn.kind_applied.clone(),
+                    //     ),
+                    //     source: assoc_type_impl.source.clone(),
+                    // };
+                    let equality = Equality {
+                        assoc_type: assoc_type_fullname,
+                        impl_type,
+                        args: assoc_type_impl
+                            .params
+                            .iter()
+                            .map(|tv| type_from_tyvar(tv.clone()))
+                            .collect(),
+                        value: assoc_type_impl.value.clone(),
+                        source: assoc_type_impl.source.clone(),
+                    };
+                    eq_scms.push(equality.generalize())
+                }
+            }
+        }
+        eq_scms
     }
 
     // Reduce a predicate p to a context of trait instance.

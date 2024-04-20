@@ -293,7 +293,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
     let trait_name = pairs.next().unwrap().as_str().to_string();
     let mut methods: HashMap<Name, QualType> = HashMap::new();
-    let mut type_syns: HashMap<Name, AssocTypeSynInfo> = HashMap::new();
+    let mut type_syns: HashMap<Name, AssocTypeDefn> = HashMap::new();
     for pair in pairs {
         match parse_trait_member_defn(pair, ctx) {
             Either::Left((name, qual_type)) => {
@@ -332,7 +332,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
 fn parse_trait_member_defn(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-) -> Either<(Name, QualType), AssocTypeSynInfo> {
+) -> Either<(Name, QualType), AssocTypeDefn> {
     assert_eq!(pair.as_rule(), Rule::trait_member_defn);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
@@ -356,27 +356,28 @@ fn parse_trait_member_value_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> (N
     (method_name, qual_type)
 }
 
-fn parse_trait_member_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> AssocTypeSynInfo {
+fn parse_trait_member_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> AssocTypeDefn {
     assert_eq!(pair.as_rule(), Rule::trait_member_type_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let assoc_type_defn = parse_type(pairs.next().unwrap(), ctx);
     // Validate form of `assoc_type_defn`
-    let assoc_type_name = assoc_type_defn.is_associated_type_defn();
-    if assoc_type_name.is_none() {
+    let assoc_type_defn = assoc_type_defn.is_associated_type_defn();
+    if assoc_type_defn.is_none() {
         error_exit_with_src(
-            "Definition of an associated type has to be of the form `type {AssocTypeName} self (: {kind})`. If `{kind}` is omitted, it is assumed to be `*`.",
+            "Definition of an associated type has to be of the form `type {AssocTypeName} self {type_var_2} ... {type_var_N} (: {kind})`, where N is the arity of the associated type. Each `{type_var_k}` should be a free type variable. If `{kind}` is omitted, it is assumed to be `*`.",
             &Some(span),
         );
     }
-    let assoc_type_name = assoc_type_name.unwrap();
+    let (assoc_type_name, assoc_type_vars) = assoc_type_defn.unwrap();
     let kind_applied = if let Some(pair) = pairs.next() {
         parse_kind(pair, ctx)
     } else {
         kind_star()
     };
-    AssocTypeSynInfo {
+    AssocTypeDefn {
         name: assoc_type_name,
+        arity: assoc_type_vars.len() + 1,
         kind_applied,
         src: Some(span),
     }
@@ -453,10 +454,10 @@ fn parse_trait_member_type_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Ass
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let assoc_type_application = parse_type(pairs.next().unwrap(), ctx);
-    let assoc_type_impl = assoc_type_application.is_associated_type_impl();
+    let assoc_type_impl = assoc_type_application.is_associated_type_defn();
     if assoc_type_impl.is_none() {
         error_exit_with_src(
-            "Implementation of an associated type has to be of the form `type {AssocTypeName} self {type_var_0} ... {type_var_N} = {Type}`, where each `{type_var_i}` is a free type variable.",
+            "Implementation of an associated type has to be of the form `type {AssocTypeName} self {type_var_2} ... {type_var_N} = {Type}`, where N is the arity of the associated type. Each `{type_var_k}` should be a free type variable.",
             &Some(span),
         );
     }

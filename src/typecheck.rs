@@ -1,3 +1,4 @@
+use core::panic;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -181,104 +182,13 @@ impl Substitution {
         qual_type.ty = self.substitute_type(&qual_type.ty);
     }
 
-    // Calculate minimum substitution to unify two types.
-    pub fn unify(
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-        ty1: &Arc<TypeNode>,
-        ty2: &Arc<TypeNode>,
-    ) -> Option<Substitution> {
-        match &ty1.ty {
-            Type::TyVar(var1) => {
-                return Self::unify_tyvar(kind_map, &var1, ty2);
-            }
-            _ => {}
+    // Apply substitution to equality.
+    pub fn substitute_equality(&self, eq: &mut Equality) {
+        eq.impl_type = self.substitute_type(&eq.impl_type);
+        for arg in &mut eq.args {
+            *arg = self.substitute_type(arg);
         }
-        match &ty2.ty {
-            Type::TyVar(var2) => {
-                return Self::unify_tyvar(kind_map, &var2, ty1);
-            }
-            _ => {}
-        }
-        match &ty1.ty {
-            Type::TyVar(_) => unreachable!(),
-            Type::TyCon(tc1) => match &ty2.ty {
-                Type::TyCon(tc2) => {
-                    if tc1 == tc2 {
-                        return Some(Self::default());
-                    } else {
-                        return None;
-                    }
-                }
-                _ => {
-                    return None;
-                }
-            },
-            Type::TyApp(fun1, arg1) => match &ty2.ty {
-                Type::TyApp(fun2, arg2) => {
-                    let mut ret = Self::default();
-                    match Self::unify(kind_map, &fun1, &fun2) {
-                        Some(sub) => ret.add_substitution(&sub),
-                        None => return None,
-                    };
-                    let arg1 = ret.substitute_type(arg1);
-                    let arg2 = ret.substitute_type(arg2);
-                    match Self::unify(kind_map, &arg1, &arg2) {
-                        Some(sub) => ret.add_substitution(&sub),
-                        None => return None,
-                    };
-                    return Some(ret);
-                }
-                _ => {
-                    return None;
-                }
-            },
-            Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
-                Type::FunTy(arg_ty2, ret_ty2) => {
-                    let mut ret = Self::default();
-                    match Self::unify(kind_map, &arg_ty1, &arg_ty2) {
-                        Some(sub) => ret.add_substitution(&sub),
-                        None => return None,
-                    };
-                    let ret_ty1 = ret.substitute_type(ret_ty1);
-                    let ret_ty2 = ret.substitute_type(ret_ty2);
-                    match Self::unify(kind_map, &ret_ty1, &ret_ty2) {
-                        Some(sub) => ret.add_substitution(&sub),
-                        None => return None,
-                    };
-                    return Some(ret);
-                }
-                _ => {
-                    return None;
-                }
-            },
-        }
-    }
-
-    // Subroutine of unify().
-    fn unify_tyvar(
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-        tyvar1: &Arc<TyVar>,
-        ty2: &Arc<TypeNode>,
-    ) -> Option<Self> {
-        match &ty2.ty {
-            Type::TyVar(tyvar2) => {
-                if tyvar1.name == tyvar2.name {
-                    // Avoid adding circular subsitution.
-                    return Some(Self::default());
-                }
-            }
-            _ => {}
-        };
-        if ty2.free_vars().contains_key(&tyvar1.name) {
-            // For example, this error occurs when
-            // the user is making `f c` in the implementation of
-            // `map: [f: Functor] (a -> b) -> f a -> f b; map = |f, c| (...)`;
-            return None;
-        }
-        if tyvar1.kind != ty2.kind(kind_map) {
-            return None;
-        }
-        Some(Self::single(&tyvar1.name, ty2.clone()))
+        eq.value = self.substitute_type(&eq.value);
     }
 
     // Calculate minimum substitution s such that `s(ty1) = ty2`.
@@ -300,7 +210,8 @@ impl Substitution {
                 //
                 // (And this implementation is the same as one in "Typing Haskell in Haskell".)
                 if v1.kind != ty2.kind(kind_map) {
-                    return None;
+                    panic!("Is this possible?");
+                    // return None;
                 }
                 Some(Self::single(&v1.name, ty2.clone()))
             }
@@ -361,6 +272,230 @@ impl Substitution {
                 _ => None,
             },
         }
+    }
+}
+
+pub struct Unification {
+    substitution: Substitution,
+    equalities: Vec<Equality>, // Set of pending equality constraints.
+}
+
+impl Default for Unification {
+    fn default() -> Self {
+        Self {
+            substitution: Default::default(),
+            equalities: vec![],
+        }
+    }
+}
+
+impl Unification {
+    pub fn single_substitution(var: &str, ty: Arc<TypeNode>) -> Unification {
+        Unification {
+            substitution: Substitution::single(var, ty),
+            equalities: vec![],
+        }
+    }
+
+    pub fn from_equality(
+        eq: Equality,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
+    ) -> Unification {
+        let mut uni = Self::default();
+        uni.add_equality(eq, kind_map, assoc_tys);
+        uni
+    }
+
+    pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+        self.substitution.substitute_type(ty)
+    }
+
+    pub fn add_substitution(
+        &mut self,
+        subst: &Substitution,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
+    ) {
+        self.substitution.add_substitution(subst);
+        let eqs = std::mem::replace(&mut self.equalities, vec![]);
+        for mut eq in eqs {
+            eq.substitute(subst);
+            if let Some(uni) = Self::reduce_equality(&eq, kind_map, assoc_tys) {
+                self.add_unification(&uni, kind_map, assoc_tys);
+            } else {
+                self.equalities.push(eq);
+            }
+        }
+    }
+
+    pub fn add_equality(
+        &mut self,
+        mut eq: Equality,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
+    ) {
+        self.substitution.substitute_equality(&mut eq);
+        if let Some(uni) = Self::reduce_equality(&eq, kind_map, assoc_tys) {
+            self.add_unification(&uni, kind_map, assoc_tys);
+        } else {
+            self.equalities.push(eq);
+        }
+    }
+
+    pub fn add_unification(
+        &mut self,
+        uni: &Unification,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
+    ) {
+        self.add_substitution(&uni.substitution, kind_map, assoc_tys);
+        for eq in &uni.equalities {
+            self.add_equality(eq.clone(), kind_map, assoc_tys);
+        }
+    }
+
+    // Reduce an equality to an unification if possible.
+    pub fn reduce_equality(
+        eq: &Equality,
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
+    ) -> Option<Unification> {
+        // If `impl_type` is head normal form, then it cannot be unified to trait instance.
+        if eq.impl_type.is_hnf() {
+            return None;
+        }
+        for assoc_type_inst in &assoc_tys[&eq.assoc_type] {
+            let lhs1 = assoc_type_inst.equality.lhs();
+            let lhs2 = eq.lhs();
+            let s = Substitution::matching(kind_map, &lhs1, &lhs2);
+            if s.is_none() {
+                continue;
+            }
+            let s = s.unwrap();
+            let rhs1 = s.substitute_type(&assoc_type_inst.equality.value);
+            let rhs2 = eq.value;
+            return Unification::unify(kind_map, assoc_tys, &rhs1, &rhs2);
+        }
+        return None;
+    }
+
+    // Calculate minimum unification of two types.
+    pub fn unify(
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
+        mut ty1: &Arc<TypeNode>,
+        mut ty2: &Arc<TypeNode>,
+    ) -> Option<Unification> {
+        // Case: Either is a type variable.
+        for _ in 0..2 {
+            match &ty1.ty {
+                Type::TyVar(var1) => {
+                    return Self::unify_tyvar(kind_map, &var1, ty2);
+                }
+                _ => {}
+            }
+            std::mem::swap(&mut ty1, &mut ty2);
+        }
+        // Case: Either is usage of associated type.
+        for _ in 0..2 {
+            if let Some((assoc_ty, args)) =
+                ty1.is_associated_type_usage(|name| assoc_tys.contains_key(name))
+            {
+                let eq = Equality {
+                    assoc_type: assoc_ty,
+                    impl_type: args[0],
+                    args: args[1..].to_vec(),
+                    value: ty2.clone(),
+                    source: None,
+                };
+                return Some(Self::from_equality(eq, kind_map, assoc_tys));
+            }
+            std::mem::swap(&mut ty1, &mut ty2);
+        }
+
+        // Other case.
+        match &ty1.ty {
+            Type::TyVar(_) => unreachable!(),
+            Type::TyCon(tc1) => match &ty2.ty {
+                Type::TyCon(tc2) => {
+                    if tc1 == tc2 {
+                        return Some(Self::default());
+                    } else {
+                        return None;
+                    }
+                }
+                _ => {
+                    return None;
+                }
+            },
+            Type::TyApp(fun1, arg1) => match &ty2.ty {
+                Type::TyApp(fun2, arg2) => {
+                    let mut ret: Unification = Self::default();
+                    match Self::unify(kind_map, assoc_tys, &fun1, &fun2) {
+                        Some(uni) => ret.add_unification(&uni, kind_map, assoc_tys),
+                        None => return None,
+                    };
+                    let arg1 = ret.substitute_type(arg1);
+                    let arg2 = ret.substitute_type(arg2);
+                    match Self::unify(kind_map, assoc_tys, &arg1, &arg2) {
+                        Some(uni) => ret.add_unification(&uni, kind_map, assoc_tys),
+                        None => return None,
+                    };
+                    return Some(ret);
+                }
+                _ => {
+                    return None;
+                }
+            },
+            Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
+                Type::FunTy(arg_ty2, ret_ty2) => {
+                    let mut ret = Self::default();
+                    match Self::unify(kind_map, assoc_tys, &arg_ty1, &arg_ty2) {
+                        Some(uni) => ret.add_unification(&uni, kind_map, assoc_tys),
+                        None => return None,
+                    };
+                    let ret_ty1 = ret.substitute_type(ret_ty1);
+                    let ret_ty2 = ret.substitute_type(ret_ty2);
+                    match Self::unify(kind_map, assoc_tys, &ret_ty1, &ret_ty2) {
+                        Some(uni) => ret.add_unification(&uni, kind_map, assoc_tys),
+                        None => return None,
+                    };
+                    return Some(ret);
+                }
+                _ => {
+                    return None;
+                }
+            },
+        }
+    }
+
+    // Subroutine of unify().
+    fn unify_tyvar(
+        kind_map: &HashMap<TyCon, Arc<Kind>>,
+        tyvar1: &Arc<TyVar>,
+        ty2: &Arc<TypeNode>,
+    ) -> Option<Self> {
+        match &ty2.ty {
+            Type::TyVar(tyvar2) => {
+                if tyvar1.name == tyvar2.name {
+                    // Avoid adding circular subsitution.
+                    return Some(Self::default());
+                }
+            }
+            _ => {}
+        };
+        if ty2.free_vars().contains_key(&tyvar1.name) {
+            // For example, this error occurs when
+            // the user is making `f c` in the implementation of
+            // `map: [f: Functor] (a -> b) -> f a -> f b; map = |f, c| (...)`;
+            return None;
+        }
+        if tyvar1.kind != ty2.kind(kind_map) {
+            panic!("Is this possible?");
+            // return None;
+        };
+        Some(Self::single_substitution(&tyvar1.name, ty2.clone()))
     }
 }
 
