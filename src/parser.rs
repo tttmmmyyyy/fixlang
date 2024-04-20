@@ -464,8 +464,9 @@ fn parse_trait_member_type_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Ass
     let type_value = parse_type(pairs.next().unwrap(), ctx);
     AssocTypeImpl {
         name: assoc_type_name,
-        tyvars: type_vars,
+        params: type_vars,
         value: type_value,
+        source: Some(span),
     }
 }
 
@@ -480,6 +481,7 @@ fn parse_predicate_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualPr
     let predicate = parse_predicate(pairs.next().unwrap(), ctx);
     let qp = QualPredicate {
         context: predicates,
+        equality: todo!(""),
         kind_preds: kinds,
         predicate,
     };

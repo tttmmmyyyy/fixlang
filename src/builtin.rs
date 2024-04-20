@@ -3948,6 +3948,7 @@ pub fn unary_opeartor_instance(
     TraitInstance {
         qual_pred: QualPredicate {
             context: vec![],
+            equality: vec![],
             kind_preds: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
@@ -4014,6 +4015,7 @@ pub fn binary_opeartor_instance(
     TraitInstance {
         qual_pred: QualPredicate {
             context: vec![],
+            equality: vec![],
             kind_preds: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },

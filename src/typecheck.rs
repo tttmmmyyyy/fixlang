@@ -487,7 +487,7 @@ impl TypeCheckContext {
             let new_var_name = self.new_tyvar();
             sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
         }
-        let mut preds = scheme.preds.clone();
+        let mut preds = scheme.context.clone();
         for p in &mut preds {
             sub.substitute_predicate(p);
         }

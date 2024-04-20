@@ -763,6 +763,9 @@ impl Program {
                 let mut opt_e: Option<TypedExpr> = None;
                 for method in impls {
                     // Check if the type of this implementation unify with the required type `sym.ty`.
+                    // NOTE: Since overlapping implementations and unrelated methods are forbidden,
+                    // we only need to check the unifiability here,
+                    // and we do not need to check whether predicates or equality constraints are satisfiable or not.
                     let mut tc0 = tc.clone();
                     let (_, method_ty) = tc0.instantiate_scheme(&method.ty, false);
                     if Substitution::unify(&tc.type_env.kinds(), &method_ty, &sym.ty).is_none() {

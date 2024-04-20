@@ -42,8 +42,9 @@ pub struct AssocTypeSynInfo {
 #[derive(Clone)]
 pub struct AssocTypeImpl {
     pub name: Name,
-    pub tyvars: Vec<Arc<TyVar>>,
+    pub params: Vec<Arc<TyVar>>,
     pub value: Arc<TypeNode>,
+    pub source: Option<Span>,
 }
 
 // Traits definitions.
@@ -190,7 +191,7 @@ impl TraitInstance {
     pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
         // Create qualtype. Ex. `[] (a, b) -> String`.
         let trait_tyvar = &trait_info.type_var.name; // Ex. tyvar == `t`
-        let impl_type = self.qual_pred.predicate.ty.clone(); // Ex. impl_type == `(a, b)`
+        let impl_type = self.impl_type(); // Ex. impl_type == `(a, b)`
         let s = Substitution::single(&trait_tyvar, impl_type);
         let mut method_qualty = trait_info.method_ty(method_name); // Ex. method_qualty == `[] t -> String`
         s.substitute_qualtype(&mut method_qualty); // Ex. method_qualty == `[] (a, b) -> String`
@@ -223,6 +224,34 @@ impl TraitInstance {
     pub fn method_expr(&self, name: &Name) -> Arc<ExprNode> {
         self.methods.get(name).unwrap().clone()
     }
+
+    // Get the type implementing the trait.
+    pub fn impl_type(&self) -> Arc<TypeNode> {
+        self.qual_pred.predicate.ty.clone()
+    }
+
+    // From implementation of associated types, get generalized type equalities.
+    pub fn type_equalities(&self) -> Vec<EqualityScheme> {
+        self.assoc_types
+            .iter()
+            .map(|(assoc_type_name, assoc_type_impl)| {
+                let assoc_type_namespace = self.trait_id().name.to_namespace();
+                let assoc_type_fullname = FullName::new(&assoc_type_namespace, assoc_type_name);
+                let equality = Equality {
+                    assoc_type: assoc_type_fullname,
+                    impl_type: self.impl_type(),
+                    args: assoc_type_impl
+                        .params
+                        .iter()
+                        .map(|tv| type_from_tyvar(tv.clone()))
+                        .collect(),
+                    value: assoc_type_impl.value.clone(),
+                    source: assoc_type_impl.source.clone(),
+                };
+                equality.generalize()
+            })
+            .collect()
+    }
 }
 
 // Trait Aliases
@@ -251,9 +280,11 @@ impl TraitAlias {
 }
 
 // Qualified predicate. Statement such as "[a : Eq] Array a : Eq".
+// Constraints in `[...]` can be trait bound and equality.
 #[derive(Clone)]
 pub struct QualPredicate {
     pub context: Vec<Predicate>,
+    pub equality: Vec<Equality>,
     pub kind_preds: Vec<KindPredicate>,
     pub predicate: Predicate,
 }
@@ -463,9 +494,35 @@ impl KindPredicate {
     }
 }
 
-pub struct TypeEquality {
-    lhs: Arc<TypeNode>,
-    rhs: Arc<TypeNode>,
+// Equality predicate `AssociateType arg0 arg1 = value`.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Equality {
+    assoc_type: FullName,
+    impl_type: Arc<TypeNode>,
+    args: Vec<Arc<TypeNode>>,
+    value: Arc<TypeNode>,
+    source: Option<Span>,
+}
+
+impl Equality {
+    pub fn generalize(&self) -> EqualityScheme {
+        let mut tyvars = vec![];
+        self.impl_type.free_vars_vec(&mut tyvars);
+        for arg in &self.args {
+            arg.free_vars_vec(&mut tyvars);
+        }
+        let tyvars: HashSet<Name> = tyvars.iter().cloned().collect();
+        // NOTE: All of free variables in `value` should already be included in `tyvars`.
+        EqualityScheme {
+            tyvars,
+            equality: self.clone(),
+        }
+    }
+}
+
+pub struct EqualityScheme {
+    pub tyvars: HashSet<Name>,
+    pub equality: Equality,
 }
 
 // Trait environments.
