@@ -449,9 +449,6 @@ impl Predicate {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct PredicateInfo {}
-
 // Statement such as "f: * -> *".
 #[derive(Clone)]
 pub struct KindPredicate {
