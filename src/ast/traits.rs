@@ -369,26 +369,26 @@ impl QualType {
 pub struct Predicate {
     pub trait_id: TraitId,
     pub ty: Arc<TypeNode>,
-    pub info: PredicateInfo,
+    pub source: Option<Span>,
 }
 
 impl Predicate {
     pub fn set_source(&mut self, source: Span) {
-        self.info.source = Some(source);
+        self.source = Some(source);
     }
 
     pub fn make(trait_id: TraitId, ty: Arc<TypeNode>) -> Self {
         Predicate {
             trait_id,
             ty,
-            info: PredicateInfo { source: None },
+            source: None,
         }
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         let resolve_result = self.trait_id.resolve_namespace(ctx);
         if resolve_result.is_err() {
-            error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
+            error_exit_with_src(&resolve_result.unwrap_err(), &self.source)
         }
         self.ty = self.ty.resolve_namespace(ctx);
     }
@@ -428,7 +428,7 @@ impl Predicate {
                     expected.to_string(),
                     found.to_string()
                 ),
-                &self.info.source,
+                &self.source,
             )
         }
     }
@@ -450,9 +450,7 @@ impl Predicate {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PredicateInfo {
-    pub source: Option<Span>,
-}
+pub struct PredicateInfo {}
 
 // Statement such as "f: * -> *".
 #[derive(Clone)]
@@ -545,8 +543,8 @@ impl TraitEnv {
                 // check implementation is given for trait, not for trait alias.
                 if aliases.contains(trait_id) {
                     error_exit_with_src(
-                        "You cannot implement a trait alias directly. Implement each aliased trait instead.",
-                        &inst.qual_pred.predicate.info.source,
+                        "A trait alias cannot be implemented directly. Implement each aliased trait instead.",
+                        &inst.qual_pred.predicate.source,
                     )
                 }
 
@@ -567,7 +565,7 @@ impl TraitEnv {
                     match ctx.ty.ty {
                         Type::TyVar(_) => {}
                         _ => {
-                            error_exit_with_src(&format!("Invalid trait bound `{}`. In current Fix, trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.", ctx.to_string_normalize()), &ctx.info.source);
+                            error_exit_with_src(&format!("Invalid trait bound `{}`. In current Fix, trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.", ctx.to_string_normalize()), &ctx.source);
                         }
                     }
                 }
@@ -696,7 +694,7 @@ impl TraitEnv {
                 let mut trait_id = trait_id.clone();
                 let resolve_result = trait_id.resolve_namespace(ctx);
                 if resolve_result.is_err() {
-                    let src = inst.qual_pred.predicate.info.source.clone();
+                    let src = inst.qual_pred.predicate.source.clone();
                     error_exit_with_src(&resolve_result.unwrap_err(), &src)
                 }
 

@@ -1212,9 +1212,9 @@ impl Scheme {
         }
         let res = QualPredicate::extend_kind_scope(&mut scope, &ret.preds, &vec![], trait_kind_map);
         if let Err(msg) = res {
-            let mut span = ret.preds[0].info.source.clone();
+            let mut span = ret.preds[0].source.clone();
             for i in 1..ret.preds.len() {
-                span = Span::unite_opt(&span, &ret.preds[i].info.source);
+                span = Span::unite_opt(&span, &ret.preds[i].source);
             }
             error_exit_with_src(&msg, &span);
         }

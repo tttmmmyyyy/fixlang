@@ -282,7 +282,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
         if !preds.is_empty() {
             error_exit_with_src(
                 "Fix does not support super-trait; only kinds of the type parameter can be specified as the assumption for trait definition.",
-                &preds.first().unwrap().info.source
+                &preds.first().unwrap().source
             );
         }
         kinds
@@ -526,7 +526,7 @@ fn parse_type_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualType {
         match &pred.ty.ty {
             Type::TyVar(_) => {}
             _ => {
-                error_exit_with_src("Trait bound has to be of the form `tv : SomeTrait` for some type variable `tv`.", &pred.info.source);
+                error_exit_with_src("Trait bound has to be of the form `tv : SomeTrait` for some type variable `tv`.", &pred.source);
             }
         }
     }
@@ -658,7 +658,7 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDefn {
         if preds.len() > 0 {
             error_exit_with_src(
                 "In type definition, you cannot specify trait bound on type variable; you can only specify kind of type variable.",
-                &preds.first().unwrap().info.source,
+                &preds.first().unwrap().source,
             );
         }
         for kind_pred in kind_preds {
