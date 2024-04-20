@@ -463,6 +463,11 @@ impl KindPredicate {
     }
 }
 
+pub struct TypeEquality {
+    lhs: Arc<TypeNode>,
+    rhs: Arc<TypeNode>,
+}
+
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
