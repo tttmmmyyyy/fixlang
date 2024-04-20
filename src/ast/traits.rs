@@ -38,6 +38,14 @@ pub struct AssocTypeSynInfo {
     pub src: Option<Span>,
 }
 
+// Implementation of associated type synonym.
+#[derive(Clone)]
+pub struct AssocTypeImpl {
+    pub name: Name,
+    pub tyvars: Vec<Arc<TyVar>>,
+    pub value: Arc<TypeNode>,
+}
+
 // Traits definitions.
 #[derive(Clone)]
 pub struct TraitInfo {
@@ -130,7 +138,7 @@ pub struct TraitInstance {
     // Method implementation.
     pub methods: HashMap<Name, Arc<ExprNode>>,
     // Associated type synonym implementation.
-    pub assoc_types: HashMap<Name, Arc<TypeNode>>,
+    pub assoc_types: HashMap<Name, AssocTypeImpl>,
     // Module where this instance is defined.
     pub define_module: Name,
     // Source location where this instance is defined.

@@ -493,10 +493,10 @@ impl TypeNode {
         ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
     }
 
-    // Flatten type application:
-    // `f a b` => `(f, vec![a, b])`.
-    // `a` => `(a, vec![])`.
-    fn flatten_type_application(&self) -> Vec<Arc<TypeNode>> {
+    // Flatten type application.
+    // ex. If given `f a b`, returns `vec![f, a, b]`.
+    // ex. If given `a`, panics.
+    pub fn flatten_type_application(&self) -> Vec<Arc<TypeNode>> {
         fn flatten_type_application_inner(ty: &TypeNode, args: &mut Vec<Arc<TypeNode>>) {
             match &ty.ty {
                 Type::TyApp(fun, arg) => {
@@ -809,6 +809,84 @@ impl TypeNode {
     ) -> BasicTypeEnum<'c> {
         self.get_object_type(capture, gc.type_env())
             .to_embedded_type(gc, vec![])
+    }
+
+    // Check if the type takes the form of the definition of associated type.
+    // Definition of an associated type has to be of the form `type {AssocTypeName} self`,
+    // - where `{AssocTypeName}` is a local name and
+    // - `self` is the special type variable.
+    // If ok, return the name of the associated type.
+    pub fn is_associated_type_defn(&self) -> Option<Name> {
+        match &self.ty {
+            Type::TyApp(fun, arg) => {
+                let assoc_ty = match &fun.ty {
+                    Type::TyCon(tc) => tc,
+                    _ => return None,
+                };
+                // Name of `assoc_ty` should be local.
+                if !assoc_ty.name.is_local() {
+                    return None;
+                }
+                match &arg.ty {
+                    Type::TyVar(tv) => {
+                        if tv.name == TRAIT_IMPL_SELF {
+                            return Some(assoc_ty.name.to_string());
+                        } else {
+                            return None;
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        }
+    }
+
+    // Check if the type takes the form of the implementation of associated type.
+    // Implementation of an associated type has to be of the form `type AssocTypeName self tv1 ... tvN`,
+    // - where `AssocTypeName` is a local name,
+    // - `self` is the special type variable, and
+    // - `tv1 ... tvN` are type variables.
+    // If ok, return the pair of the name of the associated type and the list of type variables.
+    pub fn is_associated_type_impl(&self) -> Option<(Name, Vec<Arc<TyVar>>)> {
+        let assoc_ty_name;
+        match &self.ty {
+            Type::TyApp(fun, _arg) => {
+                let assoc_ty = match &fun.ty {
+                    Type::TyCon(tc) => tc,
+                    _ => return None,
+                };
+                // Name of `assoc_ty` should be local.
+                if !assoc_ty.name.is_local() {
+                    return None;
+                }
+                assoc_ty_name = assoc_ty.name.to_string();
+            }
+            _ => return None,
+        };
+        let applications = self.flatten_type_application();
+        match &applications[1].ty {
+            Type::TyVar(tv) => {
+                if tv.name != TRAIT_IMPL_SELF {
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+        let mut tyvars = vec![];
+        for i in 2..applications.len() {
+            match &applications[i].ty {
+                Type::TyVar(tv) => {
+                    // Since `tv` should be free, it cannot be `self`.
+                    if tv.name == TRAIT_IMPL_SELF {
+                        return None;
+                    }
+                    tyvars.push(tv.clone());
+                }
+                _ => return None,
+            }
+        }
+        Some((assoc_ty_name, tyvars))
     }
 }
 
