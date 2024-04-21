@@ -275,21 +275,22 @@ impl Substitution {
     }
 }
 
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Unification {
     substitution: Substitution,
     equalities: Vec<Equality>, // Set of pending equality constraints.
 }
 
-impl Default for Unification {
-    fn default() -> Self {
-        Self {
-            substitution: Default::default(),
-            equalities: vec![],
-        }
-    }
+pub enum UnificationErr {
+    Unsatisfiable(Predicate),
+    Disjoint(Arc<TypeNode>, Arc<TypeNode>),
 }
 
 impl Unification {
+    pub fn is_empty(&self) -> bool {
+        self.substitution.data.is_empty() && self.equalities.is_empty()
+    }
+
     pub fn single_substitution(var: &str, ty: Arc<TypeNode>) -> Unification {
         Unification {
             substitution: Substitution::single(var, ty),
@@ -301,10 +302,10 @@ impl Unification {
         eq: Equality,
         kind_map: &HashMap<TyCon, Arc<Kind>>,
         assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
-    ) -> Unification {
+    ) -> Result<Unification, UnificationErr> {
         let mut uni = Self::default();
-        uni.add_equality(eq, kind_map, assoc_tys);
-        uni
+        uni.add_equality(eq, kind_map, assoc_tys)?;
+        Ok(uni)
     }
 
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
@@ -316,17 +317,18 @@ impl Unification {
         subst: &Substitution,
         kind_map: &HashMap<TyCon, Arc<Kind>>,
         assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
-    ) {
+    ) -> Result<(), UnificationErr> {
         self.substitution.add_substitution(subst);
         let eqs = std::mem::replace(&mut self.equalities, vec![]);
         for mut eq in eqs {
             eq.substitute(subst);
-            if let Some(uni) = Self::reduce_equality(&eq, kind_map, assoc_tys) {
-                self.add_unification(&uni, kind_map, assoc_tys);
+            if let Some(uni) = Self::reduce_equality(&eq, kind_map, assoc_tys)? {
+                self.add_unification(&uni, kind_map, assoc_tys)?;
             } else {
                 self.equalities.push(eq);
             }
         }
+        Ok(())
     }
 
     pub fn add_equality(
@@ -334,13 +336,14 @@ impl Unification {
         mut eq: Equality,
         kind_map: &HashMap<TyCon, Arc<Kind>>,
         assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
-    ) {
+    ) -> Result<(), UnificationErr> {
         self.substitution.substitute_equality(&mut eq);
-        if let Some(uni) = Self::reduce_equality(&eq, kind_map, assoc_tys) {
-            self.add_unification(&uni, kind_map, assoc_tys);
+        if let Some(uni) = Self::reduce_equality(&eq, kind_map, assoc_tys)? {
+            self.add_unification(&uni, kind_map, assoc_tys)?;
         } else {
             self.equalities.push(eq);
         }
+        Ok(())
     }
 
     pub fn add_unification(
@@ -348,22 +351,25 @@ impl Unification {
         uni: &Unification,
         kind_map: &HashMap<TyCon, Arc<Kind>>,
         assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
-    ) {
-        self.add_substitution(&uni.substitution, kind_map, assoc_tys);
+    ) -> Result<(), UnificationErr> {
+        self.add_substitution(&uni.substitution, kind_map, assoc_tys)?;
         for eq in &uni.equalities {
-            self.add_equality(eq.clone(), kind_map, assoc_tys);
+            self.add_equality(eq.clone(), kind_map, assoc_tys)?;
         }
+        Ok(())
     }
 
     // Reduce an equality to an unification if possible.
+    // If equality is unsaatisfiable, return Err.
+    // If equality is satisfiable, returns None if it cannot be reduced, or returns the minimum unification.
     pub fn reduce_equality(
         eq: &Equality,
         kind_map: &HashMap<TyCon, Arc<Kind>>,
         assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
-    ) -> Option<Unification> {
+    ) -> Result<Option<Unification>, UnificationErr> {
         // If `impl_type` is head normal form, then it cannot be unified to trait instance.
         if eq.impl_type.is_hnf() {
-            return None;
+            return Ok(None);
         }
         for assoc_type_inst in &assoc_tys[&eq.assoc_type] {
             let lhs1 = assoc_type_inst.equality.lhs();
@@ -375,9 +381,10 @@ impl Unification {
             let s = s.unwrap();
             let rhs1 = s.substitute_type(&assoc_type_inst.equality.value);
             let rhs2 = eq.value;
-            return Unification::unify(kind_map, assoc_tys, &rhs1, &rhs2);
+            let uni = Unification::unify(kind_map, assoc_tys, &rhs1, &rhs2)?;
+            return Ok(Some(uni));
         }
-        return None;
+        return Err(UnificationErr::Unsatisfiable(eq.predicate()));
     }
 
     // Calculate minimum unification of two types.
@@ -386,7 +393,7 @@ impl Unification {
         assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
         mut ty1: &Arc<TypeNode>,
         mut ty2: &Arc<TypeNode>,
-    ) -> Option<Unification> {
+    ) -> Result<Unification, UnificationErr> {
         // Case: Either is a type variable.
         for _ in 0..2 {
             match &ty1.ty {
@@ -409,7 +416,7 @@ impl Unification {
                     value: ty2.clone(),
                     source: None,
                 };
-                return Some(Self::from_equality(eq, kind_map, assoc_tys));
+                return Ok(Self::from_equality(eq, kind_map, assoc_tys)?);
             }
             std::mem::swap(&mut ty1, &mut ty2);
         }
@@ -420,51 +427,43 @@ impl Unification {
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
                     if tc1 == tc2 {
-                        return Some(Self::default());
+                        return Ok(Self::default());
                     } else {
-                        return None;
+                        return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()));
                     }
                 }
                 _ => {
-                    return None;
+                    return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()));
                 }
             },
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret: Unification = Self::default();
-                    match Self::unify(kind_map, assoc_tys, &fun1, &fun2) {
-                        Some(uni) => ret.add_unification(&uni, kind_map, assoc_tys),
-                        None => return None,
-                    };
+                    let uni = Self::unify(kind_map, assoc_tys, &fun1, &fun2)?;
+                    ret.add_unification(&uni, kind_map, assoc_tys)?;
                     let arg1 = ret.substitute_type(arg1);
                     let arg2 = ret.substitute_type(arg2);
-                    match Self::unify(kind_map, assoc_tys, &arg1, &arg2) {
-                        Some(uni) => ret.add_unification(&uni, kind_map, assoc_tys),
-                        None => return None,
-                    };
-                    return Some(ret);
+                    let uni = Self::unify(kind_map, assoc_tys, &arg1, &arg2)?;
+                    ret.add_unification(&uni, kind_map, assoc_tys)?;
+                    return Ok(ret);
                 }
                 _ => {
-                    return None;
+                    return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()));
                 }
             },
             Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
                 Type::FunTy(arg_ty2, ret_ty2) => {
                     let mut ret = Self::default();
-                    match Self::unify(kind_map, assoc_tys, &arg_ty1, &arg_ty2) {
-                        Some(uni) => ret.add_unification(&uni, kind_map, assoc_tys),
-                        None => return None,
-                    };
+                    let uni = Self::unify(kind_map, assoc_tys, &arg_ty1, &arg_ty2)?;
+                    ret.add_unification(&uni, kind_map, assoc_tys)?;
                     let ret_ty1 = ret.substitute_type(ret_ty1);
                     let ret_ty2 = ret.substitute_type(ret_ty2);
-                    match Self::unify(kind_map, assoc_tys, &ret_ty1, &ret_ty2) {
-                        Some(uni) => ret.add_unification(&uni, kind_map, assoc_tys),
-                        None => return None,
-                    };
-                    return Some(ret);
+                    let uni = Self::unify(kind_map, assoc_tys, &ret_ty1, &ret_ty2)?;
+                    ret.add_unification(&uni, kind_map, assoc_tys)?;
+                    return Ok(ret);
                 }
                 _ => {
-                    return None;
+                    return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()));
                 }
             },
         }
@@ -475,12 +474,12 @@ impl Unification {
         kind_map: &HashMap<TyCon, Arc<Kind>>,
         tyvar1: &Arc<TyVar>,
         ty2: &Arc<TypeNode>,
-    ) -> Option<Self> {
+    ) -> Result<Unification, UnificationErr> {
         match &ty2.ty {
             Type::TyVar(tyvar2) => {
                 if tyvar1.name == tyvar2.name {
                     // Avoid adding circular subsitution.
-                    return Some(Self::default());
+                    return Ok(Self::default());
                 }
             }
             _ => {}
@@ -489,13 +488,13 @@ impl Unification {
             // For example, this error occurs when
             // the user is making `f c` in the implementation of
             // `map: [f: Functor] (a -> b) -> f a -> f b; map = |f, c| (...)`;
-            return None;
+            return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
         if tyvar1.kind != ty2.kind(kind_map) {
             panic!("Is this possible?");
             // return None;
         };
-        Some(Self::single_substitution(&tyvar1.name, ty2.clone()))
+        Ok(Self::single_substitution(&tyvar1.name, ty2.clone()))
     }
 }
 
@@ -526,10 +525,13 @@ pub struct TypeCheckContext {
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct TypeResolver {
     // Unification.
-    pub unification: Substitution,
+    pub unification: Unification,
     // Type to kind mapping.
     #[serde(skip)]
     pub kind_map: HashMap<TyCon, Arc<Kind>>,
+    // Equality schemes populated by implementation of associated types.
+    #[serde(skip)]
+    pub assoc_tys: HashMap<FullName, Vec<EqualityScheme>>,
 }
 
 impl TypeResolver {
@@ -538,14 +540,15 @@ impl TypeResolver {
         self.kind_map = type_env.kinds();
     }
 
-    // Update substitution to unify two types.
-    // When substitution fails, it has no side effect to self.
+    // Update unification to unify two types.
+    // When unification fails, it has no side effect to self.
     pub fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         let ty1 = &self.substitute_type(ty1);
         let ty2 = &self.substitute_type(ty2);
-        match Substitution::unify(&self.kind_map, ty1, ty2) {
-            Some(sub) => {
-                self.unification.add_substitution(&sub);
+        match Unification::unify(&self.kind_map, &self.assoc_tys, ty1, ty2) {
+            Some(uni) => {
+                self.unification
+                    .add_unification(&uni, &self.kind_map, &self.assoc_tys);
                 return true;
             }
             None => {
@@ -561,7 +564,7 @@ impl TypeResolver {
 
     // Apply substitution to a predicate.
     pub fn substitute_predicate(&self, p: &mut Predicate) {
-        self.unification.substitute_predicate(p)
+        self.unification.substitution.substitute_predicate(p)
     }
 }
 
@@ -960,8 +963,7 @@ impl TypeCheckContext {
     pub fn check_type(&mut self, expr: Arc<ExprNode>, expect_scm: Arc<Scheme>) -> Arc<ExprNode> {
         // This function should be called when TypeCheckContext is "fresh".
         assert!(self.predicates.is_empty());
-        assert!(self.resolver.unification.data.is_empty());
-        todo!("assert here equalities are empty");
+        assert!(self.resolver.unification.is_empty());
 
         let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone());

@@ -510,6 +510,17 @@ impl Equality {
         ty
     }
 
+    // Returns the predicate to reduce this equality.
+    pub fn predicate(&self) -> Predicate {
+        // Get trait name from the name of the associated type.
+        let trait_name = self.assoc_type.namespace;
+        let trait_name = FullName::new(
+            &NameSpace::new(trait_name.names[0..trait_name.names.len() - 1].to_vec()),
+            trait_name.names.last().unwrap(),
+        );
+        Predicate::make(TraitId::from_fullname(trait_name), self.impl_type.clone())
+    }
+
     pub fn substitute(&mut self, subst: &Substitution) {
         self.impl_type = subst.substitute_type(&self.impl_type);
         for arg in &mut self.args {
@@ -533,6 +544,7 @@ impl Equality {
     }
 }
 
+#[derive(Clone)]
 pub struct EqualityScheme {
     pub tyvars: HashSet<Name>,
     pub equality: Equality,
