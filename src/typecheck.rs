@@ -525,8 +525,8 @@ pub struct TypeCheckContext {
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct TypeResolver {
-    // Substitution.
-    pub substitution: Substitution,
+    // Unification.
+    pub unification: Substitution,
     // Type to kind mapping.
     #[serde(skip)]
     pub kind_map: HashMap<TyCon, Arc<Kind>>,
@@ -545,7 +545,7 @@ impl TypeResolver {
         let ty2 = &self.substitute_type(ty2);
         match Substitution::unify(&self.kind_map, ty1, ty2) {
             Some(sub) => {
-                self.substitution.add_substitution(&sub);
+                self.unification.add_substitution(&sub);
                 return true;
             }
             None => {
@@ -556,12 +556,12 @@ impl TypeResolver {
 
     // Apply substitution to type.
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
-        self.substitution.substitute_type(ty)
+        self.unification.substitute_type(ty)
     }
 
     // Apply substitution to a predicate.
     pub fn substitute_predicate(&self, p: &mut Predicate) {
-        self.substitution.substitute_predicate(p)
+        self.unification.substitute_predicate(p)
     }
 }
 
@@ -679,7 +679,7 @@ impl TypeCheckContext {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the expected type.",
                                 fullname.to_string(),
-                                scm.substitute(&self.resolver.substitution).to_string(),
+                                scm.substitute(&self.resolver.unification).to_string(),
                             );
                             Err(msg)
                         } else {
@@ -693,7 +693,7 @@ impl TypeCheckContext {
                                 let msg = format!(
                                     "- `{}` of type `{}` does not match since the constraint `{}` is not satisifed.",
                                     fullname.to_string(),
-                                    scm.substitute(&self.resolver.substitution).to_string(),
+                                    scm.substitute(&self.resolver.unification).to_string(),
                                     fail_predicate.to_string_normalize()
                                 );
                                 Err(msg)
@@ -960,7 +960,7 @@ impl TypeCheckContext {
     pub fn check_type(&mut self, expr: Arc<ExprNode>, expect_scm: Arc<Scheme>) -> Arc<ExprNode> {
         // This function should be called when TypeCheckContext is "fresh".
         assert!(self.predicates.is_empty());
-        assert!(self.resolver.substitution.data.is_empty());
+        assert!(self.resolver.unification.data.is_empty());
         todo!("assert here equalities are empty");
 
         let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
