@@ -638,9 +638,9 @@ impl TypeCheckContext {
         self.resolver.unify(ty1, ty2)
     }
 
-    // Reduce predicates.
+    // Reduce predicates to head normal forms.
     // Returns Err(p) if predicates are unsatisfiable due to predicate p.
-    pub fn reduce_predicates(&mut self) -> Result<(), Predicate> {
+    pub fn reduce_predicates_to_hnfs(&mut self) -> Result<(), Predicate> {
         let mut preds = std::mem::replace(&mut self.predicates, vec![]);
         for p in &mut preds {
             self.substitute_predicate(p);
@@ -648,7 +648,7 @@ impl TypeCheckContext {
         self.predicates.append(&mut preds);
         self.predicates = self
             .trait_env
-            .reduce(&self.predicates, &self.type_env.kinds())?;
+            .reduce_to_hnf(&self.predicates, &self.type_env.kinds())?;
         Ok(())
     }
 
@@ -674,7 +674,7 @@ impl TypeCheckContext {
                         let fullname = FullName::new(ns, &var.name.name);
                         let mut tc = self.clone();
                         let (_, var_ty) = tc.instantiate_scheme(&scm, true);
-                        // if var_ty is unifiable to the expected type and predicates are satisfiable, then this candidate is ok.
+                        // if var_ty is unifiable to the expected type and predicates are not unsatisfiable, then this candidate is ok.
                         if !tc.unify(&var_ty, &ty) {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the expected type.",
@@ -683,10 +683,11 @@ impl TypeCheckContext {
                             );
                             Err(msg)
                         } else {
-                            let reduce_result = tc.reduce_predicates();
+                            let reduce_result = tc.reduce_predicates_to_hnfs();
                             if reduce_result.is_ok() {
                                 Ok((tc, ns.clone()))
                             } else {
+                                // When predicates are unsatisfiable,
                                 let mut fail_predicate = reduce_result.err().unwrap();
                                 self.substitute_predicate(&mut fail_predicate);
                                 let msg = format!(
@@ -957,11 +958,15 @@ impl TypeCheckContext {
     // Check if expr has type scm.
     // Returns given AST augmented with inferred information.
     pub fn check_type(&mut self, expr: Arc<ExprNode>, expect_scm: Arc<Scheme>) -> Arc<ExprNode> {
-        assert!(self.predicates.is_empty()); // This function is available only when predicates are empty.
+        // This function should be called when TypeCheckContext is "fresh".
+        assert!(self.predicates.is_empty());
+        assert!(self.resolver.substitution.data.is_empty());
+        todo!("assert here equalities are empty");
+
         let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone());
         let deduced_ty = self.substitute_type(&specified_ty);
-        let red_res = self.reduce_predicates();
+        let red_res = self.reduce_predicates_to_hnfs();
         assert!(red_res.is_ok());
         let required_preds = std::mem::replace(&mut self.predicates, Default::default());
 

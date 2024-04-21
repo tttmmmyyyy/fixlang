@@ -1035,7 +1035,7 @@ impl TraitEnv {
     // Returns qs when satisfaction of ps are reduced to qs.
     // In particular, returns empty when ps are satisfied.
     // Returns Err(p) if reduction failed due to predicate p.
-    pub fn reduce(
+    pub fn reduce_to_hnf(
         &self,
         ps: &Vec<Predicate>,
         kind_map: &HashMap<TyCon, Arc<Kind>>,
