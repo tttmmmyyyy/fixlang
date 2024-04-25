@@ -966,6 +966,10 @@ impl TypeCheckContext {
         assert!(self.predicates.is_empty());
         assert!(self.resolver.unification.is_empty());
 
+        // Theretically, it is enogh to do `unify_type_of_expr(expr, a_type_var)` to infer the type of expr,
+        // and check that the deduced type (which is defined by substitute_type(a_type_var)) is more general than the specified type signature, i.e.,
+        // there exists a substitution `s` such that `s(deduced_type) = specified_ty`.
+        // Here, in fact, we use `specified_ty` instead of `a_type_var` to generate better error messages.
         let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone());
         let deduced_ty = self.substitute_type(&specified_ty);
