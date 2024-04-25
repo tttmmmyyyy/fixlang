@@ -755,6 +755,7 @@ impl Program {
                 // Calculate free vars.
                 e.calculate_free_vars();
                 // Specialize e's type to the required type `sym.ty`.
+                // TODO: maybe we can use here matching, not unification.
                 let ok = e.unify_to(&sym.ty);
                 assert!(ok);
                 e
@@ -784,6 +785,7 @@ impl Program {
                     // Calculate free vars.
                     e.calculate_free_vars();
                     // Specialize e's type to required type `sym.ty`
+                    // TODO: maybe we can use here matching, not unification.
                     assert!(e.unify_to(&sym.ty));
                     opt_e = Some(e);
                     break;
