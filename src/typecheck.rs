@@ -369,6 +369,7 @@ impl Unification {
     ) -> Result<Option<Unification>, UnificationErr> {
         // If `impl_type` is head normal form, then it cannot be unified to trait instance.
         if eq.impl_type.is_hnf() {
+            todo!("we need to change definition of hnf, since associated type is not a type constructor.");
             return Ok(None);
         }
         for assoc_type_inst in &assoc_tys[&eq.assoc_type] {
