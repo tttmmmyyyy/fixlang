@@ -437,12 +437,6 @@ impl TypeCheckContext {
         (preds, sub.substitute_type(&scheme.ty))
     }
 
-    // Update substitution to unify two types.
-    // When substitution fails, it has no side effect to self.
-    pub fn unify(&mut self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
-        self.resolver.unify(ty1, ty2)
-    }
-
     // Reduce predicates to head normal forms.
     // Returns Err(p) if predicates are unsatisfiable due to predicate p.
     pub fn reduce_predicates_to_hnfs(&mut self) -> Result<(), Predicate> {
@@ -956,11 +950,9 @@ impl TypeCheckContext {
             Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
                 Type::FunTy(arg_ty2, ret_ty2) => {
                     self.unify(&arg_ty1, &arg_ty2)?;
-                    self.add_unification(&uni)?;
-                    let ret_ty1 = ret.substitute_type(ret_ty1);
-                    let ret_ty2 = ret.substitute_type(ret_ty2);
+                    let ret_ty1 = self.resolver.substitute_type(ret_ty1);
+                    let ret_ty2 = self.resolver.substitute_type(ret_ty2);
                     self.unify(&ret_ty1, &ret_ty2)?;
-                    ret.add_unification(&uni)?;
                     return Ok(());
                 }
                 _ => {
