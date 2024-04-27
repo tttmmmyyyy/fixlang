@@ -912,7 +912,7 @@ impl TraitEnv {
     // Reduce a predicate p to a context of trait instance.
     // For example, reduce `Array a : Eq` to `a : Eq` using instance `impl [a : Eq] Array a : Eq`.
     // Returns None when p cannot be reduced more.
-    fn reduce_to_context_of_instance(
+    pub fn reduce_to_context_of_instance(
         &self,
         p: &Predicate,
         kind_map: &HashMap<TyCon, Arc<Kind>>,
@@ -940,131 +940,131 @@ impl TraitEnv {
         return None;
     }
 
-    // Judge whether a predicate p is entailed by a set of predicates ps.
-    pub fn entail(
-        &self,
-        ps: &Vec<Predicate>,
-        p: &Predicate,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-    ) -> bool {
-        // Resolve trait aliases in ps.
-        let mut resolved_ps = vec![];
-        for p in ps {
-            resolved_ps.append(&mut p.resolve_trait_aliases(self));
-        }
-        let ps = resolved_ps;
+    // // Judge whether a predicate p is entailed by a set of predicates ps.
+    // pub fn entail(
+    //     &self,
+    //     ps: &Vec<Predicate>,
+    //     p: &Predicate,
+    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+    // ) -> bool {
+    //     // Resolve trait aliases in ps.
+    //     let mut resolved_ps = vec![];
+    //     for p in ps {
+    //         resolved_ps.append(&mut p.resolve_trait_aliases(self));
+    //     }
+    //     let ps = resolved_ps;
 
-        p.resolve_trait_aliases(self)
-            .iter()
-            .all(|p| self.entail_inner(&ps, p, kind_map))
-    }
+    //     p.resolve_trait_aliases(self)
+    //         .iter()
+    //         .all(|p| self.entail_inner(&ps, p, kind_map))
+    // }
 
-    // Judge whether a predicate p is entailed by a set of predicates ps.
-    // p and ps cannot contain trait aliases.
-    fn entail_inner(
-        &self,
-        ps: &Vec<Predicate>,
-        p: &Predicate,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-    ) -> bool {
-        // If p is in ps, then ok.
-        for q in ps {
-            if q.to_string() == p.to_string() {
-                return true;
-            }
-        }
-        // Try reducing p by instances.
-        match self.reduce_to_context_of_instance(p, kind_map) {
-            Some(ctxs) => {
-                let mut all_ok = true;
-                for ctx in ctxs {
-                    if !self.entail(ps, &ctx, kind_map) {
-                        all_ok = false;
-                        break;
-                    }
-                }
-                all_ok
-            }
-            None => false,
-        }
-    }
+    // // Judge whether a predicate p is entailed by a set of predicates ps.
+    // // p and ps cannot contain trait aliases.
+    // fn entail_inner(
+    //     &self,
+    //     ps: &Vec<Predicate>,
+    //     p: &Predicate,
+    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+    // ) -> bool {
+    //     // If p is in ps, then ok.
+    //     for q in ps {
+    //         if q.to_string() == p.to_string() {
+    //             return true;
+    //         }
+    //     }
+    //     // Try reducing p by instances.
+    //     match self.reduce_to_context_of_instance(p, kind_map) {
+    //         Some(ctxs) => {
+    //             let mut all_ok = true;
+    //             for ctx in ctxs {
+    //                 if !self.entail(ps, &ctx, kind_map) {
+    //                     all_ok = false;
+    //                     break;
+    //                 }
+    //             }
+    //             all_ok
+    //         }
+    //         None => false,
+    //     }
+    // }
 
-    // Reduce a predicate to head normal form.
-    // Returns Err(p) if reduction failed due to predicate p.
-    fn reduce_to_hnfs(
-        &self,
-        p: &Predicate,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-    ) -> Result<Vec<Predicate>, Predicate> {
-        if p.ty.is_hnf() {
-            return Ok(vec![p.clone()]);
-        }
-        match self.reduce_to_context_of_instance(p, kind_map) {
-            Some(ps) => self.reduce_to_hnfs_many(&ps, kind_map),
-            None => Err(p.clone()),
-        }
-    }
+    // // Reduce a predicate to head normal form.
+    // // Returns Err(p) if reduction failed due to predicate p.
+    // fn reduce_to_hnfs(
+    //     &self,
+    //     p: &Predicate,
+    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+    // ) -> Result<Vec<Predicate>, Predicate> {
+    //     if p.ty.is_hnf() {
+    //         return Ok(vec![p.clone()]);
+    //     }
+    //     match self.reduce_to_context_of_instance(p, kind_map) {
+    //         Some(ps) => self.reduce_to_hnfs_many(&ps, kind_map),
+    //         None => Err(p.clone()),
+    //     }
+    // }
 
-    // Reduce predicates to head normal form.
-    // Returns Err(p) if reduction failed due to predicate p.
-    fn reduce_to_hnfs_many(
-        &self,
-        ps: &Vec<Predicate>,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-    ) -> Result<Vec<Predicate>, Predicate> {
-        let mut ret: Vec<Predicate> = Default::default();
-        for p in ps {
-            ret.append(&mut self.reduce_to_hnfs(p, kind_map)?)
-        }
-        Ok(ret)
-    }
+    // // Reduce predicates to head normal form.
+    // // Returns Err(p) if reduction failed due to predicate p.
+    // fn reduce_to_hnfs_many(
+    //     &self,
+    //     ps: &Vec<Predicate>,
+    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+    // ) -> Result<Vec<Predicate>, Predicate> {
+    //     let mut ret: Vec<Predicate> = Default::default();
+    //     for p in ps {
+    //         ret.append(&mut self.reduce_to_hnfs(p, kind_map)?)
+    //     }
+    //     Ok(ret)
+    // }
 
-    // Simplify a set of predicates by entail.
-    fn reduce_predicates_by_entail(
-        &self,
-        ps: &Vec<Predicate>,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-    ) -> Vec<Predicate> {
-        let mut ps = ps.clone();
-        let mut i = 0 as usize;
-        while i < ps.len() {
-            let qs: Vec<Predicate> = ps
-                .iter()
-                .enumerate()
-                .filter_map(|(j, p)| if i == j { None } else { Some(p.clone()) })
-                .collect();
-            if self.entail(&qs, &ps[i], kind_map) {
-                ps.remove(i);
-            } else {
-                i += 1;
-            }
-        }
-        ps
-        // TODO: Improve performance. See scEntail in "Typing Haskell in Haskell".
-    }
+    // // Simplify a set of predicates by entail.
+    // fn reduce_predicates_by_entail(
+    //     &self,
+    //     ps: &Vec<Predicate>,
+    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+    // ) -> Vec<Predicate> {
+    //     let mut ps = ps.clone();
+    //     let mut i = 0 as usize;
+    //     while i < ps.len() {
+    //         let qs: Vec<Predicate> = ps
+    //             .iter()
+    //             .enumerate()
+    //             .filter_map(|(j, p)| if i == j { None } else { Some(p.clone()) })
+    //             .collect();
+    //         if self.entail(&qs, &ps[i], kind_map) {
+    //             ps.remove(i);
+    //         } else {
+    //             i += 1;
+    //         }
+    //     }
+    //     ps
+    //     // TODO: Improve performance. See scEntail in "Typing Haskell in Haskell".
+    // }
 
-    // Context reduction.
-    // Returns qs when satisfaction of ps are reduced to qs.
-    // In particular, returns empty when ps are satisfied.
-    // Returns Err(p) if reduction failed due to predicate p.
-    pub fn reduce_to_hnf(
-        &self,
-        ps: &Vec<Predicate>,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-    ) -> Result<Vec<Predicate>, Predicate> {
-        // Resolve trait aliases in ps.
-        let mut resolved_ps = vec![];
-        for p in ps {
-            resolved_ps.append(&mut p.resolve_trait_aliases(self));
-        }
-        let ps = resolved_ps;
+    // // Context reduction.
+    // // Returns qs when satisfaction of ps are reduced to qs.
+    // // In particular, returns empty when ps are satisfied.
+    // // Returns Err(p) if reduction failed due to predicate p.
+    // pub fn reduce_to_hnf(
+    //     &self,
+    //     ps: &Vec<Predicate>,
+    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+    // ) -> Result<Vec<Predicate>, Predicate> {
+    //     // Resolve trait aliases in ps.
+    //     let mut resolved_ps = vec![];
+    //     for p in ps {
+    //         resolved_ps.append(&mut p.resolve_trait_aliases(self));
+    //     }
+    //     let ps = resolved_ps;
 
-        let ret = self.reduce_to_hnfs_many(&ps, kind_map)?;
-        let ret = self.reduce_predicates_by_entail(&ret, kind_map);
-        // Every predicate has to be hnf.
-        assert!(ret.iter().all(|p| p.ty.is_hnf()));
-        Ok(ret)
-    }
+    //     let ret = self.reduce_to_hnfs_many(&ps, kind_map)?;
+    //     let ret = self.reduce_predicates_by_entail(&ret, kind_map);
+    //     // Every predicate has to be hnf.
+    //     assert!(ret.iter().all(|p| p.ty.is_hnf()));
+    //     Ok(ret)
+    // }
 
     // Resolve trait aliases.
     fn resolve_aliases(&self, trait_id: &TraitId) -> Vec<TraitId> {

@@ -767,10 +767,12 @@ impl Program {
                     // NOTE: Since overlapping implementations and unrelated methods are forbidden,
                     // we only need to check the unifiability here,
                     // and we do not need to check whether predicates or equality constraints are satisfiable or not.
-                    let mut tc0 = tc.clone();
-                    let (_, method_ty) = tc0.instantiate_scheme(&method.ty, false);
-                    if Unification::unify(&tc.type_env.kinds(), &method_ty, &sym.ty).is_none() {
-                        continue;
+                    {
+                        let mut tc0 = tc.clone();
+                        let (_, method_ty) = tc0.instantiate_scheme(&method.ty, false);
+                        if tc0.unify(&method_ty, &sym.ty).is_err() {
+                            continue;
+                        }
                     }
                     // Perform type-checking.
                     let define_module = method.define_module.clone();

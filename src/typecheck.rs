@@ -313,34 +313,6 @@ impl Unification {
     }
 }
 
-// Context under type-checking.
-// Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
-#[derive(Clone, Default)]
-pub struct TypeCheckContext {
-    // The identifier of type variables.
-    tyvar_id: u32,
-    // Scoped map of variable name -> scheme. (Assamptions of type inference.)
-    pub scope: Scope<Arc<Scheme>>,
-    // Type resolver.
-    pub resolver: TypeResolver,
-    // Collected predicates.
-    pub predicates: Vec<Predicate>,
-    // Trait environment.
-    trait_env: TraitEnv,
-    // List of type constructors.
-    pub type_env: TypeEnv,
-    // A map from a module to the import statements.
-    // To decrease clone-cost, wrap it in reference counter.
-    pub import_statements: Arc<HashMap<Name, Vec<ImportStatement>>>,
-    // In which module is the current expression defined?
-    // This is used as a state variable for typechecking.
-    pub current_module: Option<Name>,
-    // Equality schemes populated by instantiation of associated types.
-    pub assoc_tys: HashMap<FullName, Vec<EqualityScheme>>,
-    // Equalities assumed.
-    pub assumed_eqs: HashMap<FullName, Equality>,
-}
-
 // TODO: Maybe we dont need this wrapper of unification? Isn't it enogh to have Substitution instead of TypeResolver?
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct TypeResolver {
@@ -366,6 +338,47 @@ impl TypeResolver {
     pub fn substitute_predicate(&self, p: &mut Predicate) {
         self.unification.substitution.substitute_predicate(p)
     }
+}
+
+// In TypeCheckContext::instantiate_scheme, how constraints of type scheme is handled?
+pub enum ConstraintInstantiationMode {
+    // We require the constraints to be satisfied.
+    Require,
+    // We assume that the constraints are satisfied.
+    Assume,
+}
+
+// Context under type-checking.
+// Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
+#[derive(Clone, Default)]
+pub struct TypeCheckContext {
+    // The identifier of type variables.
+    tyvar_id: u32,
+    // Scoped map of variable name -> scheme. (Assamptions of type inference.)
+    pub scope: Scope<Arc<Scheme>>,
+    // Type resolver.
+    pub resolver: TypeResolver,
+    // Collected predicates.
+    pub predicates: Vec<Predicate>,
+    // Trait environment.
+    trait_env: TraitEnv,
+    // List of type constructors.
+    pub type_env: TypeEnv,
+    // A map from a module to the import statements.
+    // To decrease clone-cost, wrap it in reference counter.
+    pub import_statements: Arc<HashMap<Name, Vec<ImportStatement>>>,
+    // In which module is the current expression defined?
+    // This is used as a state variable for typechecking.
+    pub current_module: Option<Name>,
+    // Equality schemes populated by instantiation of associated types.
+    pub assoc_tys: HashMap<FullName, Vec<EqualityScheme>>,
+    // Equalities assumed.
+    pub assumed_eqs: HashMap<FullName, Vec<Equality>>,
+    // Predicates assumed.
+    pub assumed_preds: HashMap<FullName, Vec<Predicate>>,
+    // Fixed type variables.
+    // In unification, these type variables are not allowed to be replaced to another type.
+    pub fixed_tyvars: HashSet<Name>,
 }
 
 impl TypeCheckContext {
@@ -420,19 +433,28 @@ impl TypeCheckContext {
     pub fn instantiate_scheme(
         &mut self,
         scheme: &Arc<Scheme>,
-        append_predicates: bool,
-    ) -> (Vec<Predicate>, Arc<TypeNode>) {
+        constraint_mode: ConstraintInstantiationMode,
+    ) -> (Vec<Predicate>, Vec<Equality>, Arc<TypeNode>) {
         let mut sub = Substitution::default();
+        let mut new_tyvars = vec![];
         for (var, kind) in &scheme.vars {
             let new_var_name = self.new_tyvar();
+            new_tyvars.push(new_var_name.clone());
             sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
         }
         let mut preds = scheme.context.clone();
         for p in &mut preds {
             sub.substitute_predicate(p);
         }
-        if append_predicates {
-            self.predicates.append(&mut preds);
+        match constraint_mode {
+            ConstraintInstantiationMode::Require => {
+                self.predicates.append(&mut preds);
+            },
+            ConstraintInstantiationMode::Assume => {
+                for new_tyvar in new_tyvars {
+                    self.fixed_tyvars.insert(new_tyvar)
+                }
+            },
         }
         (preds, sub.substitute_type(&scheme.ty))
     }
