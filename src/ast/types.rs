@@ -359,17 +359,30 @@ impl TypeNode {
             Type::TyCon(_) => false,
             Type::TyApp(head, _) => head.is_hnf(),
             Type::FunTy(_, _) => false,
+            Type::AssocTy(_, args) => args[0].is_hnf(),
         }
     }
 
-    pub fn get_head_string(&self) -> String {
+    // Is this type constructor based?
+    pub fn is_tycon_based(&self) -> bool {
         match &self.ty {
-            Type::TyVar(_) => self.to_string(),
-            Type::TyCon(_) => self.to_string(),
-            Type::TyApp(head, _) => head.get_head_string(),
-            Type::FunTy(_, _) => "->".to_string(),
+            Type::TyVar(_) => false,
+            Type::TyCon(_) => true,
+            Type::TyApp(head, _) => head.is_tycon_based(),
+            Type::FunTy(_, _) => true,
+            Type::AssocTy(_, _) => false,
         }
     }
+
+    // pub fn get_head_string(&self) -> String {
+    //     match &self.ty {
+    //         Type::TyVar(_) => self.to_string(),
+    //         Type::TyCon(_) => self.to_string(),
+    //         Type::TyApp(head, _) => head.get_head_string(),
+    //         Type::FunTy(_, _) => "->".to_string(),
+    //         Type::AssocTy(assoc_ty, _) => assoc_ty.to_string(),
+    //     }
+    // }
 
     pub fn set_tyvar_kind(&self, kind: Arc<Kind>) -> Arc<TypeNode> {
         let mut ret = self.clone();
@@ -382,7 +395,6 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -392,7 +404,6 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_tyapp_arg(&self, arg: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -402,7 +413,6 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_funty_src(&self, src: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -412,7 +422,15 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
+    pub fn set_assocty_args(&self, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::AssocTy(assoc_ty, _) => ret.ty = Type::AssocTy(assoc_ty.clone(), args),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
     pub fn set_funty_dst(&self, dst: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -860,33 +878,33 @@ impl TypeNode {
         Some((assoc_type_name, tyvars))
     }
 
-    // Check if the type takes the form of the usage of associated type.
-    // Usage of an associated type has to be of the form `AssocTypeName {t1} ... {tvN}`.
-    pub fn is_associated_type_usage(
-        &self,
-        is_assoc_type: impl Fn(&FullName) -> bool,
-    ) -> Option<(FullName, Vec<Arc<TypeNode>>)> {
-        // Validate the type application sequence.
-        let app_seq = self.flatten_type_application();
-        if app_seq.len() < 2 {
-            return None;
-        }
-        let assoc_type_name: FullName;
-        match &app_seq[0].ty {
-            Type::TyCon(tc) => {
-                assoc_type_name = tc.name.clone();
-            }
-            _ => return None,
-        }
-        if !is_assoc_type(&assoc_type_name) {
-            return None;
-        }
-        let mut type_args = vec![];
-        for i in 1..app_seq.len() {
-            type_args.push(app_seq[i].clone());
-        }
-        Some((assoc_type_name, type_args))
-    }
+    // // Check if the type takes the form of the usage of associated type.
+    // // Usage of an associated type has to be of the form `AssocTypeName {t1} ... {tvN}`.
+    // pub fn is_associated_type_usage(
+    //     &self,
+    // ) -> Option<(FullName, Vec<Arc<TypeNode>>)> {
+    //     todo!("add new type enum (AssocType) and use it.");
+    //     // Validate the type application sequence.
+    //     let app_seq = self.flatten_type_application();
+    //     if app_seq.len() < 2 {
+    //         return None;
+    //     }
+    //     let assoc_type_name: FullName;
+    //     match &app_seq[0].ty {
+    //         Type::TyCon(tc) => {
+    //             assoc_type_name = tc.name.clone();
+    //         }
+    //         _ => return None,
+    //     }
+    //     if !is_assoc_type(&assoc_type_name) {
+    //         return None;
+    //     }
+    //     let mut type_args = vec![];
+    //     for i in 1..app_seq.len() {
+    //         type_args.push(app_seq[i].clone());
+    //     }
+    //     Some((assoc_type_name, type_args))
+    // }
 
     // // Check if the type takes the form of the implementation of associated type.
     // // Implementation of an associated type has to be of the form `type AssocTypeName self tv1 ... tvN`,
@@ -953,24 +971,25 @@ impl Clone for TypeNode {
 }
 
 // Variant of type
-#[derive(PartialEq, Eq, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
     FunTy(Arc<TypeNode>, Arc<TypeNode>),
+    AssocTy(FullName, Vec<Arc<TypeNode>>),
 }
 
-impl Clone for Type {
-    fn clone(&self) -> Self {
-        match self {
-            Type::TyVar(x) => Type::TyVar(x.clone()),
-            Type::TyApp(x, y) => Type::TyApp(x.clone(), y.clone()),
-            Type::FunTy(x, y) => Type::FunTy(x.clone(), y.clone()),
-            Type::TyCon(tc) => Type::TyCon(tc.clone()),
-        }
-    }
-}
+// impl Clone for Type {
+//     fn clone(&self) -> Self {
+//         match self {
+//             Type::TyVar(x) => Type::TyVar(x.clone()),
+//             Type::TyApp(x, y) => Type::TyApp(x.clone(), y.clone()),
+//             Type::FunTy(x, y) => Type::FunTy(x.clone(), y.clone()),
+//             Type::TyCon(tc) => Type::TyCon(tc.clone()),
+//         }
+//     }
+// }
 
 impl TypeNode {
     // Stringify. Name of type variables are normalized to names such as "t0", "t1", etc.

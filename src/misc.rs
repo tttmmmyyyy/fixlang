@@ -1,5 +1,5 @@
 use super::*;
-use std::fs;
+use std::{fs, hash::Hash};
 
 pub fn error_exit(msg: &str) -> ! {
     // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
@@ -89,4 +89,12 @@ pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
         result.push(w);
     }
     result
+}
+
+pub fn insert_to_hashmap_vec<K: Clone + Eq + Hash, V>(map: &mut HashMap<K, Vec<V>>, key: &K, elem : V) {
+    if map.contains_key(key) {
+        map[key].push(elem);
+    } else {
+        map.insert(key.clone(), vec![elem]);
+    }
 }
