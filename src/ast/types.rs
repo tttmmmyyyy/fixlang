@@ -1175,8 +1175,10 @@ impl TypeNode {
 pub struct Scheme {
     // Generalized variables.
     pub vars: HashMap<Name, Arc<Kind>>,
-    // Constraints
-    pub context: Vec<Predicate>,
+    // Predicates
+    pub predicates: Vec<Predicate>,
+    // Equalities
+    pub equalities: Vec<Equality>,
     // Generalized type.
     pub ty: Arc<TypeNode>,
 }
@@ -1185,7 +1187,7 @@ impl Scheme {
     pub fn to_string(&self) -> String {
         // First, fix ordering of generalized variables (self.vars) following the ordering they appear.
         let mut vars0 = vec![];
-        for p in &self.context {
+        for p in &self.predicates {
             p.ty.free_vars_vec(&mut vars0);
         }
         self.ty.free_vars_vec(&mut vars0);
@@ -1220,7 +1222,7 @@ impl Scheme {
 
         // Substitute type variables in predicates and type to chosen names.
         let preds = self
-            .context
+            .predicates
             .clone()
             .iter()
             .map(|p| {
@@ -1264,15 +1266,15 @@ impl Scheme {
             }
         }
         let res =
-            QualPredicate::extend_kind_scope(&mut scope, &ret.context, &vec![], trait_kind_map);
+            QualPredicate::extend_kind_scope(&mut scope, &ret.predicates, &vec![], trait_kind_map);
         if let Err(msg) = res {
-            let mut span = ret.context[0].source.clone();
-            for i in 1..ret.context.len() {
-                span = Span::unite_opt(&span, &ret.context[i].source);
+            let mut span = ret.predicates[0].source.clone();
+            for i in 1..ret.predicates.len() {
+                span = Span::unite_opt(&span, &ret.predicates[i].source);
             }
             error_exit_with_src(&msg, &span);
         }
-        for p in &mut ret.context {
+        for p in &mut ret.predicates {
             p.set_kinds(&scope);
         }
         ret.ty = ret.ty.set_kinds(&scope);
@@ -1289,7 +1291,7 @@ impl Scheme {
         kind_map: &HashMap<TyCon, Arc<Kind>>,
         trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
     ) {
-        for p in &self.context {
+        for p in &self.predicates {
             p.check_kinds(kind_map, trait_kind_map);
         }
         self.ty.kind(kind_map);
@@ -1303,7 +1305,7 @@ impl Scheme {
     ) -> Arc<Scheme> {
         Arc::new(Scheme {
             vars,
-            context: preds,
+            predicates: preds,
             ty,
         })
     }
@@ -1313,7 +1315,7 @@ impl Scheme {
         for (v, _) in &self.vars {
             assert!(!s.data.contains_key(v));
         }
-        let mut preds = self.context.clone();
+        let mut preds = self.predicates.clone();
         for p in &mut preds {
             s.substitute_predicate(p)
         }
@@ -1358,7 +1360,7 @@ impl Scheme {
 
     pub fn resolve_namespace(&self, ctx: &NameResolutionContext) -> Arc<Scheme> {
         let mut res = self.clone();
-        for p in &mut res.context {
+        for p in &mut res.predicates {
             p.resolve_namespace(ctx);
         }
         res.ty = res.ty.resolve_namespace(ctx);
@@ -1367,7 +1369,7 @@ impl Scheme {
 
     pub fn resolve_type_aliases(&self, type_env: &TypeEnv) -> Arc<Scheme> {
         let mut res = self.clone();
-        for p in &mut res.context {
+        for p in &mut res.predicates {
             p.resolve_type_aliases(type_env);
         }
         res.ty = res.ty.resolve_type_aliases(type_env);

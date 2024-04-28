@@ -442,7 +442,7 @@ impl TypeCheckContext {
             new_tyvars.push(new_var_name.clone());
             sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
         }
-        let mut preds = scheme.context.clone();
+        let mut preds = scheme.predicates.clone();
         for p in &mut preds {
             sub.substitute_predicate(p);
         }
@@ -452,7 +452,7 @@ impl TypeCheckContext {
             },
             ConstraintInstantiationMode::Assume => {
                 for new_tyvar in new_tyvars {
-                    self.fixed_tyvars.insert(new_tyvar)
+                    self.fixed_tyvars.insert(new_tyvar);
                 }
             },
         }
