@@ -429,12 +429,11 @@ impl TypeCheckContext {
     }
 
     // Instantiate a scheme.
-    // Returns predicates if append_predicates = false or append them to self if append_predicates = true.
     pub fn instantiate_scheme(
         &mut self,
         scheme: &Arc<Scheme>,
         constraint_mode: ConstraintInstantiationMode,
-    ) -> (Vec<Predicate>, Vec<Equality>, Arc<TypeNode>) {
+    ) -> Result<Arc<TypeNode>, UnificationErr> {
         let mut sub = Substitution::default();
         let mut new_tyvars = vec![];
         for (var, kind) in &scheme.vars {
@@ -446,17 +445,26 @@ impl TypeCheckContext {
         for p in &mut preds {
             sub.substitute_predicate(p);
         }
+        let mut eqs = scheme.equalities.clone();
+        for eq in &mut eqs {
+            sub.substitute_equality(eq);
+        }
         match constraint_mode {
             ConstraintInstantiationMode::Require => {
                 self.predicates.append(&mut preds);
+                for eq in eqs {
+                    self.add_equality(eq)?;
+                }
             },
             ConstraintInstantiationMode::Assume => {
                 for new_tyvar in new_tyvars {
                     self.fixed_tyvars.insert(new_tyvar);
                 }
+                self.assumed_preds.extend(&mut preds);
+                self.assumed_eqs.extend(&mut eqs);
             },
         }
-        (preds, sub.substitute_type(&scheme.ty))
+        Ok(sub.substitute_type(&scheme.ty))
     }
 
     // Reduce predicates to head normal forms.
