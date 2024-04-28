@@ -844,7 +844,7 @@ impl TypeCheckContext {
 
     fn add_equality(&mut self, mut eq: Equality) -> Result<(), UnificationErr> {
         self.substitute_equality(&mut eq);
-        let red_lhs = self.reduce_by_equality(eq.lhs());
+        let red_lhs = self.reduce_type_by_equality(eq.lhs());
         if red_lhs.to_string() != eq.lhs().to_string() {
             self.unify_inner(&red_lhs, &eq.value)?;
         } else {
@@ -895,29 +895,29 @@ impl TypeCheckContext {
     // }
 
     // Reduce a type by replacing associated type to its value.
-    fn reduce_by_equality(&self, ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    fn reduce_type_by_equality(&self, ty: Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(_) => ty,
             Type::TyCon(_) => ty,
             Type::TyApp(tyfun, tyarg) => {
-                let tyfun = self.reduce_by_equality(tyfun.clone());
-                let tyarg = self.reduce_by_equality(tyarg.clone());
+                let tyfun = self.reduce_type_by_equality(tyfun.clone());
+                let tyarg = self.reduce_type_by_equality(tyarg.clone());
                 ty.set_tyapp_fun(tyfun).set_tyapp_arg(tyarg)
             },
             Type::FunTy(tysrc, tydst) => {
-                let tysrc = self.reduce_by_equality(tysrc.clone());
-                let tydst = self.reduce_by_equality(tydst.clone());
+                let tysrc = self.reduce_type_by_equality(tysrc.clone());
+                let tydst = self.reduce_type_by_equality(tydst.clone());
                 ty.set_funty_src(tysrc).set_funty_dst(tydst)
             },
             Type::AssocTy(assoc_ty, args) => {
-                let args = args.iter().map(|arg| self.reduce_by_equality(arg.clone())).collect::<Vec<_>>();
+                let args = args.iter().map(|arg| self.reduce_type_by_equality(arg.clone())).collect::<Vec<_>>();
                 let ty = ty.set_assocty_args(args);
                 // Try assumed equality.
                 for assumed_eq in &self.assumed_eqs[assoc_ty] {
                     if ty.to_string() != assumed_eq.lhs().to_string() {
                         continue;
                     }
-                    return self.reduce_by_equality(assumed_eq.value);
+                    return self.reduce_type_by_equality(assumed_eq.value);
                 }
                 // Try matching to associated type instance.
                 if !args[0].is_tycon_based() {
@@ -932,7 +932,7 @@ impl TypeCheckContext {
                     }
                     let s = s.unwrap();
                     let rhs = s.substitute_type(&assoc_type_inst.equality.value);
-                    return self.reduce_by_equality(rhs);
+                    return self.reduce_type_by_equality(rhs);
                 }
                 return ty;
             },
@@ -946,6 +946,7 @@ impl TypeCheckContext {
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
     ) -> Result<(), UnificationErr> {
+        todo!("rename this to unify_keep and make unify_inner public");
         let mut cloned_self = self.clone();
         match cloned_self.unify(ty1, ty2) {
             Ok(_) => {
