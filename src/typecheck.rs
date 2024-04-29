@@ -234,7 +234,7 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::matching(fun1, fun2) {
+                    match Self::matching(fun1, fun2, fixed_tyvars) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -242,7 +242,7 @@ impl Substitution {
                         }
                         None => return None,
                     }
-                    match Self::matching(arg1, arg2) {
+                    match Self::matching(arg1, arg2, fixed_tyvars) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -257,7 +257,7 @@ impl Substitution {
             Type::FunTy(src1, dst1) => match &ty2.ty {
                 Type::FunTy(src2, dst2) => {
                     let mut ret = Self::default();
-                    match Self::matching(src1, src2) {
+                    match Self::matching(src1, src2, fixed_tyvars) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -265,7 +265,7 @@ impl Substitution {
                         }
                         None => return None,
                     }
-                    match Self::matching(dst1, dst2) {
+                    match Self::matching(dst1, dst2, fixed_tyvars) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -285,7 +285,7 @@ impl Substitution {
                         }
                         let mut ret = Self::default();
                         for i in 0..args1.len() {
-                            match Self::matching(&args1[i], &args2[i]) {
+                            match Self::matching(&args1[i], &args2[i], fixed_tyvars) {
                                 Some(s) => {
                                     if !ret.merge_substitution(&s) {
                                         return None;
