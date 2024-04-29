@@ -1053,7 +1053,7 @@ impl TypeCheckContext {
             return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
         if self.fixed_tyvars.contains(&tyvar1.name) {
-            Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2))
+            return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
         self.add_substitution(&Substitution::single(&tyvar1.name, ty2.clone()));
         Ok(())
