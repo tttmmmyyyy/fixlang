@@ -2062,8 +2062,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     pub fn declare_symbol(&mut self, sym: &InstantiatedSymbol) -> FunctionValue<'c> {
         let name = &sym.instantiated_name;
-        self.typeresolver = sym.type_resolver.clone();
-        let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
+        self.typeresolver = sym.substitution.clone();
+        let obj_ty = sym.substitution.substitute_type(&sym.ty);
         if obj_ty.is_funptr() {
             // Declare lambda function.
             let lam = sym.expr.as_ref().unwrap().clone();
@@ -2104,8 +2104,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             ));
         }
 
-        self.typeresolver = sym.type_resolver.clone();
-        let obj_ty = sym.type_resolver.substitute_type(&sym.ty);
+        self.typeresolver = sym.substitution.clone();
+        let obj_ty = sym.substitution.substitute_type(&sym.ty);
         if obj_ty.is_funptr() {
             // Implement lambda function.
             let lam_fn = sym_fn;

@@ -398,24 +398,25 @@ pub struct TypeCheckContext {
 }
 
 impl TypeCheckContext {
-    // Creaate instance.
+    // Create instance.
     pub fn new(
         trait_env: TraitEnv,
         type_env: TypeEnv,
         import_statements: HashMap<Name, Vec<ImportStatement>>,
     ) -> Self {
-        let mut resolver = TypeResolver::default();
-        resolver.set_type_env(type_env.clone());
         Self {
             tyvar_id: Default::default(),
             scope: Default::default(),
-            resolver,
-            predicates: Default::default(),
             type_env,
             trait_env,
             import_statements: Arc::new(import_statements),
             current_module: None,
-            assumed_eqs: Default::default(),
+            substitution: Substitution::default(),
+            predicates: vec![],
+            equalities: vec![],
+            assumed_preds: HashMap::default(),
+            assumed_eqs: HashMap::default(),
+            fixed_tyvars: HashSet::default(),
         }
     }
 

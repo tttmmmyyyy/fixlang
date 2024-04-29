@@ -100,7 +100,7 @@ pub fn define_borrowing_functions(program: &mut Program) {
                     generic_name: generic_name,
                     ty: sym.ty.clone(),
                     expr: Some(expr),
-                    type_resolver: sym.type_resolver.clone(),
+                    substitution: sym.substitution.clone(),
                 },
             );
         }

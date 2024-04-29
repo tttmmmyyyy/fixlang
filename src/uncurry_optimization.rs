@@ -12,7 +12,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_symbols, Default::default());
     for (sym_name, sym) in syms {
-        let typeresolver = &sym.type_resolver;
+        let typeresolver = &sym.substitution;
 
         fix_mod
             .instantiated_symbols
@@ -42,7 +42,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
                     generic_name: generic_name,
                     ty,
                     expr: Some(expr.clone()),
-                    type_resolver: sym.type_resolver.clone(),
+                    substitution: sym.substitution.clone(),
                 },
             );
         }
@@ -57,7 +57,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
         let expr = replace_closure_call_to_funptr_call_subexprs(
             sym.expr.as_ref().unwrap(),
             &symbol_names,
-            &sym.type_resolver,
+            &sym.substitution,
         );
         let expr = calculate_free_vars(expr);
         sym.expr = Some(expr);
