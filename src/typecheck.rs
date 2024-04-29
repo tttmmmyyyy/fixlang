@@ -444,7 +444,7 @@ impl TypeCheckContext {
     }
 
     // Apply substitution to an equality.
-    pub fn substitute_predicate(&self, eq: &mut Equality) {
+    pub fn substitute_equality(&self, eq: &mut Equality) {
         self.substitution.substitute_equality(eq)
     }
 
@@ -460,7 +460,7 @@ impl TypeCheckContext {
             let new_var_name = self.new_tyvar();
             new_tyvars.push(new_var_name.clone());
             sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
-            // TODO: change name of tyvar if ConstraintInstantiationMode::Assume.
+            // TODO: change name of tyvar if ConstraintInstantiationMode::Assume for better error message.
         }
         let mut preds = scheme.predicates.clone();
         for p in &mut preds {
@@ -841,7 +841,7 @@ impl TypeCheckContext {
                 ), &expr.source
             );
         }
-        let specified_ty = specified_ty.unwrap();
+        let specified_ty = specified_ty.ok().unwrap();
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone());
         let reduction_res = self.reduce_predicates();
         if let Err(e) = reduction_res {
@@ -911,7 +911,7 @@ impl TypeCheckContext {
                     // Insstantiate `assumed_eq`.
                     let mut subst = Substitution::default();
                     for tv in assumed_eq.gen_vars {
-                        subst.add_substitution(&Substitution::single(&tv, type_tyvar(&self.new_tyvar(), &kind_star())));
+                        subst.add_substitution(&Substitution::single(&tv, type_tyvar(&self.new_tyvar(), &tv.kind)));
                     }
                     let mut equality = assumed_eq.equality.clone();
                     subst.substitute_equality(&mut equality);
@@ -977,8 +977,7 @@ impl TypeCheckContext {
             {
                 let eq = Equality {
                     assoc_type: assoc_ty,
-                    impl_type: args[0],
-                    args: args[1..].to_vec(),
+                    args,
                     value: ty2.clone(),
                     source: None,
                 };
@@ -1092,7 +1091,7 @@ impl TypeCheckContext {
             // Instantiate qualified predicate.
             let mut subst = Substitution::default();
             for tv in qual_pred_scm.gen_vars {
-                subst.add_substitution(&Substitution::single(&tv, type_tyvar(&self.new_tyvar(), &kind_star())));
+                subst.add_substitution(&Substitution::single(&tv, type_tyvar(&self.new_tyvar(), &tv.kind)));
             }
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
             subst.substitute_qualpred(&mut qual_pred);

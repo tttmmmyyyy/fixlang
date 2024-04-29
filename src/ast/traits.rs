@@ -361,7 +361,7 @@ impl QualPredicate {
 }
 
 pub struct QualPredScheme {
-    pub gen_vars : HashSet<Name>,
+    pub gen_vars : Vec<Arc<TyVar>>,
     pub qual_pred : QualPredicate
 }
 
@@ -536,7 +536,7 @@ impl Equality {
 
 #[derive(Clone)]
 pub struct EqualityScheme {
-    pub gen_vars: HashSet<Name>,
+    pub gen_vars: Vec<Arc<TyVar>>,
     pub equality: Equality,
 }
 
