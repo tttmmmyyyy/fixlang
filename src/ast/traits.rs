@@ -498,7 +498,6 @@ impl KindPredicate {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Equality {
     pub assoc_type: FullName,
-    pub impl_type: Arc<TypeNode>,
     pub args: Vec<Arc<TypeNode>>,
     pub value: Arc<TypeNode>,
     pub source: Option<Span>,
@@ -507,41 +506,27 @@ pub struct Equality {
 impl Equality {
     // Get the type of the left-hand side of the equality.
     pub fn lhs(&self) -> Arc<TypeNode> {
-        let mut ty = type_tycon(&tycon(self.assoc_type.clone()));
-        ty = type_tyapp(ty, self.impl_type);
-        for arg in self.args {
-            ty = type_tyapp(ty, arg.clone());
-        }
-        ty
+        type_assocty(self.assoc_type.clone(), self.args.clone())
     }
 
     // Returns the predicate to reduce this equality.
-    pub fn predicate(&self) -> Predicate {
-        // Get trait name from the name of the associated type.
-        let trait_name = self.assoc_type.namespace;
-        let trait_name = FullName::new(
-            &NameSpace::new(trait_name.names[0..trait_name.names.len() - 1].to_vec()),
-            trait_name.names.last().unwrap(),
-        );
-        Predicate::make(TraitId::from_fullname(trait_name), self.impl_type.clone())
-    }
-
-    pub fn substitute(&mut self, subst: &Substitution) {
-        self.impl_type = subst.substitute_type(&self.impl_type);
-        for arg in &mut self.args {
-            *arg = subst.substitute_type(arg);
-        }
-        self.value = subst.substitute_type(&self.value);
-    }
+    // pub fn predicate(&self) -> Predicate {
+    //     // Get trait name from the name of the associated type.
+    //     let trait_name = self.assoc_type.namespace;
+    //     let trait_name = FullName::new(
+    //         &NameSpace::new(trait_name.names[0..trait_name.names.len() - 1].to_vec()),
+    //         trait_name.names.last().unwrap(),
+    //     );
+    //     Predicate::make(TraitId::from_fullname(trait_name), self.impl_type.clone())
+    // }
 
     pub fn generalize(&self) -> EqualityScheme {
         let mut tyvars = vec![];
-        self.impl_type.free_vars_vec(&mut tyvars);
         for arg in &self.args {
             arg.free_vars_vec(&mut tyvars);
         }
+        self.value.free_vars_vec(&mut tyvars);
         let tyvars: HashSet<Name> = tyvars.iter().cloned().collect();
-        // NOTE: All of free variables in `value` should already be included in `tyvars`.
         EqualityScheme {
             gen_vars: tyvars,
             equality: self.clone(),
@@ -886,24 +871,13 @@ impl TraitEnv {
                     let assoc_type_namespace = trait_id.name.to_namespace();
                     let assoc_type_fullname = FullName::new(&assoc_type_namespace, assoc_type_name);
                     let impl_type = inst.impl_type();
-                    // let trait_info = self.traits.get(&trait_id).unwrap();
-                    // let assoc_type_defn = trait_info.assoc_types.get(assoc_type_name).unwrap();
-                    // let assoc_type_info = AssocTypeInfo {
-                    //     name: assoc_type_fullname.clone(),
-                    //     kind: kind_arrow(
-                    //         trait_info.type_var.kind.clone(),
-                    //         assoc_type_defn.kind_applied.clone(),
-                    //     ),
-                    //     source: assoc_type_impl.source.clone(),
-                    // };
+                    let mut args = vec![impl_type];
+                    for tv in &assoc_type_impl.params {
+                        args.push(type_from_tyvar(tv.clone()));
+                    }
                     let equality = Equality {
                         assoc_type: assoc_type_fullname,
-                        impl_type,
-                        args: assoc_type_impl
-                            .params
-                            .iter()
-                            .map(|tv| type_from_tyvar(tv.clone()))
-                            .collect(),
+                        args: args,
                         value: assoc_type_impl.value.clone(),
                         source: assoc_type_impl.source.clone(),
                     };

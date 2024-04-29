@@ -1137,6 +1137,10 @@ pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyApp(tyfun, param))
 }
 
+pub fn type_assocty(assoc_ty: FullName, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+    TypeNode::new_arc(Type::AssocTy(assoc_ty, args))
+}
+
 pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }

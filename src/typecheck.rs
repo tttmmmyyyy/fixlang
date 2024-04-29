@@ -189,7 +189,6 @@ impl Substitution {
 
     // Apply substitution to equality.
     pub fn substitute_equality(&self, eq: &mut Equality) {
-        eq.impl_type = self.substitute_type(&eq.impl_type);
         for arg in &mut eq.args {
             *arg = self.substitute_type(arg);
         }
