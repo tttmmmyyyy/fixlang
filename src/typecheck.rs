@@ -839,7 +839,12 @@ impl TypeCheckContext {
         // Here, in fact, we use `specified_ty` instead of `a_type_var` to generate better error messages.
         let specified_ty = self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume);
         if let Err(e) = specified_ty {
-            todo!("provide good error message.");
+            error_exit_with_src(
+                &format!(
+                    "Constraint `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    e.to_constraint_string()
+                ), &expr.source
+            );
         }
         let specified_ty = specified_ty.unwrap();
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone());
@@ -847,11 +852,9 @@ impl TypeCheckContext {
         if let Err(e) = reduction_res {
             error_exit_with_src(
                 &format!(
-                    "Type mismatch. Expected `{}`, found `{}`.",
-                    todo!(""),
-                    todo!("")
-                ),
-                todo!(""),
+                    "Constraint `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    e.to_constraint_string()
+                ), &expr.source
             );
         }
         if self.equalities.len() > 0 {
@@ -1128,6 +1131,19 @@ impl TypeCheckContext {
 pub enum UnificationErr {
     Unsatisfiable(Predicate),
     Disjoint(Arc<TypeNode>, Arc<TypeNode>),
+}
+
+impl UnificationErr {
+    pub fn to_constraint_string(&self) -> String {
+        match self {
+            UnificationErr::Unsatisfiable(p) => {
+                p.to_string()
+            },
+            UnificationErr::Disjoint(ty1, ty2) => {
+                format!("`{}` == `{}`", ty1.to_string(), ty2.to_string())
+            },
+        }
+    }
 }
 
         // pub fn reduce_to_context_of_instance(
