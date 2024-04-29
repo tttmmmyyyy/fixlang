@@ -1067,4 +1067,38 @@ impl TypeCheckContext {
         self.add_substitution(&Substitution::single_substitution(&tyvar1.name, ty2.clone()));
         Ok(())
     }
+
+    // Reduce `self.predicates`.
+    fn reduce_predicates(&mut self) {
+        let preds = std::mem::replace(&mut self.predicates, vec![]);
+        let mut processed_preds : HashSet<String> = HashSet::new();
+    }
+
+        // pub fn reduce_to_context_of_instance(
+    //     &self,
+    //     p: &Predicate,
+    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+    // ) -> Option<Vec<Predicate>> {
+    //     let insntances = self.instances.get(&p.trait_id);
+    //     if let Some(instances) = insntances {
+    //         for inst in instances {
+    //             match Substitution::matching(&inst.qual_pred.predicate.ty, &p.ty) {
+    //                 Some(s) => {
+    //                     let ps = inst.qual_pred.context.iter().map(|c| {
+    //                         let mut c = c.clone();
+    //                         s.substitute_predicate(&mut c);
+    //                         c
+    //                     });
+    //                     let mut ret = vec![];
+    //                     for p in ps {
+    //                         ret.append(&mut p.resolve_trait_aliases(self));
+    //                     }
+    //                     return Some(ret);
+    //                 }
+    //                 None => {}
+    //             }
+    //         }
+    //     }
+    //     return None;
+    // }
 }

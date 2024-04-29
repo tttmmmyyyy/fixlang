@@ -481,9 +481,9 @@ fn parse_predicate_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualPr
     };
     let predicate = parse_predicate(pairs.next().unwrap(), ctx);
     let qp = QualPredicate {
-        context: predicates,
-        equality: todo!(""),
-        kind_preds: kinds,
+        pred_constraints: predicates,
+        eq_constraints: todo!(""),
+        kind_pred_constraints: kinds,
         predicate,
     };
     qp

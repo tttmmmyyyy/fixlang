@@ -167,14 +167,14 @@ pub struct TraitInstance {
 impl TraitInstance {
     pub fn set_kinds_in_qual_pred(&mut self, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
         let mut scope = HashMap::new();
-        let preds = &self.qual_pred.context;
-        let kind_preds = &self.qual_pred.kind_preds;
+        let preds = &self.qual_pred.pred_constraints;
+        let kind_preds = &self.qual_pred.kind_pred_constraints;
         let res = QualPredicate::extend_kind_scope(&mut scope, preds, kind_preds, trait_kind_map);
         if res.is_err() {
             error_exit_with_src(&res.unwrap_err(), &self.source);
         }
         self.qual_pred.predicate.set_kinds(&scope);
-        for ctx in &mut self.qual_pred.context {
+        for ctx in &mut self.qual_pred.pred_constraints {
             ctx.set_kinds(&scope);
         }
     }
@@ -217,11 +217,11 @@ impl TraitInstance {
         // Prepare `vars`, `ty` and `preds` to be generalized.
         let ty = method_qualty.ty.clone();
         let mut vars = ty.free_vars();
-        let mut preds = self.qual_pred.context.clone();
+        let mut preds = self.qual_pred.pred_constraints.clone();
         preds.append(&mut method_qualty.preds);
 
         // Apply kind information specified by kind predicates of trait implementation to `vars`.
-        for kind_pred in self.qual_pred.kind_preds.iter() {
+        for kind_pred in self.qual_pred.kind_pred_constraints.iter() {
             if vars.contains_key(&kind_pred.tyvar) {
                 vars.insert(kind_pred.tyvar.clone(), kind_pred.kind.clone());
             }
@@ -278,9 +278,9 @@ impl TraitAlias {
 // Constraints in `[...]` can be trait bound and equality.
 #[derive(Clone)]
 pub struct QualPredicate {
-    pub context: Vec<Predicate>,
-    pub equality: Vec<Equality>,
-    pub kind_preds: Vec<KindPredicate>,
+    pub pred_constraints: Vec<Predicate>,
+    pub eq_constraints: Vec<Equality>,
+    pub kind_pred_constraints: Vec<KindPredicate>,
     pub predicate: Predicate,
 }
 
@@ -288,14 +288,14 @@ impl QualPredicate {
     #[allow(dead_code)]
     pub fn to_string(&self) -> String {
         let mut s = String::default();
-        if self.context.len() > 0 || self.kind_preds.len() > 0 {
+        if self.pred_constraints.len() > 0 || self.kind_pred_constraints.len() > 0 {
             s += "[";
         }
         let mut preds = vec![];
-        preds.extend(self.kind_preds.iter().map(|p| p.to_string()));
-        preds.extend(self.context.iter().map(|p| p.to_string()));
+        preds.extend(self.kind_pred_constraints.iter().map(|p| p.to_string()));
+        preds.extend(self.pred_constraints.iter().map(|p| p.to_string()));
         s += &preds.join(", ");
-        if self.context.len() > 0 || self.kind_preds.len() > 0 {
+        if self.pred_constraints.len() > 0 || self.kind_pred_constraints.len() > 0 {
             s += "] ";
         }
         s += &self.predicate.to_string();
@@ -303,14 +303,14 @@ impl QualPredicate {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        for p in &mut self.context {
+        for p in &mut self.pred_constraints {
             p.resolve_namespace(ctx);
         }
         self.predicate.resolve_namespace(ctx);
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        for p in &mut self.context {
+        for p in &mut self.pred_constraints {
             p.resolve_type_aliases(type_env);
         }
         self.predicate.resolve_type_aliases(type_env);
@@ -489,7 +489,7 @@ impl KindPredicate {
     }
 }
 
-// Equality predicate `AssociateType arg0 arg1 = value`.
+// Equality predicate `AssociateType arg0 args = value`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Equality {
     pub assoc_type: FullName,
@@ -645,7 +645,7 @@ impl TraitEnv {
                 // Check context is head-normal-form.
                 // NOTE: we are currently require more strong condition: `tv : SomeTrait`.
                 // This is because we don't have "kind inference", so predicate of form `m SomeType` cannot be handled.
-                for ctx in &inst.qual_pred.context {
+                for ctx in &inst.qual_pred.pred_constraints {
                     match ctx.ty.ty {
                         Type::TyVar(_) => {}
                         _ => {
@@ -909,36 +909,36 @@ impl TraitEnv {
         eq_scms
     }
 
-    // Reduce a predicate p to a context of trait instance.
-    // For example, reduce `Array a : Eq` to `a : Eq` using instance `impl [a : Eq] Array a : Eq`.
-    // Returns None when p cannot be reduced more.
-    pub fn reduce_to_context_of_instance(
-        &self,
-        p: &Predicate,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-    ) -> Option<Vec<Predicate>> {
-        let insntances = self.instances.get(&p.trait_id);
-        if let Some(instances) = insntances {
-            for inst in instances {
-                match Substitution::matching(kind_map, &inst.qual_pred.predicate.ty, &p.ty) {
-                    Some(s) => {
-                        let ps = inst.qual_pred.context.iter().map(|c| {
-                            let mut c = c.clone();
-                            s.substitute_predicate(&mut c);
-                            c
-                        });
-                        let mut ret = vec![];
-                        for p in ps {
-                            ret.append(&mut p.resolve_trait_aliases(self));
-                        }
-                        return Some(ret);
-                    }
-                    None => {}
-                }
-            }
-        }
-        return None;
-    }
+    // // Reduce a predicate p to a context of trait instance.
+    // // For example, reduce `Array a : Eq` to `a : Eq` using instance `impl [a : Eq] Array a : Eq`.
+    // // Returns None when p cannot be reduced more.
+    // pub fn reduce_to_context_of_instance(
+    //     &self,
+    //     p: &Predicate,
+    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+    // ) -> Option<Vec<Predicate>> {
+    //     let insntances = self.instances.get(&p.trait_id);
+    //     if let Some(instances) = insntances {
+    //         for inst in instances {
+    //             match Substitution::matching(&inst.qual_pred.predicate.ty, &p.ty) {
+    //                 Some(s) => {
+    //                     let ps = inst.qual_pred.context.iter().map(|c| {
+    //                         let mut c = c.clone();
+    //                         s.substitute_predicate(&mut c);
+    //                         c
+    //                     });
+    //                     let mut ret = vec![];
+    //                     for p in ps {
+    //                         ret.append(&mut p.resolve_trait_aliases(self));
+    //                     }
+    //                     return Some(ret);
+    //                 }
+    //                 None => {}
+    //             }
+    //         }
+    //     }
+    //     return None;
+    // }
 
     // // Judge whether a predicate p is entailed by a set of predicates ps.
     // pub fn entail(

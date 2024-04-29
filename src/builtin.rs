@@ -3947,9 +3947,9 @@ pub fn unary_opeartor_instance(
 ) -> TraitInstance {
     TraitInstance {
         qual_pred: QualPredicate {
-            context: vec![],
-            equality: vec![],
-            kind_preds: vec![],
+            pred_constraints: vec![],
+            eq_constraints: vec![],
+            kind_pred_constraints: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
         methods: HashMap::from([(
@@ -4014,9 +4014,9 @@ pub fn binary_opeartor_instance(
 ) -> TraitInstance {
     TraitInstance {
         qual_pred: QualPredicate {
-            context: vec![],
-            equality: vec![],
-            kind_preds: vec![],
+            pred_constraints: vec![],
+            eq_constraints: vec![],
+            kind_pred_constraints: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
         methods: HashMap::from([(
