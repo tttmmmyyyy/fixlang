@@ -197,9 +197,11 @@ impl Substitution {
     }
 
     // Calculate minimum substitution s such that `s(ty1) = ty2`.
+    // NOTE: This function only searches for syntactical substitution, i.e., does not resolve associated type.
     pub fn matching(
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
+        fixed_tyvars: &HashSet<Name>,
     ) -> Option<Self> {
         match &ty1.ty {
             Type::TyVar(v1) => {
@@ -213,7 +215,11 @@ impl Substitution {
                 // - `{t0 -> t1}` and `{}` can be merged to `{t0 -> t1}`.
                 //
                 // (And this implementation is the same as one in "Typing Haskell in Haskell".)
-                Some(Self::single(&v1.name, ty2.clone()))
+                if !fixed_tyvars.contains(&v1.name) {
+                    Some(Self::single(&v1.name, ty2.clone()))
+                } else {
+                    None
+                }
             }
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
@@ -271,58 +277,75 @@ impl Substitution {
                 }
                 _ => None,
             },
+            Type::AssocTy(assoc_ty1, args1) => {
+                match &ty2.ty {
+                    Type::AssocTy(assoc_ty2, args2) => {
+                        if assoc_ty1 != assoc_ty2 {
+                            return None;
+                        }
+                        let mut ret = Self::default();
+                        for i in 0..args1.len() {
+                            match Self::matching(&args1[i], &args2[i]) {
+                                Some(s) => {
+                                    if !ret.merge_substitution(&s) {
+                                        return None;
+                                    }
+                                },
+                                None => return None,
+                            }
+                        }
+                        Some(ret)
+                    },
+                    _ => None,
+                }
+            },
         }
     }
 }
 
-pub enum UnificationErr {
-    Unsatisfiable(Predicate),
-    Disjoint(Arc<TypeNode>, Arc<TypeNode>),
-}
+// impl Unification {
+//     pub fn is_empty(&self) -> bool {
+//         self.substitution.data.is_empty() && self.equalities.is_empty()
+//     }
 
-impl Unification {
-    pub fn is_empty(&self) -> bool {
-        self.substitution.data.is_empty() && self.equalities.is_empty()
-    }
+//     pub fn single_substitution(var: &str, ty: Arc<TypeNode>) -> Unification {
+//         Unification {
+//             substitution: Substitution::single(var, ty),
+//             equalities: vec![],
+//         }
+//     }
 
-    pub fn single_substitution(var: &str, ty: Arc<TypeNode>) -> Unification {
-        Unification {
-            substitution: Substitution::single(var, ty),
-            equalities: vec![],
-        }
-    }
+//     // pub fn from_equality(
+//     //     eq: Equality,
+//     //     kind_map: &HashMap<TyCon, Arc<Kind>>,
+//     //     assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
+//     // ) -> Result<Unification, UnificationErr> {
+//     //     let mut uni = Self::default();
+//     //     uni.add_equality(eq, kind_map, assoc_tys)?;
+//     //     Ok(uni)
+//     // }
 
-    // pub fn from_equality(
-    //     eq: Equality,
-    //     kind_map: &HashMap<TyCon, Arc<Kind>>,
-    //     assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
-    // ) -> Result<Unification, UnificationErr> {
-    //     let mut uni = Self::default();
-    //     uni.add_equality(eq, kind_map, assoc_tys)?;
-    //     Ok(uni)
-    // }
+//     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+//         self.substitution.substitute_type(ty)
+//     }
+// }
 
-    pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
-        self.substitution.substitute_type(ty)
-    }
-}
+// impl TypeResolver {
+//     // Set type environment.
+//     pub fn set_type_env(&mut self, type_env: TypeEnv) {
+//         self.kind_map = type_env.kinds();
+//     }
 
-impl TypeResolver {
-    // Set type environment.
-    pub fn set_type_env(&mut self, type_env: TypeEnv) {
-        self.kind_map = type_env.kinds();
-    }
+//     // Apply substitution to type.
+//     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+//         self.unification.substitute_type(ty)
+//     }
 
-    // Apply substitution to type.
-    pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
-        self.unification.substitute_type(ty)
-    }
-
-    // Apply substitution to a predicate.
-    pub fn substitute_predicate(&self, p: &mut Predicate) {
-        self.unification.substitution.substitute_predicate(p)
-    }
-}
+//     // Apply substitution to a predicate.
+//     pub fn substitute_predicate(&self, p: &mut Predicate) {
+//         self.unification.substitution.substitute_predicate(p)
+//     }
+// }
 
 // In TypeCheckContext::instantiate_scheme, how constraints of type scheme is handled?
 pub enum ConstraintInstantiationMode {
@@ -361,7 +384,7 @@ pub struct TypeCheckContext {
     // Equalities assumed.
     pub assumed_eqs: HashMap<FullName, Vec<Equality>>,
     // Predicates assumed.
-    pub assumed_preds: HashMap<TraitId, Vec<Predicate>>,
+    pub assumed_preds: HashMap<TraitId, Vec<QualPredScheme>>,
     // Fixed type variables.
     // In unification, these type variables are not allowed to be replaced to another type.
     pub fixed_tyvars: HashSet<Name>,
@@ -1069,9 +1092,17 @@ impl TypeCheckContext {
     }
 
     // Reduce `self.predicates`.
-    fn reduce_predicates(&mut self) {
+    // If predicates are not satisfiable, return Err.
+    fn reduce_predicates(&mut self) -> Result<(), UnificationErr> {
         let preds = std::mem::replace(&mut self.predicates, vec![]);
-        let mut processed_preds : HashSet<String> = HashSet::new();
+        let mut is_already_handled : HashMap<String, bool> = HashMap::new();
+    }
+
+    fn reduce_predicate(&self, mut p : Predicate) -> Result<Vec<Predicate>, UnificationErr> {
+        p.ty = self.reduce_type_by_equality(p.ty);
+        for qual_pred in self.assumed_preds[&p.trait_id] {
+        
+        }
     }
 
         // pub fn reduce_to_context_of_instance(
@@ -1101,4 +1132,9 @@ impl TypeCheckContext {
     //     }
     //     return None;
     // }
+}
+
+pub enum UnificationErr {
+    Unsatisfiable(Predicate),
+    Disjoint(Arc<TypeNode>, Arc<TypeNode>),
 }

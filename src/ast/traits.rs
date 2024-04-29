@@ -360,6 +360,11 @@ impl QualPredicate {
     }
 }
 
+pub struct QualPredScheme {
+    gen_vars : HashSet<Name>,
+    qual_pred : QualPredicate
+}
+
 #[derive(Clone)]
 pub struct QualType {
     pub preds: Vec<Predicate>,
