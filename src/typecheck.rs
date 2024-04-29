@@ -837,8 +837,8 @@ impl TypeCheckContext {
         if let Err(e) = specified_ty {
             error_exit_with_src(
                 &format!(
-                    "Constraint `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
-                    e.to_constraint_string()
+                    "Condition `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    e.to_condition_string()
                 ), &expr.source
             );
         }
@@ -848,8 +848,8 @@ impl TypeCheckContext {
         if let Err(e) = reduction_res {
             error_exit_with_src(
                 &format!(
-                    "Constraint `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
-                    e.to_constraint_string()
+                    "Condition `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    e.to_condition_string()
                 ), &expr.source
             );
         }
@@ -857,7 +857,7 @@ impl TypeCheckContext {
             let eq = &self.equalities[0];
             error_exit_with_src(
                 &format!(
-                    "Constraint `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    "Condition `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
                     eq.to_string()
                 ),
                 &expr.source,
@@ -1130,7 +1130,7 @@ pub enum UnificationErr {
 }
 
 impl UnificationErr {
-    pub fn to_constraint_string(&self) -> String {
+    pub fn to_condition_string(&self) -> String {
         match self {
             UnificationErr::Unsatisfiable(p) => {
                 p.to_string()
