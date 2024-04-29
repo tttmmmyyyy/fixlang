@@ -540,31 +540,32 @@ impl TypeCheckContext {
                     .map(|(ns, scm)| {
                         let fullname = FullName::new(ns, &var.name.name);
                         let mut tc = self.clone();
-                        let (_, var_ty) = tc.instantiate_scheme(&scm, true);
-                        // if var_ty is unifiable to the expected type and predicates are not unsatisfiable, then this candidate is ok.
-                        if !tc.unify(&var_ty, &ty) {
+                        let var_ty = tc.instantiate_scheme(&scm, ConstraintInstantiationMode::Require);
+                        if let Err(e) = var_ty {
+                            let msg = format!("- `{}` of type `{}` does not match since the constraint `{}` is unsatisfiable.", 
+                                fullname.to_string(), 
+                                scm.substitute(&self.substitution).to_string(), 
+                                e.to_constraint_string()
+                            );
+                            Err(msg)
+                        } else if let Err(e) = tc.unify_inner(&var_ty.ok().unwrap(), &ty) {
                             let msg = format!(
-                                "- `{}` of type `{}` does not match the expected type.",
+                                "- `{}` of type `{}` does not match the expected type since the constraint `{}` is unsatisfiable.",
                                 fullname.to_string(),
-                                scm.substitute(&self.resolver.unification).to_string(),
+                                scm.substitute(&self.substitution).to_string(),
+                                e.to_constraint_string()
+                            );
+                            Err(msg)
+                        } else if let Err(e) = tc.reduce_predicates() {
+                            let msg = format!(
+                                "- `{}` of type `{}` does not match the expected type since the constraint `{}` is unsatisfiable.",
+                                fullname.to_string(),
+                                scm.substitute(&self.substitution).to_string(),
+                                e.to_constraint_string()
                             );
                             Err(msg)
                         } else {
-                            let reduce_result = tc.reduce_predicates_to_hnfs();
-                            if reduce_result.is_ok() {
-                                Ok((tc, ns.clone()))
-                            } else {
-                                // When predicates are unsatisfiable,
-                                let mut fail_predicate = reduce_result.err().unwrap();
-                                self.substitute_predicate(&mut fail_predicate);
-                                let msg = format!(
-                                    "- `{}` of type `{}` does not match since the constraint `{}` is not satisifed.",
-                                    fullname.to_string(),
-                                    scm.substitute(&self.resolver.unification).to_string(),
-                                    fail_predicate.to_string_normalize()
-                                );
-                                Err(msg)
-                            }
+                            Ok((tc, ns.clone()))
                         }
                     })
                     .collect();
@@ -951,7 +952,7 @@ impl TypeCheckContext {
     }
 
     // Unify two types.
-    fn unify_inner(
+    pub fn unify_inner(
         &mut self,
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
@@ -1054,7 +1055,7 @@ impl TypeCheckContext {
         if self.fixed_tyvars.contains(&tyvar1.name) {
             Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2))
         }
-        self.add_substitution(&Substitution::single_substitution(&tyvar1.name, ty2.clone()));
+        self.add_substitution(&Substitution::single(&tyvar1.name, ty2.clone()));
         Ok(())
     }
 
@@ -1091,7 +1092,7 @@ impl TypeCheckContext {
             // Instantiate qualified predicate.
             let mut subst = Substitution::default();
             for tv in qual_pred_scm.gen_vars {
-                subst.add_substitution(&Substitution::single(&tv, type_tyvar(&self.new_tyvar(), &tv.kind)));
+                subst.add_substitution(&Substitution::single(&tv.name, type_tyvar(&self.new_tyvar(), &tv.kind)));
             }
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
             subst.substitute_qualpred(&mut qual_pred);
@@ -1128,7 +1129,7 @@ pub enum UnificationErr {
 }
 
 impl UnificationErr {
-    pub fn to_condition_string(&self) -> String {
+    pub fn to_constraint_string(&self) -> String {
         match self {
             UnificationErr::Unsatisfiable(p) => {
                 p.to_string()
