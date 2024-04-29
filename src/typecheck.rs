@@ -196,6 +196,16 @@ impl Substitution {
         eq.value = self.substitute_type(&eq.value);
     }
 
+    pub fn substitute_qualpred(&self, qual_pred: &mut QualPredicate) {
+        for pred in &mut qual_pred.pred_constraints {
+            self.substitute_predicate(pred);
+        }
+        for eq in &mut qual_pred.pred_constraints {
+            self.substitute_equality(eq);
+        }
+        self.substitute_predicate(&mut qual_pred.predicate);
+    }
+
     // Calculate minimum substitution s such that `s(ty1) = ty2`.
     // NOTE: This function only searches for syntactical substitution, i.e., does not resolve associated type.
     pub fn matching(
@@ -876,47 +886,6 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // fn add_unification(&mut self, uni: &Unification) -> Result<(), UnificationErr> {
-    //     self.add_substitution(&uni.substitution)?;
-    //     for eq in &uni.equalities {
-    //         self.add_equality(eq.clone())?;
-    //     }
-    //     Ok(())
-    // }
-
-    // // Try to reduce an equality into an unification. 
-    // // If equality is unsatisfiable, return Err.
-    // // If equality is satisfiable, returns true if it is reduced and added to unification.
-    // fn reduce_equality(&mut self, eq: &Equality) -> Result<bool, UnificationErr> {
-    //     // Try assumed equality.
-    //     for assumed_eq in &self.assumed_eqs[&eq.assoc_type] {
-    //         if eq.lhs().to_string() != assumed_eq.lhs().to_string() {
-    //             continue;
-    //         }
-    //         self.unify(&eq.value, &assumed_eq.value)?;
-    //         return Ok(true);
-    //     }
-    //     // If `impl_type` is head normal form, then it cannot be unified to trait instance.
-    //     if eq.impl_type.is_hnf() {
-    //         return Ok(false);
-    //     }
-    //     // Try matching to associated type instance.
-    //     for assoc_type_inst in &self.assoc_tys[&eq.assoc_type] {
-    //         let lhs1 = assoc_type_inst.equality.lhs();
-    //         let lhs2 = eq.lhs();
-    //         let s = Substitution::matching(&self.kind_map, &lhs1, &lhs2);
-    //         if s.is_none() {
-    //             continue;
-    //         }
-    //         let s = s.unwrap();
-    //         let rhs1 = s.substitute_type(&assoc_type_inst.equality.value);
-    //         let rhs2 = eq.value;
-    //         self.unify(&rhs1, &rhs2)?;
-    //         return Ok(true);
-    //     }
-    //     return Err(UnificationErr::Unsatisfiable(eq.predicate()));
-    // }
-
     // Reduce a type by replacing associated type to its value.
     fn reduce_type_by_equality(&self, ty: Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
@@ -1121,16 +1090,21 @@ impl TypeCheckContext {
         }
         already_added.insert(pred_str);
         for qual_pred_scm in self.assumed_preds[&pred.trait_id] {
-            let mut fixed_tyvars = self.fixed_tyvars.clone();
-            for gen_tv in &qual_pred_scm.gen_vars {
-                fixed_tyvars.remove(gen_tv);
+            // Instantiate qualified predicate.
+            let mut subst = Substitution::default();
+            for tv in qual_pred_scm.gen_vars {
+                subst.add_substitution(&Substitution::single(&tv, type_tyvar(&self.new_tyvar(), &kind_star())));
             }
-            if let Some(s) = Substitution::matching(&qual_pred_scm.qual_pred.predicate.ty, &pred.ty, &fixed_tyvars) {
-                for eq in qual_pred_scm.qual_pred.eq_constraints {
+            let mut qual_pred = qual_pred_scm.qual_pred.clone();
+            subst.substitute_qualpred(&mut qual_pred);
+
+            //  Try to match head of `qual_pred` to `pred`.
+            if let Some(s) = Substitution::matching(&qual_pred.predicate.ty, &pred.ty, &self.fixed_tyvars) {
+                for eq in qual_pred.eq_constraints {
                     let mut eq = eq.clone();
                     self.add_equality(eq)?;
                 }
-                let preds = qual_pred_scm.qual_pred.pred_constraints.iter().map(|pred| {
+                let preds = qual_pred.pred_constraints.iter().map(|pred| {
                     let mut pred = pred.clone();
                     self.substitute_predicate(&mut pred);
                     pred
@@ -1148,6 +1122,12 @@ impl TypeCheckContext {
             return Ok(());
         }
     }
+}
+
+pub enum UnificationErr {
+    Unsatisfiable(Predicate),
+    Disjoint(Arc<TypeNode>, Arc<TypeNode>),
+}
 
         // pub fn reduce_to_context_of_instance(
     //     &self,
@@ -1176,9 +1156,45 @@ impl TypeCheckContext {
     //     }
     //     return None;
     // }
-}
 
-pub enum UnificationErr {
-    Unsatisfiable(Predicate),
-    Disjoint(Arc<TypeNode>, Arc<TypeNode>),
-}
+
+    // fn add_unification(&mut self, uni: &Unification) -> Result<(), UnificationErr> {
+    //     self.add_substitution(&uni.substitution)?;
+    //     for eq in &uni.equalities {
+    //         self.add_equality(eq.clone())?;
+    //     }
+    //     Ok(())
+    // }
+
+    // // Try to reduce an equality into an unification. 
+    // // If equality is unsatisfiable, return Err.
+    // // If equality is satisfiable, returns true if it is reduced and added to unification.
+    // fn reduce_equality(&mut self, eq: &Equality) -> Result<bool, UnificationErr> {
+    //     // Try assumed equality.
+    //     for assumed_eq in &self.assumed_eqs[&eq.assoc_type] {
+    //         if eq.lhs().to_string() != assumed_eq.lhs().to_string() {
+    //             continue;
+    //         }
+    //         self.unify(&eq.value, &assumed_eq.value)?;
+    //         return Ok(true);
+    //     }
+    //     // If `impl_type` is head normal form, then it cannot be unified to trait instance.
+    //     if eq.impl_type.is_hnf() {
+    //         return Ok(false);
+    //     }
+    //     // Try matching to associated type instance.
+    //     for assoc_type_inst in &self.assoc_tys[&eq.assoc_type] {
+    //         let lhs1 = assoc_type_inst.equality.lhs();
+    //         let lhs2 = eq.lhs();
+    //         let s = Substitution::matching(&self.kind_map, &lhs1, &lhs2);
+    //         if s.is_none() {
+    //             continue;
+    //         }
+    //         let s = s.unwrap();
+    //         let rhs1 = s.substitute_type(&assoc_type_inst.equality.value);
+    //         let rhs2 = eq.value;
+    //         self.unify(&rhs1, &rhs2)?;
+    //         return Ok(true);
+    //     }
+    //     return Err(UnificationErr::Unsatisfiable(eq.predicate()));
+    // }
