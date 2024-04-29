@@ -461,7 +461,7 @@ impl TypeCheckContext {
             let new_var_name = self.new_tyvar();
             new_tyvars.push(new_var_name.clone());
             sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
-            todo!("change name of tyvar if ConstraintInstantiationMode::Assume.");
+            // TODO: change name of tyvar if ConstraintInstantiationMode::Assume.
         }
         let mut preds = scheme.predicates.clone();
         for p in &mut preds {
@@ -483,10 +483,23 @@ impl TypeCheckContext {
                     self.fixed_tyvars.insert(new_tyvar);
                 }
                 for pred in preds {
-                    misc::insert_to_hashmap_vec(&mut self.assumed_preds, &pred.trait_id, pred);
+                    let qual_pred_scm = QualPredScheme { 
+                        gen_vars: vec![],
+                        qual_pred: QualPredicate { 
+                            pred_constraints: vec![],
+                            eq_constraints: vec![],
+                            kind_pred_constraints: vec![],
+                            predicate: pred
+                        }
+                    };
+                    misc::insert_to_hashmap_vec(&mut self.assumed_preds, &pred.trait_id, qual_pred_scm);
                 }
                 for eq in eqs {
-                    misc::insert_to_hashmap_vec(&mut self.assumed_eqs, &eq.assoc_type, eq);
+                    let eq_scm = EqualityScheme {
+                        gen_vars: vec![],
+                        equality: eq,
+                    };
+                    misc::insert_to_hashmap_vec(&mut self.assumed_eqs, &eq.assoc_type, eq_scm);
                 }
             },
         }
@@ -824,40 +837,32 @@ impl TypeCheckContext {
         // and check that the deduced type (which is defined by substitute_type(a_type_var)) is more general than the specified type signature, i.e.,
         // there exists a substitution `s` such that `s(deduced_type) = specified_ty`.
         // Here, in fact, we use `specified_ty` instead of `a_type_var` to generate better error messages.
-        let (given_preds, specified_ty) = self.instantiate_scheme(&expect_scm, false);
+        let specified_ty = self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume);
+        if let Err(e) = specified_ty {
+            todo!("provide good error message.");
+        }
+        let specified_ty = specified_ty.unwrap();
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone());
-        let deduced_ty = self.substitute_type(&specified_ty);
-        let red_res = self.reduce_predicates_to_hnfs();
-        assert!(red_res.is_ok());
-        let required_preds = std::mem::replace(&mut self.predicates, Default::default());
-
-        let s = Substitution::matching(&self.type_env.kinds(), &deduced_ty, &specified_ty);
-        if s.is_none() {
+        let reduction_res = self.reduce_predicates();
+        if let Err(e) = reduction_res {
             error_exit_with_src(
                 &format!(
                     "Type mismatch. Expected `{}`, found `{}`.",
-                    specified_ty.to_string_normalize(),
-                    deduced_ty.to_string_normalize()
+                    todo!(""),
+                    todo!("")
+                ),
+                todo!(""),
+            );
+        }
+        if self.equalities.len() > 0 {
+            let eq = &self.equalities[0];
+            error_exit_with_src(
+                &format!(
+                    "Constraint `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    eq.to_string()
                 ),
                 &expr.source,
             );
-        }
-        let s = s.unwrap();
-        for p in required_preds {
-            let mut p = p.clone();
-            s.substitute_predicate(&mut p);
-            if !self
-                .trait_env
-                .entail(&given_preds, &p, &self.type_env.kinds())
-            {
-                error_exit_with_src(
-                    &format!(
-                        "Constraint `{}` is required for this expression but is not assumed in its type.",
-                        p.to_string_normalize()
-                    ),
-                    &expr.source,
-                );
-            }
         }
 
         expr
