@@ -833,10 +833,6 @@ impl TypeCheckContext {
         assert!(self.assumed_preds.is_empty());
         assert!(self.assumed_eqs.is_empty());
 
-        // Theretically, it is enogh to do `unify_type_of_expr(expr, a_type_var)` to infer the type of expr,
-        // and check that the deduced type (which is defined by substitute_type(a_type_var)) is more general than the specified type signature, i.e.,
-        // there exists a substitution `s` such that `s(deduced_type) = specified_ty`.
-        // Here, in fact, we use `specified_ty` instead of `a_type_var` to generate better error messages.
         let specified_ty = self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume);
         if let Err(e) = specified_ty {
             error_exit_with_src(
