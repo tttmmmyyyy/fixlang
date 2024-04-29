@@ -1091,17 +1091,61 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // Reduce `self.predicates`.
-    // If predicates are not satisfiable, return Err.
+    // Reduce predicates as long as possible.
+    // If predicates are unsatisfiable, return Err.
     fn reduce_predicates(&mut self) -> Result<(), UnificationErr> {
         let preds = std::mem::replace(&mut self.predicates, vec![]);
-        let mut is_already_handled : HashMap<String, bool> = HashMap::new();
+        let mut already_added : HashSet<String> = HashSet::new();
+        for pred in preds {
+            self.add_predicate_reducing(pred, &mut already_added)?;
+        }
+        Ok(())
     }
 
-    fn reduce_predicate(&self, mut p : Predicate) -> Result<Vec<Predicate>, UnificationErr> {
-        p.ty = self.reduce_type_by_equality(p.ty);
-        for qual_pred in self.assumed_preds[&p.trait_id] {
-        
+    // Add a predicate after reducing it.
+    fn add_predicate_reducing(&mut self, mut pred : Predicate, already_added: &mut HashSet<Name>) -> Result<(), UnificationErr> {
+        for pred in pred.resolve_trait_aliases(&self.trait_env) {
+            self.add_predicate_reducing_noalias(pred, already_added)?;
+        }
+        Ok(())
+    }
+
+    // Add a predicate after reducing it.
+    // Trait in `pred` should not be a trait alias.
+    fn add_predicate_reducing_noalias(&mut self, mut pred : Predicate, already_added: &mut HashSet<Name>) -> Result<(), UnificationErr> {
+        self.substitute_predicate(&mut pred);
+        pred.ty = self.reduce_type_by_equality(pred.ty);
+        let pred_str = pred.to_string();
+        if already_added.contains(&pred_str) {
+            return Ok(());
+        }
+        already_added.insert(pred_str);
+        for qual_pred_scm in self.assumed_preds[&pred.trait_id] {
+            let mut fixed_tyvars = self.fixed_tyvars.clone();
+            for gen_tv in &qual_pred_scm.gen_vars {
+                fixed_tyvars.remove(gen_tv);
+            }
+            if let Some(s) = Substitution::matching(&qual_pred_scm.qual_pred.predicate.ty, &pred.ty, &fixed_tyvars) {
+                for eq in qual_pred_scm.qual_pred.eq_constraints {
+                    let mut eq = eq.clone();
+                    self.add_equality(eq)?;
+                }
+                let preds = qual_pred_scm.qual_pred.pred_constraints.iter().map(|pred| {
+                    let mut pred = pred.clone();
+                    self.substitute_predicate(&mut pred);
+                    pred
+                }).collect::<Vec<_>>();
+                for pred in preds {
+                    self.add_predicate_reducing(pred, already_added)?;
+                }
+                return Ok(());
+            }
+        }
+        if pred.ty.is_tycon_based() {
+            return Err(UnificationErr::Unsatisfiable(pred));
+        } else {
+            self.predicates.push(pred);
+            return Ok(());
         }
     }
 

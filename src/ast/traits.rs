@@ -361,8 +361,8 @@ impl QualPredicate {
 }
 
 pub struct QualPredScheme {
-    gen_vars : HashSet<Name>,
-    qual_pred : QualPredicate
+    pub gen_vars : HashSet<Name>,
+    pub qual_pred : QualPredicate
 }
 
 #[derive(Clone)]
@@ -465,7 +465,7 @@ impl Predicate {
     }
 
     // If the trait used in this predicate is a trait alias, resolve it to a set of predicates that are not using trait aliases.
-    fn resolve_trait_aliases(&self, trait_env: &TraitEnv) -> Vec<Predicate> {
+    pub fn resolve_trait_aliases(&self, trait_env: &TraitEnv) -> Vec<Predicate> {
         if !trait_env.is_alias(&self.trait_id) {
             return vec![self.clone()];
         }
