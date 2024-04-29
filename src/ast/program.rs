@@ -47,9 +47,8 @@ pub struct InstantiatedSymbol {
     pub generic_name: FullName,
     pub ty: Arc<TypeNode>,
     pub expr: Option<Arc<ExprNode>>,
-    // type resolver for types in expr.
-    // TODO: we should remove `type_resolver` field by applying it to `expr` and `ty` when they are created.
-    pub type_resolver: TypeResolver,
+    // substitution for types in expr.
+    pub substitution: Substitution,
 }
 
 impl InstantiatedSymbol {
@@ -796,7 +795,7 @@ impl Program {
             }
         };
         sym.expr = Some(self.instantiate_expr(&typed_expr.type_resolver, &typed_expr.expr));
-        sym.type_resolver = typed_expr.type_resolver;
+        sym.substitution = typed_expr.type_resolver;
     }
 
     // Instantiate all symbols.
@@ -915,7 +914,7 @@ impl Program {
                 generic_name: name.clone(),
                 ty: ty.clone(),
                 expr: None,
-                type_resolver: TypeResolver::default(), // This field will be set in the end of instantiation.
+                substitution: TypeResolver::default(), // This field will be set in the end of instantiation.
             });
         }
         inst_name

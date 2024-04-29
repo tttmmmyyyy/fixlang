@@ -938,7 +938,6 @@ impl TypeCheckContext {
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
     ) -> Result<(), UnificationErr> {
-        todo!("rename this to unify_keep and make unify_inner public");
         let mut cloned_self = self.clone();
         match cloned_self.unify_rollback_if_err(ty1, ty2) {
             Ok(_) => {
