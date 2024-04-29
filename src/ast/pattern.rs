@@ -304,8 +304,8 @@ impl Pattern {
                 for (field_name, pat) in field_to_pat {
                     let (pat_ty, var_ty) = pat.pattern.get_type(typechcker);
                     var_to_ty.extend(var_ty);
-                    let ok = typechcker.unify(&pat_ty, field_name_to_ty.get(field_name).unwrap());
-                    if !ok {
+                    let unify_res = typechcker.unify(&pat_ty, field_name_to_ty.get(field_name).unwrap());
+                    if let Err(_) = unify_res {
                         error_exit_with_src(
                             &format!(
                                 "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
@@ -333,8 +333,8 @@ impl Pattern {
                 let field_ty = field_tys[field_idx].clone();
                 let (pat_ty, var_ty) = pat.pattern.get_type(typechcker);
                 var_to_ty.extend(var_ty);
-                let ok = typechcker.unify(&pat_ty, &field_ty);
-                if !ok {
+                let unify_res = typechcker.unify(&pat_ty, &field_ty);
+                if let Err(_) = unify_res {
                     error_exit_with_src(
                         &format!(
                             "Inappropriate pattern `{}` for a value of field `{}` of union `{}`.",
