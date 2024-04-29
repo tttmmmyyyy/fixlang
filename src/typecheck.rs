@@ -224,7 +224,7 @@ impl Substitution {
                 // - `{t0 -> t1}` and `{}` can be merged to `{t0 -> t1}`.
                 //
                 // (And this implementation is the same as one in "Typing Haskell in Haskell".)
-                if !fixed_tyvars.contains(&v1.name) {
+                if !fixed_tyvars.contains(&v1.name) && ty1.kind() == ty2.kind() {
                     Some(Self::single(&v1.name, ty2.clone()))
                 } else {
                     None
@@ -1050,6 +1050,9 @@ impl TypeCheckContext {
             // For example, this error occurs when
             // the user is making `f c` in the implementation of
             // `map: [f: Functor] (a -> b) -> f a -> f b; map = |f, c| (...)`;
+            return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
+        }
+        if tyvar1.kind != ty2.kind() {
             return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
         if self.fixed_tyvars.contains(&tyvar1.name) {

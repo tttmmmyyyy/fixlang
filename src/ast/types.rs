@@ -55,50 +55,50 @@ pub enum TyConVariant {
     DynamicObject,
 }
 
-#[derive(Clone, PartialEq, Hash, Eq)]
+#[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     pub name: FullName,
 }
 
-impl Serialize for TyCon {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.name.to_string())
-    }
-}
+// impl Serialize for TyCon {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         serializer.serialize_str(&self.name.to_string())
+//     }
+// }
 
-impl<'de> Deserialize<'de> for TyCon {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(TyConVisitor)
-    }
-}
+// impl<'de> Deserialize<'de> for TyCon {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de>,
+//     {
+//         deserializer.deserialize_str(TyConVisitor)
+//     }
+// }
 
-struct TyConVisitor;
-impl<'de> serde::de::Visitor<'de> for TyConVisitor {
-    type Value = TyCon;
+// struct TyConVisitor;
+// impl<'de> serde::de::Visitor<'de> for TyConVisitor {
+//     type Value = TyCon;
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        match FullName::parse(v) {
-            Some(name) => Ok(TyCon::new(name)),
-            None => Err(de::Error::custom(format!(
-                "Failed to parse `{}` as FullName.",
-                v
-            ))),
-        }
-    }
+//     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+//     where
+//         E: serde::de::Error,
+//     {
+//         match FullName::parse(v) {
+//             Some(name) => Ok(TyCon::new(name)),
+//             None => Err(de::Error::custom(format!(
+//                 "Failed to parse `{}` as FullName.",
+//                 v
+//             ))),
+//         }
+//     }
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("String for TyCon")
-    }
-}
+//     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+//         formatter.write_str("String for TyCon")
+//     }
+// }
 
 impl TyCon {
     pub fn new(fullname: FullName) -> TyCon {
@@ -754,13 +754,13 @@ impl TypeNode {
     }
 
     // Calculate kind.
-    pub fn kind(self: &Arc<TypeNode>, kind_map: &HashMap<TyCon, Arc<Kind>>) -> Arc<Kind> {
+    pub fn kind(self: &Arc<TypeNode>) -> Arc<Kind> {
         match &self.ty {
             Type::TyVar(tv) => tv.kind.clone(),
             Type::TyCon(tc) => kind_map.get(&tc).unwrap().clone(),
             Type::TyApp(fun, arg) => {
-                let fun_kind = fun.kind(kind_map);
-                let arg_kind = arg.kind(kind_map);
+                let fun_kind = fun.kind();
+                let arg_kind = arg.kind();
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
@@ -778,7 +778,7 @@ impl TypeNode {
                 }
             }
             Type::FunTy(dom, codom) => {
-                let arg_kind = dom.kind(kind_map);
+                let arg_kind = dom.kind();
                 if arg_kind != kind_star() {
                     error_exit_with_src(
                         &format!(
@@ -790,7 +790,7 @@ impl TypeNode {
                         self.get_source(),
                     )
                 }
-                let ret_kind = codom.kind(kind_map);
+                let ret_kind = codom.kind();
                 if ret_kind != kind_star() {
                     error_exit_with_src(
                         &format!("Cannot form function type `{}` since its codomain type `{}` has kind `{}`.", self.to_string_normalize(), codom.to_string_normalize(), ret_kind.to_string()),
@@ -799,6 +799,7 @@ impl TypeNode {
                 }
                 kind_star()
             }
+            Type::AssocTy(_, _) => todo!(),
         }
     }
 
