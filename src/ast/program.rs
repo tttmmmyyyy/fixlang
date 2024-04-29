@@ -148,14 +148,14 @@ impl SymbolExpr {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
     pub expr: Arc<ExprNode>,
-    pub type_resolver: TypeResolver,
+    pub substitution: Substitution,
 }
 
 impl TypedExpr {
     pub fn from_expr(expr: Arc<ExprNode>) -> Self {
         TypedExpr {
             expr,
-            type_resolver: TypeResolver::default(),
+            substitution: Substitution::default(),
         }
     }
 
@@ -163,11 +163,9 @@ impl TypedExpr {
         self.expr = calculate_free_vars(self.expr.clone());
     }
 
-    // When unification fails, it has no side effect to self.
-    pub fn unify_to(&mut self, target_ty: &Arc<TypeNode>) -> bool {
-        return self
-            .type_resolver
-            .unify(&self.expr.ty.as_ref().unwrap(), target_ty);
+    pub fn specialize_type_to(&mut self, target_ty: &Arc<TypeNode>) {
+        let matching = Substitution::matching(self.expr.ty.as_ref().unwrap(), &target_ty, &HashSet::new()).unwrap();
+        self.substitution.add_substitution(&matching);
     }
 }
 
@@ -754,9 +752,7 @@ impl Program {
                 // Calculate free vars.
                 e.calculate_free_vars();
                 // Specialize e's type to the required type `sym.ty`.
-                // TODO: maybe we can use here matching, not unification.
-                let ok = e.unify_to(&sym.ty);
-                assert!(ok);
+                e.specialize_type_to(&sym.ty);
                 e
             }
             SymbolExpr::Method(impls) => {
@@ -768,8 +764,8 @@ impl Program {
                     // and we do not need to check whether predicates or equality constraints are satisfiable or not.
                     {
                         let mut tc0 = tc.clone();
-                        let (_, method_ty) = tc0.instantiate_scheme(&method.ty, false);
-                        if tc0.unify_rollback_if_err(&method_ty, &sym.ty).is_err() {
+                        let method_ty = tc0.instantiate_scheme(&method.ty, ConstraintInstantiationMode::Ignore).ok().unwrap();
+                        if tc0.unify(&method_ty, &sym.ty).is_err() {
                             continue;
                         }
                     }
@@ -786,8 +782,7 @@ impl Program {
                     // Calculate free vars.
                     e.calculate_free_vars();
                     // Specialize e's type to required type `sym.ty`
-                    // TODO: maybe we can use here matching, not unification.
-                    assert!(e.unify_to(&sym.ty));
+                    e.specialize_type_to(&sym.ty);
                     opt_e = Some(e);
                     break;
                 }

@@ -8,7 +8,7 @@ use super::*;
 
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TyVar {
-    pub name: String,
+    pub name: Name,
     pub kind: Arc<Kind>,
 }
 
@@ -18,6 +18,13 @@ impl TyVar {
         ret.kind = kind;
         Arc::new(ret)
     }
+}
+
+#[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
+pub struct TyAssoc {
+    pub name : FullName,
+    pub kind : Arc<Kind>,
+    pub arity : usize,
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -799,7 +806,9 @@ impl TypeNode {
                 }
                 kind_star()
             }
-            Type::AssocTy(_, _) => todo!(),
+            Type::AssocTy(assoc_ty, args) => {
+                todo!("")
+            },
         }
     }
 
@@ -978,7 +987,7 @@ pub enum Type {
     TyCon(Arc<TyCon>),
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
     FunTy(Arc<TypeNode>, Arc<TypeNode>),
-    AssocTy(FullName, Vec<Arc<TypeNode>>),
+    AssocTy(TyAssoc, Vec<Arc<TypeNode>>),
 }
 
 // impl Clone for Type {

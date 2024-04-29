@@ -358,10 +358,12 @@ impl Substitution {
 
 // In TypeCheckContext::instantiate_scheme, how constraints of type scheme is handled?
 pub enum ConstraintInstantiationMode {
-    // We require the constraints to be satisfied.
+    // Require the constraints to be satisfied.
     Require,
-    // We assume that the constraints are satisfied.
+    // Assume that the constraints are satisfied.
     Assume,
+    // Igreno the constraints.
+    Ignore,
 }
 
 // Context under type-checking.
@@ -463,6 +465,13 @@ impl TypeCheckContext {
             sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
             // TODO: change name of tyvar if ConstraintInstantiationMode::Assume for better error message.
         }
+        let ty = sub.substitute_type(&scheme.ty);
+        match constraint_mode {
+            ConstraintInstantiationMode::Ignore => {
+                return Ok(ty);
+            }
+            _ => {}
+        }
         let mut preds = scheme.predicates.clone();
         for p in &mut preds {
             sub.substitute_predicate(p);
@@ -502,8 +511,9 @@ impl TypeCheckContext {
                     misc::insert_to_hashmap_vec(&mut self.assumed_eqs, &eq.assoc_type, eq_scm);
                 }
             },
+            ConstraintInstantiationMode::Ignore => unreachable!(),
         }
-        Ok(sub.substitute_type(&scheme.ty))
+        Ok(ty)
     }
 
     // Reduce predicates to head normal forms.

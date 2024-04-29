@@ -446,11 +446,10 @@ impl Predicate {
 
     pub fn check_kinds(
         &self,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
         trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
     ) {
         let expected = &trait_kind_map[&self.trait_id];
-        let found = self.ty.kind(kind_map);
+        let found = self.ty.kind();
         if *expected != found {
             error_exit_with_src(
                 &format!(
