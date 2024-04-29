@@ -770,7 +770,7 @@ impl Program {
                     {
                         let mut tc0 = tc.clone();
                         let (_, method_ty) = tc0.instantiate_scheme(&method.ty, false);
-                        if tc0.unify(&method_ty, &sym.ty).is_err() {
+                        if tc0.unify_rollback_if_err(&method_ty, &sym.ty).is_err() {
                             continue;
                         }
                     }

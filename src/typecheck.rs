@@ -548,7 +548,7 @@ impl TypeCheckContext {
                                 e.to_constraint_string()
                             );
                             Err(msg)
-                        } else if let Err(e) = tc.unify_inner(&var_ty.ok().unwrap(), &ty) {
+                        } else if let Err(e) = tc.unify(&var_ty.ok().unwrap(), &ty) {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the expected type since the constraint `{}` is unsatisfiable.",
                                 fullname.to_string(),
@@ -613,7 +613,7 @@ impl TypeCheckContext {
                 }
             }
             Expr::LLVM(lit) => {
-                if !self.unify(&lit.ty, &ty) {
+                if !self.unify_rollback_if_err(&lit.ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`",
@@ -645,7 +645,7 @@ impl TypeCheckContext {
                 let arg_ty = type_tyvar_star(&self.new_tyvar());
                 let body_ty = type_tyvar_star(&self.new_tyvar());
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
-                if !self.unify(&fun_ty, &ty) {
+                if !self.unify_rollback_if_err(&fun_ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`",
@@ -696,7 +696,7 @@ impl TypeCheckContext {
                         anno_ty.get_source(),
                     )
                 }
-                if !self.unify(&ty, anno_ty) {
+                if !self.unify_rollback_if_err(&ty, anno_ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -745,7 +745,7 @@ impl TypeCheckContext {
 
                 // Get field types.
                 let struct_ty = tc.get_struct_union_value_type(self);
-                if !self.unify(&struct_ty, &ty) {
+                if !self.unify_rollback_if_err(&struct_ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -775,7 +775,7 @@ impl TypeCheckContext {
                 // Prepare type of element.
                 let elem_ty = type_tyvar_star(&self.new_tyvar());
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
-                if !self.unify(&array_ty, &ty) {
+                if !self.unify_rollback_if_err(&array_ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found an array.",
@@ -793,7 +793,7 @@ impl TypeCheckContext {
             }
             Expr::CallC(_, ret_ty, param_tys, is_va_args, args) => {
                 let ret_ty = type_tycon(ret_ty);
-                if !self.unify(&ty, &ret_ty) {
+                if !self.unify_rollback_if_err(&ty, &ret_ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -880,7 +880,7 @@ impl TypeCheckContext {
         self.substitute_equality(&mut eq);
         let red_lhs = self.reduce_type_by_equality(eq.lhs());
         if red_lhs.to_string() != eq.lhs().to_string() {
-            self.unify_inner(&red_lhs, &eq.value)?;
+            self.unify(&red_lhs, &eq.value)?;
         } else {
             self.equalities.push(eq);
         }
@@ -933,14 +933,14 @@ impl TypeCheckContext {
 
     // Update unification to unify two types.
     // When unification fails, it has no side effect to self.
-    pub fn unify(
+    pub fn unify_rollback_if_err(
         &mut self,
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
     ) -> Result<(), UnificationErr> {
         todo!("rename this to unify_keep and make unify_inner public");
         let mut cloned_self = self.clone();
-        match cloned_self.unify(ty1, ty2) {
+        match cloned_self.unify_rollback_if_err(ty1, ty2) {
             Ok(_) => {
                 *self = cloned_self;
                 return Ok(());
@@ -952,7 +952,7 @@ impl TypeCheckContext {
     }
 
     // Unify two types.
-    pub fn unify_inner(
+    pub fn unify(
         &mut self,
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
@@ -1006,10 +1006,10 @@ impl TypeCheckContext {
             },
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
-                    self.unify_inner(&fun1, &fun2)?;
+                    self.unify(&fun1, &fun2)?;
                     let arg1 = self.substitute_type(arg1);
                     let arg2 = self.substitute_type(arg2);
-                    self.unify_inner(&arg1, &arg2)?;
+                    self.unify(&arg1, &arg2)?;
                     return Ok(());
                 }
                 _ => {
@@ -1018,10 +1018,10 @@ impl TypeCheckContext {
             },
             Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
                 Type::FunTy(arg_ty2, ret_ty2) => {
-                    self.unify_inner(&arg_ty1, &arg_ty2)?;
+                    self.unify(&arg_ty1, &arg_ty2)?;
                     let ret_ty1 = self.substitute_type(ret_ty1);
                     let ret_ty2 = self.substitute_type(ret_ty2);
-                    self.unify_inner(&ret_ty1, &ret_ty2)?;
+                    self.unify(&ret_ty1, &ret_ty2)?;
                     return Ok(());
                 }
                 _ => {
