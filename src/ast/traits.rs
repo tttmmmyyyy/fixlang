@@ -877,7 +877,7 @@ impl TraitEnv {
                     }
                     let equality = Equality {
                         assoc_type: assoc_type_fullname,
-                        args: args,
+                        args,
                         value: assoc_type_impl.value.clone(),
                         source: assoc_type_impl.source.clone(),
                     };
