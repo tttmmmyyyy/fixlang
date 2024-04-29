@@ -543,7 +543,7 @@ impl Equality {
         let tyvars: HashSet<Name> = tyvars.iter().cloned().collect();
         // NOTE: All of free variables in `value` should already be included in `tyvars`.
         EqualityScheme {
-            tyvars,
+            gen_vars: tyvars,
             equality: self.clone(),
         }
     }
@@ -551,7 +551,7 @@ impl Equality {
 
 #[derive(Clone)]
 pub struct EqualityScheme {
-    pub tyvars: HashSet<Name>,
+    pub gen_vars: HashSet<Name>,
     pub equality: Equality,
 }
 

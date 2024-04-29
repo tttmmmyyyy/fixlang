@@ -389,10 +389,8 @@ pub struct TypeCheckContext {
     // In which module is the current expression defined?
     // This is used as a state variable for typechecking.
     pub current_module: Option<Name>,
-    // Equality schemes populated by instantiation of associated types.
-    pub assoc_tys: HashMap<FullName, Vec<EqualityScheme>>,
     // Equalities assumed.
-    pub assumed_eqs: HashMap<FullName, Vec<Equality>>,
+    pub assumed_eqs: HashMap<FullName, Vec<EqualityScheme>>,
     // Predicates assumed.
     pub assumed_preds: HashMap<TraitId, Vec<QualPredScheme>>,
     // Fixed type variables.
@@ -418,7 +416,6 @@ impl TypeCheckContext {
             trait_env,
             import_statements: Arc::new(import_statements),
             current_module: None,
-            assoc_tys: Default::default(),
             assumed_eqs: Default::default(),
         }
     }
@@ -902,28 +899,27 @@ impl TypeCheckContext {
                 ty.set_funty_src(tysrc).set_funty_dst(tydst)
             },
             Type::AssocTy(assoc_ty, args) => {
+                // Reduce each arguments. 
                 let args = args.iter().map(|arg| self.reduce_type_by_equality(arg.clone())).collect::<Vec<_>>();
                 let ty = ty.set_assocty_args(args);
-                // Try assumed equality.
+
+                // Try matching to assumed equality.
                 for assumed_eq in &self.assumed_eqs[assoc_ty] {
-                    if ty.to_string() != assumed_eq.lhs().to_string() {
+                    // Insstantiate `assumed_eq`.
+                    let mut subst = Substitution::default();
+                    for tv in assumed_eq.gen_vars {
+                        subst.add_substitution(&Substitution::single(&tv, type_tyvar(&self.new_tyvar(), &kind_star())));
+                    }
+                    let mut equality = assumed_eq.equality.clone();
+                    subst.substitute_equality(&mut equality);
+
+                    // Try to match lhs of `equality` to `ty`.
+                    let subst: Option<Substitution> = Substitution::matching(&equality.lhs(), &ty, &self.fixed_tyvars);
+                    if subst.is_none() {
                         continue;
                     }
-                    return self.reduce_type_by_equality(assumed_eq.value);
-                }
-                // Try matching to associated type instance.
-                if !args[0].is_tycon_based() {
-                    // In this case, arg[0] never matches.
-                    return ty;
-                }
-                for assoc_type_inst in &self.assoc_tys[assoc_ty] {
-                    let lhs = assoc_type_inst.equality.lhs();
-                    let s = Substitution::matching(&lhs, &ty);
-                    if s.is_none() {
-                        continue;
-                    }
-                    let s = s.unwrap();
-                    let rhs = s.substitute_type(&assoc_type_inst.equality.value);
+                    let subst: Substitution = subst.unwrap();
+                    let rhs = subst.substitute_type(&equality.value);
                     return self.reduce_type_by_equality(rhs);
                 }
                 return ty;
