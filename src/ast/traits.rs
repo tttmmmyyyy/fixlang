@@ -56,6 +56,12 @@ pub struct AssocTypeImpl {
 //     pub source: Option<Span>,
 // }
 
+pub struct AssocTypeKindInfo {
+    pub name: TyAssoc,
+    pub arg_kinds : Vec<Arc<Kind>>,
+    pub value_kind : Arc<Kind>
+}
+
 // Traits definitions.
 #[derive(Clone)]
 pub struct TraitInfo {
@@ -120,7 +126,7 @@ impl TraitInfo {
                 &self.kind_predicates[1].source,
             );
             error_exit_with_src(
-                "You can specify at most one condition of the form `{type-variable} : {kind}` as the assumption of trait definition.",
+                "You can specify at most one constraint of the form `{type-variable} : {kind}` as the assumption of trait definition.",
                 &span,
             );
         }
@@ -446,10 +452,10 @@ impl Predicate {
 
     pub fn check_kinds(
         &self,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+        kind_env: &KindEnv,
     ) {
-        let expected = &trait_kind_map[&self.trait_id];
-        let found = self.ty.kind();
+        let expected = &kind_env.traits_and_aliases[&self.trait_id];
+        let found = self.ty.kind(kind_env);
         if *expected != found {
             error_exit_with_src(
                 &format!(
@@ -1108,7 +1114,7 @@ impl TraitEnv {
             }
             ta.kind = kind;
         }
-        let trait_kind_map = self.trait_kind_map();
+        let trait_kind_map = self.trait_kind_map_with_aliases();
         for (_trait_id, trait_impls) in &mut self.instances {
             for inst in trait_impls {
                 inst.set_kinds_in_qual_pred(&trait_kind_map);
@@ -1116,7 +1122,7 @@ impl TraitEnv {
         }
     }
 
-    pub fn trait_kind_map(&self) -> HashMap<TraitId, Arc<Kind>> {
+    pub fn trait_kind_map_with_aliases(&self) -> HashMap<TraitId, Arc<Kind>> {
         let mut res: HashMap<TraitId, Arc<Kind>> = HashMap::default();
         for (id, ti) in &self.traits {
             res.insert(id.clone(), ti.type_var.kind.clone());

@@ -199,7 +199,7 @@ impl Substitution {
         for pred in &mut qual_pred.pred_constraints {
             self.substitute_predicate(pred);
         }
-        for eq in &mut qual_pred.pred_constraints {
+        for eq in &mut qual_pred.eq_constraints {
             self.substitute_equality(eq);
         }
         self.substitute_predicate(&mut qual_pred.predicate);
@@ -384,6 +384,8 @@ pub struct TypeCheckContext {
     trait_env: TraitEnv,
     // List of type constructors.
     pub type_env: TypeEnv,
+    // Kind environment.
+    pub kind_env: Arc<KindEnv>,
     // A map from a module to the import statements.
     // To decrease clone-cost, wrap it in reference counter.
     pub import_statements: Arc<HashMap<Name, Vec<ImportStatement>>>,

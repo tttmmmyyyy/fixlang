@@ -23,8 +23,6 @@ impl TyVar {
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TyAssoc {
     pub name : FullName,
-    pub kind : Arc<Kind>,
-    pub arity : usize,
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -305,6 +303,7 @@ impl TypeNode {
                 src.define_modules_of_tycons(out_set);
                 dst.define_modules_of_tycons(out_set);
             }
+            Type::AssocTy(_, _) => panic!("Upto this function is called, all associated types should have been resolved."),
         }
     }
 
@@ -315,6 +314,15 @@ impl TypeNode {
             Type::TyCon(_) => false,
             Type::TyApp(fun, arg) => fun.contains_tyvar(tv) || arg.contains_tyvar(tv),
             Type::FunTy(src, dst) => src.contains_tyvar(tv) || dst.contains_tyvar(tv),
+            Type::AssocTy(_, args) => {
+                // NOTE: The special `self` type variable should be resolved in parser.
+                for arg in args {
+                    if arg.contains_tyvar(tv) {
+                        return true;
+                    }
+                }
+                return false;
+            },
         }
     }
 
@@ -761,13 +769,13 @@ impl TypeNode {
     }
 
     // Calculate kind.
-    pub fn kind(self: &Arc<TypeNode>) -> Arc<Kind> {
+    pub fn kind(self: &Arc<TypeNode>, kind_env: &KindEnv) -> Arc<Kind> {
         match &self.ty {
             Type::TyVar(tv) => tv.kind.clone(),
-            Type::TyCon(tc) => kind_map.get(&tc).unwrap().clone(),
+            Type::TyCon(tc) => kind_env.tycons.get(&tc).unwrap().clone(),
             Type::TyApp(fun, arg) => {
-                let fun_kind = fun.kind();
-                let arg_kind = arg.kind();
+                let fun_kind = fun.kind(kind_env);
+                let arg_kind = arg.kind(kind_env);
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
@@ -1408,4 +1416,11 @@ impl Scheme {
         res.ty = res.ty.resolve_type_aliases(type_env);
         Arc::new(res)
     }
+}
+
+#[derive(Default)]
+pub struct KindEnv {
+    pub tycons : HashMap<TyCon, Arc<Kind>>,
+    pub assoc_tys : HashMap<TyAssoc, AssocTypeKindInfo>,
+    pub traits_and_aliases : HashMap<TraitId, Arc<Kind>>
 }

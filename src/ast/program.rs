@@ -149,6 +149,8 @@ impl SymbolExpr {
 pub struct TypedExpr {
     pub expr: Arc<ExprNode>,
     pub substitution: Substitution,
+    #[serde(skip)]
+    pub kind_env: Arc<KindEnv>,
 }
 
 impl TypedExpr {
@@ -156,6 +158,7 @@ impl TypedExpr {
         TypedExpr {
             expr,
             substitution: Substitution::default(),
+            kind_env : Arc::new(KindEnv::default())
         }
     }
 
@@ -701,11 +704,11 @@ impl Program {
 
         // Load type-checking cache file.
         let hash_of_dependent_codes = self.module_dependency_hash(define_module);
-        let opt_cache = load_cache(name, &hash_of_dependent_codes, required_scheme);
-        if opt_cache.is_some() {
+        let cache = load_cache(name, &hash_of_dependent_codes, required_scheme);
+        if cache.is_some() {
             // If cache is available,
-            *te = opt_cache.unwrap();
-            te.type_resolver.kind_map = tc.type_env.kinds();
+            *te = cache.unwrap();
+            te.kind_env = tc.kind_env.clone();
             return;
         }
 
@@ -724,7 +727,8 @@ impl Program {
         let mut tc = tc.clone();
         tc.current_module = Some(define_module.clone());
         te.expr = tc.check_type(te.expr.clone(), required_scheme.clone());
-        te.type_resolver = tc.resolver;
+        te.substitution = tc.substitution;
+        te.kind_env = tc.kind_env.clone();
 
         // Save the result to cache file.
         save_cache(te, required_scheme, name, &hash_of_dependent_codes);
@@ -789,8 +793,8 @@ impl Program {
                 opt_e.unwrap()
             }
         };
-        sym.expr = Some(self.instantiate_expr(&typed_expr.type_resolver, &typed_expr.expr));
-        sym.substitution = typed_expr.type_resolver;
+        sym.expr = Some(self.instantiate_expr(&typed_expr.substitution, &typed_expr.expr));
+        sym.substitution = typed_expr.substitution;
     }
 
     // Instantiate all symbols.
@@ -817,13 +821,13 @@ impl Program {
     }
 
     // Instantiate expression.
-    fn instantiate_expr(&mut self, tr: &TypeResolver, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+    fn instantiate_expr(&mut self, sub: &Substitution, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
                 if v.name.is_local() {
                     expr.clone()
                 } else {
-                    let ty = tr.substitute_type(&expr.ty.as_ref().unwrap());
+                    let ty = sub.substitute_type(&expr.ty.as_ref().unwrap());
                     let instance = self.require_instantiated_symbol(&v.name, &ty);
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
@@ -831,35 +835,35 @@ impl Program {
             }
             Expr::LLVM(_) => expr.clone(),
             Expr::App(fun, args) => {
-                let fun = self.instantiate_expr(tr, fun);
+                let fun = self.instantiate_expr(sub, fun);
                 let args = args
                     .iter()
-                    .map(|arg| self.instantiate_expr(tr, arg))
+                    .map(|arg| self.instantiate_expr(sub, arg))
                     .collect::<Vec<_>>();
                 expr.set_app_func(fun).set_app_args(args)
             }
-            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(tr, body)),
+            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(sub, body)),
             Expr::Let(_, bound, val) => {
-                let bound = self.instantiate_expr(tr, bound);
-                let val = self.instantiate_expr(tr, val);
+                let bound = self.instantiate_expr(sub, bound);
+                let val = self.instantiate_expr(sub, val);
                 expr.set_let_bound(bound).set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.instantiate_expr(tr, cond);
-                let then_expr = self.instantiate_expr(tr, then_expr);
-                let else_expr = self.instantiate_expr(tr, else_expr);
+                let cond = self.instantiate_expr(sub, cond);
+                let then_expr = self.instantiate_expr(sub, then_expr);
+                let else_expr = self.instantiate_expr(sub, else_expr);
                 expr.set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
             Expr::TyAnno(e, _) => {
-                let e = self.instantiate_expr(tr, e);
+                let e = self.instantiate_expr(sub, e);
                 expr.set_tyanno_expr(e)
             }
             Expr::MakeStruct(_, fields) => {
                 let mut expr = expr.clone();
                 for (field_name, field_expr) in fields {
-                    let field_expr = self.instantiate_expr(tr, field_expr);
+                    let field_expr = self.instantiate_expr(sub, field_expr);
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }
                 expr
@@ -867,7 +871,7 @@ impl Program {
             Expr::ArrayLit(elems) => {
                 let mut expr = expr.clone();
                 for (i, e) in elems.iter().enumerate() {
-                    let e = self.instantiate_expr(tr, e);
+                    let e = self.instantiate_expr(sub, e);
                     expr = expr.set_array_lit_elem(e, i);
                 }
                 expr
@@ -875,14 +879,14 @@ impl Program {
             Expr::CallC(_, _, _, _, args) => {
                 let mut expr = expr.clone();
                 for (i, e) in args.iter().enumerate() {
-                    let e = self.instantiate_expr(tr, e);
+                    let e = self.instantiate_expr(sub, e);
                     expr = expr.set_call_c_arg(e, i);
                 }
                 expr
             }
         };
         // If the type of an expression contains undetermied type variable after instantiation, raise an error.
-        if !tr
+        if !sub
             .substitute_type(ret.ty.as_ref().unwrap())
             .free_vars()
             .is_empty()
@@ -909,7 +913,7 @@ impl Program {
                 generic_name: name.clone(),
                 ty: ty.clone(),
                 expr: None,
-                substitution: TypeResolver::default(), // This field will be set in the end of instantiation.
+                substitution: Substitution::default(), // This field will be set in the end of instantiation.
             });
         }
         inst_name
@@ -959,7 +963,7 @@ impl Program {
     pub fn set_kinds(&mut self) {
         self.trait_env.set_kinds();
         let kind_map = &self.type_env().kinds();
-        let trait_kind_map = self.trait_env.trait_kind_map();
+        let trait_kind_map = self.trait_env.trait_kind_map_with_aliases();
         for (_name, sym) in &mut self.global_values {
             sym.set_kinds(kind_map, &trait_kind_map);
         }
