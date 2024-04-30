@@ -1003,7 +1003,7 @@ impl Program {
         let mut ctx = NameResolutionContext::new(
             &self.tycon_names_with_aliases(),
             &self.trait_names_with_aliases(),
-            &self.assoc_ty_names(),
+            self.assoc_ty_to_arity(),
             vec![],
         );
         // Resolve namespaces in type constructors.

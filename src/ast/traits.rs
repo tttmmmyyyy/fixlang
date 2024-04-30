@@ -911,7 +911,7 @@ impl TraitEnv {
                 let assoc_type_namespace = trait_id.name.to_namespace();
                 let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
                 let arity = assoc_ty_info.arity;
-                assoc_ty_arity.push(assoc_type_fullname, arity);
+                assoc_ty_arity.insert(assoc_type_fullname, arity);
             }
         }
         assoc_ty_arity
