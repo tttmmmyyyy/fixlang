@@ -244,7 +244,7 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::matching(fun1, fun2, fixed_tyvars) {
+                    match Self::matching(fun1, fun2, fixed_tyvars, kind_env) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -252,7 +252,7 @@ impl Substitution {
                         }
                         None => return None,
                     }
-                    match Self::matching(arg1, arg2, fixed_tyvars) {
+                    match Self::matching(arg1, arg2, fixed_tyvars, kind_env) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -267,7 +267,7 @@ impl Substitution {
             Type::FunTy(src1, dst1) => match &ty2.ty {
                 Type::FunTy(src2, dst2) => {
                     let mut ret = Self::default();
-                    match Self::matching(src1, src2, fixed_tyvars) {
+                    match Self::matching(src1, src2, fixed_tyvars, kind_env) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -275,7 +275,7 @@ impl Substitution {
                         }
                         None => return None,
                     }
-                    match Self::matching(dst1, dst2, fixed_tyvars) {
+                    match Self::matching(dst1, dst2, fixed_tyvars, kind_env) {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return None;
@@ -295,7 +295,7 @@ impl Substitution {
                         }
                         let mut ret = Self::default();
                         for i in 0..args1.len() {
-                            match Self::matching(&args1[i], &args2[i], fixed_tyvars) {
+                            match Self::matching(&args1[i], &args2[i], fixed_tyvars, kind_env) {
                                 Some(s) => {
                                     if !ret.merge_substitution(&s) {
                                         return None;
@@ -932,7 +932,7 @@ impl TypeCheckContext {
                     subst.substitute_equality(&mut equality);
 
                     // Try to match lhs of `equality` to `ty`.
-                    let subst: Option<Substitution> = Substitution::matching(&equality.lhs(), &ty, &self.fixed_tyvars);
+                    let subst: Option<Substitution> = Substitution::matching(&equality.lhs(), &ty, &self.fixed_tyvars, &self.kind_env);
                     if subst.is_none() {
                         continue;
                     }
@@ -1065,7 +1065,7 @@ impl TypeCheckContext {
             // `map: [f: Functor] (a -> b) -> f a -> f b; map = |f, c| (...)`;
             return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
-        if tyvar1.kind != ty2.kind() {
+        if tyvar1.kind != ty2.kind(&self.kind_env) {
             return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
         if self.fixed_tyvars.contains(&tyvar1.name) {
@@ -1114,7 +1114,7 @@ impl TypeCheckContext {
             subst.substitute_qualpred(&mut qual_pred);
 
             //  Try to match head of `qual_pred` to `pred`.
-            if let Some(s) = Substitution::matching(&qual_pred.predicate.ty, &pred.ty, &self.fixed_tyvars) {
+            if let Some(s) = Substitution::matching(&qual_pred.predicate.ty, &pred.ty, &self.fixed_tyvars, &self.kind_env) {
                 for eq in qual_pred.eq_constraints {
                     let mut eq = eq.clone();
                     self.add_equality(eq)?;

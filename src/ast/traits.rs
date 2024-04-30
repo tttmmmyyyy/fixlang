@@ -24,7 +24,7 @@ impl TraitId {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
-        self.name = ctx.resolve(&self.name, NameResolutionType::Trait)?;
+        self.name = ctx.resolve(&self.name, &[NameResolutionType::Trait])?;
         Ok(())
     }
 }
@@ -754,7 +754,7 @@ impl TraitEnv {
             assert!(
                 trait_id.name
                     == ctx
-                        .resolve(&trait_id.name, NameResolutionType::Trait)
+                        .resolve(&trait_id.name, &[NameResolutionType::Trait])
                         .unwrap()
             );
             trait_info.resolve_namespace(ctx);
@@ -890,6 +890,20 @@ impl TraitEnv {
             }
         }
         eq_scms
+    }
+
+    pub fn assoc_ty_names(&self) -> HashSet<FullName> {
+        let mut names = vec![];
+        for (trait_id, insts) in &self.instances {
+            for inst in insts {
+                for (assoc_type_name, assoc_type_impl) in &inst.assoc_types {
+                    let assoc_type_namespace = trait_id.name.to_namespace();
+                    let assoc_type_fullname = FullName::new(&assoc_type_namespace, assoc_type_name);
+                    names.push(assoc_type_fullname)
+                }
+            }
+        }
+        names.iter().collect::<HashSet<_>>()
     }
 
     // // Reduce a predicate p to a context of trait instance.

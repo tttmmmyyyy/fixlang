@@ -84,14 +84,14 @@ pub fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
 fn funptr_lambda(
     generic_name: &FullName,
     expr: &Arc<ExprNode>,
-    typeresolver: &TypeResolver, // for resolving types of expr
+    substitution: &Substitution, // for resolving types of expr
     vars_count: usize,
 ) -> Option<Arc<ExprNode>> {
     if exclude(generic_name) {
         return None;
     }
 
-    let expr_type = typeresolver.substitute_type(expr.ty.as_ref().unwrap());
+    let expr_type = substitution.substitute_type(expr.ty.as_ref().unwrap());
     if expr_type.is_funptr() {
         return None;
     }
@@ -106,7 +106,7 @@ fn funptr_lambda(
     // Collect types of argments.
     let (arg_types, body_ty) = collect_app_src(&expr_type, vars_count);
     assert_eq!(
-        typeresolver.substitute_type(body.ty.as_ref().unwrap()),
+        substitution.substitute_type(body.ty.as_ref().unwrap()),
         body_ty
     );
 
@@ -180,10 +180,10 @@ fn collect_app_src(ty: &Arc<TypeNode>, vars_limit: usize) -> (Vec<Arc<TypeNode>>
 fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
-    typechcker: &TypeResolver,
+    substitution: &Substitution,
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
-    let fun_ty = typechcker.substitute_type(fun.ty.as_ref().unwrap());
+    let fun_ty = substitution.substitute_type(fun.ty.as_ref().unwrap());
     if fun_ty.is_funptr() {
         return expr.clone();
     }

@@ -196,51 +196,54 @@ impl MethodImpl {
 }
 
 pub struct NameResolutionContext {
-    pub types: HashSet<FullName>,
-    pub traits: HashSet<FullName>,
-    pub assoc_tys: HashSet<FullName>,
+    pub candidates: HashMap<FullName, NameResolutionType>,
     pub import_statements: Vec<ImportStatement>,
 }
 
-#[derive(PartialEq)]
-pub enum NameResolutionType {
-    TyCon,
-    AssocTy,
-    Trait,
-}
-
 impl<'a> NameResolutionContext {
+    pub fn new(tycon_names_with_aliases: &HashSet<FullName>, trait_names_with_aliases: &HashSet<FullName>, assoc_ty_names: &HashSet<FullName>, import_statements: Vec<ImportStatement>) -> Self {
+        let mut candidates: HashMap<FullName, NameResolutionType> = HashMap::new();
+        fn insert_or_err(candidates: &mut HashMap<FullName, NameResolutionType>, name : FullName, nrt : NameResolutionType) {
+            if candidates.contains_key(&name) && candidates[&name] != nrt {
+                error_exit(&format!("There are two names defined `{}`: one is `{}` and one is `{}`.", name.to_string(), candidates[&name].to_string(), nrt.to_string()))
+            }
+            candidates.insert(name, nrt);
+        }
+        for name in tycon_names_with_aliases {
+            insert_or_err(&mut candidates, name.clone(), NameResolutionType::TyCon);
+        }
+        for name in trait_names_with_aliases {
+            insert_or_err(&mut candidates, name.clone(), NameResolutionType::Trait);
+        }
+        for name in assoc_ty_names {
+            insert_or_err(&mut candidates, name.clone(), NameResolutionType::AssocTy);
+        }
+        NameResolutionContext {
+            candidates, import_statements
+        }
+    }
+
     pub fn resolve(
         &self,
         short_name: &FullName,
-        type_or_trait: NameResolutionType,
+        accept_types : &[NameResolutionType]
     ) -> Result<FullName, String> {
-        let candidates = if type_or_trait == NameResolutionType::TyCon {
-            &self.types
-        } else {
-            &self.traits
-        };
-        let candidates = candidates
+        let candidates = self.candidates
             .iter()
-            .filter(|full_name| import::is_accessible(&self.import_statements, full_name))
-            .filter_map(|full_name| {
-                if short_name.is_suffix(full_name) {
-                    Some(full_name.clone())
-                } else {
+            .filter_map(|(full_name, nrt)| {
+                if !import::is_accessible(&self.import_statements, full_name) {
                     None
+                } else if !accept_types.contains(nrt) {
+                    None
+                } else if !short_name.is_suffix(full_name) {
+                    None
+                } else {
+                    Some(full_name.clone())
                 }
             })
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
-            let msg = match type_or_trait {
-                NameResolutionType::TyCon => {
-                    format!("Unknown type name `{}`.", short_name.to_string())
-                }
-                NameResolutionType::Trait => {
-                    format!("Unknown trait name `{}`.", short_name.to_string())
-                }
-            };
-            Err(msg)
+            Err(format!("Unknown entity `{}`.", short_name.to_string()))
         } else if candidates.len() == 1 {
             Ok(candidates[0].clone())
         } else {
@@ -251,21 +254,30 @@ impl<'a> NameResolutionContext {
                 .collect::<Vec<_>>();
             candidates.sort(); // Sort for deterministic error message.
             let candidates = candidates.join(", ");
-
-            let msg = if type_or_trait == NameResolutionType::TyCon {
+            let msg = 
                 format!(
-                    "Type name `{}` is ambiguous. There are {}.",
+                    "Name `{}` is ambiguous. There are {}.",
                     short_name.to_string(),
                     candidates
-                )
-            } else {
-                format!(
-                    "Trait name `{}` is ambiguous. There are {}.",
-                    short_name.to_string(),
-                    candidates
-                )
-            };
+                );
             Err(msg)
+        }
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum NameResolutionType {
+    TyCon,
+    Trait,
+    AssocTy,
+}
+
+impl NameResolutionType {
+    pub fn to_string(&self) -> &'static str {
+        match self {
+            TyCon => { "type" }
+            Trait => { "trait" }
+            AssocTy => { "associated type" }
         }
     }
 }
@@ -469,6 +481,10 @@ impl Program {
             res.insert(k.name.clone());
         }
         res
+    }
+
+    pub fn assoc_ty_names(&self) -> HashSet<FullName> {
+        self.trait_env.assoc_ty_names()
     }
 
     // Get of list of tycons that can be used for namespace resolution.
@@ -715,11 +731,12 @@ impl Program {
         }
 
         // Perform namespace inference.
-        let nrctx = NameResolutionContext {
-            types: self.tycon_names_with_aliases(),
-            traits: self.trait_names_with_aliases(),
-            import_statements: self.mod_to_import_stmts[define_module].clone(),
-        };
+        let nrctx = NameResolutionContext::new(
+            &self.tycon_names_with_aliases(),
+            &self.trait_names_with_aliases(),
+            &self.assoc_ty_names(), 
+            self.mod_to_import_stmts[define_module].clone()
+        );
         te.expr = te.expr.resolve_namespace(&nrctx);
 
         // Resolve type aliases in expression.
@@ -974,11 +991,12 @@ impl Program {
     // Infer namespaces to traits and types that appear in declarations (not in expressions).
     // NOTE: names of in the definition of types/traits/global_values have to be full-named already when this function called.
     pub fn resolve_namespace_in_declaration(&mut self) {
-        let mut ctx = NameResolutionContext {
-            types: self.tycon_names_with_aliases(),
-            traits: self.trait_names_with_aliases(),
-            import_statements: vec![],
-        };
+        let mut ctx = NameResolutionContext::new(
+            &self.tycon_names_with_aliases(),
+            &self.trait_names_with_aliases(),
+            &self.assoc_ty_names(),
+            vec![],
+        );
         // Resolve namespaces in type constructors.
         {
             let mut tycons = (*self.type_env.tycons).clone();
