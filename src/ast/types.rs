@@ -364,6 +364,10 @@ impl TypeNode {
             Type::FunTy(src, dst) => self
                 .set_funty_src(src.set_kinds(kinds))
                 .set_funty_dst(dst.set_kinds(kinds)),
+            Type::AssocTy(_, args) => {
+                let args = args.iter().map(|arg| arg.set_kinds(kinds)).collect::<Vec<_>>();
+                self.set_assocty_args(args)
+            },
         }
     }
 
@@ -389,15 +393,15 @@ impl TypeNode {
         }
     }
 
-    // pub fn get_head_string(&self) -> String {
-    //     match &self.ty {
-    //         Type::TyVar(_) => self.to_string(),
-    //         Type::TyCon(_) => self.to_string(),
-    //         Type::TyApp(head, _) => head.get_head_string(),
-    //         Type::FunTy(_, _) => "->".to_string(),
-    //         Type::AssocTy(assoc_ty, _) => assoc_ty.to_string(),
-    //     }
-    // }
+    pub fn get_head_string(&self) -> String {
+        match &self.ty {
+            Type::TyVar(_) => self.to_string(),
+            Type::TyCon(_) => self.to_string(),
+            Type::TyApp(head, _) => head.get_head_string(),
+            Type::FunTy(_, _) => "->".to_string(),
+            Type::AssocTy(assoc_ty, _) => assoc_ty.to_string(),
+        }
+    }
 
     pub fn set_tyvar_kind(&self, kind: Arc<Kind>) -> Arc<TypeNode> {
         let mut ret = self.clone();
@@ -1190,14 +1194,19 @@ impl TypeNode {
                 free_vars.extend(output.free_vars());
             }
             Type::TyCon(_) => {}
+            Type::AssocTy(_, args) => {
+                for arg in args {
+                    free_vars.extend(arg.free_vars());
+                }
+            },
         };
         free_vars
     }
 
     // Append free type variables to a buffer of type Vec. Elements of the resulting buf may be duplicated.
-    pub fn free_vars_vec(self: &Arc<TypeNode>, buf: &mut Vec<Name>) {
+    pub fn free_vars_vec(self: &Arc<TypeNode>, buf: &mut Vec<Arc<TyVar>>) {
         match &self.ty {
-            Type::TyVar(tv) => buf.push(tv.name.clone()),
+            Type::TyVar(tv) => buf.push(tv.clone()),
             Type::TyApp(tyfun, arg) => {
                 tyfun.free_vars_vec(buf);
                 arg.free_vars_vec(buf);
@@ -1207,6 +1216,11 @@ impl TypeNode {
                 output.free_vars_vec(buf);
             }
             Type::TyCon(_) => {}
+            Type::AssocTy(_, args) => {
+                for arg in args {
+                    arg.free_vars_vec(buf);
+                }
+            }
         };
     }
 }

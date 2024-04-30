@@ -531,7 +531,6 @@ impl Equality {
             arg.free_vars_vec(&mut tyvars);
         }
         self.value.free_vars_vec(&mut tyvars);
-        let tyvars: HashSet<Name> = tyvars.iter().cloned().collect();
         EqualityScheme {
             gen_vars: tyvars,
             equality: self.clone(),
@@ -631,9 +630,9 @@ impl TraitEnv {
 
                 // Check instance is not head-normal-form.
                 let implemented_ty = &inst.qual_pred.predicate.ty;
-                if implemented_ty.is_hnf() {
+                if !implemented_ty.is_tycon_based() {
                     error_exit_with_src(
-                        &format!("Implementing trait for type `{}` is not allowed (by type inference algorithm used in Fix). The head (in this case, `{}`) of a type for which trait is implemented should be a type constructor and cannot be a type variable.", implemented_ty.to_string(), implemented_ty.get_head_string()),&implemented_ty.get_source()
+                        &format!("Implementing trait for type `{}` is not allowed. The head (in this case, `{}`) of a type for which trait is implemented should be a type constructor.", implemented_ty.to_string(), implemented_ty.get_head_string()),&implemented_ty.get_source()
                     );
                 }
 
