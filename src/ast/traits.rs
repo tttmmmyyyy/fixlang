@@ -894,16 +894,27 @@ impl TraitEnv {
 
     pub fn assoc_ty_names(&self) -> HashSet<FullName> {
         let mut names = vec![];
-        for (trait_id, insts) in &self.instances {
-            for inst in insts {
-                for (assoc_type_name, assoc_type_impl) in &inst.assoc_types {
-                    let assoc_type_namespace = trait_id.name.to_namespace();
-                    let assoc_type_fullname = FullName::new(&assoc_type_namespace, assoc_type_name);
-                    names.push(assoc_type_fullname)
-                }
+        for (trait_id, trait_info) in &self.traits {
+            for (assoc_ty_name, assoc_ty_info) in trait_info.assoc_types {
+                let assoc_type_namespace = trait_id.name.to_namespace();
+                let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
+                names.push(assoc_type_fullname)
             }
         }
-        names.iter().collect::<HashSet<_>>()
+        names.into_iter().collect::<HashSet<_>>()
+    }
+
+    pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
+        let mut assoc_ty_arity = HashMap::new();
+        for (trait_id, trait_info) in &self.traits {
+            for (assoc_ty_name, assoc_ty_info) in trait_info.assoc_types {
+                let assoc_type_namespace = trait_id.name.to_namespace();
+                let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
+                let arity = assoc_ty_info.arity;
+                assoc_ty_arity.push(assoc_type_fullname, arity);
+            }
+        }
+        assoc_ty_arity
     }
 
     // // Reduce a predicate p to a context of trait instance.

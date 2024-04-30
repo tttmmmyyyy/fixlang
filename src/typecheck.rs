@@ -407,6 +407,7 @@ impl TypeCheckContext {
     pub fn new(
         trait_env: TraitEnv,
         type_env: TypeEnv,
+        kind_env: Arc<KindEnv>,
         import_statements: HashMap<Name, Vec<ImportStatement>>,
     ) -> Self {
         Self {
@@ -414,6 +415,7 @@ impl TypeCheckContext {
             scope: Default::default(),
             type_env,
             trait_env,
+            kind_env,
             import_statements: Arc::new(import_statements),
             current_module: None,
             substitution: Substitution::default(),

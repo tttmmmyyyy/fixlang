@@ -197,11 +197,16 @@ impl MethodImpl {
 
 pub struct NameResolutionContext {
     pub candidates: HashMap<FullName, NameResolutionType>,
+    pub assoc_ty_to_arity: HashMap<FullName, usize>,
     pub import_statements: Vec<ImportStatement>,
 }
 
 impl<'a> NameResolutionContext {
-    pub fn new(tycon_names_with_aliases: &HashSet<FullName>, trait_names_with_aliases: &HashSet<FullName>, assoc_ty_names: &HashSet<FullName>, import_statements: Vec<ImportStatement>) -> Self {
+    pub fn new(
+            tycon_names_with_aliases: &HashSet<FullName>,
+            trait_names_with_aliases: &HashSet<FullName>,
+            assoc_ty_to_arity: HashMap<FullName, usize>,
+            import_statements: Vec<ImportStatement>) -> Self {
         let mut candidates: HashMap<FullName, NameResolutionType> = HashMap::new();
         fn insert_or_err(candidates: &mut HashMap<FullName, NameResolutionType>, name : FullName, nrt : NameResolutionType) {
             if candidates.contains_key(&name) && candidates[&name] != nrt {
@@ -215,11 +220,11 @@ impl<'a> NameResolutionContext {
         for name in trait_names_with_aliases {
             insert_or_err(&mut candidates, name.clone(), NameResolutionType::Trait);
         }
-        for name in assoc_ty_names {
+        for (name, arity) in &assoc_ty_to_arity {
             insert_or_err(&mut candidates, name.clone(), NameResolutionType::AssocTy);
         }
         NameResolutionContext {
-            candidates, import_statements
+            candidates, import_statements, assoc_ty_to_arity
         }
     }
 
@@ -487,6 +492,10 @@ impl Program {
         self.trait_env.assoc_ty_names()
     }
 
+    pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
+        self.trait_env.assoc_ty_to_arity()
+    }
+
     // Get of list of tycons that can be used for namespace resolution.
     pub fn tycon_names_with_aliases_vec(&self) -> Vec<FullName> {
         let mut res: Vec<FullName> = Default::default();
@@ -734,7 +743,7 @@ impl Program {
         let nrctx = NameResolutionContext::new(
             &self.tycon_names_with_aliases(),
             &self.trait_names_with_aliases(),
-            &self.assoc_ty_names(), 
+            self.assoc_ty_to_arity(), 
             self.mod_to_import_stmts[define_module].clone()
         );
         te.expr = te.expr.resolve_namespace(&nrctx);

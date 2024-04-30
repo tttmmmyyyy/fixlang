@@ -1,5 +1,5 @@
 use core::panic;
-use std::sync::Arc;
+use std::{env::args, sync::Arc};
 
 use inkwell::types::BasicType;
 use serde::{de, Deserialize, Serialize};
@@ -123,7 +123,7 @@ impl TyCon {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
-        self.name = ctx.resolve(&self.name, NameResolutionType::TyCon)?;
+        self.name = ctx.resolve(&self.name, &[NameResolutionType::TyCon, NameResolutionType::AssocTy])?;
         Ok(())
     }
 
@@ -441,6 +441,15 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    pub fn set_assocty_name(&self, name: TyAssoc) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::AssocTy(_, args) => ret.ty = Type::AssocTy(name, args),
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
     pub fn set_assocty_args(&self, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -497,6 +506,8 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    // Resolve namespaces of tycons / type aliases / trait / trait aliases / associated types that appear in a type.
+    // Also, replaces TyCon node to an AssocTy node if necessary.
     pub fn resolve_namespace(self: &Arc<TypeNode>, ctx: &NameResolutionContext) -> Arc<TypeNode> {
         match &self.ty {
             Type::TyVar(_tv) => self.clone(),
@@ -508,12 +519,52 @@ impl TypeNode {
                 }
                 self.set_tycon_tc(Arc::new(tc))
             }
-            Type::TyApp(fun, arg) => self
-                .set_tyapp_fun(fun.resolve_namespace(ctx))
-                .set_tyapp_arg(arg.resolve_namespace(ctx)),
+            Type::TyApp(fun, arg) => {
+                let app_seq = self.flatten_type_application();
+                match &app_seq[0].ty {                    
+                    Type::TyCon(tc) => {
+                        // In this case, replase self to associated type application if necessary.
+                        let mut tc = tc.as_ref().clone();
+                        let result = tc.resolve_namespace(ctx);
+                        if result.is_err() {
+                            error_exit_with_src(&result.unwrap_err(), &app_seq[0].info.source)
+                        }
+                        if ctx.candidates[&tc.name] == NameResolutionType::AssocTy {
+                            let assoc_ty_name = tc.name;
+                            let arity: usize = ctx.assoc_ty_to_arity[&assoc_ty_name];
+                            let (_, args) = app_seq.split_at(1);
+                            if args.len() - 1 < arity {
+                                error_exit_with_src("Associated type `{}` has arity `{}`, but supplied `{}` types. All usage of associated type has to be saturated.", &app_seq[0].info.source);
+                            }
+                            let (assoc_ty_args, following_args) = args.split_at(arity);
+                            let assoc_ty_span = args[0].get_source().clone();
+                            let mut assoc_ty = type_assocty(assoc_ty_name, assoc_ty_args.iter().cloned().collect()).set_source(assoc_ty_span);
+                            for arg in following_args {
+                                let fun_src = assoc_ty.get_source();
+                                let arg_src = arg.get_source();
+                                let span = Span::unite_opt(fun_src, arg_src);
+                                assoc_ty = type_tyapp(assoc_ty, arg.clone()).set_source(span);
+                            }
+                            return assoc_ty.resolve_namespace(ctx);
+                        }
+                    },
+                    _ => {}
+                }
+                self.set_tyapp_fun(fun.resolve_namespace(ctx)).set_tyapp_arg(arg.resolve_namespace(ctx))
+            },
             Type::FunTy(src, dst) => self
                 .set_funty_src(src.resolve_namespace(ctx))
                 .set_funty_dst(dst.resolve_namespace(ctx)),
+            Type::AssocTy(assoc_ty, args) => {
+                let assoc_ty = ctx.resolve(&assoc_ty.name, &[NameResolutionType::AssocTy]);
+                if assoc_ty.is_err() {
+                    error_exit_with_src(&assoc_ty.unwrap_err(), &self.info.source)
+                }
+                let assoc_ty = assoc_ty.ok().unwrap();
+                let assoc_ty = TyAssoc { name : assoc_ty };
+                let args = args.iter().map(|arg| arg.resolve_namespace(ctx)).collect::<Vec<_>>();
+                self.set_assocty_name(assoc_ty).set_assocty_args(args)
+            },
         }
     }
 
@@ -533,22 +584,22 @@ impl TypeNode {
     // Flatten type application.
     // ex. If given `f a b`, returns `vec![f, a, b]`.
     pub fn flatten_type_application(&self) -> Vec<Arc<TypeNode>> {
-        fn flatten_type_application_inner(ty: &TypeNode, args: &mut Vec<Arc<TypeNode>>) {
+        fn flatten_type_application_inner(ty: &TypeNode, tys: &mut Vec<Arc<TypeNode>>) {
             match &ty.ty {
                 Type::TyApp(fun, arg) => {
-                    flatten_type_application_inner(fun, args);
-                    args.push(arg.clone());
+                    flatten_type_application_inner(fun, tys);
+                    tys.push(arg.clone());
                 }
                 _ => {
-                    assert!(args.is_empty());
-                    args.push(Arc::new(ty.clone()));
+                    assert!(tys.is_empty());
+                    tys.push(Arc::new(ty.clone()));
                 }
             }
         }
 
-        let mut args: Vec<Arc<TypeNode>> = vec![];
-        flatten_type_application_inner(self, &mut args);
-        args
+        let mut tys: Vec<Arc<TypeNode>> = vec![];
+        flatten_type_application_inner(self, &mut tys);
+        tys
     }
 
     fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
