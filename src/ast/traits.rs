@@ -29,23 +29,68 @@ impl TraitId {
     }
 }
 
-// Definition of associated type synonym.
+// Definition of associated type.
 #[derive(Clone)]
 pub struct AssocTypeDefn {
+    // The local name of the associated type.
     pub name: Name,
-    pub arity: usize, // This arity includes `self`.
-    // The kind of the application of the associated type synonym.
+    // Kind predicates on the definition of the associated type.
+    pub kind_preds: Vec<KindPredicate>,
+    // Type parameters of the associated type.
+    // This does not include `self`.
+    pub params: Vec<Arc<TyVar>>,
+    // The kind of the application of the associated type.
     pub kind_applied: Arc<Kind>,
+    // Source location of associated type definition.
     pub src: Option<Span>,
 }
 
-// Implementation of associated type synonym.
+impl AssocTypeDefn {
+    pub fn set_kinds(&mut self) {
+        // Set `kind_predicates` to `self.params`.
+        for param in &mut self.params {
+            for kind_pred in &self.kind_preds {
+                if param.name == kind_pred.tyvar {
+                    *param = param.set_kind(kind_pred.kind.clone());
+                }
+            }
+        }
+    }
+}
+
+// Implementation of associated type.
 #[derive(Clone)]
 pub struct AssocTypeImpl {
     pub name: Name,
+    // Type parameters of the associated type implementation.
+    // This does not include `self`.
     pub params: Vec<Arc<TyVar>>,
     pub value: Arc<TypeNode>,
     pub source: Option<Span>,
+}
+
+impl AssocTypeImpl {
+    pub fn set_kinds(&mut self, trait_id: &TraitId, kind_env: &KindEnv) {
+        let assoc_ty_name = TyAssoc {
+            name: FullName::new(&trait_id.name.to_namespace(), &self.name),
+        };
+        let param_kinds = kind_env.assoc_tys.get(&assoc_ty_name).unwrap().param_kinds;
+        if self.params.len() != param_kinds.len() {
+            error_exit_with_src(
+                &format!(
+                    "Invalid number of parameters for associated type `{}`. Expect: {}, found: {}.",
+                    self.name,
+                    param_kinds.len(),
+                    self.params.len()
+                ),
+                &self.source,
+            )
+        }
+        for (param, kind) in &mut self.params.iter_mut().zip(param_kinds.iter()) {
+            *param = param.set_kind(kind.clone());
+        }
+        self.value = self.value.set_kinds(kind_env);
+    }
 }
 
 // #[derive(Clone, Serialize, Deserialize)]
@@ -58,8 +103,8 @@ pub struct AssocTypeImpl {
 
 pub struct AssocTypeKindInfo {
     pub name: TyAssoc,
-    pub arg_kinds : Vec<Arc<Kind>>,
-    pub value_kind : Arc<Kind>
+    pub param_kinds: Vec<Arc<Kind>>,
+    pub value_kind: Arc<Kind>,
 }
 
 // Traits definitions.
@@ -101,14 +146,15 @@ impl TraitInfo {
     // Here, for example, in case "trait a: ToString { to_string : a -> String }",
     // this function returns "[a: ToString] a -> String" as type of "to_string" method.
     pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
-        let mut ty = self.methods.get(name).unwrap().clone();
-        let vars = ty.free_vars();
+        let mut qual_ty = self.methods.get(name).unwrap().clone();
+        let mut vars = vec![];
+        qual_ty.free_vars_vec(&mut vars);
         let mut preds = vec![Predicate::make(
             self.id.clone(),
             type_from_tyvar(self.type_var.clone()),
         )];
-        preds.append(&mut ty.preds);
-        Scheme::generalize(vars, preds, ty.ty)
+        preds.append(&mut qual_ty.preds);
+        Scheme::generalize(vars, preds, qual_ty.eqs, qual_ty.ty)
     }
 
     // Get the type of a method.
@@ -119,6 +165,7 @@ impl TraitInfo {
     }
 
     // Validate kind_predicates and set it to self.type_var.
+    // Also, set kinds of parameters of associated type definition.
     pub fn set_trait_kind(&mut self) {
         if self.kind_predicates.len() >= 2 {
             let span = Span::unite_opt(
@@ -142,6 +189,9 @@ impl TraitInfo {
                 );
             }
             self.type_var = self.type_var.set_kind(self.kind_predicates[0].kind.clone());
+        }
+        for (_, assoc_ty_defn) in &mut self.assoc_types {
+            assoc_ty_defn.set_kinds();
         }
     }
 
@@ -171,11 +221,11 @@ pub struct TraitInstance {
 }
 
 impl TraitInstance {
-    pub fn set_kinds_in_qual_pred(&mut self, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) {
+    pub fn set_kinds_in_qual_pred(&mut self, kind_env: &KindEnv) {
         let mut scope = HashMap::new();
         let preds = &self.qual_pred.pred_constraints;
         let kind_preds = &self.qual_pred.kind_pred_constraints;
-        let res = QualPredicate::extend_kind_scope(&mut scope, preds, kind_preds, trait_kind_map);
+        let res = QualPredicate::extend_kind_scope(&mut scope, preds, kind_preds, kind_env);
         if res.is_err() {
             error_exit_with_src(&res.unwrap_err(), &self.source);
         }
@@ -213,25 +263,22 @@ impl TraitInstance {
     // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
     // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
     pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
-        // Create qualtype. Ex. `[] (a, b) -> String`.
-        let trait_tyvar = &trait_info.type_var.name; // Ex. tyvar == `t`
-        let impl_type = self.impl_type(); // Ex. impl_type == `(a, b)`
+        // Create qualtype. ex. `[] (a, b) -> String`.
+        let trait_tyvar = &trait_info.type_var.name; // ex. tyvar == `t`
+        let impl_type = self.impl_type(); // ex. impl_type == `(a, b)`
         let s = Substitution::single(&trait_tyvar, impl_type);
-        let mut method_qualty = trait_info.method_ty(method_name); // Ex. method_qualty == `[] t -> String`
-        s.substitute_qualtype(&mut method_qualty); // Ex. method_qualty == `[] (a, b) -> String`
+        let mut method_qualty = trait_info.method_ty(method_name); // ex. method_qualty == `[] t -> String`
+        s.substitute_qualtype(&mut method_qualty); // ex. method_qualty == `[] (a, b) -> String`
 
-        // Prepare `vars`, `ty` and `preds` to be generalized.
+        // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
         let ty = method_qualty.ty.clone();
-        let mut vars = ty.free_vars();
+        let mut vars = vec![];
+        method_qualty.free_vars_vec(&mut vars);
+        self.qual_pred.free_vars_vec(&mut vars);
         let mut preds = self.qual_pred.pred_constraints.clone();
         preds.append(&mut method_qualty.preds);
-
-        // Apply kind information specified by kind predicates of trait implementation to `vars`.
-        for kind_pred in self.qual_pred.kind_pred_constraints.iter() {
-            if vars.contains_key(&kind_pred.tyvar) {
-                vars.insert(kind_pred.tyvar.clone(), kind_pred.kind.clone());
-            }
-        }
+        let mut eqs = self.qual_pred.eq_constraints.clone();
+        eqs.append(&mut method_qualty.eqs);
 
         // Set source location of the type to the location where the method is implemented.
         let source = self
@@ -241,7 +288,7 @@ impl TraitInstance {
             .map(|src| src.to_single_character());
         let ty = ty.set_source(source);
 
-        Scheme::generalize(vars, preds, ty)
+        Scheme::generalize(vars, preds, eqs, ty)
     }
 
     // Get expression that implements a method.
@@ -291,6 +338,35 @@ pub struct QualPredicate {
 }
 
 impl QualPredicate {
+    // pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
+    //     let mut vars = self.predicate.free_vars();
+    //     for pred in &self.pred_constraints {
+    //         vars.extend(pred.free_vars());
+    //     }
+    //     for eq in &self.eq_constraints {
+    //         vars.extend(eq.free_vars());
+    //     }
+    //     vars
+    // }
+
+    pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
+        for pred in &self.pred_constraints {
+            pred.ty.free_vars_vec(buf);
+        }
+        for eq in &self.eq_constraints {
+            eq.free_vars_vec(buf);
+        }
+        self.predicate.ty.free_vars_vec(buf);
+        // Apply kind predicates.
+        for tv in buf {
+            for kind_pred in &self.kind_pred_constraints {
+                if tv.name == kind_pred.tyvar {
+                    tv.kind = kind_pred.kind.clone();
+                }
+            }
+        }
+    }
+
     #[allow(dead_code)]
     pub fn to_string(&self) -> String {
         let mut s = String::default();
@@ -325,8 +401,9 @@ impl QualPredicate {
     pub fn extend_kind_scope(
         scope: &mut HashMap<Name, Arc<Kind>>,
         preds: &Vec<Predicate>,
+        eqs: &Vec<Equality>,
         kind_preds: &Vec<KindPredicate>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
+        kind_env: &KindEnv,
     ) -> Result<(), String> {
         fn insert(
             scope: &mut HashMap<Name, Arc<Kind>>,
@@ -351,10 +428,10 @@ impl QualPredicate {
                 }
             };
             let trait_id = &p.trait_id;
-            if !trait_kind_map.contains_key(trait_id) {
+            if !kind_env.traits_and_aliases.contains_key(trait_id) {
                 panic!("Unknown trait: {}", trait_id.to_string());
             }
-            let kind = trait_kind_map[trait_id].clone();
+            let kind = kind_env.traits_and_aliases[trait_id].clone();
             insert(scope, tyvar, kind)?;
         }
         for kp in kind_preds {
@@ -362,18 +439,20 @@ impl QualPredicate {
             let kind = kp.kind.clone();
             insert(scope, tyvar, kind)?;
         }
+        todo!("use eqs.");
         Ok(())
     }
 }
 
 pub struct QualPredScheme {
-    pub gen_vars : Vec<Arc<TyVar>>,
-    pub qual_pred : QualPredicate
+    pub gen_vars: Vec<Arc<TyVar>>,
+    pub qual_pred: QualPredicate,
 }
 
 #[derive(Clone)]
 pub struct QualType {
     pub preds: Vec<Predicate>,
+    pub eqs: Vec<Equality>,
     pub kind_preds: Vec<KindPredicate>,
     pub ty: Arc<TypeNode>,
 }
@@ -384,6 +463,9 @@ impl QualType {
         for pred in &mut self.preds {
             pred.resolve_namespace(ctx);
         }
+        for eq in &mut self.eqs {
+            eq.resolve_namespace(ctx);
+        }
         self.ty = self.ty.resolve_namespace(ctx);
     }
 
@@ -392,12 +474,40 @@ impl QualType {
         for pred in &mut self.preds {
             pred.resolve_type_aliases(type_env);
         }
+        for eq in &mut self.eqs {
+            eq.resolve_type_aliases(type_env);
+        }
         self.ty = self.ty.resolve_type_aliases(type_env);
     }
 
     // Calculate free type variables.
-    pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
-        self.ty.free_vars()
+    // pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
+    //     let mut ret = self.ty.free_vars();
+    //     for pred in &self.preds {
+    //         ret.extend(pred.free_vars());
+    //     }
+    //     for eq in &self.eqs {
+    //         ret.extend(eq.free_vars());
+    //     }
+    //     ret
+    // }
+
+    pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
+        for pred in &self.preds {
+            pred.ty.free_vars_vec(buf);
+        }
+        for eq in &self.eqs {
+            eq.free_vars_vec(buf);
+        }
+        self.ty.free_vars_vec(buf);
+        // Apply kind predicates.
+        for tv in buf {
+            for kind_pred in &self.kind_preds {
+                if tv.name == kind_pred.tyvar {
+                    tv.kind = kind_pred.kind.clone();
+                }
+            }
+        }
     }
 }
 
@@ -410,6 +520,10 @@ pub struct Predicate {
 }
 
 impl Predicate {
+    pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
+        self.ty.free_vars()
+    }
+
     pub fn set_source(&mut self, source: Span) {
         self.source = Some(source);
     }
@@ -450,10 +564,7 @@ impl Predicate {
         self.ty = self.ty.set_kinds(scope);
     }
 
-    pub fn check_kinds(
-        &self,
-        kind_env: &KindEnv,
-    ) {
+    pub fn check_kinds(&self, kind_env: &KindEnv) {
         let expected = &kind_env.traits_and_aliases[&self.trait_id];
         let found = self.ty.kind(kind_env);
         if *expected != found {
@@ -502,13 +613,99 @@ impl KindPredicate {
 // Equality predicate `AssociateType arg0 args = value`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Equality {
-    pub assoc_type: FullName,
+    pub assoc_type: TyAssoc,
     pub args: Vec<Arc<TypeNode>>,
     pub value: Arc<TypeNode>,
     pub source: Option<Span>,
 }
 
 impl Equality {
+    pub fn check_kinds(&self, kind_env: &KindEnv) {
+        let kind_info = kind_env.assoc_tys.get(&self.assoc_type).unwrap();
+        if self.args.len() != kind_info.param_kinds.len() {
+            error_exit_with_src(
+                &format!(
+                    "Invalid number of arguments for associated type `{}`. Expect: {}, found: {}.",
+                    self.assoc_type.name.to_string(),
+                    kind_info.param_kinds.len(),
+                    self.args.len()
+                ),
+                &self.source,
+            )
+        }
+        for (arg, expect_kind) in self.args.iter().zip(kind_info.param_kinds.iter()) {
+            let found_kind = arg.kind(kind_env);
+            if *expect_kind != found_kind {
+                error_exit_with_src(
+                    &format!(
+                        "Kind mismatch in `{}`. Expect: {}, found: {}.",
+                        arg.to_string(),
+                        expect_kind.to_string(),
+                        found_kind.to_string()
+                    ),
+                    &self.source,
+                )
+            }
+        }
+        let found_kind = self.value.kind(kind_env);
+        if kind_info.value_kind != found_kind {
+            error_exit_with_src(
+                &format!(
+                    "Kind mismatch in `{}`. Expect: {}, found: {}.",
+                    self.value.to_string(),
+                    kind_info.value_kind.to_string(),
+                    found_kind.to_string()
+                ),
+                &self.source,
+            )
+        }
+    }
+
+    pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
+        for arg in &mut self.args {
+            *arg = arg.set_kinds(scope);
+        }
+        self.value = self.value.set_kinds(scope);
+    }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        for arg in &mut self.args {
+            *arg = arg.resolve_type_aliases(type_env);
+        }
+        self.value = self.value.resolve_type_aliases(type_env);
+    }
+
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.assoc_type.resolve_namespace(ctx);
+        for arg in &mut self.args {
+            *arg = arg.resolve_namespace(ctx);
+        }
+        self.value = self.value.resolve_namespace(ctx);
+    }
+
+    pub fn is_all_args_tyvar(&self) -> bool {
+        self.args.iter().all(|arg| arg.is_tyvar())
+    }
+
+    pub fn to_string(&self) -> String {
+        format!("{} = {}", self.lhs().to_string(), self.value.to_string())
+    }
+
+    pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
+        let mut vars = self.value.free_vars();
+        for arg in &self.args {
+            vars.extend(arg.free_vars());
+        }
+        vars
+    }
+
+    pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
+        for arg in &self.args {
+            arg.free_vars_vec(buf);
+        }
+        self.value.free_vars_vec(buf);
+    }
+
     // Get the type of the left-hand side of the equality.
     pub fn lhs(&self) -> Arc<TypeNode> {
         type_assocty(self.assoc_type.clone(), self.args.clone())
@@ -880,7 +1077,9 @@ impl TraitEnv {
                         args.push(type_from_tyvar(tv.clone()));
                     }
                     let equality = Equality {
-                        assoc_type: assoc_type_fullname,
+                        assoc_type: TyAssoc {
+                            name: assoc_type_fullname,
+                        },
                         args,
                         value: assoc_type_impl.value.clone(),
                         source: assoc_type_impl.source.clone(),
@@ -910,11 +1109,36 @@ impl TraitEnv {
             for (assoc_ty_name, assoc_ty_info) in trait_info.assoc_types {
                 let assoc_type_namespace = trait_id.name.to_namespace();
                 let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
-                let arity = assoc_ty_info.arity;
+                let arity = assoc_ty_info.params.len() + 1;
                 assoc_ty_arity.insert(assoc_type_fullname, arity);
             }
         }
         assoc_ty_arity
+    }
+
+    pub fn assoc_ty_kind_info(&self) -> HashMap<TyAssoc, AssocTypeKindInfo> {
+        let mut assoc_ty_kind_info = HashMap::new();
+        for (trait_id, trait_info) in &self.traits {
+            for (assoc_ty_name, assoc_ty_info) in trait_info.assoc_types {
+                let assoc_type_namespace = trait_id.name.to_namespace();
+                let assoc_type = TyAssoc {
+                    name: FullName::new(&assoc_type_namespace, &assoc_ty_name),
+                };
+                assoc_ty_kind_info.insert(
+                    assoc_type,
+                    AssocTypeKindInfo {
+                        name: assoc_type,
+                        param_kinds: assoc_ty_info
+                            .params
+                            .iter()
+                            .map(|tv| tv.kind.clone())
+                            .collect(),
+                        value_kind: assoc_ty_info.kind_applied.clone(),
+                    },
+                );
+            }
+        }
+        assoc_ty_kind_info
     }
 
     // // Reduce a predicate p to a context of trait instance.
@@ -1110,7 +1334,7 @@ impl TraitEnv {
     }
 
     // Set kinds in TraitInfo, TraitAlias and TraitInstances.
-    pub fn set_kinds(&mut self) {
+    pub fn set_kinds_in_trait_and_alias_defns(&mut self) {
         for (_id, ti) in &mut self.traits {
             ti.set_trait_kind();
         }
@@ -1138,10 +1362,15 @@ impl TraitEnv {
             }
             ta.kind = kind;
         }
-        let trait_kind_map = self.trait_kind_map_with_aliases();
-        for (_trait_id, trait_impls) in &mut self.instances {
+    }
+
+    pub fn set_kinds_in_trait_instances(&mut self, kind_env: &KindEnv) {
+        for (trait_id, trait_impls) in &mut self.instances {
             for inst in trait_impls {
-                inst.set_kinds_in_qual_pred(&trait_kind_map);
+                inst.set_kinds_in_qual_pred(kind_env);
+                for (_, assoc_ty_impl) in &mut inst.assoc_types {
+                    assoc_ty_impl.set_kinds(trait_id, kind_env);
+                }
             }
         }
     }

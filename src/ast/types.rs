@@ -1,6 +1,7 @@
 use core::panic;
 use std::{env::args, sync::Arc};
 
+use chrono::format;
 use inkwell::types::BasicType;
 use serde::{de, Deserialize, Serialize};
 
@@ -20,9 +21,16 @@ impl TyVar {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Serialize, Deserialize, Hash)]
 pub struct TyAssoc {
-    pub name : FullName,
+    pub name: FullName,
+}
+
+impl TyAssoc {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
+        self.name = ctx.resolve(&self.name, &[NameResolutionType::AssocTy])?;
+        Ok(())
+    }
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -123,7 +131,10 @@ impl TyCon {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
-        self.name = ctx.resolve(&self.name, &[NameResolutionType::TyCon, NameResolutionType::AssocTy])?;
+        self.name = ctx.resolve(
+            &self.name,
+            &[NameResolutionType::TyCon, NameResolutionType::AssocTy],
+        )?;
         Ok(())
     }
 
@@ -303,7 +314,9 @@ impl TypeNode {
                 src.define_modules_of_tycons(out_set);
                 dst.define_modules_of_tycons(out_set);
             }
-            Type::AssocTy(_, _) => panic!("Upto this function is called, all associated types should have been resolved."),
+            Type::AssocTy(_, _) => panic!(
+                "Upto this function is called, all associated types should have been resolved."
+            ),
         }
     }
 
@@ -322,7 +335,7 @@ impl TypeNode {
                     }
                 }
                 return false;
-            },
+            }
         }
     }
 
@@ -348,26 +361,29 @@ impl TypeNode {
     }
 
     // Set kinds to type variables.
-    pub fn set_kinds(self: &Arc<TypeNode>, kinds: &HashMap<Name, Arc<Kind>>) -> Arc<TypeNode> {
+    pub fn set_kinds(self: &Arc<TypeNode>, tv_to_kind: &HashMap<Name, Arc<Kind>>) -> Arc<TypeNode> {
         match &self.ty {
             Type::TyVar(tv) => {
-                if kinds.contains_key(&tv.name) {
-                    self.set_tyvar_kind(kinds[&tv.name].clone())
+                if tv_to_kind.contains_key(&tv.name) {
+                    self.set_tyvar_kind(tv_to_kind[&tv.name].clone())
                 } else {
                     self.clone()
                 }
             }
             Type::TyCon(_tc) => self.clone(),
             Type::TyApp(fun, arg) => self
-                .set_tyapp_fun(fun.set_kinds(kinds))
-                .set_tyapp_arg(arg.set_kinds(kinds)),
+                .set_tyapp_fun(fun.set_kinds(tv_to_kind))
+                .set_tyapp_arg(arg.set_kinds(tv_to_kind)),
             Type::FunTy(src, dst) => self
-                .set_funty_src(src.set_kinds(kinds))
-                .set_funty_dst(dst.set_kinds(kinds)),
+                .set_funty_src(src.set_kinds(tv_to_kind))
+                .set_funty_dst(dst.set_kinds(tv_to_kind)),
             Type::AssocTy(_, args) => {
-                let args = args.iter().map(|arg| arg.set_kinds(kinds)).collect::<Vec<_>>();
+                let args = args
+                    .iter()
+                    .map(|arg| arg.set_kinds(tv_to_kind))
+                    .collect::<Vec<_>>();
                 self.set_assocty_args(args)
-            },
+            }
         }
     }
 
@@ -390,6 +406,13 @@ impl TypeNode {
             Type::TyApp(head, _) => head.is_tycon_based(),
             Type::FunTy(_, _) => true,
             Type::AssocTy(_, _) => false,
+        }
+    }
+
+    pub fn is_tyvar(&self) -> bool {
+        match &self.ty {
+            Type::TyVar(_) => true,
+            _ => false,
         }
     }
 
@@ -444,7 +467,7 @@ impl TypeNode {
     pub fn set_assocty_name(&self, name: TyAssoc) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
-            Type::AssocTy(_, args) => ret.ty = Type::AssocTy(name, args),
+            Type::AssocTy(_, args) => ret.ty = Type::AssocTy(name, args.clone()),
             _ => panic!(),
         }
         Arc::new(ret)
@@ -521,7 +544,7 @@ impl TypeNode {
             }
             Type::TyApp(fun, arg) => {
                 let app_seq = self.flatten_type_application();
-                match &app_seq[0].ty {                    
+                match &app_seq[0].ty {
                     Type::TyCon(tc) => {
                         // In this case, replase self to associated type application if necessary.
                         let mut tc = tc.as_ref().clone();
@@ -538,7 +561,13 @@ impl TypeNode {
                             }
                             let (assoc_ty_args, following_args) = args.split_at(arity);
                             let assoc_ty_span = args[0].get_source().clone();
-                            let mut assoc_ty = type_assocty(assoc_ty_name, assoc_ty_args.iter().cloned().collect()).set_source(assoc_ty_span);
+                            let mut assoc_ty = type_assocty(
+                                TyAssoc {
+                                    name: assoc_ty_name,
+                                },
+                                assoc_ty_args.iter().cloned().collect(),
+                            )
+                            .set_source(assoc_ty_span);
                             for arg in following_args {
                                 let fun_src = assoc_ty.get_source();
                                 let arg_src = arg.get_source();
@@ -547,24 +576,27 @@ impl TypeNode {
                             }
                             return assoc_ty.resolve_namespace(ctx);
                         }
-                    },
+                    }
                     _ => {}
                 }
-                self.set_tyapp_fun(fun.resolve_namespace(ctx)).set_tyapp_arg(arg.resolve_namespace(ctx))
-            },
+                self.set_tyapp_fun(fun.resolve_namespace(ctx))
+                    .set_tyapp_arg(arg.resolve_namespace(ctx))
+            }
             Type::FunTy(src, dst) => self
                 .set_funty_src(src.resolve_namespace(ctx))
                 .set_funty_dst(dst.resolve_namespace(ctx)),
             Type::AssocTy(assoc_ty, args) => {
-                let assoc_ty = ctx.resolve(&assoc_ty.name, &[NameResolutionType::AssocTy]);
-                if assoc_ty.is_err() {
-                    error_exit_with_src(&assoc_ty.unwrap_err(), &self.info.source)
+                let mut assoc_ty = assoc_ty.clone();
+                let result = assoc_ty.resolve_namespace(ctx);
+                if result.is_err() {
+                    error_exit_with_src(&result.unwrap_err(), &self.info.source)
                 }
-                let assoc_ty = assoc_ty.ok().unwrap();
-                let assoc_ty = TyAssoc { name : assoc_ty };
-                let args = args.iter().map(|arg| arg.resolve_namespace(ctx)).collect::<Vec<_>>();
+                let args = args
+                    .iter()
+                    .map(|arg| arg.resolve_namespace(ctx))
+                    .collect::<Vec<_>>();
                 self.set_assocty_name(assoc_ty).set_assocty_args(args)
-            },
+            }
         }
     }
 
@@ -689,6 +721,13 @@ impl TypeNode {
             Type::TyApp(fun_ty, arg_ty) => self
                 .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(env, path.clone(), entry_typename))
                 .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(env, path, entry_typename)),
+            Type::AssocTy(_, args) => {
+                let args = args
+                    .iter()
+                    .map(|arg| arg.resolve_type_aliases_inner(env, path, entry_typename))
+                    .collect::<Vec<_>>();
+                self.set_assocty_args(args)
+            }
         }
     }
 
@@ -699,6 +738,7 @@ impl TypeNode {
             Type::TyCon(_) => false,
             Type::TyApp(_, _) => false,
             Type::FunTy(_, _) => true,
+            Type::AssocTy(_, _) => false,
         }
     }
 
@@ -709,6 +749,7 @@ impl TypeNode {
             Type::TyCon(tc) => Some(tc.clone()),
             Type::TyApp(fun, _) => fun.toplevel_tycon(),
             Type::FunTy(_, _) => None,
+            Type::AssocTy(_, _) => None,
         }
     }
 
@@ -848,7 +889,7 @@ impl TypeNode {
                 }
             }
             Type::FunTy(dom, codom) => {
-                let arg_kind = dom.kind();
+                let arg_kind = dom.kind(kind_env);
                 if arg_kind != kind_star() {
                     error_exit_with_src(
                         &format!(
@@ -860,7 +901,7 @@ impl TypeNode {
                         self.get_source(),
                     )
                 }
-                let ret_kind = codom.kind();
+                let ret_kind = codom.kind(kind_env);
                 if ret_kind != kind_star() {
                     error_exit_with_src(
                         &format!("Cannot form function type `{}` since its codomain type `{}` has kind `{}`.", self.to_string_normalize(), codom.to_string_normalize(), ret_kind.to_string()),
@@ -870,8 +911,24 @@ impl TypeNode {
                 kind_star()
             }
             Type::AssocTy(assoc_ty, args) => {
-                todo!("")
-            },
+                let kind_info = kind_env.assoc_tys.get(&assoc_ty).unwrap().clone();
+                assert_eq!(kind_info.param_kinds.len(), args.len());
+                for i in 0..args.len() {
+                    let expected = kind_info.param_kinds[i];
+                    let found = args[i].kind(kind_env);
+                    if expected != found {
+                        error_exit_with_src(
+                            &format!(
+                                "Kind mismatch. Expected `{}`, found `{}`.",
+                                expected.to_string(),
+                                found.to_string()
+                            ),
+                            args[i].get_source(),
+                        );
+                    }
+                }
+                kind_info.value_kind.clone()
+            }
         }
     }
 
@@ -905,7 +962,7 @@ impl TypeNode {
     // Definition of an associated type has to be of the form `type {AssocTypeName} self {tv1} ... {tvN}`,
     // - where `{AssocTypeName}` is a local name and
     // - `self` is the special type variable.
-    // If ok, return the name and arity of the associated type.
+    // If ok, return the name and the array `[tv1, ..., tvN]`.
     pub fn is_associated_type_defn(&self) -> Option<(Name, Vec<Arc<TyVar>>)> {
         // Validate the type application sequence.
         let app_seq = self.flatten_type_application();
@@ -1069,16 +1126,33 @@ impl TypeNode {
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
         let mut tyvar_num = -1;
         let mut s = Substitution::default();
-        for (tyvar, kind) in self.free_vars() {
+        for (name, tv) in self.free_vars() {
             tyvar_num += 1;
             let new_name = format!("t{}", tyvar_num);
-            s.add_substitution(&Substitution::single(&tyvar, type_tyvar(&new_name, &kind)))
+            s.add_substitution(&Substitution::single(
+                &name,
+                type_tyvar(&new_name, &tv.kind),
+            ))
         }
         s.substitute_type(self).to_string()
     }
 
     // Stringify.
     pub fn to_string(&self) -> String {
+        fn brace_needed_if_used_as_arg(arg: &Arc<TypeNode>) -> bool {
+            match &arg.ty {
+                Type::TyVar(_) => false,
+                Type::TyCon(_) => false,
+                Type::TyApp(fun, _) => {
+                    let tycon = fun.toplevel_tycon();
+                    let is_tuple = tycon.is_some() && get_tuple_n(&tycon.unwrap().name).is_some();
+                    !is_tuple
+                }
+                Type::FunTy(_, _) => true,
+                Type::AssocTy(_, _) => true,
+            }
+        }
+
         match &self.ty {
             Type::TyVar(v) => v.name.clone(),
             Type::TyApp(fun, arg) => {
@@ -1100,23 +1174,12 @@ impl TypeNode {
                         None => {}
                     }
                 }
-                let arg_brace_needed = match &arg.ty {
-                    Type::TyVar(_) => false,
-                    Type::TyCon(_) => false,
-                    Type::TyApp(fun, _) => {
-                        let tycon = fun.toplevel_tycon();
-                        let is_tuple =
-                            tycon.is_some() && get_tuple_n(&tycon.unwrap().name).is_some();
-                        !is_tuple
-                    }
-                    Type::FunTy(_, _) => true,
-                };
                 let tyfun = fun.to_string();
-                let arg = arg.to_string();
-                if arg_brace_needed {
-                    format!("{} ({})", tyfun, arg)
+                let arg_str = arg.to_string();
+                if brace_needed_if_used_as_arg(arg) {
+                    format!("{} ({})", tyfun, arg_str)
                 } else {
-                    format!("{} {}", tyfun, arg)
+                    format!("{} {}", tyfun, arg_str)
                 }
             }
             Type::FunTy(src, dst) => {
@@ -1139,6 +1202,23 @@ impl TypeNode {
                 res
             }
             Type::TyCon(tc) => tc.to_string(),
+            Type::AssocTy(assoc_ty, args) => {
+                format!(
+                    "{} {}",
+                    assoc_ty.name.to_string(),
+                    args.iter()
+                        .map(|arg| {
+                            let arg_str = arg.to_string();
+                            if brace_needed_if_used_as_arg(arg) {
+                                format!("({})", arg_str)
+                            } else {
+                                arg_str
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
+            }
         }
     }
 
@@ -1210,7 +1290,7 @@ pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyApp(tyfun, param))
 }
 
-pub fn type_assocty(assoc_ty: FullName, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+pub fn type_assocty(assoc_ty: TyAssoc, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::AssocTy(assoc_ty, args))
 }
 
@@ -1230,11 +1310,11 @@ pub struct TypeInfo {
 
 impl TypeNode {
     // Calculate free type variables.
-    pub fn free_vars(self: &Arc<TypeNode>) -> HashMap<Name, Arc<Kind>> {
-        let mut free_vars: HashMap<String, Arc<Kind>> = HashMap::default();
+    pub fn free_vars(self: &Arc<TypeNode>) -> HashMap<Name, Arc<TyVar>> {
+        let mut free_vars: HashMap<String, Arc<TyVar>> = HashMap::default();
         match &self.ty {
             Type::TyVar(tv) => {
-                free_vars.insert(tv.name.clone(), tv.kind.clone());
+                free_vars.insert(tv.name.clone(), tv.clone());
             }
             Type::TyApp(tyfun, arg) => {
                 free_vars.extend(tyfun.free_vars());
@@ -1249,15 +1329,20 @@ impl TypeNode {
                 for arg in args {
                     free_vars.extend(arg.free_vars());
                 }
-            },
+            }
         };
         free_vars
     }
 
-    // Append free type variables to a buffer of type Vec. Elements of the resulting buf may be duplicated.
+    // Append free type variables to a buffer of type Vec.
     pub fn free_vars_vec(self: &Arc<TypeNode>, buf: &mut Vec<Arc<TyVar>>) {
         match &self.ty {
-            Type::TyVar(tv) => buf.push(tv.clone()),
+            Type::TyVar(tv) => {
+                if buf.iter().any(|tv0| tv0.name == tv.name) {
+                    return;
+                }
+                buf.push(tv.clone())
+            }
             Type::TyApp(tyfun, arg) => {
                 tyfun.free_vars_vec(buf);
                 arg.free_vars_vec(buf);
@@ -1280,7 +1365,7 @@ impl TypeNode {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Scheme {
     // Generalized variables.
-    pub vars: HashMap<Name, Arc<Kind>>,
+    pub gen_vars: Vec<Arc<TyVar>>,
     // Predicates
     pub predicates: Vec<Predicate>,
     // Equalities
@@ -1291,30 +1376,11 @@ pub struct Scheme {
 
 impl Scheme {
     pub fn to_string(&self) -> String {
-        // First, fix ordering of generalized variables (self.vars) following the ordering they appear.
-        let mut vars0 = vec![];
-        for p in &self.predicates {
-            p.ty.free_vars_vec(&mut vars0);
-        }
-        self.ty.free_vars_vec(&mut vars0);
-        let mut added: HashSet<Name> = Default::default();
-        let mut vars = vec![];
-        for v in vars0 {
-            if added.contains(&v) {
-                continue;
-            }
-            if !self.vars.contains_key(&v) {
-                continue;
-            }
-            vars.push((v.clone(), self.vars.get(&v).unwrap().clone()));
-            added.insert(v.clone());
-        }
-
-        // Change name of type variables to t0, t1, ...
+        // Change names of generalized type variables to t0, t1, ...
         let free_vars = self.free_vars();
         let mut s = Substitution::default();
         let mut tyvar_num = -1;
-        for (tyvar, kind) in &vars {
+        for tyvar in &self.gen_vars {
             let new_name = loop {
                 tyvar_num += 1;
                 let new_name = format!("t{}", tyvar_num);
@@ -1323,13 +1389,15 @@ impl Scheme {
                 }
                 break new_name;
             };
-            s.add_substitution(&Substitution::single(tyvar, type_tyvar(&new_name, kind)))
+            s.add_substitution(&Substitution::single(
+                &tyvar.name,
+                type_tyvar(&new_name, &tyvar.kind.clone()),
+            ))
         }
 
-        // Substitute type variables in predicates and type to chosen names.
+        // Substitute type variables in predicates, equalities and the type to chosen names.
         let preds = self
             .predicates
-            .clone()
             .iter()
             .map(|p| {
                 let mut p = p.clone();
@@ -1337,22 +1405,31 @@ impl Scheme {
                 p
             })
             .collect::<Vec<_>>();
+        let eqs = self
+            .equalities
+            .iter()
+            .map(|eq| {
+                let mut eq = eq.clone();
+                s.substitute_equality(&mut eq);
+                eq
+            })
+            .collect::<Vec<_>>();
         let ty = s.substitute_type(&self.ty);
 
         // Stringify.
-        let preds_str = if preds.is_empty() {
+        let constraints_str = if preds.is_empty() && eqs.is_empty() {
             "".to_string()
         } else {
-            format!(
-                "[{}] ",
-                preds
-                    .iter()
-                    .map(|p| p.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
+            let mut constraint_strs = vec![];
+            for p in &preds {
+                constraint_strs.push(p.to_string());
+            }
+            for eq in &eqs {
+                constraint_strs.push(eq.to_string());
+            }
+            format!("[{}] ", constraint_strs.join(", "))
         };
-        preds_str + &ty.to_string()
+        constraints_str + &ty.to_string()
     }
 
     #[allow(dead_code)]
@@ -1362,13 +1439,13 @@ impl Scheme {
         Arc::new(ret)
     }
 
-    pub fn set_kinds(&self, trait_kind_map: &HashMap<TraitId, Arc<Kind>>) -> Arc<Scheme> {
+    pub fn set_kinds(&self, kind_env: &KindEnv) -> Arc<Scheme> {
         let mut ret = self.clone();
         let mut scope: HashMap<Name, Arc<Kind>> = Default::default();
         // If a kind in `self.vars` is not `*`, then the kind is explicitly specified by user, so we insert it into `scope`.
-        for (v, k) in &self.vars {
-            if *k != kind_star() {
-                scope.insert(v.clone(), k.clone());
+        for tv in &self.gen_vars {
+            if tv.kind != kind_star() {
+                scope.insert(tv.name, tv.kind.clone());
             }
         }
         let res =
@@ -1383,83 +1460,113 @@ impl Scheme {
         for p in &mut ret.predicates {
             p.set_kinds(&scope);
         }
+        for eq in &mut ret.equalities {
+            eq.set_kinds(&scope);
+        }
         ret.ty = ret.ty.set_kinds(&scope);
-        for (v, k) in &mut ret.vars {
-            if scope.contains_key(v) {
-                *k = scope[v].clone();
+        for tv in &mut ret.gen_vars {
+            if scope.contains_key(&tv.name) {
+                *tv = tv.set_kind(scope[&tv.name].clone());
             }
         }
         Arc::new(ret)
     }
 
-    pub fn check_kinds(
-        &self,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
-    ) {
+    pub fn check_kinds(&self, kind_env: &KindEnv) {
         for p in &self.predicates {
-            p.check_kinds(kind_map, trait_kind_map);
+            p.check_kinds(kind_env);
         }
-        self.ty.kind(kind_map);
+        for eq in &self.equalities {
+            eq.check_kinds(kind_env);
+        }
+        self.ty.kind(kind_env);
     }
 
     // Create new instance.
     fn new_arc(
-        vars: HashMap<String, Arc<Kind>>,
+        vars: Vec<Arc<TyVar>>,
         preds: Vec<Predicate>,
+        eqs: Vec<Equality>,
         ty: Arc<TypeNode>,
     ) -> Arc<Scheme> {
         Arc::new(Scheme {
-            vars,
+            gen_vars: vars,
             predicates: preds,
+            equalities: eqs,
             ty,
         })
     }
 
     pub fn substitute(&self, s: &Substitution) -> Arc<Scheme> {
         // Generalized variables cannot be replaced.
-        for (v, _) in &self.vars {
+        for (v, _) in &self.gen_vars {
             assert!(!s.data.contains_key(v));
         }
         let mut preds = self.predicates.clone();
         for p in &mut preds {
             s.substitute_predicate(p)
         }
-        Scheme::new_arc(self.vars.clone(), preds, s.substitute_type(&self.ty))
+        Scheme::new_arc(self.gen_vars.clone(), preds, s.substitute_type(&self.ty))
     }
 
     // Create instance by generalizaing type.
     pub fn generalize(
-        vars: HashMap<String, Arc<Kind>>,
+        mut vars: Vec<Arc<TyVar>>,
         mut preds: Vec<Predicate>,
+        mut eqs: Vec<Equality>,
         ty: Arc<TypeNode>,
     ) -> Arc<Scheme> {
-        // All predicates should be head normal form.
-        assert!(preds.iter().all(|p| p.ty.is_hnf()));
+        assert!(preds.iter().all(|p| p.ty.is_tyvar()));
+        assert!(eqs.iter().all(|eq| eq.is_all_args_tyvar()));
 
         let mut s = Substitution::default();
-        let mut gen_vars: HashMap<String, Arc<Kind>> = Default::default();
-        for (i, (v, k)) in vars.iter().enumerate() {
+        let mut added = HashMap::<Name, Arc<TyVar>>::new();
+        for (i, tv) in vars.iter_mut().enumerate() {
+            if added.contains_key(&tv.name) {
+                if added[&tv.name] == tv {
+                    continue;
+                } else {
+                    panic!(
+                        "Type variable {} is duplicated and speficied kinds are not equal.",
+                        tv.name
+                    );
+                }
+            }
+            added.insert(tv.name.clone(), tv.clone());
+            let org_name = tv.name.clone();
             let gen_name = format!("%g{}", i); // To avoid confliction with user-defined type varible, add prefix %.
-            s.add_substitution(&Substitution::single(v, type_tyvar(&gen_name, k)));
-            gen_vars.insert(gen_name, k.clone());
+            tv.name = gen_name.clone();
+            s.add_substitution(&Substitution::single(
+                &org_name,
+                type_from_tyvar(tv.clone()),
+            ));
         }
         for p in &mut preds {
             s.substitute_predicate(p);
         }
+        for eq in &mut eqs {
+            s.substitute_equality(eq);
+        }
         let ty = s.substitute_type(&ty);
-        Scheme::new_arc(gen_vars, preds, ty)
+        Scheme::new_arc(vars, preds, eqs, ty)
     }
 
     pub fn from_type(ty: Arc<TypeNode>) -> Arc<Scheme> {
-        Scheme::generalize(HashMap::default(), vec![], ty)
+        Scheme::generalize(vec![], vec![], vec![], ty)
     }
 
     // Get free type variables.
-    pub fn free_vars(&self) -> HashMap<Name, Arc<Kind>> {
-        let mut ret = self.ty.free_vars();
-        for var in &self.vars {
-            ret.remove(var.0);
+    pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
+        let mut ret = HashMap::default();
+        for p in self.predicates {
+            ret.extend(p.free_vars());
+        }
+        for e in self.equalities {
+            ret.extend(e.free_vars());
+        }
+        ret.extend(self.ty.free_vars());
+        for var in &self.gen_vars {
+            ret.remove(&var.name);
         }
         ret
     }
@@ -1485,7 +1592,7 @@ impl Scheme {
 
 #[derive(Default)]
 pub struct KindEnv {
-    pub tycons : HashMap<TyCon, Arc<Kind>>,
-    pub assoc_tys : HashMap<TyAssoc, AssocTypeKindInfo>,
-    pub traits_and_aliases : HashMap<TraitId, Arc<Kind>>
+    pub tycons: HashMap<TyCon, Arc<Kind>>,
+    pub assoc_tys: HashMap<TyAssoc, AssocTypeKindInfo>,
+    pub traits_and_aliases: HashMap<TraitId, Arc<Kind>>,
 }

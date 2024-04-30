@@ -105,19 +105,15 @@ impl GlobalValue {
         self.expr.resolve_type_aliases(type_env);
     }
 
-    pub fn set_kinds(
-        &mut self,
-        kind_map: &HashMap<TyCon, Arc<Kind>>,
-        trait_kind_map: &HashMap<TraitId, Arc<Kind>>,
-    ) {
-        self.scm = self.scm.set_kinds(trait_kind_map);
-        self.scm.check_kinds(kind_map, trait_kind_map);
+    pub fn set_kinds(&mut self, kind_env: &KindEnv) {
+        self.scm = self.scm.set_kinds(kind_env);
+        self.scm.check_kinds(kind_env);
         match &mut self.expr {
             SymbolExpr::Simple(_) => {}
             SymbolExpr::Method(ms) => {
                 for m in ms {
-                    m.ty = m.ty.set_kinds(trait_kind_map);
-                    m.ty.check_kinds(kind_map, trait_kind_map);
+                    m.ty = m.ty.set_kinds(kind_env);
+                    m.ty.check_kinds(kind_env);
                 }
             }
         }
@@ -158,7 +154,7 @@ impl TypedExpr {
         TypedExpr {
             expr,
             substitution: Substitution::default(),
-            kind_env : Arc::new(KindEnv::default())
+            kind_env: Arc::new(KindEnv::default()),
         }
     }
 
@@ -167,7 +163,13 @@ impl TypedExpr {
     }
 
     pub fn specialize_type_to(&mut self, target_ty: &Arc<TypeNode>) {
-        let matching = Substitution::matching(self.expr.ty.as_ref().unwrap(), &target_ty, &HashSet::new(), &self.kind_env).unwrap();
+        let matching = Substitution::matching(
+            self.expr.ty.as_ref().unwrap(),
+            &target_ty,
+            &HashSet::new(),
+            &self.kind_env,
+        )
+        .unwrap();
         self.substitution.add_substitution(&matching);
     }
 }
@@ -203,14 +205,24 @@ pub struct NameResolutionContext {
 
 impl<'a> NameResolutionContext {
     pub fn new(
-            tycon_names_with_aliases: &HashSet<FullName>,
-            trait_names_with_aliases: &HashSet<FullName>,
-            assoc_ty_to_arity: HashMap<FullName, usize>,
-            import_statements: Vec<ImportStatement>) -> Self {
+        tycon_names_with_aliases: &HashSet<FullName>,
+        trait_names_with_aliases: &HashSet<FullName>,
+        assoc_ty_to_arity: HashMap<FullName, usize>,
+        import_statements: Vec<ImportStatement>,
+    ) -> Self {
         let mut candidates: HashMap<FullName, NameResolutionType> = HashMap::new();
-        fn insert_or_err(candidates: &mut HashMap<FullName, NameResolutionType>, name : FullName, nrt : NameResolutionType) {
+        fn insert_or_err(
+            candidates: &mut HashMap<FullName, NameResolutionType>,
+            name: FullName,
+            nrt: NameResolutionType,
+        ) {
             if candidates.contains_key(&name) && candidates[&name] != nrt {
-                error_exit(&format!("There are two names defined `{}`: one is `{}` and one is `{}`.", name.to_string(), candidates[&name].to_string(), nrt.to_string()))
+                error_exit(&format!(
+                    "There are two names defined `{}`: one is `{}` and one is `{}`.",
+                    name.to_string(),
+                    candidates[&name].to_string(),
+                    nrt.to_string()
+                ))
             }
             candidates.insert(name, nrt);
         }
@@ -224,16 +236,19 @@ impl<'a> NameResolutionContext {
             insert_or_err(&mut candidates, name.clone(), NameResolutionType::AssocTy);
         }
         NameResolutionContext {
-            candidates, import_statements, assoc_ty_to_arity
+            candidates,
+            import_statements,
+            assoc_ty_to_arity,
         }
     }
 
     pub fn resolve(
         &self,
         short_name: &FullName,
-        accept_types : &[NameResolutionType]
+        accept_types: &[NameResolutionType],
     ) -> Result<FullName, String> {
-        let candidates = self.candidates
+        let candidates = self
+            .candidates
             .iter()
             .filter_map(|(full_name, nrt)| {
                 if !import::is_accessible(&self.import_statements, full_name) {
@@ -248,7 +263,7 @@ impl<'a> NameResolutionContext {
             })
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
-            Err(format!("Unknown entity `{}`.", short_name.to_string()))
+            Err(format!("Unknown name `{}`.", short_name.to_string()))
         } else if candidates.len() == 1 {
             Ok(candidates[0].clone())
         } else {
@@ -259,12 +274,11 @@ impl<'a> NameResolutionContext {
                 .collect::<Vec<_>>();
             candidates.sort(); // Sort for deterministic error message.
             let candidates = candidates.join(", ");
-            let msg = 
-                format!(
-                    "Name `{}` is ambiguous. There are {}.",
-                    short_name.to_string(),
-                    candidates
-                );
+            let msg = format!(
+                "Name `{}` is ambiguous. There are {}.",
+                short_name.to_string(),
+                candidates
+            );
             Err(msg)
         }
     }
@@ -280,9 +294,9 @@ pub enum NameResolutionType {
 impl NameResolutionType {
     pub fn to_string(&self) -> &'static str {
         match self {
-            TyCon => { "type" }
-            Trait => { "trait" }
-            AssocTy => { "associated type" }
+            TyCon => "type",
+            Trait => "trait",
+            AssocTy => "associated type",
         }
     }
 }
@@ -743,8 +757,8 @@ impl Program {
         let nrctx = NameResolutionContext::new(
             &self.tycon_names_with_aliases(),
             &self.trait_names_with_aliases(),
-            self.assoc_ty_to_arity(), 
-            self.mod_to_import_stmts[define_module].clone()
+            self.assoc_ty_to_arity(),
+            self.mod_to_import_stmts[define_module].clone(),
         );
         te.expr = te.expr.resolve_namespace(&nrctx);
 
@@ -796,7 +810,10 @@ impl Program {
                     // and we do not need to check whether predicates or equality constraints are satisfiable or not.
                     {
                         let mut tc0 = tc.clone();
-                        let method_ty = tc0.instantiate_scheme(&method.ty, ConstraintInstantiationMode::Ignore).ok().unwrap();
+                        let method_ty = tc0
+                            .instantiate_scheme(&method.ty, ConstraintInstantiationMode::Ignore)
+                            .ok()
+                            .unwrap();
                         if tc0.unify(&method_ty, &sym.ty).is_err() {
                             continue;
                         }
@@ -989,11 +1006,19 @@ impl Program {
     }
 
     pub fn set_kinds(&mut self) {
-        self.trait_env.set_kinds();
-        let kind_map = &self.type_env().kinds();
-        let trait_kind_map = self.trait_env.trait_kind_map_with_aliases();
+        self.trait_env.set_kinds_in_trait_and_alias_defns();
+        let kind_env = self.kind_env();
+        self.trait_env.set_kinds_in_trait_instances(&kind_env);
         for (_name, sym) in &mut self.global_values {
-            sym.set_kinds(kind_map, &trait_kind_map);
+            sym.set_kinds(&kind_env);
+        }
+    }
+
+    pub fn kind_env(&self) -> KindEnv {
+        KindEnv {
+            tycons: self.type_env().kinds(),
+            assoc_tys: self.trait_env.assoc_ty_kind_info(),
+            traits_and_aliases: self.trait_env.trait_kind_map_with_aliases(),
         }
     }
 

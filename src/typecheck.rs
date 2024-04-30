@@ -137,6 +137,7 @@ impl Substitution {
             *ty = new_ty;
         }
         for (var, ty) in &other.data {
+            assert!(!self.data.contains_key(var));
             self.data.insert(var.to_string(), ty.clone());
         }
     }
@@ -183,6 +184,9 @@ impl Substitution {
     pub fn substitute_qualtype(&self, qual_type: &mut QualType) {
         for pred in &mut qual_type.preds {
             self.substitute_predicate(pred);
+        }
+        for eq in &mut qual_type.eqs {
+            self.substitute_equality(eq);
         }
         qual_type.ty = self.substitute_type(&qual_type.ty);
     }
@@ -407,7 +411,7 @@ impl TypeCheckContext {
     pub fn new(
         trait_env: TraitEnv,
         type_env: TypeEnv,
-        kind_env: Arc<KindEnv>,
+        kind_env: KindEnv,
         import_statements: HashMap<Name, Vec<ImportStatement>>,
     ) -> Self {
         Self {
@@ -415,7 +419,7 @@ impl TypeCheckContext {
             scope: Default::default(),
             type_env,
             trait_env,
-            kind_env,
+            kind_env : Arc::new(kind_env),
             import_statements: Arc::new(import_statements),
             current_module: None,
             substitution: Substitution::default(),
@@ -464,7 +468,7 @@ impl TypeCheckContext {
     ) -> Result<Arc<TypeNode>, UnificationErr> {
         let mut sub = Substitution::default();
         let mut new_tyvars = vec![];
-        for (var, kind) in &scheme.vars {
+        for (var, kind) in &scheme.gen_vars {
             let new_var_name = self.new_tyvar();
             new_tyvars.push(new_var_name.clone());
             sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
