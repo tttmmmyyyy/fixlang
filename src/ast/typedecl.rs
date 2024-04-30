@@ -13,7 +13,7 @@ pub struct TypeDefn {
 
 impl TypeDefn {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        assert!(self.name == ctx.resolve(&self.name, NameResolutionType::Type).unwrap());
+        assert!(self.name == ctx.resolve(&self.name, NameResolutionType::TyCon).unwrap());
         self.value.resolve_namespace(ctx);
     }
 
@@ -92,7 +92,7 @@ impl TypeDefn {
     }
 
     // Get free type variables that appear in the right hand side of type definition.
-    pub fn free_variables_in_definition(&self) -> Vec<Name> {
+    pub fn free_variables_in_definition(&self) -> Vec<Arc<TyVar>> {
         let mut ret = vec![];
         if self.is_alias() {
             match &self.value {
@@ -111,11 +111,11 @@ impl TypeDefn {
     pub fn check_tyvars(&self) {
         let tyvars = HashSet::<String>::from_iter(self.tyvars.iter().map(|tv| tv.name.clone()));
         for v in self.free_variables_in_definition() {
-            if !tyvars.contains(&v) {
+            if !tyvars.contains(&v.name) {
                 error_exit_with_src(
                     &format!(
                         "Unknown type variable `{}` in the definition of type `{}`",
-                        v,
+                        v.name,
                         self.name.to_string()
                     ),
                     &self.source.as_ref().map(|s| s.to_single_character()),

@@ -123,7 +123,7 @@ impl TyCon {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
-        self.name = ctx.resolve(&self.name, NameResolutionType::Type)?;
+        self.name = ctx.resolve(&self.name, NameResolutionType::TyCon)?;
         Ok(())
     }
 
@@ -399,7 +399,7 @@ impl TypeNode {
             Type::TyCon(_) => self.to_string(),
             Type::TyApp(head, _) => head.get_head_string(),
             Type::FunTy(_, _) => "->".to_string(),
-            Type::AssocTy(assoc_ty, _) => assoc_ty.to_string(),
+            Type::AssocTy(assoc_ty, _) => assoc_ty.name.to_string(),
         }
     }
 

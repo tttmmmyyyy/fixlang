@@ -211,6 +211,7 @@ impl Substitution {
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
         fixed_tyvars: &HashSet<Name>,
+        kind_env: &KindEnv
     ) -> Option<Self> {
         match &ty1.ty {
             Type::TyVar(v1) => {
@@ -224,7 +225,7 @@ impl Substitution {
                 // - `{t0 -> t1}` and `{}` can be merged to `{t0 -> t1}`.
                 //
                 // (And this implementation is the same as one in "Typing Haskell in Haskell".)
-                if !fixed_tyvars.contains(&v1.name) && ty1.kind() == ty2.kind() {
+                if !fixed_tyvars.contains(&v1.name) && ty1.kind(kind_env) == ty2.kind(kind_env) {
                     Some(Self::single(&v1.name, ty2.clone()))
                 } else {
                     None

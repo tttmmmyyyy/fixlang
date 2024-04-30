@@ -167,7 +167,7 @@ impl TypedExpr {
     }
 
     pub fn specialize_type_to(&mut self, target_ty: &Arc<TypeNode>) {
-        let matching = Substitution::matching(self.expr.ty.as_ref().unwrap(), &target_ty, &HashSet::new()).unwrap();
+        let matching = Substitution::matching(self.expr.ty.as_ref().unwrap(), &target_ty, &HashSet::new(), &self.kind_env).unwrap();
         self.substitution.add_substitution(&matching);
     }
 }
@@ -198,12 +198,14 @@ impl MethodImpl {
 pub struct NameResolutionContext {
     pub types: HashSet<FullName>,
     pub traits: HashSet<FullName>,
+    pub assoc_tys: HashSet<FullName>,
     pub import_statements: Vec<ImportStatement>,
 }
 
 #[derive(PartialEq)]
 pub enum NameResolutionType {
-    Type,
+    TyCon,
+    AssocTy,
     Trait,
 }
 
@@ -213,7 +215,7 @@ impl<'a> NameResolutionContext {
         short_name: &FullName,
         type_or_trait: NameResolutionType,
     ) -> Result<FullName, String> {
-        let candidates = if type_or_trait == NameResolutionType::Type {
+        let candidates = if type_or_trait == NameResolutionType::TyCon {
             &self.types
         } else {
             &self.traits
@@ -231,7 +233,7 @@ impl<'a> NameResolutionContext {
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
             let msg = match type_or_trait {
-                NameResolutionType::Type => {
+                NameResolutionType::TyCon => {
                     format!("Unknown type name `{}`.", short_name.to_string())
                 }
                 NameResolutionType::Trait => {
@@ -250,7 +252,7 @@ impl<'a> NameResolutionContext {
             candidates.sort(); // Sort for deterministic error message.
             let candidates = candidates.join(", ");
 
-            let msg = if type_or_trait == NameResolutionType::Type {
+            let msg = if type_or_trait == NameResolutionType::TyCon {
                 format!(
                     "Type name `{}` is ambiguous. There are {}.",
                     short_name.to_string(),
