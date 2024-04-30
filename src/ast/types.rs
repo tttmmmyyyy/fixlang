@@ -416,6 +416,30 @@ impl TypeNode {
         }
     }
 
+    // A type is free if and only if:
+    // - It is a type variable, or associated type application with free type arguments, and
+    // - All type variables that appear in the type are distinct.
+    pub fn is_free(&self) -> bool {
+        pub fn is_free_inner(ty: &TypeNode, tvs_appear: &mut HashSet<Name>) -> bool {
+            match &ty.ty {
+                Type::TyVar(tv) => {
+                    if tvs_appear.contains(&tv.name) {
+                        false
+                    } else {
+                        tvs_appear.insert(tv.name);
+                        true
+                    }
+                }
+                Type::TyCon(_) => false,
+                Type::TyApp(fun, arg) => false,
+                Type::FunTy(src, dst) => false,
+                Type::AssocTy(_, args) => args.iter().all(|arg| is_free_inner(arg, tvs_appear)),
+            }
+        }
+        let mut tvs_appear = HashSet::new();
+        is_free_inner(self, &mut tvs_appear)
+    }
+
     pub fn get_head_string(&self) -> String {
         match &self.ty {
             Type::TyVar(_) => self.to_string(),
@@ -959,9 +983,9 @@ impl TypeNode {
     }
 
     // Check if the type takes the form of the definition of associated type.
-    // Definition of an associated type has to be of the form `type {AssocTypeName} self {tv1} ... {tvN}`,
+    // Definition of an associated type has to be of the form `type AssocTypeName tv1 ... tvN`,
     // - where `{AssocTypeName}` is a local name and
-    // - `self` is the special type variable.
+    // - tv1 == self.
     // If ok, return the name and the array `[tv1, ..., tvN]`.
     pub fn is_associated_type_defn(&self) -> Option<(Name, Vec<Arc<TyVar>>)> {
         // Validate the type application sequence.
@@ -979,22 +1003,15 @@ impl TypeNode {
             }
             _ => return None,
         }
-        match &app_seq[1].ty {
-            Type::TyVar(tv) => {
-                if tv.name != TRAIT_IMPL_SELF {
-                    return None;
-                }
-            }
-            _ => return None,
-        }
         let mut tyvars = vec![];
-        let mut tyvars_set: HashSet<Name> = HashSet::new();
-        for i in 2..app_seq.len() {
+        let mut tyvars_set: HashSet<Name> = HashSet::new(); // Used for checking duplication.
+        for i in 1..app_seq.len() {
             match &app_seq[i].ty {
                 Type::TyVar(tv) => {
-                    // Since `tv` should be free, it cannot be `self`.
-                    if tv.name == TRAIT_IMPL_SELF {
-                        return None;
+                    if i == 1 {
+                        if tv.name != TRAIT_IMPL_SELF {
+                            return None;
+                        }
                     }
                     if tyvars_set.contains(&tv.name) {
                         return None;
@@ -1448,8 +1465,13 @@ impl Scheme {
                 scope.insert(tv.name, tv.kind.clone());
             }
         }
-        let res =
-            QualPredicate::extend_kind_scope(&mut scope, &ret.predicates, &vec![], trait_kind_map);
+        let res = QualPredicate::extend_kind_scope(
+            &mut scope,
+            &ret.predicates,
+            &ret.equalities,
+            &vec![],
+            kind_env,
+        );
         if let Err(msg) = res {
             let mut span = ret.predicates[0].source.clone();
             for i in 1..ret.predicates.len() {
@@ -1483,7 +1505,7 @@ impl Scheme {
     }
 
     // Create new instance.
-    fn new_arc(
+    pub fn new_arc(
         vars: Vec<Arc<TyVar>>,
         preds: Vec<Predicate>,
         eqs: Vec<Equality>,
@@ -1497,18 +1519,6 @@ impl Scheme {
         })
     }
 
-    pub fn substitute(&self, s: &Substitution) -> Arc<Scheme> {
-        // Generalized variables cannot be replaced.
-        for (v, _) in &self.gen_vars {
-            assert!(!s.data.contains_key(v));
-        }
-        let mut preds = self.predicates.clone();
-        for p in &mut preds {
-            s.substitute_predicate(p)
-        }
-        Scheme::new_arc(self.gen_vars.clone(), preds, s.substitute_type(&self.ty))
-    }
-
     // Create instance by generalizaing type.
     pub fn generalize(
         mut vars: Vec<Arc<TyVar>>,
@@ -1516,8 +1526,8 @@ impl Scheme {
         mut eqs: Vec<Equality>,
         ty: Arc<TypeNode>,
     ) -> Arc<Scheme> {
-        assert!(preds.iter().all(|p| p.ty.is_tyvar()));
-        assert!(eqs.iter().all(|eq| eq.is_all_args_tyvar()));
+        assert!(preds.iter().all(|p| p.ty.is_free()));
+        assert!(eqs.iter().all(|eq| eq.lhs().is_free()));
 
         let mut s = Substitution::default();
         let mut added = HashMap::<Name, Arc<TyVar>>::new();

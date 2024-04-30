@@ -180,6 +180,27 @@ impl Substitution {
         }
     }
 
+    pub fn substitute_scheme(&self, scm: &Arc<Scheme>) -> Arc<Scheme> {
+        // Generalized variables cannot be replaced.
+        for v in &scm.gen_vars {
+            assert!(!self.data.contains_key(&v.name));
+        }
+        let mut preds = scm.predicates.clone();
+        for p in &mut preds {
+            self.substitute_predicate(p)
+        }
+        let mut eqs = scm.equalities.clone();
+        for eq in &mut eqs {
+            self.substitute_equality(eq)
+        }
+        Scheme::new_arc(
+            scm.gen_vars.clone(),
+            preds,
+            eqs,
+            self.substitute_type(&scm.ty),
+        )
+    }
+
     // Apply substitution to qualified type.
     pub fn substitute_qualtype(&self, qual_type: &mut QualType) {
         for pred in &mut qual_type.preds {
@@ -564,7 +585,7 @@ impl TypeCheckContext {
                         if let Err(e) = var_ty {
                             let msg = format!("- `{}` of type `{}` does not match since the constraint `{}` is unsatisfiable.", 
                                 fullname.to_string(), 
-                                scm.substitute(&self.substitution).to_string(), 
+                                self.substitution.substitute_scheme(scm).to_string(), 
                                 e.to_constraint_string()
                             );
                             Err(msg)
@@ -572,7 +593,7 @@ impl TypeCheckContext {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the expected type since the constraint `{}` is unsatisfiable.",
                                 fullname.to_string(),
-                                scm.substitute(&self.substitution).to_string(),
+                                self.substitution.substitute_scheme(scm).to_string(),
                                 e.to_constraint_string()
                             );
                             Err(msg)
@@ -580,7 +601,7 @@ impl TypeCheckContext {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the expected type since the constraint `{}` is unsatisfiable.",
                                 fullname.to_string(),
-                                scm.substitute(&self.substitution).to_string(),
+                                self.substitution.substitute_scheme(scm).to_string(),
                                 e.to_constraint_string()
                             );
                             Err(msg)

@@ -794,10 +794,11 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
     let scm = Scheme::generalize(
-        HashMap::from([
-            ("a".to_string(), kind_star()),
-            ("b".to_string(), kind_star()),
-        ]),
+        vec![
+            tyvar_from_name("a", &kind_star()),
+            tyvar_from_name("b", &kind_star()),
+        ],
+        vec![],
         vec![],
         type_fun(type_fun(fixed_ty.clone(), fixed_ty.clone()), fixed_ty),
     );
@@ -867,6 +868,7 @@ pub fn cast_between_integral_function(
     let is_target_signed = to.toplevel_tycon().unwrap().is_singned_intger();
     let scm = Scheme::generalize(
         Default::default(),
+        vec![],
         vec![],
         type_fun(from.clone(), to.clone()),
     );
@@ -951,6 +953,7 @@ pub fn cast_between_float_function(
     const FROM_NAME: &str = "from";
     let scm = Scheme::generalize(
         Default::default(),
+        vec![],
         vec![],
         type_fun(from.clone(), to.clone()),
     );
@@ -1044,6 +1047,7 @@ pub fn cast_int_to_float_function(
 
     let scm = Scheme::generalize(
         Default::default(),
+        vec![],
         vec![],
         type_fun(from.clone(), to.clone()),
     );
@@ -1139,6 +1143,7 @@ pub fn cast_float_to_int_function(
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
+        vec![],
         type_fun(from.clone(), to.clone()),
     );
     let expr = expr_abs(
@@ -1215,6 +1220,7 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
 
     let scm = Scheme::generalize(
         Default::default(),
+        vec![],
         vec![],
         type_fun(ty.clone(), type_fun(ty.clone(), ty.clone())),
     );
@@ -1329,6 +1335,7 @@ pub fn bitwise_operation_function(
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
+        vec![],
         type_fun(ty.clone(), type_fun(ty.clone(), ty.clone())),
     );
     let expr = expr_abs(
@@ -1419,7 +1426,8 @@ pub fn fill_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::generalize(
-        HashMap::from([("a".to_string(), kind_star())]),
+        vec![tyvar_from_name("a", &kind_star())],
+        vec![],
         vec![],
         type_fun(
             make_i64_ty(),
@@ -1491,7 +1499,8 @@ pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::generalize(
-        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![tyvar_from_name(ELEM_TYPE, &kind_star())],
+        vec![],
         vec![],
         type_fun(make_i64_ty(), array_ty),
     );
@@ -1570,7 +1579,8 @@ pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
 
     let scm = Scheme::generalize(
-        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![tyvar_from_name(ELEM_TYPE, &kind_star())],
+        vec![],
         vec![],
         type_fun(
             make_i64_ty(),
@@ -1650,7 +1660,8 @@ pub fn unsafe_get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
 
     let scm = Scheme::generalize(
-        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![tyvar_from_name(ELEM_TYPE, &kind_star())],
+        vec![],
         vec![],
         type_fun(make_i64_ty(), type_fun(array_ty, elem_tyvar.clone())),
     );
@@ -1717,7 +1728,8 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
 
     let scm = Scheme::generalize(
-        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![tyvar_from_name(ELEM_TYPE, &kind_star())],
+        vec![],
         vec![],
         type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
     );
@@ -1787,7 +1799,8 @@ pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::generalize(
-        HashMap::from([("a".to_string(), kind_star())]),
+        vec![tyvar_from_name("a", &kind_star())],
+        vec![],
         vec![],
         type_fun(
             make_i64_ty(),
@@ -1956,7 +1969,8 @@ pub fn set_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>)
     );
     let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
     let scm = Scheme::generalize(
-        HashMap::from([("a".to_string(), kind_star())]),
+        vec![tyvar_from_name("a", &kind_star())],
+        vec![],
         vec![],
         type_fun(
             make_i64_ty(),
@@ -2073,7 +2087,8 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::generalize(
-        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![tyvar_from_name(ELEM_TYPE, &kind_star())],
+        vec![],
         vec![],
         type_fun(
             make_i64_ty(),
@@ -2138,7 +2153,8 @@ pub fn force_unique_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
         None,
     );
     let scm = Scheme::generalize(
-        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![tyvar_from_name(ELEM_TYPE, &kind_star())],
+        vec![],
         vec![],
         type_fun(array_ty.clone(), array_ty),
     );
@@ -2218,7 +2234,8 @@ pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::generalize(
-        HashMap::from([(ELEM_TYPE.to_string(), kind_star())]),
+        vec![tyvar_from_name(ELEM_TYPE, &kind_star())],
+        vec![],
         vec![],
         type_fun(array_ty.clone(), make_ptr_ty()),
     );
@@ -2280,7 +2297,8 @@ pub fn get_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
     let scm = Scheme::generalize(
-        HashMap::from([("a".to_string(), kind_star())]),
+        vec![tyvar_from_name("a", &kind_star())],
+        vec![],
         vec![],
         type_fun(array_ty, make_i64_ty()),
     );
@@ -2345,7 +2363,8 @@ pub fn get_capacity_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
     let scm = Scheme::generalize(
-        HashMap::from([("a".to_string(), kind_star())]),
+        vec![tyvar_from_name("a", &kind_star())],
+        vec![],
         vec![],
         type_fun(array_ty, make_i64_ty()),
     );
@@ -2431,7 +2450,9 @@ pub fn struct_get(
         None,
     );
     let ty = type_fun(str_ty, field.ty.clone());
-    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
+    let mut tvs = vec![];
+    ty.free_vars_vec(&mut tvs);
+    let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
 
@@ -2557,7 +2578,9 @@ pub fn struct_mod(
         type_fun(field.ty.clone(), field.ty.clone()),
         type_fun(str_ty.clone(), str_ty.clone()),
     );
-    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
+    let mut tvs = vec![];
+    ty.free_vars_vec(&mut tvs);
+    let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
 
@@ -2718,7 +2741,9 @@ pub fn struct_set(
         None,
     );
     let ty = type_fun(field.ty.clone(), type_fun(str_ty.clone(), str_ty.clone()));
-    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
+    let mut tvs = vec![];
+    ty.free_vars_vec(&mut tvs);
+    let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
 
@@ -2824,7 +2849,9 @@ pub fn union_new(
     let union_ty = union.ty();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
-    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
+    let mut tvs = vec![];
+    ty.free_vars_vec(&mut tvs);
+    let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
 
@@ -2864,7 +2891,9 @@ pub fn union_as(
     let union_ty = union.ty();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(union_ty, field_ty);
-    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
+    let mut tvs = vec![];
+    ty.free_vars_vec(&mut tvs);
+    let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
 

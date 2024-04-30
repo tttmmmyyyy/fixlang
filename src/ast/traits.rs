@@ -37,7 +37,7 @@ pub struct AssocTypeDefn {
     // Kind predicates on the definition of the associated type.
     pub kind_preds: Vec<KindPredicate>,
     // Type parameters of the associated type.
-    // This does not include `self`.
+    // Includes `self`.
     pub params: Vec<Arc<TyVar>>,
     // The kind of the application of the associated type.
     pub kind_applied: Arc<Kind>,
@@ -46,9 +46,16 @@ pub struct AssocTypeDefn {
 }
 
 impl AssocTypeDefn {
-    pub fn set_kinds(&mut self) {
+    pub fn param_kinds(&self) -> Vec<Arc<Kind>> {
+        self.params.iter().map(|p| p.kind.clone()).collect()
+    }
+
+    pub fn set_kinds(&mut self, impl_type_kind: Arc<Kind>) {
+        // Set `impl_type_kind` to `parms[0]`.
+        self.params[0] = self.params[0].set_kind(impl_type_kind.clone());
         // Set `kind_predicates` to `self.params`.
-        for param in &mut self.params {
+        for param in &mut self.params[1..] {
+            // Skip `self`.
             for kind_pred in &self.kind_preds {
                 if param.name == kind_pred.tyvar {
                     *param = param.set_kind(kind_pred.kind.clone());
@@ -63,16 +70,16 @@ impl AssocTypeDefn {
 pub struct AssocTypeImpl {
     pub name: Name,
     // Type parameters of the associated type implementation.
-    // This does not include `self`.
+    // Includes `self`.
     pub params: Vec<Arc<TyVar>>,
     pub value: Arc<TypeNode>,
     pub source: Option<Span>,
 }
 
 impl AssocTypeImpl {
-    pub fn set_kinds(&mut self, trait_id: &TraitId, kind_env: &KindEnv) {
+    pub fn set_kinds(&mut self, trait_inst: &TraitInstance, kind_env: &KindEnv) {
         let assoc_ty_name = TyAssoc {
-            name: FullName::new(&trait_id.name.to_namespace(), &self.name),
+            name: FullName::new(&trait_inst.trait_id().name.to_namespace(), &self.name),
         };
         let param_kinds = kind_env.assoc_tys.get(&assoc_ty_name).unwrap().param_kinds;
         if self.params.len() != param_kinds.len() {
@@ -86,10 +93,17 @@ impl AssocTypeImpl {
                 &self.source,
             )
         }
-        for (param, kind) in &mut self.params.iter_mut().zip(param_kinds.iter()) {
+        let mut tvs_in_value = vec![];
+        trait_inst.impl_type().free_vars_vec(&mut tvs_in_value);
+        for (param, kind) in &mut self.params[1..].iter_mut().zip(param_kinds[1..].iter()) {
             *param = param.set_kind(kind.clone());
+            tvs_in_value.push(param.clone());
         }
-        self.value = self.value.set_kinds(kind_env);
+        let mut tv_to_kind = HashMap::new();
+        for tv_in_value in tvs_in_value {
+            tv_to_kind.insert(tv_in_value.name.clone(), tv_in_value.kind.clone());
+        }
+        self.value = self.value.set_kinds(&tv_to_kind);
     }
 }
 
@@ -103,7 +117,7 @@ impl AssocTypeImpl {
 
 pub struct AssocTypeKindInfo {
     pub name: TyAssoc,
-    pub param_kinds: Vec<Arc<Kind>>,
+    pub param_kinds: Vec<Arc<Kind>>, // Includes `self`.
     pub value_kind: Arc<Kind>,
 }
 
@@ -191,7 +205,7 @@ impl TraitInfo {
             self.type_var = self.type_var.set_kind(self.kind_predicates[0].kind.clone());
         }
         for (_, assoc_ty_defn) in &mut self.assoc_types {
-            assoc_ty_defn.set_kinds();
+            assoc_ty_defn.set_kinds(self.type_var.kind.clone());
         }
     }
 
@@ -224,14 +238,18 @@ impl TraitInstance {
     pub fn set_kinds_in_qual_pred(&mut self, kind_env: &KindEnv) {
         let mut scope = HashMap::new();
         let preds = &self.qual_pred.pred_constraints;
+        let eqs = &self.qual_pred.eq_constraints;
         let kind_preds = &self.qual_pred.kind_pred_constraints;
-        let res = QualPredicate::extend_kind_scope(&mut scope, preds, kind_preds, kind_env);
+        let res = QualPredicate::extend_kind_scope(&mut scope, preds, eqs, kind_preds, kind_env);
         if res.is_err() {
             error_exit_with_src(&res.unwrap_err(), &self.source);
         }
         self.qual_pred.predicate.set_kinds(&scope);
-        for ctx in &mut self.qual_pred.pred_constraints {
-            ctx.set_kinds(&scope);
+        for pred in &mut self.qual_pred.pred_constraints {
+            pred.set_kinds(&scope);
+        }
+        for eq in &mut self.qual_pred.eq_constraints {
+            eq.set_kinds(&scope);
         }
     }
 
@@ -419,27 +437,65 @@ impl QualPredicate {
             }
             Ok(())
         }
-
-        for p in preds {
-            let tyvar = match &p.ty.ty {
-                Type::TyVar(tv) => tv.name.clone(),
-                _ => {
-                    panic!("Trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.")
+        fn extend_by_assoc_ty_application(
+            scope: &mut HashMap<Name, Arc<Kind>>,
+            assoc_ty_app: Arc<TypeNode>,
+            kind_env: &KindEnv,
+        ) -> Result<(), String> {
+            match &assoc_ty_app.ty {
+                Type::AssocTy(assoc_ty, args) => {
+                    let kind_info = kind_env.assoc_tys.get(assoc_ty).unwrap();
+                    if args.len() != kind_info.param_kinds.len() {
+                        return Err(format!(
+                            "Invalid number of arguments for associated type `{}`. Expect: {}, found: {}.",
+                            assoc_ty.name.to_string(),
+                            kind_info.param_kinds.len(),
+                            args.len()
+                        ));
+                    }
+                    for (arg, kind) in args.iter().zip(kind_info.param_kinds.iter()) {
+                        match arg.ty {
+                            Type::TyVar(tv) => {
+                                insert(scope, tv.name.clone(), kind.clone())?;
+                            }
+                            Type::AssocTy(_, _) => {
+                                extend_by_assoc_ty_application(scope, arg.clone(), kind_env)?;
+                            }
+                            _ => {}
+                        }
+                    }
                 }
-            };
-            let trait_id = &p.trait_id;
-            if !kind_env.traits_and_aliases.contains_key(trait_id) {
-                panic!("Unknown trait: {}", trait_id.to_string());
+                _ => unreachable!("Associated type application expected."),
             }
-            let kind = kind_env.traits_and_aliases[trait_id].clone();
-            insert(scope, tyvar, kind)?;
+            Ok(())
         }
+
         for kp in kind_preds {
             let tyvar = kp.tyvar.clone();
             let kind = kp.kind.clone();
             insert(scope, tyvar, kind)?;
         }
-        todo!("use eqs.");
+        for p in preds {
+            let tyvar = match &p.ty.ty {
+                Type::TyVar(tv) => {
+                    let trait_id = &p.trait_id;
+                    if !kind_env.traits_and_aliases.contains_key(trait_id) {
+                        panic!("Unknown trait: {}", trait_id.to_string());
+                    }
+                    let kind = kind_env.traits_and_aliases[trait_id].clone();
+                    insert(scope, tv.name, kind)?;
+                }
+                Type::AssocTy(_, _) => {
+                    extend_by_assoc_ty_application(scope, p.ty.clone(), kind_env)?;
+                }
+                _ => {
+                    // Do nothing.
+                }
+            };
+        }
+        for eq in eqs {
+            extend_by_assoc_ty_application(scope, eq.lhs(), kind_env)?;
+        }
         Ok(())
     }
 }
@@ -610,7 +666,7 @@ impl KindPredicate {
     }
 }
 
-// Equality predicate `AssociateType arg0 args = value`.
+// Equality predicate `AssociateType args = value`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Equality {
     pub assoc_type: TyAssoc,
@@ -709,6 +765,13 @@ impl Equality {
     // Get the type of the left-hand side of the equality.
     pub fn lhs(&self) -> Arc<TypeNode> {
         type_assocty(self.assoc_type.clone(), self.args.clone())
+    }
+
+    pub fn trait_id(&self) -> TraitId {
+        let mut names = self.assoc_type.name.namespace.names.clone();
+        let name = names.pop().unwrap();
+        let namespace = NameSpace::new(names);
+        TraitId::from_fullname(FullName::new(&namespace, &name))
     }
 
     // Returns the predicate to reduce this equality.
@@ -1073,7 +1136,7 @@ impl TraitEnv {
                     let assoc_type_fullname = FullName::new(&assoc_type_namespace, assoc_type_name);
                     let impl_type = inst.impl_type();
                     let mut args = vec![impl_type];
-                    for tv in &assoc_type_impl.params {
+                    for tv in &assoc_type_impl.params[1..] {
                         args.push(type_from_tyvar(tv.clone()));
                     }
                     let equality = Equality {
@@ -1109,7 +1172,7 @@ impl TraitEnv {
             for (assoc_ty_name, assoc_ty_info) in trait_info.assoc_types {
                 let assoc_type_namespace = trait_id.name.to_namespace();
                 let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
-                let arity = assoc_ty_info.params.len() + 1;
+                let arity = assoc_ty_info.params.len();
                 assoc_ty_arity.insert(assoc_type_fullname, arity);
             }
         }
@@ -1128,11 +1191,7 @@ impl TraitEnv {
                     assoc_type,
                     AssocTypeKindInfo {
                         name: assoc_type,
-                        param_kinds: assoc_ty_info
-                            .params
-                            .iter()
-                            .map(|tv| tv.kind.clone())
-                            .collect(),
+                        param_kinds: assoc_ty_info.param_kinds(),
                         value_kind: assoc_ty_info.kind_applied.clone(),
                     },
                 );
@@ -1369,7 +1428,7 @@ impl TraitEnv {
             for inst in trait_impls {
                 inst.set_kinds_in_qual_pred(kind_env);
                 for (_, assoc_ty_impl) in &mut inst.assoc_types {
-                    assoc_ty_impl.set_kinds(trait_id, kind_env);
+                    assoc_ty_impl.set_kinds(inst, kind_env);
                 }
             }
         }

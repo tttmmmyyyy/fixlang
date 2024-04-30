@@ -369,17 +369,19 @@ fn parse_trait_member_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Ass
             &Some(span),
         );
     }
-    let (assoc_type_name, assoc_type_vars) = assoc_type_defn.unwrap();
+    let (assoc_type_name, assoc_type_params) = assoc_type_defn.unwrap();
     let kind_applied = if let Some(pair) = pairs.next() {
         parse_kind(pair, ctx)
     } else {
         kind_star()
     };
+    todo!("forbid kind preds for self");
     AssocTypeDefn {
         name: assoc_type_name,
-        arity: assoc_type_vars.len() + 1,
         kind_applied,
         src: Some(span),
+        params: assoc_type_params,
+        kind_preds: todo!(),
     }
 }
 
@@ -461,11 +463,11 @@ fn parse_trait_member_type_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Ass
             &Some(span),
         );
     }
-    let (assoc_type_name, type_vars) = assoc_type_impl.unwrap();
+    let (assoc_type_name, params) = assoc_type_impl.unwrap();
     let type_value = parse_type(pairs.next().unwrap(), ctx);
     AssocTypeImpl {
         name: assoc_type_name,
-        params: type_vars,
+        params,
         value: type_value,
         source: Some(span),
     }
