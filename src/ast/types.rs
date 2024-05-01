@@ -1,9 +1,8 @@
 use core::panic;
-use std::{env::args, sync::Arc};
+use std::sync::Arc;
 
-use chrono::format;
 use inkwell::types::BasicType;
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use super::*;
 
@@ -413,6 +412,20 @@ impl TypeNode {
         match &self.ty {
             Type::TyVar(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn is_tycon(self) -> bool {
+        match &self.ty {
+            Type::TyCon(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_tycon(&self) -> &TyCon {
+        match &self.ty {
+            Type::TyCon(tc) => tc,
+            _ => panic!(),
         }
     }
 
@@ -1025,6 +1038,44 @@ impl TypeNode {
         Some((assoc_type_name, tyvars))
     }
 
+    // Is an appropriate form for the left-hand side of equality?
+    // We do not replace TyCon to AssocTy here, because we cannot check whether a capital name is TyCon or AssocTy from the arguments of this function.
+    // Replacing TyCon to AssocTy will be done in the namspace resolution.
+    pub fn is_equality_lhs(&self) -> bool {
+        fn is_equality_lhs_inner(ty: &TypeNode, appeared_type_var: &mut HashSet<Name>) -> bool {
+            match &ty.ty {
+                Type::TyVar(tv) => {
+                    if appeared_type_var.contains(&tv.name) {
+                        return false;
+                    }
+                    appeared_type_var.insert(tv.name.clone());
+                    true
+                }
+                Type::TyCon(_) => false,
+                Type::TyApp(fun, arg) => {
+                    let app_seq = ty.flatten_type_application();
+                    if !app_seq[0].is_tycon() {
+                        return false;
+                    }
+                    for arg in &app_seq[1..] {
+                        if !is_equality_lhs_inner(arg, appeared_type_var) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+                Type::FunTy(src, dst) => false,
+                Type::AssocTy(_, args) => args
+                    .iter()
+                    .all(|arg| is_equality_lhs_inner(arg, appeared_type_var)),
+            }
+        }
+        if self.is_tyvar() {
+            return false;
+        }
+        is_equality_lhs_inner(self, &mut HashSet::new())
+    }
+
     // // Check if the type takes the form of the usage of associated type.
     // // Usage of an associated type has to be of the form `AssocTypeName {t1} ... {tvN}`.
     // pub fn is_associated_type_usage(
@@ -1352,7 +1403,7 @@ impl TypeNode {
     }
 
     // Append free type variables to a buffer of type Vec.
-    pub fn free_vars_vec(self: &Arc<TypeNode>, buf: &mut Vec<Arc<TyVar>>) {
+    pub fn free_vars_to_vec(self: &Arc<TypeNode>, buf: &mut Vec<Arc<TyVar>>) {
         match &self.ty {
             Type::TyVar(tv) => {
                 if buf.iter().any(|tv0| tv0.name == tv.name) {
@@ -1361,20 +1412,26 @@ impl TypeNode {
                 buf.push(tv.clone())
             }
             Type::TyApp(tyfun, arg) => {
-                tyfun.free_vars_vec(buf);
-                arg.free_vars_vec(buf);
+                tyfun.free_vars_to_vec(buf);
+                arg.free_vars_to_vec(buf);
             }
             Type::FunTy(input, output) => {
-                input.free_vars_vec(buf);
-                output.free_vars_vec(buf);
+                input.free_vars_to_vec(buf);
+                output.free_vars_to_vec(buf);
             }
             Type::TyCon(_) => {}
             Type::AssocTy(_, args) => {
                 for arg in args {
-                    arg.free_vars_vec(buf);
+                    arg.free_vars_to_vec(buf);
                 }
             }
         };
+    }
+
+    pub fn free_vars_vec(self: &Arc<TypeNode>) -> Vec<Arc<TyVar>> {
+        let mut buf = vec![];
+        self.free_vars_to_vec(&mut buf);
+        buf
     }
 }
 
@@ -1530,10 +1587,10 @@ impl Scheme {
         assert!(eqs.iter().all(|eq| eq.lhs().is_free()));
 
         let mut s = Substitution::default();
-        let mut added = HashMap::<Name, Arc<TyVar>>::new();
+        let mut added = HashMap::<Name, Arc<Kind>>::new();
         for (i, tv) in vars.iter_mut().enumerate() {
             if added.contains_key(&tv.name) {
-                if added[&tv.name] == tv {
+                if added[&tv.name] == tv.kind {
                     continue;
                 } else {
                     panic!(
@@ -1542,7 +1599,7 @@ impl Scheme {
                     );
                 }
             }
-            added.insert(tv.name.clone(), tv.clone());
+            added.insert(tv.name.clone(), tv.kind.clone());
             let org_name = tv.name.clone();
             let gen_name = format!("%g{}", i); // To avoid confliction with user-defined type varible, add prefix %.
             tv.name = gen_name.clone();

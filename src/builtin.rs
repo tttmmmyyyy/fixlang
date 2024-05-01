@@ -2451,7 +2451,7 @@ pub fn struct_get(
     );
     let ty = type_fun(str_ty, field.ty.clone());
     let mut tvs = vec![];
-    ty.free_vars_vec(&mut tvs);
+    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
@@ -2579,7 +2579,7 @@ pub fn struct_mod(
         type_fun(str_ty.clone(), str_ty.clone()),
     );
     let mut tvs = vec![];
-    ty.free_vars_vec(&mut tvs);
+    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
@@ -2742,7 +2742,7 @@ pub fn struct_set(
     );
     let ty = type_fun(field.ty.clone(), type_fun(str_ty.clone(), str_ty.clone()));
     let mut tvs = vec![];
-    ty.free_vars_vec(&mut tvs);
+    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
@@ -2850,7 +2850,7 @@ pub fn union_new(
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
     let mut tvs = vec![];
-    ty.free_vars_vec(&mut tvs);
+    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
@@ -2892,7 +2892,7 @@ pub fn union_as(
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(union_ty, field_ty);
     let mut tvs = vec![];
-    ty.free_vars_vec(&mut tvs);
+    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
@@ -2985,7 +2985,9 @@ pub fn union_is(
     );
     let union_ty = union.ty();
     let ty = type_fun(union_ty, make_bool_ty());
-    let scm = Scheme::generalize(ty.free_vars(), vec![], ty);
+    let mut tvs = vec![];
+    ty.free_vars_to_vec(&mut tvs);
+    let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
 
@@ -3225,7 +3227,9 @@ pub fn union_mod_function(
         type_fun(field_ty.clone(), field_ty),
         type_fun(union_ty.clone(), union_ty),
     );
-    let scm = Scheme::generalize(HashMap::default(), vec![], ty);
+    let mut tvs = vec![];
+    ty.free_vars_to_vec(&mut tvs);
+    let scm = Scheme::generalize(tvs, vec![], vec![], ty);
     (expr, scm)
 }
 
@@ -3347,10 +3351,11 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
     let tyvar_s = type_tyvar(S_NAME, &kind_star());
     let tyvar_b = type_tyvar(B_NAME, &kind_star());
     let scm = Scheme::generalize(
-        HashMap::from([
-            (S_NAME.to_string(), kind_star()),
-            (B_NAME.to_string(), kind_star()),
-        ]),
+        vec![
+            tyvar_from_name(S_NAME, &kind_star()),
+            tyvar_from_name(B_NAME, &kind_star()),
+        ],
+        vec![],
         vec![],
         type_fun(
             tyvar_s.clone(),
@@ -3427,7 +3432,8 @@ pub fn abort_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let scm = Scheme::generalize(
-        HashMap::from([(A_NAME.to_string(), kind_star())]),
+        vec![tyvar_from_name(A_NAME, &kind_star())],
+        vec![],
         vec![],
         type_tyapp(make_lazy_ty(), type_tyvar_star(A_NAME)),
     );
@@ -3514,7 +3520,8 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let ret_type = make_tuple_ty(vec![make_bool_ty(), obj_type.clone()]);
     let scm = Scheme::generalize(
-        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![tyvar_from_name(TYPE_NAME, &kind_star())],
+        vec![],
         vec![],
         type_fun(obj_type.clone(), ret_type.clone()),
     );
@@ -3578,7 +3585,8 @@ pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
-        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![tyvar_from_name(TYPE_NAME, &kind_star())],
+        vec![],
         vec![],
         type_fun(obj_type.clone(), ret_type.clone()),
     );
@@ -3634,7 +3642,8 @@ pub fn get_boxed_value_from_retained_ptr_function() -> (Arc<ExprNode>, Arc<Schem
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let ptr_type = make_ptr_ty();
     let scm = Scheme::generalize(
-        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![tyvar_from_name(TYPE_NAME, &kind_star())],
+        vec![],
         vec![],
         type_fun(ptr_type.clone(), obj_type.clone()),
     );
@@ -3737,7 +3746,8 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
-        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![tyvar_from_name(TYPE_NAME, &kind_star())],
+        vec![],
         vec![],
         type_fun(obj_type.clone(), ret_type.clone()),
     );
@@ -3837,7 +3847,8 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
-        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![tyvar_from_name(TYPE_NAME, &kind_star())],
+        vec![],
         vec![],
         type_fun(obj_type.clone(), ret_type.clone()),
     );
@@ -3892,7 +3903,8 @@ pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let scm = Scheme::generalize(
-        HashMap::from([(TYPE_NAME.to_string(), kind_star())]),
+        vec![tyvar_from_name(TYPE_NAME, &kind_star())],
+        vec![],
         vec![],
         type_fun(obj_type.clone(), obj_type.clone()),
     );
@@ -3922,7 +3934,7 @@ pub fn infinity_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
         ty.clone(),
         None,
     );
-    let scm = Scheme::generalize(HashMap::default(), vec![], ty);
+    let scm = Scheme::generalize(vec![], vec![], vec![], ty);
     (expr, scm)
 }
 
@@ -3939,7 +3951,7 @@ pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
         ty.clone(),
         None,
     );
-    let scm = Scheme::generalize(HashMap::default(), vec![], ty);
+    let scm = Scheme::generalize(vec![], vec![], vec![], ty);
     (expr, scm)
 }
 
@@ -3955,12 +3967,13 @@ pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
             method_name,
             QualType {
                 preds: vec![],
-                kind_preds: vec![],
+                kind_signs: vec![],
+                eqs: vec![],
                 ty: type_fun(tv_type.clone(), tv_type.clone()),
             },
         )]),
         assoc_types: HashMap::new(),
-        kind_predicates: vec![],
+        kind_signs: vec![],
         source: None,
     }
 }
@@ -3978,7 +3991,7 @@ pub fn unary_opeartor_instance(
         qual_pred: QualPredicate {
             pred_constraints: vec![],
             eq_constraints: vec![],
-            kind_pred_constraints: vec![],
+            kind_constraints: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
         methods: HashMap::from([(
@@ -4021,12 +4034,13 @@ pub fn binary_operator_trait(
             method_name,
             QualType {
                 preds: vec![],
-                kind_preds: vec![],
+                kind_signs: vec![],
+                eqs: vec![],
                 ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
             },
         )]),
         assoc_types: HashMap::default(),
-        kind_predicates: vec![],
+        kind_signs: vec![],
         source: None,
     }
 }
@@ -4045,7 +4059,7 @@ pub fn binary_opeartor_instance(
         qual_pred: QualPredicate {
             pred_constraints: vec![],
             eq_constraints: vec![],
-            kind_pred_constraints: vec![],
+            kind_constraints: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
         methods: HashMap::from([(

@@ -527,7 +527,7 @@ impl TypeCheckContext {
                         qual_pred: QualPredicate { 
                             pred_constraints: vec![],
                             eq_constraints: vec![],
-                            kind_pred_constraints: vec![],
+                            kind_constraints: vec![],
                             predicate: pred
                         }
                     };

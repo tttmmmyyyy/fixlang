@@ -35,7 +35,7 @@ pub struct AssocTypeDefn {
     // The local name of the associated type.
     pub name: Name,
     // Kind predicates on the definition of the associated type.
-    pub kind_preds: Vec<KindPredicate>,
+    pub kind_signs: Vec<KindSignature>,
     // Type parameters of the associated type.
     // Includes `self`.
     pub params: Vec<Arc<TyVar>>,
@@ -53,12 +53,12 @@ impl AssocTypeDefn {
     pub fn set_kinds(&mut self, impl_type_kind: Arc<Kind>) {
         // Set `impl_type_kind` to `parms[0]`.
         self.params[0] = self.params[0].set_kind(impl_type_kind.clone());
-        // Set `kind_predicates` to `self.params`.
+        // Set `kind_signs` to `self.params`.
         for param in &mut self.params[1..] {
             // Skip `self`.
-            for kind_pred in &self.kind_preds {
-                if param.name == kind_pred.tyvar {
-                    *param = param.set_kind(kind_pred.kind.clone());
+            for kind_sign in &self.kind_signs {
+                if param.name == kind_sign.tyvar {
+                    *param = param.set_kind(kind_sign.kind.clone());
                 }
             }
         }
@@ -94,7 +94,7 @@ impl AssocTypeImpl {
             )
         }
         let mut tvs_in_value = vec![];
-        trait_inst.impl_type().free_vars_vec(&mut tvs_in_value);
+        trait_inst.impl_type().free_vars_to_vec(&mut tvs_in_value);
         for (param, kind) in &mut self.params[1..].iter_mut().zip(param_kinds[1..].iter()) {
             *param = param.set_kind(kind.clone());
             tvs_in_value.push(param.clone());
@@ -135,8 +135,8 @@ pub struct TraitInfo {
     pub methods: HashMap<Name, QualType>,
     // Associated type synonyms.
     pub assoc_types: HashMap<Name, AssocTypeDefn>,
-    // Predicates at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
-    pub kind_predicates: Vec<KindPredicate>,
+    // Kind signatures at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
+    pub kind_signs: Vec<KindSignature>,
     // Source location of trait definition.
     pub source: Option<Span>,
 }
@@ -178,31 +178,28 @@ impl TraitInfo {
         self.methods.get(name).unwrap().clone()
     }
 
-    // Validate kind_predicates and set it to self.type_var.
+    // Validate kind_signs and set it to self.type_var.
     // Also, set kinds of parameters of associated type definition.
     pub fn set_trait_kind(&mut self) {
-        if self.kind_predicates.len() >= 2 {
-            let span = Span::unite_opt(
-                &self.kind_predicates[0].source,
-                &self.kind_predicates[1].source,
-            );
+        if self.kind_signs.len() >= 2 {
+            let span = Span::unite_opt(&self.kind_signs[0].source, &self.kind_signs[1].source);
             error_exit_with_src(
                 "You can specify at most one constraint of the form `{type-variable} : {kind}` as the assumption of trait definition.",
                 &span,
             );
         }
-        if self.kind_predicates.len() > 0 {
-            if self.kind_predicates[0].tyvar != self.type_var.name {
+        if self.kind_signs.len() > 0 {
+            if self.kind_signs[0].tyvar != self.type_var.name {
                 error_exit_with_src(
                     &format!(
                         "The type variable used in the assumption of trait `{}` has to be `{}`.",
                         self.id.to_string(),
                         self.type_var.name,
                     ),
-                    &self.kind_predicates[0].source,
+                    &self.kind_signs[0].source,
                 );
             }
-            self.type_var = self.type_var.set_kind(self.kind_predicates[0].kind.clone());
+            self.type_var = self.type_var.set_kind(self.kind_signs[0].kind.clone());
         }
         for (_, assoc_ty_defn) in &mut self.assoc_types {
             assoc_ty_defn.set_kinds(self.type_var.kind.clone());
@@ -239,8 +236,8 @@ impl TraitInstance {
         let mut scope = HashMap::new();
         let preds = &self.qual_pred.pred_constraints;
         let eqs = &self.qual_pred.eq_constraints;
-        let kind_preds = &self.qual_pred.kind_pred_constraints;
-        let res = QualPredicate::extend_kind_scope(&mut scope, preds, eqs, kind_preds, kind_env);
+        let kind_signs = &self.qual_pred.kind_constraints;
+        let res = QualPredicate::extend_kind_scope(&mut scope, preds, eqs, kind_signs, kind_env);
         if res.is_err() {
             error_exit_with_src(&res.unwrap_err(), &self.source);
         }
@@ -351,7 +348,7 @@ impl TraitAlias {
 pub struct QualPredicate {
     pub pred_constraints: Vec<Predicate>,
     pub eq_constraints: Vec<Equality>,
-    pub kind_pred_constraints: Vec<KindPredicate>,
+    pub kind_constraints: Vec<KindSignature>,
     pub predicate: Predicate,
 }
 
@@ -369,17 +366,17 @@ impl QualPredicate {
 
     pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         for pred in &self.pred_constraints {
-            pred.ty.free_vars_vec(buf);
+            pred.ty.free_vars_to_vec(buf);
         }
         for eq in &self.eq_constraints {
             eq.free_vars_vec(buf);
         }
-        self.predicate.ty.free_vars_vec(buf);
+        self.predicate.ty.free_vars_to_vec(buf);
         // Apply kind predicates.
         for tv in buf {
-            for kind_pred in &self.kind_pred_constraints {
-                if tv.name == kind_pred.tyvar {
-                    tv.kind = kind_pred.kind.clone();
+            for kind_sign in &self.kind_constraints {
+                if tv.name == kind_sign.tyvar {
+                    tv.kind = kind_sign.kind.clone();
                 }
             }
         }
@@ -388,14 +385,14 @@ impl QualPredicate {
     #[allow(dead_code)]
     pub fn to_string(&self) -> String {
         let mut s = String::default();
-        if self.pred_constraints.len() > 0 || self.kind_pred_constraints.len() > 0 {
+        if self.pred_constraints.len() > 0 || self.kind_constraints.len() > 0 {
             s += "[";
         }
         let mut preds = vec![];
-        preds.extend(self.kind_pred_constraints.iter().map(|p| p.to_string()));
+        preds.extend(self.kind_constraints.iter().map(|p| p.to_string()));
         preds.extend(self.pred_constraints.iter().map(|p| p.to_string()));
         s += &preds.join(", ");
-        if self.pred_constraints.len() > 0 || self.kind_pred_constraints.len() > 0 {
+        if self.pred_constraints.len() > 0 || self.kind_constraints.len() > 0 {
             s += "] ";
         }
         s += &self.predicate.to_string();
@@ -420,7 +417,7 @@ impl QualPredicate {
         scope: &mut HashMap<Name, Arc<Kind>>,
         preds: &Vec<Predicate>,
         eqs: &Vec<Equality>,
-        kind_preds: &Vec<KindPredicate>,
+        kind_signs: &Vec<KindSignature>,
         kind_env: &KindEnv,
     ) -> Result<(), String> {
         fn insert(
@@ -470,7 +467,7 @@ impl QualPredicate {
             Ok(())
         }
 
-        for kp in kind_preds {
+        for kp in kind_signs {
             let tyvar = kp.tyvar.clone();
             let kind = kp.kind.clone();
             insert(scope, tyvar, kind)?;
@@ -509,7 +506,7 @@ pub struct QualPredScheme {
 pub struct QualType {
     pub preds: Vec<Predicate>,
     pub eqs: Vec<Equality>,
-    pub kind_preds: Vec<KindPredicate>,
+    pub kind_signs: Vec<KindSignature>,
     pub ty: Arc<TypeNode>,
 }
 
@@ -550,17 +547,17 @@ impl QualType {
 
     pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         for pred in &self.preds {
-            pred.ty.free_vars_vec(buf);
+            pred.ty.free_vars_to_vec(buf);
         }
         for eq in &self.eqs {
             eq.free_vars_vec(buf);
         }
-        self.ty.free_vars_vec(buf);
+        self.ty.free_vars_to_vec(buf);
         // Apply kind predicates.
         for tv in buf {
-            for kind_pred in &self.kind_preds {
-                if tv.name == kind_pred.tyvar {
-                    tv.kind = kind_pred.kind.clone();
+            for kind_sign in &self.kind_signs {
+                if tv.name == kind_sign.tyvar {
+                    tv.kind = kind_sign.kind.clone();
                 }
             }
         }
@@ -654,13 +651,13 @@ impl Predicate {
 
 // Statement such as "f: * -> *".
 #[derive(Clone)]
-pub struct KindPredicate {
+pub struct KindSignature {
     pub tyvar: Name,
     pub kind: Arc<Kind>,
     pub source: Option<Span>,
 }
 
-impl KindPredicate {
+impl KindSignature {
     pub fn to_string(&self) -> String {
         format!("{} : {}", self.tyvar, self.kind.to_string())
     }
@@ -757,9 +754,9 @@ impl Equality {
 
     pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         for arg in &self.args {
-            arg.free_vars_vec(buf);
+            arg.free_vars_to_vec(buf);
         }
-        self.value.free_vars_vec(buf);
+        self.value.free_vars_to_vec(buf);
     }
 
     // Get the type of the left-hand side of the equality.
@@ -788,9 +785,9 @@ impl Equality {
     pub fn generalize(&self) -> EqualityScheme {
         let mut tyvars = vec![];
         for arg in &self.args {
-            arg.free_vars_vec(&mut tyvars);
+            arg.free_vars_to_vec(&mut tyvars);
         }
-        self.value.free_vars_vec(&mut tyvars);
+        self.value.free_vars_to_vec(&mut tyvars);
         EqualityScheme {
             gen_vars: tyvars,
             equality: self.clone(),

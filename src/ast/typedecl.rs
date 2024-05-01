@@ -13,7 +13,12 @@ pub struct TypeDefn {
 
 impl TypeDefn {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        assert!(self.name == ctx.resolve(&self.name, &[NameResolutionType::TyCon]).unwrap());
+        assert!(
+            self.name
+                == ctx
+                    .resolve(&self.name, &[NameResolutionType::TyCon])
+                    .unwrap()
+        );
         self.value.resolve_namespace(ctx);
     }
 
@@ -96,12 +101,12 @@ impl TypeDefn {
         let mut ret = vec![];
         if self.is_alias() {
             match &self.value {
-                TypeDeclValue::Alias(ta) => ta.value.free_vars_vec(&mut ret),
+                TypeDeclValue::Alias(ta) => ta.value.free_vars_to_vec(&mut ret),
                 _ => unreachable!(),
             }
         } else {
             for field in self.fields() {
-                field.ty.free_vars_vec(&mut ret);
+                field.ty.free_vars_to_vec(&mut ret);
             }
         }
         ret

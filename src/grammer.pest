@@ -169,15 +169,17 @@ tyvar_head = _{ ASCII_ALPHA_LOWER }
 tyvar_char = _{ ASCII_ALPHA | ASCII_DIGIT }
 type_var = { !keywords ~ tyvar_head ~ tyvar_char* }
 
-type_qualified = { predicates? ~ sep* ~ type_expr }
+type_qualified = { constraints? ~ sep* ~ type_expr }
 
 predicate = { type_expr ~ sep* ~ ":" ~ sep* ~ trait_fullname }
 
-predicate_kind = { type_var ~ sep* ~ ":" ~ sep* ~ kind }
+equality = { type_expr ~ sep* ~ "=" ~ sep* ~ type_expr }
 
-predicates = { "[" ~ sep* ~ (predicate | predicate_kind) ~ (sep* ~ "," ~ sep* ~ (predicate | predicate_kind))* ~ sep* ~ "]" }
+kind_signature = { type_var ~ sep* ~ ":" ~ sep* ~ kind }
 
-predicate_qualified = { predicates? ~ sep* ~ predicate }
+constraints = { "[" ~ sep* ~ (predicate | kind_signature) ~ (sep* ~ "," ~ sep* ~ (predicate | kind_signature))* ~ sep* ~ "]" }
+
+predicate_qualified = { constraints? ~ sep* ~ predicate }
 
 // === Kinds ===
 kind_star = { "*" }
@@ -195,7 +197,7 @@ type_field_name = { !keywords ~ var_head ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
-type_defn = { "type" ~ sep+ ~ (predicates ~ sep+)? ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn | type_alias_defn) ~ sep* ~ semicolon }
+type_defn = { "type" ~ sep+ ~ (constraints ~ sep+)? ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn | type_alias_defn) ~ sep* ~ semicolon }
 
 comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* }
 
@@ -215,7 +217,7 @@ trait_name = { capital_name }
 
 trait_fullname = { capital_fullname }
 
-trait_defn = { "trait" ~ sep+ ~ predicates? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
+trait_defn = { "trait" ~ sep+ ~ constraints? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 
 trait_member_defn = { trait_member_value_defn | trait_member_type_defn }
 

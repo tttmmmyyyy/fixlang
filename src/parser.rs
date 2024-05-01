@@ -276,13 +276,18 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let kinds = if pairs.peek().unwrap().as_rule() == Rule::predicates {
+    let kinds = if pairs.peek().unwrap().as_rule() == Rule::constraints {
         let pair = pairs.next().unwrap();
-        let (preds, kinds) = parse_predicates(pair, ctx);
-        if !preds.is_empty() {
-            error_exit_with_src(
-                "Fix does not support super-trait; only kinds of the type parameter can be specified as the assumption for trait definition.",
+        let (preds, eqs, kinds) = parse_constraints(pair, ctx);
+        if !preds.is_empty() || !eqs.is_empty() {
+            let one_src = if !preds.is_empty() {
                 &preds.first().unwrap().source
+            } else {
+                &eqs.first().unwrap().source
+            };
+            error_exit_with_src(
+                "In the constraint of trait definition, only kind signature is allowed. Fix does not support \"super-trait\".",
+                one_src
             );
         }
         kinds
@@ -324,7 +329,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
         type_var: tyvar_from_name(&trait_tyvar, &kind_star()),
         methods,
         assoc_types: type_syns,
-        kind_predicates: kinds,
+        kind_signs: kinds,
         source: Some(span),
     }
 }
@@ -381,7 +386,7 @@ fn parse_trait_member_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Ass
         kind_applied,
         src: Some(span),
         params: assoc_type_params,
-        kind_preds: todo!(),
+        kind_signs: todo!(),
     }
 }
 
@@ -476,16 +481,16 @@ fn parse_trait_member_type_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Ass
 fn parse_predicate_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualPredicate {
     assert_eq!(pair.as_rule(), Rule::predicate_qualified);
     let mut pairs = pair.into_inner();
-    let (predicates, kinds) = if pairs.peek().unwrap().as_rule() == Rule::predicates {
-        parse_predicates(pairs.next().unwrap(), ctx)
+    let (predicates, eqs, kinds) = if pairs.peek().unwrap().as_rule() == Rule::constraints {
+        parse_constraints(pairs.next().unwrap(), ctx)
     } else {
-        (vec![], vec![])
+        (vec![], vec![], vec![])
     };
     let predicate = parse_predicate(pairs.next().unwrap(), ctx);
     let qp = QualPredicate {
         pred_constraints: predicates,
-        eq_constraints: todo!(""),
-        kind_pred_constraints: kinds,
+        eq_constraints: eqs,
+        kind_constraints: kinds,
         predicate,
     };
     qp
@@ -501,7 +506,7 @@ fn parse_global_value_decl(pair: Pair<Rule>, ctx: &mut ParseContext) -> GlobalVa
     let ty = qual_type.ty.clone();
     GlobalValueDecl {
         name: FullName::new(&ctx.namespace, &name),
-        ty: Scheme::generalize(ty.free_vars(), preds, ty),
+        ty: Scheme::generalize(ty.free_vars_vec(), preds, vec![], ty),
         src: Some(span),
     }
 }
@@ -522,10 +527,10 @@ fn parse_global_name_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> GlobalVal
 fn parse_type_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualType {
     assert_eq!(pair.as_rule(), Rule::type_qualified);
     let mut pairs = pair.into_inner();
-    let (preds, kinds) = if pairs.peek().unwrap().as_rule() == Rule::predicates {
-        parse_predicates(pairs.next().unwrap(), ctx)
+    let (preds, eqs, kinds) = if pairs.peek().unwrap().as_rule() == Rule::constraints {
+        parse_constraints(pairs.next().unwrap(), ctx)
     } else {
-        (vec![], vec![])
+        (vec![], vec![], vec![])
     };
     for pred in &preds {
         match &pred.ty.ty {
@@ -539,40 +544,68 @@ fn parse_type_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualType {
     let qt = QualType {
         preds,
         ty,
-        kind_preds: kinds,
+        kind_signs: kinds,
+        eqs,
     };
     qt
 }
 
-fn parse_predicates(
+fn parse_constraints(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-) -> (Vec<Predicate>, Vec<KindPredicate>) {
-    assert_eq!(pair.as_rule(), Rule::predicates);
+) -> (Vec<Predicate>, Vec<Equality>, Vec<KindSignature>) {
+    assert_eq!(pair.as_rule(), Rule::constraints);
     let pairs = pair.into_inner();
     let mut ps: Vec<Predicate> = Default::default();
-    let mut ks: Vec<KindPredicate> = Default::default();
+    let mut ks: Vec<KindSignature> = Default::default();
+    let mut es: Vec<Equality> = Default::default();
     for pair in pairs {
         if pair.as_rule() == Rule::predicate {
             ps.push(parse_predicate(pair, ctx));
-        } else if pair.as_rule() == Rule::predicate_kind {
-            ks.push(parse_predicate_kind(pair, ctx));
+        } else if pair.as_rule() == Rule::kind_signature {
+            ks.push(parse_kind_signature(pair, ctx));
+        } else if pair.as_rule() == Rule::equality {
+            es.push(parse_equality(pair, ctx));
         } else {
             unreachable!()
         }
     }
-    (ps, ks)
+    (ps, es, ks)
 }
 
-fn parse_predicate_kind(pair: Pair<Rule>, ctx: &mut ParseContext) -> KindPredicate {
-    assert_eq!(pair.as_rule(), Rule::predicate_kind);
+fn parse_kind_signature(pair: Pair<Rule>, ctx: &mut ParseContext) -> KindSignature {
+    assert_eq!(pair.as_rule(), Rule::kind_signature);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
     let kind = parse_kind(pairs.next().unwrap(), ctx);
-    KindPredicate {
+    KindSignature {
         tyvar: name,
         kind,
+        source: Some(span),
+    }
+}
+
+fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Equality {
+    assert_eq!(pair.as_rule(), Rule::equality);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
+    let lhs = parse_type(pairs.next().unwrap(), ctx);
+    let rhs = parse_type(pairs.next().unwrap(), ctx);
+    if !lhs.is_equality_lhs() {
+        error_exit_with_src(
+            "The left side of an equality constraint has to be the application of associated type to free types. \
+            Here, free type is either a type variable or an associated type applied to free types.",
+            &lhs.get_source(),
+        )
+    }
+    let lhs_seq = lhs.flatten_type_application();
+    Equality {
+        assoc_type: TyAssoc {
+            name: lhs_seq[0].as_tycon().name,
+        },
+        args: lhs_seq[1..].iter().cloned().collect(),
+        value: rhs,
         source: Some(span),
     }
 }
@@ -655,28 +688,33 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDefn {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
 
-    // Parse predicates to specify kinds of type variables.
+    // Parse constraints to specify kinds of type variables.
     let mut kinds: HashMap<Name, Arc<Kind>> = HashMap::new();
-    if pairs.peek().unwrap().as_rule() == Rule::predicates {
+    if pairs.peek().unwrap().as_rule() == Rule::constraints {
         let pair = pairs.next().unwrap();
-        let (preds, kind_preds) = parse_predicates(pair, ctx);
-        if preds.len() > 0 {
+        let (preds, eqs, kind_signs) = parse_constraints(pair, ctx);
+        if preds.len() > 0 || eqs.len() > 0 {
+            let one_src = if !preds.is_empty() {
+                &preds.first().unwrap().source
+            } else {
+                &eqs.first().unwrap().source
+            };
             error_exit_with_src(
-                "In type definition, you cannot specify trait bound on type variable; you can only specify kind of type variable.",
-                &preds.first().unwrap().source,
+                "In the constraint of type definition, only kind signature is allowed.",
+                one_src,
             );
         }
-        for kind_pred in kind_preds {
-            if kinds.contains_key(&kind_pred.tyvar) {
+        for kind_sign in kind_signs {
+            if kinds.contains_key(&kind_sign.tyvar) {
                 error_exit_with_src(
                     &format!(
                         "Kind of type variable `{}` is specified more than once.",
-                        kind_pred.tyvar
+                        kind_sign.tyvar
                     ),
-                    &kind_pred.source,
+                    &kind_sign.source,
                 );
             }
-            kinds.insert(kind_pred.tyvar, kind_pred.kind);
+            kinds.insert(kind_sign.tyvar, kind_sign.kind);
         }
     }
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_name);

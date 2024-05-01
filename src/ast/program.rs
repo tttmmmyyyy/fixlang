@@ -247,6 +247,11 @@ impl<'a> NameResolutionContext {
         short_name: &FullName,
         accept_types: &[NameResolutionType],
     ) -> Result<FullName, String> {
+        let accept_type_string = accept_types
+            .iter()
+            .map(|nrt| nrt.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
         let candidates = self
             .candidates
             .iter()
@@ -263,7 +268,11 @@ impl<'a> NameResolutionContext {
             })
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
-            Err(format!("Unknown name `{}`.", short_name.to_string()))
+            Err(format!(
+                "Unknown `{}` name `{}`.",
+                accept_type_string,
+                short_name.to_string()
+            ))
         } else if candidates.len() == 1 {
             Ok(candidates[0].clone())
         } else {
