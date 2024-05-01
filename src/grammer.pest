@@ -177,7 +177,7 @@ equality = { type_expr ~ sep* ~ "=" ~ sep* ~ type_expr }
 
 kind_signature = { type_var ~ sep* ~ ":" ~ sep* ~ kind }
 
-constraints = { "[" ~ sep* ~ (predicate | kind_signature) ~ (sep* ~ "," ~ sep* ~ (predicate | kind_signature))* ~ sep* ~ "]" }
+constraints = { "[" ~ sep* ~ (predicate | kind_signature | equality) ~ (sep* ~ "," ~ sep* ~ (predicate | kind_signature | equality))* ~ sep* ~ "]" }
 
 predicate_qualified = { constraints? ~ sep* ~ predicate }
 
