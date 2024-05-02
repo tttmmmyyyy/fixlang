@@ -64,6 +64,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     let mut typechecker = TypeCheckContext::new(
         program.trait_env.clone(),
         program.type_env(),
+        program.kind_env(),
         program.mod_to_import_stmts.clone(),
     );
 

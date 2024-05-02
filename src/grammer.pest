@@ -225,7 +225,7 @@ trait_member_value_defn = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_q
 
 trait_member_value_name = _{ var }
 
-trait_member_type_defn = { "type" ~ sep+ ~ type_expr ~ (sep* ~ ":" ~ sep* ~ kind)? ~ sep* ~ semicolon }
+trait_member_type_defn = { "type" ~ (sep+ ~ constraints)? ~ sep+ ~ type_expr ~ (sep* ~ ":" ~ sep* ~ kind)? ~ sep* ~ semicolon }
 
 // === Trait implementations ===
 trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }

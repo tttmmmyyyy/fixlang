@@ -221,60 +221,60 @@ fn replace_closure_call_to_funptr_call(
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
-    typeresolver: &TypeResolver,
+    substitution: &Substitution,
 ) -> Arc<ExprNode> {
-    let expr = replace_closure_call_to_funptr_call(expr, symbols, typeresolver);
+    let expr = replace_closure_call_to_funptr_call(expr, symbols, substitution);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::LLVM(_) => expr.clone(),
         Expr::App(fun, args) => {
             let args = args
                 .iter()
-                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbols, typeresolver))
+                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbols, substitution))
                 .collect();
             expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(
                 fun,
                 symbols,
-                typeresolver,
+                substitution,
             ))
             .set_app_args(args)
         }
         Expr::Lam(_, val) => expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(
             val,
             symbols,
-            typeresolver,
+            substitution,
         )),
         Expr::Let(_, bound, val) => expr
             .set_let_bound(replace_closure_call_to_funptr_call_subexprs(
                 bound,
                 symbols,
-                typeresolver,
+                substitution,
             ))
             .set_let_value(replace_closure_call_to_funptr_call_subexprs(
                 val,
                 symbols,
-                typeresolver,
+                substitution,
             )),
         Expr::If(c, t, e) => expr
             .set_if_cond(replace_closure_call_to_funptr_call_subexprs(
                 c,
                 symbols,
-                typeresolver,
+                substitution,
             ))
             .set_if_then(replace_closure_call_to_funptr_call_subexprs(
                 t,
                 symbols,
-                typeresolver,
+                substitution,
             ))
             .set_if_else(replace_closure_call_to_funptr_call_subexprs(
                 e,
                 symbols,
-                typeresolver,
+                substitution,
             )),
         Expr::TyAnno(e, _) => expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(
             e,
             symbols,
-            typeresolver,
+            substitution,
         )),
         Expr::MakeStruct(_, fields) => {
             let fields = fields.clone();
@@ -283,7 +283,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
                 let field_expr = replace_closure_call_to_funptr_call_subexprs(
                     &field_expr,
                     symbols,
-                    typeresolver,
+                    substitution,
                 );
                 expr = expr.set_make_struct_field(&field_name, field_expr);
             }
@@ -293,7 +293,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
             let mut expr = expr.clone();
             for (i, e) in elems.iter().enumerate() {
                 expr = expr.set_array_lit_elem(
-                    replace_closure_call_to_funptr_call_subexprs(e, symbols, typeresolver),
+                    replace_closure_call_to_funptr_call_subexprs(e, symbols, substitution),
                     i,
                 )
             }
@@ -303,7 +303,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
                 expr = expr.set_call_c_arg(
-                    replace_closure_call_to_funptr_call_subexprs(e, symbols, typeresolver),
+                    replace_closure_call_to_funptr_call_subexprs(e, symbols, substitution),
                     i,
                 )
             }

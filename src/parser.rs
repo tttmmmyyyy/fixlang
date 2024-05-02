@@ -365,12 +365,32 @@ fn parse_trait_member_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Ass
     assert_eq!(pair.as_rule(), Rule::trait_member_type_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
+    let kind_signs = if pairs.peek().unwrap().as_rule() == Rule::constraints {
+        let (preds, eqs, kind_signs) = parse_constraints(pairs.next().unwrap(), ctx);
+        if !preds.is_empty() || !eqs.is_empty() {
+            let one_src = if !preds.is_empty() {
+                &preds.first().unwrap().source
+            } else {
+                &eqs.first().unwrap().source
+            };
+            error_exit_with_src(
+                "In the constraint of associated type definition, only kind signature is allowed.",
+                one_src,
+            );
+        }
+        kind_signs
+    } else {
+        vec![]
+    };
     let assoc_type_defn = parse_type(pairs.next().unwrap(), ctx);
     // Validate form of `assoc_type_defn`
     let assoc_type_defn = assoc_type_defn.is_associated_type_defn();
     if assoc_type_defn.is_none() {
         error_exit_with_src(
-            "Definition of an associated type has to be of the form `type {AssocTypeName} self {type_var_2} ... {type_var_N} (: {kind})`, where N is the arity of the associated type. Each `{type_var_k}` should be a free type variable. If `{kind}` is omitted, it is assumed to be `*`.",
+            "Definition of an associated type has to be of the form `type {AssocTypeName} self {type_var_2} ... {type_var_N} (: {kind})`\
+            , where N is the arity of the associated type. \
+            Type variables `{type_var_k}` has to be distinct. \
+            If `{kind}` is omitted, it is assumed to be `*`.",
             &Some(span),
         );
     }
@@ -380,13 +400,12 @@ fn parse_trait_member_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Ass
     } else {
         kind_star()
     };
-    todo!("forbid kind preds for self");
     AssocTypeDefn {
         name: assoc_type_name,
         kind_applied,
         src: Some(span),
         params: assoc_type_params,
-        kind_signs: todo!(),
+        kind_signs,
     }
 }
 
@@ -594,8 +613,8 @@ fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Equality {
     let rhs = parse_type(pairs.next().unwrap(), ctx);
     if !lhs.is_equality_lhs() {
         error_exit_with_src(
-            "The left side of an equality constraint has to be the application of associated type to free types. \
-            Here, free type is either a type variable or an associated type applied to free types.",
+            "The left side of an equality constraint has to be the application of associated type to free types, and itself has to be free.\
+            Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
             &lhs.get_source(),
         )
     }

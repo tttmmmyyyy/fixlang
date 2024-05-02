@@ -497,6 +497,7 @@ impl QualPredicate {
     }
 }
 
+#[derive(Clone)]
 pub struct QualPredScheme {
     pub gen_vars: Vec<Arc<TyVar>>,
     pub qual_pred: QualPredicate,

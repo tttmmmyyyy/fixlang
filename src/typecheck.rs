@@ -419,7 +419,7 @@ pub struct TypeCheckContext {
     // This is used as a state variable for typechecking.
     pub current_module: Option<Name>,
     // Equalities assumed.
-    pub assumed_eqs: HashMap<FullName, Vec<EqualityScheme>>,
+    pub assumed_eqs: HashMap<TyAssoc, Vec<EqualityScheme>>,
     // Predicates assumed.
     pub assumed_preds: HashMap<TraitId, Vec<QualPredScheme>>,
     // Fixed type variables.
@@ -489,10 +489,10 @@ impl TypeCheckContext {
     ) -> Result<Arc<TypeNode>, UnificationErr> {
         let mut sub = Substitution::default();
         let mut new_tyvars = vec![];
-        for (var, kind) in &scheme.gen_vars {
+        for tv in &scheme.gen_vars {
             let new_var_name = self.new_tyvar();
             new_tyvars.push(new_var_name.clone());
-            sub.add_substitution(&Substitution::single(&var, type_tyvar(&new_var_name, kind)));
+            sub.add_substitution(&Substitution::single(&tv.name, type_tyvar(&new_var_name, &tv.kind)));
             // TODO: change name of tyvar if ConstraintInstantiationMode::Assume for better error message.
         }
         let ty = sub.substitute_type(&scheme.ty);
@@ -548,6 +548,7 @@ impl TypeCheckContext {
 
     // Reduce predicates to head normal forms.
     // Returns Err(p) if predicates are unsatisfiable due to predicate p.
+    /*
     pub fn reduce_predicates_to_hnfs(&mut self) -> Result<(), Predicate> {
         let mut preds = std::mem::replace(&mut self.predicates, vec![]);
         for p in &mut preds {
@@ -559,6 +560,7 @@ impl TypeCheckContext {
             .reduce_to_hnf(&self.predicates, &self.type_env.kinds())?;
         Ok(())
     }
+    */
 
     // Perform typechecking.
     // Update type substitution so that `ei` has type `ty`.
@@ -654,10 +656,10 @@ impl TypeCheckContext {
                 }
             }
             Expr::LLVM(lit) => {
-                if !self.unify_rollback_if_err(&lit.ty, &ty) {
+                if let Err(_) = self.unify_rollback_if_err(&lit.ty, &ty) {
                     error_exit_with_src(
                         &format!(
-                            "Type mismatch. Expected `{}`, found `{}`",
+                            "Type mismatch. Expected `{}`, found `{}`.",
                             &self.substitute_type(&ty).to_string_normalize(),
                             &lit.ty.to_string_normalize(),
                         ),
@@ -686,7 +688,7 @@ impl TypeCheckContext {
                 let arg_ty = type_tyvar_star(&self.new_tyvar());
                 let body_ty = type_tyvar_star(&self.new_tyvar());
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
-                if !self.unify_rollback_if_err(&fun_ty, &ty) {
+                if let Err(_) = self.unify_rollback_if_err(&fun_ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`",
@@ -709,7 +711,7 @@ impl TypeCheckContext {
                 let var_scm = var_ty.iter().map(|(name, ty)| {
                     (
                         name.clone(),
-                        Scheme::generalize(HashMap::default(), vec![], ty.clone()),
+                        Scheme::generalize(vec![], vec![], vec![],ty.clone()),
                     )
                 });
                 for (name, scm) in var_scm.clone() {
@@ -737,7 +739,7 @@ impl TypeCheckContext {
                         anno_ty.get_source(),
                     )
                 }
-                if !self.unify_rollback_if_err(&ty, anno_ty) {
+                if let Err(_) = self.unify_rollback_if_err(&ty, anno_ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -786,7 +788,7 @@ impl TypeCheckContext {
 
                 // Get field types.
                 let struct_ty = tc.get_struct_union_value_type(self);
-                if !self.unify_rollback_if_err(&struct_ty, &ty) {
+                if let Err(_) = self.unify_rollback_if_err(&struct_ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -816,7 +818,7 @@ impl TypeCheckContext {
                 // Prepare type of element.
                 let elem_ty = type_tyvar_star(&self.new_tyvar());
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
-                if !self.unify_rollback_if_err(&array_ty, &ty) {
+                if let Err(_) = self.unify_rollback_if_err(&array_ty, &ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found an array.",
@@ -834,7 +836,7 @@ impl TypeCheckContext {
             }
             Expr::CallC(_, ret_ty, param_tys, is_va_args, args) => {
                 let ret_ty = type_tycon(ret_ty);
-                if !self.unify_rollback_if_err(&ty, &ret_ty) {
+                if let Err(_) = self.unify_rollback_if_err(&ty, &ret_ty) {
                     error_exit_with_src(
                         &format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -878,8 +880,8 @@ impl TypeCheckContext {
         if let Err(e) = specified_ty {
             error_exit_with_src(
                 &format!(
-                    "Condition `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
-                    e.to_condition_string()
+                    "`{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    e.to_constraint_string()
                 ), &expr.source
             );
         }
@@ -889,8 +891,8 @@ impl TypeCheckContext {
         if let Err(e) = reduction_res {
             error_exit_with_src(
                 &format!(
-                    "Condition `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
-                    e.to_condition_string()
+                    "`{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    e.to_constraint_string()
                 ), &expr.source
             );
         }
@@ -910,7 +912,7 @@ impl TypeCheckContext {
 
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnificationErr> {
         self.substitution.add_substitution(subst);
-        let eqs = std::mem::replace(&mut self.resolver.equalities, vec![]);
+        let eqs = std::mem::replace(&mut self.equalities, vec![]);
         for mut eq in eqs {
             self.add_equality(eq)?;
         }
@@ -953,7 +955,7 @@ impl TypeCheckContext {
                     // Insstantiate `assumed_eq`.
                     let mut subst = Substitution::default();
                     for tv in assumed_eq.gen_vars {
-                        subst.add_substitution(&Substitution::single(&tv, type_tyvar(&self.new_tyvar(), &tv.kind)));
+                        subst.add_substitution(&Substitution::single(&tv.name, type_tyvar(&self.new_tyvar(), &tv.kind)));
                     }
                     let mut equality = assumed_eq.equality.clone();
                     subst.substitute_equality(&mut equality);
@@ -1006,7 +1008,7 @@ impl TypeCheckContext {
         for _ in 0..2 {
             match &ty1.ty {
                 Type::TyVar(var1) => {
-                    return self.unify_tyvar(&var1, ty2);
+                    return self.unify_tyvar(var1.clone(), ty2.clone());
                 }
                 _ => {}
             }
