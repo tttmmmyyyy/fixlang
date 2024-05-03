@@ -877,8 +877,6 @@ impl TypeCheckContext {
         assert!(self.substitution.is_empty());
         assert!(self.predicates.is_empty());
         assert!(self.equalities.is_empty());
-        assert!(self.assumed_preds.is_empty());
-        assert!(self.assumed_eqs.is_empty());
 
         let specified_ty = self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume);
         if let Err(e) = specified_ty {
