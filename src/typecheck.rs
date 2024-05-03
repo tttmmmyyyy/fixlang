@@ -589,7 +589,7 @@ impl TypeCheckContext {
                         let mut tc = self.clone();
                         let var_ty = tc.instantiate_scheme(&scm, ConstraintInstantiationMode::Require);
                         if let Err(e) = var_ty {
-                            let msg = format!("- `{}` of type `{}` does not match since the constraint `{}` is unsatisfiable.", 
+                            let msg = format!("- `{}` of type `{}` does not match since the constraint {} is unsatisfiable.", 
                                 fullname.to_string(), 
                                 self.substitution.substitute_scheme(scm).to_string(), 
                                 e.to_constraint_string()
@@ -597,7 +597,7 @@ impl TypeCheckContext {
                             Err(msg)
                         } else if let Err(e) = tc.unify(&var_ty.ok().unwrap(), &ty) {
                             let msg = format!(
-                                "- `{}` of type `{}` does not match the expected type since the constraint `{}` is unsatisfiable.",
+                                "- `{}` of type `{}` does not match the expected type since the constraint {} is unsatisfiable.",
                                 fullname.to_string(),
                                 self.substitution.substitute_scheme(scm).to_string(),
                                 e.to_constraint_string()
@@ -1037,7 +1037,16 @@ impl TypeCheckContext {
 
         // Other case.
         match &ty1.ty {
-            Type::TyVar(_) => unreachable!(),
+            Type::TyVar(tv1) => {
+                match &ty2.ty {
+                    Type::TyVar(tv2) => {
+                        assert!(self.fixed_tyvars.contains(&tv1.name) && self.fixed_tyvars.contains(&tv2.name));
+                        return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()));
+                    }
+                    _ => {}
+                }
+                unreachable!();
+            },
             Type::AssocTy(_, _) => unreachable!(),
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {

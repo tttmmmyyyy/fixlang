@@ -6192,7 +6192,7 @@ pub fn test_associated_type() {
     }
 
     extend : [c1 : Collects, c2 : Collects, Elem c1 = Elem c2] c1 -> c2 -> c2;
-    extend = |xs, ys| xs.to_iter.fold(xs, |xs, x| xs.insert(x));
+    extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
 
     main : IO ();
     main = (
