@@ -37,7 +37,7 @@ pub struct AssocTypeDefn {
     // Kind predicates on the definition of the associated type.
     pub kind_signs: Vec<KindSignature>,
     // Type parameters of the associated type.
-    // Includes `self`.
+    // Includes `impl_type`.
     pub params: Vec<Arc<TyVar>>,
     // The kind of the application of the associated type.
     pub kind_applied: Arc<Kind>,
@@ -70,7 +70,7 @@ impl AssocTypeDefn {
 pub struct AssocTypeImpl {
     pub name: Name,
     // Type parameters of the associated type implementation.
-    // Includes `self`.
+    // Includes `impl_type`.
     pub params: Vec<Arc<TyVar>>,
     pub value: Arc<TypeNode>,
     pub source: Option<Span>,

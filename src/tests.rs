@@ -6163,3 +6163,26 @@ pub fn test_import_unknown_namespace() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_associated_type() {
+    let source = r##"
+    module Main;
+
+    trait c : Collects {
+        type Elem c;
+        empty : Elem c;
+    }
+
+    impl Array a : Collects {
+        type Elem (Array a) = a;
+        empty = [];
+    }
+
+    main : IO ();
+    main = (
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}

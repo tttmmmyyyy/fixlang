@@ -44,7 +44,6 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
 pub const STRUCT_GETTER_SYMBOL: &str = "@";
 pub const STRUCT_SETTER_SYMBOL: &str = "set_";
-pub const TRAIT_IMPL_SELF: &str = "self";
 
 pub const CAP_NAME: &str = "#CAP";
 
