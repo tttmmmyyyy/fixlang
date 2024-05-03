@@ -146,8 +146,6 @@ impl SymbolExpr {
 pub struct TypedExpr {
     pub expr: Arc<ExprNode>,
     pub substitution: Substitution,
-    #[serde(skip)]
-    pub kind_env: Arc<KindEnv>,
 }
 
 impl TypedExpr {
@@ -155,23 +153,11 @@ impl TypedExpr {
         TypedExpr {
             expr,
             substitution: Substitution::default(),
-            kind_env: Arc::new(KindEnv::default()),
         }
     }
 
     pub fn calculate_free_vars(&mut self) {
         self.expr = calculate_free_vars(self.expr.clone());
-    }
-
-    pub fn specialize_type_to(&mut self, target_ty: &Arc<TypeNode>) {
-        let matching = Substitution::matching(
-            self.expr.ty.as_ref().unwrap(),
-            &target_ty,
-            &HashSet::new(),
-            &self.kind_env,
-        )
-        .unwrap();
-        self.substitution.add_substitution(&matching);
     }
 }
 
@@ -759,7 +745,6 @@ impl Program {
         if cache.is_some() {
             // If cache is available,
             *te = cache.unwrap();
-            te.kind_env = tc.kind_env.clone();
             return;
         }
 
@@ -780,7 +765,6 @@ impl Program {
         tc.current_module = Some(define_module.clone());
         te.expr = tc.check_type(te.expr.clone(), required_scheme.clone());
         te.substitution = tc.substitution;
-        te.kind_env = tc.kind_env.clone();
 
         // Save the result to cache file.
         save_cache(te, required_scheme, name, &hash_of_dependent_codes);
@@ -793,7 +777,7 @@ impl Program {
             error_exit_with_src(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add type annotation.", sym.generic_name.to_string(), sym.ty.to_string_normalize()), &sym.expr.as_ref().unwrap().source);
         }
         let global_sym = self.global_values.get(&sym.generic_name).unwrap();
-        let typed_expr = match &global_sym.expr {
+        let expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
                 // Perform type-checking.
                 let define_module = sym.generic_name.module();
@@ -808,11 +792,14 @@ impl Program {
                 // Calculate free vars.
                 e.calculate_free_vars();
                 // Specialize e's type to the required type `sym.ty`.
-                e.specialize_type_to(&sym.ty);
-                e
+                let mut tc = tc.clone();
+                assert!(tc.substitution.is_empty());
+                tc.substitution = std::mem::replace(&mut e.substitution, Substitution::default());
+                tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
+                tc.finish_inferred_types(e.expr)
             }
             SymbolExpr::Method(impls) => {
-                let mut opt_e: Option<TypedExpr> = None;
+                let mut opt_e: Option<Arc<ExprNode>> = None;
                 for method in impls {
                     // Check if the type of this implementation unify with the required type `sym.ty`.
                     // NOTE: Since overlapping implementations and unrelated methods are forbidden,
@@ -840,16 +827,19 @@ impl Program {
                     );
                     // Calculate free vars.
                     e.calculate_free_vars();
-                    // Specialize e's type to required type `sym.ty`
-                    e.specialize_type_to(&sym.ty);
-                    opt_e = Some(e);
+                    // Specialize e's type to the required type `sym.ty`.
+                    let mut tc = tc.clone();
+                    assert!(tc.substitution.is_empty());
+                    tc.substitution =
+                        std::mem::replace(&mut e.substitution, Substitution::default());
+                    tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
+                    opt_e = Some(tc.finish_inferred_types(e.expr));
                     break;
                 }
                 opt_e.unwrap()
             }
         };
-        sym.expr = Some(self.instantiate_expr(&typed_expr.substitution, &typed_expr.expr));
-        sym.substitution = typed_expr.substitution;
+        sym.expr = Some(self.instantiate_expr(&expr));
     }
 
     // Instantiate all symbols.
@@ -876,49 +866,49 @@ impl Program {
     }
 
     // Instantiate expression.
-    fn instantiate_expr(&mut self, sub: &Substitution, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+    fn instantiate_expr(&mut self, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
                 if v.name.is_local() {
                     expr.clone()
                 } else {
-                    let ty = sub.substitute_type(&expr.ty.as_ref().unwrap());
-                    let instance = self.require_instantiated_symbol(&v.name, &ty);
+                    let instance =
+                        self.require_instantiated_symbol(&v.name, &expr.ty.as_ref().unwrap());
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
                 }
             }
             Expr::LLVM(_) => expr.clone(),
             Expr::App(fun, args) => {
-                let fun = self.instantiate_expr(sub, fun);
+                let fun = self.instantiate_expr(fun);
                 let args = args
                     .iter()
-                    .map(|arg| self.instantiate_expr(sub, arg))
+                    .map(|arg| self.instantiate_expr(arg))
                     .collect::<Vec<_>>();
                 expr.set_app_func(fun).set_app_args(args)
             }
-            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(sub, body)),
+            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(body)),
             Expr::Let(_, bound, val) => {
-                let bound = self.instantiate_expr(sub, bound);
-                let val = self.instantiate_expr(sub, val);
+                let bound = self.instantiate_expr(bound);
+                let val = self.instantiate_expr(val);
                 expr.set_let_bound(bound).set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.instantiate_expr(sub, cond);
-                let then_expr = self.instantiate_expr(sub, then_expr);
-                let else_expr = self.instantiate_expr(sub, else_expr);
+                let cond = self.instantiate_expr(cond);
+                let then_expr = self.instantiate_expr(then_expr);
+                let else_expr = self.instantiate_expr(else_expr);
                 expr.set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
             Expr::TyAnno(e, _) => {
-                let e = self.instantiate_expr(sub, e);
+                let e = self.instantiate_expr(e);
                 expr.set_tyanno_expr(e)
             }
             Expr::MakeStruct(_, fields) => {
                 let mut expr = expr.clone();
                 for (field_name, field_expr) in fields {
-                    let field_expr = self.instantiate_expr(sub, field_expr);
+                    let field_expr = self.instantiate_expr(field_expr);
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }
                 expr
@@ -926,7 +916,7 @@ impl Program {
             Expr::ArrayLit(elems) => {
                 let mut expr = expr.clone();
                 for (i, e) in elems.iter().enumerate() {
-                    let e = self.instantiate_expr(sub, e);
+                    let e = self.instantiate_expr(e);
                     expr = expr.set_array_lit_elem(e, i);
                 }
                 expr
@@ -934,18 +924,14 @@ impl Program {
             Expr::CallC(_, _, _, _, args) => {
                 let mut expr = expr.clone();
                 for (i, e) in args.iter().enumerate() {
-                    let e = self.instantiate_expr(sub, e);
+                    let e = self.instantiate_expr(e);
                     expr = expr.set_call_c_arg(e, i);
                 }
                 expr
             }
         };
         // If the type of an expression contains undetermied type variable after instantiation, raise an error.
-        if !sub
-            .substitute_type(ret.ty.as_ref().unwrap())
-            .free_vars()
-            .is_empty()
-        {
+        if !ret.ty.as_ref().unwrap().free_vars().is_empty() {
             error_exit_with_src(
                 "The type of an expression cannot be determined. You need to add type annotation to help type inference.",
                 &expr.source,

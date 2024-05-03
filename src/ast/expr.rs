@@ -407,12 +407,44 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_array_lit_elems(&self, elems: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::ArrayLit(_) => {
+                ret.expr = Arc::new(Expr::ArrayLit(elems));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
     pub fn set_call_c_arg(&self, arg: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
         let mut ret = self.clone();
         match &*self.expr {
             Expr::CallC(fun_name, ret_ty, param_tys, is_var_args, args) => {
                 let mut args = args.clone();
                 args[idx] = arg;
+                ret.expr = Arc::new(Expr::CallC(
+                    fun_name.clone(),
+                    ret_ty.clone(),
+                    param_tys.clone(),
+                    *is_var_args,
+                    args,
+                ));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_call_c_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::CallC(fun_name, ret_ty, param_tys, is_var_args, _) => {
                 ret.expr = Arc::new(Expr::CallC(
                     fun_name.clone(),
                     ret_ty.clone(),

@@ -407,7 +407,7 @@ pub struct TypeCheckContext {
     // Collected predicates.
     pub predicates: Vec<Predicate>,
     // Trait environment.
-    trait_env: TraitEnv,
+    pub trait_env: Arc<TraitEnv>,
     // List of type constructors.
     pub type_env: TypeEnv,
     // Kind environment.
@@ -441,8 +441,8 @@ impl TypeCheckContext {
             tyvar_id: Default::default(),
             scope: Default::default(),
             type_env,
-            trait_env,
-            kind_env : Arc::new(kind_env),
+            trait_env: Arc::new(trait_env),
+            kind_env: Arc::new(kind_env),
             import_statements: Arc::new(import_statements),
             current_module: None,
             substitution: Substitution::default(),
@@ -1163,6 +1163,51 @@ impl TypeCheckContext {
         }
         self.predicates.push(pred);
         return Ok(());
+    }
+
+    pub fn finish_inferred_types(&mut self, expr: Arc<ExprNode>) -> Arc<ExprNode> {
+        let ty = self.substitute_type(expr.ty.as_ref().unwrap());
+        let ty = self.reduce_type_by_equality(ty);
+        // eprintln!("finish_inferred_types:");
+        // eprintln!("  ty: {}", ty.to_string());
+        let expr = expr.set_inferred_type(ty);
+        match &*expr.expr {
+            Expr::Var(_) => expr,
+            Expr::LLVM(_) => expr,
+            Expr::App(fun, args) => {
+                let args = args.iter().map(|arg| self.finish_inferred_types(arg.clone())).collect::<Vec<_>>();
+                let fun = self.finish_inferred_types(fun.clone());
+                expr.set_app_func(fun).set_app_args(args)
+            }
+            Expr::Lam(_args, body) => {
+                let body = self.finish_inferred_types(body.clone());
+                expr.set_lam_body(body)
+            }
+            Expr::Let(_pat, val, body) => {
+                let val = self.finish_inferred_types(val.clone());
+                let body = self.finish_inferred_types(body.clone());
+                expr.set_let_bound(val).set_let_value(body)
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                let cond = self.finish_inferred_types(cond.clone());
+                let then_expr = self.finish_inferred_types(then_expr.clone());
+                let else_expr = self.finish_inferred_types(else_expr.clone());
+                expr.set_if_cond(cond).set_if_then(then_expr).set_if_else(else_expr)
+            }
+            Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.finish_inferred_types(e.clone())),
+            Expr::MakeStruct(_tc, fields) => {
+                let fields = fields.iter().map(|(name, e)| (name.clone(), self.finish_inferred_types(e.clone()))).collect::<Vec<_>>();
+                expr.set_make_struct_fields(fields)
+            }
+            Expr::ArrayLit(elems) => {
+                let elems = elems.iter().map(|e| self.finish_inferred_types(e.clone())).collect::<Vec<_>>();
+                expr.set_array_lit_elems(elems)
+            }
+            Expr::CallC(_, _, _, _, args) => {
+                let args = args.iter().map(|arg| self.finish_inferred_types(arg.clone())).collect::<Vec<_>>();
+                expr.set_call_c_args(args)
+            }
+        }
     }
 }
 
