@@ -1011,7 +1011,9 @@ impl TypeCheckContext {
         for _ in 0..2 {
             match &ty1.ty {
                 Type::TyVar(var1) => {
-                    return self.unify_tyvar(var1.clone(), ty2.clone());
+                    if !self.fixed_tyvars.contains(&var1.name) {
+                        return self.unify_tyvar(var1.clone(), ty2.clone());
+                    }
                 }
                 _ => {}
             }
@@ -1082,6 +1084,7 @@ impl TypeCheckContext {
         tyvar1: Arc<TyVar>,
         ty2: Arc<TypeNode>,
     ) -> Result<(), UnificationErr> {
+        assert!(!self.fixed_tyvars.contains(&tyvar1.name));
         match &ty2.ty {
             Type::TyVar(tyvar2) => {
                 if tyvar1.name == tyvar2.name {
@@ -1098,9 +1101,6 @@ impl TypeCheckContext {
             return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
         if tyvar1.kind != ty2.kind(&self.kind_env) {
-            return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
-        }
-        if self.fixed_tyvars.contains(&tyvar1.name) {
             return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
         self.add_substitution(&Substitution::single(&tyvar1.name, ty2.clone()))?;
