@@ -6168,19 +6168,25 @@ pub fn test_import_unknown_namespace() {
 pub fn test_associated_type() {
     let source = r##"
     module Main;
+    import Debug;
 
     trait c : Collects {
         type Elem c;
         empty : Elem c;
+        insert : Elem c -> c -> c;
+        to_array : c -> Array (Elem c);
     }
 
     impl Array a : Collects {
         type Elem (Array a) = a;
         empty = [];
+        insert = |x, xs| xs.push_back(x);
+        to_array = |xs| xs;
     }
 
     main : IO ();
     main = (
+        eval assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);
         pure()
     );
     "##;
