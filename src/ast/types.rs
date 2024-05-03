@@ -18,6 +18,12 @@ impl TyVar {
         ret.kind = kind;
         Arc::new(ret)
     }
+
+    pub fn set_name(&self, name: Name) -> Arc<TyVar> {
+        let mut ret = self.clone();
+        ret.name = name;
+        Arc::new(ret)
+    }
 }
 
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize, Hash)]
@@ -431,7 +437,7 @@ impl TypeNode {
         }
     }
 
-    pub fn is_tycon(self) -> bool {
+    pub fn is_tycon(&self) -> bool {
         match &self.ty {
             Type::TyCon(_) => true,
             _ => false,
@@ -455,13 +461,13 @@ impl TypeNode {
                     if tvs_appear.contains(&tv.name) {
                         false
                     } else {
-                        tvs_appear.insert(tv.name);
+                        tvs_appear.insert(tv.name.clone());
                         true
                     }
                 }
                 Type::TyCon(_) => false,
-                Type::TyApp(fun, arg) => false,
-                Type::FunTy(src, dst) => false,
+                Type::TyApp(_fun, _arg) => false,
+                Type::FunTy(_src, _dst) => false,
                 Type::AssocTy(_, args) => args.iter().all(|arg| is_free_inner(arg, tvs_appear)),
             }
         }
@@ -777,7 +783,7 @@ impl TypeNode {
             Type::AssocTy(_, args) => {
                 let args = args
                     .iter()
-                    .map(|arg| arg.resolve_type_aliases_inner(env, path, entry_typename))
+                    .map(|arg| arg.resolve_type_aliases_inner(env, path.clone(), entry_typename))
                     .collect::<Vec<_>>();
                 self.set_assocty_args(args)
             }
@@ -967,9 +973,9 @@ impl TypeNode {
                 let kind_info = kind_env.assoc_tys.get(&assoc_ty).unwrap().clone();
                 assert_eq!(kind_info.param_kinds.len(), args.len());
                 for i in 0..args.len() {
-                    let expected = kind_info.param_kinds[i];
+                    let expected = &kind_info.param_kinds[i];
                     let found = args[i].kind(kind_env);
-                    if expected != found {
+                    if *expected != found {
                         error_exit_with_src(
                             &format!(
                                 "Kind mismatch. Expected `{}`, found `{}`.",
@@ -1068,7 +1074,7 @@ impl TypeNode {
                     true
                 }
                 Type::TyCon(_) => false,
-                Type::TyApp(fun, arg) => {
+                Type::TyApp(_fun, _arg) => {
                     let app_seq = ty.flatten_type_application();
                     if !app_seq[0].is_tycon() {
                         return false;
@@ -1080,7 +1086,7 @@ impl TypeNode {
                     }
                     true
                 }
-                Type::FunTy(src, dst) => false,
+                Type::FunTy(_src, _dst) => false,
                 Type::AssocTy(_, args) => args
                     .iter()
                     .all(|arg| is_equality_lhs_inner(arg, appeared_type_var)),
@@ -1535,7 +1541,7 @@ impl Scheme {
         // If a kind in `self.vars` is not `*`, then the kind is explicitly specified by user, so we insert it into `scope`.
         for tv in &self.gen_vars {
             if tv.kind != kind_star() {
-                scope.insert(tv.name, tv.kind.clone());
+                scope.insert(tv.name.clone(), tv.kind.clone());
             }
         }
         let res = QualPredicate::extend_kind_scope(
@@ -1618,7 +1624,7 @@ impl Scheme {
             added.insert(tv.name.clone(), tv.kind.clone());
             let org_name = tv.name.clone();
             let gen_name = format!("%g{}", i); // To avoid confliction with user-defined type varible, add prefix %.
-            tv.name = gen_name.clone();
+            *tv = tv.set_name(gen_name.clone());
             s.add_substitution(&Substitution::single(
                 &org_name,
                 type_from_tyvar(tv.clone()),
@@ -1641,10 +1647,10 @@ impl Scheme {
     // Get free type variables.
     pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
         let mut ret = HashMap::default();
-        for p in self.predicates {
+        for p in &self.predicates {
             ret.extend(p.free_vars());
         }
-        for e in self.equalities {
+        for e in &self.equalities {
             ret.extend(e.free_vars());
         }
         ret.extend(self.ty.free_vars());

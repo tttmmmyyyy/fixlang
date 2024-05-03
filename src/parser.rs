@@ -621,7 +621,7 @@ fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Equality {
     let lhs_seq = lhs.flatten_type_application();
     Equality {
         assoc_type: TyAssoc {
-            name: lhs_seq[0].as_tycon().name,
+            name: lhs_seq[0].as_tycon().name.clone(),
         },
         args: lhs_seq[1..].iter().cloned().collect(),
         value: rhs,

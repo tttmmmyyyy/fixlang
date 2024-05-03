@@ -91,9 +91,13 @@ pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
     result
 }
 
-pub fn insert_to_hashmap_vec<K: Clone + Eq + Hash, V>(map: &mut HashMap<K, Vec<V>>, key: &K, elem : V) {
-    if map.contains_key(key) {
-        map[key].push(elem);
+pub fn insert_to_hashmap_vec<K: Clone + Eq + Hash, V>(
+    map: &mut HashMap<K, Vec<V>>,
+    key: &K,
+    elem: V,
+) {
+    if let Some(vec) = map.get_mut(key) {
+        vec.push(elem);
     } else {
         map.insert(key.clone(), vec![elem]);
     }

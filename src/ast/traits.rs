@@ -81,7 +81,7 @@ impl AssocTypeImpl {
         let assoc_ty_name = TyAssoc {
             name: FullName::new(&trait_inst.trait_id().name.to_namespace(), &self.name),
         };
-        let param_kinds = kind_env.assoc_tys.get(&assoc_ty_name).unwrap().param_kinds;
+        let param_kinds = &kind_env.assoc_tys.get(&assoc_ty_name).unwrap().param_kinds;
         if self.params.len() != param_kinds.len() {
             error_exit_with_src(
                 &format!(
@@ -377,7 +377,7 @@ impl QualPredicate {
         for tv in buf {
             for kind_sign in &self.kind_constraints {
                 if tv.name == kind_sign.tyvar {
-                    tv.kind = kind_sign.kind.clone();
+                    *tv = tv.set_kind(kind_sign.kind.clone());
                 }
             }
         }
@@ -452,7 +452,7 @@ impl QualPredicate {
                         ));
                     }
                     for (arg, kind) in args.iter().zip(kind_info.param_kinds.iter()) {
-                        match arg.ty {
+                        match &arg.ty {
                             Type::TyVar(tv) => {
                                 insert(scope, tv.name.clone(), kind.clone())?;
                             }
@@ -473,23 +473,23 @@ impl QualPredicate {
             let kind = kp.kind.clone();
             insert(scope, tyvar, kind)?;
         }
-        for p in preds {
-            let tyvar = match &p.ty.ty {
+        for pred in preds {
+            match &pred.ty.ty {
                 Type::TyVar(tv) => {
-                    let trait_id = &p.trait_id;
+                    let trait_id = &pred.trait_id;
                     if !kind_env.traits_and_aliases.contains_key(trait_id) {
                         panic!("Unknown trait: {}", trait_id.to_string());
                     }
                     let kind = kind_env.traits_and_aliases[trait_id].clone();
-                    insert(scope, tv.name, kind)?;
+                    insert(scope, tv.name.clone(), kind)?;
                 }
                 Type::AssocTy(_, _) => {
-                    extend_by_assoc_ty_application(scope, p.ty.clone(), kind_env)?;
+                    extend_by_assoc_ty_application(scope, pred.ty.clone(), kind_env)?;
                 }
                 _ => {
                     // Do nothing.
                 }
-            };
+            }
         }
         for eq in eqs {
             extend_by_assoc_ty_application(scope, eq.lhs(), kind_env)?;
@@ -559,7 +559,7 @@ impl QualType {
         for tv in buf {
             for kind_sign in &self.kind_signs {
                 if tv.name == kind_sign.tyvar {
-                    tv.kind = kind_sign.kind.clone();
+                    *tv = tv.set_kind(kind_sign.kind.clone());
                 }
             }
         }
@@ -872,8 +872,14 @@ impl TraitEnv {
                 }
             }
         }
-
         let aliases: HashSet<_> = self.aliases.keys().collect();
+        // Prepare TypeCheckContext to use `unify`.
+        let tc = TypeCheckContext::new(
+            TraitEnv::default(),
+            TypeEnv::default(),
+            kind_env,
+            HashMap::new(),
+        );
         // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
@@ -966,13 +972,6 @@ impl TraitEnv {
             }
 
             // Check overlapping instance.
-            // Prepare TypeCheckContext to use `unify`.
-            let mut tc = TypeCheckContext::new(
-                TraitEnv::default(),
-                TypeEnv::default(),
-                kind_env,
-                HashMap::new(),
-            );
             for i in 0..insts.len() {
                 for j in (i + 1)..insts.len() {
                     let inst_i = &insts[i];
@@ -1157,7 +1156,7 @@ impl TraitEnv {
     pub fn assoc_ty_names(&self) -> HashSet<FullName> {
         let mut names = vec![];
         for (trait_id, trait_info) in &self.traits {
-            for (assoc_ty_name, assoc_ty_info) in trait_info.assoc_types {
+            for (assoc_ty_name, _assoc_ty_info) in &trait_info.assoc_types {
                 let assoc_type_namespace = trait_id.name.to_namespace();
                 let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
                 names.push(assoc_type_fullname)
@@ -1169,7 +1168,7 @@ impl TraitEnv {
     pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
         let mut assoc_ty_arity = HashMap::new();
         for (trait_id, trait_info) in &self.traits {
-            for (assoc_ty_name, assoc_ty_info) in trait_info.assoc_types {
+            for (assoc_ty_name, assoc_ty_info) in &trait_info.assoc_types {
                 let assoc_type_namespace = trait_id.name.to_namespace();
                 let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
                 let arity = assoc_ty_info.params.len();
@@ -1182,13 +1181,13 @@ impl TraitEnv {
     pub fn assoc_ty_kind_info(&self) -> HashMap<TyAssoc, AssocTypeKindInfo> {
         let mut assoc_ty_kind_info = HashMap::new();
         for (trait_id, trait_info) in &self.traits {
-            for (assoc_ty_name, assoc_ty_info) in trait_info.assoc_types {
+            for (assoc_ty_name, assoc_ty_info) in &trait_info.assoc_types {
                 let assoc_type_namespace = trait_id.name.to_namespace();
                 let assoc_type = TyAssoc {
                     name: FullName::new(&assoc_type_namespace, &assoc_ty_name),
                 };
                 assoc_ty_kind_info.insert(
-                    assoc_type,
+                    assoc_type.clone(),
                     AssocTypeKindInfo {
                         name: assoc_type,
                         param_kinds: assoc_ty_info.param_kinds(),
@@ -1424,12 +1423,14 @@ impl TraitEnv {
     }
 
     pub fn set_kinds_in_trait_instances(&mut self, kind_env: &KindEnv) {
-        for (trait_id, trait_impls) in &mut self.instances {
+        for (_trait_id, trait_impls) in &mut self.instances {
             for inst in trait_impls {
                 inst.set_kinds_in_qual_pred(kind_env);
-                for (_, assoc_ty_impl) in &mut inst.assoc_types {
-                    assoc_ty_impl.set_kinds(inst, kind_env);
+                let mut assoc_tys = std::mem::replace(&mut inst.assoc_types, HashMap::default());
+                for (_, assoc_ty_impl) in &mut assoc_tys {
+                    assoc_ty_impl.set_kinds(&inst, kind_env);
                 }
+                inst.assoc_types = assoc_tys;
             }
         }
     }

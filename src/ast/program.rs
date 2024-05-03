@@ -233,7 +233,7 @@ impl<'a> NameResolutionContext {
         for name in trait_names_with_aliases {
             insert_or_err(&mut candidates, name.clone(), NameResolutionType::Trait);
         }
-        for (name, arity) in &assoc_ty_to_arity {
+        for (name, _arity) in &assoc_ty_to_arity {
             insert_or_err(&mut candidates, name.clone(), NameResolutionType::AssocTy);
         }
         NameResolutionContext {

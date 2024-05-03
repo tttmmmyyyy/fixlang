@@ -522,6 +522,7 @@ impl TypeCheckContext {
                     self.fixed_tyvars.insert(new_tyvar);
                 }
                 for pred in preds {
+                    let trait_id = pred.trait_id.clone();
                     let qual_pred_scm = QualPredScheme { 
                         gen_vars: vec![],
                         qual_pred: QualPredicate { 
@@ -531,14 +532,15 @@ impl TypeCheckContext {
                             predicate: pred
                         }
                     };
-                    misc::insert_to_hashmap_vec(&mut self.assumed_preds, &pred.trait_id, qual_pred_scm);
+                    misc::insert_to_hashmap_vec(&mut self.assumed_preds, &trait_id, qual_pred_scm);
                 }
                 for eq in eqs {
+                    let assoc_ty = eq.assoc_type.clone();
                     let eq_scm = EqualityScheme {
                         gen_vars: vec![],
                         equality: eq,
                     };
-                    misc::insert_to_hashmap_vec(&mut self.assumed_eqs, &eq.assoc_type, eq_scm);
+                    misc::insert_to_hashmap_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
                 }
             },
             ConstraintInstantiationMode::Ignore => unreachable!(),
@@ -931,7 +933,7 @@ impl TypeCheckContext {
     }
 
     // Reduce a type by replacing associated type to its value.
-    fn reduce_type_by_equality(&self, ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    fn reduce_type_by_equality(&mut self, ty: Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(_) => ty,
             Type::TyCon(_) => ty,
@@ -951,16 +953,17 @@ impl TypeCheckContext {
                 let ty = ty.set_assocty_args(args);
 
                 // Try matching to assumed equality.
-                for assumed_eq in &self.assumed_eqs[assoc_ty] {
-                    // Insstantiate `assumed_eq`.
+                for assumed_eq in &self.assumed_eqs.get(assoc_ty).unwrap().clone() {
+                    // Instantiate `assumed_eq`.
                     let mut subst = Substitution::default();
-                    for tv in assumed_eq.gen_vars {
+                    for tv in &assumed_eq.gen_vars {
                         subst.add_substitution(&Substitution::single(&tv.name, type_tyvar(&self.new_tyvar(), &tv.kind)));
                     }
                     let mut equality = assumed_eq.equality.clone();
                     subst.substitute_equality(&mut equality);
 
                     // Try to match lhs of `equality` to `ty`.
+                    let equality = &assumed_eq.equality;
                     let subst: Option<Substitution> = Substitution::matching(&equality.lhs(), &ty, &self.fixed_tyvars, &self.kind_env);
                     if subst.is_none() {
                         continue;
@@ -1016,11 +1019,11 @@ impl TypeCheckContext {
         }
         // Case: Either is usage of associated type.
         for _ in 0..2 {
-            if let Type::AssocTy(assoc_ty, args) = ty1.ty
+            if let Type::AssocTy(assoc_ty, args) = &ty1.ty
             {
                 let eq = Equality {
-                    assoc_type: assoc_ty,
-                    args,
+                    assoc_type: assoc_ty.clone(),
+                    args:args.clone(),
                     value: ty2.clone(),
                     source: None,
                 };
@@ -1133,10 +1136,10 @@ impl TypeCheckContext {
             return Ok(());
         }
         already_added.insert(pred_str);
-        for qual_pred_scm in self.assumed_preds[&pred.trait_id] {
+        for qual_pred_scm in &self.assumed_preds.get(&pred.trait_id).unwrap().clone() {
             // Instantiate qualified predicate.
             let mut subst = Substitution::default();
-            for tv in qual_pred_scm.gen_vars {
+            for tv in &qual_pred_scm.gen_vars {
                 subst.add_substitution(&Substitution::single(&tv.name, type_tyvar(&self.new_tyvar(), &tv.kind)));
             }
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
