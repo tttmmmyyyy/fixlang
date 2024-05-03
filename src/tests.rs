@@ -6184,9 +6184,17 @@ pub fn test_associated_type() {
         to_array = |xs| xs;
     }
 
+    impl Iterator a : Collects {
+        type Elem (Iterator a) = a;
+        empty = Iterator::empty;
+        insert = |x, xs| xs.push_front(x);
+        to_array = |xs| xs.Iterator::to_array;
+    }
+
     main : IO ();
     main = (
         eval assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);
+        eval assert_eq(|_|"", Iterator::empty.insert(1).insert(2).insert(3).Collects::to_array, [1, 2, 3]);
         pure()
     );
     "##;
