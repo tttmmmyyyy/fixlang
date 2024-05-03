@@ -871,7 +871,7 @@ impl TypeCheckContext {
     }
 
     // Check if expr has type scm.
-    // Returns given AST augmented with inferred information.
+    // Returns given AST set with inferred type.
     pub fn check_type(&mut self, expr: Arc<ExprNode>, expect_scm: Arc<Scheme>) -> Arc<ExprNode> {
         // This function should be called when TypeCheckContext is "fresh".
         assert!(self.substitution.is_empty());
