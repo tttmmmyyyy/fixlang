@@ -6194,7 +6194,7 @@ pub fn test_associated_type() {
     main : IO ();
     main = (
         eval assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);
-        eval assert_eq(|_|"", Iterator::empty.insert(1).insert(2).insert(3).Collects::to_array, [1, 2, 3]);
+        eval assert_eq(|_|"", Iterator::empty.insert(3).insert(2).insert(1).Collects::to_array, [1, 2, 3]);
         pure()
     );
     "##;
