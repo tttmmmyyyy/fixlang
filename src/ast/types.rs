@@ -615,8 +615,8 @@ impl TypeNode {
                             let assoc_ty_name = tc.name;
                             let arity: usize = ctx.assoc_ty_to_arity[&assoc_ty_name];
                             let (_, args) = app_seq.split_at(1);
-                            if args.len() - 1 < arity {
-                                error_exit_with_src("Associated type `{}` has arity `{}`, but supplied `{}` types. All usage of associated type has to be saturated.", &app_seq[0].info.source);
+                            if args.len() < arity {
+                                error_exit_with_src(&format!("Associated type `{}` has arity {}, but supplied {} types. All appearance of associated type has to be saturated.", assoc_ty_name.to_string(), arity, args.len()), &app_seq[0].info.source);
                             }
                             let (assoc_ty_args, following_args) = args.split_at(arity);
                             let assoc_ty_span = args[0].get_source().clone();
