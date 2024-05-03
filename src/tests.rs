@@ -6174,27 +6174,32 @@ pub fn test_associated_type() {
         type Elem c;
         empty : Elem c;
         insert : Elem c -> c -> c;
-        to_array : c -> Array (Elem c);
+        to_iter : c -> Iterator (Elem c);
     }
 
     impl Array a : Collects {
         type Elem (Array a) = a;
         empty = [];
         insert = |x, xs| xs.push_back(x);
-        to_array = |xs| xs;
+        to_iter = |xs| Array::to_iter(xs);
     }
 
     impl Iterator a : Collects {
         type Elem (Iterator a) = a;
         empty = Iterator::empty;
         insert = |x, xs| xs.push_front(x);
-        to_array = |xs| xs.Iterator::to_array;
+        to_iter = |xs| xs;
     }
+
+    extend : [c1 : Collects, c2 : Collects, Elem c1 = Elem c2] c1 -> c2 -> c2;
+    extend = |xs, ys| xs.to_iter.fold(xs, |xs, x| xs.insert(x));
 
     main : IO ();
     main = (
         eval assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);
-        eval assert_eq(|_|"", Iterator::empty.insert(3).insert(2).insert(1).Collects::to_array, [1, 2, 3]);
+        eval assert_eq(|_|"", Iterator::empty.insert(3).insert(2).insert(1).to_array, [1, 2, 3]);
+        eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]), [1, 2, 3, 4, 5, 6]);
+        eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6].Collects::to_iter), [1, 2, 3, 4, 5, 6]);
         pure()
     );
     "##;
