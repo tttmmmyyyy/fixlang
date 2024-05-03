@@ -115,6 +115,7 @@ impl AssocTypeImpl {
 //     pub source: Option<Span>,
 // }
 
+#[derive(Clone)]
 pub struct AssocTypeKindInfo {
     pub name: TyAssoc,
     pub param_kinds: Vec<Arc<Kind>>, // Includes `self`.
@@ -823,7 +824,7 @@ impl TraitEnv {
         res
     }
 
-    pub fn validate(&mut self, kind_map: &HashMap<TyCon, Arc<Kind>>) {
+    pub fn validate(&mut self, kind_env: KindEnv) {
         // Check name confliction of traits and aliases.
         fn create_conflicting_error(env: &TraitEnv, trait_id: &TraitId) {
             let this_src = &env.traits.get(trait_id).unwrap().source;
@@ -886,11 +887,12 @@ impl TraitEnv {
 
                 *inst.trait_id_mut() = trait_id.clone();
 
-                // Check instance is not head-normal-form.
+                // Check instance head.
                 let implemented_ty = &inst.qual_pred.predicate.ty;
-                if !implemented_ty.is_tycon_based() {
+                if !implemented_ty.is_implementable() {
                     error_exit_with_src(
-                        &format!("Implementing trait for type `{}` is not allowed. The head (in this case, `{}`) of a type for which trait is implemented should be a type constructor.", implemented_ty.to_string(), implemented_ty.get_head_string()),&implemented_ty.get_source()
+                        &format!("Implementing trait for type `{}` is not allowed. \
+                        The head (in this case, `{}`) of a type for which trait is implemented should be a type constructor.", implemented_ty.to_string(), implemented_ty.get_head_string()),&implemented_ty.get_source()
                     );
                 }
 
@@ -898,11 +900,8 @@ impl TraitEnv {
                 // NOTE: we are currently require more strong condition: `tv : SomeTrait`.
                 // This is because we don't have "kind inference", so predicate of form `m SomeType` cannot be handled.
                 for ctx in &inst.qual_pred.pred_constraints {
-                    match ctx.ty.ty {
-                        Type::TyVar(_) => {}
-                        _ => {
-                            error_exit_with_src(&format!("Invalid trait bound `{}`. In current Fix, trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.", ctx.to_string_normalize()), &ctx.source);
-                        }
+                    if !ctx.ty.is_tyvar() {
+                        error_exit_with_src(&format!("Invalid trait bound `{}`. In current Fix, trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.", ctx.to_string_normalize()), &ctx.source);
                     }
                 }
 
@@ -956,7 +955,7 @@ impl TraitEnv {
                 if trait_def_id != *instance_def_mod && type_def_id != *instance_def_mod {
                     error_exit_with_src(
                         &format!(
-                            "Implementing trait `{}` for type `{}` in module `{}` is not allowed: You cannot implement an external trait for an external type.",
+                            "Implementing trait `{}` for type `{}` in module `{}` is not allowed: cannot implement an external trait for an external type.",
                             trait_id.to_string(),
                             ty.to_string_normalize(),
                             instance_def_mod.to_string(),
@@ -967,28 +966,31 @@ impl TraitEnv {
             }
 
             // Check overlapping instance.
+            // Prepare TypeCheckContext to use `unify`.
+            let mut tc = TypeCheckContext::new(
+                TraitEnv::default(),
+                TypeEnv::default(),
+                kind_env,
+                HashMap::new(),
+            );
             for i in 0..insts.len() {
                 for j in (i + 1)..insts.len() {
                     let inst_i = &insts[i];
                     let inst_j = &insts[j];
-                    if Substitution::unify(
-                        kind_map,
-                        &inst_i.qual_pred.predicate.ty,
-                        &inst_j.qual_pred.predicate.ty,
-                    )
-                    .is_some()
-                    {
-                        error_exit_with_srcs(
-                            &format!(
-                                "Two trait implementations for `{}` are overlapping.",
-                                trait_id.to_string()
-                            ),
-                            &[
-                                &inst_i.source.as_ref().map(|s| s.to_single_character()),
-                                &inst_j.source.as_ref().map(|s| s.to_single_character()),
-                            ],
-                        );
+                    let mut tc = tc.clone();
+                    if tc.unify(&inst_i.impl_type(), &inst_j.impl_type()).is_err() {
+                        continue;
                     }
+                    error_exit_with_srcs(
+                        &format!(
+                            "Two trait implementations for `{}` are overlapping.",
+                            trait_id.to_string()
+                        ),
+                        &[
+                            &inst_i.source.as_ref().map(|s| s.to_single_character()),
+                            &inst_j.source.as_ref().map(|s| s.to_single_character()),
+                        ],
+                    );
                 }
             }
         }

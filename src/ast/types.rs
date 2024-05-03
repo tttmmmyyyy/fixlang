@@ -387,25 +387,41 @@ impl TypeNode {
     }
 
     // Is this type head normal form? i.e., begins with type variable.
-    pub fn is_hnf(&self) -> bool {
+    // pub fn is_hnf(&self) -> bool {
+    //     match &self.ty {
+    //         Type::TyVar(_) => true,
+    //         Type::TyCon(_) => false,
+    //         Type::TyApp(head, _) => head.is_hnf(),
+    //         Type::FunTy(_, _) => false,
+    //         Type::AssocTy(_, args) => args[0].is_hnf(),
+    //     }
+    // }
+
+    // Is this type constructed from type constructor, not
+    pub fn is_assoc_ty_free(&self) -> bool {
         match &self.ty {
             Type::TyVar(_) => true,
-            Type::TyCon(_) => false,
-            Type::TyApp(head, _) => head.is_hnf(),
-            Type::FunTy(_, _) => false,
-            Type::AssocTy(_, args) => args[0].is_hnf(),
+            Type::TyCon(_) => true,
+            Type::TyApp(head, _) => head.is_assoc_ty_free(),
+            Type::FunTy(src, dst) => src.is_assoc_ty_free() && dst.is_assoc_ty_free(),
+            Type::AssocTy(_, _) => false,
         }
     }
 
-    // Is this type constructor based?
-    pub fn is_tycon_based(&self) -> bool {
+    // Is head of this type type constructor?
+    fn is_head_tycon(&self) -> bool {
         match &self.ty {
             Type::TyVar(_) => false,
             Type::TyCon(_) => true,
-            Type::TyApp(head, _) => head.is_tycon_based(),
+            Type::TyApp(head, _) => head.is_head_tycon(),
             Type::FunTy(_, _) => true,
             Type::AssocTy(_, _) => false,
         }
+    }
+
+    // Is this type can be instance head of trait?
+    pub fn is_implementable(&self) -> bool {
+        self.is_head_tycon() && self.is_assoc_ty_free()
     }
 
     pub fn is_tyvar(&self) -> bool {
@@ -1657,7 +1673,7 @@ impl Scheme {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct KindEnv {
     pub tycons: HashMap<TyCon, Arc<Kind>>,
     pub assoc_tys: HashMap<TyAssoc, AssocTypeKindInfo>,

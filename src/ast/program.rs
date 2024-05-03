@@ -63,7 +63,8 @@ impl InstantiatedSymbol {
         // Even for implemented trait methods, it is enough to add the module where the trait is defined and the modules where the types of the symbol are defined.
         // This is because,
         // - By orphan rule, trait implementations are given in the module where the trait is defined, or the module where the type is defined.
-        // - Moreover, we forbid unrelated trait implementation (see `test_unrelated_trait_method()`), so the type the trait is implemented appears in the type of the symbol.
+        // - Moreover, we forbid unrelated trait implementation (see `test_unrelated_trait_method()`),
+        // so the type the trait is implemented appears in the type of the symbol.
     }
 }
 
@@ -303,9 +304,9 @@ pub enum NameResolutionType {
 impl NameResolutionType {
     pub fn to_string(&self) -> &'static str {
         match self {
-            TyCon => "type",
-            Trait => "trait",
-            AssocTy => "associated type",
+            NameResolutionType::TyCon => "type",
+            NameResolutionType::Trait => "trait",
+            NameResolutionType::AssocTy => "associated type",
         }
     }
 }
@@ -1130,8 +1131,7 @@ impl Program {
     }
 
     pub fn validate_trait_env(&mut self) {
-        let kind_map = self.type_env.kinds();
-        self.trait_env.validate(&kind_map);
+        self.trait_env.validate(self.kind_env());
     }
 
     pub fn add_methods(self: &mut Program) {

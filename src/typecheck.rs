@@ -1143,28 +1143,23 @@ impl TypeCheckContext {
             subst.substitute_qualpred(&mut qual_pred);
 
             //  Try to match head of `qual_pred` to `pred`.
-            if let Some(s) = Substitution::matching(&qual_pred.predicate.ty, &pred.ty, &self.fixed_tyvars, &self.kind_env) {
-                for eq in qual_pred.eq_constraints {
-                    let mut eq = eq.clone();
+            if let Some(subst) = Substitution::matching(&qual_pred.predicate.ty, &pred.ty, &self.fixed_tyvars, &self.kind_env) {
+                for mut eq in qual_pred.eq_constraints {
+                    subst.substitute_equality(&mut eq);
                     self.add_equality(eq)?;
                 }
-                let preds = qual_pred.pred_constraints.iter().map(|pred| {
-                    let mut pred = pred.clone();
-                    self.substitute_predicate(&mut pred);
-                    pred
-                }).collect::<Vec<_>>();
-                for pred in preds {
+                for mut pred in qual_pred.pred_constraints { 
+                    subst.substitute_predicate(&mut pred);
                     self.add_predicate_reducing(pred, already_added)?;
                 }
                 return Ok(());
             }
         }
-        if pred.ty.is_tycon_based() {
+        if pred.ty.is_assoc_ty_free() && pred.ty.free_vars().is_empty() { // If there is no hope to reduce the type further,
             return Err(UnificationErr::Unsatisfiable(pred));
-        } else {
-            self.predicates.push(pred);
-            return Ok(());
         }
+        self.predicates.push(pred);
+        return Ok(());
     }
 }
 
