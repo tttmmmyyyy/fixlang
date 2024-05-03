@@ -252,7 +252,7 @@ impl<'a> NameResolutionContext {
             .iter()
             .map(|nrt| nrt.to_string())
             .collect::<Vec<_>>()
-            .join(", ");
+            .join(" or ");
         let candidates = self
             .candidates
             .iter()
@@ -270,7 +270,7 @@ impl<'a> NameResolutionContext {
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
             Err(format!(
-                "Unknown `{}` name `{}`.",
+                "Unknown {} name `{}`.",
                 accept_type_string,
                 short_name.to_string()
             ))
