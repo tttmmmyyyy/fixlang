@@ -12,8 +12,6 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_symbols, Default::default());
     for (sym_name, sym) in syms {
-        let typeresolver = &sym.substitution;
-
         fix_mod
             .instantiated_symbols
             .insert(sym_name.clone(), sym.clone());
@@ -23,7 +21,6 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
             let mut expr = funptr_lambda(
                 &sym.generic_name,
                 sym.expr.as_ref().unwrap(),
-                typeresolver,
                 arg_cnt as usize,
             );
             if expr.is_none() {
@@ -42,7 +39,6 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
                     generic_name: generic_name,
                     ty,
                     expr: Some(expr.clone()),
-                    substitution: sym.substitution.clone(),
                 },
             );
         }
@@ -54,11 +50,8 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
         symbol_names.insert(name.clone());
     }
     for (_name, sym) in &mut fix_mod.instantiated_symbols {
-        let expr = replace_closure_call_to_funptr_call_subexprs(
-            sym.expr.as_ref().unwrap(),
-            &symbol_names,
-            &sym.substitution,
-        );
+        let expr =
+            replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
         let expr = calculate_free_vars(expr);
         sym.expr = Some(expr);
     }
@@ -84,14 +77,13 @@ pub fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
 fn funptr_lambda(
     generic_name: &FullName,
     expr: &Arc<ExprNode>,
-    substitution: &Substitution, // for resolving types of expr
     vars_count: usize,
 ) -> Option<Arc<ExprNode>> {
     if exclude(generic_name) {
         return None;
     }
 
-    let expr_type = substitution.substitute_type(expr.ty.as_ref().unwrap());
+    let expr_type = expr.ty.as_ref().unwrap();
     if expr_type.is_funptr() {
         return None;
     }
@@ -105,10 +97,7 @@ fn funptr_lambda(
 
     // Collect types of argments.
     let (arg_types, body_ty) = collect_app_src(&expr_type, vars_count);
-    assert_eq!(
-        substitution.substitute_type(body.ty.as_ref().unwrap()),
-        body_ty
-    );
+    assert_eq!(*body.ty.as_ref().unwrap(), body_ty);
 
     // Construct function pointer.
     let funptr_ty = type_funptr(arg_types, body_ty);
@@ -180,10 +169,9 @@ fn collect_app_src(ty: &Arc<TypeNode>, vars_limit: usize) -> (Vec<Arc<TypeNode>>
 fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
-    substitution: &Substitution,
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
-    let fun_ty = substitution.substitute_type(fun.ty.as_ref().unwrap());
+    let fun_ty = fun.ty.as_ref().unwrap();
     if fun_ty.is_funptr() {
         return expr.clone();
     }
@@ -221,70 +209,37 @@ fn replace_closure_call_to_funptr_call(
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
-    substitution: &Substitution,
 ) -> Arc<ExprNode> {
-    let expr = replace_closure_call_to_funptr_call(expr, symbols, substitution);
+    let expr = replace_closure_call_to_funptr_call(expr, symbols);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::LLVM(_) => expr.clone(),
         Expr::App(fun, args) => {
             let args = args
                 .iter()
-                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbols, substitution))
+                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbols))
                 .collect();
-            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(
-                fun,
-                symbols,
-                substitution,
-            ))
-            .set_app_args(args)
+            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(fun, symbols))
+                .set_app_args(args)
         }
-        Expr::Lam(_, val) => expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(
-            val,
-            symbols,
-            substitution,
-        )),
+        Expr::Lam(_, val) => {
+            expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(val, symbols))
+        }
         Expr::Let(_, bound, val) => expr
-            .set_let_bound(replace_closure_call_to_funptr_call_subexprs(
-                bound,
-                symbols,
-                substitution,
-            ))
-            .set_let_value(replace_closure_call_to_funptr_call_subexprs(
-                val,
-                symbols,
-                substitution,
-            )),
+            .set_let_bound(replace_closure_call_to_funptr_call_subexprs(bound, symbols))
+            .set_let_value(replace_closure_call_to_funptr_call_subexprs(val, symbols)),
         Expr::If(c, t, e) => expr
-            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(
-                c,
-                symbols,
-                substitution,
-            ))
-            .set_if_then(replace_closure_call_to_funptr_call_subexprs(
-                t,
-                symbols,
-                substitution,
-            ))
-            .set_if_else(replace_closure_call_to_funptr_call_subexprs(
-                e,
-                symbols,
-                substitution,
-            )),
-        Expr::TyAnno(e, _) => expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(
-            e,
-            symbols,
-            substitution,
-        )),
+            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(c, symbols))
+            .set_if_then(replace_closure_call_to_funptr_call_subexprs(t, symbols))
+            .set_if_else(replace_closure_call_to_funptr_call_subexprs(e, symbols)),
+        Expr::TyAnno(e, _) => {
+            expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(e, symbols))
+        }
         Expr::MakeStruct(_, fields) => {
             let fields = fields.clone();
             let mut expr = expr;
             for (field_name, field_expr) in fields {
-                let field_expr = replace_closure_call_to_funptr_call_subexprs(
-                    &field_expr,
-                    symbols,
-                    substitution,
-                );
+                let field_expr = replace_closure_call_to_funptr_call_subexprs(&field_expr, symbols);
                 expr = expr.set_make_struct_field(&field_name, field_expr);
             }
             expr
@@ -292,20 +247,16 @@ fn replace_closure_call_to_funptr_call_subexprs(
         Expr::ArrayLit(elems) => {
             let mut expr = expr.clone();
             for (i, e) in elems.iter().enumerate() {
-                expr = expr.set_array_lit_elem(
-                    replace_closure_call_to_funptr_call_subexprs(e, symbols, substitution),
-                    i,
-                )
+                expr = expr
+                    .set_array_lit_elem(replace_closure_call_to_funptr_call_subexprs(e, symbols), i)
             }
             expr
         }
         Expr::CallC(_, _, _, _, args) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
-                expr = expr.set_call_c_arg(
-                    replace_closure_call_to_funptr_call_subexprs(e, symbols, substitution),
-                    i,
-                )
+                expr =
+                    expr.set_call_c_arg(replace_closure_call_to_funptr_call_subexprs(e, symbols), i)
             }
             expr
         }

@@ -47,8 +47,6 @@ pub struct InstantiatedSymbol {
     pub generic_name: FullName,
     pub ty: Arc<TypeNode>,
     pub expr: Option<Arc<ExprNode>>,
-    // substitution for types in expr.
-    pub substitution: Substitution,
 }
 
 impl InstantiatedSymbol {
@@ -954,7 +952,6 @@ impl Program {
                 generic_name: name.clone(),
                 ty: ty.clone(),
                 expr: None,
-                substitution: Substitution::default(), // This field will be set in the end of instantiation.
             });
         }
         inst_name

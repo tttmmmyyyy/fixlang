@@ -298,7 +298,6 @@ pub struct GenerationContext<'c, 'm> {
     debug_scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>, // None implies that currently generating codes for function whose source is unknown.
     debug_location: Vec<Option<Span>>, // None implies that currently generating codes for function whose source is unknown.
     pub global: HashMap<FullName, Variable<'c>>,
-    pub substitution: Substitution, // Should be unnecessary.
     type_env: TypeEnv,
     pub target_data: TargetData,
     pub config: Configuration,
@@ -420,7 +419,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             debug_info: Default::default(),
             debug_location: vec![],
             global: Default::default(),
-            substitution: Default::default(),
             type_env,
             target_data: target_data,
             config,
@@ -1224,8 +1222,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate expression.
     pub fn eval_expr(&mut self, expr: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
-        let expr =
-            expr.set_inferred_type(self.substitution.substitute_type(&expr.ty.clone().unwrap()));
         assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
 
         if self.has_di() {
@@ -2062,8 +2058,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     pub fn declare_symbol(&mut self, sym: &InstantiatedSymbol) -> FunctionValue<'c> {
         let name = &sym.instantiated_name;
-        self.substitution = sym.substitution.clone();
-        let obj_ty = sym.substitution.substitute_type(&sym.ty);
+        let obj_ty = &sym.ty;
         if obj_ty.is_funptr() {
             // Declare lambda function.
             let lam = sym.expr.as_ref().unwrap().clone();
@@ -2104,13 +2099,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             ));
         }
 
-        self.substitution = sym.substitution.clone();
-        let obj_ty = sym.substitution.substitute_type(&sym.ty);
+        let obj_ty = &sym.ty;
         if obj_ty.is_funptr() {
             // Implement lambda function.
             let lam_fn = sym_fn;
             let lam = sym.expr.as_ref().unwrap().clone();
-            let lam = lam.set_inferred_type(obj_ty);
+            let lam = lam.set_inferred_type(obj_ty.clone());
             self.implement_lambda_function(lam, lam_fn, None);
         } else {
             // Prepare global variable to store the initialized global value.
