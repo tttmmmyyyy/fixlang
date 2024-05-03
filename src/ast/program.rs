@@ -512,9 +512,9 @@ impl Program {
         res
     }
 
-    pub fn assoc_ty_names(&self) -> HashSet<FullName> {
-        self.trait_env.assoc_ty_names()
-    }
+    // pub fn assoc_ty_names(&self) -> HashSet<FullName> {
+    //     self.trait_env.assoc_ty_names()
+    // }
 
     pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
         self.trait_env.assoc_ty_to_arity()

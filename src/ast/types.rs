@@ -455,7 +455,7 @@ impl TypeNode {
     // - It is a type variable, or associated type application with free type arguments, and
     // - All type variables that appear in the type are distinct.
     pub fn is_free(&self) -> bool {
-        pub fn is_free_inner(ty: &TypeNode, tvs_appear: &mut HashSet<Name>) -> bool {
+        fn is_free_inner(ty: &TypeNode, tvs_appear: &mut HashSet<Name>) -> bool {
             match &ty.ty {
                 Type::TyVar(tv) => {
                     if tvs_appear.contains(&tv.name) {

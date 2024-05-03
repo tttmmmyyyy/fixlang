@@ -731,16 +731,19 @@ impl Equality {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.assoc_type.resolve_namespace(ctx);
+        let result = self.assoc_type.resolve_namespace(ctx);
+        if result.is_err() {
+            error_exit_with_src(&result.unwrap_err(), &self.source)
+        }
         for arg in &mut self.args {
             *arg = arg.resolve_namespace(ctx);
         }
         self.value = self.value.resolve_namespace(ctx);
     }
 
-    pub fn is_all_args_tyvar(&self) -> bool {
-        self.args.iter().all(|arg| arg.is_tyvar())
-    }
+    // pub fn is_all_args_tyvar(&self) -> bool {
+    //     self.args.iter().all(|arg| arg.is_tyvar())
+    // }
 
     pub fn to_string(&self) -> String {
         format!("{} = {}", self.lhs().to_string(), self.value.to_string())
@@ -766,12 +769,12 @@ impl Equality {
         type_assocty(self.assoc_type.clone(), self.args.clone())
     }
 
-    pub fn trait_id(&self) -> TraitId {
-        let mut names = self.assoc_type.name.namespace.names.clone();
-        let name = names.pop().unwrap();
-        let namespace = NameSpace::new(names);
-        TraitId::from_fullname(FullName::new(&namespace, &name))
-    }
+    // pub fn trait_id(&self) -> TraitId {
+    //     let mut names = self.assoc_type.name.namespace.names.clone();
+    //     let name = names.pop().unwrap();
+    //     let namespace = NameSpace::new(names);
+    //     TraitId::from_fullname(FullName::new(&namespace, &name))
+    // }
 
     // Returns the predicate to reduce this equality.
     // pub fn predicate(&self) -> Predicate {
@@ -1125,9 +1128,28 @@ impl TraitEnv {
         self.aliases.insert(alias.id.clone(), alias);
     }
 
+    pub fn qualified_predicates(&self) -> HashMap<TraitId, Vec<QualPredScheme>> {
+        let mut qps = HashMap::default();
+        for (trait_id, insts) in &self.instances {
+            for inst in insts {
+                let mut vars = vec![];
+                inst.qual_pred.free_vars_vec(&mut vars);
+                misc::insert_to_hashmap_vec(
+                    &mut qps,
+                    trait_id,
+                    QualPredScheme {
+                        gen_vars: vars,
+                        qual_pred: inst.qual_pred.clone(),
+                    },
+                );
+            }
+        }
+        qps
+    }
+
     // From implementation of associated types, get generalized type equalities.
-    pub fn type_equalities(&self) -> Vec<EqualityScheme> {
-        let mut eq_scms = vec![];
+    pub fn type_equalities(&self) -> HashMap<TyAssoc, Vec<EqualityScheme>> {
+        let mut eq_scms = HashMap::default();
         for (trait_id, insts) in &self.instances {
             for inst in insts {
                 for (assoc_type_name, assoc_type_impl) in &inst.assoc_types {
@@ -1146,24 +1168,28 @@ impl TraitEnv {
                         value: assoc_type_impl.value.clone(),
                         source: assoc_type_impl.source.clone(),
                     };
-                    eq_scms.push(equality.generalize())
+                    misc::insert_to_hashmap_vec(
+                        &mut eq_scms,
+                        &equality.assoc_type,
+                        equality.generalize(),
+                    );
                 }
             }
         }
         eq_scms
     }
 
-    pub fn assoc_ty_names(&self) -> HashSet<FullName> {
-        let mut names = vec![];
-        for (trait_id, trait_info) in &self.traits {
-            for (assoc_ty_name, _assoc_ty_info) in &trait_info.assoc_types {
-                let assoc_type_namespace = trait_id.name.to_namespace();
-                let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
-                names.push(assoc_type_fullname)
-            }
-        }
-        names.into_iter().collect::<HashSet<_>>()
-    }
+    // pub fn assoc_ty_names(&self) -> HashSet<FullName> {
+    //     let mut names = vec![];
+    //     for (trait_id, trait_info) in &self.traits {
+    //         for (assoc_ty_name, _assoc_ty_info) in &trait_info.assoc_types {
+    //             let assoc_type_namespace = trait_id.name.to_namespace();
+    //             let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
+    //             names.push(assoc_type_fullname)
+    //         }
+    //     }
+    //     names.into_iter().collect::<HashSet<_>>()
+    // }
 
     pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
         let mut assoc_ty_arity = HashMap::new();

@@ -435,6 +435,8 @@ impl TypeCheckContext {
         kind_env: KindEnv,
         import_statements: HashMap<Name, Vec<ImportStatement>>,
     ) -> Self {
+        let assumed_preds = trait_env.qualified_predicates();
+        let assumed_eqs = trait_env.type_equalities();
         Self {
             tyvar_id: Default::default(),
             scope: Default::default(),
@@ -446,8 +448,8 @@ impl TypeCheckContext {
             substitution: Substitution::default(),
             predicates: vec![],
             equalities: vec![],
-            assumed_preds: HashMap::default(),
-            assumed_eqs: HashMap::default(),
+            assumed_preds,
+            assumed_eqs,
             fixed_tyvars: HashSet::default(),
         }
     }
@@ -915,7 +917,7 @@ impl TypeCheckContext {
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnificationErr> {
         self.substitution.add_substitution(subst);
         let eqs = std::mem::replace(&mut self.equalities, vec![]);
-        for mut eq in eqs {
+        for eq in eqs {
             self.add_equality(eq)?;
         }
         Ok(())
@@ -985,7 +987,7 @@ impl TypeCheckContext {
         ty2: &Arc<TypeNode>,
     ) -> Result<(), UnificationErr> {
         let mut cloned_self = self.clone();
-        match cloned_self.unify_rollback_if_err(ty1, ty2) {
+        match cloned_self.unify(ty1, ty2) {
             Ok(_) => {
                 *self = cloned_self;
                 return Ok(());
@@ -1103,7 +1105,7 @@ impl TypeCheckContext {
         if self.fixed_tyvars.contains(&tyvar1.name) {
             return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2));
         }
-        self.add_substitution(&Substitution::single(&tyvar1.name, ty2.clone()));
+        self.add_substitution(&Substitution::single(&tyvar1.name, ty2.clone()))?;
         Ok(())
     }
 
@@ -1119,7 +1121,7 @@ impl TypeCheckContext {
     }
 
     // Add a predicate after reducing it.
-    fn add_predicate_reducing(&mut self, mut pred : Predicate, already_added: &mut HashSet<Name>) -> Result<(), UnificationErr> {
+    fn add_predicate_reducing(&mut self, pred : Predicate, already_added: &mut HashSet<Name>) -> Result<(), UnificationErr> {
         for pred in pred.resolve_trait_aliases(&self.trait_env) {
             self.add_predicate_reducing_noalias(pred, already_added)?;
         }
