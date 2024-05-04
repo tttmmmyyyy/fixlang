@@ -524,10 +524,11 @@ fn parse_global_value_decl(pair: Pair<Rule>, ctx: &mut ParseContext) -> GlobalVa
     let name = pairs.next().unwrap().as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx);
     let preds = qual_type.preds.clone();
+    let eqs = qual_type.eqs.clone();
     let ty = qual_type.ty.clone();
     GlobalValueDecl {
         name: FullName::new(&ctx.namespace, &name),
-        ty: Scheme::generalize(ty.free_vars_vec(), preds, vec![], ty),
+        ty: Scheme::generalize(ty.free_vars_vec(), preds, eqs, ty),
         src: Some(span),
     }
 }
