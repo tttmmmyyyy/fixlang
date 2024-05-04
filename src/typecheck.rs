@@ -243,18 +243,23 @@ impl Substitution {
                 // We do not use `unify_tyvar` here:
                 // `unify_tyvar` avoids adding circular substitution, but `matching` SHOULD not avoid it.
                 // For example, consider `ty1 = t0 -> t0`, `ty2 = t1 -> t0`.
-                // There is not substitution `s` such that `s(ty1) = ty2`, so we should return None.
+                // There is no substitution `s` such that `s(ty1) = ty2`, so we should return None.
                 // If we use `unify_tyvar`, it returns `{t0 -> t1}`, because
                 // - `unify_tyvar` returns `{t0 -> t1}` when trying to unify the domains of `ty1` and `ty2`.
                 // - `unify_tyvar` returns `{}` (empty substitution) when trying to unify the codomains of `ty1` and `ty2`.
                 // - `{t0 -> t1}` and `{}` can be merged to `{t0 -> t1}`.
-                //
-                // (And this implementation is the same as one in "Typing Haskell in Haskell".)
-                if !fixed_tyvars.contains(&v1.name) && ty1.kind(kind_env) == ty2.kind(kind_env) {
-                    Some(Self::single(&v1.name, ty2.clone()))
-                } else {
-                    None
+                // And this implementation of mathcing is the same as one in "Typing Haskell in Haskell".
+                if ty1.kind(kind_env) != ty2.kind(kind_env) {
+                    return None;
                 }
+                if fixed_tyvars.contains(&v1.name) {
+                    if ty1.to_string() == ty2.to_string() {
+                        return Some(Self::default());
+                    } else {
+                        return None;
+                    }
+                }
+                Some(Self::single(&v1.name, ty2.clone()))
             }
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
