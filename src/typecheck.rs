@@ -903,6 +903,16 @@ impl TypeCheckContext {
                 ), &expr.source
             );
         }
+        if self.predicates.len() > 0 {
+            let pred = &self.predicates[0];
+            error_exit_with_src(
+                &format!(
+                    "Condition `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    pred.to_string()
+                ),
+                &expr.source,
+            );
+        }
         if self.equalities.len() > 0 {
             let eq = &self.equalities[0];
             error_exit_with_src(
