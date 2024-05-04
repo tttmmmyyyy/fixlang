@@ -1710,6 +1710,9 @@ impl Scheme {
         for p in &mut res.predicates {
             p.resolve_namespace(ctx);
         }
+        for eq in &mut res.equalities {
+            eq.resolve_namespace(ctx);
+        }
         res.ty = res.ty.resolve_namespace(ctx);
         Arc::new(res)
     }
