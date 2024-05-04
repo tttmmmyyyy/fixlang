@@ -1242,7 +1242,7 @@ impl UnificationErr {
                 p.to_string()
             },
             UnificationErr::Disjoint(ty1, ty2) => {
-                format!("`{}` == `{}`", ty1.to_string(), ty2.to_string())
+                format!("`{}` = `{}`", ty1.to_string(), ty2.to_string())
             },
         }
     }
