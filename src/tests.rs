@@ -6206,7 +6206,7 @@ pub fn test_associated_type_collects() {
     type Wrapper c = struct { data : c };
 
     impl [c : Collects, Elem c : ToString] Wrapper c : ToString {
-        to_string = |xs| xs.to_iter.map(to_string).join(", ");
+        to_string = |xs| xs.@data.to_iter.map(to_string).join(", ");
     }
 
     main : IO ();

@@ -509,7 +509,7 @@ impl TypeCheckContext {
             }
             _ => {}
         }
-        let mut preds = scheme.predicates.clone();
+        let mut preds = scheme.predicates.iter().map(|pred| pred.resolve_trait_aliases(&self.trait_env).into_iter()).flatten().collect::<Vec<_>>();
         for p in &mut preds {
             sub.substitute_predicate(p);
         }
@@ -1052,15 +1052,9 @@ impl TypeCheckContext {
 
         // Other case.
         match &ty1.ty {
-            Type::TyVar(tv1) => {
-                match &ty2.ty {
-                    Type::TyVar(tv2) => {
-                        assert!(self.fixed_tyvars.contains(&tv1.name) && self.fixed_tyvars.contains(&tv2.name));
-                        return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()));
-                    }
-                    _ => {}
-                }
-                unreachable!();
+            Type::TyVar(_) => {
+                // If the code reaches here, `ty1` is a fixed type variable, and `ty1` is not equal to `ty2`.
+                return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()));
             },
             Type::AssocTy(_, _) => unreachable!(),
             Type::TyCon(tc1) => match &ty2.ty {
@@ -1160,6 +1154,7 @@ impl TypeCheckContext {
             return Ok(());
         }
         already_added.insert(pred_str);
+        let mut unifiable = false;
         for qual_pred_scm in &self.assumed_preds.get(&pred.trait_id).unwrap().clone() {
             // Instantiate qualified predicate.
             let mut subst = Substitution::default();
@@ -1169,7 +1164,7 @@ impl TypeCheckContext {
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
             subst.substitute_qualpred(&mut qual_pred);
 
-            //  Try to match head of `qual_pred` to `pred`.
+            // Try to match head of `qual_pred` to `pred`.
             if let Some(subst) = Substitution::matching(&qual_pred.predicate.ty, &pred.ty, &self.fixed_tyvars, &self.kind_env) {
                 for mut eq in qual_pred.eq_constraints {
                     subst.substitute_equality(&mut eq);
@@ -1180,9 +1175,17 @@ impl TypeCheckContext {
                     self.add_predicate_reducing(pred, already_added)?;
                 }
                 return Ok(());
+            } else {
+                // If match fails, then we cannot reduce the predicate at now.
+                // But we may be able to reduce it after the predicate is substituted further.
+                // To see if there is possibility for further reduction, we check here the unifiability.
+                let mut tc = self.clone();
+                if tc.unify(&qual_pred.predicate.ty, &pred.ty).is_ok() {
+                    unifiable = true;
+                }
             }
         }
-        if pred.ty.is_assoc_ty_free() && pred.ty.free_vars().is_empty() { // If there is no hope to reduce the type further,
+        if !unifiable {
             return Err(UnificationErr::Unsatisfiable(pred));
         }
         self.predicates.push(pred);
