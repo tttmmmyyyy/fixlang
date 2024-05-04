@@ -32,9 +32,6 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     // Calculate list of type constructors.
     program.calculate_type_env();
 
-    // Check if there is a name collision between types and traits.
-    program.validate_type_and_trait_name_collision();
-
     // Infer namespaces of traits and types that appear in declarations (not in expressions).
     program.resolve_namespace_in_declaration();
 
@@ -52,6 +49,9 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
     // Create symbols.
     program.create_trait_method_symbols();
+
+    // Validate constraints of global value type.
+    program.validate_global_value_types();
 
     // Check if all items referred in import statements are defined.
     // This check should be done after `add_methods` and `create_trait_method_symbols`.

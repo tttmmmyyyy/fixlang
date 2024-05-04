@@ -202,8 +202,10 @@ impl<'a> NameResolutionContext {
             nrt: NameResolutionType,
         ) {
             if candidates.contains_key(&name) && candidates[&name] != nrt {
+                // If there is confliction between type names, trait names and associated type names, raise an error.
+                // This restriction is necessary for namespace resolution and avoiding ambiguous import statement.
                 error_exit(&format!(
-                    "There are two names defined `{}`: one is `{}` and one is `{}`.",
+                    "There are two entities named as `{}`: one is a {} and one is a {}.",
                     name.to_string(),
                     candidates[&name].to_string(),
                     nrt.to_string()
@@ -502,19 +504,6 @@ impl Program {
 
     pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
         self.trait_env.assoc_ty_to_arity()
-    }
-
-    // Get of list of tycons that can be used for namespace resolution.
-    pub fn tycon_names_with_aliases_vec(&self) -> Vec<FullName> {
-        let mut res: Vec<FullName> = Default::default();
-        res.reserve_exact(self.type_env.tycons.len() + self.type_env.aliases.len());
-        for (k, _) in self.type_env().tycons.iter() {
-            res.push(k.name.clone());
-        }
-        for (k, _) in self.type_env().aliases.iter() {
-            res.push(k.name.clone());
-        }
-        res
     }
 
     // Get of list of traits that can be used for namespace resolution.
@@ -998,6 +987,20 @@ impl Program {
         }
     }
 
+    pub fn validate_global_value_types(&self) {
+        for (_name, gv) in &self.global_values {
+            gv.scm.validate_constraints();
+            match gv.expr {
+                SymbolExpr::Simple(ref _e) => {}
+                SymbolExpr::Method(ref impls) => {
+                    for impl_ in impls {
+                        impl_.ty.validate_constraints();
+                    }
+                }
+            }
+        }
+    }
+
     pub fn set_kinds(&mut self) {
         self.trait_env.set_kinds_in_trait_and_alias_defns();
         let kind_env = self.kind_env();
@@ -1356,21 +1359,6 @@ impl Program {
             mod_to_hash.insert(module.clone(), self.module_dependency_hash(&module));
         }
         mod_to_hash
-    }
-
-    pub fn validate_type_and_trait_name_collision(&self) {
-        // In fact, this validation is not necessary for almost all behavior of Fix;
-        // This is effective only for avoiding ambiguous import statement.
-        let type_names = self.tycon_names_with_aliases_vec();
-        let trait_names = self.trait_names_with_aliases();
-        for ty_name in type_names {
-            if trait_names.contains(&ty_name) {
-                error_exit(&format!(
-                    "Type and trait cannot have the same name: `{}`.",
-                    ty_name.to_string()
-                ));
-            }
-        }
     }
 
     // Check if all items referred in import statements are defined.

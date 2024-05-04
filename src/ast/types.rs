@@ -1516,6 +1516,27 @@ pub struct Scheme {
 }
 
 impl Scheme {
+    pub fn validate_constraints(&self) {
+        for pred in &self.predicates {
+            if !pred.ty.is_free() {
+                error_exit_with_src(
+                    "Trait constraint is only allowed on a free type. \
+                    Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
+                    &pred.source,
+                );
+            }
+        }
+        for eq in &self.equalities {
+            if !eq.lhs().is_free() {
+                error_exit_with_src(
+                    "Equality constraint is only allowed on free types. \
+                    Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
+                    &eq.source,
+                );
+            }
+        }
+    }
+
     pub fn to_string(&self) -> String {
         // Change names of generalized type variables to t0, t1, ...
         let free_vars = self.free_vars();
@@ -1650,9 +1671,6 @@ impl Scheme {
         mut eqs: Vec<Equality>,
         ty: Arc<TypeNode>,
     ) -> Arc<Scheme> {
-        assert!(preds.iter().all(|p| p.ty.is_free()));
-        assert!(eqs.iter().all(|eq| eq.lhs().is_free()));
-
         let mut s = Substitution::default();
         let mut added = HashMap::<Name, Arc<Kind>>::new();
         for (i, tv) in vars.iter_mut().enumerate() {

@@ -554,14 +554,6 @@ fn parse_type_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualType {
     } else {
         (vec![], vec![], vec![])
     };
-    for pred in &preds {
-        match &pred.ty.ty {
-            Type::TyVar(_) => {}
-            _ => {
-                error_exit_with_src("Trait bound has to be of the form `tv : SomeTrait` for some type variable `tv`.", &pred.source);
-            }
-        }
-    }
     let ty = parse_type(pairs.next().unwrap(), ctx);
     let qt = QualType {
         preds,
@@ -616,7 +608,7 @@ fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Equality {
     let rhs = parse_type(pairs.next().unwrap(), ctx);
     if !lhs.is_equality_lhs() {
         error_exit_with_src(
-            "The left side of an equality constraint has to be the application of associated type to free types, and itself has to be free.\
+            "The left side of an equality constraint should be the application of associated type to free types, and itself should be free.\
             Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
             &lhs.get_source(),
         )
