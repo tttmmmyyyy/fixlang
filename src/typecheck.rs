@@ -720,7 +720,7 @@ impl TypeCheckContext {
                 let var_scm = var_ty.iter().map(|(name, ty)| {
                     (
                         name.clone(),
-                        Scheme::generalize(vec![], vec![], vec![],ty.clone()),
+                        Scheme::from_type(ty.clone()),
                     )
                 });
                 for (name, scm) in var_scm.clone() {
