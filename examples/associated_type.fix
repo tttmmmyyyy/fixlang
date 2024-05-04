@@ -29,23 +29,18 @@ impl Iterator a : Collects {
     to_iter = |xs| xs;
 }
 
-// Takes to collections of the same element type and 
+// Takes to collections with the same element type, and insert all elements of the second collection to the first one.
+// Here we use the equality constraint `Elem c1 = Elem c2`.
 extend : [c1 : Collects, c2 : Collects, Elem c1 = Elem c2] c1 -> c2 -> c2;
 extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
 
+// Take a collection whose element type implements `ToString` trait, and stringify the collection.
+// Here we use the trait constraint on the element type `Elem c : ToString`.
 stringify : [c : Collects, Elem c : ToString] c -> String;
 stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
 main : IO ();
 main = (
-    eval assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);
-    eval assert_eq(|_|"", Iterator::empty.insert(3).insert(2).insert(1).to_array, [1, 2, 3]);
-    eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]), [1, 2, 3, 4, 5, 6]);
-    eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6].Collects::to_iter), [1, 2, 3, 4, 5, 6]);
-    eval assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6]).to_array, [6, 5, 4, 1, 2, 3]);
-    eval assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6].Collects::to_iter).to_array, [6, 5, 4, 1, 2, 3]);
-    eval assert_eq(|_|"", [1, 2, 3].has_equal_elements1([1, 2, 3]), true);
-    eval assert_eq(|_|"", [1, 2, 3].has_equal_elements2([4, 5, 6]), false);
-    eval assert_eq(|_|"", [1, 2, 3].stringify, "1, 2, 3");
+    eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");
     pure()
 );

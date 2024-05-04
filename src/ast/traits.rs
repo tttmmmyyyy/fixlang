@@ -575,6 +575,16 @@ pub struct Predicate {
 }
 
 impl Predicate {
+    pub fn validate_freeness(&self) {
+        if !self.ty.is_free() {
+            error_exit_with_src(
+                "Trait constraint is only allowed on a free type. \
+                Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
+                &self.source,
+            );
+        }
+    }
+
     pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
         self.ty.free_vars()
     }
@@ -675,6 +685,16 @@ pub struct Equality {
 }
 
 impl Equality {
+    pub fn validate_freeness(&self) {
+        if !self.lhs().is_free() {
+            error_exit_with_src(
+                "Equality constraint is only allowed on free types. \
+                Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
+                &self.source,
+            );
+        }
+    }
+
     pub fn check_kinds(&self, kind_env: &KindEnv) {
         let kind_info = kind_env.assoc_tys.get(&self.assoc_type).unwrap();
         if self.args.len() != kind_info.param_kinds.len() {
@@ -858,11 +878,11 @@ impl TraitEnv {
         }
         // Circular aliasing will be detected in `TraitEnv::resolve_aliases`.
 
-        // Forbid unrelated trait method:
-        // Check that the type variable in trait definition appears each of the methods' type.
-        // This assumption is used in `InstanciatedSymbol::dependent_modules`.
         for (_trait_id, trait_info) in &self.traits {
             for (method_name, method_ty) in &trait_info.methods {
+                // Forbid unrelated trait method:
+                // Check that the type variable in trait definition appears each of the methods' type.
+                // This assumption is used in `InstanciatedSymbol::dependent_modules`.
                 if !method_ty.ty.contains_tyvar(&trait_info.type_var) {
                     error_exit_with_src (
                         &format!(
@@ -872,6 +892,13 @@ impl TraitEnv {
                         ),
                         method_ty.ty.get_source()
                     );
+                }
+                // Validate constraints.
+                for pred in &method_ty.preds {
+                    pred.validate_freeness();
+                }
+                for eq in &method_ty.eqs {
+                    eq.validate_freeness();
                 }
             }
         }
@@ -905,13 +932,12 @@ impl TraitEnv {
                     );
                 }
 
-                // Check context is head-normal-form.
-                // NOTE: we are currently require more strong condition: `tv : SomeTrait`.
-                // This is because we don't have "kind inference", so predicate of form `m SomeType` cannot be handled.
-                for ctx in &inst.qual_pred.pred_constraints {
-                    if !ctx.ty.is_tyvar() {
-                        error_exit_with_src(&format!("Invalid trait bound `{}`. In current Fix, trait bound has to be of the form `tv : SomeTrait` for a type variable `tv`.", ctx.to_string_normalize()), &ctx.source);
-                    }
+                // Validate instance context.
+                for pred in &inst.qual_pred.pred_constraints {
+                    pred.validate_freeness();
+                }
+                for eq in &inst.qual_pred.eq_constraints {
+                    eq.validate_freeness();
                 }
 
                 // Check whether all trait methods are implemented.

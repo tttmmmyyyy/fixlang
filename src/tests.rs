@@ -6165,7 +6165,7 @@ pub fn test_import_unknown_namespace() {
 }
 
 #[test]
-pub fn test_associated_type() {
+pub fn test_associated_type_collects() {
     let source = r##"
     module Main;
     import Debug;
@@ -6203,6 +6203,12 @@ pub fn test_associated_type() {
     stringify : [c : Collects, Elem c : ToString] c -> String;
     stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
+    type Wrapper c = struct { data : c };
+
+    impl [c : Collects, Elem c : ToString] Wrapper c : ToString {
+        to_string = |xs| xs.to_iter.map(to_string).join(", ");
+    }
+
     main : IO ();
     main = (
         eval assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);
@@ -6214,6 +6220,8 @@ pub fn test_associated_type() {
         eval assert_eq(|_|"", [1, 2, 3].has_equal_elements1([1, 2, 3]), true);
         eval assert_eq(|_|"", [1, 2, 3].has_equal_elements2([4, 5, 6]), false);
         eval assert_eq(|_|"", [1, 2, 3].stringify, "1, 2, 3");
+        pure()
+        eval assert_eq(|_|"", Wrapper { data : [false, true, true] }.to_string, "false, true, true");
         pure()
     );
     "##;

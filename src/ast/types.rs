@@ -1518,22 +1518,10 @@ pub struct Scheme {
 impl Scheme {
     pub fn validate_constraints(&self) {
         for pred in &self.predicates {
-            if !pred.ty.is_free() {
-                error_exit_with_src(
-                    "Trait constraint is only allowed on a free type. \
-                    Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
-                    &pred.source,
-                );
-            }
+            pred.validate_freeness();
         }
         for eq in &self.equalities {
-            if !eq.lhs().is_free() {
-                error_exit_with_src(
-                    "Equality constraint is only allowed on free types. \
-                    Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
-                    &eq.source,
-                );
-            }
+            eq.validate_freeness();
         }
     }
 
