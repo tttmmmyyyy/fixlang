@@ -6220,7 +6220,6 @@ pub fn test_associated_type_collects() {
         eval assert_eq(|_|"", [1, 2, 3].has_equal_elements1([1, 2, 3]), true);
         eval assert_eq(|_|"", [1, 2, 3].has_equal_elements2([4, 5, 6]), false);
         eval assert_eq(|_|"", [1, 2, 3].stringify, "1, 2, 3");
-        pure()
         eval assert_eq(|_|"", Wrapper { data : [false, true, true] }.to_string, "false, true, true");
         pure()
     );
