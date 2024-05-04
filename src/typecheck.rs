@@ -1192,8 +1192,6 @@ impl TypeCheckContext {
     pub fn finish_inferred_types(&mut self, expr: Arc<ExprNode>) -> Arc<ExprNode> {
         let ty = self.substitute_type(expr.ty.as_ref().unwrap());
         let ty = self.reduce_type_by_equality(ty);
-        // eprintln!("finish_inferred_types:");
-        // eprintln!("  ty: {}", ty.to_string());
         let expr = expr.set_inferred_type(ty);
         match &*expr.expr {
             Expr::Var(_) => expr,
