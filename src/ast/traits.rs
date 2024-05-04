@@ -169,7 +169,7 @@ impl TraitInfo {
             type_from_tyvar(self.type_var.clone()),
         )];
         preds.append(&mut qual_ty.preds);
-        Scheme::generalize(vars, preds, qual_ty.eqs, qual_ty.ty)
+        Scheme::generalize(&qual_ty.kind_signs, preds, qual_ty.eqs, qual_ty.ty)
     }
 
     // Get the type of a method.
@@ -288,9 +288,8 @@ impl TraitInstance {
 
         // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
         let ty = method_qualty.ty.clone();
-        let mut vars = vec![];
-        method_qualty.free_vars_vec(&mut vars);
-        self.qual_pred.free_vars_vec(&mut vars);
+        let mut kind_signs = self.qual_pred.kind_constraints.clone();
+        kind_signs.append(&mut method_qualty.kind_signs.clone());
         let mut preds = self.qual_pred.pred_constraints.clone();
         preds.append(&mut method_qualty.preds);
         let mut eqs = self.qual_pred.eq_constraints.clone();
@@ -304,7 +303,7 @@ impl TraitInstance {
             .map(|src| src.to_single_character());
         let ty = ty.set_source(source);
 
-        Scheme::generalize(vars, preds, eqs, ty)
+        Scheme::generalize(&kind_signs, preds, eqs, ty)
     }
 
     // Get expression that implements a method.
@@ -575,6 +574,10 @@ pub struct Predicate {
 }
 
 impl Predicate {
+    pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
+        self.ty.free_vars_to_vec(buf);
+    }
+
     pub fn validate_freeness(&self) {
         if !self.ty.is_free() {
             error_exit_with_src(
@@ -685,6 +688,13 @@ pub struct Equality {
 }
 
 impl Equality {
+    pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
+        for arg in &self.args {
+            arg.free_vars_to_vec(buf);
+        }
+        self.value.free_vars_to_vec(buf);
+    }
+
     pub fn validate_freeness(&self) {
         if !self.lhs().is_free() {
             error_exit_with_src(

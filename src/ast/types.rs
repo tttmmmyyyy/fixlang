@@ -19,6 +19,7 @@ impl TyVar {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_name(&self, name: Name) -> Arc<TyVar> {
         let mut ret = self.clone();
         ret.name = name;
@@ -1582,13 +1583,6 @@ impl Scheme {
         constraints_str + &ty.to_string()
     }
 
-    #[allow(dead_code)]
-    pub fn set_ty(&self, ty: Arc<TypeNode>) -> Arc<Scheme> {
-        let mut ret = self.clone();
-        ret.ty = ty;
-        Arc::new(ret)
-    }
-
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Arc<Scheme> {
         let mut ret = self.clone();
         let mut scope: HashMap<Name, Arc<Kind>> = Default::default();
@@ -1654,45 +1648,31 @@ impl Scheme {
 
     // Create instance by generalizaing type.
     pub fn generalize(
-        mut vars: Vec<Arc<TyVar>>,
-        mut preds: Vec<Predicate>,
-        mut eqs: Vec<Equality>,
+        kind_signs: &[KindSignature],
+        preds: Vec<Predicate>,
+        eqs: Vec<Equality>,
         ty: Arc<TypeNode>,
     ) -> Arc<Scheme> {
-        let mut s = Substitution::default();
-        let mut added = HashMap::<Name, Arc<Kind>>::new();
-        for (i, tv) in vars.iter_mut().enumerate() {
-            if added.contains_key(&tv.name) {
-                if added[&tv.name] == tv.kind {
-                    continue;
-                } else {
-                    panic!(
-                        "Type variable {} is duplicated and speficied kinds are not equal.",
-                        tv.name
-                    );
+        let mut vars = vec![];
+        for pred in &preds {
+            pred.free_vars_to_vec(&mut vars);
+        }
+        for eq in &eqs {
+            eq.free_vars_to_vec(&mut vars);
+        }
+        ty.free_vars_to_vec(&mut vars);
+        for tv in &mut vars {
+            for kind_sign in kind_signs {
+                if tv.name == kind_sign.tyvar {
+                    *tv = tv.set_kind(kind_sign.kind.clone());
                 }
             }
-            added.insert(tv.name.clone(), tv.kind.clone());
-            let org_name = tv.name.clone();
-            let gen_name = format!("%g{}", i); // To avoid confliction with user-defined type varible, add prefix %.
-            *tv = tv.set_name(gen_name.clone());
-            s.add_substitution(&Substitution::single(
-                &org_name,
-                type_from_tyvar(tv.clone()),
-            ));
         }
-        for p in &mut preds {
-            s.substitute_predicate(p);
-        }
-        for eq in &mut eqs {
-            s.substitute_equality(eq);
-        }
-        let ty = s.substitute_type(&ty);
         Scheme::new_arc(vars, preds, eqs, ty)
     }
 
     pub fn from_type(ty: Arc<TypeNode>) -> Arc<Scheme> {
-        Scheme::generalize(vec![], vec![], vec![], ty)
+        Scheme::new_arc(vec![], vec![], vec![], ty)
     }
 
     // Get free type variables.

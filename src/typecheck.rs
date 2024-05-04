@@ -393,8 +393,6 @@ pub enum ConstraintInstantiationMode {
     Require,
     // Assume that the constraints are satisfied.
     Assume,
-    // Igreno the constraints.
-    Ignore,
 }
 
 // Context under type-checking.
@@ -494,39 +492,36 @@ impl TypeCheckContext {
         scheme: &Arc<Scheme>,
         constraint_mode: ConstraintInstantiationMode,
     ) -> Result<Arc<TypeNode>, UnificationErr> {
-        let mut sub = Substitution::default();
-        let mut new_tyvars = vec![];
-        for tv in &scheme.gen_vars {
-            let new_var_name = self.new_tyvar();
-            new_tyvars.push(new_var_name.clone());
-            sub.add_substitution(&Substitution::single(&tv.name, type_tyvar(&new_var_name, &tv.kind)));
-            // TODO: change name of tyvar if ConstraintInstantiationMode::Assume for better error message.
-        }
-        let ty = sub.substitute_type(&scheme.ty);
-        match constraint_mode {
-            ConstraintInstantiationMode::Ignore => {
-                return Ok(ty);
-            }
-            _ => {}
-        }
         let mut preds = scheme.predicates.iter().map(|pred| pred.resolve_trait_aliases(&self.trait_env).into_iter()).flatten().collect::<Vec<_>>();
-        for p in &mut preds {
-            sub.substitute_predicate(p);
-        }
         let mut eqs = scheme.equalities.clone();
-        for eq in &mut eqs {
-            sub.substitute_equality(eq);
-        }
         match constraint_mode {
             ConstraintInstantiationMode::Require => {
+                // Instantiate type variables.
+                let mut sub = Substitution::default();
+                let mut new_tyvars = vec![];
+                for tv in &scheme.gen_vars {
+                    let new_var_name = self.new_tyvar();
+                    new_tyvars.push(new_var_name.clone());
+                    sub.add_substitution(&Substitution::single(&tv.name, type_tyvar(&new_var_name, &tv.kind)));
+                }
+                // Apply substitution to type, predicates and equalities.
+                let ty = sub.substitute_type(&scheme.ty);
+                for eq in &mut eqs {
+                    sub.substitute_equality(eq);
+                }
+                // Add constraints to the TypeCheckerContext.
+                for pred in &mut preds {
+                    sub.substitute_predicate(pred);
+                }
                 self.predicates.append(&mut preds);
                 for eq in eqs {
                     self.add_equality(eq)?;
                 }
+                return Ok(ty);
             },
             ConstraintInstantiationMode::Assume => {
-                for new_tyvar in new_tyvars {
-                    self.fixed_tyvars.insert(new_tyvar);
+                for tv in &scheme.gen_vars {
+                    self.fixed_tyvars.insert(tv.name.clone());
                 }
                 for pred in preds {
                     let trait_id = pred.trait_id.clone();
@@ -549,10 +544,9 @@ impl TypeCheckContext {
                     };
                     misc::insert_to_hashmap_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
                 }
+                return Ok(scheme.ty.clone());
             },
-            ConstraintInstantiationMode::Ignore => unreachable!(),
         }
-        Ok(ty)
     }
 
     // Reduce predicates to head normal forms.

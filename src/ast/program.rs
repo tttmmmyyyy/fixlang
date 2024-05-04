@@ -794,11 +794,7 @@ impl Program {
                     // and we do not need to check whether predicates or equality constraints are satisfiable or not.
                     {
                         let mut tc0 = tc.clone();
-                        let method_ty = tc0
-                            .instantiate_scheme(&method.ty, ConstraintInstantiationMode::Ignore)
-                            .ok()
-                            .unwrap();
-                        if tc0.unify(&method_ty, &sym.ty).is_err() {
+                        if tc0.unify(&method.ty.ty, &sym.ty).is_err() {
                             continue;
                         }
                     }
