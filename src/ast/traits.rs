@@ -403,6 +403,9 @@ impl QualPredicate {
         for p in &mut self.pred_constraints {
             p.resolve_namespace(ctx);
         }
+        for eq in &mut self.eq_constraints {
+            eq.resolve_namespace(ctx);
+        }
         self.predicate.resolve_namespace(ctx);
     }
 

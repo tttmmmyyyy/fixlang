@@ -6191,23 +6191,29 @@ pub fn test_associated_type_collects() {
         to_iter = |xs| xs;
     }
 
-    extend : [c1 : Collects, c2 : Collects, Elem c1 = Elem c2] c1 -> c2 -> c2;
+    extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
     extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
 
-    has_equal_elements1 : [c1 : Collects, c2 : Collects, Elem c1 = Elem c2, Elem c1 : Eq] c1 -> c2 -> Bool;
-    has_equal_elements1 = |xs, ys| xs.to_iter.to_array == ys.to_iter.to_array;
-
-    has_equal_elements2 : [c1 : Collects, c2 : Collects, Elem c1 = Elem c2, Elem c2 : Eq] c1 -> c2 -> Bool;
-    has_equal_elements2 = |xs, ys| xs.to_iter.to_array == ys.to_iter.to_array;
+    has_equal_elements : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e, e : Eq] c1 -> c2 -> Bool;
+    has_equal_elements = |xs, ys| xs.to_iter.to_array == ys.to_iter.to_array;
 
     stringify : [c : Collects, Elem c : ToString] c -> String;
     stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
     type Wrapper c = struct { data : c };
 
-    impl [c : Collects, Elem c : ToString] Wrapper c : ToString {
+    impl [c : Collects, Elem c = e, e : ToString] Wrapper c : ToString {
         to_string = |xs| xs.@data.to_iter.map(to_string).join(", ");
     }
+
+    sum_elements1 : [c : Collects, Elem c = I64] c -> I64;
+    sum_elements1 = |xs| xs.to_iter.fold(0, |acc, x| acc + x);
+
+    sum_elements2 : [c : Collects, Elem c = I64] c -> Elem c;
+    sum_elements2 = |xs| xs.to_iter.fold(0, |acc, x| acc + x);
+
+    sum_elements3 : [c : Collects, Elem c : Additive] c -> Elem c;
+    sum_elements3 = |xs| xs.to_iter.sum;
 
     main : IO ();
     main = (
@@ -6217,10 +6223,12 @@ pub fn test_associated_type_collects() {
         eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6].Collects::to_iter), [1, 2, 3, 4, 5, 6]);
         eval assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6]).to_array, [6, 5, 4, 1, 2, 3]);
         eval assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6].Collects::to_iter).to_array, [6, 5, 4, 1, 2, 3]);
-        eval assert_eq(|_|"", [1, 2, 3].has_equal_elements1([1, 2, 3]), true);
-        eval assert_eq(|_|"", [1, 2, 3].has_equal_elements2([4, 5, 6]), false);
+        eval assert_eq(|_|"", [1, 2, 3].has_equal_elements([1, 2, 3]), true);
         eval assert_eq(|_|"", [1, 2, 3].stringify, "1, 2, 3");
         eval assert_eq(|_|"", Wrapper { data : [false, true, true] }.to_string, "false, true, true");
+        eval assert_eq(|_|"", [1, 2, 3].sum_elements1, 6);
+        eval assert_eq(|_|"", [1, 2, 3].sum_elements2, 6);
+        eval assert_eq(|_|"", [1, 2, 3].sum_elements3, 6);
         pure()
     );
     "##;
