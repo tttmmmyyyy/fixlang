@@ -30,13 +30,11 @@ impl Iterator a : Collects {
 }
 
 // Takes to collections with the same element type, and insert all elements of the second collection to the first one.
-// Here we use the equality constraint `Elem c1 = Elem c2`.
-extend : [c1 : Collects, c2 : Collects, Elem c1 = Elem c2] c1 -> c2 -> c2;
+extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
 extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
 
 // Take a collection whose element type implements `ToString` trait, and stringify the collection.
-// Here we use the trait constraint on the element type `Elem c : ToString`.
-stringify : [c : Collects, Elem c : ToString] c -> String;
+stringify : [c : Collects, Elem c = e, e : ToString] c -> String;
 stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
 main : IO ();
