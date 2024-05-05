@@ -1708,6 +1708,9 @@ impl Scheme {
         for p in &mut res.predicates {
             p.resolve_type_aliases(type_env);
         }
+        for eq in &mut res.equalities {
+            eq.resolve_type_aliases(type_env);
+        }
         res.ty = res.ty.resolve_type_aliases(type_env);
         Arc::new(res)
     }
