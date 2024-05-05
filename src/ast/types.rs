@@ -404,7 +404,7 @@ impl TypeNode {
     //     }
     // }
 
-    // Is this type constructed from type constructor, not
+    // Is this type constructed from type constructor, not from associated types?
     pub fn is_assoc_ty_free(&self) -> bool {
         match &self.ty {
             Type::TyVar(_) => true,
@@ -450,30 +450,6 @@ impl TypeNode {
             Type::TyCon(tc) => tc,
             _ => panic!(),
         }
-    }
-
-    // A type is free if and only if:
-    // - It is a type variable, or associated type application with free type arguments, and
-    // - All type variables that appear in the type are distinct.
-    pub fn is_free(&self) -> bool {
-        fn is_free_inner(ty: &TypeNode, tvs_appear: &mut HashSet<Name>) -> bool {
-            match &ty.ty {
-                Type::TyVar(tv) => {
-                    if tvs_appear.contains(&tv.name) {
-                        false
-                    } else {
-                        tvs_appear.insert(tv.name.clone());
-                        true
-                    }
-                }
-                Type::TyCon(_) => false,
-                Type::TyApp(_fun, _arg) => false,
-                Type::FunTy(_src, _dst) => false,
-                Type::AssocTy(_, args) => args.iter().all(|arg| is_free_inner(arg, tvs_appear)),
-            }
-        }
-        let mut tvs_appear = HashSet::new();
-        is_free_inner(self, &mut tvs_appear)
     }
 
     pub fn get_head_string(&self) -> String {
@@ -1518,11 +1494,46 @@ pub struct Scheme {
 
 impl Scheme {
     pub fn validate_constraints(&self) {
+        // Validate constraints.
+        // NOTE:
+        // This validation is too restrictive.
+        // We should allow more general constraints in a future by converting user-specified constraints to a form where the following restrictions are satisfied.
         for pred in &self.predicates {
-            pred.validate_freeness();
+            // Each predicate constraint should be in the form of `type_var : Trait`.
+            if !pred.ty.is_tyvar() {
+                error_exit_with_src(
+"Trait constraint should be in the form of `{type_var} : {Trait}`.
+NOTE: If you want to put a constraint on an associated type application, e.g., `Elem c : ToString`, you should write `Elem c = e, e : ToString` instead.
+We will support more general constraints by implementing such conversion in a future.",
+                    &pred.source,
+                );
+            }
         }
         for eq in &self.equalities {
-            eq.validate_freeness();
+            // Right hand side of equality should be free from associated type.
+            if !eq.value.is_assoc_ty_free() {
+                error_exit_with_src(
+"Right side of an equality constraint cannot contain an associated type.
+NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`.
+We will support more general constraints by implementing such conversion in a future.",
+                    &eq.source,
+                );
+            }
+            // The first argument of the left side of an equality constraint should be a type variable.
+            if !eq.args[0].is_tyvar() {
+                error_exit_with_src("The first argument of the left side of an equality constraint should be a type variable.", &eq.source);
+            }
+        }
+        // We do not allow there are two equality constraints with the same left side.
+        for i in 0..self.equalities.len() {
+            for j in i + 1..self.equalities.len() {
+                if self.equalities[i].lhs().to_string() == self.equalities[j].lhs().to_string() {
+                    error_exit_with_srcs(
+                        "Multiple equality constraints with the same left side are not allowed.",
+                        &[&self.equalities[i].source, &self.equalities[j].source],
+                    );
+                }
+            }
         }
     }
 

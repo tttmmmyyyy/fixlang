@@ -6197,7 +6197,7 @@ pub fn test_associated_type_collects() {
     has_equal_elements : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e, e : Eq] c1 -> c2 -> Bool;
     has_equal_elements = |xs, ys| xs.to_iter.to_array == ys.to_iter.to_array;
 
-    stringify : [c : Collects, Elem c : ToString] c -> String;
+    stringify : [c : Collects, Elem c = e, e : ToString] c -> String;
     stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
     type Wrapper c = struct { data : c };
@@ -6212,7 +6212,7 @@ pub fn test_associated_type_collects() {
     sum_elements2 : [c : Collects, Elem c = I64] c -> Elem c;
     sum_elements2 = |xs| xs.to_iter.fold(0, |acc, x| acc + x);
 
-    sum_elements3 : [c : Collects, Elem c : Additive] c -> Elem c;
+    sum_elements3 : [c : Collects, Elem c = e, e : Additive] c -> Elem c;
     sum_elements3 = |xs| xs.to_iter.sum;
 
     main : IO ();

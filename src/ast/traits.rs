@@ -581,16 +581,6 @@ impl Predicate {
         self.ty.free_vars_to_vec(buf);
     }
 
-    pub fn validate_freeness(&self) {
-        if !self.ty.is_free() {
-            error_exit_with_src(
-                "Trait constraint is only allowed on a free type. \
-                Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
-                &self.source,
-            );
-        }
-    }
-
     pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
         self.ty.free_vars()
     }
@@ -696,16 +686,6 @@ impl Equality {
             arg.free_vars_to_vec(buf);
         }
         self.value.free_vars_to_vec(buf);
-    }
-
-    pub fn validate_freeness(&self) {
-        if !self.lhs().is_free() {
-            error_exit_with_src(
-                "Equality constraint is only allowed on free types. \
-                Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
-                &self.source,
-            );
-        }
     }
 
     pub fn check_kinds(&self, kind_env: &KindEnv) {
@@ -906,13 +886,6 @@ impl TraitEnv {
                         method_ty.ty.get_source()
                     );
                 }
-                // Validate constraints.
-                for pred in &method_ty.preds {
-                    pred.validate_freeness();
-                }
-                for eq in &method_ty.eqs {
-                    eq.validate_freeness();
-                }
             }
         }
         let aliases: HashSet<_> = self.aliases.keys().collect();
@@ -943,14 +916,6 @@ impl TraitEnv {
                         &format!("Implementing trait for type `{}` is not allowed. \
                         The head (in this case, `{}`) of a type for which trait is implemented should be a type constructor.", implemented_ty.to_string(), implemented_ty.get_head_string()),&implemented_ty.get_source()
                     );
-                }
-
-                // Validate instance context.
-                for pred in &inst.qual_pred.pred_constraints {
-                    pred.validate_freeness();
-                }
-                for eq in &inst.qual_pred.eq_constraints {
-                    eq.validate_freeness();
                 }
 
                 // Check whether all trait methods are implemented.
