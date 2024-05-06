@@ -1047,7 +1047,8 @@ main = (
 
 ## Traits
 
-A Trait is a predicate on types. A trait can require that some "methods" are implemented for the type which is an instance of itself.
+A Trait is a set of types. 
+A trait is defined by a set of "methods" to be implemented by each member of it.
 
 ```
 module Main;
@@ -1082,7 +1083,7 @@ impl [a : Eq, b : Eq] Pair a b : Eq {
     );
 }
 
-// You can specify preconditions of type variables in the `[]` bracket before type signature.
+// You can specify constraints on type variables in the `[]` bracket before the type signature.
 search : [a : Eq] a -> Array a -> I64;
 search = |elem, arr| loop(0, |idx|
     if idx == arr.get_size { break $ -1 };
