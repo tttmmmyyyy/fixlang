@@ -918,40 +918,53 @@ impl TraitEnv {
                     );
                 }
 
-                // Check whether all trait methods are implemented.
-                let trait_methods = &self.traits[trait_id]
-                    .methods
-                    .iter()
-                    .map(|s| s.0)
-                    .collect::<HashSet<_>>();
-                let impl_methods = inst.methods.iter().map(|s| s.0).collect::<HashSet<_>>();
-                for trait_method in trait_methods {
-                    if !impl_methods.contains(trait_method) {
-                        let pred = inst.qual_pred.predicate.to_string_normalize();
+                // Check that all trait methods are implemented.
+                let trait_methods = &self.traits[trait_id].methods;
+                let impl_methods = &inst.methods;
+                for (trait_method, _) in trait_methods {
+                    if !impl_methods.contains_key(trait_method) {
                         error_exit_with_src(
-                            &format!(
-                                "Lacking implementation of method `{}` for `{}`",
-                                trait_method, pred,
-                            ),
+                            &format!("Lacking implementation of method `{}`.", trait_method),
                             &inst.source,
                         )
                     }
                 }
-                for impl_method in impl_methods {
-                    if !trait_methods.contains(impl_method) {
+                for (impl_method, impl_expr) in impl_methods {
+                    if !trait_methods.contains_key(impl_method) {
                         error_exit_with_src(
                             &format!(
                                 "`{}` is not a method of trait `{}`.",
                                 impl_method,
                                 trait_id.to_string(),
                             ),
-                            &inst
-                                .methods
-                                .get(impl_method)
-                                .unwrap()
-                                .source
-                                .as_ref()
-                                .map(|s| s.to_single_character()),
+                            &impl_expr.source.as_ref().map(|s| s.to_single_character()),
+                        )
+                    }
+                }
+
+                // Check that all associated types are implemented.
+                let trait_assoc_types = &self.traits[trait_id].assoc_types;
+                let impl_assoc_types = &inst.assoc_types;
+                for (trait_assoc_type, _) in trait_assoc_types {
+                    if !impl_assoc_types.contains_key(trait_assoc_type) {
+                        error_exit_with_src(
+                            &format!(
+                                "Lacking implementation of associated type `{}`.",
+                                trait_assoc_type,
+                            ),
+                            &inst.source,
+                        )
+                    }
+                }
+                for (impl_assoc_type, impl_info) in impl_assoc_types {
+                    if !trait_assoc_types.contains_key(impl_assoc_type) {
+                        error_exit_with_src(
+                            &format!(
+                                "`{}` is not an associated type of trait `{}`.",
+                                impl_assoc_type,
+                                trait_id.to_string(),
+                            ),
+                            &impl_info.source.as_ref().map(|s| s.to_single_character()),
                         )
                     }
                 }

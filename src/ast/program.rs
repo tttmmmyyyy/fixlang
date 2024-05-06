@@ -1081,33 +1081,60 @@ impl Program {
             type_defn.check_tyvars();
             let type_name = &type_defn.name;
             match &type_defn.value {
-                TypeDeclValue::Struct(str) => match Field::check_duplication(&str.fields) {
-                    Some(field_name) => {
+                TypeDeclValue::Struct(str) => {
+                    for field in &str.fields {
+                        if !field.ty.is_assoc_ty_free() {
+                            error_exit_with_src(
+                                "Associated type is not allowed in the field type of a struct.",
+                                &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                            );
+                        }
+                    }
+                    match Field::check_duplication(&str.fields) {
+                        Some(field_name) => {
+                            error_exit_with_src(
+                                &format!(
+                                    "Duplicate field `{}` in the definition of struct `{}`.",
+                                    field_name,
+                                    type_name.to_string()
+                                ),
+                                &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+                TypeDeclValue::Union(union) => {
+                    for field in &union.fields {
+                        if !field.ty.is_assoc_ty_free() {
+                            error_exit_with_src(
+                                "Associated type is not allowed in the field type of a union.",
+                                &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                            );
+                        }
+                    }
+                    match Field::check_duplication(&union.fields) {
+                        Some(field_name) => {
+                            error_exit_with_src(
+                                &format!(
+                                    "Duplicate field `{}` in the definition of union `{}`",
+                                    field_name,
+                                    type_name.to_string()
+                                ),
+                                &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+                TypeDeclValue::Alias(ta) => {
+                    if !ta.value.is_assoc_ty_free() {
                         error_exit_with_src(
-                            &format!(
-                                "Duplicate field `{}` in the definition of struct `{}`.",
-                                field_name,
-                                type_name.to_string()
-                            ),
+                            "Associated type is not allowed in the right-hand side of a type alias.",
                             &type_defn.source.as_ref().map(|s| s.to_single_character()),
                         );
                     }
-                    _ => {}
-                },
-                TypeDeclValue::Union(union) => match Field::check_duplication(&union.fields) {
-                    Some(field_name) => {
-                        error_exit_with_src(
-                            &format!(
-                                "Duplicate field `{}` in the definition of union `{}`",
-                                field_name,
-                                type_name.to_string()
-                            ),
-                            &type_defn.source.as_ref().map(|s| s.to_single_character()),
-                        );
-                    }
-                    _ => {}
-                },
-                TypeDeclValue::Alias(_) => {} // Nothing to do.
+                } // Nothing to do.
             }
         }
     }
