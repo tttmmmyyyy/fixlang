@@ -1500,6 +1500,9 @@ impl Scheme {
         // We should allow more general constraints in a future by converting user-specified constraints to a form where the following restrictions are satisfied.
         for pred in &self.predicates {
             // Each predicate constraint should be in the form of `type_var : Trait`.
+            // This ensures that the predicate constraint is on the "terminal" type, i.e., a type which cannot be reduced further.
+            // For example, if a user is writing `Elem c = e, Elem c : ToString`, then the typechecker may fail to prove `Elem c : ToString`.
+            // Writing `Elem c = e, e : ToString` instead is ok.
             if !pred.ty.is_tyvar() {
                 error_exit_with_src(
 "Trait constraint should be in the form of `{type_var} : {Trait}`.
@@ -1510,7 +1513,8 @@ We will support more general constraints by implementing such conversion in a fu
             }
         }
         for eq in &self.equalities {
-            // Right hand side of equality should be free from associated type.
+            // Right hand side of an equality should be free from associated type.
+            // This ensures that the reduction of a type terminates in a finite number of steps.
             if !eq.value.is_assoc_ty_free() {
                 error_exit_with_src(
 "Right side of an equality constraint cannot contain an associated type.
@@ -1520,8 +1524,22 @@ We will support more general constraints by implementing such conversion in a fu
                 );
             }
             // The first argument of the left side of an equality constraint should be a type variable.
+            // If this condition is not satisified, then a type can be reduce in two ways, by this equality and by an instance of the associated type,
+            // which implies that there is no "normal form" of the type.
             if !eq.args[0].is_tyvar() {
                 error_exit_with_src("The first argument of the left side of an equality constraint should be a type variable.", &eq.source);
+            }
+            // The left side of an equality constraint should be free from associated type.
+            // This ensures that this equality constraint can be applied without reducing the left side of the equality.
+            for arg in &eq.args[1..] {
+                if !arg.is_assoc_ty_free() {
+                    error_exit_with_src(
+                        "In left side of an equality constraint, arguments of an associated type cannot contain an associated type.
+                        NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`.
+                        We will support more general constraints by implementing such conversion in a future.",
+                        &eq.source,
+                    );
+                }
             }
         }
         // We do not allow there are two equality constraints with the same left side.
