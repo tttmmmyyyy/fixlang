@@ -77,6 +77,14 @@ pub struct AssocTypeImpl {
 }
 
 impl AssocTypeImpl {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+        self.value = self.value.resolve_type_aliases(type_env);
+    }
+
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+        self.value = self.value.resolve_namespace(ctx);
+    }
+
     pub fn set_kinds(&mut self, trait_inst: &TraitInstance, kind_env: &KindEnv) {
         let assoc_ty_name = TyAssoc {
             name: FullName::new(&trait_inst.trait_id().name.to_namespace(), &self.name),
@@ -253,6 +261,9 @@ impl TraitInstance {
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
         self.qual_pred.resolve_namespace(ctx);
+        for (_assoc_ty_name, assoc_ty_impl) in &mut self.assoc_types {
+            assoc_ty_impl.resolve_namespace(ctx);
+        }
 
         // This function is called only by resolve_namespace_in_declaration, so we don't need to see into expression.
 
@@ -263,6 +274,9 @@ impl TraitInstance {
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
         self.qual_pred.resolve_type_aliases(type_env);
+        for (_assoc_ty_name, assoc_ty_impl) in &mut self.assoc_types {
+            assoc_ty_impl.resolve_type_aliases(type_env);
+        }
     }
 
     // Get trait id.
@@ -412,6 +426,9 @@ impl QualPredicate {
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
         for p in &mut self.pred_constraints {
             p.resolve_type_aliases(type_env);
+        }
+        for eq in &mut self.eq_constraints {
+            eq.resolve_type_aliases(type_env);
         }
         self.predicate.resolve_type_aliases(type_env);
     }

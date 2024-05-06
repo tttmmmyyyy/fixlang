@@ -736,11 +736,13 @@ impl TypeCheckContext {
                     .set_if_else(else_expr)
             }
             Expr::TyAnno(e, anno_ty) => {
-                if !anno_ty.free_vars().is_empty() {
-                    error_exit_with_src(
-                        &format!("Currently, cannot use type variable in type annotation.",),
-                        anno_ty.get_source(),
-                    )
+                for tv in anno_ty.free_vars_vec() {
+                    if !self.fixed_tyvars.contains(&tv.name) {
+                        error_exit_with_src(
+                            &format!("Unknown type variable `{}`.", tv.name),
+                            &ei.source,
+                        )
+                    }
                 }
                 if let Err(_) = self.unify_rollback_if_err(&ty, anno_ty) {
                     error_exit_with_src(

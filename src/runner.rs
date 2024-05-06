@@ -32,10 +32,10 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     // Calculate list of type constructors.
     program.calculate_type_env();
 
-    // Infer namespaces of traits and types that appear in declarations (not in expressions).
-    program.resolve_namespace_in_declaration();
+    // Infer namespaces of traits and types that appear in declarations and associated type implementations.
+    program.resolve_namespace_capital_names_not_in_expression();
 
-    // Resolve type aliases that appear in declarations (not in expressions).
+    // Resolve type aliases that appear in declarations and associated type implementations.
     program.resolve_type_aliases_in_declaration();
 
     // Validate user-defined types.

@@ -6234,3 +6234,41 @@ pub fn test_associated_type_collects() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_associated_type_num() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    type Zero = unbox struct { data : () };
+    type Succ n = unbox struct { data : () };
+
+    type One = Succ Zero;
+    type Two = Succ One;
+    type Three = Succ Two;
+
+    trait n : Nat {
+        type Add n m;
+        to_I64 : (I64, Option n);
+    }
+    impl Zero : Nat {
+        type Add Zero m = m;
+        to_I64 = (0, none());
+    }
+    impl [n : Nat] Succ n : Nat {
+        type Add (Succ n) m = Succ (Add n m);
+        to_I64 = ((to_I64 : (I64, Option n)).@0 + 1, none());
+    }
+
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", (to_I64 : (I64, Option Zero)).@0, 0);
+        eval assert_eq(|_|"", (to_I64 : (I64, Option One)).@0, 1);
+        eval assert_eq(|_|"", (to_I64 : (I64, Option Two)).@0, 2);
+        eval assert_eq(|_|"", (to_I64 : (I64, Option (Add One Two))).@0, 3);
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
