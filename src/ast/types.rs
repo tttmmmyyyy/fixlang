@@ -37,6 +37,14 @@ impl TyAssoc {
         self.name = ctx.resolve(&self.name, &[NameResolutionType::AssocTy])?;
         Ok(())
     }
+
+    pub fn trait_id(&self) -> TraitId {
+        let mut namespace = self.name.namespace.names.clone();
+        let name = namespace.pop().unwrap();
+        TraitId {
+            name : FullName::new(&NameSpace::new(namespace), &name)
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -1540,6 +1548,29 @@ We will support more general constraints by implementing such conversion in a fu
                         &eq.source,
                     );
                 }
+            }
+            // For each associated type usage, e.g., `Elem c = I64`, we check that `c : Collects` is in the constraint.
+            let mut ok = false;
+            for pred in &self.predicates {
+                if pred.trait_id != eq.assoc_type.trait_id() {
+                    continue;
+                }
+                if pred.ty.to_string() != eq.args[0].to_string() {
+                    continue;
+                }
+                ok = true;
+                break;
+            }
+            if !ok {
+                let pred = Predicate {
+                    trait_id : eq.assoc_type.trait_id(),
+                    ty : eq.args[0].clone(),
+                    source : None,
+                };
+                error_exit_with_src(
+                    &format!("The equality constraint `{}` is invalid here because `{}` is not assumed.", eq.to_string(), pred.to_string()),
+                    &eq.source,
+                );
             }
         }
         // We do not allow there are two equality constraints with the same left side.
