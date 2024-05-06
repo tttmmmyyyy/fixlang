@@ -1,0 +1,46 @@
+module Main;
+import Debug;
+
+// We define addition on type level numbers using associated types.
+
+// First, we prepare type level numbers.
+type Zero = unbox struct { data : () };
+type Succ n = unbox struct { data : () };
+type One = Succ Zero;
+type Two = Succ One;
+type Three = Succ Two;
+
+// `Value` is a type which is parametrized by a type level number and holds a value of it.
+type Value n = unbox struct { data : I64 };
+
+// Define the trait for type level numbers, which requires
+// - an associated type `Add` which performs addition of two type level numbers,
+// - a value of type `Value n` which holds a value of the type level number.
+trait n : Nat {
+    type Add n m;
+    value : Value n;
+}
+
+// Implement `Nat` for type level by induction.
+impl Zero : Nat {
+    type Add Zero m = m;
+    value = Value { data : 0 };
+}
+impl [n : Nat] Succ n : Nat {
+    type Add (Succ n) m = Succ (Add n m);
+    value = (
+        // The following is how we extract a value from a type level number:
+        // We select the appropriate implementation of the trait method `Nat::value` using type annotation.
+        let n = (Nat::value : Value n).@data;
+        Value { data : n + 1 }
+    );
+}
+
+main : IO ();
+main = (
+    eval assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
+    eval assert_eq(|_|"", (Nat::value : Value One).@data, 1);
+    eval assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
+    eval assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
+    pure()
+);
