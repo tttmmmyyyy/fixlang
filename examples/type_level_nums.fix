@@ -17,7 +17,7 @@ type Value n = unbox struct { data : I64 };
 // - an associated type `Add` which performs addition of two type level numbers,
 // - a value of type `Value n` which holds a value of the type level number.
 trait n : Nat {
-    type Add n m;
+    type Add n m; // An associated type of arity 2.
     value : Value n;
 }
 

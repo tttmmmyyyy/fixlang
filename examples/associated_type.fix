@@ -4,7 +4,7 @@ import Debug;
 // A trait for collection-like types.
 trait c : Collects {
     // Associated type definition.
-    // Here, we define a type function `Elem` which accepts any type implememting `Collects` and returns a type.
+    // Here, we define a type level function `Elem` which domain is the trait `Collects` and returns a type.
     // When implementing `Collects` trait for a type `c`, you need to specify the value (which is a type) `Elem c`.
     type Elem c;
     // You can use `Elem c` in trait method definitions.
