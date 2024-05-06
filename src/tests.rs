@@ -6206,6 +6206,13 @@ pub fn test_associated_type_collects() {
         to_string = |xs| xs.@data.to_iter.map(to_string).join(", ");
     }
 
+    impl [c : Collects] Wrapper c : Collects {
+        type Elem (Wrapper c) = Elem c;
+        empty = Wrapper { data : Collects::empty };
+        insert = |x, w| Wrapper { data : w.@data.insert(x) };
+        to_iter = |w| w.@data.to_iter;
+    }
+
     sum_elements1 : [c : Collects, Elem c = I64] c -> I64;
     sum_elements1 = |xs| xs.to_iter.fold(0, |acc, x| acc + x);
 
@@ -6226,6 +6233,7 @@ pub fn test_associated_type_collects() {
         eval assert_eq(|_|"", [1, 2, 3].has_equal_elements([1, 2, 3]), true);
         eval assert_eq(|_|"", [1, 2, 3].stringify, "1, 2, 3");
         eval assert_eq(|_|"", Wrapper { data : [false, true, true] }.to_string, "false, true, true");
+        eval assert_eq(|_|"", Wrapper { data : [false, true, true] }.Collects::to_iter.to_array, [false, true, true]);
         eval assert_eq(|_|"", [1, 2, 3].sum_elements1, 6);
         eval assert_eq(|_|"", [1, 2, 3].sum_elements2, 6);
         eval assert_eq(|_|"", [1, 2, 3].sum_elements3, 6);
