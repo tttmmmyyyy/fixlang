@@ -29,7 +29,7 @@ impl Iterator a : Collects {
     to_iter = |xs| xs;
 }
 
-// Takes to collections with the same element type, and insert all elements of the second collection to the first one.
+// Takes two collections with the same element type, and insert all elements of the second collection to the first one.
 extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
 extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
 
