@@ -588,7 +588,7 @@ impl TypeCheckContext {
                         let mut tc = self.clone();
                         let var_ty = tc.instantiate_scheme(&scm, ConstraintInstantiationMode::Require);
                         if let Err(e) = var_ty {
-                            let msg = format!("- `{}` of type `{}` does not match since the constraint {} is unsatisfiable.", 
+                            let msg = format!("- `{}` of type `{}` does not match since the constraint {} cannot be deduced.", 
                                 fullname.to_string(), 
                                 self.substitution.substitute_scheme(scm).to_string(), 
                                 e.to_constraint_string()
@@ -596,7 +596,7 @@ impl TypeCheckContext {
                             Err(msg)
                         } else if let Err(e) = tc.unify(&var_ty.ok().unwrap(), &ty) {
                             let msg = format!(
-                                "- `{}` of type `{}` does not match the expected type since the constraint {} is unsatisfiable.",
+                                "- `{}` of type `{}` does not match the expected type since the constraint {} cannot be deduced.",
                                 fullname.to_string(),
                                 self.substitution.substitute_scheme(scm).to_string(),
                                 e.to_constraint_string()
@@ -604,7 +604,7 @@ impl TypeCheckContext {
                             Err(msg)
                         } else if let Err(e) = tc.reduce_predicates() {
                             let msg = format!(
-                                "- `{}` of type `{}` does not match the expected type since the constraint `{}` is unsatisfiable.",
+                                "- `{}` of type `{}` does not match the expected type since the constraint `{}` cannot be deduced.",
                                 fullname.to_string(),
                                 self.substitution.substitute_scheme(scm).to_string(),
                                 e.to_constraint_string()
