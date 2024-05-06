@@ -6236,7 +6236,7 @@ pub fn test_associated_type_collects() {
 }
 
 #[test]
-pub fn test_associated_type_num() {
+pub fn test_associated_type_type_level_arithmetic() {
     let source = r##"
     module Main;
     import Debug;
@@ -6248,25 +6248,30 @@ pub fn test_associated_type_num() {
     type Two = Succ One;
     type Three = Succ Two;
 
+    type Value n = unbox struct { data : I64 };
+
     trait n : Nat {
         type Add n m;
-        to_I64 : (I64, Option n);
+        value : Value n;
     }
     impl Zero : Nat {
         type Add Zero m = m;
-        to_I64 = (0, none());
+        value = Value { data : 0 };
     }
     impl [n : Nat] Succ n : Nat {
         type Add (Succ n) m = Succ (Add n m);
-        to_I64 = ((to_I64 : (I64, Option n)).@0 + 1, none());
+        value = (
+            let n = (Nat::value : Value n).@data;
+            Value { data : n + 1 }
+        );
     }
 
     main : IO ();
     main = (
-        eval assert_eq(|_|"", (to_I64 : (I64, Option Zero)).@0, 0);
-        eval assert_eq(|_|"", (to_I64 : (I64, Option One)).@0, 1);
-        eval assert_eq(|_|"", (to_I64 : (I64, Option Two)).@0, 2);
-        eval assert_eq(|_|"", (to_I64 : (I64, Option (Add One Two))).@0, 3);
+        eval assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
+        eval assert_eq(|_|"", (Nat::value : Value One).@data, 1);
+        eval assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
+        eval assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
         pure()
     );
     "##;
