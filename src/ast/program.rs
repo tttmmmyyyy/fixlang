@@ -985,12 +985,12 @@ impl Program {
 
     pub fn validate_global_value_types(&self) {
         for (_name, gv) in &self.global_values {
-            gv.scm.validate_constraints();
+            gv.scm.validate_constraints(&self.trait_env);
             match gv.expr {
                 SymbolExpr::Simple(ref _e) => {}
                 SymbolExpr::Method(ref impls) => {
                     for impl_ in impls {
-                        impl_.ty.validate_constraints();
+                        impl_.ty.validate_constraints(&self.trait_env);
                     }
                 }
             }

@@ -42,7 +42,7 @@ impl TyAssoc {
         let mut namespace = self.name.namespace.names.clone();
         let name = namespace.pop().unwrap();
         TraitId {
-            name : FullName::new(&NameSpace::new(namespace), &name)
+            name: FullName::new(&NameSpace::new(namespace), &name),
         }
     }
 }
@@ -1501,7 +1501,7 @@ pub struct Scheme {
 }
 
 impl Scheme {
-    pub fn validate_constraints(&self) {
+    pub fn validate_constraints(&self, trait_env: &TraitEnv) {
         // Validate constraints.
         // NOTE:
         // This validation is too restrictive.
@@ -1520,6 +1520,12 @@ We will support more general constraints by implementing such conversion in a fu
                 );
             }
         }
+        let preds = self
+            .predicates
+            .iter()
+            .map(|pred| pred.resolve_trait_aliases(trait_env))
+            .flatten()
+            .collect::<Vec<_>>();
         for eq in &self.equalities {
             // Right hand side of an equality should be free from associated type.
             // This ensures that the reduction of a type terminates in a finite number of steps.
@@ -1551,7 +1557,7 @@ We will support more general constraints by implementing such conversion in a fu
             }
             // For each associated type usage, e.g., `Elem c = I64`, we check that `c : Collects` is in the constraint.
             let mut ok = false;
-            for pred in &self.predicates {
+            for pred in &preds {
                 if pred.trait_id != eq.assoc_type.trait_id() {
                     continue;
                 }
@@ -1563,12 +1569,16 @@ We will support more general constraints by implementing such conversion in a fu
             }
             if !ok {
                 let pred = Predicate {
-                    trait_id : eq.assoc_type.trait_id(),
-                    ty : eq.args[0].clone(),
-                    source : None,
+                    trait_id: eq.assoc_type.trait_id(),
+                    ty: eq.args[0].clone(),
+                    source: None,
                 };
                 error_exit_with_src(
-                    &format!("The equality constraint `{}` is invalid here because `{}` is not assumed.", eq.to_string(), pred.to_string()),
+                    &format!(
+                        "The equality constraint `{}` is invalid here because `{}` is not assumed.",
+                        eq.to_string(),
+                        pred.to_string()
+                    ),
                     &eq.source,
                 );
             }
