@@ -4,6 +4,7 @@
 
 ### Added
 - Experimental support for multi-threading. Added `AsyncTask` built-in module.
+- Add associated types.
 - Add functions related to command line arguments: `get_arg`, `get_arg_count`, `get_args` in `Std::IO`.
 - Add `Random` built-in module.
 - Add `Std::F32::infinity`, `Std::F64::infinity`, `Std::F32::quiet_nan`, `Std::F64::quiet_nan`.
