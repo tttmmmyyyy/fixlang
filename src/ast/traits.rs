@@ -935,7 +935,7 @@ impl TraitEnv {
                     );
                 }
 
-                // Check that all trait methods are implemented.
+                // Validate the set of trait methods.
                 let trait_methods = &self.traits[trait_id].methods;
                 let impl_methods = &inst.methods;
                 for (trait_method, _) in trait_methods {
@@ -959,7 +959,7 @@ impl TraitEnv {
                     }
                 }
 
-                // Check that all associated types are implemented.
+                // Validate the set of associated types.
                 let trait_assoc_types = &self.traits[trait_id].assoc_types;
                 let impl_assoc_types = &inst.assoc_types;
                 for (trait_assoc_type, _) in trait_assoc_types {
@@ -983,6 +983,23 @@ impl TraitEnv {
                             ),
                             &impl_info.source.as_ref().map(|s| s.to_single_character()),
                         )
+                    }
+                    // Validate free variable of associated type implementation.
+                    let mut allowed_tyvars = vec![];
+                    inst.impl_type().free_vars_to_vec(&mut allowed_tyvars);
+                    for arg in &impl_info.params {
+                        allowed_tyvars.push(arg.clone());
+                    }
+                    for used_tv in impl_info.value.free_vars_vec() {
+                        if allowed_tyvars
+                            .iter()
+                            .all(|allowed_tv| allowed_tv.name != used_tv.name)
+                        {
+                            error_exit_with_src(
+                                &format!("Unknown type variable `{}`.", used_tv.name),
+                                &impl_info.source.as_ref().map(|s| s.to_single_character()),
+                            )
+                        }
                     }
                 }
 
