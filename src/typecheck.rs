@@ -938,7 +938,10 @@ impl TypeCheckContext {
         if red_lhs.to_string() != eq.lhs().to_string() {
             self.unify(&red_lhs, &eq.value)?;
         } else {
-            self.equalities.push(eq);
+            eq.value = self.reduce_type_by_equality(eq.value.clone());
+            if eq.lhs().to_string() != eq.value.to_string() {
+                self.equalities.push(eq);
+            }
         }
         Ok(())
     }
