@@ -1476,9 +1476,9 @@ We will support more general constraints by implementing such conversion in a fu
             for arg in &eq.args[1..] {
                 if !arg.is_assoc_ty_free() {
                     error_exit_with_src(
-                        "In left side of an equality constraint, arguments of an associated type cannot contain an associated type.
-                        NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`.
-                        We will support more general constraints by implementing such conversion in a future.",
+"In left side of an equality constraint, arguments of an associated type cannot contain an associated type.
+NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`.
+We will support more general constraints by implementing such conversion in a future.",
                         &eq.source,
                     );
                 }

@@ -608,14 +608,13 @@ fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Equality {
     let mut pairs = pair.into_inner();
     let lhs = parse_type(pairs.next().unwrap(), ctx);
     let rhs = parse_type(pairs.next().unwrap(), ctx);
-    if !lhs.is_equality_lhs() {
+    let lhs_seq = lhs.flatten_type_application();
+    if lhs_seq.len() < 2 || !lhs_seq[0].is_tycon() {
         error_exit_with_src(
-            "The left side of an equality constraint should be the application of associated type to free types, and itself should be free.\
-            Here, free type is either a type variable or an associated type applied to free types where all type variable that appear are distinct.",
+            "The left side of an equality constraint should be the application of an associated type.",
             &lhs.get_source(),
         )
     }
-    let lhs_seq = lhs.flatten_type_application();
     Equality {
         assoc_type: TyAssoc {
             name: lhs_seq[0].as_tycon().name.clone(),

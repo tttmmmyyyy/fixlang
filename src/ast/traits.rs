@@ -554,18 +554,6 @@ impl QualType {
         self.ty = self.ty.resolve_type_aliases(type_env);
     }
 
-    // Calculate free type variables.
-    // pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
-    //     let mut ret = self.ty.free_vars();
-    //     for pred in &self.preds {
-    //         ret.extend(pred.free_vars());
-    //     }
-    //     for eq in &self.eqs {
-    //         ret.extend(eq.free_vars());
-    //     }
-    //     ret
-    // }
-
     pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         for pred in &self.preds {
             pred.ty.free_vars_to_vec(buf);

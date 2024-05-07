@@ -549,22 +549,6 @@ impl TypeCheckContext {
         }
     }
 
-    // Reduce predicates to head normal forms.
-    // Returns Err(p) if predicates are unsatisfiable due to predicate p.
-    /*
-    pub fn reduce_predicates_to_hnfs(&mut self) -> Result<(), Predicate> {
-        let mut preds = std::mem::replace(&mut self.predicates, vec![]);
-        for p in &mut preds {
-            self.substitute_predicate(p);
-        }
-        self.predicates.append(&mut preds);
-        self.predicates = self
-            .trait_env
-            .reduce_to_hnf(&self.predicates, &self.type_env.kinds())?;
-        Ok(())
-    }
-    */
-
     // Perform typechecking.
     // Update type substitution so that `ei` has type `ty`.
     // Returns given AST augmented with inferred information.
