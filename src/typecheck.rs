@@ -744,6 +744,12 @@ impl TypeCheckContext {
                         )
                     }
                 }
+                // Add predicates required by associated type usages in `anno_ty`.
+                let mut req_preds = anno_ty.predicates_from_associated_types();
+                for req_pred in &mut req_preds {
+                    self.substitute_predicate(req_pred);
+                }
+                self.predicates.append(&mut req_preds.clone());
                 if let Err(_) = self.unify_rollback_if_err(&ty, anno_ty) {
                     error_exit_with_src(
                         &format!(

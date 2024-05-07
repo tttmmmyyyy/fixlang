@@ -401,17 +401,6 @@ impl TypeNode {
         }
     }
 
-    // Is this type head normal form? i.e., begins with type variable.
-    // pub fn is_hnf(&self) -> bool {
-    //     match &self.ty {
-    //         Type::TyVar(_) => true,
-    //         Type::TyCon(_) => false,
-    //         Type::TyApp(head, _) => head.is_hnf(),
-    //         Type::FunTy(_, _) => false,
-    //         Type::AssocTy(_, args) => args[0].is_hnf(),
-    //     }
-    // }
-
     // Is this type constructed from type constructor, not from associated types?
     pub fn is_assoc_ty_free(&self) -> bool {
         match &self.ty {
@@ -1127,88 +1116,6 @@ impl TypeNode {
         }
         is_equality_lhs_inner(self, &mut HashSet::new())
     }
-
-    // // Check if the type takes the form of the usage of associated type.
-    // // Usage of an associated type has to be of the form `AssocTypeName {t1} ... {tvN}`.
-    // pub fn is_associated_type_usage(
-    //     &self,
-    // ) -> Option<(FullName, Vec<Arc<TypeNode>>)> {
-    //     todo!("add new type enum (AssocType) and use it.");
-    //     // Validate the type application sequence.
-    //     let app_seq = self.flatten_type_application();
-    //     if app_seq.len() < 2 {
-    //         return None;
-    //     }
-    //     let assoc_type_name: FullName;
-    //     match &app_seq[0].ty {
-    //         Type::TyCon(tc) => {
-    //             assoc_type_name = tc.name.clone();
-    //         }
-    //         _ => return None,
-    //     }
-    //     if !is_assoc_type(&assoc_type_name) {
-    //         return None;
-    //     }
-    //     let mut type_args = vec![];
-    //     for i in 1..app_seq.len() {
-    //         type_args.push(app_seq[i].clone());
-    //     }
-    //     Some((assoc_type_name, type_args))
-    // }
-
-    // // Check if the type takes the form of the implementation of associated type.
-    // // Implementation of an associated type has to be of the form `type AssocTypeName self tv1 ... tvN`,
-    // // - where `AssocTypeName` is a local name,
-    // // - `self` is the special type variable, and
-    // // - `tv1 ... tvN` are type variables.
-    // // If ok, return the pair of the name of the associated type and the list of type variables.
-    // pub fn is_associated_type_impl(&self) -> Option<(Name, Vec<Arc<TyVar>>)> {
-    //     // `self` has to be a type application.
-    //     match &self.ty {
-    //         Type::TyApp(_, _) => {}
-    //         _ => {
-    //             return None;
-    //         }
-    //     }
-    //     let assoc_ty_name;
-    //     match &self.ty {
-    //         Type::TyApp(fun, _arg) => {
-    //             let assoc_ty = match &fun.ty {
-    //                 Type::TyCon(tc) => tc,
-    //                 _ => return None,
-    //             };
-    //             // Name of `assoc_ty` should be local.
-    //             if !assoc_ty.name.is_local() {
-    //                 return None;
-    //             }
-    //             assoc_ty_name = assoc_ty.name.to_string();
-    //         }
-    //         _ => return None,
-    //     };
-    //     let applications = self.flatten_type_application();
-    //     match &applications[1].ty {
-    //         Type::TyVar(tv) => {
-    //             if tv.name != TRAIT_IMPL_SELF {
-    //                 return None;
-    //             }
-    //         }
-    //         _ => return None,
-    //     }
-    //     let mut tyvars = vec![];
-    //     for i in 2..applications.len() {
-    //         match &applications[i].ty {
-    //             Type::TyVar(tv) => {
-    //                 // Since `tv` should be free, it cannot be `self`.
-    //                 if tv.name == TRAIT_IMPL_SELF {
-    //                     return None;
-    //                 }
-    //                 tyvars.push(tv.clone());
-    //             }
-    //             _ => return None,
-    //         }
-    //     }
-    //     Some((assoc_ty_name, tyvars))
-    // }
 }
 
 impl Clone for TypeNode {
@@ -1229,17 +1136,6 @@ pub enum Type {
     FunTy(Arc<TypeNode>, Arc<TypeNode>),
     AssocTy(TyAssoc, Vec<Arc<TypeNode>>),
 }
-
-// impl Clone for Type {
-//     fn clone(&self) -> Self {
-//         match self {
-//             Type::TyVar(x) => Type::TyVar(x.clone()),
-//             Type::TyApp(x, y) => Type::TyApp(x.clone(), y.clone()),
-//             Type::FunTy(x, y) => Type::FunTy(x.clone(), y.clone()),
-//             Type::TyCon(tc) => Type::TyCon(tc.clone()),
-//         }
-//     }
-// }
 
 impl TypeNode {
     // Stringify. Name of type variables are normalized to names such as "t0", "t1", etc.
@@ -1363,6 +1259,38 @@ impl TypeNode {
     pub fn hash(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
         format!("{:x}", md5::compute(type_string))
+    }
+
+    // See all associated type usages (e.g., `Elem c`) in this type and return the list of predicates required (e.g., `c : Collects`).
+    pub fn predicates_from_associated_types(&self) -> Vec<Predicate> {
+        fn predicates_from_associated_types_inner(ty: &TypeNode, buf: &mut Vec<Predicate>) {
+            match &ty.ty {
+                Type::TyVar(_) => {}
+                Type::TyCon(_) => {}
+                Type::TyApp(fun, arg) => {
+                    predicates_from_associated_types_inner(fun, buf);
+                    predicates_from_associated_types_inner(arg, buf);
+                }
+                Type::FunTy(src, dst) => {
+                    predicates_from_associated_types_inner(src, buf);
+                    predicates_from_associated_types_inner(dst, buf);
+                }
+                Type::AssocTy(assoc_ty, args) => {
+                    let pred = Predicate {
+                        trait_id: assoc_ty.trait_id(),
+                        ty: args[0].clone(),
+                        source: ty.get_source().clone(),
+                    };
+                    buf.push(pred);
+                    for arg in args {
+                        predicates_from_associated_types_inner(arg, buf);
+                    }
+                }
+            }
+        }
+        let mut buf = vec![];
+        predicates_from_associated_types_inner(self, &mut buf);
+        buf
     }
 }
 
