@@ -1078,44 +1078,6 @@ impl TypeNode {
         }
         (assoc_type_name, tyvars)
     }
-
-    // Is an appropriate form for the left-hand side of equality?
-    // We do not replace TyCon to AssocTy here, because we cannot check whether a capital name is TyCon or AssocTy from the arguments of this function.
-    // Replacing TyCon to AssocTy will be done in the namspace resolution.
-    pub fn is_equality_lhs(&self) -> bool {
-        fn is_equality_lhs_inner(ty: &TypeNode, appeared_type_var: &mut HashSet<Name>) -> bool {
-            match &ty.ty {
-                Type::TyVar(tv) => {
-                    if appeared_type_var.contains(&tv.name) {
-                        return false;
-                    }
-                    appeared_type_var.insert(tv.name.clone());
-                    true
-                }
-                Type::TyCon(_) => false,
-                Type::TyApp(_fun, _arg) => {
-                    let app_seq = ty.flatten_type_application();
-                    if !app_seq[0].is_tycon() {
-                        return false;
-                    }
-                    for arg in &app_seq[1..] {
-                        if !is_equality_lhs_inner(arg, appeared_type_var) {
-                            return false;
-                        }
-                    }
-                    true
-                }
-                Type::FunTy(_src, _dst) => false,
-                Type::AssocTy(_, args) => args
-                    .iter()
-                    .all(|arg| is_equality_lhs_inner(arg, appeared_type_var)),
-            }
-        }
-        if self.is_tyvar() {
-            return false;
-        }
-        is_equality_lhs_inner(self, &mut HashSet::new())
-    }
 }
 
 impl Clone for TypeNode {
