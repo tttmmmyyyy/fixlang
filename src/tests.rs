@@ -6285,3 +6285,27 @@ pub fn test_associated_type_type_level_arithmetic() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_extra_comma() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    type MyStruct0 a b = struct { fst : a, snd : b, };
+    type MyStruct1 a b = struct { fst : a, snd : b ,};
+    type MyStruct2 a b = struct { fst : a, snd : b , };
+    type MyUnion0 a b = union { fst : a, snd : b, };
+    type MyUnion1 a b = union { fst : a, snd : b ,};
+    type MyUnion2 a b = union { fst : a, snd : b , };
+
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", [1, 2, 3,], [1, 2, 3]);
+        eval assert_eq(|_|"", [1, 2, 3, ], [1, 2, 3]);
+        eval assert_eq(|_|"", [,], [] : Array Bool);
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}

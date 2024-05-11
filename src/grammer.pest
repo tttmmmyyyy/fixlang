@@ -42,7 +42,7 @@ expr_nullptr_lit = { "nullptr" ~ !var_char }
 // Since "nullptr_val" should be parsed as a variable name, not as literal, "~ !var_char" is necessary.
 expr_bool_lit = { ("true" | "false") ~ !var_char }
 
-expr_array_lit = { "[" ~ (sep* ~ expr ~ sep* ~ ("," ~ sep* ~ expr)*)? ~ sep* ~ "]" }
+expr_array_lit = { "[" ~ (sep* ~ expr ~ sep* ~ ("," ~ sep* ~ expr)*)? ~ sep* ~ ("," ~ sep*)? ~ "]" }
 
 expr_string_lit = { "\"" ~ string_lit_inner ~ "\"" }
 
@@ -80,8 +80,11 @@ expr_lam = { "|" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ sep* ~ "|" 
 
 expr_do = { "do" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" }
 
-// For n = 0 or n >= 2 this is interpreted as tuple, and for n = 1 this is treated as braced type.
-expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)*)? ~ sep* ~ ")" }
+// This pattern can be parsed for one of 
+// - the unit value, 
+// - tuple value
+// - bracketed expression
+expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ ",")?)? ~ sep* ~ ")" }
 
 expr_make_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ sep* ~ "}" }
 
@@ -199,7 +202,7 @@ type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 type_defn = { "type" ~ sep+ ~ (constraints ~ sep+)? ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn | type_alias_defn) ~ sep* ~ semicolon }
 
-comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* }
+comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )* ~ (sep* ~ ",")? }
 
 box_or_unbox = { "box" | "unbox" }
 
