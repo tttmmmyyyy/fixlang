@@ -6295,15 +6295,38 @@ pub fn test_extra_comma() {
     type MyStruct0 a b = struct { fst : a, snd : b, };
     type MyStruct1 a b = struct { fst : a, snd : b ,};
     type MyStruct2 a b = struct { fst : a, snd : b , };
+    
     type MyUnion0 a b = union { fst : a, snd : b, };
     type MyUnion1 a b = union { fst : a, snd : b ,};
     type MyUnion2 a b = union { fst : a, snd : b , };
 
     main : IO ();
     main = (
+        let _ = MyStruct0 { fst : 0, snd : false, };
+
         eval assert_eq(|_|"", [1, 2, 3,], [1, 2, 3]);
         eval assert_eq(|_|"", [1, 2, 3, ], [1, 2, 3]);
         eval assert_eq(|_|"", [,], [] : Array Bool);
+
+        eval assert_eq(|_|"", (42), 42);
+
+        let zero_tuple : () = ();
+        eval assert_eq(|_|"", zero_tuple, ());
+
+        let two_tuple : (I64, I64, ) = (0, 1,);
+        eval assert_eq(|_|"", two_tuple : (I64, I64), (0, 1));
+
+        let one_tuple : (I64,) = (0,);
+        let one_tuple = one_tuple.set_0(42);
+        eval assert_eq(|_|"", one_tuple, (42, ));
+        eval assert_eq(|_|"", one_tuple.to_string, "(42,)");
+
+        let unwrap_one_tuple = |(x,)| x;
+        eval assert_eq(|_|"", one_tuple.unwrap_one_tuple, 42);
+
+        let (one_tuple_elem,) = one_tuple;
+        eval assert_eq(|_|"", one_tuple_elem, 42);
+
         pure()
     );
     "##;

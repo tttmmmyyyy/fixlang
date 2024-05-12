@@ -1145,9 +1145,13 @@ impl TypeNode {
                             // If args.len() < n, then `self` is a partial application to a tuple.
                             // In this case, we show missing arguments by `*` (e.g., `(Std::I64, *)`).
                             for _ in args.len()..n as usize {
-                                arg_strs.push("*".to_string());
+                                arg_strs.push(kind_star().to_string());
                             }
-                            return format!("({})", arg_strs.join(", "));
+                            if n == 1 {
+                                return format!("({},)", arg_strs[0]);
+                            } else {
+                                return format!("({})", arg_strs.join(", "));
+                            }
                         }
                         None => {}
                     }

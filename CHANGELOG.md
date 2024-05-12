@@ -17,12 +17,14 @@
 - Added orphan rule: a module cannot implement an external trait for an external type.
 - The "eval" syntax now accepts only an expression of type `()`.
 - Added `Std::Functor::forget : [f : Functor] f a -> f ()`, [which is intended to be used with "eval".](/Document.md#chaining-io-actions-by-eval-and-forget)
+- Tuple of size 1, e.g., `(I64,)` (type of 1-tuples whose element is `I64`), `(42,)` (literal for 1-tuple) or `let (x,) = (42,);` (pattern matching for 1-tuple).
 
 ### Changed
 - Overflowing integer literals now result in a compile-time error.
 - Now tuple types (`Std::Tuple{N}`) for any large N are defined if they are used. In older versions, only tuples upto N=4 were defined.
 - Module names can contain period so that you can define a module such as `Main.Model.Impl`.
 - Now, in a trait definition, the type of a trait method should contain the type variable of that trait definition.
+- Allow extra comma in many place. For example, you can write `[1, 2, 3, ]` for array literal of length 3.
 
 ### Fixed
 - Performance improvement of functions in built-in libraries: #6, #30, #31

@@ -88,7 +88,7 @@ expr_do = { "do" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" }
 // - bracketed expression e.g., `(42)`
 expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ extra_comma)?)? ~ sep* ~ ")" }
 
-expr_make_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ sep* ~ "}" }
+expr_make_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ (sep* ~ ",")? ~ sep* ~ "}" }
 
 // nlr = non left recursive
 expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
@@ -150,7 +150,7 @@ pattern = { pattern_var | pattern_tuple | pattern_struct }
 
 pattern_var = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
-pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)+ ~ ")" }
+pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ (sep* ~ ",")? ~ sep* ~ ")" }
 
 pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern)* ~ sep* ~ "}" }
 
@@ -159,7 +159,7 @@ pattern_union = { (capital_name ~ "::")+ ~ type_field_name ~ sep* ~ "(" ~ sep* ~
 // === Types ===
 type_expr = { type_fun }
 
-type_tuple = { "(" ~ (sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)* ~ (sep* ~ ",")?)? ~ sep* ~ ")" }
+type_tuple = { "(" ~ (sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)* ~ (sep* ~ extra_comma)?)? ~ sep* ~ ")" }
 
 type_nlr = { type_tycon | type_var | type_tuple }
 

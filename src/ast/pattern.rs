@@ -304,7 +304,8 @@ impl Pattern {
                 for (field_name, pat) in field_to_pat {
                     let (pat_ty, var_ty) = pat.pattern.get_type(typechcker);
                     var_to_ty.extend(var_ty);
-                    let unify_res = typechcker.unify(&pat_ty, field_name_to_ty.get(field_name).unwrap());
+                    let unify_res =
+                        typechcker.unify(&pat_ty, field_name_to_ty.get(field_name).unwrap());
                     if let Err(_) = unify_res {
                         error_exit_with_src(
                             &format!(
@@ -380,14 +381,16 @@ impl Pattern {
                 ret
             }
             Pattern::Struct(tc, fields) => {
-                if tc.name.namespace == NameSpace::new_str(&[STD_NAME])
-                    && tc.name.name.starts_with(TUPLE_NAME)
-                {
+                if let Some(n) = get_tuple_n(&tc.name) {
                     let pats = fields
                         .iter()
                         .map(|(_, pat)| pat.pattern.to_string())
                         .collect::<Vec<_>>();
-                    format!("({})", pats.join(", "))
+                    if n == 1 {
+                        format!("({},)", pats[0])
+                    } else {
+                        format!("({})", pats.join(", "))
+                    }
                 } else {
                     let pats = fields
                         .iter()

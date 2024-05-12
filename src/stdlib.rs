@@ -348,10 +348,10 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
     let mut src = "module Std; \n\n".to_string();
     for size in sizes {
         // For unit type, we define necessary traits in "std.fix".
-        if *size == 0 || *size == 1 {
+        if *size == 0 {
             continue;
         }
-        assert!(*size >= 2);
+        let tuple_close = if *size == 1 { ",)" } else { ")" };
         // Implement `ToString` trait.
         src += "impl [";
         src += &(0..*size)
@@ -365,19 +365,23 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
             .map(|i| format!("t{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += ") : ToString { \n";
+        src += tuple_close;
+        src += " : ToString { \n";
         src += "    to_string = |(";
         src += &(0..*size)
             .map(|i| format!("x{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += ")| \"(\" + ";
+        src += tuple_close;
+        src += "| \"(\" + ";
         src += &(0..*size)
             .into_iter()
             .map(|i| format!("x{}.to_string", i))
             .collect::<Vec<_>>()
             .join(" + \", \" + ");
-        src += " + \")\";\n";
+        src += " + \"";
+        src += tuple_close;
+        src += "\";\n";
         src += "}\n\n";
 
         // Implement `Eq` trait.
@@ -393,18 +397,21 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
             .map(|i| format!("t{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += ") : Eq { \n";
+        src += tuple_close;
+        src += " : Eq { \n";
         src += "    eq = |(";
         src += &(0..*size)
             .map(|i| format!("x{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += "), (";
+        src += tuple_close;
+        src += ", (";
         src += &(0..*size)
             .map(|i| format!("y{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += ")| ";
+        src += tuple_close;
+        src += "| ";
         src += &(0..*size)
             .into_iter()
             .map(|i| format!("x{} == y{}", i, i))
@@ -426,18 +433,21 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
             .map(|i| format!("t{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += ") : LessThan { \n";
+        src += tuple_close;
+        src += " : LessThan { \n";
         src += "    less_than = |(";
         src += &(0..*size)
             .map(|i| format!("x{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += "), (";
+        src += tuple_close;
+        src += ", (";
         src += &(0..*size)
             .map(|i| format!("y{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += ")| (\n";
+        src += tuple_close;
+        src += "| (\n";
         for i in 0..*size {
             src += &format!("        if x{} != y{} {{ x{} < y{} }};\n", i, i, i, i);
         }
@@ -458,18 +468,21 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
             .map(|i| format!("t{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += ") : LessThanOrEq { \n";
+        src += tuple_close;
+        src += " : LessThanOrEq { \n";
         src += "    less_than_or_eq = |(";
         src += &(0..*size)
             .map(|i| format!("x{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += "), (";
+        src += tuple_close;
+        src += ", (";
         src += &(0..*size)
             .map(|i| format!("y{}", i))
             .collect::<Vec<_>>()
             .join(", ");
-        src += ")| (\n";
+        src += tuple_close;
+        src += "| (\n";
         for i in 0..*size {
             src += &format!("        if x{} != y{} {{ x{} <= y{} }};\n", i, i, i, i);
         }

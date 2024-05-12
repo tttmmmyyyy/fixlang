@@ -1390,13 +1390,19 @@ fn parse_expr_do(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
 
 fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_tuple);
-    let string = pair.as_str().to_string();
     let span = Span::from_pair(&ctx.source, &pair);
-    let exprs = pair
-        .into_inner()
-        .map(|p| parse_expr(p, ctx).set_source(Some(span.clone())))
-        .collect::<Vec<_>>();
-    if is_bracket {
+    let pairs = pair.into_inner();
+    let mut exprs = vec![];
+    let mut extra_comma = false;
+    for pair in pairs {
+        if pair.as_rule() == Rule::extra_comma {
+            extra_comma = true;
+            break;
+        }
+        exprs.push(parse_expr(pair, ctx));
+    }
+    let is_bracketed_expr = exprs.len() == 1 && !extra_comma;
+    if is_bracketed_expr {
         exprs[0].clone()
     } else {
         let tuple_size = exprs.len();
@@ -1802,11 +1808,17 @@ fn parse_tycon(pair: Pair<Rule>) -> Arc<TyCon> {
 fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_tuple);
     let span = Span::from_pair(&ctx.source, &pair);
-    let types = pair
-        .into_inner()
-        .map(|p| parse_type(p, ctx))
-        .collect::<Vec<_>>();
-    if types.len() == 1 {
+    let mut types = vec![];
+    let mut extra_comma = false;
+    for pair in pair.into_inner() {
+        if pair.as_rule() == Rule::extra_comma {
+            extra_comma = true;
+            break;
+        }
+        types.push(parse_type(pair, ctx));
+    }
+    let is_bracketed_type = types.len() == 1 && !extra_comma;
+    if is_bracketed_type {
         types[0].clone()
     } else {
         let tuple_size = types.len();

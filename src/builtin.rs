@@ -407,7 +407,6 @@ pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
 
 // Get tuple type.
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    assert!(tys.len() <= FUNPTR_ARGS_MAX as usize);
     let mut ty = type_tycon(&tycon(make_tuple_name(tys.len() as u32)));
     for field_ty in tys {
         ty = type_tyapp(ty, field_ty);
@@ -457,7 +456,6 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
 }
 
 pub fn tuple_defn(size: u32) -> TypeDefn {
-    assert!(size != 1);
     let tyvars = (0..size)
         .map(|i| tyvar_from_name(&("t".to_string() + &i.to_string()), &kind_star()))
         .collect::<Vec<_>>();

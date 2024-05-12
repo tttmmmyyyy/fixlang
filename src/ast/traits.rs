@@ -918,8 +918,13 @@ impl TraitEnv {
                 let implemented_ty = &inst.qual_pred.predicate.ty;
                 if !implemented_ty.is_implementable() {
                     error_exit_with_src(
-                        &format!("Implementing trait for type `{}` is not allowed. \
-                        The head (in this case, `{}`) of a type for which trait is implemented should be a type constructor.", implemented_ty.to_string(), implemented_ty.get_head_string()),&implemented_ty.get_source()
+                        &format!(
+                            "Implementing trait for type `{}` is not allowed. \
+                            The head (in this case, `{}`) of the type should be a type constructor.",
+                            implemented_ty.to_string(),
+                            implemented_ty.get_head_string()
+                        ),
+                        &implemented_ty.get_source(),
                     );
                 }
 
