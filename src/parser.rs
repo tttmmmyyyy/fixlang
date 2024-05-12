@@ -1390,12 +1390,13 @@ fn parse_expr_do(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
 
 fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_tuple);
+    let string = pair.as_str().to_string();
     let span = Span::from_pair(&ctx.source, &pair);
     let exprs = pair
         .into_inner()
         .map(|p| parse_expr(p, ctx).set_source(Some(span.clone())))
         .collect::<Vec<_>>();
-    if exprs.len() == 1 {
+    if is_bracket {
         exprs[0].clone()
     } else {
         let tuple_size = exprs.len();

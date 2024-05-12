@@ -1,6 +1,8 @@
 // === Basic rules ===
 sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
+extra_comma = { "," }
+
 keywords = _{ ("let" | "eval" | "in" | "if" | "else" | "do" | "type" | "trait" | "impl") ~ sep+ }
 
 semicolon = _{ ";" }
@@ -80,11 +82,11 @@ expr_lam = { "|" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ sep* ~ "|" 
 
 expr_do = { "do" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" }
 
-// This pattern can be parsed for one of 
-// - the unit value, 
-// - tuple value
-// - bracketed expression
-expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ ",")?)? ~ sep* ~ ")" }
+// This pattern will be parsed as one of 
+// - the unit value i.e., `()`
+// - tuple value e.g., `(42,)`, `(42, true)`, ... 
+// - bracketed expression e.g., `(42)`
+expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ extra_comma)?)? ~ sep* ~ ")" }
 
 expr_make_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ sep* ~ "}" }
 
@@ -157,8 +159,7 @@ pattern_union = { (capital_name ~ "::")+ ~ type_field_name ~ sep* ~ "(" ~ sep* ~
 // === Types ===
 type_expr = { type_fun }
 
-// For n = 0 or n >= 2 this is interpreted as tuple, and for n = 1 this is treated as braced type.
-type_tuple = { "(" ~ (sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)*)? ~ sep* ~ ")" }
+type_tuple = { "(" ~ (sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)* ~ (sep* ~ ",")?)? ~ sep* ~ ")" }
 
 type_nlr = { type_tycon | type_var | type_tuple }
 
