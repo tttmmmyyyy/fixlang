@@ -4,17 +4,6 @@ import RegExp;
 
 main : IO ();
 main = (
-    let regexp = RegExp::compile("[a-z]+([0-9]+)", "").as_ok;
-    let groups = regexp.match("abc012 def345").as_ok;
-    eval assert_eq(|_|"", groups, ["abc012", "012"]);
-
-    let regexp = RegExp::compile("[a-z]+([0-9]+)", "g").as_ok;
-    let groups = regexp.match("abc012 def345").as_ok;
-    eval assert_eq(|_|"", groups, ["abc012", "def345"]);
-
-    let regexp = RegExp::compile("(\\w\\w)(\\w)", "").as_ok;
-    let result = regexp.replace_all("abc def ijk", "$2$1");
-    eval assert_eq(|_|"", result, "cab fde kij");
-
+    let x = () : Std::Tuple0;
     pure()
 );

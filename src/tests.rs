@@ -6332,3 +6332,29 @@ pub fn test_extra_comma() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_textual_name_of_tuples() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    compare_tuple2 : Tuple2 I64 Bool -> (I64, Bool) -> Bool;
+    compare_tuple2 = |x, y| x == y;
+
+    compare_tuple1 : Tuple1 I64 -> (I64,) -> Bool;
+    compare_tuple1 = |x, y| x == y;
+
+    compare_tuple0 : Tuple0 -> () -> Bool;
+    compare_tuple0 = |x, y| x == y;
+
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", compare_tuple2((42, true), (42, true)), true);
+        eval assert_eq(|_|"", compare_tuple1((42,), (42,)), true);
+        eval assert_eq(|_|"", compare_tuple0((), ()), true);
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}

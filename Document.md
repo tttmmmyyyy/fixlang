@@ -24,6 +24,7 @@
   - [Numbers and literals](#numbers-and-literals)
   - [Strings and literals](#strings-and-literals)
   - [Arrays and literals](#arrays-and-literals)
+  - [Unit and tuples](#unit-and-tuples)
   - [Structs](#structs-1)
     - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
     - [`set_{field_name} : {field_type} -> {struct} -> {struct}`](#set_field_name--field_type---struct---struct)
@@ -55,8 +56,7 @@
     - [Chaining IO actions by `eval` and `forget`](#chaining-io-actions-by-eval-and-forget)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
-    - [Tuples](#tuples)
-    - [Unit](#unit)
+    - [Tuples and unit](#tuples-and-unit)
     - [Array](#array)
     - [Structs](#structs-2)
     - [Unions](#unions-2)
@@ -684,6 +684,11 @@ The type for strings is `String`. String literals are enclosed in double quotati
 ## Arrays and literals
 
 The type for arrays is `Array`. Array literals are enclosed in "[" and "]", and each elements are separated by ",", such as `[1, 2, 3]`.
+
+## Unit and tuples
+
+Textual names of tuples are `Tuple{N}` where `N` is a natural number (which can be 0). For example, `Tuple2 I64 Bool` is equivalent to `(I64, Bool)`.
+The unit type `()` is in fact the tuple of length 0, i.e., `Tuple0`.
 
 ## Structs
 
@@ -1511,14 +1516,12 @@ In general, types that contain a lot of data (such as `Array`) are suited to be 
 
 Functions are unboxed, but captured values are stored to an unnamed boxed struct.
 
-### Tuples
+### Tuples and unit
 
 Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
 Tuples are special forms of structs whose field names are `0`, `1`, `2`, etc. 
 
-### Unit
-
-The unit type `()` is unboxed.
+Since the unit type is a tuple type of length 0, the unit type is also unboxed.
 
 ### Array
 
