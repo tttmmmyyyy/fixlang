@@ -12,6 +12,9 @@ impl CpuFeatures {
     pub fn parse(features: &str) -> CpuFeatures {
         let mut data = vec![];
         for feature in features.split(',') {
+            if feature.len() == 0 {
+                continue;
+            }
             // `feature` is in the form of `(+/-)name`.
             let (state, name) = feature.split_at(1);
             let state = match state {
