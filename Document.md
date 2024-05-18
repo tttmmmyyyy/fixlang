@@ -132,8 +132,8 @@ When Fix program runs, it calls `main` function defined in the `Main` module.
 
 The usefulness of modules is hard to see in this example. They are useful when you construct a program from multiple source files.
 
-The first letter of the module name must be capitalized. 
-Moreover, you can use a sequence of strings with a capital initial separated by periods (e.g. `Main.Model.Impl`) as a module name. 
+A module name must starts with a capital letter, or an underscore preceding a capital letter.
+Moreover, you can use a sequence of such strings concatenated by periods (e.g. `Main.Model.Impl`) as a module name. 
 This grammar will be useful to express the hierarchy of modules.
 
 ## Global values
@@ -183,8 +183,9 @@ The followings are examples of types:
 - `IO ()`: the type of I/O actions which returns no value. It is the type of `main` function of Fix program.
 - `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from its length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
 
-In Fix, the first letter of the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) has to be 
-capitalized. A type that starts with a lowercase letter is interpreted as a type parameter. Each type parameter will be instanciated to a specific type when the program is compiled.
+In Fix, the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) must starts with a capital letter, or an underscore preceding a capital letter.
+A type that starts with a lowercase letter is interpreted as a type parameter. 
+Each type parameter will be instanciated to a specific type when the program is compiled.
 
 ## Expressions
 
@@ -746,7 +747,7 @@ Modify a union value by a function acting on a variant. It is assured that if yo
 
 In Fix, all entities (global values, types, traits) defined in a source file is collected to form a module.
 Each source file has to declare the name of the module by `module {module_name};`.
-The first letter of a module name must be capitalized.
+A module name must starts with a capital letter, or an underscore preceding a capital letter.
 Module name is used as the top-level namespace of entities defined in a source file.
 
 You can import other module by `import {module_name};`. As an example, consider a program consists of two source files:
@@ -791,7 +792,7 @@ All entities must be distinguished uniquely by their full name (name and namespa
 Module name is used as the top-level namespace of entities defined in a source file. 
 In addition, you can create a namespace explicitly by `namespace TheNameSpace { ... }`.
 
-The first letter of a namespace name must be capitalized.
+A namespace must starts with a capital letter, or an underscore preceding a capital letter.
 
 For example, consider the following program.
 
@@ -858,7 +859,7 @@ main = (
 
 will compile because Fix can infer the type of `truth` by the fact that it can be added to `0` of type `I64`.
 
-A module name can be a string created by concatenating strings with capital initials by periods (e.g. `Main.Model.Impl`).
+A module name can contain periods, e.g., `Main.Model.Impl`.
 In this case, an entity whose full name is `Main.Model.Impl::truth` can be referred to as `Impl::truth` or `Model.Impl::truth`.
 
 ## More on import statements: filtering entities

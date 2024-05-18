@@ -25,6 +25,7 @@
 - Module names can contain period so that you can define a module such as `Main.Model.Impl`.
 - Now, in a trait definition, the type of a trait method should contain the type variable of that trait definition.
 - Allow extra comma in many place. For example, you can write `[1, 2, 3, ]` for array literal of length 3.
+- Type name, trait name, module name and namespace name can now starts with an underscore preceeding a capital letter.
 
 ### Fixed
 - Performance improvement of functions in built-in libraries: #6, #30, #31
