@@ -367,6 +367,7 @@
       - [`eprintln : String -> IO ()`](#eprintln--string---io-)
       - [`exit : I64 -> IO a`](#exit--i64---io-a)
       - [`exit_with_msg : I64 -> String -> IO a`](#exit_with_msg--i64---string---io-a)
+    - [`from_func : (() -> a) -> IO a`](#from_func-----a---io-a)
       - [`get_arg : I64 -> IO (Option String)`](#get_arg--i64---io-option-string)
       - [`get_arg_count : IO I64`](#get_arg_count--io-i64)
       - [`get_args : IO (Array String)`](#get_args--io-array-string)
@@ -1352,6 +1353,9 @@ Exit the program with an error code.
 #### `exit_with_msg : I64 -> String -> IO a`
 Exit the program with an error message and an error code.
 The error message is written to the standard error output.
+
+### `from_func : (() -> a) -> IO a`
+Create an IO action from a function.    
 
 #### `get_arg : I64 -> IO (Option String)`
 `get_arg(n)` returns the n-th (0-indexed) command line argument.

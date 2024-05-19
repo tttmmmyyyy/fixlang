@@ -515,6 +515,10 @@ namespace IO {
     exit_with_msg : I64 -> String -> IO a;
     exit_with_msg = |code, msg| eval *eprintln(msg); exit(code);
 
+    // Create an IO action from a function.
+    from_func : (() -> a) -> IO a;
+    from_func = |func| IO { _data : func };
+
     // `get_arg(n)` returns the n-th (0-indexed) command line argument.
     // If n is greater than or equal to the number of command line arguments, this function returns none.
     get_arg : I64 -> IO (Option String);
