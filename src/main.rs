@@ -105,6 +105,13 @@ fn main() {
         .multiple_values(true)
         .takes_value(true)
         .help("Add dynamically linked library. For example, give \"abc\" to link \"libabc.so\".");
+    let library_paths = Arg::new("library-paths")
+        .long("library-paths")
+        .short('L')
+        .action(clap::ArgAction::Append)
+        .multiple_values(true)
+        .takes_value(true)
+        .help("Add library search paths.");
     let debug_info = Arg::new("debug-info")
         .long("debug")
         .short('g')
@@ -153,7 +160,9 @@ fn main() {
         .about("Executes a Fix program.")
         .arg(source_file.clone())
         .arg(output_file.clone())
+        .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
+        .arg(library_paths.clone())
         .arg(debug_info.clone())
         .arg(opt_level.clone())
         .arg(emit_llvm.clone())
@@ -166,6 +175,7 @@ fn main() {
         .arg(output_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
+        .arg(library_paths.clone())
         .arg(debug_info.clone())
         .arg(opt_level)
         .arg(emit_llvm.clone())
@@ -209,11 +219,22 @@ fn main() {
         options
     }
 
+    fn read_library_paths_option(m: &ArgMatches) -> Vec<PathBuf> {
+        m.try_get_many::<String>("library-paths")
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .map(|v| PathBuf::from(v))
+            .collect::<Vec<_>>()
+    }
+
     fn create_config_from_matches(m: &ArgMatches) -> Configuration {
         let mut config = Configuration::release();
         config.source_files = read_source_files_options(m);
         config.out_file_path = read_output_file_option(m);
         config.linked_libraries.append(&mut read_library_options(m));
+        config
+            .library_search_paths
+            .append(&mut read_library_paths_option(m));
         config.emit_llvm = m.contains_id("emit-llvm");
         if m.contains_id("threaded") {
             config.set_threaded();

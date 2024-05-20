@@ -506,6 +506,10 @@ pub fn build_file(config: &mut Configuration) {
     let program = load_file(config);
     let obj_paths = build_object_files(program, config.clone());
 
+    let mut library_search_path_opts: Vec<String> = vec![];
+    for path in &config.library_search_paths {
+        library_search_path_opts.push(format!("-L{}", path.to_str().unwrap()));
+    }
     let mut libs_opts = vec![];
     for (lib_name, link_type) in &config.linked_libraries {
         if std::env::consts::OS != "macos" {
@@ -589,7 +593,9 @@ pub fn build_file(config: &mut Configuration) {
     for obj_path in obj_paths {
         com.arg(obj_path.to_str().unwrap());
     }
-    com.arg(runtime_obj_path.to_str().unwrap()).args(libs_opts);
+    com.arg(runtime_obj_path.to_str().unwrap())
+        .args(library_search_path_opts)
+        .args(libs_opts);
     let output = com.output().expect("Failed to run gcc.");
     if output.stderr.len() > 0 {
         eprintln!(

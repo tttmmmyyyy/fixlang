@@ -35,6 +35,8 @@ pub struct Configuration {
     pub fix_opt_level: FixOptimizationLevel,
     // Linked libraries
     pub linked_libraries: Vec<(String, LinkType)>,
+    // Library search paths.
+    pub library_search_paths: Vec<PathBuf>,
     // Create debug info.
     pub debug_info: bool,
     // Is emit llvm?
@@ -94,6 +96,7 @@ impl Default for Configuration {
             verbose: false,
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
             valgrind_tool: ValgrindTool::None,
+            library_search_paths: vec![],
         }
     }
 }
