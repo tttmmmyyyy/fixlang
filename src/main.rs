@@ -87,6 +87,7 @@ fn main() {
         .long("file")
         .short('f')
         .help("Source files to be compiled and linked. Exactly one file of them must define `Main` module and `main : IO ()`.")
+        .action(clap::ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
         .required(true);
@@ -94,11 +95,15 @@ fn main() {
         .long("static-link")
         .short('s')
         .action(clap::ArgAction::Append)
-        .help("Add statically linked library. For example, give \"abc\" to link \"libabc.so\".");
+        .multiple_values(true)
+        .takes_value(true)
+        .help("Add statically linked library. For example, give \"abc\" to link \"libabc.a\".");
     let dynamic_link_library = Arg::new("dynamic-link-library")
         .long("dynamic-link")
         .short('d')
         .action(clap::ArgAction::Append)
+        .multiple_values(true)
+        .takes_value(true)
         .help("Add dynamically linked library. For example, give \"abc\" to link \"libabc.so\".");
     let debug_info = Arg::new("debug-info")
         .long("debug")
