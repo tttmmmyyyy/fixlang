@@ -3232,7 +3232,7 @@ pub fn test115_5() {
 }
 
 #[test]
-pub fn test116() {
+pub fn test_destructor() {
     // Test Std::Destructor
     let source = r#"
         module Main; import Debug;
@@ -3242,7 +3242,7 @@ pub fn test116() {
 
             // Boxed case
             let dtor0 = Destructor { 
-                value : [1,2,3], 
+                _value : [1,2,3], 
                 dtor : |arr| (
                     let arr_str = arr.to_iter.map(to_string).join(", ");
                     debug_println("dtor0 destructed. val: " + arr_str)
@@ -3251,7 +3251,7 @@ pub fn test116() {
 
             // Unboxed case
             let dtor1 = Destructor { 
-                value : 42, 
+                _value : 42, 
                 dtor : |val| (
                     debug_println("dtor1 destructed. val: " + val.to_string)
                 )
@@ -3259,15 +3259,15 @@ pub fn test116() {
 
             // Dtor in dtor
             let dtor3 = Destructor { 
-                value : 2, 
+                _value : 2, 
                 dtor : |val| (
                     debug_println("dtor3 destructed. val: " + val.to_string)
                 )
             };
             let dtor2 = Destructor { 
-                value : dtor3, 
+                _value : dtor3, 
                 dtor : |val| (
-                    debug_println("dtor2 destructed. val.@value: " + val.@value.to_string)
+                    debug_println("dtor2 destructed. val.@_value: " + val.@_value.to_string)
                 )
             };
 

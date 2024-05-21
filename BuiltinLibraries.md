@@ -1981,6 +1981,10 @@ To release / retain the object in C program, call it on the function pointer obt
 
 `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
 When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
+This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
+
+NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
+NOTE2: If the contained value is captured by another Fix's object than `Destructor`, the contained value is still alive after the destructor function is called.
 
 Typically, this type is used to manage resources allocated by C function in Fix's world.
 ```
@@ -2049,9 +2053,10 @@ main = (
 then the `res` will be allocated in the *execution* of `main` as a local value, and will be deallocated upto the end of the execution.
 
 #### `borrow : (a -> b) -> Destructor a -> b`
-Borrow the internal value. `dtor.borrow(worker)` calls `worker` on the internal value captured by `dtor`, and returns the value returned by `worker`.
-
-This function is for performing operations on resources with keeping them alive: If you simply write `f(dtor.@value)`, the destructor may be called immediately after `@value` function is called, and the resource may be already released when `f` is called. This happens if the `dtor.@value` expression is the last place `dtor` is used.
+Borrow the contained value.
+`borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
+It is guaranteed that the `dtor` is alive during the call of `worker`. 
+In other words, the `worker` receives the contained value on which the destructor is not called yet.
 
 #### `make : a -> (a -> ()) -> Destructor a`
 Make a destructor value.
