@@ -1979,9 +1979,8 @@ To release / retain the object in C program, call it on the function pointer obt
 
 ##### `type Destructor`
 
-`Destructor a` is a boxed type which has two fields `value : a` and `dtor : a -> ()`, where the latter field is called destructor.
-The destructor function will be called when a value of `Destructor a` is deallocated.
-Note that the inner value of type `a` itself may be still alive after the destructor function is called.
+`Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
+When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
 
 Typically, this type is used to manage resources allocated by C function in Fix's world.
 ```
@@ -2004,7 +2003,8 @@ resource = (
 );
 ```
 will not be deallocated and the destructor function will never be called. 
-A more intuitive example is the following.
+
+Let's take a less intuitive example.
 ```
 main : IO ();
 main = (
@@ -2031,11 +2031,11 @@ In the above program, the `res` is allocated in the *creation* of the `main` val
 If this is a problem for you, you should cover up the side effects of resource allocation in the IO monad.
 ```
 allocate_resource : IO Resource;
-allocate_resource = IO { _data : |_| (
+allocate_resource = IO::from_func $ |_| (
     let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
     let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
     Resource { _dtor : dtor };
-) };
+);
 ```
 If you use it as follows,
 ```

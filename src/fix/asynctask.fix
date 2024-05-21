@@ -20,7 +20,7 @@ _get_boxed_none_of_codomain_type = |_func| (
 // This function blocks the current thread until the task is finished.
 get : Task a -> a;
 get = |task| (
-    let task_handle = task.@dtor.@value;
+    let task_handle = task.@dtor.@_value;
     let task_result_ptr = CALL_C[Ptr fixruntime_thread_get_task_result(Ptr), task_handle];
     let _ = task; // Do not call destructor before ending working with `task_handle`.
     unsafe_get_boxed_value_from_retained_ptr(task_result_ptr).Boxed::@value.as_some
@@ -176,7 +176,7 @@ namespace Var {
     // Get a value stored in a `Var`.
     get : Var a -> IO a;
     get = |Var { _dtor : dtor }| IO { _data : |_| (
-        let handle = dtor.@value;
+        let handle = dtor.@_value;
         eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
         let ptr = CALL_C[Ptr fixruntime_thread_var_get(Ptr), handle];
         eval CALL_C[() fixruntime_thread_var_unlock(Ptr), handle];
@@ -187,7 +187,7 @@ namespace Var {
     // `var.lock(act)` performs an action on the value in `var` while locking `var` to prevent it from being changed by another thread.
     lock : (a -> IO b) -> Var a -> IO b;
     lock = |act, Var { _dtor : dtor }| IO { _data : |_| (
-        let handle = dtor.@value;
+        let handle = dtor.@_value;
         eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
         let ptr = CALL_C[Ptr fixruntime_thread_var_get(Ptr), handle];
         let res = act(ptr.unsafe_get_boxed_value_from_retained_ptr.VarValue::@value)._unsafe_perform; 
@@ -220,7 +220,7 @@ namespace Var {
     set = |value, Var { _dtor : dtor }| IO { _data : |_| (
         let value = mark_threaded(VarValue { value : value });
         let ptr = value.unsafe_get_retained_ptr_of_boxed_value;
-        let handle = dtor.@value;
+        let handle = dtor.@_value;
         eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
         eval CALL_C[() fixruntime_thread_var_set(Ptr, Ptr), handle, ptr];
         eval CALL_C[() fixruntime_thread_var_signalall(Ptr), handle];
@@ -239,7 +239,7 @@ namespace Var {
     // then performs `act` on the value in `var` while locking `var` to prevent it from being changed by another thread.
     wait_and_lock : (a -> Bool) -> (a -> IO b) -> Var a -> IO b;
     wait_and_lock = |cond, act, Var { _dtor : dtor }| IO { _data : |_| (
-        let handle = dtor.@value;
+        let handle = dtor.@_value;
         eval CALL_C[() fixruntime_thread_var_lock(Ptr), handle];
         let ok_val = loop((), |_| (
             let ptr = CALL_C[Ptr fixruntime_thread_var_get(Ptr), handle];

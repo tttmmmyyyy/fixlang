@@ -415,27 +415,28 @@ type Boxed a = box struct { value : a };
 type ErrMsg = String;
 
 namespace FFI::Destructor {
-    // `Destructor a` is a boxed type which has two fields of type `a` and `a -> ()`, where the latter field is called destructor.
-    // The destructor function will be called when a value of `Destructor a` is deallocated.
+    // `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
+    // When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
+    // This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
+    // 
+    // NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
+    // NOTE2: If the contained value is captured by 
     // Note that the inner value of type `a` may be still alive after the destructor function is called.
-    // This type is useful to manage resources allocated by C function.
-    type Destructor a = box struct { value : a, dtor : a -> () };
+    type Destructor a = box struct { _value : a, dtor : a -> () };
 
-    // Borrow the internal value.
-    // `borrow(worker, dtor)` calls `worker` on the internal value captured by `dtor`, and returns the value returned by `worker`.
-    // If you try to extract the value by `dtor.@_value` from `dtor : Destructor a` and this expression is the last use of `dtor`, 
-    // then you get a value after the destructor function is called. 
-    // On the other hand, in `borrow(worker, dtor)`, `worker` will be called before the destructor is called.
+    // Borrow the contained value.
+    // `borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
+    // It is guaranteed that the `dtor` is alive during the call of `worker`.
     borrow : (a -> b) -> Destructor a -> b;
     borrow = |worker, dtor| (
-        let res = worker(dtor.@value);
+        let res = worker(dtor.@_value);
         let _ = dtor; // Prolong lifetime of `dtor`.
         res
     );
 
     // Make a destructor value.
     make : a -> (a -> ()) -> Destructor a;
-    make = |val, dtor| Destructor { value : val, dtor : dtor };
+    make = |val, dtor| Destructor { _value : val, dtor : dtor };
 }
 
 type IO a = unbox struct { _data : () -> a };
@@ -1275,7 +1276,7 @@ namespace PunchedArray {
     plug_in! : a -> PunchedArray a -> Array a;
     plug_in! = |elm, parr| (
         let PunchedArray { _data : data, idx : idx } = parr;
-        let arr = data.set_dtor!(|_|()).@value; // Clear destructor and extract value.
+        let arr = data.set_dtor!(|_|()).@_value; // Clear destructor and extract value.
         arr.force_unique!._unsafe_set(idx, elm) 
         // The above force_unique! is redundant and added just to be safe: as long as the user doesn't access to `_data` of `PunchedArray`, `arr` should be uniquely owned by `data`.
     );
