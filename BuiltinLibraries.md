@@ -367,7 +367,7 @@
       - [`eprintln : String -> IO ()`](#eprintln--string---io-)
       - [`exit : I64 -> IO a`](#exit--i64---io-a)
       - [`exit_with_msg : I64 -> String -> IO a`](#exit_with_msg--i64---string---io-a)
-    - [`from_func : (() -> a) -> IO a`](#from_func-----a---io-a)
+      - [`from_func : (() -> a) -> IO a`](#from_func-----a---io-a)
       - [`get_arg : I64 -> IO (Option String)`](#get_arg--i64---io-option-string)
       - [`get_arg_count : IO I64`](#get_arg_count--io-i64)
       - [`get_args : IO (Array String)`](#get_args--io-array-string)
@@ -1354,7 +1354,7 @@ Exit the program with an error code.
 Exit the program with an error message and an error code.
 The error message is written to the standard error output.
 
-### `from_func : (() -> a) -> IO a`
+#### `from_func : (() -> a) -> IO a`
 Create an IO action from a function.    
 
 #### `get_arg : I64 -> IO (Option String)`
@@ -2454,8 +2454,8 @@ Reserve a HashSet so that it will not rehash until size exceeds the spacified va
 Convert a HashSet into an iterator.
 
 # Module `Math`
-// A math library.
-// Importing this module automatically links libm.so to the program.
+A math library.
+Importing this module automatically links libm.so to the program.
 
 ## `_gcd_nonneg : I64 -> I64 -> I64`
 Calculate greatest common divisors of two non-negative integers. 
