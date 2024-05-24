@@ -1694,7 +1694,7 @@ This function panics if the given array is shared.
 A type of result value for a computation that may fail.
 
 ```
-type Result o e = unbox union { ok : o, err: e };
+type Result e o = unbox union { ok : o, err: e };
 ```
 
 #### `unwrap : Result e o -> o`
