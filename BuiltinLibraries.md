@@ -684,6 +684,7 @@
   - [`from_local : DateTime -> IOFail Time`](#from_local--datetime---iofail-time)
   - [`from_utc : DateTime -> Result ErrMsg Time`](#from_utc--datetime---result-errmsg-time)
   - [`get_now : IO Time`](#get_now--io-time)
+  - [`get_now_monotonic : IO Time`](#get_now_monotonic--io-time)
   - [`to_F64 : Time -> F64`](#to_f64--time---f64)
   - [`to_local : Time -> IOResult DateTime`](#to_local--time---ioresult-datetime)
   - [`to_utc : Time -> Result ErrMsg DateTime`](#to_utc--time---result-errmsg-datetime)
@@ -2739,6 +2740,9 @@ Convert UTC datetime to time.
 
 ## `get_now : IO Time`
 Get current time.
+
+## `get_now_monotonic : IO Time`
+Get current time using CLOCK_MONOTONIC.
 
 ## `to_F64 : Time -> F64`
 Convert time to 64-bit floating value.

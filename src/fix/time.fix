@@ -97,6 +97,16 @@ get_now = (
     )}
 );
 
+// Get current time using CLOCK_MONOTONIC.
+get_now_monotonic : IO Time;
+get_now_monotonic = (
+    IO::from_func $ |_| (
+        let buf: Array I64 = Array::empty(2)._unsafe_set_size(2); // sec, usec.
+        eval CALL_C[() fixruntime_clock_gettime_monotonic(Ptr), buf._get_ptr];
+        Time { sec : buf.@(0), nanosec : buf.@(1).to_U32 }
+    )
+);
+
 // Convert time to 64-bit floating value.
 to_F64 : Time -> F64;
 to_F64 = |Time { sec : s, nanosec : ns }| s.to_F64 + ns.to_F64 * 1.0e-9;

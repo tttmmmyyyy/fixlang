@@ -261,6 +261,15 @@ void fixruntime_clock_gettime(int64_t *ret)
     ret[0] = (int64_t)ts.tv_sec;
     ret[1] = (int64_t)ts.tv_nsec;
 }
+
+void fixruntime_clock_gettime_monotonic(int64_t *ret)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    ret[0] = (int64_t)ts.tv_sec;
+    ret[1] = (int64_t)ts.tv_nsec;
+}
+
 void fixruntime_gmlocaltime(uint8_t is_local, uint64_t sec, int64_t *ret)
 {
     // struct tm *gmtime_r(const time_t *timep, struct tm *result);
