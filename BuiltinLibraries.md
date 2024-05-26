@@ -681,11 +681,11 @@
   - [`type DateTime`](#type-datetime)
   - [`_datetime_to_time_inner : Bool -> DateTime -> Result ErrMsg Time`](#_datetime_to_time_inner--bool---datetime---result-errmsg-time)
   - [`_time_to_datetime_inner : Bool -> Time -> Result ErrMsg DateTime`](#_time_to_datetime_inner--bool---time---result-errmsg-datetime)
-  - [`from_local : DateTime -> IOResult ErrMsg Time`](#from_local--datetime---ioresult-errmsg-time)
+  - [`from_local : DateTime -> IOFail Time`](#from_local--datetime---iofail-time)
   - [`from_utc : DateTime -> Result ErrMsg Time`](#from_utc--datetime---result-errmsg-time)
   - [`get_now : IO Time`](#get_now--io-time)
   - [`to_F64 : Time -> F64`](#to_f64--time---f64)
-  - [`to_local : Time -> IOResult ErrMsg DateTime`](#to_local--time---ioresult-errmsg-datetime)
+  - [`to_local : Time -> IOResult DateTime`](#to_local--time---ioresult-datetime)
   - [`to_utc : Time -> Result ErrMsg DateTime`](#to_utc--time---result-errmsg-datetime)
 
 # NOTE
@@ -2730,7 +2730,7 @@ Convert time to datetime.
 `_time_to_datetime_inner(false)` returns utc datetime, and `_time_to_datetime_inner(true)` returns local datetime.
 Note that "local time" depends on timezone, so this function is violating purity.
 
-## `from_local : DateTime -> IOResult ErrMsg Time`
+## `from_local : DateTime -> IOFail Time`
 Convert local datetime to time.
 This function depends on timezone, so it returns `IOResult` value.
 
@@ -2743,7 +2743,7 @@ Get current time.
 ## `to_F64 : Time -> F64`
 Convert time to 64-bit floating value.
 
-## `to_local : Time -> IOResult ErrMsg DateTime`
+## `to_local : Time -> IOResult DateTime`
 Convert time to local time.
 This function depends on timezone, so it returns `IOResult` value.
 
