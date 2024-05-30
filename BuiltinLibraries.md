@@ -427,6 +427,7 @@
       - [`is_empty : Iterator a -> Bool`](#is_empty--iterator-a---bool)
       - [`loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`](#loop_iter--b---b---a---loopresult-b-b---iterator-a---b)
       - [`loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`](#loop_iter_m--m--monad-b---b---a---m-loopresult-b-b---iterator-a---m-b)
+      - [`product : Iterator a -> Iterator b -> Iterator (b, a)`](#product--iterator-a---iterator-b---iterator-b-a)
       - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
       - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
       - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
@@ -1560,6 +1561,10 @@ Loop along an iterator. At each iteration step, you can choose to continue or to
 
 #### `loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`
 Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
+
+#### `product : Iterator a -> Iterator b -> Iterator (b, a)`
+The cartesian product of two iterators.
+Example: `[1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array == [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]`
 
 #### `push_front : a -> Iterator a -> Iterator a`
 Push an element to an iterator.

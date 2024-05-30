@@ -6380,3 +6380,18 @@ pub fn test_capital_name_starts_with_underscore() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_iterator_product() {
+    let source = r##"
+    module Main;
+    import Debug;
+
+    main : IO ();
+    main = (
+        eval assert_eq(|_|"", [1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}

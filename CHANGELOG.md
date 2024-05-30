@@ -14,10 +14,11 @@
 - `Option a`, `Result e a` and tuples now implements `Eq` when type parameters of each type is satisfying preconditions.
 - `Array a`, `Option a`, `Result e a`, `()` and tuples now implements `ToString` when type parameters of each type is satisfying preconditions.
 - `Array a`, `String` and tuples now implements `LessThan` and `LessThanOrEq` when type parameters of each type is satisfying preconditions.
-- Added orphan rule: a module cannot implement an external trait for an external type.
+- Add orphan rule: a module cannot implement an external trait for an external type.
 - The "eval" syntax now accepts only an expression of type `()`.
-- Added `Std::Functor::forget : [f : Functor] f a -> f ()`, [which is intended to be used with "eval".](/Document.md#chaining-io-actions-by-eval-and-forget)
+- Add `Std::Functor::forget : [f : Functor] f a -> f ()`, [which is intended to be used with "eval".](/Document.md#chaining-io-actions-by-eval-and-forget)
 - Tuple of size 1, e.g., `(I64,)` (type of 1-tuples whose element is `I64`), `(42,)` (literal for 1-tuple) or `let (x,) = (42,);` (pattern matching for 1-tuple).
+- Add `Std::Iterator::product : Iterator a -> Iterator b -> Iterator (b, a)`
 
 ### Changed
 - Overflowing integer literals now result in a compile-time error.
