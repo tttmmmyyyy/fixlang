@@ -1316,7 +1316,7 @@ impl Program {
             }
 
             error_exit_with_src(
-                &format!("Cannot find module `{}`", module),
+                &format!("Cannot find module `{}`.", module),
                 &import_stmt.source,
             );
         }

@@ -5385,7 +5385,6 @@ pub fn test_overlapping_trait_and_function() {
 }
 
 #[test]
-#[should_panic]
 pub fn test_orphan_rule_1() {
     let source = r##"
     module Main;
@@ -5399,11 +5398,14 @@ pub fn test_orphan_rule_1() {
         println $ [1,2,3].to_string
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Implementing trait `Std::ToString` for type `Std::Array t0` in module `Main` is illegal; it is not allowed to implement an external trait for an external type.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_orphan_rule_2() {
     let source = r##"
     module Main;
@@ -5419,11 +5421,14 @@ pub fn test_orphan_rule_2() {
         println $ [1,2,3].to_string
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Implementing trait `Std::ToString` for type `Std::Array Main::MyType` in module `Main` is illegal; it is not allowed to implement an external trait for an external type.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_orphan_rule_3() {
     let source = r##"
     module Main;
@@ -5439,7 +5444,11 @@ pub fn test_orphan_rule_3() {
         println $ [1,2,3].to_string
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Implementing trait `Std::ToString` for type `Main::MyType -> Main::MyType` in module `Main` is illegal; it is not allowed to implement an external trait for an external type.",
+    );
 }
 
 #[test]
@@ -5489,7 +5498,6 @@ pub fn test_implement_trait_on_arrow_2() {
 }
 
 #[test]
-#[should_panic]
 pub fn test_overlapping_instances_1() {
     let source = r##"
     module Main;
@@ -5513,11 +5521,14 @@ pub fn test_overlapping_instances_1() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Two trait implementations for `Main::MyToString` are overlapping.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_overlapping_instances_2() {
     let source = r##"
     module Main;
@@ -5541,11 +5552,14 @@ pub fn test_overlapping_instances_2() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Two trait implementations for `Main::MyToString` are overlapping.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_overlapping_instances_3() {
     let source = r##"
     module Main;
@@ -5569,11 +5583,14 @@ pub fn test_overlapping_instances_3() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Two trait implementations for `Main::MyToString` are overlapping.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_overlapping_instances_4() {
     let source = r##"
     module Main;
@@ -5601,11 +5618,14 @@ pub fn test_overlapping_instances_4() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Two trait implementations for `Main::MyToString` are overlapping.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_eval_non_unit() {
     let source = r##"
     module Main;
@@ -5616,11 +5636,14 @@ pub fn test_eval_non_unit() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Type mismatch. Expected `()`, found `Std::I64`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_unrelated_trait_method() {
     let source = r##"
     module Main;
@@ -5632,11 +5655,14 @@ pub fn test_unrelated_trait_method() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Type variable `a` used in trait definition has to appear in the type of a method `value`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_duplicated_symbols() {
     let source = r##"
     module Main;
@@ -5650,11 +5676,14 @@ pub fn test_duplicated_symbols() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Duplicate definition for global value: `Main::truth`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_typedef_unknown_tyvar() {
     let source = r##"
     module Main;
@@ -5664,11 +5693,14 @@ pub fn test_typedef_unknown_tyvar() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        " Unknown type variable `a` in the definition of type `Main::Hoge`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_typedef_trait_precondition() {
     let source = r##"
     module Main;
@@ -5678,11 +5710,14 @@ pub fn test_typedef_trait_precondition() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "In the constraint of type definition, only kind signature is allowed.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_typedef_specify_kind_twice() {
     let source = r##"
     module Main;
@@ -5692,11 +5727,14 @@ pub fn test_typedef_specify_kind_twice() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Kind of type variable `a` is specified more than once.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_typedef_kind_mismatch() {
     let source = r##"
     module Main;
@@ -5706,7 +5744,11 @@ pub fn test_typedef_kind_mismatch() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "error: Kind mismatch",
+    );
 }
 
 #[test]
@@ -5805,7 +5847,6 @@ pub fn test_split_by_max_size() {
 }
 
 #[test]
-#[should_panic]
 pub fn test_duplicated_struct_name() {
     let source = r##"
     module Main;
@@ -5819,11 +5860,14 @@ pub fn test_duplicated_struct_name() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Duplicate definition of type `Main::Hoge`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_ambiguous_struct_name() {
     let source = r##"
     module Main;
@@ -5843,11 +5887,14 @@ pub fn test_ambiguous_struct_name() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Name `Hoge` is ambiguous. There are `Main::A::Hoge`, `Main::B::Hoge`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_duplicated_trait_name() {
     let source = r##"
     module Main;
@@ -5865,11 +5912,14 @@ pub fn test_duplicated_trait_name() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Duplicate definition for trait Main::Hoge.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_ambiguous_trait_name() {
     let source = r##"
     module Main;
@@ -5895,11 +5945,14 @@ pub fn test_ambiguous_trait_name() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Name `Hoge` is ambiguous. There are `Main::A::Hoge`, `Main::B::Hoge`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_empty() {
     let source = r##"
     module Main;
@@ -5910,7 +5963,11 @@ pub fn test_import_empty() {
         println("Hello, World!")
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Unknown type or associated type name",
+    );
 }
 
 #[test]
@@ -5928,7 +5985,6 @@ pub fn test_import_any() {
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_hiding_any() {
     let source = r##"
     module Main;
@@ -5939,7 +5995,11 @@ pub fn test_import_hiding_any() {
         println("Hello, World!")
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Unknown type or associated type name",
+    );
 }
 
 #[test]
@@ -5984,7 +6044,6 @@ pub fn test_import_any_in_namespace() {
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_insufficient() {
     let source = r##"
     module Main;
@@ -5995,11 +6054,14 @@ pub fn test_import_insufficient() {
         println("Hello, World!")
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Unknown type or associated type name `Std::String`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_hiding_necessary() {
     let source = r##"
     module Main;
@@ -6010,7 +6072,11 @@ pub fn test_import_hiding_necessary() {
         println("Hello, World!")
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Unknown type or associated type name `IO`.",
+    );
 }
 
 #[test]
@@ -6032,7 +6098,6 @@ pub fn test_import_hiding_unnecessary() {
 }
 
 #[test]
-#[should_panic]
 pub fn test_type_and_trait_name_collision() {
     let source = r##"
     module Main;
@@ -6047,11 +6112,14 @@ pub fn test_type_and_trait_name_collision() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "There are two entities named as `Main::Piyo`: one is a type and one is a trait.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_unknown_module() {
     let source = r##"
     module Main;
@@ -6061,11 +6129,14 @@ pub fn test_import_unknown_module() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Cannot find module `Piyo`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_unknown_symbol() {
     let source = r##"
     module Main;
@@ -6074,11 +6145,14 @@ pub fn test_import_unknown_symbol() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Cannot find value named `Std::piyo`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_unknown_symbol_hiding() {
     let source = r##"
     module Main;
@@ -6087,11 +6161,14 @@ pub fn test_import_unknown_symbol_hiding() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Cannot find value named `Std::piyo`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_unknown_type_or_trait() {
     let source = r##"
     module Main;
@@ -6100,11 +6177,14 @@ pub fn test_import_unknown_type_or_trait() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Cannot find entity named `Std::Piyo`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_import_unknown_namespace() {
     let source = r##"
     module Main;
@@ -6113,7 +6193,11 @@ pub fn test_import_unknown_namespace() {
     main : IO ();
     main = pure();
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Namespace `Std::Piyo` is not defined or empty.",
+    );
 }
 
 #[test]
@@ -6413,7 +6497,6 @@ pub fn test_circular_aliasing_issue42() {
 }
 
 #[test]
-#[should_panic]
 pub fn test_unsaturated_type_alias() {
     let source = r##"
     module Main;
@@ -6430,11 +6513,10 @@ pub fn test_unsaturated_type_alias() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(&source, Configuration::develop_compiler(), "Cannot resolve type alias `Main::Hoge` in `Main::Hoge t0` because it is not fully applied.");
 }
 
 #[test]
-#[should_panic]
 pub fn test_detect_circular_type_aliasing_0() {
     let source = r##"
     module Main;
@@ -6448,11 +6530,14 @@ pub fn test_detect_circular_type_aliasing_0() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Circular type aliasing is found in `Main::Fizz`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_detect_circular_type_aliasing_1() {
     let source = r##"
     module Main;
@@ -6465,11 +6550,14 @@ pub fn test_detect_circular_type_aliasing_1() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Circular type aliasing is found in `Main::Hoge`.",
+    );
 }
 
 #[test]
-#[should_panic]
 pub fn test_detect_circular_type_aliasing_2() {
     let source = r##"
     module Main;
@@ -6482,5 +6570,9 @@ pub fn test_detect_circular_type_aliasing_2() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::develop_compiler());
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Circular type aliasing is found in `Main::Hoge Std::I64`.",
+    );
 }

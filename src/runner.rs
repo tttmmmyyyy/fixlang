@@ -3,6 +3,7 @@ use rand::Rng;
 use std::{
     env,
     fs::{self, create_dir_all, remove_dir_all},
+    panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
@@ -389,6 +390,18 @@ pub fn test_source(source: &str, mut config: Configuration) {
     save_temporary_source(source, MAIN_RUN, &source_hash);
     config.source_files = vec![temporary_source_path(MAIN_RUN, &source_hash)];
     assert_eq!(run_file(config), 0);
+}
+
+#[allow(dead_code)]
+pub fn test_source_fail(source: &str, config: Configuration, contained_msg: &str) {
+    let msg = catch_unwind(AssertUnwindSafe(|| {
+        test_source(source, config);
+    }))
+    .unwrap_err()
+    .downcast_ref::<String>()
+    .unwrap()
+    .clone();
+    assert!(msg.contains(contained_msg));
 }
 
 // Return file content and last modified.

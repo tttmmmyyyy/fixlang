@@ -119,7 +119,7 @@ impl TypeDefn {
             if !tyvars.contains(&v.name) {
                 error_exit_with_src(
                     &format!(
-                        "Unknown type variable `{}` in the definition of type `{}`",
+                        "Unknown type variable `{}` in the definition of type `{}`.",
                         v.name,
                         self.name.to_string()
                     ),
