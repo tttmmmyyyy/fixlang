@@ -31,7 +31,7 @@
 ### Fixed
 - Performance improvement of functions in built-in libraries: #6, #30, #31
 - Bug fixes on built-in libraries: #11, #13, #27, #34
-- Bug fixes on compiler: #8, #14, #15, #20, #25, #26, #28, #36
+- Bug fixes on compiler: #8, #14, #15, #20, #25, #26, #28, #36, #42
 
 ## [0.1.0] - 2023-10-24
 
