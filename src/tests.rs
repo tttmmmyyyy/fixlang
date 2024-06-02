@@ -3896,54 +3896,6 @@ pub fn test127() {
 }
 
 #[test]
-pub fn test128() {
-    // Test type alias.
-    let source = r#"
-        module Main; 
-        import Debug;
-
-        // Test of higher kinded trait alias is covered by Std::Lazy.
-
-        type Name = String;
-
-        // Type alias in declaration of global value.
-        greet : Name -> String;
-        greet = |name| "My name is " + name;
-
-        // Type alias in type definition.
-        type Person = box struct { name : Name };
-
-        // Type alias in definition of trait.
-        trait a : Named {
-            get_name : a -> Name;
-        }
-        impl Person : Named {
-            get_name = @name;
-        }
-        
-        // Implement trait on type alias.
-        trait a : MyToString {
-            to_string : a -> String;
-        }
-        impl Name : MyToString {
-            to_string = |s : Name| s;
-        }
-
-        main : IO ();
-        main = (
-            eval assert_eq(|_|"", "John".greet + " " + get_name(Person { name : "Smith" }), "My name is John Smith");
-
-            // Type alias in type annotation.
-            let names : Array Name = ["John Smith"];
-            eval assert_eq(|_|"", names.@(0).MyToString::to_string, "John Smith");
-
-            pure()
-        );
-    "#;
-    test_source(&source, Configuration::develop_compiler());
-}
-
-#[test]
 pub fn test129() {
     // Test ToBytes/FromBytes
     let source = r#"
@@ -6397,6 +6349,54 @@ pub fn test_iterator_product() {
 }
 
 #[test]
+pub fn test_type_alias() {
+    // Test type alias.
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        // Test of higher kinded trait alias is covered by Std::Lazy.
+
+        type Name = String;
+
+        // Type alias in declaration of global value.
+        greet : Name -> String;
+        greet = |name| "My name is " + name;
+
+        // Type alias in type definition.
+        type Person = box struct { name : Name };
+
+        // Type alias in definition of trait.
+        trait a : Named {
+            get_name : a -> Name;
+        }
+        impl Person : Named {
+            get_name = @name;
+        }
+        
+        // Implement trait on type alias.
+        trait a : MyToString {
+            to_string : a -> String;
+        }
+        impl Name : MyToString {
+            to_string = |s : Name| s;
+        }
+
+        main : IO ();
+        main = (
+            eval assert_eq(|_|"", "John".greet + " " + get_name(Person { name : "Smith" }), "My name is John Smith");
+
+            // Type alias in type annotation.
+            let names : Array Name = ["John Smith"];
+            eval assert_eq(|_|"", names.@(0).MyToString::to_string, "John Smith");
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
 pub fn test_circular_aliasing_issue42() {
     let source = r##"
     module Main;
@@ -6406,6 +6406,79 @@ pub fn test_circular_aliasing_issue42() {
     main: IO ();
     main = (
         let arr: MyArray (MyArray I64)  = [ [] ];
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_unsaturated_type_alias() {
+    let source = r##"
+    module Main;
+
+    type Hoge a b = a -> b;
+
+    impl Hoge a : Functor {
+        map = |f, g| g >> f;
+    }
+    
+    main: IO ();
+    main = (
+        let hoge : Hoge I64 String = to_string;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_detect_circular_type_aliasing_0() {
+    let source = r##"
+    module Main;
+
+    type Fizz = Buzz;
+    type Buzz = Fizz;
+    
+    main: IO ();
+    main = (
+        let fizz : Fizz = 42;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_detect_circular_type_aliasing_1() {
+    let source = r##"
+    module Main;
+
+    type Hoge = Array Hoge;
+    
+    main: IO ();
+    main = (
+        let hoge : Hoge = [];
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+#[should_panic]
+pub fn test_detect_circular_type_aliasing_2() {
+    let source = r##"
+    module Main;
+
+    type Hoge a = Hoge I64;
+    
+    main: IO ();
+    main = (
+        let hoge : Hoge Bool = [];
         pure()
     );
     "##;

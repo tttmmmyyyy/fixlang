@@ -682,17 +682,29 @@ impl TypeNode {
 
     // Remove type aliases in a type.
     pub fn resolve_type_aliases(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-        self.resolve_type_aliases_inner(env, vec![], &self.to_string_normalize())
+        let self_src = self.get_source().clone();
+        self.resolve_type_aliases_inner(env, vec![], &self_src)
     }
 
     // Remove type aliases in a type.
-    // * `path`, `entry_typename` - Arguments to detect circular aliasing.
+    // * `type_name_path` - argument to detect circular aliasing.
+    // * `entry_type` - argument to show good error message.
     fn resolve_type_aliases_inner(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
-        mut path: Vec<String>,
-        entry_typename: &str,
+        mut type_name_path: Vec<String>,
+        entry_type_src: &Option<Span>,
     ) -> Arc<TypeNode> {
+        // Check circular aliasing.
+        let type_name = self.to_string_normalize();
+        if type_name_path.contains(&type_name) {
+            error_exit_with_src(
+                &format!("Circular type aliasing is found in `{}`.", type_name),
+                entry_type_src,
+            )
+        }
+        type_name_path.push(type_name);
+
         // First, treat the case where top-level type constructor is a type alias.
         // As an example, consider type alias `type Lazy a = () -> a`. Then `Lazy Bool` should be resolved to `() -> Bool`.
         let app_seq = self.flatten_type_application();
@@ -700,15 +712,6 @@ impl TypeNode {
         match &toplevel_ty.ty {
             Type::TyCon(tc) => {
                 if let Some(ta) = env.aliases.get(&tc) {
-                    // Check recursive aliasing.
-                    if path.contains(&tc.name.to_string()) {
-                        error_exit(&format!(
-                            "Cannot resolve type aliasing in `{}`. Circular aliasing is found.",
-                            entry_typename
-                        ))
-                    }
-                    path.push(tc.name.to_string());
-
                     // When the type alias is not fully applied, raise error.
                     if app_seq.len() - 1 < ta.tyvars.len() {
                         error_exit_with_src(
@@ -739,7 +742,11 @@ impl TypeNode {
                         let src = Span::unite_opt(resolved.get_source(), arg.get_source());
                         resolved = type_tyapp(resolved, arg).set_source(src);
                     }
-                    return resolved.resolve_type_aliases_inner(env, path, entry_typename);
+                    return resolved.resolve_type_aliases_inner(
+                        env,
+                        type_name_path,
+                        entry_type_src,
+                    );
                 }
             }
             _ => {}
@@ -748,16 +755,34 @@ impl TypeNode {
         match &self.ty {
             Type::TyVar(_) => self.clone(),
             Type::FunTy(dom_ty, codom_ty) => self
-                .set_funty_src(dom_ty.resolve_type_aliases_inner(env, path.clone(), entry_typename))
-                .set_funty_dst(codom_ty.resolve_type_aliases_inner(env, path, entry_typename)),
+                .set_funty_src(dom_ty.resolve_type_aliases_inner(
+                    env,
+                    type_name_path.clone(),
+                    entry_type_src,
+                ))
+                .set_funty_dst(codom_ty.resolve_type_aliases_inner(
+                    env,
+                    type_name_path,
+                    entry_type_src,
+                )),
             Type::TyCon(_) => self.clone(),
             Type::TyApp(fun_ty, arg_ty) => self
-                .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(env, path.clone(), entry_typename))
-                .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(env, path, entry_typename)),
+                .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(
+                    env,
+                    type_name_path.clone(),
+                    entry_type_src,
+                ))
+                .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(
+                    env,
+                    type_name_path,
+                    entry_type_src,
+                )),
             Type::AssocTy(_, args) => {
                 let args = args
                     .iter()
-                    .map(|arg| arg.resolve_type_aliases_inner(env, path.clone(), entry_typename))
+                    .map(|arg| {
+                        arg.resolve_type_aliases_inner(env, type_name_path.clone(), entry_type_src)
+                    })
                     .collect::<Vec<_>>();
                 self.set_assocty_args(args)
             }
