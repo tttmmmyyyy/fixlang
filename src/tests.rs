@@ -6395,3 +6395,19 @@ pub fn test_iterator_product() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_circular_aliasing_issue42() {
+    let source = r##"
+    module Main;
+
+    type MyArray a = Array a;
+    
+    main: IO ();
+    main = (
+        let arr: MyArray (MyArray I64)  = [ [] ];
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
