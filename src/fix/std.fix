@@ -877,16 +877,20 @@ namespace Iterator {
     // You should use `Monad::flatten` instead of this function.
     // This function is used in the implementation of `Monad::bind` for `Iterator`.
     _flatten : Iterator (Iterator a) -> Iterator a;
-    _flatten = |iter_iter| (
-        let next = |_| (
-            if iter_iter.is_empty { Option::none() };
-            let (iter, iter_iter) = iter_iter.advance.as_some;
-            if iter.is_empty { iter_iter._flatten.advance };
-            let (e, iter) = iter.advance.as_some;
-            Option::some $ (e, iter_iter.push_front(iter)._flatten)
-        );
-        Iterator { next : next }
+    _flatten = |iters| (
+        let opt_iter = iters.advance;
+        if opt_iter.is_none { Iterator::empty };
+        let (iter, iters) = opt_iter.as_some;
+        _flatten_sub(iter, iters)
     );
+
+    _flatten_sub : Iterator a -> Iterator (Iterator a) -> Iterator a;
+    _flatten_sub = |iter, iters| Iterator { next : |_| 
+        let opt_elem = iter.advance;
+        if opt_elem.is_none { iters._flatten.advance };
+        let (elem, iter) = opt_elem.as_some;
+        Option::some $ (elem, _flatten_sub(iter, iters))
+    };
 
     // Get next value and next iterator.
     advance : Iterator a -> Option (a, Iterator a);
@@ -1061,11 +1065,7 @@ namespace Iterator {
     // The cartesian product of two iterators.
     // Example: `[1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array == [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]`
     product : Iterator a -> Iterator b -> Iterator (b, a);
-    product = |as, bs| (
-        let a = *as;
-        let b = *bs;
-        pure $ (b, a)
-    );
+    product = |as, bs| as.map(|a| bs.map(|b| (b, a)))._flatten;
 
     // Push an element to an iterator.
     push_front : a -> Iterator a -> Iterator a;
