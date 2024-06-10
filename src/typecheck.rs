@@ -1144,7 +1144,7 @@ impl TypeCheckContext {
         }
         already_added.insert(pred_str);
         let mut unifiable = false;
-        for qual_pred_scm in &self.assumed_preds.get(&pred.trait_id).unwrap().clone() {
+        for qual_pred_scm in &self.assumed_preds.get(&pred.trait_id).unwrap_or(&vec![]).clone() {
             // Instantiate qualified predicate.
             let mut subst = Substitution::default();
             for tv in &qual_pred_scm.gen_vars {

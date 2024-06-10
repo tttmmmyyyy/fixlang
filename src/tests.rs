@@ -6576,3 +6576,24 @@ pub fn test_detect_circular_type_aliasing_2() {
         "Circular type aliasing is found in `Main::Hoge Std::I64`.",
     );
 }
+
+#[test]
+pub fn test_call_unimplemented_trait_method_regression_issue_43() {
+    let source = r##"
+        module Main;
+
+        trait a: Foo {
+            foo: a -> IO ();
+        }
+        
+        main: IO ();
+        main = (
+            123.foo
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "No value named `foo` matches the expected type `Std::I64 -> Std::IO ()`.",
+    );
+}
