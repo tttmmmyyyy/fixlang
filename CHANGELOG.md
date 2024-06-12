@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [0.2.0] - 2024-06-12
+
+### Added
 - Experimental support for multi-threading. Added `AsyncTask` built-in module.
 - Add associated types.
 - Add functions related to command line arguments: `get_arg`, `get_arg_count`, `get_args` in `Std::IO`.
@@ -31,7 +39,7 @@
 ### Fixed
 - Performance improvement of functions in built-in libraries: #6, #30, #31
 - Bug fixes on built-in libraries: #11, #13, #27, #34
-- Bug fixes on compiler: #8, #14, #15, #20, #25, #26, #28, #36, #42
+- Bug fixes on compiler: #8, #14, #15, #20, #25, #26, #28, #36, #42, #43
 
 ## [0.1.0] - 2023-10-24
 
