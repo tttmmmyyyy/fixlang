@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Add `Std::Monad::unless : [m : Monad] Bool -> m () -> m ()`, `Std::Monad::when : [m : Monad] Bool -> m () -> m ()`.
 
 ### Changed
 

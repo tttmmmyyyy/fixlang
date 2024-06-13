@@ -541,6 +541,8 @@
       - [(required) `bind : [m : Monad] (a -> m b) -> m a -> m b`](#required-bind--m--monad-a---m-b---m-a---m-b)
       - [(required) `pure : [m : Monad] a -> m a`](#required-pure--m--monad-a---m-a)
       - [`flatten : [m : Monad] m (m a) -> a`](#flatten--m--monad-m-m-a---a)
+      - [`unless : [m : Monad] Bool -> m () -> m ()`](#unless--m--monad-bool---m----m-)
+      - [`when : [m : Monad] Bool -> m () -> m ()`](#when--m--monad-bool---m----m-)
     - [ToBytes](#tobytes)
       - [`to_bytes : [a : ToBytes] a -> Array U8`](#to_bytes--a--tobytes-a---array-u8)
     - [ToString](#tostring)
@@ -2118,6 +2120,16 @@ NOTE: For primitive types of Fix, `FromString` is implemented using `strto**` fu
 #### (required) `pure : [m : Monad] a -> m a`
 
 #### `flatten : [m : Monad] m (m a) -> a`
+
+Flatten a nested monadic action.
+
+#### `unless : [m : Monad] Bool -> m () -> m ()`
+
+`unless(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is false.
+
+#### `when : [m : Monad] Bool -> m () -> m ()`
+
+`when(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is true.
 
 ### ToBytes
 

@@ -1713,8 +1713,17 @@ trait [m : *->*] m : Monad {
 }
 
 namespace Monad {
+    // Flatten a nested monadic action.
     flatten : [m : Monad] m (m a) -> m a;
     flatten = Monad::bind(|x|x);
+
+    // `unless(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is false.
+    unless : [m : Monad] Bool -> m () -> m ();
+    unless = |cond, act| if cond { pure $ () } else { act };
+
+    // `when(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is true.
+    when : [m : Monad] Bool -> m () -> m ();
+    when = |cond, act| if cond { act } else { pure $ () };
 }
 
 trait a : ToBytes {
