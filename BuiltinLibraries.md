@@ -2119,8 +2119,6 @@ NOTE: For primitive types of Fix, `FromString` is implemented using `strto**` fu
 
 #### `flatten : [m : Monad] m (m a) -> a`
 
-This is equivalent to `Monad::bind(|x|x)`.
-
 ### ToBytes
 
 #### `to_bytes : [a : ToBytes] a -> Array U8`
