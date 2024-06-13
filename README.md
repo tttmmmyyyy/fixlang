@@ -8,7 +8,7 @@ We hope it will grow to a language that is recommended as "your first functional
 
 You can try Fix in [fixlang playground](https://tttmmmyyyy.github.io/fixlang-playground/).
 
-Features: 
+Concepts: 
 - **Familiar syntax.** 
   - The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
 - **Simplicity.** 
@@ -43,6 +43,24 @@ main = (
 );
 ```
 [Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCi8vIFByaW50cyBuLXRoIHZhbHVlIG9mIEZpYm9uYWNjaSBzZXF1ZW5jZSBpbiBPKG4pLg0KbWFpbiA6IElPICgpOw0KbWFpbiA9ICgNCiAgICBsZXQgbiA9IDMwOw0KICAgIGxldCBhcnIgPSBBcnJheTo6ZmlsbChuKzEsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDAsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDEsIDEpOw0KICAgIGxldCBhcnIgPSBsb29wKCgyLCBhcnIpLCB8KGlkeCwgYXJyKXwNCiAgICAgICAgaWYgaWR4ID09IGFyci5nZXRfc2l6ZSB7DQogICAgICAgICAgICBicmVhayAkIGFycg0KICAgICAgICB9IGVsc2Ugew0KICAgICAgICAgICAgbGV0IHggPSBhcnIuQChpZHgtMSk7DQogICAgICAgICAgICBsZXQgeSA9IGFyci5AKGlkeC0yKTsNCiAgICAgICAgICAgIGxldCBhcnIgPSBhcnIuc2V0KGlkeCwgeCt5KTsNCiAgICAgICAgICAgIGNvbnRpbnVlICQgKGlkeCsxLCBhcnIpDQogICAgICAgIH0NCiAgICApOw0KICAgIHByaW50bG4gJCBhcnIuQChuKS50b19zdHJpbmcgLy8gODMyMDQwIGZvciBuID0gMzANCik7)
+
+## Features
+
+- Functional:
+  - First class functions (a.k.a. closures)
+  - Pattern matching
+  - Higher kinded types
+  - Traits
+  - Associated types
+  - Syntax for monads (that is different from `do` in Haskell)
+  - Hindley-Milner type inference
+- Ad hoc overloading
+- Foreign function interface (Calling C function, managing reference counter from C side)
+- Multithread programming
+- Memory management / mutability:
+  - Memory safety and thread safety
+  - Leakless memory management by reference counting
+  - In-place update of uniquely referenced arrays and structs
 
 ## Examples
 
