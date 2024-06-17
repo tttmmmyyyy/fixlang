@@ -70,6 +70,9 @@ pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const DOT_FIXLANG: &str = ".fixlang";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const COMPILATION_UNITS_PATH: &str = ".fixlang/intermediate/units";
+pub const CHECK_C_TYPES_PATH: &str = ".fixlang/check_c_types.c";
+pub const CHECK_C_TYPES_EXEC_PATH: &str = ".fixlang/check_c_types.out";
+pub const C_TYPES_JSON_PATH: &str = ".fixlang/c_types.json";
 
 pub const ASYNCTASK_NAME: &str = "AsyncTask";
 

@@ -438,7 +438,7 @@ where
 
 pub fn load_file(config: &mut Configuration) -> Program {
     // Link all modules specified in source_files.
-    let mut target_mod = make_std_mod();
+    let mut target_mod = make_std_mod(config);
     for file_path in &config.source_files {
         let fix_mod = parse_file_path(file_path.clone());
         target_mod.link(fix_mod, false);

@@ -4,7 +4,7 @@ pub const FIX_NAME: &str = "fix";
 
 const STD_SOURCE: &str = include_str!("fix/std.fix");
 
-pub fn make_std_mod() -> Program {
+pub fn make_std_mod(config: &Configuration) -> Program {
     let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std");
 
     // `LoopResult` type.
@@ -335,6 +335,60 @@ pub fn make_std_mod() -> Program {
         ),
         get_retain_function_of_boxed_value(),
     );
+
+    // Add C types type aliases.
+    let c_types_data_int = vec![
+        ("CChar", "I", config.c_type_sizes.char),
+        ("CSignedChar", "I", config.c_type_sizes.char),
+        ("CUnsignedChar", "U", config.c_type_sizes.char),
+        ("CShort", "I", config.c_type_sizes.short),
+        ("CShortInt", "I", config.c_type_sizes.short),
+        ("CSignedShort", "I", config.c_type_sizes.short),
+        ("CSignedShortInt", "I", config.c_type_sizes.short),
+        ("CUnsignedShort", "U", config.c_type_sizes.short),
+        ("CUnsignedShortInt", "U", config.c_type_sizes.short),
+        ("CInt", "I", config.c_type_sizes.int),
+        ("CSigned", "I", config.c_type_sizes.int),
+        ("CSignedInt", "I", config.c_type_sizes.int),
+        ("CUnsigned", "U", config.c_type_sizes.int),
+        ("CUnsignedInt", "U", config.c_type_sizes.int),
+        ("CLong", "I", config.c_type_sizes.long),
+        ("CLongInt", "I", config.c_type_sizes.long),
+        ("CSignedLong", "I", config.c_type_sizes.long),
+        ("CSignedLongInt", "I", config.c_type_sizes.long),
+        ("CUnsignedLong", "U", config.c_type_sizes.long),
+        ("CUnsignedLongInt", "U", config.c_type_sizes.long),
+        ("CLongLong", "I", config.c_type_sizes.long_long),
+        ("CLongLongInt", "I", config.c_type_sizes.long_long),
+        ("CSignedLongLong", "I", config.c_type_sizes.long_long),
+        ("CSignedLongLongInt", "I", config.c_type_sizes.long_long),
+        ("CUnsignedLongLong", "U", config.c_type_sizes.long_long),
+        ("CUnsignedLongLongInt", "U", config.c_type_sizes.long_long),
+        ("CSizeT", "U", config.c_type_sizes.size_t),
+        ("CFloat", "F", config.c_type_sizes.float),
+        ("CDouble", "F", config.c_type_sizes.double),
+    ];
+    for (name, sign, size) in c_types_data_int {
+        let fix_type = if sign == "F" {
+            make_floating_ty(&format!("{}{}", sign, size))
+        } else {
+            make_integral_ty(&format!("{}{}", sign, size))
+        };
+        if fix_type.is_none() {
+            println!(
+                "Warning: Type alias `{}` is not supported in this system.",
+                name
+            );
+            continue;
+        }
+        let fix_type = fix_type.unwrap();
+        fix_module.add_type_defns(vec![TypeDefn {
+            name: FullName::from_strs(&[STD_NAME, FFI_NAME], name),
+            value: TypeDeclValue::Alias(TypeAlias { value: fix_type }),
+            tyvars: vec![],
+            source: None,
+        }]);
+    }
 
     fix_module
 }

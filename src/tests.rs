@@ -6597,3 +6597,21 @@ pub fn test_call_unimplemented_trait_method_regression_issue_43() {
         "No value named `foo` matches the expected type `Std::I64 -> Std::IO ()`.",
     );
 }
+
+#[test]
+pub fn test_c_type_aliases() {
+    let source = r##"
+        module Main;
+        import Debug;
+
+        v_char : CChar;
+        v_char = 42_I8;
+        
+        main: IO ();
+        main = (
+            eval assert_eq(|_|"", v_char, 42_I8);
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
