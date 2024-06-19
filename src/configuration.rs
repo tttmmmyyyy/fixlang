@@ -3,9 +3,11 @@ use std::{env, path::PathBuf};
 
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
+use serde::{Deserialize, Serialize};
 
 use crate::cpu_features::CpuFeatures;
 
+use crate::constants::{CHECK_C_TYPES_EXEC_PATH, CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::{misc::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 
 #[derive(Clone, Copy)]
@@ -58,6 +60,8 @@ pub struct Configuration {
     pub max_cu_size: usize,
     // Run program with valgrind. Effective only in `run` mode.
     pub valgrind_tool: ValgrindTool,
+    // Sizes of C types.
+    pub c_type_sizes: CTypeSizes,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -97,6 +101,7 @@ impl Default for Configuration {
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
             valgrind_tool: ValgrindTool::None,
             library_search_paths: vec![],
+            c_type_sizes: CTypeSizes::load_or_check(),
         }
     }
 }
@@ -257,6 +262,7 @@ impl Configuration {
         data.push_str(&self.debug_info.to_string());
         data.push_str(&self.threaded.to_string());
         data.push_str(&self.async_task.to_string());
+        data.push_str(&self.c_type_sizes.to_string());
         data.push_str(build_time_utc!()); // Also add build time of the compiler.
         format!("{:x}", md5::compute(data))
     }
@@ -289,5 +295,161 @@ impl Configuration {
             }
         }
         com
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct CTypeSizes {
+    pub char: usize,
+    pub short: usize,
+    pub int: usize,
+    pub long: usize,
+    pub long_long: usize,
+    pub size_t: usize,
+    pub float: usize,
+    pub double: usize,
+}
+
+impl CTypeSizes {
+    fn to_string(&self) -> String {
+        vec![
+            format!("char: {}", self.char),
+            format!("short: {}", self.short),
+            format!("int: {}", self.int),
+            format!("long: {}", self.long),
+            format!("long long: {}", self.long_long),
+            format!("size_t: {}", self.size_t),
+            format!("float: {}", self.float),
+            format!("double: {}", self.double),
+        ]
+        .join(", ")
+    }
+
+    // Get the size of each C types by compiling and running a C program.
+    fn from_gcc() -> Self {
+        // First, create a C source file to check the size of each C types.
+        let c_source = r#"
+#include <stdio.h>
+#include <stddef.h>
+#include <limits.h>
+int main() {
+    printf("%lu\n", sizeof(char) * CHAR_BIT);
+    printf("%lu\n", sizeof(short) * CHAR_BIT);
+    printf("%lu\n", sizeof(int) * CHAR_BIT);
+    printf("%lu\n", sizeof(long) * CHAR_BIT);
+    printf("%lu\n", sizeof(long long) * CHAR_BIT);
+    printf("%lu\n", sizeof(size_t) * CHAR_BIT);
+    printf("%lu\n", sizeof(float) * CHAR_BIT);
+    printf("%lu\n", sizeof(double) * CHAR_BIT);
+    return 0;
+}
+        "#;
+        // Then save it to a temporary file ".fixlang/check_c_types.c".
+        let check_c_types_path = PathBuf::from(CHECK_C_TYPES_PATH);
+        // Create parent folders.
+        let parent = check_c_types_path.parent().unwrap();
+        if std::fs::create_dir_all(parent).is_err() {
+            error_exit(&format!("Failed to create directory \"{:?}\".", parent));
+        }
+        if std::fs::write(&check_c_types_path, c_source).is_err() {
+            error_exit(&format!(
+                "Failed to write file \"{:?}\".",
+                check_c_types_path
+            ));
+        }
+        // Run it by gcc.
+        let output = Command::new("gcc")
+            .arg(CHECK_C_TYPES_PATH)
+            .arg("-o")
+            .arg(CHECK_C_TYPES_EXEC_PATH)
+            .output();
+        if output.is_err() {
+            error_exit(&format!("Failed to compile \"{}\".", CHECK_C_TYPES_PATH));
+        }
+        let output = output.unwrap();
+        // Run the program and parse the result to create CTypeSizes.
+        if !output.status.success() {
+            error_exit(&format!(
+                "Failed to compile \"{}\": \"{}\".",
+                CHECK_C_TYPES_PATH,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        let output = Command::new(CHECK_C_TYPES_EXEC_PATH).output();
+        if output.is_err() {
+            error_exit(&format!("Failed to run \"{}\".", CHECK_C_TYPES_EXEC_PATH));
+        }
+        let output = output.unwrap();
+        if !output.status.success() {
+            error_exit(&format!(
+                "Failed to run \"{}\": \"{}\".",
+                CHECK_C_TYPES_EXEC_PATH,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        let output = String::from_utf8_lossy(&output.stdout);
+        let mut lines = output.lines();
+        let char = lines.next().unwrap().parse().unwrap();
+        let short = lines.next().unwrap().parse().unwrap();
+        let int = lines.next().unwrap().parse().unwrap();
+        let long = lines.next().unwrap().parse().unwrap();
+        let long_long = lines.next().unwrap().parse().unwrap();
+        let size_t = lines.next().unwrap().parse().unwrap();
+        let float = lines.next().unwrap().parse().unwrap();
+        let double = lines.next().unwrap().parse().unwrap();
+        let res = CTypeSizes {
+            char,
+            short,
+            int,
+            long,
+            long_long,
+            size_t,
+            float,
+            double,
+        };
+        res
+    }
+
+    fn save_to_file(&self) {
+        // Open json file.
+        let path = C_TYPES_JSON_PATH;
+        let file = std::fs::File::create(path);
+        if file.is_err() {
+            error_exit(&format!("Failed to create \"{}\".", path));
+        }
+        let file = file.unwrap();
+        // Serialize and write to the file.
+        serde_json::to_writer_pretty(file, self)
+            .expect(format!("Failed to write \"{}\".", path).as_str());
+    }
+
+    fn load_file() -> Option<Self> {
+        let path = PathBuf::from(C_TYPES_JSON_PATH);
+        if !path.exists() {
+            return None;
+        }
+        let file = std::fs::File::open(path);
+        if file.is_err() {
+            eprintln!("Failed to open \"{}\".", C_TYPES_JSON_PATH);
+            return None;
+        }
+        let file = file.unwrap();
+        let sizes = serde_json::from_reader(file);
+        if sizes.is_err() {
+            eprintln!("Failed to parse the content of \"{}\".", C_TYPES_JSON_PATH);
+            return None;
+        }
+        Some(sizes.unwrap())
+    }
+
+    fn load_or_check() -> Self {
+        match Self::load_file() {
+            Some(sizes) => sizes,
+            None => {
+                let sizes = Self::from_gcc();
+                sizes.save_to_file();
+                sizes
+            }
+        }
     }
 }

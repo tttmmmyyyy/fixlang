@@ -1573,7 +1573,8 @@ main = (
 In `{c_function_signature}`, you need to specify type of return value and arguments. 
 
 - Use `Ptr` for pointers.
-- Use `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64` for numeric types.
+- Use `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64` for numeric types. 
+- Moreover, there are type aliases `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble` to concrete Fix numeric types depending on the system gcc.
 - Use `...` for `va_arg`.
 - If return type is `void`, put `()` before the function name.
 

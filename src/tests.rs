@@ -6597,3 +6597,56 @@ pub fn test_call_unimplemented_trait_method_regression_issue_43() {
         "No value named `foo` matches the expected type `Std::I64 -> Std::IO ()`.",
     );
 }
+
+#[test]
+pub fn test_c_type_aliases() {
+    let source = r##"
+        module Main;
+        import Debug;
+        
+        main: IO ();
+        main = (
+            let x : CChar = 42.to_CChar;
+            let x : CChar = 42.0.to_CChar;
+
+            let x : CUnsignedChar = 42.to_CUnsignedChar;
+            let x : CUnsignedChar = 42.0.to_CUnsignedChar;
+            
+            let x : CShort = 42.to_CShort;
+            let x : CShort = 42.0.to_CShort;
+
+            let x : CUnsignedShort = 42.to_CUnsignedShort;
+            let x : CUnsignedShort = 42.0.to_CUnsignedShort;
+
+            let x : CInt = 42.to_CInt;
+            let x : CInt = 42.0.to_CInt;
+
+            let x : CUnsignedInt = 42.to_CUnsignedInt;
+            let x : CUnsignedInt = 42.0.to_CUnsignedInt;
+
+            let x : CLong = 42.to_CLong;
+            let x : CLong = 42.0.to_CLong;
+
+            let x : CUnsignedLong = 42.to_CUnsignedLong;
+            let x : CUnsignedLong = 42.0.to_CUnsignedLong;
+
+            let x : CLongLong = 42.to_CLongLong;
+            let x : CLongLong = 42.0.to_CLongLong;
+
+            let x : CUnsignedLongLong = 42.to_CUnsignedLongLong;
+            let x : CUnsignedLongLong = 42.0.to_CUnsignedLongLong;
+
+            let x : CSizeT = 42.to_CSizeT;
+            let x : CSizeT = 42.0.to_CSizeT;
+
+            let x : CFloat = 42.to_CFloat;
+            let x : CFloat = 42.0.to_CFloat;
+
+            let x : CDouble = 42.to_CDouble;
+            let x : CDouble = 42.0.to_CDouble;
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
