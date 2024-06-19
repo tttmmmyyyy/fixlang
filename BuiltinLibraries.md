@@ -26,6 +26,18 @@
       - [`to_U64 : I8 -> U64`](#to_u64--i8---u64)
       - [`to_F32 : I8 -> F32`](#to_f32--i8---f32)
       - [`to_F64 : I8 -> F64`](#to_f64--i8---f64)
+      - [`to_CChar : I8 -> CChar`](#to_cchar--i8---cchar)
+      - [`to_CUnsignedChar : I8 -> CUnsignedChar`](#to_cunsignedchar--i8---cunsignedchar)
+      - [`to_CShort : I8 -> CShort`](#to_cshort--i8---cshort)
+      - [`to_CUnsignedShort : I8 -> CUnsignedShort`](#to_cunsignedshort--i8---cunsignedshort)
+      - [`to_CInt : I8 -> CInt`](#to_cint--i8---cint)
+      - [`to_CUnsignedInt : I8 -> CUnsignedInt`](#to_cunsignedint--i8---cunsignedint)
+      - [`to_CUnsignedLong : I8 -> CUnsignedLong`](#to_cunsignedlong--i8---cunsignedlong)
+      - [`to_CLongLong : I8 -> CLongLong`](#to_clonglong--i8---clonglong)
+      - [`to_CUnsignedLongLong : I8 -> CUnsignedLongLong`](#to_cunsignedlonglong--i8---cunsignedlonglong)
+      - [`to_CSizeT : I8 -> CSizeT`](#to_csizet--i8---csizet)
+      - [`to_CFloat : I8 -> CFloat`](#to_cfloat--i8---cfloat)
+      - [`to_CDouble : I8 -> CDouble`](#to_cdouble--i8---cdouble)
       - [`impl I8 : Add`](#impl-i8--add)
       - [`impl I8 : Eq`](#impl-i8--eq)
       - [`impl I8 : FromBytes`](#impl-i8--frombytes)
@@ -57,6 +69,18 @@
       - [`to_U64 : U8 -> U64`](#to_u64--u8---u64)
       - [`to_F32 : U8 -> F32`](#to_f32--u8---f32)
       - [`to_F64 : U8 -> F64`](#to_f64--u8---f64)
+      - [`to_CChar : U8 -> CChar`](#to_cchar--u8---cchar)
+      - [`to_CUnsignedChar : U8 -> CUnsignedChar`](#to_cunsignedchar--u8---cunsignedchar)
+      - [`to_CShort : U8 -> CShort`](#to_cshort--u8---cshort)
+      - [`to_CUnsignedShort : U8 -> CUnsignedShort`](#to_cunsignedshort--u8---cunsignedshort)
+      - [`to_CInt : U8 -> CInt`](#to_cint--u8---cint)
+      - [`to_CUnsignedInt : U8 -> CUnsignedInt`](#to_cunsignedint--u8---cunsignedint)
+      - [`to_CUnsignedLong : U8 -> CUnsignedLong`](#to_cunsignedlong--u8---cunsignedlong)
+      - [`to_CLongLong : U8 -> CLongLong`](#to_clonglong--u8---clonglong)
+      - [`to_CUnsignedLongLong : U8 -> CUnsignedLongLong`](#to_cunsignedlonglong--u8---cunsignedlonglong)
+      - [`to_CSizeT : U8 -> CSizeT`](#to_csizet--u8---csizet)
+      - [`to_CFloat : U8 -> CFloat`](#to_cfloat--u8---cfloat)
+      - [`to_CDouble : U8 -> CDouble`](#to_cdouble--u8---cdouble)
       - [`impl U8 : Add`](#impl-u8--add)
       - [`impl U8 : Eq`](#impl-u8--eq)
       - [`impl U8 : FromBytes`](#impl-u8--frombytes)
@@ -89,6 +113,18 @@
       - [`to_U64 : I16 -> U64`](#to_u64--i16---u64)
       - [`to_F32 : I16 -> F32`](#to_f32--i16---f32)
       - [`to_F64 : I16 -> F64`](#to_f64--i16---f64)
+      - [`to_CChar : I16 -> CChar`](#to_cchar--i16---cchar)
+      - [`to_CUnsignedChar : I16 -> CUnsignedChar`](#to_cunsignedchar--i16---cunsignedchar)
+      - [`to_CShort : I16 -> CShort`](#to_cshort--i16---cshort)
+      - [`to_CUnsignedShort : I16 -> CUnsignedShort`](#to_cunsignedshort--i16---cunsignedshort)
+      - [`to_CInt : I16 -> CInt`](#to_cint--i16---cint)
+      - [`to_CUnsignedInt : I16 -> CUnsignedInt`](#to_cunsignedint--i16---cunsignedint)
+      - [`to_CUnsignedLong : I16 -> CUnsignedLong`](#to_cunsignedlong--i16---cunsignedlong)
+      - [`to_CLongLong : I16 -> CLongLong`](#to_clonglong--i16---clonglong)
+      - [`to_CUnsignedLongLong : I16 -> CUnsignedLongLong`](#to_cunsignedlonglong--i16---cunsignedlonglong)
+      - [`to_CSizeT : I16 -> CSizeT`](#to_csizet--i16---csizet)
+      - [`to_CFloat : I16 -> CFloat`](#to_cfloat--i16---cfloat)
+      - [`to_CDouble : I16 -> CDouble`](#to_cdouble--i16---cdouble)
       - [`impl I16 : Add`](#impl-i16--add)
       - [`impl I16 : Eq`](#impl-i16--eq)
       - [`impl I16 : FromBytes`](#impl-i16--frombytes)
@@ -120,6 +156,18 @@
       - [`to_U64 : U16 -> U64`](#to_u64--u16---u64)
       - [`to_F32 : U16 -> F32`](#to_f32--u16---f32)
       - [`to_F64 : U16 -> F64`](#to_f64--u16---f64)
+      - [`to_CChar : U16 -> CChar`](#to_cchar--u16---cchar)
+      - [`to_CUnsignedChar : U16 -> CUnsignedChar`](#to_cunsignedchar--u16---cunsignedchar)
+      - [`to_CShort : U16 -> CShort`](#to_cshort--u16---cshort)
+      - [`to_CUnsignedShort : U16 -> CUnsignedShort`](#to_cunsignedshort--u16---cunsignedshort)
+      - [`to_CInt : U16 -> CInt`](#to_cint--u16---cint)
+      - [`to_CUnsignedInt : U16 -> CUnsignedInt`](#to_cunsignedint--u16---cunsignedint)
+      - [`to_CUnsignedLong : U16 -> CUnsignedLong`](#to_cunsignedlong--u16---cunsignedlong)
+      - [`to_CLongLong : U16 -> CLongLong`](#to_clonglong--u16---clonglong)
+      - [`to_CUnsignedLongLong : U16 -> CUnsignedLongLong`](#to_cunsignedlonglong--u16---cunsignedlonglong)
+      - [`to_CSizeT : U16 -> CSizeT`](#to_csizet--u16---csizet)
+      - [`to_CFloat : U16 -> CFloat`](#to_cfloat--u16---cfloat)
+      - [`to_CDouble : U16 -> CDouble`](#to_cdouble--u16---cdouble)
       - [`impl U16 : Add`](#impl-u16--add)
       - [`impl U16 : Eq`](#impl-u16--eq)
       - [`impl U16 : FromBytes`](#impl-u16--frombytes)
@@ -151,6 +199,18 @@
       - [`to_U64 : I32 -> U64`](#to_u64--i32---u64)
       - [`to_F32 : I32 -> F32`](#to_f32--i32---f32)
       - [`to_F64 : I32 -> F64`](#to_f64--i32---f64)
+      - [`to_CChar : I32 -> CChar`](#to_cchar--i32---cchar)
+      - [`to_CUnsignedChar : I32 -> CUnsignedChar`](#to_cunsignedchar--i32---cunsignedchar)
+      - [`to_CShort : I32 -> CShort`](#to_cshort--i32---cshort)
+      - [`to_CUnsignedShort : I32 -> CUnsignedShort`](#to_cunsignedshort--i32---cunsignedshort)
+      - [`to_CInt : I32 -> CInt`](#to_cint--i32---cint)
+      - [`to_CUnsignedInt : I32 -> CUnsignedInt`](#to_cunsignedint--i32---cunsignedint)
+      - [`to_CUnsignedLong : I32 -> CUnsignedLong`](#to_cunsignedlong--i32---cunsignedlong)
+      - [`to_CLongLong : I32 -> CLongLong`](#to_clonglong--i32---clonglong)
+      - [`to_CUnsignedLongLong : I32 -> CUnsignedLongLong`](#to_cunsignedlonglong--i32---cunsignedlonglong)
+      - [`to_CSizeT : I32 -> CSizeT`](#to_csizet--i32---csizet)
+      - [`to_CFloat : I32 -> CFloat`](#to_cfloat--i32---cfloat)
+      - [`to_CDouble : I32 -> CDouble`](#to_cdouble--i32---cdouble)
       - [`impl I32 : Add`](#impl-i32--add)
       - [`impl I32 : Eq`](#impl-i32--eq)
       - [`impl I32 : FromBytes`](#impl-i32--frombytes)
@@ -181,6 +241,18 @@
       - [`to_U64 : U32 -> U64`](#to_u64--u32---u64)
       - [`to_F32 : U32 -> F32`](#to_f32--u32---f32)
       - [`to_F64 : U32 -> F64`](#to_f64--u32---f64)
+      - [`to_CChar : U32 -> CChar`](#to_cchar--u32---cchar)
+      - [`to_CUnsignedChar : U32 -> CUnsignedChar`](#to_cunsignedchar--u32---cunsignedchar)
+      - [`to_CShort : U32 -> CShort`](#to_cshort--u32---cshort)
+      - [`to_CUnsignedShort : U32 -> CUnsignedShort`](#to_cunsignedshort--u32---cunsignedshort)
+      - [`to_CInt : U32 -> CInt`](#to_cint--u32---cint)
+      - [`to_CUnsignedInt : U32 -> CUnsignedInt`](#to_cunsignedint--u32---cunsignedint)
+      - [`to_CUnsignedLong : U32 -> CUnsignedLong`](#to_cunsignedlong--u32---cunsignedlong)
+      - [`to_CLongLong : U32 -> CLongLong`](#to_clonglong--u32---clonglong)
+      - [`to_CUnsignedLongLong : U32 -> CUnsignedLongLong`](#to_cunsignedlonglong--u32---cunsignedlonglong)
+      - [`to_CSizeT : U32 -> CSizeT`](#to_csizet--u32---csizet)
+      - [`to_CFloat : U32 -> CFloat`](#to_cfloat--u32---cfloat)
+      - [`to_CDouble : U32 -> CDouble`](#to_cdouble--u32---cdouble)
       - [`impl U32 : Add`](#impl-u32--add)
       - [`impl U32 : Eq`](#impl-u32--eq)
       - [`impl U32 : FromBytes`](#impl-u32--frombytes)
@@ -212,6 +284,18 @@
       - [`to_U64 : I64 -> U64`](#to_u64--i64---u64)
       - [`to_F32 : I64 -> F32`](#to_f32--i64---f32)
       - [`to_F64 : I64 -> F64`](#to_f64--i64---f64)
+      - [`to_CChar : I64 -> CChar`](#to_cchar--i64---cchar)
+      - [`to_CUnsignedChar : I64 -> CUnsignedChar`](#to_cunsignedchar--i64---cunsignedchar)
+      - [`to_CShort : I64 -> CShort`](#to_cshort--i64---cshort)
+      - [`to_CUnsignedShort : I64 -> CUnsignedShort`](#to_cunsignedshort--i64---cunsignedshort)
+      - [`to_CInt : I64 -> CInt`](#to_cint--i64---cint)
+      - [`to_CUnsignedInt : I64 -> CUnsignedInt`](#to_cunsignedint--i64---cunsignedint)
+      - [`to_CUnsignedLong : I64 -> CUnsignedLong`](#to_cunsignedlong--i64---cunsignedlong)
+      - [`to_CLongLong : I64 -> CLongLong`](#to_clonglong--i64---clonglong)
+      - [`to_CUnsignedLongLong : I64 -> CUnsignedLongLong`](#to_cunsignedlonglong--i64---cunsignedlonglong)
+      - [`to_CSizeT : I64 -> CSizeT`](#to_csizet--i64---csizet)
+      - [`to_CFloat : I64 -> CFloat`](#to_cfloat--i64---cfloat)
+      - [`to_CDouble : I64 -> CDouble`](#to_cdouble--i64---cdouble)
       - [`impl I64 : Add`](#impl-i64--add)
       - [`impl I64 : Eq`](#impl-i64--eq)
       - [`impl I64 : FromBytes`](#impl-i64--frombytes)
@@ -242,6 +326,18 @@
       - [`to_I64 : U64 -> I64`](#to_i64--u64---i64)
       - [`to_F32 : U64 -> F32`](#to_f32--u64---f32)
       - [`to_F64 : U64 -> F64`](#to_f64--u64---f64)
+      - [`to_CChar : U64 -> CChar`](#to_cchar--u64---cchar)
+      - [`to_CUnsignedChar : U64 -> CUnsignedChar`](#to_cunsignedchar--u64---cunsignedchar)
+      - [`to_CShort : U64 -> CShort`](#to_cshort--u64---cshort)
+      - [`to_CUnsignedShort : U64 -> CUnsignedShort`](#to_cunsignedshort--u64---cunsignedshort)
+      - [`to_CInt : U64 -> CInt`](#to_cint--u64---cint)
+      - [`to_CUnsignedInt : U64 -> CUnsignedInt`](#to_cunsignedint--u64---cunsignedint)
+      - [`to_CUnsignedLong : U64 -> CUnsignedLong`](#to_cunsignedlong--u64---cunsignedlong)
+      - [`to_CLongLong : U64 -> CLongLong`](#to_clonglong--u64---clonglong)
+      - [`to_CUnsignedLongLong : U64 -> CUnsignedLongLong`](#to_cunsignedlonglong--u64---cunsignedlonglong)
+      - [`to_CSizeT : U64 -> CSizeT`](#to_csizet--u64---csizet)
+      - [`to_CFloat : U64 -> CFloat`](#to_cfloat--u64---cfloat)
+      - [`to_CDouble : U64 -> CDouble`](#to_cdouble--u64---cdouble)
       - [`impl U64 : Add`](#impl-u64--add)
       - [`impl U64 : Eq`](#impl-u64--eq)
       - [`impl U64 : FromBytes`](#impl-u64--frombytes)
@@ -736,6 +832,18 @@ Literals:
 #### `to_U64 : I8 -> U64`
 #### `to_F32 : I8 -> F32`
 #### `to_F64 : I8 -> F64`
+#### `to_CChar : I8 -> CChar`
+#### `to_CUnsignedChar : I8 -> CUnsignedChar`
+#### `to_CShort : I8 -> CShort`
+#### `to_CUnsignedShort : I8 -> CUnsignedShort`
+#### `to_CInt : I8 -> CInt`
+#### `to_CUnsignedInt : I8 -> CUnsignedInt`
+#### `to_CUnsignedLong : I8 -> CUnsignedLong`
+#### `to_CLongLong : I8 -> CLongLong`
+#### `to_CUnsignedLongLong : I8 -> CUnsignedLongLong`
+#### `to_CSizeT : I8 -> CSizeT`
+#### `to_CFloat : I8 -> CFloat`
+#### `to_CDouble : I8 -> CDouble`
 #### `impl I8 : Add`
 #### `impl I8 : Eq`
 #### `impl I8 : FromBytes`
@@ -786,6 +894,18 @@ Literals:
 #### `to_U64 : U8 -> U64`
 #### `to_F32 : U8 -> F32`
 #### `to_F64 : U8 -> F64`
+#### `to_CChar : U8 -> CChar`
+#### `to_CUnsignedChar : U8 -> CUnsignedChar`
+#### `to_CShort : U8 -> CShort`
+#### `to_CUnsignedShort : U8 -> CUnsignedShort`
+#### `to_CInt : U8 -> CInt`
+#### `to_CUnsignedInt : U8 -> CUnsignedInt`
+#### `to_CUnsignedLong : U8 -> CUnsignedLong`
+#### `to_CLongLong : U8 -> CLongLong`
+#### `to_CUnsignedLongLong : U8 -> CUnsignedLongLong`
+#### `to_CSizeT : U8 -> CSizeT`
+#### `to_CFloat : U8 -> CFloat`
+#### `to_CDouble : U8 -> CDouble`
 #### `impl U8 : Add`
 #### `impl U8 : Eq`
 #### `impl U8 : FromBytes`
@@ -827,6 +947,18 @@ Literals:
 #### `to_U64 : I16 -> U64`
 #### `to_F32 : I16 -> F32`
 #### `to_F64 : I16 -> F64`
+#### `to_CChar : I16 -> CChar`
+#### `to_CUnsignedChar : I16 -> CUnsignedChar`
+#### `to_CShort : I16 -> CShort`
+#### `to_CUnsignedShort : I16 -> CUnsignedShort`
+#### `to_CInt : I16 -> CInt`
+#### `to_CUnsignedInt : I16 -> CUnsignedInt`
+#### `to_CUnsignedLong : I16 -> CUnsignedLong`
+#### `to_CLongLong : I16 -> CLongLong`
+#### `to_CUnsignedLongLong : I16 -> CUnsignedLongLong`
+#### `to_CSizeT : I16 -> CSizeT`
+#### `to_CFloat : I16 -> CFloat`
+#### `to_CDouble : I16 -> CDouble`
 #### `impl I16 : Add`
 #### `impl I16 : Eq`
 #### `impl I16 : FromBytes`
@@ -867,6 +999,18 @@ Literals:
 #### `to_U64 : U16 -> U64`
 #### `to_F32 : U16 -> F32`
 #### `to_F64 : U16 -> F64`
+#### `to_CChar : U16 -> CChar`
+#### `to_CUnsignedChar : U16 -> CUnsignedChar`
+#### `to_CShort : U16 -> CShort`
+#### `to_CUnsignedShort : U16 -> CUnsignedShort`
+#### `to_CInt : U16 -> CInt`
+#### `to_CUnsignedInt : U16 -> CUnsignedInt`
+#### `to_CUnsignedLong : U16 -> CUnsignedLong`
+#### `to_CLongLong : U16 -> CLongLong`
+#### `to_CUnsignedLongLong : U16 -> CUnsignedLongLong`
+#### `to_CSizeT : U16 -> CSizeT`
+#### `to_CFloat : U16 -> CFloat`
+#### `to_CDouble : U16 -> CDouble`
 #### `impl U16 : Add`
 #### `impl U16 : Eq`
 #### `impl U16 : FromBytes`
@@ -907,6 +1051,18 @@ Literals:
 #### `to_U64 : I32 -> U64`
 #### `to_F32 : I32 -> F32`
 #### `to_F64 : I32 -> F64`
+#### `to_CChar : I32 -> CChar`
+#### `to_CUnsignedChar : I32 -> CUnsignedChar`
+#### `to_CShort : I32 -> CShort`
+#### `to_CUnsignedShort : I32 -> CUnsignedShort`
+#### `to_CInt : I32 -> CInt`
+#### `to_CUnsignedInt : I32 -> CUnsignedInt`
+#### `to_CUnsignedLong : I32 -> CUnsignedLong`
+#### `to_CLongLong : I32 -> CLongLong`
+#### `to_CUnsignedLongLong : I32 -> CUnsignedLongLong`
+#### `to_CSizeT : I32 -> CSizeT`
+#### `to_CFloat : I32 -> CFloat`
+#### `to_CDouble : I32 -> CDouble`
 #### `impl I32 : Add`
 #### `impl I32 : Eq`
 #### `impl I32 : FromBytes`
@@ -946,6 +1102,18 @@ Literals:
 #### `to_U64 : U32 -> U64`
 #### `to_F32 : U32 -> F32`
 #### `to_F64 : U32 -> F64`
+#### `to_CChar : U32 -> CChar`
+#### `to_CUnsignedChar : U32 -> CUnsignedChar`
+#### `to_CShort : U32 -> CShort`
+#### `to_CUnsignedShort : U32 -> CUnsignedShort`
+#### `to_CInt : U32 -> CInt`
+#### `to_CUnsignedInt : U32 -> CUnsignedInt`
+#### `to_CUnsignedLong : U32 -> CUnsignedLong`
+#### `to_CLongLong : U32 -> CLongLong`
+#### `to_CUnsignedLongLong : U32 -> CUnsignedLongLong`
+#### `to_CSizeT : U32 -> CSizeT`
+#### `to_CFloat : U32 -> CFloat`
+#### `to_CDouble : U32 -> CDouble`
 #### `impl U32 : Add`
 #### `impl U32 : Eq`
 #### `impl U32 : FromBytes`
@@ -987,6 +1155,18 @@ Literals:
 #### `to_U64 : I64 -> U64`
 #### `to_F32 : I64 -> F32`
 #### `to_F64 : I64 -> F64`
+#### `to_CChar : I64 -> CChar`
+#### `to_CUnsignedChar : I64 -> CUnsignedChar`
+#### `to_CShort : I64 -> CShort`
+#### `to_CUnsignedShort : I64 -> CUnsignedShort`
+#### `to_CInt : I64 -> CInt`
+#### `to_CUnsignedInt : I64 -> CUnsignedInt`
+#### `to_CUnsignedLong : I64 -> CUnsignedLong`
+#### `to_CLongLong : I64 -> CLongLong`
+#### `to_CUnsignedLongLong : I64 -> CUnsignedLongLong`
+#### `to_CSizeT : I64 -> CSizeT`
+#### `to_CFloat : I64 -> CFloat`
+#### `to_CDouble : I64 -> CDouble`
 #### `impl I64 : Add`
 #### `impl I64 : Eq`
 #### `impl I64 : FromBytes`
@@ -1026,6 +1206,18 @@ Literals:
 #### `to_I64 : U64 -> I64`
 #### `to_F32 : U64 -> F32`
 #### `to_F64 : U64 -> F64`
+#### `to_CChar : U64 -> CChar`
+#### `to_CUnsignedChar : U64 -> CUnsignedChar`
+#### `to_CShort : U64 -> CShort`
+#### `to_CUnsignedShort : U64 -> CUnsignedShort`
+#### `to_CInt : U64 -> CInt`
+#### `to_CUnsignedInt : U64 -> CUnsignedInt`
+#### `to_CUnsignedLong : U64 -> CUnsignedLong`
+#### `to_CLongLong : U64 -> CLongLong`
+#### `to_CUnsignedLongLong : U64 -> CUnsignedLongLong`
+#### `to_CSizeT : U64 -> CSizeT`
+#### `to_CFloat : U64 -> CFloat`
+#### `to_CDouble : U64 -> CDouble`
 #### `impl U64 : Add`
 #### `impl U64 : Eq`
 #### `impl U64 : FromBytes`

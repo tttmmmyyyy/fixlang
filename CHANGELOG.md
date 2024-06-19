@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble`.
+
 ### Changed
 
 ### Fixed
