@@ -7,6 +7,44 @@ const STD_SOURCE: &str = include_str!("fix/std.fix");
 pub fn make_std_mod(config: &Configuration) -> Program {
     let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std");
 
+    // Add C types type aliases.
+    let c_types = vec![
+        ("CChar", "I", config.c_type_sizes.char),
+        ("CUnsignedChar", "U", config.c_type_sizes.char),
+        ("CShort", "I", config.c_type_sizes.short),
+        ("CUnsignedShort", "U", config.c_type_sizes.short),
+        ("CInt", "I", config.c_type_sizes.int),
+        ("CUnsignedInt", "U", config.c_type_sizes.int),
+        ("CLong", "I", config.c_type_sizes.long),
+        ("CUnsignedLong", "U", config.c_type_sizes.long),
+        ("CLongLong", "I", config.c_type_sizes.long_long),
+        ("CUnsignedLongLong", "U", config.c_type_sizes.long_long),
+        ("CSizeT", "U", config.c_type_sizes.size_t),
+        ("CFloat", "F", config.c_type_sizes.float),
+        ("CDouble", "F", config.c_type_sizes.double),
+    ];
+    for (name, sign, size) in &c_types {
+        let fix_type = if *sign == "F" {
+            make_floating_ty(&format!("{}{}", sign, size))
+        } else {
+            make_integral_ty(&format!("{}{}", sign, size))
+        };
+        if fix_type.is_none() {
+            println!(
+                "Warning: Type alias `{}` is not supported in this system.",
+                name
+            );
+            continue;
+        }
+        let fix_type = fix_type.unwrap();
+        fix_module.add_type_defns(vec![TypeDefn {
+            name: FullName::from_strs(&[STD_NAME, FFI_NAME], name),
+            value: TypeDeclValue::Alias(TypeAlias { value: fix_type }),
+            tyvars: vec![],
+            source: None,
+        }]);
+    }
+
     // `LoopResult` type.
     fix_module.type_defns.push(loop_result_defn());
 
@@ -152,7 +190,7 @@ pub fn make_std_mod(config: &Configuration) -> Program {
 
     // Cast functions
 
-    // Cast function between integral types.
+    // Cast function between integers.
     for from in integral_types {
         for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
@@ -163,7 +201,25 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             );
         }
     }
-    // Cast function between float types.
+    // Cast function from integer to C integers.
+    for from in integral_types {
+        for (to_name, sign, size) in &c_types {
+            if *sign == "F" {
+                continue;
+            }
+            let to_type = make_integral_ty(&format!("{}{}", sign, size));
+            if to_type.is_none() {
+                continue;
+            }
+            let to_type = to_type.unwrap();
+            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            fix_module.add_global_value(
+                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                cast_between_integral_function(from.clone(), to_type),
+            );
+        }
+    }
+    // Cast function between floats.
     for from in float_types {
         for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
@@ -174,7 +230,25 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             );
         }
     }
-    // Cast from integers to float types.
+    // Cast function from floats to C floats.
+    for from in float_types {
+        for (to_name, sign, size) in &c_types {
+            if *sign == "I" {
+                continue;
+            }
+            let to_type = make_floating_ty(&format!("{}{}", sign, size));
+            if to_type.is_none() {
+                continue;
+            }
+            let to_type = to_type.unwrap();
+            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            fix_module.add_global_value(
+                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                cast_between_float_function(from.clone(), to_type.clone()),
+            );
+        }
+    }
+    // Cast from integers to floats.
     for from in integral_types {
         for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
@@ -185,7 +259,25 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             );
         }
     }
-    // Cast from float types to integers.
+    // Cast from integers to C floats.
+    for from in integral_types {
+        for (to_name, sign, size) in &c_types {
+            if *sign == "I" {
+                continue;
+            }
+            let to_type = make_floating_ty(&format!("{}{}", sign, size));
+            if to_type.is_none() {
+                continue;
+            }
+            let to_type = to_type.unwrap();
+            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            fix_module.add_global_value(
+                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                cast_int_to_float_function(from.clone(), to_type),
+            );
+        }
+    }
+    // Cast from floats to integers.
     for from in float_types {
         for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
@@ -193,6 +285,24 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to.clone()),
+            );
+        }
+    }
+    // Cast from floats to C integers.
+    for from in float_types {
+        for (to_name, sign, size) in &c_types {
+            if *sign == "F" {
+                continue;
+            }
+            let to_type = make_integral_ty(&format!("{}{}", sign, size));
+            if to_type.is_none() {
+                continue;
+            }
+            let to_type = to_type.unwrap();
+            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            fix_module.add_global_value(
+                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                cast_float_to_int_function(from.clone(), to_type),
             );
         }
     }
@@ -335,44 +445,6 @@ pub fn make_std_mod(config: &Configuration) -> Program {
         ),
         get_retain_function_of_boxed_value(),
     );
-
-    // Add C types type aliases.
-    let c_types_data_int = vec![
-        ("CChar", "I", config.c_type_sizes.char),
-        ("CUnsignedChar", "U", config.c_type_sizes.char),
-        ("CShort", "I", config.c_type_sizes.short),
-        ("CUnsignedShort", "U", config.c_type_sizes.short),
-        ("CInt", "I", config.c_type_sizes.int),
-        ("CUnsignedInt", "U", config.c_type_sizes.int),
-        ("CLong", "I", config.c_type_sizes.long),
-        ("CUnsignedLong", "U", config.c_type_sizes.long),
-        ("CLongLong", "I", config.c_type_sizes.long_long),
-        ("CUnsignedLongLong", "U", config.c_type_sizes.long_long),
-        ("CSizeT", "U", config.c_type_sizes.size_t),
-        ("CFloat", "F", config.c_type_sizes.float),
-        ("CDouble", "F", config.c_type_sizes.double),
-    ];
-    for (name, sign, size) in c_types_data_int {
-        let fix_type = if sign == "F" {
-            make_floating_ty(&format!("{}{}", sign, size))
-        } else {
-            make_integral_ty(&format!("{}{}", sign, size))
-        };
-        if fix_type.is_none() {
-            println!(
-                "Warning: Type alias `{}` is not supported in this system.",
-                name
-            );
-            continue;
-        }
-        let fix_type = fix_type.unwrap();
-        fix_module.add_type_defns(vec![TypeDefn {
-            name: FullName::from_strs(&[STD_NAME, FFI_NAME], name),
-            value: TypeDeclValue::Alias(TypeAlias { value: fix_type }),
-            tyvars: vec![],
-            source: None,
-        }]);
-    }
 
     fix_module
 }
