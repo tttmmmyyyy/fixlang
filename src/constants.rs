@@ -22,6 +22,21 @@ pub const I64_NAME: &str = "I64";
 pub const U64_NAME: &str = "U64";
 pub const F32_NAME: &str = "F32";
 pub const F64_NAME: &str = "F64";
+
+pub const C_CHAR_NAME: &str = "CChar";
+pub const C_UNSIGNED_CHAR_NAME: &str = "CUnsignedChar";
+pub const C_SHORT_NAME: &str = "CShort";
+pub const C_UNSIGNED_SHORT_NAME: &str = "CUnsignedShort";
+pub const C_INT_NAME: &str = "CInt";
+pub const C_UNSIGNED_INT_NAME: &str = "CUnsignedInt";
+pub const C_LONG_NAME: &str = "CLong";
+pub const C_UNSIGNED_LONG_NAME: &str = "CUnsignedLong";
+pub const C_LONG_LONG_NAME: &str = "CLongLong";
+pub const C_UNSIGNED_LONG_LONG_NAME: &str = "CUnsignedLongLong";
+pub const C_SIZE_T_NAME: &str = "CSizeT";
+pub const C_FLOAT_NAME: &str = "CFloat";
+pub const C_DOUBLE_NAME: &str = "CDouble";
+
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 pub const LAZY_NAME: &str = "Lazy";

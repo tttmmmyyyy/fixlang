@@ -5,24 +5,10 @@ pub const FIX_NAME: &str = "fix";
 const STD_SOURCE: &str = include_str!("fix/std.fix");
 
 pub fn make_std_mod(config: &Configuration) -> Program {
-    let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std");
+    let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std", config);
 
     // Add C types type aliases.
-    let c_types = vec![
-        ("CChar", "I", config.c_type_sizes.char),
-        ("CUnsignedChar", "U", config.c_type_sizes.char),
-        ("CShort", "I", config.c_type_sizes.short),
-        ("CUnsignedShort", "U", config.c_type_sizes.short),
-        ("CInt", "I", config.c_type_sizes.int),
-        ("CUnsignedInt", "U", config.c_type_sizes.int),
-        ("CLong", "I", config.c_type_sizes.long),
-        ("CUnsignedLong", "U", config.c_type_sizes.long),
-        ("CLongLong", "I", config.c_type_sizes.long_long),
-        ("CUnsignedLongLong", "U", config.c_type_sizes.long_long),
-        ("CSizeT", "U", config.c_type_sizes.size_t),
-        ("CFloat", "F", config.c_type_sizes.float),
-        ("CDouble", "F", config.c_type_sizes.double),
-    ];
+    let c_types = config.c_type_sizes.get_c_types();
     for (name, sign, size) in &c_types {
         let fix_type = if *sign == "F" {
             make_floating_ty(&format!("{}{}", sign, size))
@@ -404,7 +390,7 @@ pub fn make_std_mod(config: &Configuration) -> Program {
     // Debug
     fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "abort"), abort_function());
 
-    // Numeric constants.
+    // Numeric constants
     for type_name in [F32_NAME, F64_NAME] {
         fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, type_name], "infinity"),
@@ -416,7 +402,7 @@ pub fn make_std_mod(config: &Configuration) -> Program {
         );
     }
 
-    // FFI.
+    // FFI
     fix_module.add_global_value(
         FullName::from_strs(
             &[STD_NAME, FFI_NAME],
@@ -444,6 +430,10 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             "unsafe_get_retain_function_of_boxed_value",
         ),
         get_retain_function_of_boxed_value(),
+    );
+    fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "_unsafe_get_boxed_data_ptr"),
+        get_unsafe_get_boxed_ptr(),
     );
 
     fix_module
@@ -604,7 +594,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
 }
 
 // Create module which defines traits such as ToString or Eq for tuples.
-pub fn make_tuple_traits_mod(sizes: &[u32]) -> Program {
+pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Program {
     let src = make_tuple_traits_source(sizes);
-    parse_and_save_to_temporary_file(&src, "std_tuple_traits")
+    parse_and_save_to_temporary_file(&src, "std_tuple_traits", config)
 }

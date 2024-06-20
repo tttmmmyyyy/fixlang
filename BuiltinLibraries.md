@@ -610,6 +610,8 @@
     - [`mark_threaded : a -> a`](#mark_threaded--a---a)
     - [`unsafe_is_unique : a -> (Bool, a)`](#unsafe_is_unique--a---bool-a)
     - [`namespace FFI`](#namespace-ffi)
+      - [`_unsafe_get_boxed_data_ptr : a -> Ptr`](#_unsafe_get_boxed_data_ptr--a---ptr)
+      - [`unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`](#unsafe_borrow_boxed_data_ptr--ptr---b---a---b)
       - [`unsafe_get_release_function_of_boxed_value : a -> Ptr`](#unsafe_get_release_function_of_boxed_value--a---ptr)
       - [`unsafe_get_retain_function_of_boxed_value : a -> Ptr`](#unsafe_get_retain_function_of_boxed_value--a---ptr)
       - [`unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`](#unsafe_get_boxed_value_from_retained_ptr--ptr---a)
@@ -2154,6 +2156,20 @@ main = (
 ```
 
 ### `namespace FFI`
+
+#### `_unsafe_get_boxed_data_ptr : a -> Ptr`
+
+Get a pointer to the data of a boxed value. 
+The difference from `unsafe_get_retained_ptr_of_boxed_value` is that this function returns a pointer to region where the payload of a boxed value is stored;
+on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to the boxed value itself (we do not assure, but in fact, it is the pointer where the reference counter is stored).
+
+Note that if the call `v._unsafe_get_boxed_data_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
+To avoid this problem, we recommend you to use `unsafe_borrow_boxed_data_ptr` instead.
+
+#### `unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`
+
+Borrow a pointer to the data of a boxed value.
+For detail, see the document of `_unsafe_get_boxed_data_ptr`.
 
 #### `unsafe_get_release_function_of_boxed_value : a -> Ptr`
 

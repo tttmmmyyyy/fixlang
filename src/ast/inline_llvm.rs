@@ -66,6 +66,7 @@ pub enum LLVMGenerator {
         InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
     ),
     GetRetainFunctionOfBoxedValueFunctionBody(InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody),
+    GetBoxedDataPtrFunctionBody(InlineLLVMGetBoxedDataPtrFunctionBody),
 }
 
 impl LLVMGenerator {
@@ -143,6 +144,7 @@ impl LLVMGenerator {
             LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => {
                 x.generate(gc, ty, rvo, bvs)
             }
+            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
         }
     }
 

@@ -3839,6 +3839,77 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
+    var_name: String,
+}
+
+impl InlineLLVMGetBoxedDataPtrFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ret_ty: &Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+        _borrowed_vars: &Vec<FullName>,
+    ) -> Object<'c> {
+        // Get argument.
+        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        if !obj.is_box(gc.type_env()) {
+            error_exit(
+                "`Std::FFI::_unsafe_get_boxed_data_ptr` can only be called on a boxed value.",
+            )
+        }
+        let ptr = obj.ptr(gc);
+        gc.release(obj.clone());
+        let struct_ty = obj.struct_ty(gc);
+        let ptr = gc.cast_pointer(ptr, struct_ty.ptr_type(AddressSpace::from(0)));
+        let data_ptr = gc.builder().build_struct_gep(ptr, 1, "elem_ptr").unwrap();
+        let data_ptr = gc.cast_pointer(data_ptr, ptr_to_object_type(gc.context));
+
+        let ret = if rvo.is_some() {
+            rvo.unwrap()
+        } else {
+            allocate_obj(
+                make_ptr_ty(),
+                &vec![],
+                None,
+                gc,
+                Some("ret_val@_unsafe_get_boxed_data_ptr"),
+            )
+        };
+        ret.store_field_nocap(gc, 0, data_ptr);
+
+        ret
+    }
+}
+
+pub fn get_unsafe_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const TYPE_NAME: &str = "a";
+    const VAR_NAME: &str = "x";
+    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let ret_type = make_ptr_ty();
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(obj_type.clone(), ret_type.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(VAR_NAME)],
+        expr_llvm(
+            LLVMGenerator::GetBoxedDataPtrFunctionBody(InlineLLVMGetBoxedDataPtrFunctionBody {
+                var_name: VAR_NAME.to_string(),
+            }),
+            vec![FullName::local(VAR_NAME)],
+            format!("_get_boxed_data_ptr({})", VAR_NAME),
+            ret_type,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMarkThreadedFunctionBody {
     var_name: String,
 }

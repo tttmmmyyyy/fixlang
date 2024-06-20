@@ -6650,3 +6650,25 @@ pub fn test_c_type_aliases() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_borrow_boxed_data_ptr() {
+    let source = r##"
+        module Main;
+        import Debug;
+        
+        main: IO ();
+        main = (
+            let x : Boxed I32 = Boxed { value : 0_I32 };
+            eval x.unsafe_borrow_boxed_data_ptr(|ptr|
+                "%d".borrow_c_str(|c_str|
+                    let _ = CALL_C[CInt snprintf(Ptr, CSizeT, Ptr, ...), ptr, 4.to_CSizeT, c_str, 123.to_CInt];
+                    ()
+                )
+            );
+            eval assert_eq(|_|"", x.@value, 0x00333231_I32); // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}

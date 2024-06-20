@@ -21,16 +21,19 @@ struct ParseContext {
     module_name: Name,
     // Curent namespace.
     namespace: NameSpace,
+    // Configuration.
+    config: Configuration,
 }
 
 impl ParseContext {
-    fn from_source(source: SourceFile) -> Self {
+    fn from_source(source: SourceFile, config: &Configuration) -> Self {
         Self {
             tuple_sizes: vec![],
             do_context: DoContext::default(),
             source,
             module_name: "".to_string(),
             namespace: NameSpace::local(),
+            config: config.clone(),
         }
     }
 }
@@ -96,15 +99,19 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 // This is used to parse the source code that is not saved to a file, e.g., source code embedded to the compiler or test code.
 // Saving a source code to a file is necessary for:
 // - Generate debug information, in which source location is required.
-pub fn parse_and_save_to_temporary_file(source: &str, file_name: &str) -> Program {
+pub fn parse_and_save_to_temporary_file(
+    source: &str,
+    file_name: &str,
+    config: &Configuration,
+) -> Program {
     let hash = format!("{:x}", md5::compute(source));
     if !check_temporary_source(file_name, &hash) {
         save_temporary_source(source, file_name, &hash);
     }
-    parse_file_path(temporary_source_path(file_name, &hash))
+    parse_file_path(temporary_source_path(file_name, &hash), config)
 }
 
-pub fn parse_file_path(file_path: PathBuf) -> Program {
+pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Program {
     let source = SourceFile::from_file_path(file_path);
     let source_code = source.string();
     let file = FixParser::parse(Rule::file, &source_code);
@@ -112,20 +119,20 @@ pub fn parse_file_path(file_path: PathBuf) -> Program {
         Ok(res) => res,
         Err(e) => error_exit(&message_parse_error(e, &source)),
     };
-    parse_file(file, source)
+    parse_file(file, source, config)
 }
 
-fn parse_file(mut file: Pairs<Rule>, src: SourceFile) -> Program {
+fn parse_file(mut file: Pairs<Rule>, src: SourceFile, config: &Configuration) -> Program {
     let pair = file.next().unwrap();
     match pair.as_rule() {
-        Rule::module => return parse_module(pair, src),
+        Rule::module => return parse_module(pair, src, config),
         _ => unreachable!(),
     }
 }
 
-fn parse_module(pair: Pair<Rule>, src: SourceFile) -> Program {
+fn parse_module(pair: Pair<Rule>, src: SourceFile, config: &Configuration) -> Program {
     assert_eq!(pair.as_rule(), Rule::module);
-    let mut ctx: ParseContext = ParseContext::from_source(src.clone());
+    let mut ctx: ParseContext = ParseContext::from_source(src.clone(), config);
 
     let mut pairs = pair.into_inner();
     ctx.module_name = parse_module_defn(pairs.next().unwrap());
@@ -1438,9 +1445,9 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
     assert_eq!(pair.as_rule(), Rule::expr_call_c);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap());
+    let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx);
     let fun_name = pairs.next().unwrap().as_str().to_string();
-    let param_tys = parse_ffi_param_tys(pairs.next().unwrap());
+    let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx);
     let is_var_args =
         if pairs.peek().is_some() && pairs.peek().unwrap().as_rule() == Rule::ffi_var_args {
             pairs.next();
@@ -1461,20 +1468,26 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
     expr_call_c(fun_name, ret_ty, param_tys, is_var_args, args, Some(span))
 }
 
-fn parse_ffi_c_fun_ty(pair: Pair<Rule>) -> Arc<TyCon> {
+fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
     let name = if pair.as_str() == "()" {
         make_tuple_name(0)
     } else {
-        FullName::from_strs(&[STD_NAME], pair.as_str())
+        let mut name = pair.as_str().to_string();
+        for (c_type_name, sign, size) in ctx.config.c_type_sizes.get_c_types() {
+            if c_type_name == pair.as_str() {
+                name = format!("{}{}", sign, size);
+            }
+        }
+        FullName::from_strs(&[STD_NAME], &name)
     };
     tycon(name)
 }
 
-fn parse_ffi_param_tys(pair: Pair<Rule>) -> Vec<Arc<TyCon>> {
+fn parse_ffi_param_tys(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<Arc<TyCon>> {
     assert_eq!(pair.as_rule(), Rule::ffi_param_tys);
     pair.into_inner()
-        .map(|pair| parse_ffi_c_fun_ty(pair))
+        .map(|pair| parse_ffi_c_fun_ty(pair, ctx))
         .collect()
 }
 

@@ -9,6 +9,11 @@ use crate::cpu_features::CpuFeatures;
 
 use crate::constants::{CHECK_C_TYPES_EXEC_PATH, CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::{misc::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
+use crate::{
+    C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
+    C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
+    C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
+};
 
 #[derive(Clone, Copy)]
 pub enum LinkType {
@@ -311,6 +316,24 @@ pub struct CTypeSizes {
 }
 
 impl CTypeSizes {
+    pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
+        vec![
+            (C_CHAR_NAME, "I", self.char),
+            (C_UNSIGNED_CHAR_NAME, "U", self.char),
+            (C_SHORT_NAME, "I", self.short),
+            (C_UNSIGNED_SHORT_NAME, "U", self.short),
+            (C_INT_NAME, "I", self.int),
+            (C_UNSIGNED_INT_NAME, "U", self.int),
+            (C_LONG_NAME, "I", self.long),
+            (C_UNSIGNED_LONG_NAME, "U", self.long),
+            (C_LONG_LONG_NAME, "I", self.long_long),
+            (C_UNSIGNED_LONG_LONG_NAME, "U", self.long_long),
+            (C_SIZE_T_NAME, "U", self.size_t),
+            (C_FLOAT_NAME, "F", self.float),
+            (C_DOUBLE_NAME, "F", self.double),
+        ]
+    }
+
     fn to_string(&self) -> String {
         vec![
             format!("char: {}", self.char),

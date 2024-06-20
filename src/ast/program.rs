@@ -1298,7 +1298,8 @@ impl Program {
                 STANDARD_LIBRARIES
             {
                 if module == *mod_name {
-                    let mut fixmod = parse_and_save_to_temporary_file(source_content, file_name);
+                    let mut fixmod =
+                        parse_and_save_to_temporary_file(source_content, file_name, config);
                     if let Some(mod_modifier) = mod_modifier {
                         mod_modifier(&mut fixmod);
                     }

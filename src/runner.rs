@@ -28,7 +28,10 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     program.add_tuple_defns();
 
     // Add trait implementations for tuples such as ToString or Eq.
-    program.link(make_tuple_traits_mod(&program.used_tuple_sizes), true);
+    program.link(
+        make_tuple_traits_mod(&program.used_tuple_sizes, &config),
+        true,
+    );
 
     // Calculate list of type constructors.
     program.calculate_type_env();
@@ -440,7 +443,7 @@ pub fn load_file(config: &mut Configuration) -> Program {
     // Link all modules specified in source_files.
     let mut target_mod = make_std_mod(config);
     for file_path in &config.source_files {
-        let fix_mod = parse_file_path(file_path.clone());
+        let fix_mod = parse_file_path(file_path.clone(), config);
         target_mod.link(fix_mod, false);
     }
     target_mod.resolve_imports(config);
