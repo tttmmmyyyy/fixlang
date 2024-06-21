@@ -616,10 +616,10 @@
       - [`unsafe_get_retain_function_of_boxed_value : a -> Ptr`](#unsafe_get_retain_function_of_boxed_value--a---ptr)
       - [`unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`](#unsafe_get_boxed_value_from_retained_ptr--ptr---a)
       - [`unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`](#unsafe_get_retained_ptr_of_boxed_value--a---ptr)
+      - [`type Destructor`](#type-destructor)
       - [`namespace Destructor`](#namespace-destructor)
-        - [`type Destructor`](#type-destructor)
-      - [`borrow : (a -> b) -> Destructor a -> b`](#borrow--a---b---destructor-a---b)
-      - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
+        - [`borrow : (a -> b) -> Destructor a -> b`](#borrow--a---b---destructor-a---b)
+        - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
   - [Traits](#traits)
     - [Additive](#additive)
     - [FromBytes](#frombytes)
@@ -2191,9 +2191,7 @@ Get a retained pointer to a boxed value.
 This function is intended to be used to share ownership of Fix's boxed objects with C program.
 To release / retain the object in C program, call it on the function pointer obtained by `unsafe_get_release_function_of_boxed_value` and `unsafe_get_retain_function_of_boxed_value`.
 
-#### `namespace Destructor`
-
-##### `type Destructor`
+#### `type Destructor`
 
 `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
 When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
@@ -2268,13 +2266,15 @@ main = (
 ```
 then the `res` will be allocated in the *execution* of `main` as a local value, and will be deallocated upto the end of the execution.
 
-#### `borrow : (a -> b) -> Destructor a -> b`
+#### `namespace Destructor`
+
+##### `borrow : (a -> b) -> Destructor a -> b`
 Borrow the contained value.
 `borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
 It is guaranteed that the `dtor` is alive during the call of `worker`. 
 In other words, the `worker` receives the contained value on which the destructor is not called yet.
 
-#### `make : a -> (a -> ()) -> Destructor a`
+##### `make : a -> (a -> ()) -> Destructor a`
 Make a destructor value.
 
 ## Traits

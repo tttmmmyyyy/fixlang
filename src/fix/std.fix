@@ -424,31 +424,31 @@ namespace FFI {
         let _ = val; // Use val after calling act
         res
     );
-}
 
-namespace FFI::Destructor {
     // `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
     // When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
     // This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
     // 
     // NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
     // NOTE2: If the contained value is captured by another Fix's object than `Destructor`, the contained value is still alive after the destructor function is called.
-    type Destructor a = box struct { _value : a, dtor : a -> () };
+    type Destructor a = box struct { _value : a, dtor : a -> () };    
 
-    // Borrow the contained value.
-    // `borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
-    // It is guaranteed that the `dtor` is alive during the call of `worker`. 
-    // In other words, the `worker` receives the contained value on which the destructor is not called yet.
-    borrow : (a -> b) -> Destructor a -> b;
-    borrow = |worker, dtor| (
-        let res = worker(dtor.@_value);
-        let _ = dtor; // Prolong lifetime of `dtor`.
-        res
-    );
+    namespace Destructor {
+        // Borrow the contained value.
+        // `borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
+        // It is guaranteed that the `dtor` is alive during the call of `worker`. 
+        // In other words, the `worker` receives the contained value on which the destructor is not called yet.
+        borrow : (a -> b) -> Destructor a -> b;
+        borrow = |worker, dtor| (
+            let res = worker(dtor.@_value);
+            let _ = dtor; // Prolong lifetime of `dtor`.
+            res
+        );
 
-    // Make a destructor value.
-    make : a -> (a -> ()) -> Destructor a;
-    make = |val, dtor| Destructor { _value : val, dtor : dtor };
+        // Make a destructor value.
+        make : a -> (a -> ()) -> Destructor a;
+        make = |val, dtor| Destructor { _value : val, dtor : dtor };
+    }
 }
 
 type IO a = unbox struct { _data : () -> a };
