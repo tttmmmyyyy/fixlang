@@ -612,6 +612,8 @@
     - [`namespace FFI`](#namespace-ffi)
       - [`_unsafe_get_boxed_data_ptr : a -> Ptr`](#_unsafe_get_boxed_data_ptr--a---ptr)
       - [`unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`](#unsafe_borrow_boxed_data_ptr--ptr---b---a---b)
+      - [`unsafe_clear_errno : () -> ()`](#unsafe_clear_errno-----)
+      - [`unsafe_get_errno : () -> CInt`](#unsafe_get_errno-----cint)
       - [`unsafe_get_release_function_of_boxed_value : a -> Ptr`](#unsafe_get_release_function_of_boxed_value--a---ptr)
       - [`unsafe_get_retain_function_of_boxed_value : a -> Ptr`](#unsafe_get_retain_function_of_boxed_value--a---ptr)
       - [`unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`](#unsafe_get_boxed_value_from_retained_ptr--ptr---a)
@@ -2170,6 +2172,14 @@ To avoid this problem, we recommend you to use `unsafe_borrow_boxed_data_ptr` in
 
 Borrow a pointer to the data of a boxed value.
 For detail, see the document of `_unsafe_get_boxed_data_ptr`.
+
+#### `unsafe_clear_errno : () -> ()`
+
+Set errno to zero.
+
+#### `unsafe_get_errno : () -> CInt`
+
+Get errno which is set by C functions.
 
 #### `unsafe_get_release_function_of_boxed_value : a -> Ptr`
 

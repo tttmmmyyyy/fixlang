@@ -425,6 +425,14 @@ namespace FFI {
         res
     );
 
+    // Get errno which is set by C functions.
+    unsafe_get_errno : () -> CInt;
+    unsafe_get_errno = |_| CALL_C[CInt fixruntime_get_errno()];
+
+    // Set errno to zero.
+    unsafe_clear_errno : () -> ();
+    unsafe_clear_errno = |_| CALL_C[() fixruntime_clear_errno()];
+
     // `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
     // When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
     // This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.

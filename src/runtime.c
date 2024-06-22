@@ -530,6 +530,16 @@ void *fixruntime_run_function(void *function)
     return (*ptr_fixruntime_run_function)(function);
 }
 
+int fixruntime_get_errno()
+{
+    return errno;
+}
+
+void fixruntime_clear_errno()
+{
+    errno = 0;
+}
+
 #ifdef THREAD
 
 typedef int *TaskFunction;

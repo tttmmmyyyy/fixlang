@@ -6,8 +6,11 @@
 - Add `Std::Monad::unless : [m : Monad] Bool -> m () -> m ()`, `Std::Monad::when : [m : Monad] Bool -> m () -> m ()`.
 - Add type aliases `Std::FFI::CChar`, `Std::FFI::CUnsignedChar`, `Std::FFI::CShort`, `Std::FFI::CUnsignedShort`, `Std::FFI::CInt`, `Std::FFI::CUnsignedInt`, `Std::FFI::CLong`, `Std::FFI::CUnsignedLong`, `Std::FFI::CLongLong`, `Std::FFI::CUnsignedLongLong`, `Std::FFI::CSizeT`, `Std::FFI::CFloat`, `Std::FFI::CDouble`.
 - Add `Std::FFI::_unsafe_get_boxed_data_ptr`, `Std::FFI::unsafe_borrow_boxed_data_ptr`.
+- Add `Std::FFI::unsafe_get_errno`, `Std::FFI::unsafe_clear_errno`.
 
 ### Changed
+
+- Change namespace of `type Destructor` from `Std::FFI::Destructor` to `Std::FFI`.
 
 ### Fixed
 

@@ -6672,3 +6672,25 @@ pub fn test_borrow_boxed_data_ptr() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_get_errno() {
+    let source = r##"
+        module Main;
+        import Debug;
+        
+        main: IO ();
+        main = (
+            let errno = "a_path_where_no_file_exists".borrow_c_str(|file|
+                "invalid_file_mode".borrow_c_str(|mode|
+                    eval unsafe_clear_errno();
+                    let _ = CALL_C[Ptr fopen(Ptr, Ptr), file, mode];
+                    unsafe_get_errno()
+                )
+            );
+            eval assert(|_|"", errno != 0.to_CInt);
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
