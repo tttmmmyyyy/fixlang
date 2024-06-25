@@ -68,6 +68,7 @@
     - [Casting back a `Ptr` to a Fix's value](#casting-back-a-ptr-to-a-fixs-value)
     - [Managing C resource from Fix](#managing-c-resource-from-fix)
     - [Sharing a `Ptr` between multiple threads](#sharing-a-ptr-between-multiple-threads)
+    - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
 - [Tips](#tips)
   - [How to debug Fix program](#how-to-debug-fix-program)
@@ -1630,7 +1631,7 @@ Note that, once casted to a Fix's value, the responsibility to release the point
 Some C functions allocate a resource which should be deallocated by another C function in the end. 
 Most famous examples may be `malloc` / `free` and `fopen` / `fclose`.
 
-If you try to create a Fix's type which wraps a C resource, and want to call the deallocation function automatically at the end of Fix value's lifetime, `Std::FFI::Destructor::` will be useful.
+If you try to create a Fix's type which wraps a C resource, and want to call the deallocation function automatically at the end of Fix value's lifetime, `Std::FFI::Destructor` will be useful.
 
 For details, [see the document for `Destructor`](./BuiltinLibraries.md#namespace-destructor).
 
@@ -1641,6 +1642,31 @@ Retaining / releasing a pointer to a Fix's value from multiple threads simultane
 
 To avoid this problem, add the `--threaded` compiler flag, and call `Std::mark_threaded : a -> a` on the value before obtaining the pointer.
 The `Std::mark_threaded` function traverses all values reachable from the given value, and changes them into multi-threaded mode so that the reference counting on them will be done atomically.
+
+### Accessing fields of Fix's struct value from C
+
+Assume that you have a *boxed* struct type
+```
+type Vec = box struct { x : CDouble, y : CDouble };
+```
+and a C program
+```
+struct Vec {
+    double x;
+    double y;
+}
+
+void access_vec(Vec* v) {
+    // Do something with / to `v->x` and `v->y`.
+}
+```
+
+If you want to access to the fields `x` and `y` of Fix's object `vec` from C side, then `Std::FFI::unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b` will be useful: 
+`vec.unsafe_borrow_boxed_data_ptr(|p| CALL_C[() access_vec(Ptr), p])` will successfully allows `access_vec` on work on `vec.@x` and `vec.@y`.
+
+NOTE: 
+At least in the current version of Fix, the memory layout of Fix's struct is determined by the default behaviour of LLVM, and as long as I know it is equivalent to C's struct memory layout. 
+In a future version, the situation may be changed. I may introduce a specifier (suppose it is written as `expr_c`) for a programmer to assure that the layout is equivalent to C, and the struct layout with no `expr_c` specifier may be optimized (e.g., reorder field ordering).
 
 # Operators
 
