@@ -6694,3 +6694,32 @@ pub fn test_get_errno() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_monadic_bind_and_make_struct_ordering() {
+    let source = r##"
+        module Main;
+        import Debug;
+
+        type Pair a b = struct { x : a, y : b };
+
+        impl [a : ToString, b : ToString] Pair a b : ToString {
+            to_string = |p| "(" + p.@x.to_string + ", " + p.@y.to_string + ")";
+        }
+
+        main: IO ();
+        main = (
+            let pairs = do { pure $ Pair { x : *[1, 2], y : *["a", "b"] } }; // Fix `x` first, and move `y`
+            eval assert_eq(|_|"", 
+                            pairs.to_iter.map(to_string).join(", "), 
+                            "(1, a), (1, b), (2, a), (2, b)");
+
+            let pairs = do { pure $ Pair { y : *["a", "b"], x : *[1, 2] } }; // Fix `y` first, and move `x`.
+            eval assert_eq(|_|"", 
+                            pairs.to_iter.map(to_string).join(", "), 
+                            "(1, a), (2, a), (1, b), (2, b)");
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
