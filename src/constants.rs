@@ -59,6 +59,7 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
 pub const STRUCT_GETTER_SYMBOL: &str = "@";
 pub const STRUCT_SETTER_SYMBOL: &str = "set_";
+pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 
 pub const CAP_NAME: &str = "#CAP";
 

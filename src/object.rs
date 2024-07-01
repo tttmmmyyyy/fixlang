@@ -25,7 +25,7 @@ pub enum ObjectFieldType {
     U64,
     F32,
     F64,
-    SubObject(Arc<TypeNode>),
+    SubObject(Arc<TypeNode>, bool /* is_punched */),
     UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
     UnionTag,
     Array(Arc<TypeNode>), // field to store capacity (size) and buffer for elements.
@@ -45,8 +45,10 @@ impl ObjectFieldType {
             ObjectFieldType::LambdaFunction(ty) => lambda_function_type(ty, gc)
                 .ptr_type(AddressSpace::from(0))
                 .into(),
-            ObjectFieldType::SubObject(ty) => ty_to_object_ty(ty, &vec![], gc.type_env())
-                .to_embedded_type(gc, unboxed_path.clone()),
+            ObjectFieldType::SubObject(ty, _is_punched) => {
+                ty_to_object_ty(ty, &vec![], gc.type_env())
+                    .to_embedded_type(gc, unboxed_path.clone())
+            }
             ObjectFieldType::Ptr => gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
             ObjectFieldType::U8 => gc.context.i8_type().into(),
@@ -137,7 +139,7 @@ impl ObjectFieldType {
                 .create_basic_type("Std::F64", 64, DW_ATE_FLOAT, 0)
                 .unwrap()
                 .as_type(),
-            ObjectFieldType::SubObject(ty) => ty_to_debug_embedded_ty(ty.clone(), gc),
+            ObjectFieldType::SubObject(ty, _is_punched) => ty_to_debug_embedded_ty(ty.clone(), gc),
             ObjectFieldType::UnionBuf(tys) => {
                 let basic_ty = self.to_basic_type(gc, vec![]);
                 let size_in_bits = gc.target_data.get_bit_size(&basic_ty);
@@ -1150,7 +1152,7 @@ pub fn ty_to_object_ty(
         ret.field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
         ret.field_types
-            .push(ObjectFieldType::SubObject(make_dynamic_object_ty()));
+            .push(ObjectFieldType::SubObject(make_dynamic_object_ty(), false));
     } else if ty.is_funptr() {
         assert!(capture.is_empty());
         ret.is_unbox = true;

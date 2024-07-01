@@ -30,11 +30,14 @@ impl TypeDefn {
         TyCon::new(self.name.clone())
     }
 
-    pub fn tycon_info(&self) -> TyConInfo {
+    pub fn tycon_info(&self, punched_struct_fields: Vec<usize>) -> TyConInfo {
         let kind = self.kind();
         let (variant, is_unbox, fields) = match &self.value {
             TypeDeclValue::Struct(s) => (TyConVariant::Struct, s.is_unbox, s.fields.clone()),
-            TypeDeclValue::Union(u) => (TyConVariant::Union, u.is_unbox, u.fields.clone()),
+            TypeDeclValue::Union(u) => {
+                assert!(punched_struct_fields.is_empty());
+                (TyConVariant::Union, u.is_unbox, u.fields.clone())
+            }
             TypeDeclValue::Alias(_) => panic!("Try to get TyConInfo of a type alias."),
         };
         TyConInfo {
@@ -43,6 +46,7 @@ impl TypeDefn {
             is_unbox,
             tyvars: self.tyvars.clone(),
             fields,
+            punched_struct_fields,
             source: self.source.clone(),
         }
     }

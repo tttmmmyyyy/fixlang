@@ -974,7 +974,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     ObjectFieldType::U64 => {}
                     ObjectFieldType::F32 => {}
                     ObjectFieldType::F64 => {}
-                    ObjectFieldType::SubObject(ty) => {
+                    ObjectFieldType::SubObject(ty, is_punched) => {
+                        if *is_punched {
+                            continue;
+                        }
                         let ptr = if ty.is_box(self.type_env()) {
                             self.load_obj_field(ptr, struct_type, i as u32)
                                 .into_pointer_value()

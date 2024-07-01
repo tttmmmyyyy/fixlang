@@ -16,6 +16,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -27,6 +28,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -38,6 +40,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -49,6 +52,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -60,6 +64,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -71,6 +76,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -82,6 +88,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -93,6 +100,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -104,6 +112,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -115,6 +124,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -126,6 +136,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -137,6 +148,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -153,6 +165,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                 name: "array_elem".to_string(), // Unused
                 ty: type_tyvar_star("a"),
             }],
+            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -170,6 +183,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                     .map(|i| (tyvar_from_name(&format!("a{}", i), &kind_star())))
                     .collect(),
                 fields: vec![],
+                punched_struct_fields: vec![],
                 source: None,
             },
         );
@@ -183,6 +197,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: false,
             tyvars: vec![],
             fields: vec![],
+            punched_struct_fields: vec![],
             source: None,
         },
     );

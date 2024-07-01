@@ -249,6 +249,10 @@ impl TyCon {
     pub fn is_boolean(self: &TyCon) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
+
+    pub fn into_punched_type_name(&mut self, punched_at: usize) {
+        self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
+    }
 }
 
 // Information of type constructor.
@@ -259,7 +263,8 @@ pub struct TyConInfo {
     pub variant: TyConVariant,
     pub is_unbox: bool,
     pub tyvars: Vec<Arc<TyVar>>,
-    pub fields: Vec<Field>, // For array, element type.
+    pub fields: Vec<Field>,                // For array, element type.
+    pub punched_struct_fields: Vec<usize>, // Indices of fields that are punched.
     pub source: Option<Span>,
 }
 
