@@ -33,6 +33,8 @@ pub enum LLVMGenerator {
     StructGetBody(InlineLLVMStructGetBody),
     StructModBody(InlineLLVMStructModBody),
     StructSetBody(InlineLLVMStructSetBody),
+    StructPunchBody(InlineLLVMStructPunchBody),
+    StructPlugInBody(InlineLLVMStructPlugInBody),
     MakeUnionBody(InlineLLVMMakeUnionBody),
     UnionAsBody(InlineLLVMUnionAsBody),
     UnionIsBody(InlineLLVMUnionIsBody),
@@ -145,6 +147,8 @@ impl LLVMGenerator {
                 x.generate(gc, ty, rvo, bvs)
             }
             LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::StructPunchBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::StructPlugInBody(x) => x.generate(gc, ty, rvo, bvs),
         }
     }
 

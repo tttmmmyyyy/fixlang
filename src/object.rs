@@ -832,7 +832,7 @@ impl ObjectFieldType {
         str: &Object<'c>,
         field_idx: u32,
         field: &Object<'c>,
-    ) -> () {
+    ) {
         let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
         let field_val = field.value(gc);
         str.store_field_nocap(gc, field_offset + field_idx as u32, field_val);

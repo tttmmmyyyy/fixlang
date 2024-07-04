@@ -87,46 +87,6 @@ pub struct TyCon {
     pub name: FullName,
 }
 
-// impl Serialize for TyCon {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         serializer.serialize_str(&self.name.to_string())
-//     }
-// }
-
-// impl<'de> Deserialize<'de> for TyCon {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         deserializer.deserialize_str(TyConVisitor)
-//     }
-// }
-
-// struct TyConVisitor;
-// impl<'de> serde::de::Visitor<'de> for TyConVisitor {
-//     type Value = TyCon;
-
-//     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-//     where
-//         E: serde::de::Error,
-//     {
-//         match FullName::parse(v) {
-//             Some(name) => Ok(TyCon::new(name)),
-//             None => Err(de::Error::custom(format!(
-//                 "Failed to parse `{}` as FullName.",
-//                 v
-//             ))),
-//         }
-//     }
-
-//     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         formatter.write_str("String for TyCon")
-//     }
-// }
-
 impl TyCon {
     pub fn new(fullname: FullName) -> TyCon {
         TyCon { name: fullname }
@@ -637,6 +597,13 @@ impl TypeNode {
         }
     }
 
+    // Take a struct type, and convert it to a punched version.
+    pub fn to_punched_struct(self: &Arc<TypeNode>, punched_at: usize) -> Arc<TypeNode> {
+        let mut tycon = self.toplevel_tycon().unwrap().as_ref().clone();
+        tycon.into_punched_type_name(punched_at);
+        self.set_toplevel_tycon(Arc::new(tycon))
+    }
+
     // For structs and unions, return types of fields.
     // For Array, return the element type.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
@@ -812,6 +779,23 @@ impl TypeNode {
             Type::TyApp(fun, _) => fun.toplevel_tycon(),
             Type::FunTy(_, _) => None,
             Type::AssocTy(_, _) => None,
+        }
+    }
+
+    // Update top-level type constructor of a type.
+    pub fn set_toplevel_tycon(&self, tycon: Arc<TyCon>) -> Arc<TypeNode> {
+        match &self.ty {
+            Type::TyVar(_) => {
+                panic!("`set_toplevel_tycon` reached to a type variable.")
+            }
+            Type::TyCon(_) => type_tycon(&tycon),
+            Type::TyApp(fun, arg) => type_tyapp(fun.set_toplevel_tycon(tycon), arg.clone()),
+            Type::FunTy(_, _) => {
+                panic!("`set_toplevel_tycon` reached to a function type.")
+            }
+            Type::AssocTy(_, _) => {
+                panic!("`set_toplevel_tycon` reached to an associated type application.")
+            }
         }
     }
 

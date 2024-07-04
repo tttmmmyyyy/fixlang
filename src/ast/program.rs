@@ -1159,12 +1159,29 @@ impl Program {
                 TypeDeclValue::Struct(str) => {
                     let struct_name = decl.name.clone();
                     for field in &str.fields {
+                        // Getter function
                         self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("{}{}", STRUCT_GETTER_SYMBOL, &field.name),
                             ),
                             struct_get(&struct_name, decl, &field.name),
+                        );
+                        // Punch function.
+                        self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
+                            ),
+                            struct_punch(&struct_name, decl, &field.name),
+                        );
+                        // Plug-in function.
+                        self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
+                            ),
+                            struct_plug_in(&struct_name, decl, &field.name),
                         );
                         for is_unique in [false, true] {
                             self.add_global_value(

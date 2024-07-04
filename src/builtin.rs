@@ -2429,6 +2429,189 @@ pub fn struct_get(
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMStructPunchBody {
+    var_name: FullName,
+    field_idx: usize,
+}
+
+impl InlineLLVMStructPunchBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+        _borrowed_vars: &Vec<FullName>,
+    ) -> Object<'c> {
+        // Get the field type `F` and the punched struct type `PS` using `ty == (F, PS)`.
+        let field_type = ty.field_types(gc.type_env())[0].clone();
+        let punched_type = ty.field_types(gc.type_env())[1].clone();
+
+        // Get the argument object.
+        let str = gc.get_var(&self.var_name).ptr.get(gc);
+        assert!(str.is_box(gc.type_env()));
+
+        // Move out struct field value without releaseing the struct itself.
+        let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
+
+        // Create the return value.
+        let pair = if rvo.is_none() {
+            allocate_obj(
+                make_tuple_ty(vec![field_type, punched_type]),
+                &vec![],
+                None,
+                gc,
+                Some("ret_of_punch"),
+            )
+        } else {
+            rvo.unwrap()
+        };
+        let field_val = field.value(gc);
+        pair.store_field_nocap(gc, 0, field_val);
+        let str_ptr = str.ptr(gc);
+        pair.store_field_nocap(gc, 1, str_ptr);
+
+        pair
+    }
+}
+
+// Field punching function for a given struct.
+// If the struct is `S` and the field is `F`, then the function has the type `S -> (F, PS)` where `PS` is the punched struct type.
+pub fn struct_punch(
+    struct_name: &FullName,
+    definition: &TypeDefn,
+    field_name: &str,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // Find the index of `field_name` in the given struct.
+    let field = definition.get_field_by_name(field_name);
+    if field.is_none() {
+        error_exit(&format!(
+            "No field `{}` found in the struct `{}`.",
+            &field_name,
+            struct_name.to_string(),
+        ));
+    }
+    let (field_idx, field) = field.unwrap();
+
+    let str_ty = definition.ty();
+    let punched_ty = str_ty.to_punched_struct(field_idx as usize);
+    let dst_ty = make_tuple_ty(vec![field.ty.clone(), punched_ty]);
+    let ty = type_fun(str_ty, dst_ty.clone());
+    let scm = Scheme::generalize(&[], vec![], vec![], ty);
+
+    const VAR_NAME: &str = "str_obj";
+    let expr = expr_abs(
+        vec![var_local(VAR_NAME)],
+        expr_llvm(
+            LLVMGenerator::StructPunchBody(InlineLLVMStructPunchBody {
+                var_name: FullName::local(VAR_NAME),
+                field_idx: field_idx as usize,
+            }),
+            vec![FullName::local(VAR_NAME)],
+            format!(
+                "{}::{}{}({})",
+                struct_name.to_string(),
+                STRUCT_PUNCH_SYMBOL,
+                field_name,
+                VAR_NAME
+            ),
+            dst_ty,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMStructPlugInBody {
+    punched_str_name: FullName,
+    field_name: FullName,
+    field_idx: usize,
+}
+
+impl InlineLLVMStructPlugInBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        struct_ty: &Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+        _borrowed_vars: &Vec<FullName>,
+    ) -> Object<'c> {
+        assert!(struct_ty.is_box(gc.type_env()));
+        assert!(rvo.is_none());
+
+        // Get the first argument, punched struct value, and the second argument, field value.
+        let punched_str = gc.get_var(&self.punched_str_name).ptr.get(gc);
+        let field = gc.get_var(&self.field_name).ptr.get(gc);
+
+        // Cast punched_str into the struct type.
+        let str = Object::new(punched_str.ptr(gc), struct_ty.clone());
+
+        // Move the field value into the struct value.
+        ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &field);
+
+        str
+    }
+}
+
+// Field plugging-in function for a given struct.
+// If the struct is `S` and the field is `F`, then the function has the type `PS -> F -> S` where `PS` is the punched struct type.
+pub fn struct_plug_in(
+    struct_name: &FullName,
+    definition: &TypeDefn,
+    field_name: &str,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // Find the index of `field_name` in the given struct.
+    let field = definition.get_field_by_name(field_name);
+    if field.is_none() {
+        error_exit(&format!(
+            "No field `{}` found in the struct `{}`.",
+            &field_name,
+            struct_name.to_string(),
+        ));
+    }
+    let (field_idx, field) = field.unwrap();
+
+    let str_ty = definition.ty();
+    let punched_ty = str_ty.to_punched_struct(field_idx as usize);
+    let ty = type_fun(punched_ty, type_fun(field.ty.clone(), str_ty.clone()));
+    let scm = Scheme::generalize(&[], vec![], vec![], ty);
+
+    const PUNCHED_STR_NAME: &str = "punched_str_obj";
+    const FIELD_NAME: &str = "field_obj";
+    let expr = expr_abs(
+        vec![var_local(PUNCHED_STR_NAME)],
+        expr_abs(
+            vec![var_local(FIELD_NAME)],
+            expr_llvm(
+                LLVMGenerator::StructPlugInBody(InlineLLVMStructPlugInBody {
+                    punched_str_name: FullName::local(PUNCHED_STR_NAME),
+                    field_name: FullName::local(FIELD_NAME),
+                    field_idx: field_idx as usize,
+                }),
+                vec![
+                    FullName::local(PUNCHED_STR_NAME),
+                    FullName::local(FIELD_NAME),
+                ],
+                format!(
+                    "{}::{}{}({}, {})",
+                    struct_name.to_string(),
+                    STRUCT_PLUG_IN_SYMBOL,
+                    field_name,
+                    PUNCHED_STR_NAME,
+                    FIELD_NAME
+                ),
+                str_ty.clone(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructModBody {
     f_name: FullName,
     x_name: FullName,
