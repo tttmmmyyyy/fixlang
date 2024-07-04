@@ -30,10 +30,16 @@ impl TypeDefn {
         TyCon::new(self.name.clone())
     }
 
-    pub fn tycon_info(&self, punched_struct_fields: Vec<usize>) -> TyConInfo {
+    pub fn tycon_info(&self, punched_struct_fields: &[usize]) -> TyConInfo {
         let kind = self.kind();
         let (variant, is_unbox, fields) = match &self.value {
-            TypeDeclValue::Struct(s) => (TyConVariant::Struct, s.is_unbox, s.fields.clone()),
+            TypeDeclValue::Struct(s) => {
+                let mut fields = s.fields.clone();
+                for i in punched_struct_fields {
+                    fields[*i].is_punched = true;
+                }
+                (TyConVariant::Struct, s.is_unbox, fields)
+            }
             TypeDeclValue::Union(u) => {
                 assert!(punched_struct_fields.is_empty());
                 (TyConVariant::Union, u.is_unbox, u.fields.clone())
@@ -46,7 +52,6 @@ impl TypeDefn {
             is_unbox,
             tyvars: self.tyvars.clone(),
             fields,
-            punched_struct_fields,
             source: self.source.clone(),
         }
     }
@@ -260,6 +265,7 @@ impl TypeAlias {
 pub struct Field {
     pub name: Name,
     pub ty: Arc<TypeNode>,
+    pub is_punched: bool,
 }
 
 impl Field {

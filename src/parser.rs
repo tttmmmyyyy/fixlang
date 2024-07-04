@@ -822,6 +822,7 @@ fn parse_type_field(pair: Pair<Rule>, ctx: &mut ParseContext) -> Field {
     Field {
         name: name.to_string(),
         ty,
+        is_punched: false,
     }
 }
 

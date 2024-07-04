@@ -473,9 +473,9 @@ impl Program {
                 );
             }
             if type_decl.is_alias() {
-                aliases.insert(tycon, type_decl.alias_info());
+                aliases.insert(tycon.clone(), type_decl.alias_info());
             } else {
-                tycons.insert(tycon, type_decl.tycon_info(vec![]));
+                tycons.insert(tycon.clone(), type_decl.tycon_info(&[]));
             }
             // If the type is a boxed struct, add punched struct types to tycons.
             if let TypeDeclValue::Struct(s) = &type_decl.value {
@@ -483,7 +483,7 @@ impl Program {
                     for i in 0..s.fields.len() {
                         let mut punched_tycon = tycon.clone();
                         punched_tycon.into_punched_type_name(i);
-                        tycons.insert(punched_tycon, type_decl.tycon_info(vec![i]));
+                        tycons.insert(punched_tycon, type_decl.tycon_info(&[i]));
                     }
                 }
             }

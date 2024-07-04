@@ -263,8 +263,7 @@ pub struct TyConInfo {
     pub variant: TyConVariant,
     pub is_unbox: bool,
     pub tyvars: Vec<Arc<TyVar>>,
-    pub fields: Vec<Field>,                // For array, element type.
-    pub punched_struct_fields: Vec<usize>, // Indices of fields that are punched.
+    pub fields: Vec<Field>, // For array, element type.
     pub source: Option<Span>,
 }
 

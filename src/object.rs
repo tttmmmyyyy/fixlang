@@ -1215,8 +1215,10 @@ pub fn ty_to_object_ty(
                 }
                 assert_eq!(ret.field_types.len(), struct_field_idx(is_unbox) as usize);
                 let field_types = ty.field_types(type_env);
-                for field_ty in field_types {
-                    ret.field_types.push(ObjectFieldType::SubObject(field_ty));
+                for (field_idx, field_ty) in field_types.into_iter().enumerate() {
+                    let punched = ti.fields[field_idx].is_punched;
+                    ret.field_types
+                        .push(ObjectFieldType::SubObject(field_ty, punched));
                 }
             }
             TyConVariant::Union => {
@@ -1240,7 +1242,7 @@ pub fn ty_to_object_ty(
                 assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_CAP_IDX as usize);
                 for cap in capture {
                     ret.field_types
-                        .push(ObjectFieldType::SubObject(cap.clone()));
+                        .push(ObjectFieldType::SubObject(cap.clone(), false));
                 }
             }
         }
@@ -1352,7 +1354,7 @@ pub fn allocate_obj<'c, 'm>(
             ObjectFieldType::U64 => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
-            ObjectFieldType::SubObject(_) => {}
+            ObjectFieldType::SubObject(_, _) => {}
             ObjectFieldType::LambdaFunction(_) => {}
             ObjectFieldType::Array(_) => {
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
@@ -1473,7 +1475,10 @@ pub fn create_traverser<'c, 'm>(
                 let mut union_tag: Option<IntValue<'c>> = None;
                 for (i, ft) in object_type.field_types.iter().enumerate() {
                     match ft {
-                        ObjectFieldType::SubObject(ty) => {
+                        ObjectFieldType::SubObject(ty, is_punched) => {
+                            if *is_punched {
+                                continue;
+                            }
                             let ptr_to_subobj = if ty.is_unbox(gc.type_env()) {
                                 ptr_to_field(i as u32, gc)
                             } else {
@@ -1603,7 +1608,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
         let mut elements = vec![];
         for (i, field) in obj_type.field_types.iter().enumerate() {
             let mut member_name = match field {
-                ObjectFieldType::SubObject(ty) => {
+                ObjectFieldType::SubObject(ty, _) => {
                     if !subelement_names.is_empty() {
                         subelement_names.remove(0)
                     } else {

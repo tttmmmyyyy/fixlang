@@ -16,7 +16,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -28,7 +27,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -40,7 +38,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -52,7 +49,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -64,7 +60,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -76,7 +71,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -88,7 +82,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -100,7 +93,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -112,7 +104,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -124,7 +115,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -136,7 +126,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -148,7 +137,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: true,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -164,8 +152,8 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             fields: vec![Field {
                 name: "array_elem".to_string(), // Unused
                 ty: type_tyvar_star("a"),
+                is_punched: false,
             }],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -183,7 +171,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                     .map(|i| (tyvar_from_name(&format!("a{}", i), &kind_star())))
                     .collect(),
                 fields: vec![],
-                punched_struct_fields: vec![],
                 source: None,
             },
         );
@@ -197,7 +184,6 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             is_unbox: false,
             tyvars: vec![],
             fields: vec![],
-            punched_struct_fields: vec![],
             source: None,
         },
     );
@@ -479,6 +465,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
                 .map(|i| Field {
                     name: i.to_string(),
                     ty: type_from_tyvar(tyvars[i as usize].clone()),
+                    is_punched: false,
                 })
                 .collect(),
             is_unbox: TUPLE_UNBOX,
@@ -3228,10 +3215,12 @@ pub fn loop_result_defn() -> TypeDefn {
                 Field {
                     name: "continue".to_string(),
                     ty: type_tyvar("s", &kind_star()),
+                    is_punched: false,
                 },
                 Field {
                     name: "break".to_string(),
                     ty: type_tyvar("b", &kind_star()),
+                    is_punched: false,
                 },
             ],
             is_unbox: true,
