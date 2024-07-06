@@ -6731,79 +6731,79 @@ pub fn test_struct_act() {
         import Debug;
         
         // Boxed struct with a boxed field.
-        type BB = box struct { x : Array Bool };
+        type BB = box struct { x : Array Bool, y : Array I64, z : I64 };
         impl BB : Eq {
-            eq = |lhs, rhs| lhs.@x == rhs.@x;
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
         }
 
         // Boxed struct with an unboxed field.
-        type BU = box struct { x : Bool };
+        type BU = box struct { x : Bool, y : Array I64, z : I64 };
         impl BU : Eq {
-            eq = |lhs, rhs| lhs.@x == rhs.@x;
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
         }
 
         // Unboxed struct with a boxed field.
-        type UB = unbox struct { x : Array Bool };
+        type UB = unbox struct { x : Array Bool, y : Array I64, z : I64 };
         impl UB : Eq {
-            eq = |lhs, rhs| lhs.@x == rhs.@x;
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
         }
 
         // Unboxed struct with an unboxed field.
-        type UU = unbox struct { x : Bool };
+        type UU = unbox struct { x : Bool, y : Array I64, z : I64 };
         impl UU : Eq {
-            eq = |lhs, rhs| lhs.@x == rhs.@x;
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
         }
 
         // Generic boxed struct with a boxed field.
-        type GB a = box struct { x : Array a };
+        type GB a = box struct { x : Array a, y : Array I64, z : I64 };
         impl [a : Eq] GB a : Eq {
-            eq = |lhs, rhs| lhs.@x == rhs.@x;
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
         }
 
         main: IO ();
         main = (
-            let actor_array = |x| if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
+            let actor_array = |x| let x = x.assert_unique!(|_|""); if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
             let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
 
             // BB case 1
-            let s = BB { x : [true] };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [true] }));
+            let s = BB { x : [true], y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [true], y : [1, 2], z : 3 }));
 
             // BB case 2
-            let s = BB { x : [] };
+            let s = BB { x : [], y : [1, 2], z : 3 };
             eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
 
             // BU case 1
-            let s = BU { x : true };
-            eval assert_eq(|_|"", s.act_x(actor_bool), Option::some(BU { x : true }));
+            let s = BU { x : true, y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor_bool), Option::some(BU { x : true, y : [1, 2], z : 3 }));
 
             // BU case 2
-            let s = BU { x : false };
+            let s = BU { x : false, y : [1, 2], z : 3 };
             eval assert_eq(|_|"", s.act_x(actor_bool), Option::none());
 
             // UB case 1
-            let s = UB { x : [true] };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(UB { x : [true] }));
+            let s = UB { x : [true], y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(UB { x : [true], y : [1, 2], z : 3 }));
 
             // UB case 2
-            let s = UB { x : [] };
+            let s = UB { x : [], y : [1, 2], z : 3 };
             eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
 
             // UU case 1
-            let s = UU { x : true };
-            eval assert_eq(|_|"", s.act_x(actor_bool), Option::some(UU { x : true }));
+            let s = UU { x : true, y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor_bool), Option::some(UU { x : true, y : [1, 2], z : 3 }));
 
             // UU case 2
-            let s = UU { x : false };
+            let s = UU { x : false, y : [1, 2], z : 3 };
             eval assert_eq(|_|"", s.act_x(actor_bool), Option::none());
 
             // GB case 1
             let actor_array = |x| if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
-            let s = GB { x : [true] };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(GB { x : [true] }));
+            let s = GB { x : [true], y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(GB { x : [true], y : [1, 2], z : 3 }));
 
             // GB case 2
-            let s = GB { x : [] };
+            let s = GB { x : [], y : [1, 2], z : 3 };
             eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
 
             pure()

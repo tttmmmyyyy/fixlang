@@ -2446,10 +2446,6 @@ impl InlineLLVMStructPunchBody {
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        // Get the field type `F` and the punched struct type `PS` using `ty == (F, PS)`.
-        // let field_type = ret_ty.field_types(gc.type_env())[0].clone();
-        // let punched_type = ret_ty.field_types(gc.type_env())[1].clone();
-
         // Get the argument object (the struct value).
         let str = gc.get_var(&self.var_name).ptr.get(gc);
 
@@ -2537,6 +2533,9 @@ impl InlineLLVMStructPlugInBody {
         // Get the first argument, a punched struct value, and the second argument, a field value.
         let punched_str = gc.get_var(&self.punched_str_name).ptr.get(gc);
         let field = gc.get_var(&self.field_name).ptr.get(gc);
+
+        // Make the punched struct unique.
+        let punched_str = make_struct_unique(gc, punched_str, false);
 
         // Convert punched_str into the struct type.
         let punched_value = punched_str.value(gc);
@@ -2634,7 +2633,7 @@ impl InlineLLVMStructModBody {
         let modfier = gc.get_var(&self.f_name).ptr.get(gc);
         let str = gc.get_var(&self.x_name).ptr.get(gc);
 
-        let mut str = make_struct_unique(gc, str, self.field_count as u32, self.is_unique_version);
+        let mut str = make_struct_unique(gc, str, self.is_unique_version);
 
         // Modify field
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
@@ -2859,7 +2858,6 @@ pub fn struct_act(
 fn make_struct_unique<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     mut str: Object<'c>,
-    field_count: u32,
     panic_if_shared: bool,
 ) -> Object<'c> {
     let is_unbox = str.ty.is_unbox(gc.type_env());
@@ -2881,11 +2879,17 @@ fn make_struct_unique<'c, 'm>(
         }
         // Create new struct and clone fields.
         let cloned_str = allocate_obj(str.ty.clone(), &vec![], None, gc, Some("cloned_str"));
-        for i in 0..field_count {
-            // Retain field.
+        for (i, field) in str.ty.fields(gc.type_env()).iter().enumerate() {
+            // Skip the punched field.
+            if field.is_punched {
+                continue;
+            }
+
+            // Retain the field.
             let field = ObjectFieldType::get_struct_field_noclone(gc, &str, i as u32);
             gc.retain(field.clone());
-            // Clone field.
+
+            // Clone the field.
             ObjectFieldType::set_struct_field_norelease(gc, &cloned_str, i as u32, &field);
         }
         gc.release(str.clone());
@@ -2935,7 +2939,7 @@ impl InlineLLVMStructSetBody {
         let str = gc.get_var(&FullName::local(&self.struct_name)).ptr.get(gc);
 
         // Make struct object unique.
-        let mut str = make_struct_unique(gc, str, self.field_count, self.is_unique_version);
+        let mut str = make_struct_unique(gc, str, self.is_unique_version);
 
         // Release old value
         let old_value = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);

@@ -223,7 +223,7 @@ pub struct TyConInfo {
     pub variant: TyConVariant,
     pub is_unbox: bool,
     pub tyvars: Vec<Arc<TyVar>>,
-    pub fields: Vec<Field>, // For array, element type.
+    pub fields: Vec<Field>, // For an array type, this is `vec![{element_type}]`.
     pub source: Option<Span>,
 }
 
@@ -615,6 +615,15 @@ impl TypeNode {
             s.add_substitution(&Substitution::single(&tv.name, args[i].clone()));
         }
         ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
+    }
+
+    // For structs and unions, return the fields.
+    // For Array, return the element type.
+    pub fn fields(&self, type_env: &TypeEnv) -> Vec<Field> {
+        let args = self.collect_type_argments();
+        let ti = self.toplevel_tycon_info(type_env);
+        assert_eq!(args.len(), ti.tyvars.len());
+        ti.fields
     }
 
     // Flatten type application.
