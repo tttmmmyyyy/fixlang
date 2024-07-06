@@ -166,7 +166,7 @@ init_by_array = |init_key| (
 );
 
 // Generates a random number on [0, 2^64-1]-interval.
-generate_U64 : Random -> (U64, Random);
+generate_U64 : Random -> (Random, U64);
 generate_U64 = |Random { mt:mt, mti:mti }| (
     let (mt, mti) = if (mti < _NN) {
         (mt, mti)
@@ -225,33 +225,33 @@ generate_U64 = |Random { mt:mt, mti:mti }| (
     let x = x.bit_xor(x.shift_left(37_U64).bit_and(/* 0xFFF7EEE000000000 = */ 18444473444759240704_U64));
     let x = x.bit_xor(x.shift_right(43_U64));
 
-    (x, Random { mt:mt, mti:mti })
+    (Random { mt:mt, mti:mti }, x)
 );
 
 // Generates a random number on [0, 2^63-1]-interval.
-generate_I64_nonneg : Random -> (I64, Random);
+generate_I64_nonneg : Random -> (Random, I64);
 generate_I64_nonneg = |random| (
-    let (x, random) = random.generate_U64;
-    (x.shift_right(1_U64).to_I64, random)
+    let (random, x) = random.generate_U64;
+    (random, x.shift_right(1_U64).to_I64)
 );
 
 // Generates a random number on [0, 1]-real-interval.
-generate_F64 : Random -> (F64, Random);
+generate_F64 : Random -> (Random, F64);
 generate_F64 = |random| (
-    let (x, random) = random.generate_U64;
-    (x.shift_right(11_U64).to_F64 * (1.0/9007199254740991.0), random)
+    let (random, x) = random.generate_U64;
+    (random, x.shift_right(11_U64).to_F64 * (1.0/9007199254740991.0))
 );
 
 // Generates a random number on [0, 1)-real-interval.
-generate_F64_2 : Random -> (F64, Random);
+generate_F64_2 : Random -> (Random, F64);
 generate_F64_2 = |random| (
-    let (x, random) = random.generate_U64;
-    (x.shift_right(11_U64).to_F64 * (1.0/9007199254740992.0), random)
+    let (random, x) = random.generate_U64;
+    (random, x.shift_right(11_U64).to_F64 * (1.0/9007199254740992.0))
 );
 
 // Generates a random number on (0, 1)-real-interval.
-generate_F64_3 : Random -> (F64, Random);
+generate_F64_3 : Random -> (Random, F64);
 generate_F64_3 = |random| (
-    let (x, random) = random.generate_U64;
-    ((x.shift_right(12_U64).to_F64 + 0.5) * (1.0/4503599627370496.0), random)
+    let (random, x) = random.generate_U64;
+    (random, (x.shift_right(12_U64).to_F64 + 0.5) * (1.0/4503599627370496.0))
 );

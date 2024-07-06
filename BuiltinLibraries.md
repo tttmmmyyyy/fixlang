@@ -763,11 +763,11 @@
   - [`type Random`](#type-random)
   - [`init_by_seed : U64 -> Random`](#init_by_seed--u64---random)
   - [`init_by_array : Array U64 -> Random`](#init_by_array--array-u64---random)
-  - [`generate_U64 : Random -> (U64, Random)`](#generate_u64--random---u64-random)
-  - [`generate_I64_nonneg : Random -> (I64, Random)`](#generate_i64_nonneg--random---i64-random)
-  - [`generate_F64 : Random -> (F64, Random)`](#generate_f64--random---f64-random)
-  - [`generate_F64_2 : Random -> (F64, Random)`](#generate_f64_2--random---f64-random)
-  - [`generate_F64_3 : Random -> (F64, Random)`](#generate_f64_3--random---f64-random)
+  - [`generate_U64 : Random -> (Random, U64)`](#generate_u64--random---random-u64)
+  - [`generate_I64_nonneg : Random -> (Random, I64)`](#generate_i64_nonneg--random---random-i64)
+  - [`generate_F64 : Random -> (Random, F64)`](#generate_f64--random---random-f64)
+  - [`generate_F64_2 : Random -> (Random, F64)`](#generate_f64_2--random---random-f64)
+  - [`generate_F64_3 : Random -> (Random, F64)`](#generate_f64_3--random---random-f64)
 - [module `RegExp`](#module-regexp)
   - [`type RegExp`](#type-regexp)
   - [`namespace RegExp`](#namespace-regexp)
@@ -2806,19 +2806,19 @@ Initializes `Random` with a seed.
 ## `init_by_array : Array U64 -> Random`
 Initializes `Random` with an array.
 
-## `generate_U64 : Random -> (U64, Random)`
+## `generate_U64 : Random -> (Random, U64)`
 Generates a random number on [0, 2^64-1]-interval.
 
-## `generate_I64_nonneg : Random -> (I64, Random)`
+## `generate_I64_nonneg : Random -> (Random, I64)`
 Generates a random number on [0, 2^63-1]-interval.
 
-## `generate_F64 : Random -> (F64, Random)`
+## `generate_F64 : Random -> (Random, F64)`
 Generates a random number on [0, 1]-real-interval.
 
-## `generate_F64_2 : Random -> (F64, Random)`
+## `generate_F64_2 : Random -> (Random, F64)`
 Generates a random number on [0, 1)-real-interval.
 
-## `generate_F64_3 : Random -> (F64, Random)`
+## `generate_F64_3 : Random -> (Random, F64)`
 Generates a random number on (0, 1)-real-interval.
 
 # module `RegExp`

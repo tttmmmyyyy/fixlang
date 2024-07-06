@@ -4875,7 +4875,7 @@ pub fn test_random() {
             if i >= n {
                 break_m $ random
             };
-            let (x, random) = generate_U64(random);
+            let (random, x) = generate_U64(random);
             eval *print(x.to_string + " ");
             eval *(if (i%5==4) { println("") } else { pure() });
             continue_m $ (random, i + 1)
@@ -4887,7 +4887,7 @@ pub fn test_random() {
             if i >= n {
                 break_m $ random
             };
-            let (x, random) = generate_F64_2(random);
+            let (random, x) = generate_F64_2(random);
             eval *print (x.to_string + " ");
             eval *(if (i%5==4) { println("") } else { pure() });
             continue_m $ (random, i + 1)
