@@ -26,11 +26,12 @@
   - [Arrays and literals](#arrays-and-literals)
   - [Unit and tuples](#unit-and-tuples)
   - [Structs](#structs-1)
-    - [`@{field_name} : {struct} -> {field_type}`](#field_name--struct---field_type)
-    - [`set_{field_name} : {field_type} -> {struct} -> {struct}`](#set_field_name--field_type---struct---struct)
-    - [`set_{field_name}! : {field_type} -> {struct} -> {struct}`](#set_field_name--field_type---struct---struct-1)
-    - [`mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct)
-    - [`mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`](#mod_field_name--field_type---field_type---struct---struct-1)
+    - [`@f : S -> F`](#f--s---f)
+    - [`set_f : F -> S -> S`](#set_f--f---s---s)
+    - [`set_f! : F -> S -> S`](#set_f--f---s---s-1)
+    - [`mod_f : (F -> F) -> S -> S`](#mod_f--f---f---s---s)
+    - [`mod_f! : (F -> F) -> S -> S`](#mod_f--f---f---s---s-1)
+    - [`act_f : [f : Functor] (F -> f F) -> S -> f S`](#act_f--f--functor-f---f-f---s---f-s)
   - [Unions](#unions-1)
     - [`{variant_name} : {variant_type} -> {union}`](#variant_name--variant_type---union)
     - [`is_{variant_name} : {union} -> Bool`](#is_variant_name--union---bool)
@@ -694,35 +695,38 @@ The unit type `()` is in fact the tuple of length 0, i.e., `Tuple0`.
 
 ## Structs
 
-If you define a struct named `{struct}` with a field `{field_name}` of type `{field_type}`, the following methods are defined in the namespace named `{struct}`.
+If you define a struct named `S` with a field `f` of type `F`, the following methods are defined in the namespace `S`.
 
-NOTE: In a future, we will add lens functions such as `act_{field_name} : [f: Functor] ({field_type} -> f {field_type}) -> {struct} -> f {struct} `, which are generalization of `mod` functions.
-
-### `@{field_name} : {struct} -> {field_type}`
+### `@f : S -> F`
 
 Extract the value of a field from a struct value.
 
-### `set_{field_name} : {field_type} -> {struct} -> {struct}`
+### `set_f : F -> S -> S`
 
 Modify a struct value by inserting a value to a field.
 This function clones the given struct value if it is shared.
 
-### `set_{field_name}! : {field_type} -> {struct} -> {struct}`
+### `set_f! : F -> S -> S`
 
 Modify a struct value by inserting a value to a field.
 This function never clones the given struct value. If the struct value is shared, this function panics.
 
-### `mod_{field_name} : ({field_type} -> {field_type}) -> {struct} -> {struct}`
+### `mod_f : (F -> F) -> S -> S`
 
 Modify a struct value by acting on a field value.
 This function clones the given struct value if it is shared.
 What is special about this function is that if you call `obj.mod_field(f)` when both of `obj` and `obj.@field` are unique, it is assured that `f` receives the field value which is unique. So `obj.mod_field(f)` is NOT equivalent to `let v = obj.@field; obj.set_field(f(v))`.
 
-### `mod_{field_name}! : ({field_type} -> {field_type}) -> {struct} -> {struct}`
+### `mod_f! : (F -> F) -> S -> S`
 
 Modify a struct value by acting on a field value.
 This function never clones the given struct value. If the struct value is shared, this function panics.
 What is special about this function is that if you call `obj.mod_field!(f)` when both of `obj` and `obj.@field` are unique, it is assured that `f` receives the field value which is unique. So `obj.mod_field!(f)` is NOT equivalent to `let v = obj.@field; obj.set_field!(f(v))`.
+
+### `act_f : [f : Functor] (F -> f F) -> S -> f S`
+
+Given a monadic action on a field value, perform it on the field of a struct value.
+This is a function know as [Lens](well-known) in Haskell community.
 
 ## Unions
 
