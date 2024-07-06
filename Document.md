@@ -726,7 +726,7 @@ What is special about this function is that if you call `obj.mod_field!(f)` when
 ### `act_f : [f : Functor] (F -> f F) -> S -> f S`
 
 Given a monadic action on a field value, perform it on the field of a struct value.
-This is known as [Lens](well-known) in Haskell community.
+This is known as [Lens](https://hackage.haskell.org/package/lens-5.0.1/docs/Control-Lens-Combinators.html#t:Lens) in Haskell community.
 
 ## Unions
 
