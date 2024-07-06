@@ -3710,6 +3710,12 @@ pub fn test123_5() {
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
             eval assert_eq(|_|"Case " + case + "-c", arr, [[1, 2, 3], [4, 1, 6], [7, 8, 9]]);
 
+            // Case 3: `plug_in!` is called multiple times.
+            let case = "3";
+            let arr = [[0], [1], [2]];
+            let arr = arr.act(0, |x| [x, x, x]);
+            eval *println(arr.to_string);
+
             pure()
         );
     "#;
