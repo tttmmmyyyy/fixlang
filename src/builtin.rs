@@ -2442,37 +2442,30 @@ impl InlineLLVMStructPunchBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ty: &Arc<TypeNode>,
+        ret_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the field type `F` and the punched struct type `PS` using `ty == (F, PS)`.
-        let field_type = ty.field_types(gc.type_env())[0].clone();
-        let punched_type = ty.field_types(gc.type_env())[1].clone();
+        // let field_type = ret_ty.field_types(gc.type_env())[0].clone();
+        // let punched_type = ret_ty.field_types(gc.type_env())[1].clone();
 
-        // Get the argument object.
+        // Get the argument object (the struct value).
         let str = gc.get_var(&self.var_name).ptr.get(gc);
-        assert!(str.is_box(gc.type_env()));
 
         // Move out struct field value without releaseing the struct itself.
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
 
         // Create the return value.
         let pair = if rvo.is_none() {
-            allocate_obj(
-                make_tuple_ty(vec![field_type, punched_type]),
-                &vec![],
-                None,
-                gc,
-                Some("ret_of_punch"),
-            )
+            allocate_obj(ret_ty.clone(), &vec![], None, gc, Some("ret_of_punch"))
         } else {
             rvo.unwrap()
         };
         let field_val = field.value(gc);
         pair.store_field_nocap(gc, 0, field_val);
-        let str_ptr = str.ptr(gc);
-        pair.store_field_nocap(gc, 1, str_ptr);
+        let str_val = str.value(gc);
+        pair.store_field_nocap(gc, 1, str_val);
 
         pair
     }
@@ -2502,7 +2495,7 @@ pub fn struct_punch(
     let ty = type_fun(str_ty, dst_ty.clone());
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
 
-    const VAR_NAME: &str = "str_obj";
+    const VAR_NAME: &str = "struct_value";
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_llvm(
@@ -2544,12 +2537,12 @@ impl InlineLLVMStructPlugInBody {
         assert!(struct_ty.is_box(gc.type_env()));
         assert!(rvo.is_none());
 
-        // Get the first argument, punched struct value, and the second argument, field value.
+        // Get the first argument, a punched struct value, and the second argument, a field value.
         let punched_str = gc.get_var(&self.punched_str_name).ptr.get(gc);
         let field = gc.get_var(&self.field_name).ptr.get(gc);
 
         // Cast punched_str into the struct type.
-        let str = Object::new(punched_str.ptr(gc), struct_ty.clone());
+        let str = Object::create_from_value(punched_str.value(gc), struct_ty.clone(), gc);
 
         // Move the field value into the struct value.
         ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &field);
