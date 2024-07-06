@@ -33,10 +33,10 @@
     - [`mod_f! : (F -> F) -> S -> S`](#mod_f--f---f---s---s-1)
     - [`act_f : [f : Functor] (F -> f F) -> S -> f S`](#act_f--f--functor-f---f-f---s---f-s)
   - [Unions](#unions-1)
-    - [`{variant_name} : {variant_type} -> {union}`](#variant_name--variant_type---union)
-    - [`is_{variant_name} : {union} -> Bool`](#is_variant_name--union---bool)
-    - [`as_{variant_name} : {union} -> {variant_type}`](#as_variant_name--union---variant_type)
-    - [`mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`](#mod_variant_name--variant_type---variant_type---union---union)
+    - [`v : V -> U`](#v--v---u)
+    - [`is_v : U -> Bool`](#is_v--u---bool)
+    - [`as_v : U -> V`](#as_v--u---v)
+    - [`mod_v : (V -> V) -> U -> U`](#mod_v--v---v---u---u)
   - [Modules and import statements](#modules-and-import-statements)
   - [Namespaces and overloading](#namespaces-and-overloading)
   - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
@@ -733,23 +733,24 @@ This is known as [Lens](https://hackage.haskell.org/package/lens-5.0.1/docs/Cont
 
 ## Unions
 
-If you define a union named `{union}` with a variant `{variant_name}` of type `{variant_type}`, the following methods are defined in the namespace named `{union}`.
+If you define a union named `U` with a variant `v` of type `V`, the following methods are defined in the namespace `U`.
 
-### `{variant_name} : {variant_type} -> {union}`
+### `v : V -> U`
 
 Constructs a union value from a variant value.
 
-### `is_{variant_name} : {union} -> Bool`
+### `is_v : U -> Bool`
 
 Check if a union value is created as the specified variant.
 
-### `as_{variant_name} : {union} -> {variant_type}`
+### `as_v : U -> V`
 
 Converts a union value into a variant value if it is created as the variant. If not so, this function panics.
 
-### `mod_{variant_name} : ({variant_type} -> {variant_type}) -> {union} -> {union}`
+### `mod_v : (V -> V) -> U -> U`
 
-Modify a union value by a function acting on a variant. It is assured that if you call `obj.mod_variant(f)` when the value in `obj` is unique, then `f` receives the variant value uniquely.
+Modify a union value by a function acting on a variant.
+What is special about `mod_v` is that if you call `u.mod_v(a)` when both of `u` and the value stored in `u` is unique, then `a` receives an unique value.
 
 ## Modules and import statements
 
