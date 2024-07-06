@@ -659,7 +659,7 @@ impl TypeCheckContext {
                 assert_eq!(args.len(), 1); // lambda of multiple arguments generated in optimization.
                 let arg = args[0].clone();
                 let arg_ty = type_tyvar_star(&self.new_tyvar());
-                if ei.app_order == AppSourceCodeOrderType::ArgumentIsFormer {
+                if ei.app_order == AppSourceCodeOrderType::XDotF {
                     let arg = self.unify_type_of_expr(&arg, arg_ty.clone());
                     let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty));
                     ei.set_app_args(vec![arg]).set_app_func(fun)

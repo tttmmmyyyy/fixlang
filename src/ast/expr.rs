@@ -4,10 +4,11 @@ use super::*;
 use core::panic;
 use std::{collections::HashSet, sync::Arc};
 
+// The ways of apply a function to an argument in source code.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum AppSourceCodeOrderType {
-    FunctionIsFormer,
-    ArgumentIsFormer,
+    FX,    // `f(x)`
+    XDotF, // `x.f`
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -723,7 +724,7 @@ impl Expr {
             expr: self.clone(),
             free_vars: Default::default(),
             source: src,
-            app_order: AppSourceCodeOrderType::FunctionIsFormer,
+            app_order: AppSourceCodeOrderType::FX,
             ty: None,
             released_params_indices: None,
         })

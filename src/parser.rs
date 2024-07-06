@@ -81,8 +81,7 @@ impl DoContext {
             );
             expr = expr_app(bind_function, vec![expr], bind_arg_src.clone());
             let src = Span::unite_opt(&bind_arg_src, &monad.source);
-            expr = expr_app(expr, vec![monad], src)
-                .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
+            expr = expr_app(expr, vec![monad], src).set_app_order(AppSourceCodeOrderType::XDotF);
         }
         expr
     }
@@ -1187,18 +1186,17 @@ fn parse_expr_composition(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprN
             ">>" => {
                 let span = unite_src_from_expr(&compose, &expr);
                 expr = expr_app(compose, vec![expr], span)
-                    .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
+                    .set_app_order(AppSourceCodeOrderType::XDotF);
                 let span = unite_src_from_expr(&expr, &rhs);
-                expr = expr_app(expr, vec![rhs], span)
-                    .set_app_order(AppSourceCodeOrderType::FunctionIsFormer);
+                expr = expr_app(expr, vec![rhs], span).set_app_order(AppSourceCodeOrderType::FX);
             }
             "<<" => {
                 let span = unite_src_from_expr(&compose, &rhs);
                 let right_expr = expr_app(compose, vec![rhs.clone()], span)
-                    .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
+                    .set_app_order(AppSourceCodeOrderType::XDotF);
                 let span = unite_src_from_expr(&right_expr, &rhs);
                 expr = expr_app(right_expr, vec![expr], span)
-                    .set_app_order(AppSourceCodeOrderType::FunctionIsFormer);
+                    .set_app_order(AppSourceCodeOrderType::FX);
             }
             _ => {
                 unreachable!()
@@ -1232,8 +1230,7 @@ fn parse_expr_ltr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode>
     let mut ret = exprs_iter.next().unwrap().clone();
     for expr in exprs_iter {
         let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(expr.clone(), vec![ret], span)
-            .set_app_order(AppSourceCodeOrderType::ArgumentIsFormer);
+        ret = expr_app(expr.clone(), vec![ret], span).set_app_order(AppSourceCodeOrderType::XDotF);
     }
     ret
 }

@@ -1159,7 +1159,7 @@ impl Program {
                 TypeDeclValue::Struct(str) => {
                     let struct_name = decl.name.clone();
                     for field in &str.fields {
-                        // Getter function
+                        // Add Getter function
                         self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
@@ -1167,22 +1167,8 @@ impl Program {
                             ),
                             struct_get(&struct_name, decl, &field.name),
                         );
-                        // Punch function.
-                        self.add_global_value(
-                            FullName::new(
-                                &decl.name.to_namespace(),
-                                &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
-                            ),
-                            struct_punch(&struct_name, decl, &field.name),
-                        );
-                        // Plug-in function.
-                        self.add_global_value(
-                            FullName::new(
-                                &decl.name.to_namespace(),
-                                &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
-                            ),
-                            struct_plug_in(&struct_name, decl, &field.name),
-                        );
+
+                        // Add setter functions and modifier functions.
                         for is_unique in [false, true] {
                             self.add_global_value(
                                 FullName::new(
@@ -1208,6 +1194,35 @@ impl Program {
                                 struct_set(&struct_name, decl, &field.name, is_unique),
                             )
                         }
+
+                        // Add punch function and plug-in function only when the struct is boxed.
+                        if !str.is_unbox {
+                            // Punch function.
+                            self.add_global_value(
+                                FullName::new(
+                                    &decl.name.to_namespace(),
+                                    &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
+                                ),
+                                struct_punch(&struct_name, decl, &field.name),
+                            );
+                            // Plug-in function.
+                            self.add_global_value(
+                                FullName::new(
+                                    &decl.name.to_namespace(),
+                                    &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
+                                ),
+                                struct_plug_in(&struct_name, decl, &field.name),
+                            );
+                        }
+
+                        // Add act functions
+                        self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_ACT_SYMBOL, &field.name),
+                            ),
+                            struct_act(&struct_name, decl, &field.name),
+                        );
                     }
                 }
                 TypeDeclValue::Union(union) => {

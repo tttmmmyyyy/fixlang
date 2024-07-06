@@ -41,6 +41,7 @@ pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 pub const LAZY_NAME: &str = "Lazy";
 pub const BOXED_NAME: &str = "Boxed";
+pub const FUNCTOR_NAME: &str = "Functor";
 pub const DESTRUCTOR_OBJECT_NAME: &str = "Destructor";
 pub const DESTRUCTOR_OBJECT_VALUE_FIELD_IDX: u32 = 0;
 pub const DESTRUCTOR_OBJECT_DTOR_FIELD_IDX: u32 = 1;
@@ -59,9 +60,10 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
 pub const STRUCT_GETTER_SYMBOL: &str = "@";
 pub const STRUCT_SETTER_SYMBOL: &str = "set_";
-pub const STRUCT_PUNCH_SYMBOL: &str = "_punch_";
-pub const STRUCT_PLUG_IN_SYMBOL: &str = "_plug_in_";
-pub const PUNCHED_TYPE_SYMBOL: &str = "PunchedAt";
+pub const STRUCT_ACT_SYMBOL: &str = "act_";
+pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
+pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
+pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 
 pub const CAP_NAME: &str = "#CAP";
 

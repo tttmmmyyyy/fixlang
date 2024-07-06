@@ -199,6 +199,10 @@ pub fn make_destructor_object_name() -> FullName {
     FullName::from_strs(&[STD_NAME, FFI_NAME], DESTRUCTOR_OBJECT_NAME)
 }
 
+pub fn make_functor_name() -> FullName {
+    FullName::from_strs(&[STD_NAME], FUNCTOR_NAME)
+}
+
 pub fn make_funptr_name(arity: u32) -> Name {
     format!("{}{}", FUNPTR_NAME, arity)
 }
@@ -2734,6 +2738,122 @@ pub fn struct_mod(
         type_fun(str_ty.clone(), str_ty.clone()),
     );
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
+    (expr, scm)
+}
+
+// Field act function for a given struct.
+// If the struct is `S` and the field is `F`, then the function has the type `(F -> f F) -> S -> f S`.
+// The implementation uses `#punch_{field}` and `#plug_in_{field}`.for the struct.
+pub fn struct_act(
+    struct_name: &FullName,
+    definition: &TypeDefn,
+    field_name: &str,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    // Find the index and the `Field` instance of `field_name` in the given struct.
+    let field = definition.get_field_by_name(field_name);
+    if field.is_none() {
+        error_exit(&format!(
+            "No field `{}` found in the struct `{}`.",
+            &field_name,
+            struct_name.to_string(),
+        ));
+    }
+    let (_field_idx, field) = field.unwrap();
+
+    // Create type scheme of this function.
+    let str_ty = definition.ty();
+    let field_ty = field.ty.clone();
+    let functor_ty = type_tyvar("f", &kind_arrow(kind_star(), kind_star()));
+    let src_ty = type_fun(
+        field_ty.clone(),
+        type_tyapp(functor_ty.clone(), field_ty.clone()),
+    );
+    let dst_ty = type_fun(
+        str_ty.clone(),
+        type_tyapp(functor_ty.clone(), str_ty.clone()),
+    );
+    let ty = type_fun(src_ty, dst_ty.clone());
+    let scm = Scheme::generalize(
+        &[],
+        vec![Predicate::make(
+            TraitId::from_fullname(make_functor_name()),
+            ty.clone(),
+        )],
+        vec![],
+        ty,
+    );
+
+    // Implementation of `act` function as AST.
+    // The implementation as Fix source code is:
+    // ```
+    // |f, s| (
+    //     let (x, ps) = s.#punch_{field};
+    //     f(x).map(ps.#plug_in_{field})
+    // );
+    // (Here, we cannot use the parser because we are using "#" is not allowed as value name)
+    let expr = expr_abs(
+        vec![var_local("f")],
+        expr_abs(
+            vec![var_local("s")],
+            expr_let(
+                PatternNode::make_struct(
+                    tycon(make_tuple_name(2)),
+                    vec![
+                        ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
+                        (
+                            "1".to_string(),
+                            PatternNode::make_var(var_local("ps"), None),
+                        ),
+                    ],
+                ),
+                expr_app(
+                    expr_var(
+                        FullName::new(
+                            &struct_name.to_namespace(),
+                            &format!("{}{}", STRUCT_PUNCH_SYMBOL, field_name),
+                        ),
+                        None,
+                    ),
+                    vec![expr_var(FullName::local("s"), None)],
+                    None,
+                )
+                .set_app_order(AppSourceCodeOrderType::XDotF),
+                expr_app(
+                    expr_app(
+                        expr_var(
+                            FullName::new(&make_functor_name().to_namespace(), "map"),
+                            None,
+                        ),
+                        vec![expr_app(
+                            expr_var(
+                                FullName::local(&format!(
+                                    "{}{}",
+                                    STRUCT_PLUG_IN_SYMBOL, field_name
+                                )),
+                                None,
+                            ),
+                            vec![expr_var(FullName::local("ps"), None)],
+                            None,
+                        )
+                        .set_app_order(AppSourceCodeOrderType::XDotF)],
+                        None,
+                    )
+                    .set_app_order(AppSourceCodeOrderType::FX),
+                    vec![expr_app(
+                        expr_var(FullName::local("f"), None),
+                        vec![expr_var(FullName::local("x"), None)],
+                        None,
+                    )
+                    .set_app_order(AppSourceCodeOrderType::FX)],
+                    None,
+                )
+                .set_app_order(AppSourceCodeOrderType::XDotF),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
     (expr, scm)
 }
 
