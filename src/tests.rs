@@ -6806,6 +6806,21 @@ pub fn test_struct_act() {
             let s = GB { x : [], y : [1, 2], z : 3 };
             eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
 
+            // BB shared case.
+            let actor_array = |x| if x.Array::get_size > 0 { Option::some(x.set(0, false)) } else { Option::none() };
+            let s = BB { x : [true], y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
+            eval assert_eq(|_|"", s, BB { x : [true], y : [1, 2], z : 3 });
+
+            // Case where `#plug_in(ps)` is called multiple times.
+            let actor = |x| [x, x.push_back(false), x.push_back(true)];
+            let s = BB { x : [true], y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor), [
+                BB { x : [true],              y : [1, 2], z : 3 },
+                BB { x : [true, false],       y : [1, 2], z : 3 },
+                BB { x : [true, true],        y : [1, 2], z : 3 }
+            ]);
+
             pure()
         );
     "##;

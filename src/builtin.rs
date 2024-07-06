@@ -2449,6 +2449,15 @@ impl InlineLLVMStructPunchBody {
         // Get the argument object (the struct value).
         let str = gc.get_var(&self.var_name).ptr.get(gc);
 
+        // Make the struct unique.
+        // This is necessary because the punching can be considered as setting the field to `null`.
+        // Consider the case where
+        // - We omit the uniqueness check here.
+        // - The struct is shared (by `s1` and `s2`), but the (boxed) field value itself is unique.
+        // Then, if we `let (x1, _) = s1.punch_x; let (x2, _) = s2.#punch_x;`, then `x1` and `x2` will point to the same object, but still is unique.
+        // Similar problem occurrs even if the `punch_x` function is only used in the implementation of `act_x`.
+        let str = make_struct_unique(gc, str, false);
+
         // Move out struct field value without releaseing the struct itself.
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
 
@@ -2534,7 +2543,10 @@ impl InlineLLVMStructPlugInBody {
         let punched_str = gc.get_var(&self.punched_str_name).ptr.get(gc);
         let field = gc.get_var(&self.field_name).ptr.get(gc);
 
-        // Make the punched struct unique.
+        // Make the punched struct unique before plugging-in the field value.
+        //
+        // The uniquness is not assured even if `#plug_x` is only used in the implementation of `act_x` and the `#punch_x` function has uniqueness checking.
+        // In the impelementation of `act_x`, we use `map(#plug_in_x(ps))`, and `map` can be call `#plug_in_x(ps)` multiple times, so the punched struct value `ps` can be shared.
         let punched_str = make_struct_unique(gc, punched_str, false);
 
         // Convert punched_str into the struct type.
