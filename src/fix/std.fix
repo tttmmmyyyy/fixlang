@@ -83,18 +83,11 @@ namespace Array {
     act = |idx, fun, arr| (
         let (unique, arr) = arr.unsafe_is_unique;
         if unique {
-            arr.act!(idx, fun)
+            let (parr, elm) = _PunchedArray::punch(idx, arr);
+            fun(elm).map(|elm| parr.plug_in(elm))
         } else { // shared
             fun(arr.@(idx)).map(|elm| arr.set(idx, elm))
-        }        
-    );
-
-    // Functorial version of `Array::mod!`, a.k.a. "lens" of `Array` in Haskell community.
-    // This function is almost the same as `Array::act`, but it panics if the given array is shared by multiple references.
-    act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
-    act! = |idx, act, arr| (
-        let (parr, elm) = PunchedArray::punch!(idx, arr);
-        act(elm).map(|elm| parr.plug_in!(elm))
+        }
     );
 
     // Append an array to an array.
@@ -1294,40 +1287,66 @@ impl Path : ToString {
     to_string = @_data;
 }
 
-// The type of punched arrays. A punched array is an array from which a certain element has been removed.
-// If you create a punched array `parr` by punching an array `arr` at an index `idx`, only elements of `arr` whose indices are outside `idx` are released when `parr` is released.
+// The type of punched arrays. 
+// A punched array is an array from which a certain element has been removed.
+// This is used in the implementation of `Array::act`.
 type PunchedArray a = unbox struct { _data : Destructor (Array a), idx : I64 };
 
-namespace PunchedArray {
+namespace _PunchedArray {
 
     // Plug in an element to a punched array to get back an array.
-    // This function panics if (the internal data of) the given punched array is shared by multiple references.
-    plug_in! : a -> PunchedArray a -> Array a;
-    plug_in! = |elm, parr| (
-        let PunchedArray { _data : data, idx : idx } = parr;
-        let arr = data.set_dtor!(|_|()).@_value; // Clear destructor and extract value.
-        arr.force_unique!._unsafe_set(idx, elm) 
-        // The above force_unique! is redundant and added just to be safe: as long as the user doesn't access to `_data` of `PunchedArray`, `arr` should be uniquely owned by `data`.
+    plug_in : a -> PunchedArray a -> Array a;
+    plug_in = |elm, parr| (
+        let PunchedArray { _data : data, idx : punched_idx } = parr;
+        
+        // Clear destructor and extract the internal array.
+        // Also note that if the `parr` had been cloned, then the internal array is retained here.
+        let arr = data.set_dtor(|_|()).@_value;
+
+        let (is_unique, arr) = arr.unsafe_is_unique;
+        if is_unique { 
+            // If the array is unique, we directly insert the element.
+            arr._unsafe_set(punched_idx, elm)
+        } else {
+            // If the array is shared, we create a new array and set up the elements.
+            let arr_size = arr.get_size;
+            let new_arr = Array::empty(arr.get_capacity)._unsafe_set_size(arr_size);
+            loop((0, new_arr), |(i, new_arr)| (
+                if i == arr_size { break $ new_arr };
+                let elm = if i == punched_idx { elm } else { arr.@(i) };
+                continue $ (i + 1, new_arr._unsafe_set(i, elm))
+            ))
+        }
     );
 
-    // Creates a punched array.
-    // Expression `punch(idx, arr)` evaluates to a pair `(parr, elm)`, where `elm` is the value that was stored at `idx` of `arr` and `parr` is the punched `arr` at `idx`.
-    // This function panics if the given array is shared by multiple references.
-    punch! : I64 -> Array a -> (PunchedArray a, a);
-    punch! = |idx, arr| (
-        let arr = arr.assert_unique!(|_|"[PunchedArray::punch!] Called on a shared array.");
+    // Creates a punched array by moving out the element at the specified index.
+    punch : I64 -> Array a -> (PunchedArray a, a);
+    punch = |idx, arr| (
+        // Bounds check.
         let size = arr.get_size;
-        eval assert(|_|"[PunchedArray::punch!] Index out of range.", 0 <= idx && idx < size);
+        eval assert(|_|"[_PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
+
+        // Force the array to be unique, because punching can be considered as a mutation (i.e., setting an element to "null").
+        let arr = arr.force_unique;
+
+        // Move out the element.
         let elm = arr._unsafe_get(idx);
+
+        // Create the destructor.
         let dtor = |arr| (
-            let arr = arr._unsafe_set_size(0); // Avoid releaseing elements in the destructor of Array.
-            loop((arr, 0), |(arr, i)| (
+            // Prevent elements released by the destructor of `Array`.
+            let arr = arr._unsafe_set_size(0);
+
+            // Release elements except the punched one.
+            loop((0, arr), |(i, arr)| (
                 if i == size { break $ () };
-                if i == idx { continue $ (arr, i+1) };
+                if i == idx { continue $ (i + 1, arr) };
                 let _ = arr._unsafe_get(i); // Release the element.
-                continue $ (arr, i+1)
+                continue $ (i + 1, arr)
             ))
         );
+
+        // Return the result.
         let parr = PunchedArray { _data : Destructor::make(arr, dtor), idx : idx };
         (parr, elm)
     );

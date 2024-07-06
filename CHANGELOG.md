@@ -12,8 +12,11 @@
 ### Changed
 
 - Change namespace of `type Destructor` from `Std::FFI::Destructor` to `Std::FFI`.
+- Remove `Std::Array::act!`, change `Std::PunchedArray::plug_in!` and `Std::PunchedArray::punch!` to `Std::_PunchedArray::plug_in` and `Std::_PunchedArray::punch` respectively.
 
 ### Fixed
+
+- Fix an issue on `Std::Array::act` which may cause memory leak.
 
 ## [0.2.0] - 2024-06-12
 

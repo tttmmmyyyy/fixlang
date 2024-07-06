@@ -3443,7 +3443,7 @@ pub fn test121() {
 }
 
 #[test]
-pub fn test122() {
+pub fn test_punched_array() {
     // Test PunchedArray.
     let source = r#"
         module Main; 
@@ -3456,83 +3456,83 @@ pub fn test122() {
         main = (
             // Case 1-1: Punch an array of two boxed values and release parray.
             let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 1-1", five.@x, 5);
 
             // Case 1-2: Punch an array of two boxed values and plug-in the same element.
             let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 1-2-a", five.@x, 5);
-            let arr = parr.plug_in!(five);
+            let arr = parr.plug_in(five);
             eval assert_eq(|_|"case 1-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 7);
 
             // Case 1-3: Punch an array of two boxed values and plug-in the other element.
             let seven = MyBoxed { x : 7 };
             let arr = [MyBoxed { x : 5 }, seven];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 1-3-a", five.@x, 5);
-            let arr = parr.plug_in!(seven);
+            let arr = parr.plug_in(seven);
             eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 7);
 
             // Case 1-4: Punch an array of two boxed values and plug-in another value.
             let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 1-3-a", five.@x, 5);
-            let arr = parr.plug_in!(MyBoxed { x : 11 });
+            let arr = parr.plug_in(MyBoxed { x : 11 });
             eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 11);
 
             // Case 2-1: Punch an array of two shared boxed values and release parray.
             let five = MyBoxed { x : 5 };
             let arr = [five, five];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 2-1", five.@x, 5);
 
             // Case 2-2: Punch an array of two shared boxed values and plug-in the same element.
             let five = MyBoxed { x : 5 };
             let arr = [five, five];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 2-2-a", five.@x, 5);
-            let arr = parr.plug_in!(five);
+            let arr = parr.plug_in(five);
             eval assert_eq(|_|"case 2-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
 
             // Case 2-3: Punch an array of two shared boxed values and plug-in the value again.
             let five = MyBoxed { x : 5 };
             let arr = [five, five];
-            let (parr, five1) = arr.punch!(0);
+            let (parr, five1) = arr.punch(0);
             eval assert_eq(|_|"case 2-3-a", five1.@x, 5);
-            let arr = parr.plug_in!(five);
+            let arr = parr.plug_in(five);
             eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
 
             // Case 2-4: Punch an array of two shared boxed values and plug-in another value.
             let five = MyBoxed { x : 5 };
             let arr = [five, five];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 2-3-a", five.@x, 5);
-            let arr = parr.plug_in!(MyBoxed { x : 7 });
+            let arr = parr.plug_in(MyBoxed { x : 7 });
             eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 5);
 
             // Case 3-1: Punch an array of one boxed values and release parray.
             let arr = [MyBoxed { x : 5 }];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 3-1", five.@x, 5);
 
             // Case 3-2: Punch an array of two boxed values and plug-in the same element.
             let arr = [MyBoxed { x : 5 }];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 3-2-a", five.@x, 5);
-            let arr = parr.plug_in!(five);
+            let arr = parr.plug_in(five);
             eval assert_eq(|_|"case 3-2-b", arr.@(0).@x, 5);
 
             // Case 4-1: Punch an array of two unboxed values and release parray.
             let arr = [5, 7];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 1-1", five, 5);
 
             // Case 4-2: Punch an array of two boxed values and plug-in a value.
             let arr = [5, 7];
-            let (parr, five) = arr.punch!(0);
+            let (parr, five) = arr.punch(0);
             eval assert_eq(|_|"case 4-2-a", five, 5);
-            let arr = parr.plug_in!(13);
+            let arr = parr.plug_in(13);
             eval assert_eq(|_|"case 4-2-b", arr.@(0) + arr.@(1), 13 + 7);
 
             pure()
@@ -3542,8 +3542,8 @@ pub fn test122() {
 }
 
 #[test]
-pub fn test123() {
-    // Test Array::act and Array::act!
+pub fn test_array_act_1() {
+    // Test Array::act
     let source = r#"
         module Main; 
 
@@ -3566,7 +3566,7 @@ pub fn test123() {
             // Case 0-0-0-0: Boxed element, unique array, act0 succeeds.
             let case = "0-0-0-0";
             let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
-            let opt_arr = arr.act!(0, act0);
+            let opt_arr = arr.act(0, act0);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
             eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
             eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
@@ -3575,13 +3575,13 @@ pub fn test123() {
             // Case 0-0-0-1: Boxed element, unique array, act0 fails.
             let case = "0-0-0-1";
             let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
-            let opt_arr = arr.act!(0, act0);
+            let opt_arr = arr.act(0, act0);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 0-0-1-0: Boxed element, unique array, act1 succeeds.
             let case = "0-0-1-0";
             let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
-            let opt_arr = arr.act!(0, act1);
+            let opt_arr = arr.act(0, act1);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
             eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
             eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
@@ -3590,7 +3590,7 @@ pub fn test123() {
             // Case 0-0-1-1: Boxed element, unique array, act1 fails.
             let case = "0-0-1-1";
             let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
-            let opt_arr = arr.act!(0, act1);
+            let opt_arr = arr.act(0, act1);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 0-1-0-0: Boxed element, shared array, act01 succeeds.
@@ -3634,7 +3634,7 @@ pub fn test123() {
             // Case 1-0-0-0: Unboxed element, unique array, act2 succeeds.
             let case = "1-0-0-0";
             let arr = [0, 3];
-            let opt_arr = arr.act!(0, act2);
+            let opt_arr = arr.act(0, act2);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
             eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
             eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0), 5);
@@ -3643,7 +3643,7 @@ pub fn test123() {
             // Case 1-0-0-1: Unboxed element, unique array, act2 fails.
             let case = "1-0-0-1";
             let arr = [1, 3];
-            let opt_arr = arr.act!(0, act2);
+            let opt_arr = arr.act(0, act2);
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 1-1-0-0: Unboxed element, shared array, act2 succeeds.
@@ -3670,8 +3670,8 @@ pub fn test123() {
 }
 
 #[test]
-pub fn test123_5() {
-    // Test Array::act and Array::act! (case 2)
+pub fn test_array_act_2() {
+    // Test Array::act (case 2)
     let source = r#"
         module Main; 
 
@@ -3685,14 +3685,14 @@ pub fn test123_5() {
 
             let case = "2-0-0";
             let arr = [[1, 2, 3], [4, 0, 6], [7, 8, 9]];
-            let opt_arr = arr.act!(1, act!(1, act2));
+            let opt_arr = arr.act(1, act(1, act2));
             eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
             eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
 
             // Case 2-0-1: Fails updating an element of unique two-dimensional array by act2.
             let case = "2-0-1";
             let arr = [[1, 2, 3], [4, 1, 6], [7, 8, 9]];
-            let opt_arr = arr.act!(1, act!(1, act2));
+            let opt_arr = arr.act(1, act(1, act2));
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 2-1-0: Succeeds updating an element of shared two-dimensional array by act2.
@@ -3710,11 +3710,12 @@ pub fn test123_5() {
             eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
             eval assert_eq(|_|"Case " + case + "-c", arr, [[1, 2, 3], [4, 1, 6], [7, 8, 9]]);
 
-            // Case 3: `plug_in!` is called multiple times.
+            // Case 3: `plug_in` is called multiple times.
             let case = "3";
             let arr = [[0], [1], [2]];
-            let arr = arr.act(0, |x| [x, x, x]);
+            let arr = arr.act(0, |x| [[], x, x.push_back(1)]);
             eval *println(arr.to_string);
+            eval assert_eq(|_|"Case " + case, arr, [[[], [1], [2]], [[0], [1], [2]], [[0, 1], [1], [2]]]);
 
             pure()
         );

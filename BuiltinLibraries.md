@@ -418,7 +418,6 @@
       - [`_get_ptr : Array a -> Ptr`](#_get_ptr--array-a---ptr)
       - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
       - [`act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a)
-      - [`act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a-1)
       - [`append : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a)
       - [`append! : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a-1)
       - [`borrow_ptr : (Ptr -> b) -> Array a -> b`](#borrow_ptr--ptr---b---array-a---b)
@@ -556,9 +555,9 @@
       - [`subtract_ptr : Ptr -> Ptr -> I64`](#subtract_ptr--ptr---ptr---i64)
       - [`impl Ptr : Eq`](#impl-ptr--eq)
       - [`impl Ptr : ToString`](#impl-ptr--tostring)
-    - [PunchedArray](#punchedarray)
-      - [`plug_in! : a -> PunchedArray a -> Array a`](#plug_in--a---punchedarray-a---array-a)
-      - [`punch! : I64 -> Array a -> (PunchedArray a, a)`](#punch--i64---array-a---punchedarray-a-a)
+    - [\_PunchedArray](#_punchedarray)
+      - [`plug_in : a -> PunchedArray a -> Array a`](#plug_in--a---punchedarray-a---array-a)
+      - [`punch : I64 -> Array a -> (PunchedArray a, a)`](#punch--i64---array-a---punchedarray-a-a)
     - [Result](#result)
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl [e : Eq, a : Eq] Result e a : Eq`](#impl-e--eq-a--eq-result-e-a--eq)
@@ -1369,9 +1368,6 @@ What is special about this function is that if you call `arr.act(idx, fun)` when
 
 If you call `act` on an array which is shared, this function clones the given array when inserting the result of your action into the array. This means that you don't need to pay cloning cost when your action failed, as expected.
 
-#### `act! : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`
-This function is almost the same as `Array::act`, but it panics if the given array is shared.
-
 #### `append : Array a -> Array a -> Array a`
 Append an array to an array.
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
@@ -1876,22 +1872,21 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 #### `impl Ptr : Eq`
 #### `impl Ptr : ToString`
 
-### PunchedArray
-The type of punched arrays. A punched array is an array from which a certain element has been removed.
-If you create a punched array `parr` by punching an array `arr` at an index `idx`, only elements of `arr` whose indices are outside `idx` are released when `parr` is destructed.
+### _PunchedArray
+
+The type of punched arrays. 
+A punched array is an array from which a certain element has been removed.
+This is used in the implementation of `Array::act`.
 
 ```
 type PunchedArray a = unbox struct { _data : Destructor (Array a), idx : I64 };
 ```
 
-#### `plug_in! : a -> PunchedArray a -> Array a`
+#### `plug_in : a -> PunchedArray a -> Array a`
 Plug in an element to a punched array to get back an array.
-This function panics if (the internal data of) the given punched array is shared.
 
-#### `punch! : I64 -> Array a -> (PunchedArray a, a)`
-Creates a punched array.
-Expression `punch(idx, arr)` evaluates to a pair `(parr, elm)`, where `elm` is the value that was stored at `idx` of `arr` and `parr` is the punched `arr` at `idx`.
-This function panics if the given array is shared.
+#### `punch : I64 -> Array a -> (PunchedArray a, a)`
+Creates a punched array by moving out the element at the specified index.
 
 ### Result
 
