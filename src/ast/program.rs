@@ -479,12 +479,10 @@ impl Program {
             }
             // If the type is a boxed struct, add punched struct types to tycons.
             if let TypeDeclValue::Struct(s) = &type_decl.value {
-                if !s.is_unbox {
-                    for i in 0..s.fields.len() {
-                        let mut punched_tycon = tycon.clone();
-                        punched_tycon.into_punched_type_name(i);
-                        tycons.insert(punched_tycon, type_decl.tycon_info(&[i]));
-                    }
+                for i in 0..s.fields.len() {
+                    let mut punched_tycon = tycon.clone();
+                    punched_tycon.into_punched_type_name(i);
+                    tycons.insert(punched_tycon, type_decl.tycon_info(&[i]));
                 }
             }
         }
@@ -1194,27 +1192,22 @@ impl Program {
                                 struct_set(&struct_name, decl, &field.name, is_unique),
                             )
                         }
-
-                        // Add punch function and plug-in function only when the struct is boxed.
-                        if !str.is_unbox {
-                            // Punch function.
-                            self.add_global_value(
-                                FullName::new(
-                                    &decl.name.to_namespace(),
-                                    &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
-                                ),
-                                struct_punch(&struct_name, decl, &field.name),
-                            );
-                            // Plug-in function.
-                            self.add_global_value(
-                                FullName::new(
-                                    &decl.name.to_namespace(),
-                                    &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
-                                ),
-                                struct_plug_in(&struct_name, decl, &field.name),
-                            );
-                        }
-
+                        // Add punch functions.
+                        self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
+                            ),
+                            struct_punch(&struct_name, decl, &field.name),
+                        );
+                        // Add plug-in functions.
+                        self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
+                            ),
+                            struct_plug_in(&struct_name, decl, &field.name),
+                        );
                         // Add act functions
                         self.add_global_value(
                             FullName::new(

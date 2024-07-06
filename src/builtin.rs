@@ -2534,15 +2534,18 @@ impl InlineLLVMStructPlugInBody {
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        assert!(struct_ty.is_box(gc.type_env()));
-        assert!(rvo.is_none());
-
         // Get the first argument, a punched struct value, and the second argument, a field value.
         let punched_str = gc.get_var(&self.punched_str_name).ptr.get(gc);
         let field = gc.get_var(&self.field_name).ptr.get(gc);
 
-        // Cast punched_str into the struct type.
-        let str = Object::create_from_value(punched_str.value(gc), struct_ty.clone(), gc);
+        // Convert punched_str into the struct type.
+        let punched_value = punched_str.value(gc);
+        let str = if let Some(rvo) = rvo {
+            rvo.store_unbox(gc, punched_value);
+            rvo
+        } else {
+            Object::create_from_value(punched_value, struct_ty.clone(), gc)
+        };
 
         // Move the field value into the struct value.
         ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &field);
@@ -2735,7 +2738,7 @@ pub fn struct_mod(
 }
 
 // Field act function for a given struct.
-// If the struct is `S` and the field is `F`, then the function has the type `(F -> f F) -> S -> f S`.
+// If the struct is `S` and the field is `F`, then the function has the type `[f : Functor] (F -> f F) -> S -> f S`.
 // The implementation uses `#punch_{field}` and `#plug_in_{field}`.for the struct.
 pub fn struct_act(
     struct_name: &FullName,
@@ -2770,7 +2773,7 @@ pub fn struct_act(
         &[],
         vec![Predicate::make(
             TraitId::from_fullname(make_functor_name()),
-            ty.clone(),
+            functor_ty,
         )],
         vec![],
         ty,

@@ -6723,3 +6723,91 @@ pub fn test_monadic_bind_and_make_struct_ordering() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_struct_act() {
+    let source = r##"
+        module Main;
+        import Debug;
+        
+        // Boxed struct with a boxed field.
+        type BB = box struct { x : Array Bool };
+        impl BB : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x;
+        }
+
+        // Boxed struct with an unboxed field.
+        type BU = box struct { x : Bool };
+        impl BU : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x;
+        }
+
+        // Unboxed struct with a boxed field.
+        type UB = unbox struct { x : Array Bool };
+        impl UB : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x;
+        }
+
+        // Unboxed struct with an unboxed field.
+        type UU = unbox struct { x : Bool };
+        impl UU : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x;
+        }
+
+        // Generic boxed struct with a boxed field.
+        type GB a = box struct { x : Array a };
+        impl [a : Eq] GB a : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x;
+        }
+
+        main: IO ();
+        main = (
+            let actor_array = |x| if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
+            let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
+
+            // BB case 1
+            let s = BB { x : [true] };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [true] }));
+
+            // BB case 2
+            let s = BB { x : [] };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
+
+            // BU case 1
+            let s = BU { x : true };
+            eval assert_eq(|_|"", s.act_x(actor_bool), Option::some(BU { x : true }));
+
+            // BU case 2
+            let s = BU { x : false };
+            eval assert_eq(|_|"", s.act_x(actor_bool), Option::none());
+
+            // UB case 1
+            let s = UB { x : [true] };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(UB { x : [true] }));
+
+            // UB case 2
+            let s = UB { x : [] };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
+
+            // UU case 1
+            let s = UU { x : true };
+            eval assert_eq(|_|"", s.act_x(actor_bool), Option::some(UU { x : true }));
+
+            // UU case 2
+            let s = UU { x : false };
+            eval assert_eq(|_|"", s.act_x(actor_bool), Option::none());
+
+            // GB case 1
+            let actor_array = |x| if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
+            let s = GB { x : [true] };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(GB { x : [true] }));
+
+            // GB case 2
+            let s = GB { x : [] };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
