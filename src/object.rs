@@ -1253,21 +1253,21 @@ pub fn ty_to_object_ty(
 // Allocate an object.
 pub fn allocate_obj<'c, 'm>(
     ty: Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>,    // used in dynamic object
-    array_cap: Option<IntValue<'c>>, // used in array
+    capture: &Vec<Arc<TypeNode>>,         // used in dynamic object
+    array_capacity: Option<IntValue<'c>>, // used in array
     gc: &mut GenerationContext<'c, 'm>,
     name: Option<&str>,
 ) -> Object<'c> {
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
-    assert!(array_cap.is_some() == ty.is_array());
+    assert!(array_capacity.is_some() == ty.is_array());
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
 
     // Allocate object
     let ptr_to_obj = if ty.is_array() {
-        let sizeof = object_type.size_of(gc, array_cap);
+        let sizeof = object_type.size_of(gc, array_capacity);
         let ptr = gc
             .builder()
             .build_array_malloc(gc.context.i8_type(), sizeof, "malloc_array@allocate_obj")
@@ -1364,7 +1364,7 @@ pub fn allocate_obj<'c, 'm>(
                     .build_struct_gep(ptr_to_obj, ARRAY_CAP_IDX, "ptr_to_size_field")
                     .unwrap();
                 gc.builder()
-                    .build_store(ptr_to_size_field, array_cap.unwrap());
+                    .build_store(ptr_to_size_field, array_capacity.unwrap());
             }
             ObjectFieldType::TraverseFunction => {
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
