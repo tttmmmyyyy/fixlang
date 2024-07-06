@@ -8,6 +8,7 @@
 - Add `Std::FFI::_unsafe_get_boxed_data_ptr`, `Std::FFI::unsafe_borrow_boxed_data_ptr`.
 - Add `Std::FFI::unsafe_get_errno`, `Std::FFI::unsafe_clear_errno`.
 - Add `act_{field} : [f : Functor] (F -> f F) -> S -> f S` for each field `f` of type `F` of a struct `S`, which is known as "Lens" in Haskell community.
+- Implement `Functor` for tuple types. `map` function acts the last component of tuples.
 
 ### Changed
 

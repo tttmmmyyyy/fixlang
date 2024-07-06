@@ -592,8 +592,9 @@
       - [`impl String : LessThan`](#impl-string--lessthan)
       - [`impl String : LessThanOrEq`](#impl-string--lessthanoreq)
       - [`impl String : ToString`](#impl-string--tostring)
-    - [Tuple{N} (for N \>= 2)](#tuplen-for-n--2)
+    - [Tuple{N} (for N \>= 1)](#tuplen-for-n--1)
       - [`impl [a1 : Eq, ..., aN : Eq] (a1, ..., aN) : Eq`](#impl-a1--eq--an--eq-a1--an--eq)
+      - [`impl Tuple t0 ... t(N-1) : Functor`](#impl-tuple-t0--tn-1--functor)
       - [`impl [a1 : Eq, a1 : LessThan, ..., aN : Eq, aN : LessThan] (a1, ..., aN) : LessThan`](#impl-a1--eq-a1--lessthan--an--eq-an--lessthan-a1--an--lessthan)
       - [`impl [a1 : Eq, a1 : LessThanOrEq, ..., aN : Eq, aN : LessThanOrEq] (a1, ..., aN) : LessThanOrEq`](#impl-a1--eq-a1--lessthanoreq--an--eq-an--lessthanoreq-a1--an--lessthanoreq)
       - [`impl [a1 : ToString, ..., aN : ToString] (a1, ..., aN) : ToString`](#impl-a1--tostring--an--tostring-a1--an--tostring)
@@ -2003,9 +2004,13 @@ Compare two strings lexicographically as a byte array.
 #### `impl String : ToString`
 Defined as an identity function.
 
-### Tuple{N} (for N >= 2) 
+### Tuple{N} (for N >= 1) 
 
 #### `impl [a1 : Eq, ..., aN : Eq] (a1, ..., aN) : Eq`
+
+#### `impl Tuple t0 ... t(N-1) : Functor`
+
+Functor implementation for tuples, where `map` acts on the last component.
 
 #### `impl [a1 : Eq, a1 : LessThan, ..., aN : Eq, aN : LessThan] (a1, ..., aN) : LessThan`
 

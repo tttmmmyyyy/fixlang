@@ -589,7 +589,45 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         src += "        true\n";
         src += "    );\n";
         src += "}\n\n";
+
+        // Impl `TuepleN t0 ... t(N-1) : Functor`:
+        // For example, if N = 2,
+        // impl Tuple2 t0 : Functor {
+        //     map = |f, (x0, x1)| (x0, f(x1));
+        // }
+        src += "impl ";
+        src += format!("Tuple{} ", size).as_str();
+        src += &(0..*size - 1)
+            .map(|i| format!("t{}", i))
+            .collect::<Vec<_>>()
+            .join(" ");
+        src += ": Functor { \n";
+        src += "    map = |f, (";
+        src += &(0..*size)
+            .map(|i| format!("x{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        if *size == 1 {
+            src += ",";
+        }
+        src += ")| (";
+        src += &(0..*size)
+            .map(|i| {
+                if i != *size - 1 {
+                    format!("x{}", i)
+                } else {
+                    format!("f(x{})", i)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        if *size == 1 {
+            src += ",";
+        }
+        src += ");\n";
+        src += "}\n\n";
     }
+
     src
 }
 

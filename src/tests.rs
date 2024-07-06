@@ -6833,3 +6833,20 @@ pub fn test_struct_act() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_tuple_functor() {
+    let source = r##"
+        module Main;
+        import Debug;
+        
+        main: IO ();
+        main = (
+            eval assert_eq(|_|"", (1,).map(|x| x + 1), (2,));
+            eval assert_eq(|_|"", (1, 2).map(|x| x + 1), (1, 3));
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
