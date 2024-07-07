@@ -728,6 +728,7 @@ What is special about this function is that if you call `obj.mod_field!(f)` when
 Perform a functorial action on the field of a struct value.
 Semantically, `s.act_f(a)` is equivalent to `a(s.@f).map(|f| s.set_f(f))`. 
 What is special about `act_f` is that if you call `s.act_f(a)` when both of `s` and `s.@f` is unique, it is assured that `a` receives an unique value.
+See also document for `Array::act`.
 
 This is known as [Lens](https://hackage.haskell.org/package/lens-5.0.1/docs/Control-Lens-Combinators.html#t:Lens) in Haskell community.
 
