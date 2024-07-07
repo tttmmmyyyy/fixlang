@@ -3542,6 +3542,27 @@ pub fn test_punched_array() {
 }
 
 #[test]
+pub fn test_array_act_0() {
+    // Test Array::act
+    let source = r#"
+        module Main; 
+
+        import Debug;
+
+        main : IO ();
+        main = (
+            // If the array and the element is both unique, the action should receive an unique value.
+            let arr = [[1,2,3], [4,5,6]];
+            let arr = arr.act(0, |arr| let arr = arr.assert_unique!(|_|"the array is not unique!"); (arr.to_iter.sum, []));
+            eval assert_eq(|_|"case 1", arr, (6, [[], [4,5,6]]));
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
 pub fn test_array_act_1() {
     // Test Array::act
     let source = r#"
