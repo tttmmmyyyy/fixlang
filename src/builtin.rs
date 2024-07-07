@@ -2449,14 +2449,18 @@ impl InlineLLVMStructPunchBody {
         // Get the argument object (the struct value).
         let str = gc.get_var(&self.var_name).ptr.get(gc);
 
+        // We should force the uniqueness of the struct here.
+        // Actually we omit it because we do uniqueness checking in the `act_x` function.
+        // Following is the comment and code for the uniqueness checking:
+        /*
         // Make the struct unique.
         // This is necessary because the punching can be considered as setting the field to `null`.
         // Consider the case where
         // - We omit the uniqueness check here.
         // - The struct is shared (by `s1` and `s2`), but the (boxed) field value itself is unique.
         // Then, if we `let (x1, _) = s1.punch_x; let (x2, _) = s2.#punch_x;`, then `x1` and `x2` will point to the same object, but still is unique.
-        // Similar problem occurrs even if the `punch_x` function is only used in the implementation of `act_x`.
         let str = make_struct_unique(gc, str, false);
+        */
 
         // Move out struct field value without releaseing the struct itself.
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
