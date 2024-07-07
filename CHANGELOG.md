@@ -13,7 +13,7 @@
 ### Changed
 
 - Change namespace of `type Destructor` from `Std::FFI::Destructor` to `Std::FFI`.
-- Remove `Std::Array::act!`, change `Std::PunchedArray::plug_in!` and `Std::PunchedArray::punch!` to `Std::_PunchedArray::plug_in` and `Std::_PunchedArray::punch` respectively.
+- Remove `Std::Array::act!`, change `Std::PunchedArray::plug_in!` and `Std::PunchedArray::punch!` to `Std::_PunchedArray::plug_in` and `Std::_PunchedArray::unsafe_punch` respectively.
 - Swap return values of `generate_*` functions in `Random` module, e.g., changed `generate_U64 : Random -> (U64, Random)` to `generate_U64 : Random -> (Random, U64)`.
 
 ### Fixed

@@ -557,7 +557,7 @@
       - [`impl Ptr : ToString`](#impl-ptr--tostring)
     - [\_PunchedArray](#_punchedarray)
       - [`plug_in : a -> PunchedArray a -> Array a`](#plug_in--a---punchedarray-a---array-a)
-      - [`punch : I64 -> Array a -> (PunchedArray a, a)`](#punch--i64---array-a---punchedarray-a-a)
+      - [`unsafe_punch : I64 -> Array a -> (PunchedArray a, a)`](#unsafe_punch--i64---array-a---punchedarray-a-a)
     - [Result](#result)
       - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
       - [`impl [e : Eq, a : Eq] Result e a : Eq`](#impl-e--eq-a--eq-result-e-a--eq)
@@ -1885,8 +1885,10 @@ type PunchedArray a = unbox struct { _data : Destructor (Array a), idx : I64 };
 #### `plug_in : a -> PunchedArray a -> Array a`
 Plug in an element to a punched array to get back an array.
 
-#### `punch : I64 -> Array a -> (PunchedArray a, a)`
+#### `unsafe_punch : I64 -> Array a -> (PunchedArray a, a)`
 Creates a punched array by moving out the element at the specified index.
+NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
+The uniqueness of the array is ensured in the `Array::act` function.
 
 ### Result
 
