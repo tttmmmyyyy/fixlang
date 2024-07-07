@@ -2794,10 +2794,122 @@ pub fn struct_act(
     // The implementation as Fix source code is:
     // ```
     // |f, s| (
-    //     let (x, ps) = s.#punch_{field};
-    //     f(x).map(ps.#plug_in_{field})
+    //     let (unique, s) = s.Debug::unsafe_is_unique;
+    //     if unique {
+    //         let (x, ps) = s.#punch_{field};
+    //         f(x).map(ps.#plug_in_{field})
+    //     } else {
+    //         f(s.@{field}).map(|e| s.set_{field}(e))
+    //     }
     // );
     // (Here, we cannot use the parser because we are using "#" is not allowed as value name)
+    let expr_unique = expr_let(
+        PatternNode::make_struct(
+            tycon(make_tuple_name(2)),
+            vec![
+                ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
+                (
+                    "1".to_string(),
+                    PatternNode::make_var(var_local("ps"), None),
+                ),
+            ],
+        ),
+        expr_app(
+            expr_var(
+                FullName::new(
+                    &struct_name.to_namespace(),
+                    &format!("{}{}", STRUCT_PUNCH_SYMBOL, field_name),
+                ),
+                None,
+            ),
+            vec![expr_var(FullName::local("s"), None)],
+            None,
+        )
+        .set_app_order(AppSourceCodeOrderType::XDotF),
+        expr_app(
+            expr_app(
+                expr_var(
+                    FullName::new(&make_functor_name().to_namespace(), "map"),
+                    None,
+                ),
+                vec![expr_app(
+                    expr_var(
+                        FullName::new(
+                            &struct_name.to_namespace(),
+                            &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, field_name),
+                        ),
+                        None,
+                    ),
+                    vec![expr_var(FullName::local("ps"), None)],
+                    None,
+                )
+                .set_app_order(AppSourceCodeOrderType::XDotF)],
+                None,
+            )
+            .set_app_order(AppSourceCodeOrderType::FX),
+            vec![expr_app(
+                expr_var(FullName::local("f"), None),
+                vec![expr_var(FullName::local("x"), None)],
+                None,
+            )
+            .set_app_order(AppSourceCodeOrderType::FX)],
+            None,
+        )
+        .set_app_order(AppSourceCodeOrderType::XDotF),
+        None,
+    );
+
+    let expr_shared = expr_app(
+        expr_app(
+            expr_var(
+                FullName::new(&make_functor_name().to_namespace(), "map"),
+                None,
+            ),
+            vec![expr_abs(
+                vec![var_local("e")],
+                expr_app(
+                    expr_app(
+                        expr_var(
+                            FullName::new(
+                                &struct_name.to_namespace(),
+                                &format!("{}{}", STRUCT_SETTER_SYMBOL, field_name),
+                            ),
+                            None,
+                        ),
+                        vec![expr_var(FullName::local("e"), None)],
+                        None,
+                    )
+                    .set_app_order(AppSourceCodeOrderType::FX),
+                    vec![expr_var(FullName::local("s"), None)],
+                    None,
+                )
+                .set_app_order(AppSourceCodeOrderType::XDotF),
+                None,
+            )],
+            None,
+        )
+        .set_app_order(AppSourceCodeOrderType::FX),
+        vec![expr_app(
+            expr_var(FullName::local("f"), None),
+            vec![expr_app(
+                expr_var(
+                    FullName::new(
+                        &struct_name.to_namespace(),
+                        &format!("{}{}", STRUCT_GETTER_SYMBOL, field_name),
+                    ),
+                    None,
+                ),
+                vec![expr_var(FullName::local("s"), None)],
+                None,
+            )
+            .set_app_order(AppSourceCodeOrderType::XDotF)],
+            None,
+        )
+        .set_app_order(AppSourceCodeOrderType::FX)],
+        None,
+    )
+    .set_app_order(AppSourceCodeOrderType::XDotF);
+
     let expr = expr_abs(
         vec![var_local("f")],
         expr_abs(
@@ -2806,55 +2918,25 @@ pub fn struct_act(
                 PatternNode::make_struct(
                     tycon(make_tuple_name(2)),
                     vec![
-                        ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
                         (
-                            "1".to_string(),
-                            PatternNode::make_var(var_local("ps"), None),
+                            "0".to_string(),
+                            PatternNode::make_var(var_local("unique"), None),
                         ),
+                        ("1".to_string(), PatternNode::make_var(var_local("s"), None)),
                     ],
                 ),
                 expr_app(
-                    expr_var(
-                        FullName::new(
-                            &struct_name.to_namespace(),
-                            &format!("{}{}", STRUCT_PUNCH_SYMBOL, field_name),
-                        ),
-                        None,
-                    ),
+                    expr_var(FullName::from_strs(&[STD_NAME], "unsafe_is_unique"), None),
                     vec![expr_var(FullName::local("s"), None)],
                     None,
                 )
                 .set_app_order(AppSourceCodeOrderType::XDotF),
-                expr_app(
-                    expr_app(
-                        expr_var(
-                            FullName::new(&make_functor_name().to_namespace(), "map"),
-                            None,
-                        ),
-                        vec![expr_app(
-                            expr_var(
-                                FullName::local(&format!(
-                                    "{}{}",
-                                    STRUCT_PLUG_IN_SYMBOL, field_name
-                                )),
-                                None,
-                            ),
-                            vec![expr_var(FullName::local("ps"), None)],
-                            None,
-                        )
-                        .set_app_order(AppSourceCodeOrderType::XDotF)],
-                        None,
-                    )
-                    .set_app_order(AppSourceCodeOrderType::FX),
-                    vec![expr_app(
-                        expr_var(FullName::local("f"), None),
-                        vec![expr_var(FullName::local("x"), None)],
-                        None,
-                    )
-                    .set_app_order(AppSourceCodeOrderType::FX)],
+                expr_if(
+                    expr_var(FullName::local("unique"), None),
+                    expr_unique,
+                    expr_shared,
                     None,
-                )
-                .set_app_order(AppSourceCodeOrderType::XDotF),
+                ),
                 None,
             ),
             None,

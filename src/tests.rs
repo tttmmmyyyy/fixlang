@@ -3556,6 +3556,27 @@ pub fn test_array_act_0() {
             let arr = arr.act(0, |arr| let arr = arr.assert_unique!(|_|"the array is not unique!"); (arr.to_iter.sum, []));
             eval assert_eq(|_|"case 1", arr, (6, [[], [4,5,6]]));
 
+            // Case where the array is shared.
+            let arr = [[1,2,3], [4,5,6]];
+            let arr1 = arr.act(0, |arr| (arr.to_iter.sum, []));
+            eval assert_eq(|_|"case 2", arr1, (6, [[], [4,5,6]]));
+            eval assert_eq(|_|"case 3", arr, [[1,2,3], [4,5,6]]);
+
+            // Case where the element is shared.
+            let elem = [1,2,3];
+            let arr = [elem, [4,5,6]];
+            let arr = arr.act(0, |arr| (arr.to_iter.sum, []));
+            eval assert_eq(|_|"case 4", arr, (6, [[], [4,5,6]]));
+            eval assert_eq(|_|"case 5", elem, [1,2,3]);
+
+            // Case where the array and the element is both shared.
+            let elem = [1,2,3];
+            let arr = [elem, [4,5,6]];
+            let arr1 = arr.act(0, |arr| (arr.to_iter.sum, []));
+            eval assert_eq(|_|"case 6", arr1, (6, [[], [4,5,6]]));
+            eval assert_eq(|_|"case 7", arr, [[1,2,3], [4,5,6]]);
+            eval assert_eq(|_|"case 8", elem, [1,2,3]);
+
             pure()
         );
     "#;
@@ -6834,10 +6855,23 @@ pub fn test_struct_act() {
             let s = GB { x : [], y : [1, 2], z : 3 };
             eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
 
-            // BB shared case.
+            // Case where BB is shared.
             let actor_array = |x| if x.Array::get_size > 0 { Option::some(x.set(0, false)) } else { Option::none() };
             let s = BB { x : [true], y : [1, 2], z : 3 };
             eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
+            eval assert_eq(|_|"", s, BB { x : [true], y : [1, 2], z : 3 });
+
+            // Case where field is shared.
+            let x = [true];
+            let s = BB { x : x, y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
+            eval assert_eq(|_|"", x, [true]);
+
+            // Case where both of BB and field are shared.
+            let x = [true];
+            let s = BB { x : x, y : [1, 2], z : 3 };
+            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
+            eval assert_eq(|_|"", x, [true]);
             eval assert_eq(|_|"", s, BB { x : [true], y : [1, 2], z : 3 });
 
             // Case where `#plug_in(ps)` is called multiple times.
