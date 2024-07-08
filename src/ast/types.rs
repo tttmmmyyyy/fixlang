@@ -1163,7 +1163,11 @@ impl TypeNode {
                             let args = self.collect_type_argments();
                             let mut arg_strs =
                                 args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
-                            assert!(args.len() <= n as usize);
+
+                            // We cannot assume here even `args.len() <= n`
+                            // because this function is used for generating error messages where the user apply too many arguments to a type constructor!
+                            // assert!(args.len() <= n as usize);
+
                             // If args.len() < n, then `self` is a partial application to a tuple.
                             // In this case, we show missing arguments by `*` (e.g., `(Std::I64, *)`).
                             for _ in args.len()..n as usize {
