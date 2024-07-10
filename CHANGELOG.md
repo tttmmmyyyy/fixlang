@@ -13,10 +13,10 @@
 ### Changed
 
 - Change namespace of `type Destructor` from `Std::FFI::Destructor` to `Std::FFI`.
-- Remove `Std::Array::act!`, change `Std::PunchedArray::plug_in!` and `Std::PunchedArray::punch!` to `Std::_PunchedArray::plug_in` and `Std::_PunchedArray::unsafe_punch` respectively.
 - Swap return values of `generate_*` functions in `Random` module, e.g., changed `generate_U64 : Random -> (U64, Random)` to `generate_U64 : Random -> (Random, U64)`.
-- Remove functions to modify arrays or structs asserting uniqueness: `set_{field}!`, `mod_{field}!`, `Array::set!`, `Array::mod!`, `Array::append!`, `Array::push_back!`, `Array::pop_back!`. If you want to assert a value is unique, use `Debug::assert_unique` instead.
+- Remove functions to modify arrays or structs asserting uniqueness: `set_{field}!`, `mod_{field}!`, `Array::set!`, `Array::mod!`, `Array::act!`, `Array::append!`, `Array::push_back!`, `Array::pop_back!`. If you want to assert a value is unique, use `Debug::assert_unique` instead.
 - Rename `Debug::assert_unique!` to `Debug::assert_unique`.
+- Rename `Std::PunchedArray::plug_in!` and `Std::PunchedArray::punch!` to `Std::_PunchedArray::plug_in` and `Std::_PunchedArray::unsafe_punch` respectively.
 
 ### Fixed
 
