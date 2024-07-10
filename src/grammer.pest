@@ -15,7 +15,7 @@ eq_of_let = { "=" }
 // - "@" is used for getter function ("@x" for getter of field x)
 // - "!" is used for uniqueness. Cannot appear at head because "!false" should be parsed as prefix operator "!" for boolean value.
 var_head = _{ ASCII_ALPHA_LOWER | "_" | "@" }
-var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" | "!" }
+var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 var = { !keywords ~ (var_head ~ var_char*) }
 
 capital_name = { "_"? ~ ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }

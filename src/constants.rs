@@ -60,6 +60,7 @@ pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
 pub const STRUCT_GETTER_SYMBOL: &str = "@";
 pub const STRUCT_SETTER_SYMBOL: &str = "set_";
+pub const STRUCT_MODIFIER_SYMBOL: &str = "mod_";
 pub const STRUCT_ACT_SYMBOL: &str = "act_";
 pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
 pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";

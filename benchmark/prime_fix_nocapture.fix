@@ -3,15 +3,15 @@ module Main;
 is_prime : I64 -> Array Bool;
 is_prime = |n| (
     let arr = Array::fill(n, true);
-    let arr = arr.set!(0, false);
-    let arr = arr.set!(1, false);
+    let arr = arr.set(0, false);
+    let arr = arr.set(1, false);
     (2, arr, n).fix(|continue, (i, arr, n)|
         if i*i > n { arr };
         let next_arr = (
             if !arr.@(i) { arr };
             (i+i, arr, n, i).fix(|continue, (q, arr, n, i)|
                 if n-1 < q { arr };
-                continue $ (q+i, arr.set!(q, false), n, i)
+                continue $ (q+i, arr.set(q, false), n, i)
             )
         );
         continue $ (i+1, next_arr, n)

@@ -552,15 +552,15 @@ pub fn test28() {
         main : IO ();
         main = (
             let arr = Array::fill(31, 0);
-            let arr = arr.set!(0, 0);
-            let arr = arr.set!(1, 1);
+            let arr = arr.assert_unique(|_|"The array is not unique!").set(0, 0);
+            let arr = arr.assert_unique(|_|"The array is not unique!").set(1, 1);
             let loop = fix $ |f, arr: Array I64, n| (
                 if n == 31 {
                     arr
                 } else {
                     let x = arr.@(add(n, -1));
                     let y = arr.@(add(n, -2));
-                    let arr = arr.set!(n, x+y);
+                    let arr = arr.assert_unique(|_|"The array is not unique!").set(n, x+y);
                     f(arr, n+1)
                 }
             );
@@ -737,27 +737,6 @@ pub fn test36() {
 }
 
 #[test]
-pub fn test37() {
-    // Test unique modField.
-    let source = r#"
-        module Main; import Debug;
-
-        type A = box struct {x: B};
-        type B = box struct {x: I64};
-
-        main : IO ();
-        main = (
-            let a = A {x: B {x: 16}};
-            let b = a . (mod_x! $ mod_x! $ |x| x + 15);
-            let ans = b . @x . @x;
-            let u = assert_eq(|_|"", ans, 31);
-            pure()
-        );
-        "#;
-    test_source(source, Configuration::develop_compiler());
-}
-
-#[test]
 pub fn test37_5() {
     // Test shared modField.
     let source = r#"
@@ -790,7 +769,7 @@ pub fn test38() {
         main : IO ();
         main = (    
             let a = A {x: B {x: 16}};
-            let f = |a| (a : A) . (mod_x! $ mod_x! $ |x| x + 15);
+            let f = |a| (a : A) . (mod_x $ mod_x $ |x| x + 15);
             let a = a.f;
             let ans = a.@x.@x;
             let u = assert_eq(|_|"", ans, 31);
@@ -812,7 +791,7 @@ pub fn test39() {
         main : IO ();
         main = (
             let a = A {x: B {x: 16}};
-            let f = |a| a . ((mod_x! : (B -> B) -> A -> A) $ mod_x! $ |x| x + 15);
+            let f = |a| a . ((mod_x : (B -> B) -> A -> A) $ mod_x $ |x| x + 15);
             let a = a.f;
             let ans = a.@x.@x;
             let u = assert_eq(|_|"", ans, 31);
@@ -834,7 +813,7 @@ pub fn test40() {
         main : IO ();
         main = (
             let a = A {x: B {x: 16}};
-            let f: A -> A = |a| a.(mod_x! $ mod_x! $ |x| x + 15);
+            let f: A -> A = |a| a.(mod_x $ mod_x $ |x| x + 15);
             let a = a .f;
             let ans = a .@x .@x;
             let u = assert_eq(|_|"", ans, 31);
@@ -954,11 +933,11 @@ pub fn test44() {
         main : IO ();
         main = (
             let arr0 = Array::fill(2, false);
-            let arr0 = arr0.set!(0, true);
+            let arr0 = arr0.set(0, true);
             let x = add_head_and_next(arr0);
 
             let arr1 = Array::fill(2, 3);
-            let arr1 = arr1.set!(1, 5);
+            let arr1 = arr1.set(1, 5);
             let z = add_head_and_next(arr1);
 
             let y = toI64(5) + toI64(false);
@@ -1129,7 +1108,7 @@ pub fn test47_6() {
         main : IO ();
         main = (
             let uni = Option::some([1,2,3]).mod_some(
-                |lhs| lhs.force_unique!.append([4,5,6])
+                |lhs| lhs.force_unique.append([4,5,6])
             );
             let arr = uni.as_some;
             eval assert_eq(|_|"", arr.@(0), 1);
@@ -1156,7 +1135,7 @@ pub fn test48() {
         main : IO ();
         main = (
             let int_vec = Vec {data: Array::fill(2, 5)};
-            let int_vec = int_vec.mod_data!(|arr| arr.set(0, 3));
+            let int_vec = int_vec.mod_data(|arr| arr.set(0, 3));
             let head = int_vec.@data.@(0);
             let next = int_vec.@data.@(1);
             let ans = add(head, next);
@@ -1297,8 +1276,8 @@ pub fn test52() {
     is_prime : I64 -> Array Bool;
     is_prime = |n| (
         let arr = Array::fill(n, true);
-        let arr = arr.set!(0, false);
-        let arr = arr.set!(1, false);
+        let arr = arr.assert_unique(|_|"The array is not unique!").set(0, false);
+        let arr = arr.assert_unique(|_|"The array is not unique!").set(1, false);
         loop(SieveState {i: 2, arr: arr}, |state|
             let i = state.@i;
             let arr = state.@arr;
@@ -1310,7 +1289,7 @@ pub fn test52() {
                     if n-1 < q { 
                         break $ arr
                     } else {
-                        continue $ SieveState{ i: q + i, arr: arr.set!(q, false) }
+                        continue $ SieveState{ i: q + i, arr: arr.assert_unique(|_|"The array is not unique!").set(q, false) }
                     }
                 )
             } else {
@@ -1351,8 +1330,8 @@ pub fn test53() {
     main : IO ();
     main = (
         let pair = (13, Array::fill(1, 0));
-        let pair = pair.mod_0!(|x| x + 3);
-        let pair = pair.mod_1!(|arr| arr.set!(0, 5));
+        let pair = pair.assert_unique(|_|"The pair is not unique!").mod_0(|x| x + 3);
+        let pair = pair.assert_unique(|_|"The pair is not unique!").mod_1(|arr| arr.assert_unique(|_|"The array is not unique!").set(0, 5));
         let x = pair.@0;
         let y = pair.@1.@(0);
         let ans = x + y;
@@ -1373,7 +1352,7 @@ pub fn test54() {
     main = (
         let pair0 = (13, Array::fill(1, 0));
         let pair1 = pair0.mod_1(|arr| arr.set(0, 5));
-        let pair2 = pair0.mod_0!(|x| x + 3);
+        let pair2 = pair0.mod_0(|x| x + 3);
         let x = pair1.@1.@(0);
         let y = pair2.@0;
         let ans = x + y;
@@ -1737,21 +1716,21 @@ pub fn test74() {
         let int_bool = UnboxStr { y: false, x: 0 };
         let int_bool = int_bool.set_x(3);
         let u = assert_eq(|_|"case 0", int_bool.@x, 3);
-        let int_bool = int_bool.set_x!(5);
+        let int_bool = int_bool.set_x(5);
         let u = assert_eq(|_|"case 1", int_bool.@x, 5);
 
         // Setter / getter of pair.
         let pair = (false, 0);
         let pair = pair.set_0(true);
         let u = assert_eq(|_|"case 2", pair.@0, true);
-        let pair = pair.set_0!(false);
+        let pair = pair.set_0(false);
         let u = assert_eq(|_|"case 3", pair.@0, false);
 
         // Setter / getter of boxed struct.
         let int_bool = BoxStr { y: false, x: 0 };
         let int_bool = int_bool.set_y(true);
         let u = assert_eq(|_|"case 4", int_bool.@y, true);
-        let int_bool = int_bool.set_y!(false);
+        let int_bool = int_bool.set_y(false);
         let u = assert_eq(|_|"case 5", int_bool.@y, false);
 
         pure()
@@ -1794,7 +1773,7 @@ pub fn test76() {
     main : IO ();
     main = (
         let array = Array::from_map(3, |_i| Array::from_map(3, |_j| 0));
-        let array = array.mod!(1, Array::set!(1, 9));
+        let array = array.mod(1, |arr| arr.assert_unique(|_|"The array is not unique!").set(1, 9));
         eval assert_eq(|_|"", array.@(1).@(1), 9);
         pure()
     );
@@ -1966,7 +1945,7 @@ pub fn test82() {
 
         let res = Array::empty(3);
         let v = [[1], [2], [3]].to_iter.fold(res, |res, v| (
-            res.append!(v)
+            res.assert_unique(|_|"the array is not unique!").append(v)
         ));
         eval assert_eq(|_|"", v, [1, 2, 3]);
 
@@ -2268,7 +2247,7 @@ pub fn test_call_c() {
 
 #[test]
 pub fn test95() {
-    // Test Std::unsafe_is_unique, Debug::assert_unique!
+    // Test Std::unsafe_is_unique, Debug::assert_unique
     let source = r#"
             module Main; 
             import Debug;
@@ -2294,11 +2273,11 @@ pub fn test95() {
                 eval assert_eq(|_|"fail: arr is unique", unique, false);
 
                 let int_val = 42;
-                let _ = int_val.assert_unique!(|_|"fail: int_val is shared (2)");
+                let _ = int_val.assert_unique(|_|"fail: int_val is shared (2)");
                 let use = int_val + 1;
 
                 let arr = Array::fill(10, 10);
-                let arr = arr.assert_unique!(|_|"fail: arr is shared (2)");
+                let arr = arr.assert_unique(|_|"fail: arr is shared (2)");
                 let use = arr.@(0);
 
                 pure()
@@ -3553,7 +3532,7 @@ pub fn test_array_act_0() {
         main = (
             // If the array and the element is both unique, the action should receive an unique value.
             let arr = [[1,2,3], [4,5,6]];
-            let arr = arr.act(0, |arr| let arr = arr.assert_unique!(|_|"the array is not unique!"); (arr.to_iter.sum, []));
+            let arr = arr.act(0, |arr| let arr = arr.assert_unique(|_|"the array is not unique!"); (arr.to_iter.sum, []));
             eval assert_eq(|_|"case 1", arr, (6, [[], [4,5,6]]));
 
             // Case where the array is shared.
@@ -3596,7 +3575,7 @@ pub fn test_array_act_1() {
         main : IO ();
         main = (
             let act0: MyBoxed -> Option MyBoxed = |v| (
-                if v.@x == 0 { Option::some $ v.mod_x!(add(5)) } else { Option::none() }
+                if v.@x == 0 { Option::some $ v.assert_unique(|_|"not unique!").mod_x(add(5)) } else { Option::none() }
             );
             let act01: MyBoxed -> Option MyBoxed = |v| (
                 if v.@x == 0 { Option::some $ v.mod_x(add(5)) } else { Option::none() }
@@ -6811,7 +6790,7 @@ pub fn test_struct_act() {
 
         main: IO ();
         main = (
-            let actor_array = |x| let x = x.assert_unique!(|_|""); if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
+            let actor_array = |x| let x = x.assert_unique(|_|""); if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
             let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
 
             // BB case 1

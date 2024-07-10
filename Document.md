@@ -28,9 +28,7 @@
   - [Structs](#structs-1)
     - [`@f : S -> F`](#f--s---f)
     - [`set_f : F -> S -> S`](#set_f--f---s---s)
-    - [`set_f! : F -> S -> S`](#set_f--f---s---s-1)
     - [`mod_f : (F -> F) -> S -> S`](#mod_f--f---f---s---s)
-    - [`mod_f! : (F -> F) -> S -> S`](#mod_f--f---f---s---s-1)
     - [`act_f : [f : Functor] (F -> f F) -> S -> f S`](#act_f--f--functor-f---f-f---s---f-s)
   - [Unions](#unions-1)
     - [`v : V -> U`](#v--v---u)
@@ -87,15 +85,15 @@ module Main;
 calc_fib : I64 -> Array I64;
 calc_fib = |n| (
     let arr = Array::fill(n, 0);
-    let arr = arr.set!(0, 1);
-    let arr = arr.set!(1, 1);
+    let arr = arr.set(0, 1);
+    let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
         if idx == arr.get_size {
             break $ arr
         } else {
             let x = arr.@(idx-1);
             let y = arr.@(idx-2);
-            let arr = arr.set!(idx, x+y);
+            let arr = arr.set(idx, x+y);
             continue $ (idx+1, arr)
         }
     );
@@ -108,7 +106,7 @@ main = (
     println $ Iterator::from_array(fib).map(to_string).join(", ")
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCmNhbGNfZmliIDogSTY0IC0%2BIEFycmF5IEk2NDsNCmNhbGNfZmliID0gfG58ICgNCiAgICBsZXQgYXJyID0gQXJyYXk6OmZpbGwobiwgMCk7DQogICAgbGV0IGFyciA9IGFyci5zZXQhKDAsIDEpOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0ISgxLCAxKTsNCiAgICBsZXQgYXJyID0gbG9vcCgoMiwgYXJyKSwgfChpZHgsIGFycil8DQogICAgICAgIGlmIGlkeCA9PSBhcnIuZ2V0X3NpemUgew0KICAgICAgICAgICAgYnJlYWsgJCBhcnINCiAgICAgICAgfSBlbHNlIHsNCiAgICAgICAgICAgIGxldCB4ID0gYXJyLkAoaWR4LTEpOw0KICAgICAgICAgICAgbGV0IHkgPSBhcnIuQChpZHgtMik7DQogICAgICAgICAgICBsZXQgYXJyID0gYXJyLnNldCEoaWR4LCB4K3kpOw0KICAgICAgICAgICAgY29udGludWUgJCAoaWR4KzEsIGFycikNCiAgICAgICAgfQ0KICAgICk7DQogICAgYXJyDQopOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBmaWIgPSBjYWxjX2ZpYigzMCk7DQogICAgcHJpbnRsbiAkIEl0ZXJhdG9yOjpmcm9tX2FycmF5KGZpYikubWFwKHRvX3N0cmluZykuam9pbigiLCAiKQ0KKTs%3D)
+[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCmNhbGNfZmliIDogSTY0IC0%2BIEFycmF5IEk2NDsNCmNhbGNfZmliID0gfG58ICgNCiAgICBsZXQgYXJyID0gQXJyYXk6OmZpbGwobiwgMCk7DQogICAgbGV0IGFyciA9IGFyci5zZXQoMCwgMSk7DQogICAgbGV0IGFyciA9IGFyci5zZXQoMSwgMSk7DQogICAgbGV0IGFyciA9IGxvb3AoKDIsIGFyciksIHwoaWR4LCBhcnIpfA0KICAgICAgICBpZiBpZHggPT0gYXJyLmdldF9zaXplIHsNCiAgICAgICAgICAgIGJyZWFrICQgYXJyDQogICAgICAgIH0gZWxzZSB7DQogICAgICAgICAgICBsZXQgeCA9IGFyci5AKGlkeC0xKTsNCiAgICAgICAgICAgIGxldCB5ID0gYXJyLkAoaWR4LTIpOw0KICAgICAgICAgICAgbGV0IGFyciA9IGFyci5zZXQoaWR4LCB4K3kpOw0KICAgICAgICAgICAgY29udGludWUgJCAoaWR4KzEsIGFycikNCiAgICAgICAgfQ0KICAgICk7DQogICAgYXJyDQopOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBmaWIgPSBjYWxjX2ZpYigzMCk7DQogICAgcHJpbnRsbiAkIEl0ZXJhdG9yOjpmcm9tX2FycmF5KGZpYikubWFwKHRvX3N0cmluZykuam9pbigiLCAiKQ0KKTs%3D)
 
 If you save the above program to a file "main.fix" and run `fix run -f main.fix`, it prints 
 
@@ -329,15 +327,15 @@ If the `{body}` part of your function ranges multiple lines, it is preferred to 
 ```
 calc_fib = |n| (
     let arr = Array::fill(n, 0);
-    let arr = arr.set!(0, 1);
-    let arr = arr.set!(1, 1);
+    let arr = arr.set(0, 1);
+    let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
         if idx == arr.get_size {
             break $ arr
         } else {
             let x = arr.@(idx-1);
             let y = arr.@(idx-2);
-            let arr = arr.set!(idx, x+y);
+            let arr = arr.set(idx, x+y);
             continue $ (idx+1, arr)
         }
     );
@@ -350,15 +348,15 @@ is more readable than the following:
 ```
 calc_fib = |n| 
 let arr = Array::fill(n, 0);
-let arr = arr.set!(0, 1);
-let arr = arr.set!(1, 1);
+let arr = arr.set(0, 1);
+let arr = arr.set(1, 1);
 let arr = loop((2, arr), |(idx, arr)|
     if idx == arr.get_size {
         break $ arr
     } else {
         let x = arr.@(idx-1);
         let y = arr.@(idx-2);
-        let arr = arr.set!(idx, x+y);
+        let arr = arr.set(idx, x+y);
         continue $ (idx+1, arr)
     }
 );
@@ -374,7 +372,7 @@ The precedence of the operator `.` is lower than function application by parenth
 In the program of Fibonacci sequence, the followings are examples of use of operator `.`:
 
 - `arr.get_size`: `get_size` is a function of type `Array a -> I64`, which returns the length of an array. Note that you should not write `arr.get_size()` as if you call a method of a class on an instance in other languages. Remembering syntax sugars `f() == f(())` and `x.f == f(x)`, you can desugar the expression `arr.get_size()` to `get_size((), arr)`, which raises an error because `get_size` takes only one argument.
-- `arr.set!(0, 1)`: `set!` is a function of type `I64 -> a -> Array a -> Array a`, which updates an element of an array to the specified value. 
+- `arr.set(0, 1)`: `set` is a function of type `I64 -> a -> Array a -> Array a`, which updates an element of an array to the specified value. 
 - `arr.@(idx-1)`: `@` is a function of type `I64 -> Array a -> a`, which returns the element at the specified index.
 
 We sometimes call a function of type `Param0 -> ... -> ParamN -> Obj -> Result` as a "method" on the type `Obj` that has N+1 parameters and returns a value of type `Result`. A method can be called by `obj.method(arg0, ..., argN)` as if writing OOP languages.
@@ -438,7 +436,7 @@ loop((2, arr), |(idx, arr)|
     } else {
         let x = arr.@(idx-1);
         let y = arr.@(idx-2);
-        let arr = arr.set!(idx, x+y);
+        let arr = arr.set(idx, x+y);
         continue $ (idx+1, arr)
     }
 );
@@ -586,11 +584,8 @@ In the last, `to_string : I64 -> String` is a function that converts an integer 
 
 ## Mutation in Fix and reference counter
 
-In the last of this tutorial, I explain the meaning of the exclamation mark of `set!` function.
-
-There is also a function without exclamation mark: `set : I64 -> a -> Array a -> Array a`. Semantically, both of `Array::set` and `Array::set!` return a new array with one element updated from the original array. 
-
-Remember that an expression in Fix is only a sentence that describes a value. It is essentially the same as a mathematical expression such as "1 + cos(pi/5)^2". There is no concept of "changing the value of a variable" which is ubiquitous in usual languages. For example, consider
+Remember that an expression in Fix is only a sentence that describes a value. It is essentially the same as a mathematical expression such as "1 + cos(pi/5)^2". There is no concept of "changing the value of a variable" which is ubiquitous in usual languages. In short, all values in Fix are immutable. 
+For example, consider
 
 ```
 main = (
@@ -602,7 +597,7 @@ main = (
 
 The above prints `arr0.@(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` but with the 0th element replaced by `2`", and it is NOT a command "update the 0th element of `arr0` to `2`". To realize this behavior, `set` function in the above program has to clone `arr0` before updating the 0th element of an array.
 
-More generally, all values of Fix are immutable. Immutability is good for reducing bugs caused by fails on state management, but it can be an obstacle for implementing an algorithm with its optimum time (or space) complexity. Consider the implementation of `calc_fib` function of the example program using `set` instead of `set!`:
+Now consider the implementation of `calc_fib`.
 
 ```
 calc_fib : I64 -> Array I64;
@@ -624,9 +619,12 @@ calc_fib = |n| (
 );
 ```
 
-The optimum time complexity of calculating Fibonacci sequence of length N is O(N). But if Fix had cloned the array at `let arr = arr.set(idx, x+y);` in the loop, it takes O(N) time for each loop step and the total time complexity becomes O(N^2).
+The optimum time complexity of calculating Fibonacci sequence of length N is O(N). 
+But if Fix had cloned the array at `let arr = arr.set(idx, x+y);` in the loop, it takes O(N) time for each loop step and the total time complexity becomes O(N^2).
 
-In fact, `set` in the above program doesn't clone the array and `calc_fib` works in O(N) time, as expected. This is because if the given array will no longer be used, `set` omits cloning and just updates the given array. Let's consider a simpler program: 
+In fact, `set` in the above program doesn't clone the array and `calc_fib` works in O(N) time, as expected. 
+This is because if the given array will no longer be used, `set` omits cloning and just updates the given array. 
+Let's consider a program which 
 
 ```
 main = (
@@ -636,20 +634,27 @@ main = (
 );
 ```
 
-(Note that `println` prints the 0th element of `arr1`, not of `arr0`.) In this program, the call of `set` is the last usage of `arr0`. In such a case, `set` can update the 0th element of the given array without violating immutability, because the mutation cannot be observed. 
+(Note that `println` prints the 0th element of `arr1`, not of `arr0`.)
+In this program, the call of `set` is the last usage of `arr0`. 
+In such a case, `set` updates the given array without cloning, because the mutation of `arr0` will never be observed.
 
-Go back to the `calc_fib` function. At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and set as pointing to the new array returned by `set` function. This ensures that the old array given to `set` function will be never referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
+Go back to the `calc_fib` function. 
+At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and set as pointing to the new array returned by `set` function. 
+This ensures that the old array given to `set` function will never be referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
 
 As a summary, since values in Fix are immutable, the `set : I64 -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning an array if the array will not be used later.
 
-The `set!` function is almost same as the `set` function, but it panics (i.e., stop the execution of the program) if the given array will be used later. In other words, there is assurance that `set!` doesn't clone the array. This is useful to assure that a program is running at a expected time complexity. We put the exclamation mark for a function that requires the assurance that the given value will not be used later.
-
 Fix judges whether a value may be used later or not by it's *reference counter*. Fix assigns reference counters to all boxed values - values which are always allocated on heap memory, and referenced by names or struct fields by pointers. Fix tracks the number of references to a boxed value using reference counter. A value is called "unique" if the reference counter is one, and called "shared" if otherwise. For convenience, an unboxed value is considered to be always unique.
 
-Using terminologies introduced above, if an array is shared, the `set` function clones it while the `set!` function panics.
+Using terminologies introduced above, the `set` function directly mutates the array if and only if it is unique.
 
-The exclamation mark in fix is not syntax, but merely one of characters you can use in value names.
-We add exclamation marks for functions which will be panic if a given value is shared.
+In implementing algorithms which depends on mutating arrays in `O(1)` time, such as dynamic programming, passing an unique array to `set` is quite important.
+How to assure that an array is unique?
+As I mentioned above, if `arr.set(idx, v)` is the last usage of `arr`, then `arr` is unique at the call of `set`(*).
+In particular, writing `let arr = arr.set(idx, v);` assures that `set` receives an unique array, because 
+since the updated array has the same name which was given to the old array, the old array will never be used after the call of `set`.
+
+(*): This statement is true only when the array is referenced by a single thread.
 
 # Other topics on syntax
 
@@ -706,22 +711,11 @@ Extract the value of a field from a struct value.
 Modify a struct value by inserting a value to a field.
 This function clones the given struct value if it is shared.
 
-### `set_f! : F -> S -> S`
-
-Modify a struct value by inserting a value to a field.
-This function never clones the given struct value. If the struct value is shared, this function panics.
-
 ### `mod_f : (F -> F) -> S -> S`
 
 Modify a struct value by acting on a field value.
 This function clones the given struct value if it is shared.
 What is special about this function is that if you call `obj.mod_field(f)` when both of `obj` and `obj.@field` are unique, it is assured that `f` receives the field value which is unique. So `obj.mod_field(f)` is NOT equivalent to `let v = obj.@field; obj.set_field(f(v))`.
-
-### `mod_f! : (F -> F) -> S -> S`
-
-Modify a struct value by acting on a field value.
-This function never clones the given struct value. If the struct value is shared, this function panics.
-What is special about this function is that if you call `obj.mod_field!(f)` when both of `obj` and `obj.@field` are unique, it is assured that `f` receives the field value which is unique. So `obj.mod_field!(f)` is NOT equivalent to `let v = obj.@field; obj.set_field!(f(v))`.
 
 ### `act_f : [f : Functor] (F -> f F) -> S -> f S`
 

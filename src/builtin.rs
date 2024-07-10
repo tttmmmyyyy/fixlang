@@ -1879,7 +1879,6 @@ pub struct InlineLLVMArraySetBody {
     array_name: FullName,
     idx_name: FullName,
     value_name: FullName,
-    is_unique_version: bool,
 }
 
 impl InlineLLVMArraySetBody {
@@ -1899,7 +1898,7 @@ impl InlineLLVMArraySetBody {
         let value = gc.get_var(&self.value_name).ptr.get(gc);
 
         // Force array to be unique
-        let array = make_array_unique(gc, array, self.is_unique_version);
+        let array = make_array_unique(gc, array, false);
 
         // Perform write and return.
         let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
@@ -1909,26 +1908,14 @@ impl InlineLLVMArraySetBody {
     }
 }
 
-// Implementation of Array::set/Array::set! built-in function.
+// Implementation of Array::set built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
-fn set_array_body(
-    a: &str,
-    array: &str,
-    idx: &str,
-    value: &str,
-    is_unique_version: bool,
-) -> Arc<ExprNode> {
+fn set_array_body(a: &str, array: &str, idx: &str, value: &str) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
     let value_str = FullName::local(value);
-    let func_name = String::from({
-        if is_unique_version {
-            "set!"
-        } else {
-            "set"
-        }
-    });
+    let func_name = "set";
     let name = format!("{} {} {} {}", func_name, idx, value, array);
     let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
     expr_llvm(
@@ -1936,7 +1923,6 @@ fn set_array_body(
             array_name: array_str,
             idx_name: idx_str,
             value_name: value_str,
-            is_unique_version,
         }),
         free_vars,
         name,
@@ -1946,14 +1932,14 @@ fn set_array_body(
 }
 
 // Array::set built-in function.
-pub fn set_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn set_array_common() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx")],
         expr_abs(
             vec![var_local("value")],
             expr_abs(
                 vec![var_local("array")],
-                set_array_body("a", "array", "idx", "value", is_unique_version),
+                set_array_body("a", "array", "idx", "value"),
                 None,
             ),
             None,
@@ -1973,14 +1959,9 @@ pub fn set_array_common(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>)
     (expr, scm)
 }
 
-// set built-in function.
-pub fn write_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-    set_array_common(false)
-}
-
-// set! built-in function.
-pub fn write_array_unique() -> (Arc<ExprNode>, Arc<Scheme>) {
-    set_array_common(true)
+// `Array::set` built-in function.
+pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    set_array_common()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -1988,7 +1969,6 @@ pub struct InlineLLVMArrayModBody {
     array_name: String,
     idx_name: String,
     modifier_name: String,
-    is_unique_version: bool,
 }
 
 impl InlineLLVMArrayModBody {
@@ -2012,7 +1992,7 @@ impl InlineLLVMArrayModBody {
             .get(gc);
 
         // Make array unique
-        let array = make_array_unique(gc, array, self.is_unique_version);
+        let array = make_array_unique(gc, array, false);
 
         // Get old element without retain.
         let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
@@ -2056,7 +2036,6 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
                         array_name: MODIFIED_ARRAY_NAME.to_string(),
                         idx_name: INDEX_NAME.to_string(),
                         modifier_name: MODIFIER_NAME.to_string(),
-                        is_unique_version,
                     }),
                     vec![
                         FullName::local(INDEX_NAME),
@@ -2097,7 +2076,6 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayForceUniqueBody {
     arr_name: String,
-    is_unique_version: bool,
 }
 
 impl InlineLLVMArrayForceUniqueBody {
@@ -2114,13 +2092,13 @@ impl InlineLLVMArrayForceUniqueBody {
         let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
 
         // Make array unique
-        let array = make_array_unique(gc, array, self.is_unique_version);
+        let array = make_array_unique(gc, array, false);
 
         array
     }
 }
 
-pub fn force_unique_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
     const ELEM_TYPE: &str = "a";
 
@@ -2132,14 +2110,9 @@ pub fn force_unique_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme
         expr_llvm(
             LLVMGenerator::ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody {
                 arr_name: ARR_NAME.to_string(),
-                is_unique_version,
             }),
             vec![FullName::local(ARR_NAME)],
-            format!(
-                "{}.force_unique{}",
-                ARR_NAME,
-                if is_unique_version { "!" } else { "" },
-            ),
+            format!("{}.force_unique", ARR_NAME,),
             array_ty.clone(),
             None,
         ),
@@ -2630,7 +2603,6 @@ pub fn struct_plug_in(
 pub struct InlineLLVMStructModBody {
     f_name: FullName,
     x_name: FullName,
-    is_unique_version: bool,
     field_idx: usize,
     field_count: usize,
 }
@@ -2649,7 +2621,7 @@ impl InlineLLVMStructModBody {
         let modfier = gc.get_var(&self.f_name).ptr.get(gc);
         let str = gc.get_var(&self.x_name).ptr.get(gc);
 
-        let mut str = make_struct_unique(gc, str, self.is_unique_version);
+        let mut str = make_struct_unique(gc, str, false);
 
         // Modify field
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
@@ -2678,13 +2650,11 @@ pub fn struct_mod_body(
     struct_name: &FullName,
     struct_defn: &TypeDefn,
     field_name: &str,
-    is_unique_version: bool,
 ) -> Arc<ExprNode> {
     let name = format!(
-        "{}.mod_{}{}({}, {})",
+        "{}.mod_{}({}, {})",
         struct_name.to_string(),
         field_name,
-        if is_unique_version { "!" } else { "" },
         f_name,
         x_name
     );
@@ -2695,7 +2665,6 @@ pub fn struct_mod_body(
         LLVMGenerator::StructModBody(InlineLLVMStructModBody {
             f_name,
             x_name,
-            is_unique_version,
             field_idx,
             field_count,
         }),
@@ -2711,7 +2680,6 @@ pub fn struct_mod(
     struct_name: &FullName,
     definition: &TypeDefn,
     field_name: &str,
-    is_unique_version: bool,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let field = definition.get_field_by_name(field_name);
@@ -2738,7 +2706,6 @@ pub fn struct_mod(
                 struct_name,
                 definition,
                 field_name,
-                is_unique_version,
             ),
             None,
         ),
@@ -3020,7 +2987,6 @@ pub struct InlineLLVMStructSetBody {
     value_name: String,
     struct_name: String,
     field_count: u32,
-    is_unique_version: bool,
     field_idx: u32,
 }
 
@@ -3037,7 +3003,7 @@ impl InlineLLVMStructSetBody {
         let str = gc.get_var(&FullName::local(&self.struct_name)).ptr.get(gc);
 
         // Make struct object unique.
-        let mut str = make_struct_unique(gc, str, self.is_unique_version);
+        let mut str = make_struct_unique(gc, str, false);
 
         // Release old value
         let old_value = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
@@ -3065,7 +3031,6 @@ pub fn struct_set(
     struct_name: &FullName,
     definition: &TypeDefn,
     field_name: &str,
-    is_unique_version: bool,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "val";
     const STRUCT_NAME: &str = "str";
@@ -3092,17 +3057,12 @@ pub fn struct_set(
                     value_name: VALUE_NAME.to_string(),
                     struct_name: STRUCT_NAME.to_string(),
                     field_count,
-                    is_unique_version,
                     field_idx,
                 }),
                 vec![FullName::local(VALUE_NAME), FullName::local(STRUCT_NAME)],
                 format!(
-                    "{}.{}{}{}({})",
-                    STRUCT_NAME,
-                    STRUCT_SETTER_SYMBOL,
-                    field_name,
-                    if is_unique_version { "!" } else { "" },
-                    VALUE_NAME
+                    "{}.{}{}({})",
+                    STRUCT_NAME, STRUCT_SETTER_SYMBOL, field_name, VALUE_NAME
                 ),
                 str_ty.clone(),
                 None,
@@ -3865,7 +3825,7 @@ impl InlineLLVMIsUniqueFunctionBody {
             flag.add_incoming(&[(&flag_unique_bb, unique_bb), (&flag_shared_bb, shared_bb)]);
             flag.as_basic_value().into_int_value()
         } else {
-            // If the object is boxed, it is always unique.
+            // If the object is unboxed, it is always unique.
             bool_ty.const_int(1, false)
         };
         let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();

@@ -1167,31 +1167,22 @@ impl Program {
                         );
 
                         // Add setter functions and modifier functions.
-                        for is_unique in [false, true] {
-                            self.add_global_value(
-                                FullName::new(
-                                    &decl.name.to_namespace(),
-                                    &format!(
-                                        "mod_{}{}",
-                                        &field.name,
-                                        if is_unique { "!" } else { "" }
-                                    ),
-                                ),
-                                struct_mod(&struct_name, decl, &field.name, is_unique),
-                            );
-                            self.add_global_value(
-                                FullName::new(
-                                    &decl.name.to_namespace(),
-                                    &format!(
-                                        "{}{}{}",
-                                        STRUCT_SETTER_SYMBOL,
-                                        &field.name,
-                                        if is_unique { "!" } else { "" }
-                                    ),
-                                ),
-                                struct_set(&struct_name, decl, &field.name, is_unique),
-                            )
-                        }
+
+                        // We omit `mod_t!`
+                        self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_MODIFIER_SYMBOL, &field.name,),
+                            ),
+                            struct_mod(&struct_name, decl, &field.name),
+                        );
+                        self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_SETTER_SYMBOL, &field.name,),
+                            ),
+                            struct_set(&struct_name, decl, &field.name),
+                        );
                         // Add punch functions.
                         self.add_global_value(
                             FullName::new(

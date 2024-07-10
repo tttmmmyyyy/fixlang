@@ -419,13 +419,11 @@
       - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
       - [`act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a)
       - [`append : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a)
-      - [`append! : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a-1)
       - [`borrow_ptr : (Ptr -> b) -> Array a -> b`](#borrow_ptr--ptr---b---array-a---b)
       - [`empty : I64 -> Array a`](#empty--i64---array-a)
       - [`fill : I64 -> a -> Array a`](#fill--i64---a---array-a)
       - [`find_by : [a : Eq] (a -> Bool) -> Array a -> Option I64`](#find_by--a--eq-a---bool---array-a---option-i64)
       - [`force_unique : Array a -> Array a`](#force_unique--array-a---array-a)
-      - [`force_unique! : Array a -> Array a`](#force_unique--array-a---array-a-1)
       - [`from_iter : Iterator a -> Array a`](#from_iter--iterator-a---array-a)
       - [`from_map : I64 -> (I64 -> a) -> Array a`](#from_map--i64---i64---a---array-a)
       - [`get_capacity : Array a -> I64`](#get_capacity--array-a---i64)
@@ -435,14 +433,10 @@
       - [`get_sub : I64 -> I64 -> Array a -> Array a`](#get_sub--i64---i64---array-a---array-a)
       - [`is_empty : Array a -> Bool`](#is_empty--array-a---bool)
       - [`mod : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a)
-      - [`mod! : I64 -> (a -> a) -> Array a -> Array a`](#mod--i64---a---a---array-a---array-a-1)
       - [`pop_back : Array a -> Array a`](#pop_back--array-a---array-a)
-      - [`pop_back! : Array a -> Array a`](#pop_back--array-a---array-a-1)
       - [`push_back : a -> Array a -> Array a`](#push_back--a---array-a---array-a)
-      - [`push_back! : a -> Array a -> Array a`](#push_back--a---array-a---array-a-1)
       - [`reserve : I64 -> Array a -> Array a`](#reserve--i64---array-a---array-a)
       - [`set : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a)
-      - [`set! : I64 -> a -> Array a -> Array a`](#set--i64---a---array-a---array-a-1)
       - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
       - [`to_iter : Array a -> Iterator a`](#to_iter--array-a---iterator-a)
       - [`truncate : I64 -> Array a -> Array a`](#truncate--i64---array-a---array-a)
@@ -687,7 +681,7 @@
   - [`_debug_print_to_stream : IOHandle -> String -> ()`](#_debug_print_to_stream--iohandle---string---)
   - [`assert : Lazy String -> Bool -> ()`](#assert--lazy-string---bool---)
   - [`assert_eq : [a: Eq] Lazy String -> a -> a -> ()`](#assert_eq--a-eq-lazy-string---a---a---)
-  - [`assert_unique! : Lazy String -> a -> a`](#assert_unique--lazy-string---a---a)
+  - [`assert_unique : Lazy String -> a -> a`](#assert_unique--lazy-string---a---a)
   - [`consumed_time_while : (a -> b) -> a -> (b, F64)`](#consumed_time_while--a---b---a---b-f64)
   - [`consumed_time_while_io : IO a -> IO (a, F64)`](#consumed_time_while_io--io-a---io-a-f64)
   - [`consumed_time_while_lazy : Lazy a -> (a, F64)`](#consumed_time_while_lazy--lazy-a---a-f64)
@@ -1372,12 +1366,6 @@ If you call `act` on an array which is shared, this function clones the given ar
 Append an array to an array.
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 
-#### `append! : Array a -> Array a -> Array a`
-Append an array to an array.
-This is similar to `Array::append`, but `a1.append!(a2)` panics if this function has to clone `a1` due to it being shared.
-Note that, when the capacity of `a1` is less than `a1.get_size + a2.get_size`, then `a1.append!(a2)` will not panic even if `a1` is shared, 
-because in this case cloning is inevitable whether or not `a1` is shared.
-
 #### `borrow_ptr : (Ptr -> b) -> Array a -> b`
 Call a function with a pointer to the memory region where elements are stored.
 
@@ -1395,10 +1383,6 @@ Find the first index at which the element satisfies a condition.
 #### `force_unique : Array a -> Array a`
 Force the uniqueness of an array.
 If the given array is shared, this function returns the cloned array.
-
-#### `force_unique! : Array a -> Array a`
-Force the uniqueness of an array.
-If the given array is shared, this function panics.
 
 #### `from_iter : Iterator a -> Array a`
 Create an array from an iterator.
@@ -1430,30 +1414,15 @@ Returns if the array is empty or not.
 #### `mod : I64 -> (a -> a) -> Array a -> Array a`
 Modifies an array value by acting on an element at an index.
 This function clones the given array if it is shared.
-What is special about this function is that if you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
-
-#### `mod! : I64 -> (a -> a) -> Array a -> Array a`
-Modifies an array value by acting on an element at an index.
-This function never clones the given array. If the array is shared, this function panics. 
-What is special about this function is that if you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
+What is special about this function is that if you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. 
+So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
 
 #### `pop_back : Array a -> Array a`
 Pop an element at the back of an array.
 If the array is empty, this function does nothing.
 
-#### `pop_back! : Array a -> Array a`
-Pop an element at the back of an array.
-If the array is empty, this function does nothing.
-This function panics if elements must be cloned due to the given array being shared. 
-Note that, when the given array is empty, this function will not panic even if it is shared.
-
 #### `push_back : a -> Array a -> Array a`
 Push an element to the back of an array.
-
-#### `push_back! : a -> Array a -> Array a`
-Push an element to the back of an array.
-This function panics if elements must be cloned due to the given array being shared. 
-Note that, when the capacity of `arr` is equal to its size, `arr.push_back!(e)` will not panic even if `arr` is shared because in this case cloning elements is inevitable whether or not `arr` is shared.
 
 #### `reserve : I64 -> Array a -> Array a`
 Reserves the memory region for an array.
@@ -1461,10 +1430,6 @@ Reserves the memory region for an array.
 #### `set : I64 -> a -> Array a -> Array a`
 Updates a value of an element at an index of an array.
 This function clones the given array if it is shared.
-
-#### `set! : I64 -> a -> Array a -> Array a`
-Updates a value of an element at an index of an array.
-This function never clones the given array. If the given array is shared, this function panics.
 
 #### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
 Sort elements in an array by "less than" comparator.
@@ -2125,7 +2090,7 @@ Traverses all objects reachable from the given object, and changes them into mul
 
 This function checks if a value is uniquely refernced by a name, and returns the result paired with the given value itself. If `a` is unboxed, the 0th component of the returned value is always `true`.
 
-NOTE: Using the return value of this function to branch and change the return value of your function may break the referential transparency of the function. If you want to panic when a value is shared, consider using `Debug::assert_unique!` instead.
+NOTE: Using the return value of this function to branch and change the return value of your function may break the referential transparency of the function. If you want to abort when a value is shared, consider using `Debug::assert_unique` instead.
 
 Example: 
 
@@ -2559,7 +2524,7 @@ If the assertion failed, prints a message to the stderr and aborts.
 Asserts that two values are equal.
 If the assertion failed, prints a message to the stderr and aborts.
 
-## `assert_unique! : Lazy String -> a -> a`
+## `assert_unique : Lazy String -> a -> a`
 Asserts that the given value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts.
 The main use of this function is to check whether a boxed value given as an argument is unique.

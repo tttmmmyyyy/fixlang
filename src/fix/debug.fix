@@ -34,8 +34,8 @@ assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 // Asserts that the given value is unique, and returns the given value.
 // If the assertion failed, prints a message to the stderr and aborts.
 // The main use of this function is to check whether a boxed value given as an argument is unique.
-assert_unique! : Lazy String -> a -> a;
-assert_unique! = |msg, x| (
+assert_unique : Lazy String -> a -> a;
+assert_unique = |msg, x| (
     let (unique, x) = x.unsafe_is_unique;
     eval assert(msg, unique);
     x

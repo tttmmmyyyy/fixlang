@@ -5,13 +5,11 @@ main : IO ();
 main = (
     // `fill : I64 -> a -> Array a` in namespace `Std::Array` creates an array of specified length and filled by a value.
     let arr = Array::fill(31, 0);
-    // `set` and `set!` of type `I64 -> a -> Array a -> Array a` insert a value into an array.
+    // `set` of type `I64 -> a -> Array a -> Array a` insert a value into an array.
     // `set` updates the given array in O(1) if the reference counter of it is one, 
     // or inserts a value after cloning the array (it takes O(n)) otherwise.
-    // `set!` always tries to update the given array in O(1), or panics if the reference counter is greater than one.
-    // There are also `mod` and `mod!` of type `I64 -> (a -> a) -> Array a -> Array a`, which update a value of an array.
-    let arr = arr.set!(0, 0);
-    let arr = arr.set!(1, 1);
+    let arr = arr.set(0, 0);
+    let arr = arr.set(1, 1);
     // A way for loop is to use `loop`, `continue` and `break`.
     // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body, and performs loop.
     // continue : s -> LoopResult s r -- Takes the next state and continues the loop.
@@ -23,7 +21,7 @@ main = (
             // To get a value of an array, use `@ : I64 -> Array a -> a`.
             let x = arr.@(idx-1);
             let y = arr.@(idx-2);
-            let arr = arr.set!(idx, x+y);
+            let arr = arr.set(idx, x+y);
             continue $ (idx+1, arr)
         }
     );

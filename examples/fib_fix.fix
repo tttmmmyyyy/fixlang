@@ -3,10 +3,9 @@ module Main;
 main : IO ();
 main = (
     let arr = Array::fill(31, 0);
-    // arr.set! asserts that the given array is uniquely referenced and 
-    // rewrites the given array insted of cloning because the old array value will be no longer accessed!
-    let arr = arr.set!(0, 0);
-    let arr = arr.set!(1, 1);
+    // `Array::set` omits cloning the array when the given array is uniquely referenced.
+    let arr = arr.set(0, 0);
+    let arr = arr.set(1, 1);
     let calc_fib_array = (
         // To make recursive function locally, use the idiom:
         // fix |loop, arg| (body of recursive_function that calls `loop`).
@@ -14,7 +13,7 @@ main = (
             if n == 31 { arr };
             let x = arr.@(n-1);
             let y = arr.@(n-2);
-            let arr = arr.set!(n, x+y);
+            let arr = arr.set(n, x+y);
             loop(arr, n+1)
     );
     let fib_array = calc_fib_array(arr, 2) ;

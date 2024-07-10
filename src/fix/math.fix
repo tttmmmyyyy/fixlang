@@ -40,13 +40,13 @@ binomial_coefficients : I64 -> Array (Array I64);
 binomial_coefficients = |m| (
     eval assert(|_|"[binomial_coefficients] The argument must be non-negative and less than or equal to 66.", 0 <= m && m <= 66);
     let size = m + 1;
-    let arr = Iterator::range(0, size).fold(Array::empty(size), |arr, n| arr.push_back!(Array::fill(n+1, 0)));
-    let arr = arr.(mod!(0) $ set!(0) $ 1);
+    let arr = Iterator::range(0, size).fold(Array::empty(size), |arr, n| arr.push_back(Array::fill(n+1, 0)));
+    let arr = arr.(mod(0) $ set(0) $ 1);
     Iterator::range(1, size).fold(arr, |arr, n| (
         Iterator::range(0, n+1).fold(arr, |arr, r| (
             let x = if 0 <= r-1 && r-1 <= n-1 { arr.@(n-1).@(r-1) } else { 0 };
             let y = if 0 <= r && r <= n-1 { arr.@(n-1).@(r) } else { 0 };
-            arr.(mod!(n) $ set!(r) $ x + y)
+            arr.(mod(n) $ set(r) $ x + y)
         ))
     ))
 );

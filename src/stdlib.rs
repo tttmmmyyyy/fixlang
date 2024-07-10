@@ -347,21 +347,13 @@ pub fn make_std_mod(config: &Configuration) -> Program {
         unsafe_get_array(),
     );
     fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique!"),
-        force_unique_array(true),
-    );
-    fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique"),
-        force_unique_array(false),
+        force_unique_array(),
     );
     fix_module.add_global_value(array_getter_function_name(), read_array());
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
-        write_array(),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set!"),
-        write_array_unique(),
+        set_array(),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "empty"),
@@ -370,10 +362,6 @@ pub fn make_std_mod(config: &Configuration) -> Program {
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
         mod_array(false),
-    );
-    fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod!"),
-        mod_array(true),
     );
     fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_capacity"),

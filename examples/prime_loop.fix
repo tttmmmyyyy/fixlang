@@ -4,8 +4,8 @@ module Main;
 is_prime : I64 -> Array Bool;
 is_prime = |n| (
     let arr = Array::fill(n, true);
-    let arr = arr.set!(0, false);
-    let arr = arr.set!(1, false);
+    let arr = arr.set(0, false);
+    let arr = arr.set(1, false);
     // A way for loop is to use `loop`, `continue` and `break`.
     // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body.
     // continue : s -> LoopResult s r -- Take the next state and continues the loop.
@@ -16,7 +16,7 @@ is_prime = |n| (
             if !arr.@(i) { arr };
             loop((i+i, arr), |(q, arr)|
                 if n-1 < q { break $ arr };
-                continue $ (q+i, arr.set!(q, false))
+                continue $ (q+i, arr.set(q, false))
             )
         );
         continue $ (i+1, next_arr)

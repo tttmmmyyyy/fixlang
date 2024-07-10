@@ -89,12 +89,12 @@ type Random = unbox struct {
 init_by_seed : U64 -> Random;
 init_by_seed = |seed| (
     let mt = Array::fill(_NN, 0_U64);
-    let mt = mt.set!(0, seed);
+    let mt = mt.set(0, seed);
     loop((mt, 1), |(mt, mti)| 
         if mti >= _NN {
             break $ Random { mt: mt, mti: _NN }
         };
-        let mt = mt.set!(mti, 
+        let mt = mt.set(mti, 
             (6364136223846793005_U64 * (mt.@(mti-1).bit_xor(mt.@(mti-1).shift_right(62_U64))) + mti.to_U64)
         );
         continue $ (mt, mti + 1)
@@ -115,7 +115,7 @@ init_by_array = |init_key| (
             if k <= 0 {
                 break $ (mt, mti, (i, j, k))
             };
-            let mt = mt.set!(
+            let mt = mt.set(
                 i, 
                 mt.@(i).bit_xor(
                     (mt.@(i - 1).bit_xor(
@@ -127,7 +127,7 @@ init_by_array = |init_key| (
             let i = i + 1;
             let j = j + 1;
             let (mt, i) = if (i >= _NN) { 
-                (mt.set!(0, mt.@(_NN-1)), 1)
+                (mt.set(0, mt.@(_NN-1)), 1)
             } else { 
                 (mt, i) 
             };
@@ -142,7 +142,7 @@ init_by_array = |init_key| (
             if k <= 0 {
                 break $ (mt, mti, (i, j, k))
             };
-            let mt = mt.set!(
+            let mt = mt.set(
                 i, 
                 mt.@(i).bit_xor(
                     (mt.@(i - 1).bit_xor(
@@ -152,7 +152,7 @@ init_by_array = |init_key| (
             );
             let i = i + 1;
             let (mt, i) =  if (i >= _NN) { 
-                (mt.set!(0, mt.@(_NN - 1)), 1)
+                (mt.set(0, mt.@(_NN - 1)), 1)
             } else {
                 (mt, i)
             };
@@ -161,7 +161,7 @@ init_by_array = |init_key| (
         )
     );
     
-    let mt = mt.set!(0, 1_U64.shift_left(63_U64)); /* MSB is 1; assuring non-zero initial array */ 
+    let mt = mt.set(0, 1_U64.shift_left(63_U64)); /* MSB is 1; assuring non-zero initial array */ 
     Random { mt: mt, mti: mti }
 );
 
