@@ -6884,3 +6884,37 @@ pub fn test_tuple_functor() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+#[test]
+pub fn test_empty_struct() {
+    let source = r##"
+        module Main;
+        import Debug;
+
+        type Empty = struct {};
+        impl Empty : ToString {
+            to_string = |e| "Empty";
+        }
+
+        type BoxEmpty = box struct {  };
+        impl BoxEmpty : ToString {
+            to_string = |e| "Box Empty";
+        }
+
+        type UnBoxEmpty = unbox struct {    };
+        impl UnBoxEmpty : ToString {
+            to_string = |e| "Unbox Empty";
+        }
+        
+        main: IO ();
+        main = (
+            let empty = Empty {};
+            eval assert_eq(|_|"", empty.to_string, "Empty");
+            let box_empty = BoxEmpty {};
+            eval assert_eq(|_|"", box_empty.to_string, "Box Empty");
+            let unbox_empty = UnBoxEmpty {};
+            eval assert_eq(|_|"", unbox_empty.to_string, "Unbox Empty");
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}

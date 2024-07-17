@@ -17,6 +17,7 @@
 - Remove functions to modify arrays or structs asserting uniqueness: `set_{field}!`, `mod_{field}!`, `Array::set!`, `Array::mod!`, `Array::act!`, `Array::append!`, `Array::push_back!`, `Array::pop_back!`. If you want to assert a value is unique, use `Debug::assert_unique` instead.
 - Rename `Debug::assert_unique!` to `Debug::assert_unique`.
 - Rename `Std::PunchedArray::plug_in!` and `Std::PunchedArray::punch!` to `Std::_PunchedArray::plug_in` and `Std::_PunchedArray::unsafe_punch` respectively.
+- Allow making empty structs.
 
 ### Fixed
 

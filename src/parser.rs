@@ -769,8 +769,10 @@ fn parse_struct_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDeclValue 
     let mut pairs = pair.into_inner();
     let mut fields: Vec<Field> = Vec::new();
     let mut is_unbox = true; // Default value
-    if pairs.peek().unwrap().as_rule() == Rule::box_or_unbox {
-        is_unbox = parse_box_unbox(pairs.next().unwrap(), ctx);
+    if let Some(pair) = pairs.peek() {
+        if pair.as_rule() == Rule::box_or_unbox {
+            is_unbox = parse_box_unbox(pairs.next().unwrap(), ctx);
+        }
     }
     for pair in pairs {
         fields.push(parse_type_field(pair, ctx));

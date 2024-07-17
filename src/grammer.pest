@@ -88,7 +88,7 @@ expr_do = { "do" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" }
 // - bracketed expression e.g., `(42)`
 expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ extra_comma)?)? ~ sep* ~ ")" }
 
-expr_make_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ (sep* ~ ",")? ~ sep* ~ "}" }
+expr_make_struct = { type_tycon ~ sep* ~ "{" ~ (sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ (sep* ~ ",")?)? ~ sep* ~ "}" }
 
 // nlr = non left recursive
 expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
@@ -208,7 +208,7 @@ comma_separated_type_fields = _{ type_field ~ ( sep* ~ "," ~ sep* ~ type_field )
 box_or_unbox = { "box" | "unbox" }
 
 // === struct definitions ===
-struct_defn = { (box_or_unbox ~ sep+)? ~ "struct" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
+struct_defn = { (box_or_unbox ~ sep+)? ~ "struct" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields? ~ sep* ~ "}" }
 
 // === union definitions ===
 union_defn = { (box_or_unbox ~ sep+)? ~ "union" ~ sep* ~ "{" ~ sep* ~ comma_separated_type_fields ~ sep* ~ "}" }
