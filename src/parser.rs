@@ -2007,14 +2007,14 @@ fn rule_to_string(r: &Rule) -> String {
     }
     match r {
         Rule::EOI => "end-of-input".to_string(),
-        Rule::expr_number_lit => "integer or floating number".to_string(),
+        Rule::expr_number_lit => "number literal".to_string(),
         Rule::expr_bool_lit => "boolean".to_string(),
         Rule::expr_nlr => "expression".to_string(),
         Rule::var => "variable".to_string(),
         Rule::in_of_let => "`in` or `;`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
         Rule::type_expr => "type".to_string(),
-        Rule::arg_list => "arguments".to_string(),
+        Rule::arg_list => "list of arguments".to_string(),
         Rule::operator_mul => "`*`".to_string(),
         Rule::operator_plus => "`+`".to_string(),
         Rule::operator_and => "`&&`".to_string(),
