@@ -132,7 +132,7 @@ When Fix program runs, it calls `main` function defined in the `Main` module.
 
 The usefulness of modules is hard to see in this example. They are useful when you construct a program from multiple source files.
 
-A module name must starts with a capital letter, or an underscore preceding a capital letter.
+A module name must starts with a capital letter.
 Moreover, you can use a sequence of such strings concatenated by periods (e.g. `Main.Model.Impl`) as a module name. 
 This grammar will be useful to express the hierarchy of modules.
 
@@ -183,7 +183,7 @@ The followings are examples of types:
 - `IO ()`: the type of I/O actions which returns no value. It is the type of `main` function of Fix program.
 - `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from its length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
 
-In Fix, the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) must starts with a capital letter, or an underscore preceding a capital letter.
+In Fix, the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) must starts with a capital letter.
 A type that starts with a lowercase letter is interpreted as a type parameter. 
 Each type parameter will be instanciated to a specific type when the program is compiled.
 
@@ -751,7 +751,7 @@ What is special about `mod_v` is that if you call `u.mod_v(a)` when both of `u` 
 
 In Fix, all entities (global values, types, traits) defined in a source file is collected to form a module.
 Each source file has to declare the name of the module by `module {module_name};`.
-A module name must starts with a capital letter, or an underscore preceding a capital letter.
+A module name must starts with a capital letter.
 Module name is used as the top-level namespace of entities defined in a source file.
 
 You can import other module by `import {module_name};`. As an example, consider a program consists of two source files:
@@ -796,7 +796,7 @@ All entities must be distinguished uniquely by their full name (name and namespa
 Module name is used as the top-level namespace of entities defined in a source file. 
 In addition, you can create a namespace explicitly by `namespace TheNameSpace { ... }`.
 
-A namespace must starts with a capital letter, or an underscore preceding a capital letter.
+A namespace must starts with a capital letter.
 
 For example, consider the following program.
 

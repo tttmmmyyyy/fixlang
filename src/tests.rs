@@ -6424,28 +6424,6 @@ pub fn test_textual_name_of_tuples() {
 }
 
 #[test]
-pub fn test_capital_name_starts_with_underscore() {
-    let source = r##"
-    module Main;
-    import Debug;
-
-    namespace _NS {
-        type _MyStruct = struct { data : I64 };
-    }
-
-    trait a : _MyTrait {
-        to_integer : a -> I64;
-    }
-
-    main : IO ();
-    main = (
-        pure()
-    );
-    "##;
-    test_source(&source, Configuration::develop_compiler());
-}
-
-#[test]
 pub fn test_iterator_product() {
     let source = r##"
     module Main;

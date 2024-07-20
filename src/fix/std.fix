@@ -83,7 +83,7 @@ namespace Array {
     act = |idx, fun, arr| (
         let (unique, arr) = arr.unsafe_is_unique;
         if unique {
-            let (parr, elm) = _PunchedArray::unsafe_punch(idx, arr);
+            let (parr, elm) = PunchedArray::unsafe_punch(idx, arr);
             fun(elm).map(|elm| parr.plug_in(elm))
         } else {
             fun(arr.@(idx)).map(|elm| arr.set(idx, elm))
@@ -1236,7 +1236,7 @@ impl Path : ToString {
 // This is used in the implementation of `Array::act`.
 type PunchedArray a = unbox struct { _data : Destructor (Array a), idx : I64 };
 
-namespace _PunchedArray {
+namespace PunchedArray {
 
     // Plug in an element to a punched array to get back an array.
     plug_in : a -> PunchedArray a -> Array a;
@@ -1270,7 +1270,7 @@ namespace _PunchedArray {
     unsafe_punch = |idx, arr| (
         // Bounds check.
         let size = arr.get_size;
-        eval assert(|_|"[_PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
+        eval assert(|_|"[PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
 
         // Move out the element.
         let elm = arr._unsafe_get(idx);

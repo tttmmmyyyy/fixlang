@@ -549,7 +549,7 @@
       - [`subtract_ptr : Ptr -> Ptr -> I64`](#subtract_ptr--ptr---ptr---i64)
       - [`impl Ptr : Eq`](#impl-ptr--eq)
       - [`impl Ptr : ToString`](#impl-ptr--tostring)
-    - [\_PunchedArray](#_punchedarray)
+    - [PunchedArray](#punchedarray)
       - [`plug_in : a -> PunchedArray a -> Array a`](#plug_in--a---punchedarray-a---array-a)
       - [`unsafe_punch : I64 -> Array a -> (PunchedArray a, a)`](#unsafe_punch--i64---array-a---punchedarray-a-a)
     - [Result](#result)
@@ -1837,7 +1837,7 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 #### `impl Ptr : Eq`
 #### `impl Ptr : ToString`
 
-### _PunchedArray
+### PunchedArray
 
 The type of punched arrays. 
 A punched array is an array from which a certain element has been removed.

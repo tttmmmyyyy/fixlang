@@ -18,7 +18,7 @@ var_head = _{ ASCII_ALPHA_LOWER | "_" | "@" }
 var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 var = { !keywords ~ (var_head ~ var_char*) }
 
-capital_name = { "_"? ~ ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
+capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
 
 // Though period is allowed in namespace item in grammer, the parser raisse an error if a user tries to define a namespace with period.
 // It is ok for using period in module name.
@@ -197,7 +197,7 @@ kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 // === Type definitions ===
 type_name = { capital_name }
 
-type_field_name = { !keywords ~ var_head ~ var_char* }
+type_field_name = { !keywords ~ (var_head ~ !"@") ~ var_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
@@ -246,7 +246,7 @@ trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_ful
 // === Global names === 
 global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
 
-global_name_defn = { var ~ sep+ ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
+global_name_defn = { var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
 
 // === Import statements === 
 import_statement = { "import" ~ sep+ ~ importee ~ sep* ~ semicolon }
