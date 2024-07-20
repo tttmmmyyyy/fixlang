@@ -268,6 +268,9 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
     ));
     let mut values = vec![];
     for pair in pairs {
+        if pair.as_rule() != Rule::trait_fullname {
+            break;
+        }
         values.push(parse_trait_fullname(pair, ctx));
     }
     TraitAlias {
@@ -399,7 +402,11 @@ fn parse_trait_member_type_defn(
     let (assoc_type_name, assoc_type_params) =
         assoc_type_defn.validate_as_associated_type_defn(impl_type, &Some(span.clone()), false);
     let kind_applied = if let Some(pair) = pairs.next() {
-        parse_kind(pair, ctx)
+        if pair.as_rule() == Rule::kind {
+            parse_kind(pair, ctx)
+        } else {
+            kind_star()
+        }
     } else {
         kind_star()
     };
@@ -1342,6 +1349,7 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let bound = parse_expr(pairs.next().unwrap(), ctx);
+    pairs.next().unwrap(); // Skip `Rule::semicolon`.
     let val = parse_expr_with_new_do(pairs.next().unwrap(), ctx);
     let pat = PatternNode::make_var(var_local(EVAL_VAR_NAME), Some(make_unit_ty()));
     expr_let(pat, bound, val, Some(span))
@@ -1380,6 +1388,7 @@ fn parse_expr_if(expr: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     let mut pairs = expr.into_inner();
     let cond = pairs.next().unwrap();
     let then_val = pairs.next().unwrap();
+    pairs.next().unwrap().as_rule(); // Skip `Rule::else_of_if` or `Rule::else_of_if_with_space`.
     let else_val = pairs.next().unwrap();
     expr_if(
         parse_expr(cond, ctx),
@@ -2015,7 +2024,10 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::operator_cmp => join_by_or(&["==", "!=", "<=", ">=", "<", ">"]),
         Rule::trait_impl => "`impl`".to_string(),
         Rule::import_statement => "`import`".to_string(),
-        Rule::module_defn => "module declaration".to_string(),
+        Rule::module_defn => "module definition".to_string(),
+        Rule::import_items_positive => "`::`".to_string(),
+        Rule::import_items_negative => "`hiding`".to_string(),
+        Rule::semicolon => "`;`".to_string(),
         _ => format!("{:?}", r),
     }
 }

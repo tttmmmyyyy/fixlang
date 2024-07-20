@@ -5,7 +5,7 @@ extra_comma = { "," }
 
 keywords = _{ ("let" | "eval" | "in" | "if" | "else" | "do" | "type" | "trait" | "impl") ~ sep+ }
 
-semicolon = _{ ";" }
+semicolon = { ";" } // Generate rule for semicolon for better parsing error messages.
 
 in_of_let = { "in" | semicolon }
 
@@ -72,9 +72,9 @@ expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in
 
 expr_eval = { "eval" ~ sep+ ~ expr ~ semicolon ~ sep* ~ expr }
 
-else_of_if = _{ semicolon | "else" }
+else_of_if = { semicolon | "else" }
 
-else_of_if_with_space = _{ semicolon | ("else" ~ sep) }
+else_of_if_with_space = { semicolon | ("else" ~ sep) }
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" ~ sep* ~ ((else_of_if ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}") | (else_of_if_with_space ~ sep* ~ expr)) }
 

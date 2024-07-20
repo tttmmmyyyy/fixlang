@@ -7,7 +7,7 @@ use super::*;
 #[test]
 pub fn test0() {
     let source = r#"    
-            module Main; 
+            module Main;
             import Debug;
 
             main : IO ();
