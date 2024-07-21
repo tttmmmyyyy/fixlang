@@ -70,7 +70,7 @@ expr_var = { (namespace ~ "::")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
-expr_eval = { "eval" ~ sep+ ~ expr ~ semicolon ~ sep* ~ expr }
+expr_eval = { "eval" ~ sep+ ~ expr ~ sep* ~ semicolon ~ sep* ~ expr }
 
 else_of_if = { semicolon | "else" }
 
