@@ -930,8 +930,16 @@ impl TypeNode {
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
+                            let type_strs = TypeNode::to_string_normalize_many(&[
+                                self.clone(),
+                                fun.clone(),
+                                arg.clone(),
+                            ]);
+                            let self_str = &type_strs[0];
+                            let fun_str = &type_strs[1];
+                            let arg_str = &type_strs[2];
                             error_exit_with_src(
-                                &format!("Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.", self.to_string_normalize(), fun.to_string_normalize(), fun_kind.to_string(), arg.to_string_normalize(), arg_kind.to_string()),
+                                &format!("Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.", self_str, fun_str, fun_kind.to_string(), arg_str, arg_kind.to_string()),
                                 &self.get_source(),
                             );
                         }
