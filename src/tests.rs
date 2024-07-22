@@ -3835,7 +3835,7 @@ pub fn test126() {
 }
 
 #[test]
-pub fn test127() {
+pub fn test_trait_alias() {
     // Test trait alias.
     // Basic example are Additive and Iterator::sum, which are tested in other tests.
     let source = r#"
@@ -6445,7 +6445,7 @@ pub fn test_type_alias() {
         module Main; 
         import Debug;
 
-        // Test of higher kinded trait alias is covered by Std::Lazy.
+        // Test of higher kinded type alias is covered by Std::Lazy.
 
         type Name = String;
 
