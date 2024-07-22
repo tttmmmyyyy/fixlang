@@ -6487,6 +6487,23 @@ pub fn test_type_alias() {
 }
 
 #[test]
+pub fn test_type_alias_higner_kinded_argument() {
+    // Test type alias.
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        type Swap a f = f a;
+
+        main : Swap () IO;
+        main = (
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
 pub fn test_circular_aliasing_issue42() {
     let source = r##"
     module Main;
