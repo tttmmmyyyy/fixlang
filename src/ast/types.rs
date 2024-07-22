@@ -937,10 +937,20 @@ impl TypeNode {
                         }
                         res.clone()
                     }
-                    Kind::Star => error_exit_with_src(
-                        &format!("Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.", self.to_string_normalize(), fun.to_string_normalize(), fun_kind.to_string(), arg.to_string_normalize(), arg_kind.to_string()),
-                        &self.get_source(),
-                    ),
+                    Kind::Star => {
+                        let type_strs = TypeNode::to_string_normalize_many(&[
+                            self.clone(),
+                            fun.clone(),
+                            arg.clone(),
+                        ]);
+                        let self_str = &type_strs[0];
+                        let fun_str = &type_strs[1];
+                        let arg_str = &type_strs[2];
+                        error_exit_with_src(
+                            &format!("Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.", self_str, fun_str, fun_kind.to_string(), arg_str, arg_kind.to_string()),
+                            &self.get_source(),
+                        )
+                    }
                 }
             }
             Type::FunTy(dom, codom) => {
@@ -1122,19 +1132,44 @@ pub enum Type {
 }
 
 impl TypeNode {
-    // Stringify. Name of type variables are normalized to names such as "t0", "t1", etc.
+    // Stringify a type.
+    // Name of type variables are normalized to names such as "t0", "t1", etc.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
-        let mut tyvar_num = -1;
-        let mut s = Substitution::default();
-        for (name, tv) in self.free_vars() {
-            tyvar_num += 1;
-            let new_name = format!("t{}", tyvar_num);
-            s.add_substitution(&Substitution::single(
-                &name,
-                type_tyvar(&new_name, &tv.kind),
-            ))
+        TypeNode::to_string_normalize_many(&[self.clone()])
+            .pop()
+            .unwrap()
+    }
+
+    // Stringify many types in a consistent way.
+    // Name of type variables are normalized to names such as "t0", "t1", etc.
+    pub fn to_string_normalize_many(tys: &[Arc<TypeNode>]) -> Vec<String> {
+        // Collect free variables keeping the order of appearance.
+        let mut free_vars = vec![];
+        for ty in tys {
+            ty.free_vars_to_vec(&mut free_vars);
         }
-        s.substitute_type(self).to_string()
+
+        // Create substitution that normalizes the names of type variables.
+        let mut s = Substitution::default();
+        let mut next_tyvar_name = 0;
+        let mut appeared: HashSet<Name> = HashSet::default();
+        for fv in free_vars {
+            if appeared.contains(&fv.name) {
+                continue;
+            }
+            appeared.insert(fv.name.clone());
+            let new_name = format!("t{}", next_tyvar_name);
+            s.add_substitution(&Substitution::single(
+                &fv.name,
+                type_tyvar(&new_name, &fv.kind),
+            ));
+            next_tyvar_name += 1;
+        }
+
+        // Substitute and stringify all types.
+        tys.iter()
+            .map(|ty| s.substitute_type(ty).to_string())
+            .collect()
     }
 
     // Stringify.
