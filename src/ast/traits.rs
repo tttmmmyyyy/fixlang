@@ -42,6 +42,7 @@ pub struct AssocTypeDefn {
     // The kind of the application of the associated type.
     pub kind_applied: Arc<Kind>,
     // Source location of associated type definition.
+    #[allow(dead_code)]
     pub src: Option<Span>,
 }
 
@@ -125,6 +126,7 @@ impl AssocTypeImpl {
 
 #[derive(Clone)]
 pub struct AssocTypeKindInfo {
+    #[allow(dead_code)]
     pub name: TyAssoc,
     pub param_kinds: Vec<Arc<Kind>>, // Includes `self`.
     pub value_kind: Arc<Kind>,
