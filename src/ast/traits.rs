@@ -1481,7 +1481,7 @@ impl TraitEnv {
                 if k != kind {
                     error_exit_with_src(
                         &format!(
-                            "Kind mismatch in the definition of trait alias `{}`",
+                            "Kind mismatch in the definition of trait alias `{}`.",
                             id.to_string()
                         ),
                         &ta.source,
