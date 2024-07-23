@@ -3924,6 +3924,75 @@ pub fn test_trait_alias() {
 }
 
 #[test]
+pub fn test_trait_alias_kind_mismatch() {
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        trait BadTrait = Functor + ToString;
+
+        main : IO ();
+        main = pure();
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Kind mismatch in the definition of trait alias `Main::BadTrait`.",
+    );
+}
+
+#[test]
+pub fn test_trait_alias_implement_trait_alias_directly() {
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        type Vector2 a = box struct { x : a, y : a };
+        impl [a : Additive] Vector2 a : Zero {
+            zero = Vector2 { x : Zero::zero, y : Zero::zero };
+        }
+        impl [a : Additive] Vector2 a : Add {
+            add = |lhs, rhs| Vector2 { x : lhs.@x + rhs.@x, y : lhs.@y + rhs.@y };
+        }
+
+        // Error (cannot implement trait alias directly)
+        impl [a : Additive] Vector2 a : Additive {}
+
+        main : IO ();
+        main = (
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "A trait alias cannot be implemented directly. Implement each aliased trait instead.",
+    );
+}
+
+#[test]
+pub fn test_trait_alias_circular_aliasing() {
+    let source = r#"
+        module Main; 
+        import Debug;
+
+        // Error (circular aliasing)
+        trait MyTraitA = MyTraitB + ToString;
+        trait MyTraitB = MyTraitA + Eq;
+
+        main : IO ();
+        main = (
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Circular aliasing detected in trait alias `Main::MyTraitB`.",
+    );
+}
+
+#[test]
 pub fn test129() {
     // Test ToBytes/FromBytes
     let source = r#"
