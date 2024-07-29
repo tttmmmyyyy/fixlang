@@ -6982,3 +6982,30 @@ pub fn test_empty_struct() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_make_struct_to_union() {
+    let source = r##"
+        module Main;
+
+        // declare Foo as a union
+        type Foo = unbox union {
+            foo: String
+        };
+
+        // create Foo as a struct
+        make_foo: String -> Foo;
+        make_foo = |str| Foo { foo: str };
+
+        main: IO ();
+        main = (
+            let foo = make_foo("aaa");
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}

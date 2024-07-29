@@ -748,6 +748,22 @@ impl TypeCheckContext {
                 ei.set_tyanno_expr(e)
             }
             Expr::MakeStruct(tc, fields) => {
+                // `tc` should be a struct.
+                let tycon_info = self.type_env.tycons.get(&tc);
+                if tycon_info.is_none() {
+                    error_exit_with_src(
+                        &format!("Unknown type name `{}`.", tc.to_string()),
+                        &ei.source,
+                    );
+                }
+                let tycon_info = tycon_info.unwrap();
+                if tycon_info.variant != TyConVariant::Struct {
+                    error_exit_with_src(
+                        &format!("Type `{}` is not a struct.", tc.to_string()),
+                        &ei.source,
+                    );
+                }
+
                 // Get list of field names.
                 let ti = self.type_env.tycons.get(tc);
                 if ti.is_none() {
