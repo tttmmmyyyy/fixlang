@@ -112,7 +112,7 @@ expr_composition = { expr_bind ~ (sep* ~ operator_composition ~ sep* ~ expr_bind
 // unary operators
 // NOTE: we should write this rule so that "-1" is parsed as expr_int_lit.
 operator_unary = { "-" | "!" }
-expr_unary = { expr_composition | operator_unary+ ~ expr_composition }
+expr_unary = { expr_composition | (operator_unary ~ sep*)* ~ expr_composition }
 
 // operator*,/,% (left-associative)
 operator_mul = { "*" | "/" | "%" }

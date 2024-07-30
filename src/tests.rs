@@ -7009,3 +7009,23 @@ pub fn test_make_struct_to_union() {
         "Type `Main::Foo` is not a struct.",
     );
 }
+
+#[test]
+pub fn test_regression_issue_46() {
+    let source = r##"
+        module Main;
+        main: IO ();
+        main = (
+            // No problem
+            if !(1 == 2) {
+                println ("hello")
+            };
+            // Syntax error
+            if ! (1 == 2) {
+                println ("world")
+            };
+            println("foo")
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
