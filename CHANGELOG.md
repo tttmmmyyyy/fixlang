@@ -23,7 +23,7 @@
 ### Fixed
 
 - Fix an issue on `Std::Array::act` which may cause memory leak.
-- Fix #45, #46.
+- Fix #45, #46, #47.
 
 ## [0.2.0] - 2024-06-12
 

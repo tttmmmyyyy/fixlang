@@ -404,12 +404,16 @@ namespace IO {
     _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
         IOFail { _data : IO { _data : |_| (
+            let file_ptr = handle._file_ptr;
+            if file_ptr == nullptr {
+                Result::err("Std::IO::_read_line_inner failed!: the IOHandle is already closed.")
+            };
             loop("", |str|
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
-                let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, handle._file_ptr];
+                let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, file_ptr];
                 if fgets_res == nullptr { 
-                    let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
+                    let err = CALL_C[I32 ferror(Ptr), file_ptr];
                     if err != 0_I32 { 
                         let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
                         break $ Result::err(err)

@@ -7029,3 +7029,23 @@ pub fn test_regression_issue_46() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_read_file_after_close() {
+    let source = r##"
+        module Main;
+        import Debug;
+
+        main: IO ();
+        main = do {
+            let fh = *open_file(Path::parse("/dev/null").as_some, "r");
+            eval *close_file(fh).lift;
+            let line = *read_line(fh);
+            println(line).lift
+        }.try(|msg|
+            eval assert_eq(|_|"", msg, "Std::IO::_read_line_inner failed!: the IOHandle is already closed.");
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
