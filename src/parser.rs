@@ -2028,6 +2028,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::import_items_positive => "`::`".to_string(),
         Rule::import_items_negative => "`hiding`".to_string(),
         Rule::semicolon => "`;`".to_string(),
+        Rule::extra_comma => ",".to_string(),
         _ => format!("{:?}", r),
     }
 }
