@@ -312,8 +312,7 @@ def optimize():
         print_passes(optimum_passes)
         write_source_file(optimum_passes)
         timeout = int(ceil(np.average(optimum_time) * 2.0))
-        optimum_time = np.concatenate(
-            [optimum_time, run_benchmark(timeout=timeout)])
+        optimum_time = run_benchmark(timeout=timeout)
         print('Current optimum time: {} ({} samples)'.format(
             np.average(optimum_time), optimum_time.size))
 
