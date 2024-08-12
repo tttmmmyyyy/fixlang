@@ -19,49 +19,81 @@ add_loop_unroll_and_jam_pass
 add_ipsccp_pass
 add_function_inlining_pass
 add_early_cse_pass
-add_scalar_repl_aggregates_pass_ssa
 add_loop_deletion_pass
 add_constant_merge_pass
-add_strip_symbol_pass
 add_dead_store_elimination_pass
-add_cfg_simplification_pass
 add_constant_merge_pass
 add_function_inlining_pass
-add_scalar_repl_aggregates_pass_ssa
 add_instruction_combining_pass
 add_scalar_repl_aggregates_pass
 add_tail_call_elimination_pass
 add_promote_memory_to_register_pass
-add_dead_store_elimination_pass
 add_jump_threading_pass
 add_ipsccp_pass
 add_loop_rotate_pass
 add_loop_vectorize_pass
 add_scalar_repl_aggregates_pass_ssa
-add_scalar_repl_aggregates_pass_ssa
-add_always_inliner_pass
 add_strip_dead_prototypes_pass
 add_always_inliner_pass
-add_bit_tracking_dce_pass
 add_always_inliner_pass
 add_strip_dead_prototypes_pass
-add_function_inlining_pass
 add_scoped_no_alias_aa_pass
-add_ind_var_simplify_pass
-add_loop_unroll_pass
 add_slp_vectorize_pass
 add_sccp_pass
 add_dead_store_elimination_pass
 add_aggressive_dce_pass
-add_lower_expect_intrinsic_pass
 add_ipsccp_pass
 add_simplify_lib_calls_pass
 add_instruction_combining_pass
 add_ind_var_simplify_pass
-add_constant_merge_pass
-add_correlated_value_propagation_pass
-add_loop_reroll_pass
 add_aggressive_inst_combiner_pass
+add_dead_store_elimination_pass
+add_always_inliner_pass
+add_early_cse_pass
+add_scalar_repl_aggregates_pass_ssa
+add_function_attrs_pass
+add_simplify_lib_calls_pass
+add_sccp_pass
+add_loop_vectorize_pass
+add_global_optimizer_pass
+add_aggressive_dce_pass
+add_promote_memory_to_register_pass
+add_ipsccp_pass
+add_loop_idiom_pass
+add_bit_tracking_dce_pass
+add_instruction_simplify_pass
+add_simplify_lib_calls_pass
+add_strip_dead_prototypes_pass
+add_type_based_alias_analysis_pass
+add_ind_var_simplify_pass
+add_strip_dead_prototypes_pass
+add_global_optimizer_pass
+add_promote_memory_to_register_pass
+add_basic_alias_analysis_pass
+add_slp_vectorize_pass
+add_aggressive_inst_combiner_pass
+add_instruction_simplify_pass
+add_basic_alias_analysis_pass
+add_loop_unroll_pass
+add_early_cse_pass
+add_instruction_simplify_pass
+add_correlated_value_propagation_pass
+add_loop_rotate_pass
+add_loop_reroll_pass
+add_type_based_alias_analysis_pass
+add_dead_arg_elimination_pass
+add_scalar_repl_aggregates_pass
+add_bit_tracking_dce_pass
+add_memcpy_optimize_pass
+add_memcpy_optimize_pass
+add_lower_switch_pass
+add_aggressive_dce_pass
+add_loop_reroll_pass
+add_loop_unroll_and_jam_pass
+add_ipsccp_pass
+add_merged_load_store_motion_pass
+add_loop_vectorize_pass
+add_scoped_no_alias_aa_pass
 '''
 INITIAL_PASSES = INITIAL_PASSES.split('\n')
 INITIAL_PASSES = [line.strip() for line in INITIAL_PASSES]
@@ -73,7 +105,12 @@ HEADER = '''
 use super::*;
 use inkwell::passes::PassManagerSubType;
 
-pub fn add_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
+pub fn add_internalize_and_strip_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
+    passmgr.add_internalize_pass(true);
+    passmgr.add_strip_symbol_pass();
+}
+
+pub fn add_optimization_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
 '''
 
 FOOTER = '''
