@@ -7049,3 +7049,18 @@ pub fn test_read_file_after_close() {
     "##;
     test_source(&source, Configuration::develop_compiler());
 }
+
+#[test]
+pub fn test_circular_type_definition() {
+    let source = r##"
+        module Main;
+        type Foo = unbox struct { func: Foo -> Foo };
+
+        main: IO ();
+        main = (
+            let foo = Foo { func: |x| x };
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
