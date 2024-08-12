@@ -7055,10 +7055,12 @@ pub fn test_circular_type_definition() {
     let source = r##"
         module Main;
         type Foo = unbox struct { func: Foo -> Foo };
+        type Bar = unbox union { func: Bar -> Bar };
 
         main: IO ();
         main = (
             let foo = Foo { func: |x| x };
+            let bar = Bar::func(|x| x);
             pure()
         );
     "##;

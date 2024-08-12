@@ -761,6 +761,8 @@ impl InlineLLVMFixBody {
             .unwrap()
             .as_global_value()
             .as_pointer_value();
+        let fixf_funptr =
+            gc.cast_pointer(fixf_funptr, opaque_lambda_function_ptr_type(&gc.context));
         fixf.store_field_nocap(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
         let cap_obj = gc.get_var(&FullName::local(CAP_NAME)).ptr.get(gc);
         let cap_obj_ptr = cap_obj.ptr(gc);

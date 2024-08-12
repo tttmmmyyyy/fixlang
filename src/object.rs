@@ -42,9 +42,9 @@ impl ObjectFieldType {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
             ObjectFieldType::TraverseFunction => ptr_to_traverser_type(gc.context).into(),
-            ObjectFieldType::LambdaFunction(ty) => lambda_function_type(ty, gc)
-                .ptr_type(AddressSpace::from(0))
-                .into(),
+            ObjectFieldType::LambdaFunction(_ty) => {
+                opaque_lambda_function_ptr_type(&gc.context).into()
+            }
             ObjectFieldType::SubObject(ty, _is_punched) => {
                 ty_to_object_ty(ty, &vec![], gc.type_env())
                     .to_embedded_type(gc, unboxed_path.clone())
@@ -1124,6 +1124,12 @@ pub fn lambda_function_type<'c, 'm>(
         arg_tys.push(ptr_to_object_type(gc.context).into());
         gc.context.void_type().fn_type(&arg_tys, false)
     }
+}
+
+// Opaque function pointer type used to handle type definition such as
+// `type Foo = box struct { func : Foo -> Foo }`.
+pub fn opaque_lambda_function_ptr_type<'c>(ctx: &'c Context) -> PointerType<'c> {
+    ctx.i8_type().ptr_type(AddressSpace::from(0))
 }
 
 pub fn struct_field_idx(is_unbox: bool) -> u32 {

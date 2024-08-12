@@ -123,8 +123,7 @@ impl<'c> Object<'c> {
         if self.is_box(gc.type_env()) {
             gc.cast_pointer(self.ptr, ptr_to_object_type(gc.context))
         } else if self.is_funptr() {
-            let fun_ty = lambda_function_type(&self.ty, gc);
-            gc.cast_pointer(self.ptr, fun_ty.ptr_type(AddressSpace::from(0)))
+            gc.cast_pointer(self.ptr, opaque_lambda_function_ptr_type(&gc.context))
         } else {
             let str_ty = self.struct_ty(gc);
             gc.cast_pointer(self.ptr, ptr_type(str_ty))
@@ -826,14 +825,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Take a lambda object and return function pointer.
     fn get_lambda_func_ptr(&mut self, obj: Object<'c>) -> PointerValue<'c> {
-        if obj.ty.is_closure() {
+        // Get the pointer value.
+        let ptr = if obj.ty.is_closure() {
             obj.load_field_nocap(self, CLOSURE_FUNPTR_IDX)
                 .into_pointer_value()
         } else if obj.ty.is_funptr() {
             obj.ptr(self)
         } else {
             panic!()
-        }
+        };
+
+        // Cast to function pointer type.
+        let func_ptr_ty = lambda_function_type(&obj.ty, self).ptr_type(AddressSpace::from(0));
+        self.cast_pointer(ptr, func_ptr_ty)
     }
 
     // Apply objects to a lambda.
@@ -1592,11 +1596,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             0
         };
-        lam.store_field_nocap(
-            self,
-            funptr_idx,
-            lam_fn.as_global_value().as_pointer_value(),
-        );
+        let lam_fn_ptr = lam_fn.as_global_value().as_pointer_value();
+        let lam_fn_ptr =
+            self.cast_pointer(lam_fn_ptr, opaque_lambda_function_ptr_type(&self.context));
+        lam.store_field_nocap(self, funptr_idx, lam_fn_ptr);
 
         if lam_ty.is_closure() {
             // Set captured objects.
