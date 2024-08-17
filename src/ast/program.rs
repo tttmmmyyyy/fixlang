@@ -1,4 +1,5 @@
 use build_time::build_time_utc;
+use export_statement::ExportStatement;
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc, vec};
 
@@ -309,6 +310,8 @@ pub struct Program {
     pub type_env: TypeEnv,
     // Trait environment.
     pub trait_env: TraitEnv,
+    // Export statements.
+    pub export_statements: Vec<ExportStatement>,
     // List of tuple sizes used in this program.
     pub used_tuple_sizes: Vec<u32>,
     // Import statements.
@@ -341,6 +344,7 @@ impl Program {
             type_env: Default::default(),
             used_tuple_sizes: (0..=TUPLE_SIZE_BASE).filter(|i| *i != 1).collect(),
             module_to_files: Default::default(),
+            export_statements: vec![],
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
             module_name.clone(),
@@ -1005,6 +1009,32 @@ impl Program {
         }
     }
 
+    // Validate and update export statements.
+    pub fn validate_export_statements(&self) {
+        // Validate each export statement.
+        for stmt in &self.export_statements {
+            stmt.validate();
+        }
+
+        // Check if there are multiple export statements having the same `c_function_name`.
+        let mut c_function_names: Vec<(String, Option<Span>)> = Default::default();
+        for stmt in &self.export_statements {
+            if let Some((_, span)) = c_function_names
+                .iter()
+                .find(|(name, _)| *name == stmt.c_function_name)
+            {
+                error_exit_with_srcs(
+                    &format!(
+                        "Multiple export statements have the same C function name `{}`.",
+                        stmt.c_function_name
+                    ),
+                    &[&stmt.src, span],
+                );
+            }
+            c_function_names.push((stmt.c_function_name.clone(), stmt.src.clone()));
+        }
+    }
+
     pub fn set_kinds(&mut self) {
         self.trait_env.set_kinds_in_trait_and_alias_defns();
         let kind_env = self.kind_env();
@@ -1296,6 +1326,9 @@ impl Program {
                 self.add_global_value(name, (expr.expr, ty));
             }
         }
+
+        // Merge export statements.
+        self.export_statements.append(&mut other.export_statements);
 
         // Merge used_tuple_sizes.
         self.used_tuple_sizes.append(&mut other.used_tuple_sizes);

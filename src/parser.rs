@@ -215,6 +215,7 @@ fn parse_global_defns(
             Rule::trait_alias_defn => {
                 trait_aliases.push(parse_trait_alias(pair, ctx));
             }
+            Rule::export_statement => {}
             _ => unreachable!(),
         }
     }

@@ -433,12 +433,14 @@ pub fn make_lazy_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(name))
 }
 
+// Make type `IO`
+pub fn make_io_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME)))
+}
+
 // Make type `IO ()`
 pub fn make_io_unit_ty() -> Arc<TypeNode> {
-    type_tyapp(
-        type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME))),
-        make_unit_ty(),
-    )
+    type_tyapp(make_io_ty(), make_unit_ty())
 }
 
 // Check if given name has form `TupleN` and returns N.

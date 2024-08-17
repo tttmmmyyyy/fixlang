@@ -96,7 +96,7 @@ fn funptr_lambda(
     }
 
     // Collect types of argments.
-    let (arg_types, body_ty) = collect_app_src(&expr_type, vars_count);
+    let (arg_types, body_ty) = expr_type.collect_app_src(vars_count);
     assert_eq!(*body.ty.as_ref().unwrap(), body_ty);
 
     // Construct function pointer.
@@ -127,41 +127,6 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
 
     let mut vars: Vec<Arc<Var>> = vec![];
     let val = collect_abs_inner(expr, &mut vars, vars_limit);
-    (vars, val)
-}
-
-// Convert A -> B -> C to ([A, B], C)
-fn collect_app_src(ty: &Arc<TypeNode>, vars_limit: usize) -> (Vec<Arc<TypeNode>>, Arc<TypeNode>) {
-    fn collect_app_src_inner(
-        ty: &Arc<TypeNode>,
-        vars: &mut Vec<Arc<TypeNode>>,
-        vars_limit: usize,
-    ) -> Arc<TypeNode> {
-        match &ty.ty {
-            Type::FunTy(var, val) => {
-                vars.push(var.clone());
-                if vars.len() >= vars_limit {
-                    return val.clone();
-                }
-                return collect_app_src_inner(&val, vars, vars_limit);
-            }
-            _ => {
-                if ty.is_funptr() {
-                    let mut vs = ty.get_lambda_srcs();
-                    if vars.len() + vs.len() > vars_limit {
-                        return ty.clone();
-                    }
-                    vars.append(&mut vs);
-                    return collect_app_src_inner(&ty.get_lambda_dst(), vars, vars_limit);
-                } else {
-                    ty.clone()
-                }
-            }
-        }
-    }
-
-    let mut vars: Vec<Arc<TypeNode>> = vec![];
-    let val = collect_app_src_inner(ty, &mut vars, vars_limit);
     (vars, val)
 }
 
