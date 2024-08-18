@@ -131,7 +131,7 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
 }
 
 // Replace "call closure" expression to "call function pointer" expression.
-fn replace_closure_call_to_funptr_call(
+pub fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
     symbols: &HashSet<FullName>,
 ) -> Arc<ExprNode> {
