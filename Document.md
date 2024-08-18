@@ -63,7 +63,8 @@
     - [Calling C functions from Fix](#calling-c-functions-from-fix)
     - [Sending Fix's value to C](#sending-fixs-value-to-c)
     - [Retaining / releasing Fix's value from C](#retaining--releasing-fixs-value-from-c)
-    - [Calling Fix's function from C](#calling-fixs-function-from-c)
+    - [Exporting Fix's value to C](#exporting-fixs-value-to-c)
+    - [Calling Fix's function from C (deprecated)](#calling-fixs-function-from-c-deprecated)
     - [Casting back a `Ptr` to a Fix's value](#casting-back-a-ptr-to-a-fixs-value)
     - [Managing C resource from Fix](#managing-c-resource-from-fix)
     - [Sharing a `Ptr` between multiple threads](#sharing-a-ptr-between-multiple-threads)
@@ -1605,7 +1606,43 @@ They return a function pointer of type `void (*)(void*)`.
 
 To manage reference counter of Fix's value from C side, you need to send the function pointers to C side using `CALL_C`, and call them on a pointer which directs to a Fix's value properly.
 
-### Calling Fix's function from C
+### Exporting Fix's value to C
+
+You can export a Fix's value using `EXPORT[{fix_value_name}, {c_function_name}];`:
+
+```
+increment : CInt -> CInt;
+increment = |x| x + 1.to_CInt;
+
+EXPORT[increment, c_increment];
+```
+
+In the above example code, a C function `int c_increment(int)` is defined in the binary of Fix program. 
+So you can call `c_increment` in a C program that will be linked to Fix program.
+
+The signature of the exported C function is automatically determined by the type of Fix value, as demonstrated in the following code:
+
+```
+x : CInt; 
+EXPORT[x, f]; // int f(void);
+
+x : CInt -> CInt;
+EXPORT[x, f]; // int f(int);
+
+x : CInt -> CInt;
+EXPORT[x, f]; // int f(int);
+
+x : IO ();
+EXPORT[x, f]; // void f(void);
+
+x : IO CInt;
+EXPORT[x, f]; // int f(void);
+
+x : CInt -> IO CInt;
+EXPORT[x, f]; // int f(int);
+```
+
+### Calling Fix's function from C (deprecated)
 
 If you want to call a Fix's function from C side, use the following native function which is implemented in Fix's runtime library:
 
