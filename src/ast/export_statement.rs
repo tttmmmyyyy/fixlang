@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::usize;
 
+use inkwell::types::AnyType;
 use inkwell::{module::Linkage, types::BasicType};
 
 use crate::ast::expr::ExprNode;
@@ -75,12 +76,17 @@ impl ExportStatement {
             self.exported_function_type.clone().unwrap();
 
         // Create the LLVM type of the exported C function.
-        let codom_llvm_ty = codom.get_embedded_type(gc, &vec![]);
         let dom_llvm_tys = doms
             .iter()
             .map(|dom| dom.get_embedded_type(gc, &vec![]).into())
             .collect::<Vec<_>>();
-        let func_ty = codom_llvm_ty.fn_type(&dom_llvm_tys, false);
+        let func_ty = if codom.to_string() == make_unit_ty().to_string() {
+            gc.context.void_type().fn_type(&dom_llvm_tys, false)
+        } else {
+            codom
+                .get_embedded_type(gc, &vec![])
+                .fn_type(&dom_llvm_tys, false)
+        };
 
         // Declare the function.
         let func = gc
