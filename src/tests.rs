@@ -7088,6 +7088,11 @@ pub fn test_export() {
 
         EXPORT[increment, c_increment];
 
+        add : CInt -> CInt -> CInt;
+        add = |x, y| x + y;
+
+        EXPORT[add, c_add];
+
         io_action : IO ();
         io_action = println("io_action");
 
@@ -7121,6 +7126,7 @@ pub fn test_export() {
 
         int c_value();
         int c_increment(int x);
+        int c_add(int x, int y);
         void c_io_action();
         void c_io_action2(int x);
         int c_io_action3(int x);
@@ -7133,6 +7139,10 @@ pub fn test_export() {
 
             int y = c_increment(42);
             if (y != 43) {
+                return 1;
+            }
+
+            if (c_add(40, 2) != 42) {
                 return 1;
             }
 
