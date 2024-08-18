@@ -335,7 +335,7 @@ fn build_exported_c_functions<'c, 'm>(
         // Check if `ty` is good as a type of exported Fix value.
         let res = ExportStatement::validate_type(ty, gc.type_env());
         if let Err(msg) = res {
-            let msg = format!("Exporting value of this type is not allowed: {}", msg);
+            let msg = format!("Exporting this value is not allowed: {}", msg);
             error_exit_with_src(&msg, &export_stmt.src);
         }
         let ExportFunctionType { doms, codom, is_io } = res.unwrap();

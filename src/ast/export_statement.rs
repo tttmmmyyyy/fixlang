@@ -10,7 +10,7 @@ use crate::ast::Type;
 use crate::misc::error_exit_with_src;
 use crate::sourcefile::Span;
 
-use super::make_io_ty;
+use super::{make_io_ty, make_unit_ty};
 
 #[derive(Clone)]
 pub struct ExportStatement {
@@ -55,19 +55,42 @@ impl ExportStatement {
 
         // The type cannot contain any type variables.
         if ty.free_vars_vec().len() > 0 {
-            return Result::Err("The type should not contain any type variables.".to_string());
+            return Result::Err(
+                "the type of the exported value should not contain any type variables.".to_string(),
+            );
         }
 
         // Split the type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], C)`.
         let (doms, mut codom) = ty.collect_app_src(usize::MAX);
 
+        // n should be greater than 0.
+        if doms.len() == 0 {
+            return Result::Err("the exported value should be a function value.".to_string());
+        }
+
+        // If the unit type `()` is in `doms`, then `n` should be 1.
+        let unit_ty = make_unit_ty();
+        if doms.iter().any(|ty| ty.to_string() == unit_ty.to_string()) {
+            if doms.len() != 1 {
+                return Result::Err(
+                    "the unit type should not appear in the type of the exported value if the arguments are greater than 1.".to_string(),
+                );
+            }
+        }
+
         // Each `Ai` should be fully unboxed and free from union.
         for dom in doms.iter() {
             if dom.is_fully_unboxed(type_env) {
-                return Result::Err("the type `{}` is not fully unboxed.".to_string());
+                return Result::Err(
+                    "the type of the value should be constructed without using a boxed type."
+                        .to_string(),
+                );
             }
             if !dom.is_free_from_union(type_env) {
-                return Result::Err("the type should not contain union.".to_string());
+                return Result::Err(
+                    "the type of the value should be constructed without using a union type."
+                        .to_string(),
+                );
             }
         }
 
@@ -85,10 +108,16 @@ impl ExportStatement {
 
         // `B` should be fully unboxed and free from union.
         if codom.is_fully_unboxed(type_env) {
-            return Result::Err("the type `{}` is not fully unboxed.".to_string());
+            return Result::Err(
+                "the type of the value should be constructed without using a boxed type."
+                    .to_string(),
+            );
         }
         if !codom.is_free_from_union(type_env) {
-            return Result::Err("the type should not contain union.".to_string());
+            return Result::Err(
+                "the type of the value should be constructed without using a union type."
+                    .to_string(),
+            );
         }
 
         // Return the result.

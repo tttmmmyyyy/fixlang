@@ -104,3 +104,16 @@ pub fn insert_to_hashmap_vec<K: Clone + Eq + Hash, V>(
         map.insert(key.clone(), vec![elem]);
     }
 }
+
+// A macro to get the name of a function.
+macro_rules! function_name {
+    () => {{
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        let name = type_name_of(f);
+        &name[..name.len() - 3]
+    }};
+}
+pub(crate) use function_name;
