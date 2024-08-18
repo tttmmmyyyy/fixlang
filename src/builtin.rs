@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use inkwell::module::Linkage;
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 
@@ -433,12 +434,14 @@ pub fn make_lazy_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(name))
 }
 
+// Make type `IO`
+pub fn make_io_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME)))
+}
+
 // Make type `IO ()`
 pub fn make_io_unit_ty() -> Arc<TypeNode> {
-    type_tyapp(
-        type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME))),
-        make_unit_ty(),
-    )
+    type_tyapp(make_io_ty(), make_unit_ty())
 }
 
 // Check if given name has form `TupleN` and returns N.
@@ -4032,9 +4035,11 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
                 .context
                 .void_type()
                 .fn_type(&[ptr_to_object_type(gc.context).into()], false);
-            let release_function =
-                gc.module
-                    .add_function(&release_function_name, release_function_ty, None);
+            let release_function = gc.module.add_function(
+                &release_function_name,
+                release_function_ty,
+                Some(Linkage::Internal),
+            );
             let bb = gc.context.append_basic_block(release_function, "entry");
             let _builder_guard = gc.push_builder();
             gc.builder().position_at_end(bb);
@@ -4133,9 +4138,11 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
                 .context
                 .void_type()
                 .fn_type(&[ptr_to_object_type(gc.context).into()], false);
-            let retain_function =
-                gc.module
-                    .add_function(&retain_function_name, retain_function_ty, None);
+            let retain_function = gc.module.add_function(
+                &retain_function_name,
+                retain_function_ty,
+                Some(Linkage::Internal),
+            );
             let bb = gc.context.append_basic_block(retain_function, "entry");
             let _builder_guard = gc.push_builder();
             gc.builder().position_at_end(bb);

@@ -1,4 +1,5 @@
 use build_time::build_time_utc;
+use export_statement::{ExportStatement, ExportedFunctionType};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc, vec};
 
@@ -309,6 +310,8 @@ pub struct Program {
     pub type_env: TypeEnv,
     // Trait environment.
     pub trait_env: TraitEnv,
+    // Export statements.
+    pub export_statements: Vec<ExportStatement>,
     // List of tuple sizes used in this program.
     pub used_tuple_sizes: Vec<u32>,
     // Import statements.
@@ -341,6 +344,7 @@ impl Program {
             type_env: Default::default(),
             used_tuple_sizes: (0..=TUPLE_SIZE_BASE).filter(|i| *i != 1).collect(),
             module_to_files: Default::default(),
+            export_statements: vec![],
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
             module_name.clone(),
@@ -847,13 +851,82 @@ impl Program {
     // Instantiate main function.
     pub fn instantiate_main_function(&mut self, tc: &TypeCheckContext) -> Arc<ExprNode> {
         let main_func_name = FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME);
-        if !self.global_values.contains_key(&main_func_name) {
-            error_exit(&format!("{} not found.", main_func_name.to_string()));
-        }
         let main_ty = make_io_unit_ty();
-        let inst_name = self.require_instantiated_symbol(&main_func_name, &main_ty);
+        self.instantiate_exported_value(&main_func_name, Some(main_ty), &None, tc)
+            .0
+    }
+
+    // Instantiate exported values.
+    // In this function, `ExportStatement`s are updated.
+    pub fn instantiate_exported_values(&mut self, tc: &TypeCheckContext) {
+        let mut export_stmts = std::mem::replace(&mut self.export_statements, vec![]);
+        for stmt in &mut export_stmts {
+            let (instantiated_expr, eft) =
+                self.instantiate_exported_value(&stmt.fix_value_name, None, &stmt.src, tc);
+            stmt.exported_function_type = Some(eft);
+            stmt.instantiated_value_expr = Some(instantiated_expr);
+        }
+        self.export_statements = export_stmts;
+    }
+
+    // Instantiate a global value.
+    // - required_ty: for `Main::main`, pass `IO ()` to check that the specified type is correct. If none, then use the type specified by user.
+    // - required_src: source place where the value is exported. Used to show error message.
+    pub fn instantiate_exported_value(
+        &mut self,
+        value_name: &FullName,
+        required_ty: Option<Arc<TypeNode>>,
+        required_src: &Option<Span>,
+        tc: &TypeCheckContext,
+    ) -> (Arc<ExprNode>, ExportedFunctionType) {
+        // Check if the value is defined.
+        let gv = self.global_values.get(value_name);
+        if gv.is_none() {
+            error_exit_with_src(
+                &format!("Value `{}` is not found.", value_name.to_string()),
+                &required_src,
+            );
+        }
+
+        // Validate the type of the value.
+        let gv: &GlobalValue = gv.unwrap();
+        let (required_ty, eft) = if let Some(required_ty) = required_ty {
+            // If the type of the value is specified, check if it matches the required type.
+            if gv.scm.to_string() != required_ty.to_string() {
+                error_exit_with_src(
+                    &format!(
+                        "The value `{}` should have type `{}`.",
+                        value_name.to_string(),
+                        required_ty.to_string()
+                    ),
+                    &required_src,
+                );
+            }
+            let eft = ExportedFunctionType {
+                doms: vec![],
+                codom: make_unit_ty(),
+                is_io: true,
+            };
+            (required_ty, eft)
+        } else {
+            // If the type of the value is not specified, check if it is good as the type of an exported value.
+            let res = ExportedFunctionType::validate(gv.scm.clone(), &tc.type_env);
+            if res.is_err() {
+                error_exit_with_src(
+                    &format!(
+                        "The type of the value `{}` is not suitable for export: {}",
+                        value_name.to_string(),
+                        res.err().unwrap()
+                    ),
+                    &required_src,
+                );
+            }
+            (gv.scm.ty.clone(), res.ok().unwrap())
+        };
+        let inst_name = self.require_instantiated_symbol(&value_name, &required_ty);
         self.instantiate_symbols(tc);
-        expr_var(inst_name, None).set_inferred_type(main_ty)
+        let expr = expr_var(inst_name, None).set_inferred_type(required_ty);
+        (expr, eft)
     }
 
     // Instantiate expression.
@@ -1002,6 +1075,32 @@ impl Program {
                     }
                 }
             }
+        }
+    }
+
+    // Validate and update export statements.
+    pub fn validate_export_statements(&self) {
+        // Validate each export statement.
+        for stmt in &self.export_statements {
+            stmt.validate_names();
+        }
+
+        // Check if there are multiple export statements having the same `c_function_name`.
+        let mut c_function_names: Vec<(String, Option<Span>)> = Default::default();
+        for stmt in &self.export_statements {
+            if let Some((_, span)) = c_function_names
+                .iter()
+                .find(|(name, _)| *name == stmt.c_function_name)
+            {
+                error_exit_with_srcs(
+                    &format!(
+                        "Multiple export statements have the same C function name `{}`.",
+                        stmt.c_function_name
+                    ),
+                    &[&stmt.src, span],
+                );
+            }
+            c_function_names.push((stmt.c_function_name.clone(), stmt.src.clone()));
         }
     }
 
@@ -1296,6 +1395,9 @@ impl Program {
                 self.add_global_value(name, (expr.expr, ty));
             }
         }
+
+        // Merge export statements.
+        self.export_statements.append(&mut other.export_statements);
 
         // Merge used_tuple_sizes.
         self.used_tuple_sizes.append(&mut other.used_tuple_sizes);

@@ -1,3 +1,4 @@
+use ast::export_statement::ExportStatement;
 use build_time::build_time_utc;
 use rand::Rng;
 use std::{
@@ -10,7 +11,6 @@ use std::{
 };
 
 use inkwell::{
-    module::Linkage,
     passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
@@ -32,6 +32,9 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         make_tuple_traits_mod(&program.used_tuple_sizes, &config),
         true,
     );
+
+    // Validate export statements.
+    program.validate_export_statements();
 
     // Calculate list of type constructors.
     program.calculate_type_env();
@@ -82,6 +85,9 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     // Instantiate main function and all called functions.
     let main_expr = program.instantiate_main_function(&typechecker);
 
+    // Instantiate exported functions and all called functions.
+    program.instantiate_exported_values(&typechecker);
+
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
         uncurry_optimization(&mut program);
@@ -131,6 +137,9 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     let mut threads = vec![];
     let units_count = units.len();
     for (i, unit) in units.into_iter().enumerate() {
+        // We generate the main unit in the last.
+        let is_main_unit = i == units_count - 1;
+
         obj_paths.push(unit.object_file_path());
         // If the object file is cached, skip the generation.
         if unit.is_cached() {
@@ -148,8 +157,15 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
         let all_symbols = all_symbols.clone();
         let config = config.clone();
-        let units_count = units_count.clone();
         let type_env = program.type_env();
+
+        let export_statements = if is_main_unit {
+            // Export statements are only needed for the main unit.
+            std::mem::replace(&mut program.export_statements, vec![])
+        } else {
+            vec![]
+        };
+
         let main_expr = main_expr.clone();
         threads.push(std::thread::spawn(move || {
             // Create GenerationContext.
@@ -187,12 +203,15 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
                 gc.implement_symbol(symbol);
             }
 
-            if i == units_count - 1 {
-                // In the last,
-                assert!(!unit.is_cached());
+            if is_main_unit {
+                assert!(!unit.is_cached()); // Main unit should not be cached.
 
                 // Implement runtime functions.
                 build_runtime(&mut gc, BuildMode::Implement);
+
+                // Implement exported C functions.
+                build_exported_c_functions(&mut gc, &export_statements);
+
                 // Implement the `main()` function.
                 build_main_function(&mut gc, main_expr.clone(), &config);
             }
@@ -297,6 +316,16 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
     passmgr.run_on(module);
 }
 
+// Build exported c functions.
+fn build_exported_c_functions<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    export_stmts: &[ExportStatement],
+) {
+    for export_stmt in export_stmts {
+        export_stmt.implement(gc);
+    }
+}
+
 fn build_main_function<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     main_expr: Arc<ExprNode>,
@@ -333,27 +362,27 @@ fn build_main_function<'c, 'm>(
     }
 
     // Store the pointer to `fixruntime_run_function` function defined in LLVM module to the `ptr_fixruntime_run_function` global variable defined in runtime.c.
-    let run_function_func_ptr_ty = gc
-        .context
-        .i8_type()
-        .ptr_type(AddressSpace::from(0))
-        .fn_type(
-            &[gc.context.i8_type().ptr_type(AddressSpace::from(0)).into()],
-            false,
-        )
-        .ptr_type(AddressSpace::from(0));
-    let run_task_func_ptr = gc.module.add_global(
-        run_function_func_ptr_ty,
-        Some(AddressSpace::from(0)),
-        "ptr_fixruntime_run_function",
-    );
-    run_task_func_ptr.set_externally_initialized(true);
-    run_task_func_ptr.set_linkage(Linkage::External);
-    let run_function_func = gc.module.get_function(RUNTIME_RUN_FUNCTION).unwrap();
-    gc.builder().build_store(
-        run_task_func_ptr.as_pointer_value(),
-        run_function_func.as_global_value().as_pointer_value(),
-    );
+    // let run_function_func_ptr_ty: PointerType = gc
+    //     .context
+    //     .i8_type()
+    //     .ptr_type(AddressSpace::from(0))
+    //     .fn_type(
+    //         &[gc.context.i8_type().ptr_type(AddressSpace::from(0)).into()],
+    //         false,
+    //     )
+    //     .ptr_type(AddressSpace::from(0));
+    // let run_task_func_ptr: inkwell::values::GlobalValue = gc.module.add_global(
+    //     run_function_func_ptr_ty,
+    //     Some(AddressSpace::from(0)),
+    //     "ptr_fixruntime_run_function",
+    // );
+    // run_task_func_ptr.set_externally_initialized(true);
+    // run_task_func_ptr.set_linkage(Linkage::External);
+    // let run_function_func = gc.module.get_function(RUNTIME_RUN_FUNCTION).unwrap();
+    // gc.builder().build_store(
+    //     run_task_func_ptr.as_pointer_value(),
+    //     run_function_func.as_global_value().as_pointer_value(),
+    // );
 
     // If both of `AsyncTask` and sanitizer are used, prepare for terminating threads.
     if config.async_task && config.sanitize_memory {

@@ -1,8 +1,13 @@
-use std::fs::{self, remove_file};
+use std::{
+    fs::{self, remove_file},
+    io::Write,
+    process::Command,
+};
 
 use rand::Rng;
 
 use super::*;
+use crate::misc::function_name;
 
 #[test]
 pub fn test0() {
@@ -7065,4 +7070,126 @@ pub fn test_circular_type_definition() {
         );
     "##;
     test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_export() {
+    let source = r##"
+        module Main;
+        import Debug;
+
+        value : CInt;
+        value = 42.to_CInt;
+        EXPORT[value, c_value];
+
+        increment : CInt -> CInt;
+        increment = |x| x + 1.to_CInt;
+        EXPORT[increment, c_increment];
+
+        two_variable : CInt -> CInt -> CInt;
+        two_variable = |x, y| 2.to_CInt * x + y;
+        EXPORT[two_variable, c_two_variable];
+
+        io_action : IO ();
+        io_action = println("io_action");
+        EXPORT[io_action, c_io_action];
+
+        io_action2 : CInt -> IO ();
+        io_action2 = |x| do {
+            eval *println("io_action2: " + x.to_string);
+            pure()
+        };
+        EXPORT[io_action2, c_io_action2];
+
+        io_action3 : CInt -> IO CInt;
+        io_action3 = |x| do {
+            eval *println("io_action3");
+            pure(x + 1.to_CInt)
+        };
+        EXPORT[io_action3, c_io_action3];
+
+        main: IO ();
+        main = (
+            let res = CALL_C[CInt call_fix_values()];
+            eval assert_eq(|_|"", res, 0.to_CInt);
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdio.h>
+
+        int c_value();
+        int c_increment(int x);
+        int c_two_variable(int x, int y);
+        void c_io_action();
+        void c_io_action2(int x);
+        int c_io_action3(int x);
+
+        int call_fix_values() {
+            int x = c_value();
+            if (x != 42) {
+                return 1;
+            }
+
+            int y = c_increment(42);
+            if (y != 43) {
+                return 1;
+            }
+
+            if (c_two_variable(3, 2) != 8) {
+                return 1;
+            }
+
+            c_io_action();
+
+            c_io_action2(42);
+
+            int z = c_io_action3(42);
+            if (z != 43) {
+                return 1;
+            }
+
+            return 0;
+        }
+    "##;
+
+    // Create a working directory.
+    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+
+    // Save `c_source` to a file.
+    let c_file = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, function_name!());
+    let mut file = File::create(&c_file).unwrap();
+    file.write_all(c_source.as_bytes()).unwrap();
+
+    // Build `c_source` into a shared library.
+    let lib_name = function_name!();
+    let so_file_path = format!("lib{}.so", lib_name);
+    let mut com = Command::new("gcc");
+    let output = com
+        .arg("-shared")
+        .arg("-fPIC")
+        .arg("-o")
+        .arg(so_file_path.clone())
+        .arg(&c_file)
+        .output()
+        .expect("Failed to run gcc.");
+    if output.stderr.len() > 0 {
+        eprintln!(
+            "{}",
+            String::from_utf8(output.stderr)
+                .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
+        );
+    }
+
+    // Link the shared library to the Fix program.
+    let mut config = Configuration::develop_compiler();
+    config.add_dyanmic_library(lib_name);
+    // Add the library search path.
+    config.library_search_paths.push(PathBuf::from("."));
+
+    // Run the Fix program.
+    test_source(&source, config);
+
+    // Remove the shared library.
+    let _ = fs::remove_file(so_file_path);
 }

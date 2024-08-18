@@ -4,7 +4,7 @@ use super::*;
 use inkwell::passes::PassManagerSubType;
 
 pub fn add_internalize_and_strip_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
-    passmgr.add_internalize_pass(true);
+    // passmgr.add_internalize_pass(true);
     passmgr.add_strip_symbol_pass();
 }
 

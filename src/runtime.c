@@ -523,13 +523,6 @@ int64_t fixruntime_get_number_of_processors()
     return (int64_t)sysconf(_SC_NPROCESSORS_ONLN);
 }
 
-void *(*ptr_fixruntime_run_function)(void *);
-
-void *fixruntime_run_function(void *function)
-{
-    return (*ptr_fixruntime_run_function)(function);
-}
-
 int fixruntime_get_errno()
 {
     return errno;
@@ -738,10 +731,14 @@ void fixruntime_thread_release_task(Task *task)
     }
 }
 
+// A C function exported in "asynctask.fix".
+// This function takes a pointer to the value `Std::Boxed (() -> Ptr)` and evaluate the pointer.
+void *fixruntime_run_task_function(void *function);
+
 // Run a task on this thread.
 void fixruntime_thread_execute_task(Task *task)
 {
-    TaskResult result = fixruntime_run_function(task->function);
+    TaskResult result = fixruntime_run_task_function(task->function);
 
     pthread_mutex_lock_or_exit(&task->mutex, "[runtime] Failed to lock mutex for a task.");
     task->result = result;

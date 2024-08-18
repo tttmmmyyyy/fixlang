@@ -2076,9 +2076,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Declare accessor function.
             let acc_fn_name = format!("Get#{}", name.to_string());
             let acc_fn_type = ptr_to_object_type(self.context).fn_type(&[], false);
-            let acc_fn =
-                self.module
-                    .add_function(&acc_fn_name, acc_fn_type, Some(Linkage::External));
+            let acc_fn = self.module.add_function(
+                &acc_fn_name,
+                acc_fn_type,
+                Some(self.config.external_if_separated()),
+            );
 
             // Register the accessor function to gc.
             self.add_global_object(name.clone(), acc_fn, obj_ty.clone());
@@ -2118,6 +2120,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let global_var_name = format!("GlobalVar#{}", name.to_string());
             let global_var = self.module.add_global(obj_embed_ty, None, &global_var_name);
             global_var.set_initializer(&obj_embed_ty.const_zero());
+            global_var.set_linkage(Linkage::Internal);
             let global_var = global_var.as_basic_value_enum().into_pointer_value();
 
             // Prepare initialized flag.
@@ -2133,6 +2136,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             };
             let init_flag = self.module.add_global(flag_ty, None, &flag_name);
             init_flag.set_initializer(&flag_init_val);
+            init_flag.set_linkage(Linkage::Internal);
             let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
 
             // Start to implement accessor function.

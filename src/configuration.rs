@@ -2,6 +2,7 @@ use std::process::Command;
 use std::{env, path::PathBuf};
 
 use build_time::build_time_utc;
+use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
 use serde::{Deserialize, Serialize};
 
@@ -300,6 +301,14 @@ impl Configuration {
             }
         }
         com
+    }
+
+    pub fn external_if_separated(&self) -> Linkage {
+        if self.separate_compilation() {
+            Linkage::External
+        } else {
+            Linkage::Internal
+        }
     }
 }
 

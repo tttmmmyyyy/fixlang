@@ -660,6 +660,45 @@ impl TypeNode {
         ret
     }
 
+    // Convert a type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], C)`.
+    // - `vars_limit`: the maximum number of variables to be collected.
+    pub fn collect_app_src(
+        self: &Arc<TypeNode>,
+        vars_limit: usize,
+    ) -> (Vec<Arc<TypeNode>>, Arc<TypeNode>) {
+        fn collect_app_src_inner(
+            ty: &Arc<TypeNode>,
+            vars: &mut Vec<Arc<TypeNode>>,
+            vars_limit: usize,
+        ) -> Arc<TypeNode> {
+            match &ty.ty {
+                Type::FunTy(var, val) => {
+                    vars.push(var.clone());
+                    if vars.len() >= vars_limit {
+                        return val.clone();
+                    }
+                    return collect_app_src_inner(&val, vars, vars_limit);
+                }
+                _ => {
+                    if ty.is_funptr() {
+                        let mut vs = ty.get_lambda_srcs();
+                        if vars.len() + vs.len() > vars_limit {
+                            return ty.clone();
+                        }
+                        vars.append(&mut vs);
+                        return collect_app_src_inner(&ty.get_lambda_dst(), vars, vars_limit);
+                    } else {
+                        ty.clone()
+                    }
+                }
+            }
+        }
+
+        let mut vars: Vec<Arc<TypeNode>> = vec![];
+        let val = collect_app_src_inner(self, &mut vars, vars_limit);
+        (vars, val)
+    }
+
     // Remove type aliases in a type.
     pub fn resolve_type_aliases(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
         let self_src = self.get_source().clone();

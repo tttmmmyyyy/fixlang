@@ -61,10 +61,10 @@
     - [Unions](#unions-2)
   - [Foreign function interface (FFI)](#foreign-function-interface-ffi)
     - [Calling C functions from Fix](#calling-c-functions-from-fix)
-    - [Sending Fix's value to C](#sending-fixs-value-to-c)
+    - [Exporting Fix values / functions to C](#exporting-fix-values--functions-to-c)
+    - [Sending Fix boxed values to C](#sending-fix-boxed-values-to-c)
     - [Retaining / releasing Fix's value from C](#retaining--releasing-fixs-value-from-c)
-    - [Calling Fix's function from C](#calling-fixs-function-from-c)
-    - [Casting back a `Ptr` to a Fix's value](#casting-back-a-ptr-to-a-fixs-value)
+    - [Casting back a `Ptr` to a Fix value](#casting-back-a-ptr-to-a-fix-value)
     - [Managing C resource from Fix](#managing-c-resource-from-fix)
     - [Sharing a `Ptr` between multiple threads](#sharing-a-ptr-between-multiple-threads)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
@@ -1553,9 +1553,12 @@ type Weight = box union { pound: I64, kilograms: I64 };
 
 You can link a native (C) library to a Fix program by `--static-link` or `--dynamic-link` compiler flag, and call the linked C functions from Fix side.
 
+Note that using FFI can easily break Fix's assurance such as immutability or memory safety.
+The programmer has a responsibility to hide the side effect of a foreign function into `IO`, and manage resources properly.
+
 ### Calling C functions from Fix
 
-To call C a function, use the following expression:
+To call a C function, use the following expression:
 
 ```
 CALL_C[{c_function_signature}, {arg_0}, {arg_1}, ...]
@@ -1582,15 +1585,46 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 - Use `...` for `va_arg`.
 - If return type is `void`, put `()` before the function name.
 
-Note that calling C function may break Fix's assurance such as immutability or memory safety. 
-The programmer has a responsibility to hide the side effect of C function into `IO`, or manage resource appropriately.
+### Exporting Fix values / functions to C
 
-### Sending Fix's value to C 
+You can export a value of Fix using `EXPORT[{fix_value_name}, {c_function_name}];`:
+
+```
+increment : CInt -> CInt;
+increment = |x| x + 1.to_CInt;
+EXPORT[increment, c_increment]; // Define a C function `int c_increment(int)`.
+```
+
+You can declare and call `int c_increment(int)` in a C program that will be linked to Fix program.
+
+The signature of the exported C function is automatically determined by the type of the exported Fix value, as demonstrated in the following code:
+
+```
+x : CInt; 
+EXPORT[x, f]; // int f(void);
+
+x : CInt -> CInt;
+EXPORT[x, f]; // int f(int);
+
+x : CInt -> CInt;
+EXPORT[x, f]; // int f(int);
+
+x : IO ();
+EXPORT[x, f]; // void f(void);
+
+x : IO CInt;
+EXPORT[x, f]; // int f(void);
+
+x : CInt -> IO CInt;
+EXPORT[x, f]; // int f(int);
+```
+
+### Sending Fix boxed values to C
 
 NOTE: To understand the contents of this and following sections, you will need to be familiar with scope-based reference counters, such as C++'s `shared_ptr` or Rust's `Rc`.
 
 The function `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr` returns a pointer to a Fix's value of *boxed type*.
-Then you can send the pointer to C's world by `CALL_C`.
+Then you can send the pointer to C world.
 
 The returned pointer is "retained" in the sense that it has a (shared) ownership of the Fix's value. 
 You have a responsibility to "release" (i.e., decrement the reference counter) it to avoid resource leak.
@@ -1603,31 +1637,13 @@ You can get a function pointer of retain / release function by the followings:
 
 They return a function pointer of type `void (*)(void*)`. 
 
-To manage reference counter of Fix's value from C side, you need to send the function pointers to C side using `CALL_C`, and call them on a pointer which directs to a Fix's value properly.
+To manage reference counter of Fix values from C side, you need to send the function pointers to C world, and call them on a pointer which directs to a Fix value.
 
-### Calling Fix's function from C
+### Casting back a `Ptr` to a Fix value
 
-If you want to call a Fix's function from C side, use the following native function which is implemented in Fix's runtime library:
+To cast a `Ptr` value which directs a Fix boxed value to a typed Fix's value, use `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
 
-```
-void *fixruntime_run_function(void *function)
-```
-
-Here, the argument `function` should be a (retained) pointer to the value of type `Std::Boxed (() -> a)` where `a` is a *boxed* type. 
-The function `fixruntime_run_function` calls the Fix's function given as the argument, *release it*, and returns the (retained) pointer to the result value.
-
-So, to call a Fix's function from C side, 
-- you first need to wrap the function in `Std::Boxed`, get a pointer to it by `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`, and send the pointer to C side by `CALL_C`.
-- In C library, you need to declare `void *fixruntime_run_function(void *function)`.
-- Call `fixruntime_run_function` on a (retained) pointer to the Fix's function. Note that `fixruntime_run_function` itself releases the argument; if you plan to call the function again later, you need to retain it before calling `fixruntime_run_function` to prevent the function value to be deallocated.
-- The return value of `fixruntime_run_function` is a (retained pointer) of the result. 
-
-### Casting back a `Ptr` to a Fix's value
-
-In many cases, the return value of `fixruntime_run_function` will be sent to Fix's side in any way and "casted" to a Fix's value to utilize it. 
-To cast a `Ptr` to a Fix's value, use `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
-
-Note that, once casted to a Fix's value, the responsibility to release the pointer will be on the Fix's compiler, not on you. 
+Note that, once casted to a typed Fix value, the responsibility to release the pointer will be on the Fix compiler, not on you. 
 
 ### Managing C resource from Fix
 

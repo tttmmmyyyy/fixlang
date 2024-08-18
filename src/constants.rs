@@ -40,7 +40,6 @@ pub const C_DOUBLE_NAME: &str = "CDouble";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 pub const LAZY_NAME: &str = "Lazy";
-pub const BOXED_NAME: &str = "Boxed";
 pub const FUNCTOR_NAME: &str = "Functor";
 pub const DESTRUCTOR_OBJECT_NAME: &str = "Destructor";
 pub const DESTRUCTOR_OBJECT_VALUE_FIELD_IDX: u32 = 0;
@@ -95,6 +94,8 @@ pub const TEMPORARY_SRC_PATH: &str = ".fixlang/tmp_src";
 pub const CHECK_C_TYPES_PATH: &str = ".fixlang/check_c_types.c";
 pub const CHECK_C_TYPES_EXEC_PATH: &str = ".fixlang/check_c_types.out";
 pub const C_TYPES_JSON_PATH: &str = ".fixlang/c_types.json";
+#[allow(unused)]
+pub const COMPILER_TEST_WORKING_PATH: &str = ".fixlang/compiler_test";
 
 pub const ASYNCTASK_NAME: &str = "AsyncTask";
 
