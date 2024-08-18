@@ -528,10 +528,10 @@ fn parse_export_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ExportSta
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     pairs.next().unwrap(); // Skip `EXPORT`.
-    let fix_value_name = parse_capital_fullname(pairs.next().unwrap());
+    let fix_value_name = pairs.next().unwrap().as_str().to_string();
     let c_function_name = pairs.next().unwrap().as_str().to_string();
     ExportStatement {
-        fix_value_name,
+        fix_value_name: FullName::new(&ctx.namespace, &fix_value_name),
         c_function_name,
         src: Some(span),
     }
@@ -2054,6 +2054,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::import_items_negative => "`hiding`".to_string(),
         Rule::semicolon => "`;`".to_string(),
         Rule::extra_comma => ",".to_string(),
+        Rule::export_symbol => "EXPORT".to_string(),
         _ => format!("{:?}", r),
     }
 }
