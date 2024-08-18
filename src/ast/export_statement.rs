@@ -191,20 +191,20 @@ impl ExportedFunctionType {
         // }
 
         // Each `Ai` should be fully unboxed and free from union.
-        for dom in doms.iter() {
-            if !dom.is_fully_unboxed(type_env) {
-                return Result::Err(
-                        "the type of an exported value should be constructed without using any boxed type."
-                            .to_string(),
-                    );
-            }
-            if !dom.is_free_from_union(type_env) {
-                return Result::Err(
-                        "the type of an exported value should be constructed without using any union type."
-                            .to_string(),
-                    );
-            }
-        }
+        // for dom in doms.iter() {
+        //     if !dom.is_fully_unboxed(type_env) {
+        //         return Result::Err(
+        //                 "the type of an exported value should be constructed without using any boxed type."
+        //                     .to_string(),
+        //             );
+        //     }
+        //     if !dom.is_free_from_union(type_env) {
+        //         return Result::Err(
+        //                 "the type of an exported value should be constructed without using any union type."
+        //                     .to_string(),
+        //             );
+        //     }
+        // }
 
         // If `B` is `IO C`, then replace `B` with `C` and set `is_io` to `true`.
         let mut is_io = false;
@@ -219,18 +219,18 @@ impl ExportedFunctionType {
         }
 
         // `B` should be fully unboxed and free from union.
-        if !codom.is_fully_unboxed(type_env) {
-            return Result::Err(
-                "the type of an exported value should be constructed without using any boxed type."
-                    .to_string(),
-            );
-        }
-        if !codom.is_free_from_union(type_env) {
-            return Result::Err(
-                "the type of an exported value should be constructed without using any union type."
-                    .to_string(),
-            );
-        }
+        // if !codom.is_fully_unboxed(type_env) {
+        //     return Result::Err(
+        //         "the type of an exported value should be constructed without using any boxed type."
+        //             .to_string(),
+        //     );
+        // }
+        // if !codom.is_free_from_union(type_env) {
+        //     return Result::Err(
+        //         "the type of an exported value should be constructed without using any union type."
+        //             .to_string(),
+        //     );
+        // }
 
         // Return the result.
         Result::Ok(ExportedFunctionType { doms, codom, is_io })
