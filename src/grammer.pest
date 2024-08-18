@@ -301,7 +301,7 @@ export_symbol = { "EXPORT" }
 
 exported_c_function_char = _{ !"]" ~ ANY }
 
-exported_c_function_name = _{ exported_c_function_char+ }
+exported_c_function_name = { exported_c_function_char+ }
 
 export_statement = { export_symbol ~ sep* ~ "[" ~ sep* ~ var ~ sep* ~ "," ~ sep* ~ exported_c_function_name ~ sep* ~ "]" ~ sep* ~ semicolon }
 
