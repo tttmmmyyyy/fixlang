@@ -1,9 +1,4 @@
 module Main;
-import Debug;
-import RegExp;
 
 main : IO ();
-main = (
-    let x = () : Std::Tuple0;
-    pure()
-);
+main = println("Hello, World!");
