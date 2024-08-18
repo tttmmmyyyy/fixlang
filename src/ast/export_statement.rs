@@ -3,8 +3,7 @@
 use std::sync::Arc;
 use std::usize;
 
-use inkwell::types::AnyType;
-use inkwell::{module::Linkage, types::BasicType};
+use inkwell::types::BasicType;
 
 use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
@@ -89,9 +88,7 @@ impl ExportStatement {
         };
 
         // Declare the function.
-        let func = gc
-            .module
-            .add_function(&self.c_function_name, func_ty, Some(Linkage::External));
+        let func = gc.module.add_function(&self.c_function_name, func_ty, None);
 
         // Implement the function.
         let bb = gc.context.append_basic_block(func, "entry");

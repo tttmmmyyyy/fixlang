@@ -1,3 +1,5 @@
+use inkwell::module::Linkage;
+
 use super::*;
 
 pub const RUNTIME_ABORT: &str = "abort";
@@ -214,7 +216,11 @@ fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
             }
             let void_type = context.void_type();
             let func_type = void_type.fn_type(&[ptr_to_object_type(context).into()], false);
-            module.add_function(RUNTIME_RETAIN_BOXED_OBJECT, func_type, None);
+            module.add_function(
+                RUNTIME_RETAIN_BOXED_OBJECT,
+                func_type,
+                Some(gc.config.external_if_separated()),
+            );
             return;
         }
         BuildMode::Implement => match gc.module.get_function(RUNTIME_RETAIN_BOXED_OBJECT) {
@@ -307,8 +313,11 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
                 ],
                 false,
             );
-            gc.module
-                .add_function(RUNTIME_RELEASE_BOXED_OBJECT, func_type, None);
+            gc.module.add_function(
+                RUNTIME_RELEASE_BOXED_OBJECT,
+                func_type,
+                Some(gc.config.external_if_separated()),
+            );
             return;
         }
         BuildMode::Implement => match gc.module.get_function(RUNTIME_RELEASE_BOXED_OBJECT) {
@@ -494,7 +503,11 @@ fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
                 ],
                 false,
             );
-            gc.module.add_function(func_name, func_type, None);
+            gc.module.add_function(
+                func_name,
+                func_type,
+                Some(gc.config.external_if_separated()),
+            );
             return;
         }
         BuildMode::Implement => match gc.module.get_function(func_name) {
@@ -592,7 +605,11 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
                 .context
                 .i64_type()
                 .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
-            gc.module.add_function(RUNTIME_SUBTRACT_PTR, fn_ty, None);
+            gc.module.add_function(
+                RUNTIME_SUBTRACT_PTR,
+                fn_ty,
+                Some(gc.config.external_if_separated()),
+            );
             return;
         }
         BuildMode::Implement => match gc.module.get_function(RUNTIME_SUBTRACT_PTR) {
@@ -624,7 +641,11 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>,
                 return;
             }
             let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
-            gc.module.add_function(RUNTIME_PTR_ADD_OFFSET, fn_ty, None);
+            gc.module.add_function(
+                RUNTIME_PTR_ADD_OFFSET,
+                fn_ty,
+                Some(gc.config.external_if_separated()),
+            );
             return;
         }
         BuildMode::Implement => match gc.module.get_function(RUNTIME_PTR_ADD_OFFSET) {
@@ -774,7 +795,11 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
                 return;
             }
             let fn_ty = argc_gv_ty.fn_type(&[], false);
-            gc.module.add_function(RUNTIME_GET_ARGC, fn_ty, None);
+            gc.module.add_function(
+                RUNTIME_GET_ARGC,
+                fn_ty,
+                Some(gc.config.external_if_separated()),
+            );
             return;
         }
         BuildMode::Implement => match gc.module.get_function(RUNTIME_GET_ARGC) {
@@ -785,6 +810,7 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
     // Add GLOBAL_VAR_NAME_ARGC global variable.
     let argc_gv = gc.module.add_global(argc_gv_ty, None, GLOBAL_VAR_NAME_ARGC);
     argc_gv.set_initializer(&argc_gv_ty.const_zero());
+    argc_gv.set_linkage(Linkage::Internal);
 
     let bb = gc.context.append_basic_block(func, "entry");
 
@@ -820,7 +846,11 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
                 .i8_type()
                 .ptr_type(AddressSpace::from(0))
                 .fn_type(&[gc.context.i64_type().into()], false);
-            gc.module.add_function(RUNTIME_GET_ARGV, fn_ty, None);
+            gc.module.add_function(
+                RUNTIME_GET_ARGV,
+                fn_ty,
+                Some(gc.config.external_if_separated()),
+            );
             return;
         }
         BuildMode::Implement => match gc.module.get_function(RUNTIME_GET_ARGV) {
@@ -832,6 +862,7 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
     // Add GLOBAL_VAR_NAME_ARGV global variable.
     let argv_gv = gc.module.add_global(argv_gv_ty, None, GLOBAL_VAR_NAME_ARGV);
     argv_gv.set_initializer(&argv_gv_ty.const_zero());
+    argv_gv.set_linkage(Linkage::Internal);
 
     let bb = gc.context.append_basic_block(func, "entry");
 
