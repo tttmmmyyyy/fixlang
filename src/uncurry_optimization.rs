@@ -44,7 +44,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
         }
     }
 
-    // Then replace expressions in the global symbols.
+    // Replace application expressions so that they use uncurried pointers.
     let mut symbol_names: HashSet<FullName> = Default::default();
     for (name, _sym) in &fix_mod.instantiated_symbols {
         symbol_names.insert(name.clone());
