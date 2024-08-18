@@ -124,7 +124,7 @@ impl Configuration {
         #[allow(unused_mut)]
         let mut config = Self::default();
         config.set_valgrind(ValgrindTool::MemCheck);
-        config.fix_opt_level = FixOptimizationLevel::Separated;
+        // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;

@@ -138,6 +138,9 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     let mut threads = vec![];
     let units_count = units.len();
     for (i, unit) in units.into_iter().enumerate() {
+        // We generate the main unit in the last.
+        let is_main_unit = i == units_count - 1;
+
         obj_paths.push(unit.object_file_path());
         // If the object file is cached, skip the generation.
         if unit.is_cached() {
@@ -155,9 +158,15 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
         let all_symbols = all_symbols.clone();
         let config = config.clone();
-        let units_count = units_count.clone();
         let type_env = program.type_env();
-        let export_statements = Arc::new(std::mem::replace(&mut program.export_statements, vec![]));
+
+        let export_statements = if is_main_unit {
+            // Export statements are only needed for the main unit.
+            std::mem::replace(&mut program.export_statements, vec![])
+        } else {
+            vec![]
+        };
+
         let main_expr = main_expr.clone();
         threads.push(std::thread::spawn(move || {
             // Create GenerationContext.
@@ -194,9 +203,6 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
             for symbol in unit.symbols() {
                 gc.implement_symbol(symbol);
             }
-
-            // We generate the main unit in the last.
-            let is_main_unit = i == units_count - 1;
 
             if is_main_unit {
                 assert!(!unit.is_cached()); // Main unit should not be cached.

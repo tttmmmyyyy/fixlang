@@ -11,6 +11,7 @@ use crate::misc::function_name;
 
 #[test]
 pub fn test0() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"    
             module Main;
             import Debug;
@@ -26,6 +27,7 @@ pub fn test0() {
 
 #[test]
 pub fn test1() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
             module Main; 
             import Debug;
@@ -41,6 +43,7 @@ pub fn test1() {
 
 #[test]
 pub fn test2() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
             module Main; 
             import Debug;
@@ -56,6 +59,7 @@ pub fn test2() {
 
 #[test]
 pub fn test3() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; 
         import Debug;
@@ -71,6 +75,7 @@ pub fn test3() {
 
 #[test]
 pub fn test4() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; 
         import Debug;
@@ -86,6 +91,7 @@ pub fn test4() {
 
 #[test]
 pub fn test5() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; 
         import Debug;
@@ -101,6 +107,7 @@ pub fn test5() {
 
 #[test]
 pub fn test6() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -114,6 +121,7 @@ pub fn test6() {
 
 #[test]
 pub fn test7() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -127,6 +135,7 @@ pub fn test7() {
 
 #[test]
 pub fn test8() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug; 
 
@@ -141,6 +150,7 @@ pub fn test8() {
 
 #[test]
 pub fn test9_5() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         
@@ -157,6 +167,7 @@ pub fn test9_5() {
 
 #[test]
 pub fn test10() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
 
@@ -171,6 +182,7 @@ pub fn test10() {
 
 #[test]
 pub fn test11() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
 
@@ -187,6 +199,7 @@ pub fn test11() {
 
 #[test]
 pub fn test12() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
 
@@ -205,6 +218,7 @@ pub fn test12() {
 
 #[test]
 pub fn test13() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -219,6 +233,7 @@ pub fn test13() {
 
 #[test]
 pub fn test13_5() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -233,6 +248,7 @@ pub fn test13_5() {
 
 #[test]
 pub fn test14() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -249,6 +265,7 @@ pub fn test14() {
 
 #[test]
 pub fn test15() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -263,6 +280,7 @@ pub fn test15() {
 
 #[test]
 pub fn test15_5() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -278,6 +296,7 @@ pub fn test15_5() {
 
 #[test]
 pub fn test16() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -292,6 +311,7 @@ pub fn test16() {
 
 #[test]
 pub fn test17() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -305,6 +325,7 @@ pub fn test17() {
 
 #[test]
 pub fn test18() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -318,6 +339,7 @@ pub fn test18() {
 
 #[test]
 pub fn test19() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -331,6 +353,7 @@ pub fn test19() {
 
 #[test]
 pub fn test20() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -344,6 +367,7 @@ pub fn test20() {
 
 #[test]
 pub fn test20_5() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
         main : IO ();
@@ -366,6 +390,7 @@ pub fn test20_5() {
 
 #[test]
 pub fn test21() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
             module Main; import Debug;
 
@@ -381,6 +406,7 @@ pub fn test21() {
 
 #[test]
 pub fn test22() {
+    eprintln!("Start: {}", function_name!());
     // Test recursion function defined by fix with two variables that is tail-call.
     let n: i64 = 1000000;
     let source = format!(
@@ -409,6 +435,7 @@ pub fn test22() {
 
 #[test]
 pub fn test22_5() {
+    eprintln!("Start: {}", function_name!());
     // Test recursion function defined by fix that is not tail-call.
     let source = r#"
         module Main; import Debug;
@@ -432,6 +459,7 @@ pub fn test22_5() {
 
 #[test]
 pub fn test22_7() {
+    eprintln!("Start: {}", function_name!());
     // Test global recursion function
     let source = r#"
         module Main; import Debug;
@@ -458,6 +486,7 @@ pub fn test22_7() {
 
 #[test]
 pub fn test23() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::fill of size 0.
     let source = r#"
         module Main; import Debug;
@@ -472,6 +501,7 @@ pub fn test23() {
 
 #[test]
 pub fn test24() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::fill of size > 0.
     let source = r#"
         module Main; import Debug;
@@ -487,6 +517,7 @@ pub fn test24() {
 
 #[test]
 pub fn test25() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::get.
     let source = r#"
         module Main; import Debug;
@@ -503,6 +534,7 @@ pub fn test25() {
 
 #[test]
 pub fn test26() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::set (unique case).
     let source = r#"
         module Main; import Debug;
@@ -519,6 +551,7 @@ pub fn test26() {
 
 #[test]
 pub fn test27() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::set (shared case).
     let source = r#"
         module Main; import Debug;
@@ -535,6 +568,7 @@ pub fn test27() {
 
 #[test]
 pub fn test27_5() {
+    eprintln!("Start: {}", function_name!());
     // Test Array of boxed object.
     let source = r#"
         module Main; import Debug;
@@ -551,6 +585,7 @@ pub fn test27_5() {
 
 #[test]
 pub fn test28() {
+    eprintln!("Start: {}", function_name!());
     // Calculate Fibonacci sequence using array.
     let source = r#"
         module Main; import Debug;
@@ -579,6 +614,7 @@ pub fn test28() {
 
 #[test]
 pub fn test29() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
 
@@ -596,6 +632,7 @@ pub fn test29() {
 
 #[test]
 pub fn test30() {
+    eprintln!("Start: {}", function_name!());
     // Test dollar combinator
     let source = r#"
         module Main; import Debug;
@@ -613,6 +650,7 @@ pub fn test30() {
 
 #[test]
 pub fn test31() {
+    eprintln!("Start: {}", function_name!());
     // Test . combinator
     let source = r#"
         module Main; import Debug;
@@ -630,6 +668,7 @@ pub fn test31() {
 
 #[test]
 pub fn test32() {
+    eprintln!("Start: {}", function_name!());
     // Test . and $ combinator
     let source = r#"
         module Main; import Debug;
@@ -645,6 +684,7 @@ pub fn test32() {
 
 #[test]
 pub fn test33() {
+    eprintln!("Start: {}", function_name!());
     // Test struct declaration and new, mod.
     let source = r#"
         module Main; import Debug;
@@ -663,6 +703,7 @@ pub fn test33() {
 
 #[test]
 pub fn test34_5() {
+    eprintln!("Start: {}", function_name!());
     // Test unboxed struct declaration and new, mod.
     let source = r#"
         module Main; import Debug;
@@ -681,6 +722,7 @@ pub fn test34_5() {
 
 #[test]
 pub fn test34() {
+    eprintln!("Start: {}", function_name!());
     // Test namespace inference.
     let source = r#"
         module Main; import Debug;        
@@ -701,6 +743,7 @@ pub fn test34() {
 
 #[test]
 pub fn test35() {
+    eprintln!("Start: {}", function_name!());
     // Test overloading resolution.
     let source = r#"
         module Main; import Debug;
@@ -722,6 +765,7 @@ pub fn test35() {
 
 #[test]
 pub fn test36() {
+    eprintln!("Start: {}", function_name!());
     // Test modifier composition.
     let source = r#"
         module Main; import Debug;
@@ -743,6 +787,7 @@ pub fn test36() {
 
 #[test]
 pub fn test37_5() {
+    eprintln!("Start: {}", function_name!());
     // Test shared modField.
     let source = r#"
         module Main; import Debug;
@@ -764,6 +809,7 @@ pub fn test37_5() {
 
 #[test]
 pub fn test38() {
+    eprintln!("Start: {}", function_name!());
     // Test type annotation.
     let source = r#"
         module Main; import Debug;
@@ -786,6 +832,7 @@ pub fn test38() {
 
 #[test]
 pub fn test39() {
+    eprintln!("Start: {}", function_name!());
     // Test type annotation.
     let source = r#"
         module Main; import Debug;
@@ -808,6 +855,7 @@ pub fn test39() {
 
 #[test]
 pub fn test40() {
+    eprintln!("Start: {}", function_name!());
     // Test type annotation at let-binding.
     let source = r#"
         module Main; import Debug;
@@ -830,6 +878,7 @@ pub fn test40() {
 
 #[test]
 pub fn test41() {
+    eprintln!("Start: {}", function_name!());
     // Test type annotation at let-binding.
     let source = r#"
         module Main; import Debug;
@@ -847,6 +896,7 @@ pub fn test41() {
 
 #[test]
 pub fn test41_5() {
+    eprintln!("Start: {}", function_name!());
     // Test type annotation at lambda
     let source = r#"
         module Main; import Debug;
@@ -864,6 +914,7 @@ pub fn test41_5() {
 
 #[test]
 pub fn test42() {
+    eprintln!("Start: {}", function_name!());
     // Recursion function using global variable (not tail call).
     let n = 10000;
     let source = format!(
@@ -888,6 +939,7 @@ pub fn test42() {
 
 #[test]
 pub fn test43() {
+    eprintln!("Start: {}", function_name!());
     // Recursion function using global variable (tail call).
     let n: i64 = 10000000;
     let source = format!(
@@ -912,6 +964,7 @@ pub fn test43() {
 
 #[test]
 pub fn test44() {
+    eprintln!("Start: {}", function_name!());
     // Test basic use of traits.
     let source = r#"
         module Main; import Debug;
@@ -956,6 +1009,7 @@ pub fn test44() {
 
 #[test]
 pub fn test44_5() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::from_map.
     let source = r#"
         module Main; import Debug;
@@ -982,6 +1036,7 @@ pub fn test44_5() {
 
 #[test]
 pub fn test45() {
+    eprintln!("Start: {}", function_name!());
     // Test HKT.
     let source = r#"
         module Main; import Debug;
@@ -1019,6 +1074,7 @@ pub fn test45() {
 
 #[test]
 pub fn test46() {
+    eprintln!("Start: {}", function_name!());
     // Test confliction of global name and local name.
     let source = r#"
         module Main; import Debug;
@@ -1041,6 +1097,7 @@ pub fn test46() {
 
 #[test]
 pub fn test47() {
+    eprintln!("Start: {}", function_name!());
     // Basic use of union.
     let source = r#"
         module Main; import Debug;
@@ -1063,6 +1120,7 @@ pub fn test47() {
 
 #[test]
 pub fn test47_2() {
+    eprintln!("Start: {}", function_name!());
     // Basic use of boxed union.
     let source = r#"
         module Main; import Debug;
@@ -1085,6 +1143,7 @@ pub fn test47_2() {
 
 #[test]
 pub fn test47_5() {
+    eprintln!("Start: {}", function_name!());
     // Test union of closure object
     let source = r#"
         module Main; import Debug;
@@ -1106,6 +1165,7 @@ pub fn test47_5() {
 
 #[test]
 pub fn test47_6() {
+    eprintln!("Start: {}", function_name!());
     // Test union of boxed object
     let source = r#"
         module Main; import Debug;
@@ -1131,6 +1191,7 @@ pub fn test47_6() {
 
 #[test]
 pub fn test48() {
+    eprintln!("Start: {}", function_name!());
     // Parametrised struct.
     let source = r#"
         module Main; import Debug;
@@ -1153,6 +1214,7 @@ pub fn test48() {
 
 #[test]
 pub fn test49() {
+    eprintln!("Start: {}", function_name!());
     // Parametrised union.
     let source = r#"
         module Main; import Debug;
@@ -1180,6 +1242,7 @@ pub fn test49() {
 
 #[test]
 pub fn test50() {
+    eprintln!("Start: {}", function_name!());
     // test loop.
     let n = 100;
     let source = format!(
@@ -1211,6 +1274,7 @@ pub fn test50() {
 
 #[test]
 pub fn test50_3() {
+    eprintln!("Start: {}", function_name!());
     // test loop_iter, loop_iter_m.
     let source = r#"
         module Main; import Debug;
@@ -1239,6 +1303,7 @@ pub fn test50_3() {
 
 #[test]
 pub fn test51() {
+    eprintln!("Start: {}", function_name!());
     // test trait bounds.
     let source = r#"
     module Main; import Debug;
@@ -1271,6 +1336,7 @@ pub fn test51() {
 
 #[test]
 pub fn test52() {
+    eprintln!("Start: {}", function_name!());
     // Test loop with boxed state / break.
     let source = r#"
     module Main; import Debug;
@@ -1328,6 +1394,7 @@ pub fn test52() {
 
 #[test]
 pub fn test53() {
+    eprintln!("Start: {}", function_name!());
     // Test mutation of unique unboxed struct (e.g., tuple).
     let source = r#"
     module Main; import Debug;
@@ -1349,6 +1416,7 @@ pub fn test53() {
 
 #[test]
 pub fn test54() {
+    eprintln!("Start: {}", function_name!());
     // Test mutation of shared unboxed struct (e.g., tuple).
     let source = r#"
     module Main; import Debug;
@@ -1370,6 +1438,7 @@ pub fn test54() {
 
 #[test]
 pub fn test55() {
+    eprintln!("Start: {}", function_name!());
     // Test <= operator
     let source = r#"
     module Main; import Debug;
@@ -1394,6 +1463,7 @@ pub fn test55() {
 
 #[test]
 pub fn test56() {
+    eprintln!("Start: {}", function_name!());
     // Test && and || operator
     let source = r#"
     module Main; import Debug;
@@ -1416,6 +1486,7 @@ pub fn test56() {
 
 #[test]
 pub fn test57() {
+    eprintln!("Start: {}", function_name!());
     // Test ! operator
     let source = r#"
     module Main; import Debug;
@@ -1438,6 +1509,7 @@ pub fn test57() {
 
 #[test]
 pub fn test58() {
+    eprintln!("Start: {}", function_name!());
     // Test != operator
     let source = r#"
     module Main; import Debug;
@@ -1460,6 +1532,7 @@ pub fn test58() {
 
 #[test]
 pub fn test59() {
+    eprintln!("Start: {}", function_name!());
     // Test namespace definition
     let source = r#"
     module Main; import Debug;
@@ -1492,6 +1565,7 @@ pub fn test59() {
 
 #[test]
 pub fn test60() {
+    eprintln!("Start: {}", function_name!());
     // Test unit.
     let source = r"
     module Main; import Debug;
@@ -1507,6 +1581,7 @@ pub fn test60() {
 
 #[test]
 pub fn test61() {
+    eprintln!("Start: {}", function_name!());
     // Test Hello world.
     let source = r#"
     module Main; import Debug;
@@ -1529,6 +1604,7 @@ pub fn test61() {
 
 #[test]
 pub fn test61_5() {
+    eprintln!("Start: {}", function_name!());
     // Test Hello world.
     let source = r#"
     module Main; import Debug;
@@ -1547,6 +1623,7 @@ pub fn test61_5() {
 
 #[test]
 pub fn test62() {
+    eprintln!("Start: {}", function_name!());
     // Test String length.
     let source = r#"
     module Main; import Debug;
@@ -1563,6 +1640,7 @@ pub fn test62() {
 
 #[test]
 pub fn test63() {
+    eprintln!("Start: {}", function_name!());
     // Test I64 ToString.
     // See also test98.
     let source = r#"
@@ -1580,6 +1658,7 @@ pub fn test63() {
 
 #[test]
 pub fn test64() {
+    eprintln!("Start: {}", function_name!());
     // Test escape sequence.
     let source = r#"
     module Main; import Debug;
@@ -1594,6 +1673,7 @@ pub fn test64() {
 
 #[test]
 pub fn test65() {
+    eprintln!("Start: {}", function_name!());
     // Test tuple pattern matching.
     let source = r#"
     module Main; import Debug;
@@ -1617,6 +1697,7 @@ pub fn test65() {
 
 #[test]
 pub fn test66() {
+    eprintln!("Start: {}", function_name!());
     // Test unboxed struct pattern matching.
     let source = r#"
     module Main; import Debug;
@@ -1642,6 +1723,7 @@ pub fn test66() {
 
 #[test]
 pub fn test67() {
+    eprintln!("Start: {}", function_name!());
     // Test boxed struct pattern matching.
     let source = r#"
     module Main; import Debug;
@@ -1667,6 +1749,7 @@ pub fn test67() {
 
 #[test]
 pub fn test72() {
+    eprintln!("Start: {}", function_name!());
     // Test pattern matching on argment.
     let source = r#"
     module Main; import Debug;
@@ -1689,6 +1772,7 @@ pub fn test72() {
 
 #[test]
 pub fn test73() {
+    eprintln!("Start: {}", function_name!());
     // Test pattern matching on argment.
     let source = r#"
     module Main; import Debug;
@@ -1708,6 +1792,7 @@ pub fn test73() {
 
 #[test]
 pub fn test74() {
+    eprintln!("Start: {}", function_name!());
     // Test setter function of struct / tuple.
     let source = r#"
     module Main; import Debug;
@@ -1746,6 +1831,7 @@ pub fn test74() {
 
 #[test]
 pub fn test75() {
+    eprintln!("Start: {}", function_name!());
     // Test iterator.
     let source = r#"
     module Main; import Debug;
@@ -1771,6 +1857,7 @@ pub fn test75() {
 
 #[test]
 pub fn test76() {
+    eprintln!("Start: {}", function_name!());
     // Test array modifier.
     let source = r#"
     module Main; import Debug;
@@ -1788,6 +1875,7 @@ pub fn test76() {
 
 #[test]
 pub fn test77() {
+    eprintln!("Start: {}", function_name!());
     // Test Iterator::zip / map / take / fold / subsequences.
     let source = r#"
     module Main; import Debug;
@@ -1817,6 +1905,7 @@ pub fn test77() {
 
 #[test]
 pub fn test78() {
+    eprintln!("Start: {}", function_name!());
     // Test Iterator::filter
     let source = r#"
     module Main; import Debug;
@@ -1835,6 +1924,7 @@ pub fn test78() {
 
 #[test]
 pub fn test79() {
+    eprintln!("Start: {}", function_name!());
     // Test Iterator::push_front
     let source = r#"
     module Main; import Debug;
@@ -1855,6 +1945,7 @@ pub fn test79() {
 
 #[test]
 pub fn test80() {
+    eprintln!("Start: {}", function_name!());
     // Test Iterator::last
     let source = r#"
     module Main; import Debug;
@@ -1874,6 +1965,7 @@ pub fn test80() {
 
 #[test]
 pub fn test81() {
+    eprintln!("Start: {}", function_name!());
     // Test array literal.
     let source = r#"
     module Main; import Debug;
@@ -1892,6 +1984,7 @@ pub fn test81() {
 
 #[test]
 pub fn test82() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::append.
     let source = r#"
     module Main; import Debug;
@@ -1962,6 +2055,7 @@ pub fn test82() {
 
 #[test]
 pub fn test83() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::push_back, pop_back
     let source = r#"
     module Main; import Debug;
@@ -2017,6 +2111,7 @@ pub fn test83() {
 
 #[test]
 pub fn test84() {
+    eprintln!("Start: {}", function_name!());
     // Test Eq for Array
     let source = r#"
     module Main; import Debug;
@@ -2047,6 +2142,7 @@ pub fn test84() {
 
 #[test]
 pub fn test85() {
+    eprintln!("Start: {}", function_name!());
     // Test concat string, compare string.
     let source = r#"
     module Main; import Debug;
@@ -2067,6 +2163,7 @@ pub fn test85() {
 
 #[test]
 pub fn test86() {
+    eprintln!("Start: {}", function_name!());
     // Test concat_iter
     let source = r#"
     module Main; import Debug;
@@ -2084,6 +2181,7 @@ pub fn test86() {
 
 #[test]
 pub fn test87() {
+    eprintln!("Start: {}", function_name!());
     // Test iterator comparison
     let source = r#"
     module Main; import Debug;
@@ -2111,6 +2209,7 @@ pub fn test87() {
 
 #[test]
 pub fn test88() {
+    eprintln!("Start: {}", function_name!());
     // Test iterator comparison
     let source = r#"
     module Main; import Debug;
@@ -2138,6 +2237,7 @@ pub fn test88() {
 
 #[test]
 pub fn test89() {
+    eprintln!("Start: {}", function_name!());
     // Test Iterator::append
     let source = r#"
     module Main; import Debug;
@@ -2169,6 +2269,7 @@ pub fn test89() {
 
 #[test]
 pub fn test90() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::sort_by.
     let source = r#"
     module Main; import Debug;
@@ -2196,6 +2297,7 @@ pub fn test90() {
 
 #[test]
 pub fn test92() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main; import Debug;
 
@@ -2214,6 +2316,7 @@ pub fn test92() {
 
 #[test]
 pub fn test93() {
+    eprintln!("Start: {}", function_name!());
     // Test try to make circular reference (and fail).
     let source = r#"
     module Main; 
@@ -2234,6 +2337,7 @@ pub fn test93() {
 
 #[test]
 pub fn test_call_c() {
+    eprintln!("Start: {}", function_name!());
     // Test FFI
     let source = r#"
             module Main; import Debug;
@@ -2252,6 +2356,7 @@ pub fn test_call_c() {
 
 #[test]
 pub fn test95() {
+    eprintln!("Start: {}", function_name!());
     // Test Std::unsafe_is_unique, Debug::assert_unique
     let source = r#"
             module Main; 
@@ -2293,6 +2398,7 @@ pub fn test95() {
 
 #[test]
 pub fn test96() {
+    eprintln!("Start: {}", function_name!());
     // Test U8 literal
     let source = r#"
             module Main; import Debug;
@@ -2316,6 +2422,7 @@ pub fn test96() {
 
 #[test]
 pub fn test97() {
+    eprintln!("Start: {}", function_name!());
     // Test arithmetic operation of U8, I32
     let source = r#"
         module Main; import Debug;
@@ -2346,6 +2453,7 @@ pub fn test97() {
 
 #[test]
 pub fn test98() {
+    eprintln!("Start: {}", function_name!());
     // Test to_string, from_string for integrals
     let source = r#"
         module Main; import Debug;
@@ -2411,6 +2519,7 @@ pub fn test98() {
 
 #[test]
 pub fn test99() {
+    eprintln!("Start: {}", function_name!());
     // Test cast between integral types.
     let mut rng = rand::thread_rng();
     let mut cases: Vec<String> = vec![];
@@ -2464,6 +2573,7 @@ pub fn test99() {
 
 #[test]
 pub fn test99_5() {
+    eprintln!("Start: {}", function_name!());
     // Test cast float to integral types.
     let source = r#"
         module Main; import Debug;
@@ -2496,6 +2606,7 @@ pub fn test99_5() {
 
 #[test]
 pub fn test99_51() {
+    eprintln!("Start: {}", function_name!());
     // Test cast integral to float types.
     let source = r#"
         module Main; import Debug;
@@ -2528,6 +2639,7 @@ pub fn test99_51() {
 
 #[test]
 pub fn test100() {
+    eprintln!("Start: {}", function_name!());
     // Test u8 literal
     let source = r#"
         module Main; import Debug;
@@ -2546,6 +2658,7 @@ pub fn test100() {
 
 #[test]
 pub fn test101() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::is_empty, get_first, get_last.
     let source = r#"
         module Main; import Debug;
@@ -2572,6 +2685,7 @@ pub fn test101() {
 
 #[test]
 pub fn test102() {
+    eprintln!("Start: {}", function_name!());
     // Test I64 : Eq, LessThan, LessThanEq
     let source = r#"
         module Main; import Debug;
@@ -2600,6 +2714,7 @@ pub fn test102() {
 
 #[test]
 pub fn test103() {
+    eprintln!("Start: {}", function_name!());
     // Test Bool : Eq
     let source = r#"
         module Main; import Debug;
@@ -2619,6 +2734,7 @@ pub fn test103() {
 
 #[test]
 pub fn test104() {
+    eprintln!("Start: {}", function_name!());
     // Test Bool : ToString
     let source = r#"
         module Main; import Debug;
@@ -2636,6 +2752,7 @@ pub fn test104() {
 
 #[test]
 pub fn test105() {
+    eprintln!("Start: {}", function_name!());
     // Test String::get_first_byte, get_last_byte, is_empty
     let source = r#"
         module Main; import Debug;
@@ -2657,6 +2774,7 @@ pub fn test105() {
 
 #[test]
 pub fn test106() {
+    eprintln!("Start: {}", function_name!());
     // Test [a : Eq] Option a : Eq
     let source = r#"
         module Main; import Debug;
@@ -2687,6 +2805,7 @@ pub fn test106() {
 
 #[test]
 pub fn test107() {
+    eprintln!("Start: {}", function_name!());
     // Test String::pop_back_byte, strip_last_bytes, strip_last_newlines.
     let source = r#"
         module Main; import Debug;
@@ -2714,6 +2833,7 @@ pub fn test107() {
 
 #[test]
 pub fn test108() {
+    eprintln!("Start: {}", function_name!());
     // Test write_file_string!, read_file_string!, read_line.
     let source = r#"
         module Main; import Debug;
@@ -2745,6 +2865,7 @@ pub fn test108() {
 
 #[test]
 pub fn test_is_eof() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; 
         import Debug;
@@ -2775,6 +2896,7 @@ pub fn test_is_eof() {
 
 #[test]
 pub fn test108_5() {
+    eprintln!("Start: {}", function_name!());
     // Test write_file_bytes, read_file_bytes.
     let source = r#"
         module Main; import Debug;
@@ -2799,6 +2921,7 @@ pub fn test108_5() {
 
 #[test]
 pub fn test109() {
+    eprintln!("Start: {}", function_name!());
     // Test monad syntax.
     let source = r#"
         module Main; import Debug;
@@ -2849,6 +2972,7 @@ pub fn test109() {
 
 #[test]
 pub fn test110a() {
+    eprintln!("Start: {}", function_name!());
     // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
         module Main; import Debug;
@@ -2914,6 +3038,7 @@ pub fn test110a() {
 
 #[test]
 pub fn test110b() {
+    eprintln!("Start: {}", function_name!());
     // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
         module Main; import Debug;
@@ -2980,6 +3105,7 @@ pub fn test110b() {
 
 #[test]
 pub fn test111() {
+    eprintln!("Start: {}", function_name!());
     // Test function composition operators
     let source = r#"
         module Main; import Debug;
@@ -3003,6 +3129,7 @@ pub fn test111() {
 
 #[test]
 pub fn test112() {
+    eprintln!("Start: {}", function_name!());
     // Test Iterator::generate
     let source = r#"
         module Main; import Debug;
@@ -3025,6 +3152,7 @@ pub fn test112() {
 
 #[test]
 pub fn test113() {
+    eprintln!("Start: {}", function_name!());
     // Test bit operations.
     let source = r#"
         module Main; import Debug;
@@ -3059,6 +3187,7 @@ pub fn test113() {
 
 #[test]
 pub fn test114() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::find_by
     let source = r#"
         module Main; import Debug;
@@ -3081,6 +3210,7 @@ pub fn test114() {
 
 #[test]
 pub fn test115() {
+    eprintln!("Start: {}", function_name!());
     // Test HashMap
     let source = r#"
         module Main; 
@@ -3129,6 +3259,7 @@ pub fn test115() {
 
 #[test]
 pub fn test115_5() {
+    eprintln!("Start: {}", function_name!());
     // Test HashSet
     let source = r#"
         module Main; 
@@ -3217,6 +3348,7 @@ pub fn test115_5() {
 
 #[test]
 pub fn test_destructor() {
+    eprintln!("Start: {}", function_name!());
     // Test Std::Destructor
     let source = r#"
         module Main; import Debug;
@@ -3263,6 +3395,7 @@ pub fn test_destructor() {
 
 #[test]
 pub fn test117() {
+    eprintln!("Start: {}", function_name!());
     // Test String::from_c_str
     let source = r#"
         module Main; import Debug;
@@ -3280,6 +3413,7 @@ pub fn test117() {
 
 #[test]
 pub fn test118() {
+    eprintln!("Start: {}", function_name!());
     // Test fold_m
     let source = r#"
         module Main; import Debug;
@@ -3300,6 +3434,7 @@ pub fn test118() {
 
 #[test]
 pub fn test119() {
+    eprintln!("Start: {}", function_name!());
     // Test namespace and MakeStruct, Pattern.
     let source = r#"
         module Main; import Debug;
@@ -3328,6 +3463,7 @@ pub fn test119() {
 
 #[test]
 pub fn test120() {
+    eprintln!("Start: {}", function_name!());
     // Test abort of type Array or function.
     let source = r#"
         module Main; 
@@ -3348,6 +3484,7 @@ pub fn test120() {
 
 #[test]
 pub fn test121() {
+    eprintln!("Start: {}", function_name!());
     // Test Math module
     let source = r#"
         module Main; 
@@ -3428,6 +3565,7 @@ pub fn test121() {
 
 #[test]
 pub fn test_punched_array() {
+    eprintln!("Start: {}", function_name!());
     // Test PunchedArray.
     let source = r#"
         module Main; 
@@ -3527,6 +3665,7 @@ pub fn test_punched_array() {
 
 #[test]
 pub fn test_array_act_0() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::act
     let source = r#"
         module Main; 
@@ -3569,6 +3708,7 @@ pub fn test_array_act_0() {
 
 #[test]
 pub fn test_array_act_1() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::act
     let source = r#"
         module Main; 
@@ -3697,6 +3837,7 @@ pub fn test_array_act_1() {
 
 #[test]
 pub fn test_array_act_2() {
+    eprintln!("Start: {}", function_name!());
     // Test Array::act (case 2)
     let source = r#"
         module Main; 
@@ -3751,6 +3892,7 @@ pub fn test_array_act_2() {
 
 #[test]
 pub fn test124() {
+    eprintln!("Start: {}", function_name!());
     // Test Array : Functor, Array : Monad
     let source = r#"
         module Main; 
@@ -3802,6 +3944,7 @@ pub fn test124() {
 
 #[test]
 pub fn test125() {
+    eprintln!("Start: {}", function_name!());
     // Test () : Eq
     let source = r#"
         module Main; 
@@ -3821,6 +3964,7 @@ pub fn test125() {
 
 #[test]
 pub fn test126() {
+    eprintln!("Start: {}", function_name!());
     // Test Iterator::sum.
     let source = r#"
         module Main; 
@@ -3841,6 +3985,7 @@ pub fn test126() {
 
 #[test]
 pub fn test_trait_alias() {
+    eprintln!("Start: {}", function_name!());
     // Test trait alias.
     // Basic example are Additive and Iterator::sum, which are tested in other tests.
     let source = r#"
@@ -3930,6 +4075,7 @@ pub fn test_trait_alias() {
 
 #[test]
 pub fn test_trait_alias_kind_mismatch() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; 
         import Debug;
@@ -3948,6 +4094,7 @@ pub fn test_trait_alias_kind_mismatch() {
 
 #[test]
 pub fn test_trait_alias_implement_trait_alias_directly() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; 
         import Debug;
@@ -3977,6 +4124,7 @@ pub fn test_trait_alias_implement_trait_alias_directly() {
 
 #[test]
 pub fn test_trait_alias_circular_aliasing() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; 
         import Debug;
@@ -3999,6 +4147,7 @@ pub fn test_trait_alias_circular_aliasing() {
 
 #[test]
 pub fn test129() {
+    eprintln!("Start: {}", function_name!());
     // Test ToBytes/FromBytes
     let source = r#"
         module Main; 
@@ -4094,6 +4243,7 @@ pub fn test129() {
 
 #[test]
 pub fn test130() {
+    eprintln!("Start: {}", function_name!());
     // Test Time module
     let source = r#"
         module Main; 
@@ -4133,6 +4283,7 @@ pub fn test130() {
 
 #[test]
 pub fn test131() {
+    eprintln!("Start: {}", function_name!());
     // Test Character module
     let source = r#"
         module Main; 
@@ -4238,6 +4389,7 @@ pub fn test131() {
 
 #[test]
 pub fn test_consumed_time() {
+    eprintln!("Start: {}", function_name!());
     // Test Debug module
     let source = r#"
         module Main; 
@@ -4267,6 +4419,7 @@ pub fn test_consumed_time() {
 
 #[test]
 pub fn test_signed_integral_abs() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
 
@@ -4292,6 +4445,7 @@ pub fn test_signed_integral_abs() {
 
 #[test]
 pub fn test_float_to_string_precision() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
 
@@ -4313,6 +4467,7 @@ pub fn test_float_to_string_precision() {
 
 #[test]
 pub fn test_float_to_string_exp() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
 
@@ -4332,6 +4487,7 @@ pub fn test_float_to_string_exp() {
 
 #[test]
 pub fn test_float_to_string_exp_precision() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main; import Debug;
 
@@ -4353,6 +4509,7 @@ pub fn test_float_to_string_exp_precision() {
 
 #[test]
 pub fn test_string_unsafe_from_c_str_ptr() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
         module Main;
         import Debug;
@@ -4370,6 +4527,7 @@ pub fn test_string_unsafe_from_c_str_ptr() {
 
 #[test]
 pub fn test_subprocess_run_stream() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4401,6 +4559,7 @@ pub fn test_subprocess_run_stream() {
 
 #[test]
 pub fn test_loop_lines() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4445,6 +4604,7 @@ pub fn test_loop_lines() {
 
 #[test]
 pub fn test_array_get_sub() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4479,6 +4639,7 @@ pub fn test_array_get_sub() {
 
 #[test]
 pub fn test_string_get_sub() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4501,6 +4662,7 @@ pub fn test_string_get_sub() {
 
 #[test]
 pub fn test_string_strip_first_spaces() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4522,6 +4684,7 @@ pub fn test_string_strip_first_spaces() {
 
 #[test]
 pub fn test_loop_lines_io() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4557,6 +4720,7 @@ pub fn test_loop_lines_io() {
 
 #[test]
 pub fn test_string_find() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4595,6 +4759,7 @@ pub fn test_string_find() {
 
 #[test]
 pub fn test_names_literal_prefix() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4624,6 +4789,7 @@ pub fn test_names_literal_prefix() {
 
 #[test]
 pub fn test_string_split() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4645,6 +4811,7 @@ pub fn test_string_split() {
 
 #[test]
 pub fn test_ptr_to_string() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4660,6 +4827,7 @@ pub fn test_ptr_to_string() {
 
 #[test]
 pub fn test_async_task_fib() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4692,6 +4860,7 @@ pub fn test_async_task_fib() {
 
 #[test]
 pub fn test_async_shared_array() {
+    eprintln!("Start: {}", function_name!());
     // This test shares array between multiple threads, try to mutate it from one thread while read it from multiple threads simultaneously.
     let source = r#"
     module Main;
@@ -4756,6 +4925,7 @@ pub fn test_async_shared_array() {
 
 #[test]
 pub fn test_async_task_array_result() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4776,6 +4946,7 @@ pub fn test_async_task_array_result() {
 
 #[test]
 pub fn test_async_task_io() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import AsyncTask;
@@ -4792,6 +4963,7 @@ pub fn test_async_task_io() {
 
 #[test]
 pub fn test_tarai() {
+    eprintln!("Start: {}", function_name!());
     let source = r#"
     module Main;
     import Debug;
@@ -4820,6 +4992,7 @@ pub fn test_tarai() {
 
 #[test]
 pub fn test_number_of_processors() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import AsyncTask;
@@ -4832,6 +5005,7 @@ pub fn test_number_of_processors() {
 
 #[test]
 pub fn test_async_task_dedicated_thread() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import AsyncTask;
@@ -4850,6 +5024,7 @@ pub fn test_async_task_dedicated_thread() {
 
 #[test]
 pub fn test_mvar() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import AsyncTask;
@@ -4884,6 +5059,7 @@ pub fn test_mvar() {
 
 #[test]
 pub fn test_mvar_of_shared_object() {
+    eprintln!("Start: {}", function_name!());
     // Share an array between multiple threads using Var.
     // This test is to check whether the refcnt of the array is not corrupted.
     let source = r##"
@@ -4919,6 +5095,7 @@ pub fn test_mvar_of_shared_object() {
 
 #[test]
 pub fn test_get_args() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -4933,6 +5110,7 @@ pub fn test_get_args() {
 
 #[test]
 pub fn test_regression_issue_14() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import AsyncTask;
@@ -4955,6 +5133,7 @@ pub fn test_regression_issue_14() {
 
 #[test]
 pub fn test_random() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Random;
@@ -4996,6 +5175,7 @@ pub fn test_random() {
 
 #[test]
 pub fn test_float_inf_nan() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5026,6 +5206,7 @@ pub fn test_float_inf_nan() {
 
 #[test]
 pub fn test_large_tuple() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5041,6 +5222,7 @@ pub fn test_large_tuple() {
 
 #[test]
 pub fn test_graph_find_loop() {
+    eprintln!("Start: {}", function_name!());
     // Test find_loop of graph.rs.
 
     let g = Graph::new((0..3).collect());
@@ -5090,6 +5272,7 @@ pub fn test_graph_find_loop() {
 
 #[test]
 pub fn test_run_examples() {
+    eprintln!("Start: {}", function_name!());
     test_files_in_directory(Path::new("./examples"));
 }
 
@@ -5131,6 +5314,7 @@ pub fn test_files_in_directory(path: &Path) {
 
 #[test]
 pub fn test_comment_0() {
+    eprintln!("Start: {}", function_name!());
     // block comment
     let source = r"/* head */ module Main; import Debug; 
         main : IO ();
@@ -5155,6 +5339,7 @@ pub fn test_comment_0() {
 
 #[test]
 pub fn test_comment_1() {
+    eprintln!("Start: {}", function_name!());
     // ilne comment
     let source = r"
         module Main; import Debug; //// /* */
@@ -5173,6 +5358,7 @@ pub fn test_comment_1() {
 
 #[test]
 pub fn test_hex_oct_bin_lit() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5216,6 +5402,7 @@ pub fn test_hex_oct_bin_lit() {
 
 #[test]
 pub fn test_regexp() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5243,6 +5430,7 @@ pub fn test_regexp() {
 
 #[test]
 pub fn test_array_to_string() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5259,6 +5447,7 @@ pub fn test_array_to_string() {
 
 #[test]
 pub fn test_option_to_string() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5275,6 +5464,7 @@ pub fn test_option_to_string() {
 
 #[test]
 pub fn test_unit_tuple_to_string() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5292,6 +5482,7 @@ pub fn test_unit_tuple_to_string() {
 
 #[test]
 pub fn test_unit_tuple_eq() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5316,6 +5507,7 @@ pub fn test_unit_tuple_eq() {
 
 #[test]
 pub fn test_tuple_less_than_and_less_than_or_eq() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5342,6 +5534,7 @@ pub fn test_tuple_less_than_and_less_than_or_eq() {
 
 #[test]
 pub fn test_result_to_string() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5360,6 +5553,7 @@ pub fn test_result_to_string() {
 
 #[test]
 pub fn test_result_eq() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5395,6 +5589,7 @@ pub fn test_result_eq() {
 
 #[test]
 pub fn test_array_less_than_and_less_than_or_eq() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5428,6 +5623,7 @@ pub fn test_array_less_than_and_less_than_or_eq() {
 
 #[test]
 pub fn test_string_less_than_and_less_than_or_eq() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5461,6 +5657,7 @@ pub fn test_string_less_than_and_less_than_or_eq() {
 
 #[test]
 pub fn test_overlapping_trait_and_function() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5488,6 +5685,7 @@ pub fn test_overlapping_trait_and_function() {
 
 #[test]
 pub fn test_orphan_rule_1() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5509,6 +5707,7 @@ pub fn test_orphan_rule_1() {
 
 #[test]
 pub fn test_orphan_rule_2() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5532,6 +5731,7 @@ pub fn test_orphan_rule_2() {
 
 #[test]
 pub fn test_orphan_rule_3() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5555,6 +5755,7 @@ pub fn test_orphan_rule_3() {
 
 #[test]
 pub fn test_implement_trait_on_arrow_1() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5578,6 +5779,7 @@ pub fn test_implement_trait_on_arrow_1() {
 
 #[test]
 pub fn test_implement_trait_on_arrow_2() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5601,6 +5803,7 @@ pub fn test_implement_trait_on_arrow_2() {
 
 #[test]
 pub fn test_overlapping_instances_1() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5632,6 +5835,7 @@ pub fn test_overlapping_instances_1() {
 
 #[test]
 pub fn test_overlapping_instances_2() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5663,6 +5867,7 @@ pub fn test_overlapping_instances_2() {
 
 #[test]
 pub fn test_overlapping_instances_3() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5694,6 +5899,7 @@ pub fn test_overlapping_instances_3() {
 
 #[test]
 pub fn test_overlapping_instances_4() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5729,6 +5935,7 @@ pub fn test_overlapping_instances_4() {
 
 #[test]
 pub fn test_eval_non_unit() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     
@@ -5747,6 +5954,7 @@ pub fn test_eval_non_unit() {
 
 #[test]
 pub fn test_unrelated_trait_method() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5766,6 +5974,7 @@ pub fn test_unrelated_trait_method() {
 
 #[test]
 pub fn test_duplicated_symbols() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5787,6 +5996,7 @@ pub fn test_duplicated_symbols() {
 
 #[test]
 pub fn test_typedef_unknown_tyvar() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5804,6 +6014,7 @@ pub fn test_typedef_unknown_tyvar() {
 
 #[test]
 pub fn test_typedef_trait_precondition() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5821,6 +6032,7 @@ pub fn test_typedef_trait_precondition() {
 
 #[test]
 pub fn test_typedef_specify_kind_twice() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5838,6 +6050,7 @@ pub fn test_typedef_specify_kind_twice() {
 
 #[test]
 pub fn test_typedef_kind_mismatch() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -5855,6 +6068,7 @@ pub fn test_typedef_kind_mismatch() {
 
 #[test]
 pub fn test_typedef_struct_higher_kinded_type_variable() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5873,6 +6087,7 @@ pub fn test_typedef_struct_higher_kinded_type_variable() {
 
 #[test]
 pub fn test_state_t() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5939,6 +6154,7 @@ pub fn test_state_t() {
 
 #[test]
 pub fn test_split_by_max_size() {
+    eprintln!("Start: {}", function_name!());
     let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
     let result = split_by_max_size(v, 3);
     assert_eq!(result, vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]]);
@@ -5950,6 +6166,7 @@ pub fn test_split_by_max_size() {
 
 #[test]
 pub fn test_duplicated_struct_name() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5971,6 +6188,7 @@ pub fn test_duplicated_struct_name() {
 
 #[test]
 pub fn test_ambiguous_struct_name() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -5998,6 +6216,7 @@ pub fn test_ambiguous_struct_name() {
 
 #[test]
 pub fn test_duplicated_trait_name() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -6023,6 +6242,7 @@ pub fn test_duplicated_trait_name() {
 
 #[test]
 pub fn test_ambiguous_trait_name() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -6056,6 +6276,7 @@ pub fn test_ambiguous_trait_name() {
 
 #[test]
 pub fn test_import_empty() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{};
@@ -6074,6 +6295,7 @@ pub fn test_import_empty() {
 
 #[test]
 pub fn test_import_any() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::*;
@@ -6088,6 +6310,7 @@ pub fn test_import_any() {
 
 #[test]
 pub fn test_import_hiding_any() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::* hiding *;
@@ -6106,6 +6329,7 @@ pub fn test_import_hiding_any() {
 
 #[test]
 pub fn test_import_only_necessary() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, String, IO::println};
@@ -6119,6 +6343,7 @@ pub fn test_import_only_necessary() {
 }
 #[test]
 pub fn test_import_recursive_group() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, String, IO::{println, eprintln}};
@@ -6133,6 +6358,7 @@ pub fn test_import_recursive_group() {
 
 #[test]
 pub fn test_import_any_in_namespace() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, String, IO::*};
@@ -6147,6 +6373,7 @@ pub fn test_import_any_in_namespace() {
 
 #[test]
 pub fn test_import_insufficient() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, IO::println};
@@ -6165,6 +6392,7 @@ pub fn test_import_insufficient() {
 
 #[test]
 pub fn test_import_hiding_necessary() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, String, IO::println} hiding IO;
@@ -6183,6 +6411,7 @@ pub fn test_import_hiding_necessary() {
 
 #[test]
 pub fn test_import_hiding_unnecessary() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std hiding Tuple2;
@@ -6201,6 +6430,7 @@ pub fn test_import_hiding_unnecessary() {
 
 #[test]
 pub fn test_type_and_trait_name_collision() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -6223,6 +6453,7 @@ pub fn test_type_and_trait_name_collision() {
 
 #[test]
 pub fn test_import_unknown_module() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -6240,6 +6471,7 @@ pub fn test_import_unknown_module() {
 
 #[test]
 pub fn test_import_unknown_symbol() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, Monad::pure, piyo};
@@ -6256,6 +6488,7 @@ pub fn test_import_unknown_symbol() {
 
 #[test]
 pub fn test_import_unknown_symbol_hiding() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, Monad::pure} hiding piyo;
@@ -6272,6 +6505,7 @@ pub fn test_import_unknown_symbol_hiding() {
 
 #[test]
 pub fn test_import_unknown_type_or_trait() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, Monad::pure, Piyo};
@@ -6288,6 +6522,7 @@ pub fn test_import_unknown_type_or_trait() {
 
 #[test]
 pub fn test_import_unknown_namespace() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Std::{IO, Tuple0, Monad::pure, Piyo::*};
@@ -6304,6 +6539,7 @@ pub fn test_import_unknown_namespace() {
 
 #[test]
 pub fn test_associated_type_collects() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -6383,6 +6619,7 @@ pub fn test_associated_type_collects() {
 
 #[test]
 pub fn test_associated_type_type_level_arithmetic() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -6426,6 +6663,7 @@ pub fn test_associated_type_type_level_arithmetic() {
 
 #[test]
 pub fn test_extra_comma() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -6473,6 +6711,7 @@ pub fn test_extra_comma() {
 
 #[test]
 pub fn test_textual_name_of_tuples() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -6499,6 +6738,7 @@ pub fn test_textual_name_of_tuples() {
 
 #[test]
 pub fn test_iterator_product() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
     import Debug;
@@ -6514,6 +6754,7 @@ pub fn test_iterator_product() {
 
 #[test]
 pub fn test_type_alias() {
+    eprintln!("Start: {}", function_name!());
     // Test type alias.
     let source = r#"
         module Main; 
@@ -6562,6 +6803,7 @@ pub fn test_type_alias() {
 
 #[test]
 pub fn test_type_alias_higner_kinded_argument() {
+    eprintln!("Start: {}", function_name!());
     // Test type alias.
     let source = r#"
         module Main; 
@@ -6579,6 +6821,7 @@ pub fn test_type_alias_higner_kinded_argument() {
 
 #[test]
 pub fn test_circular_aliasing_issue42() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -6595,6 +6838,7 @@ pub fn test_circular_aliasing_issue42() {
 
 #[test]
 pub fn test_unsaturated_type_alias() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -6615,6 +6859,7 @@ pub fn test_unsaturated_type_alias() {
 
 #[test]
 pub fn test_detect_circular_type_aliasing_0() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -6636,6 +6881,7 @@ pub fn test_detect_circular_type_aliasing_0() {
 
 #[test]
 pub fn test_detect_circular_type_aliasing_1() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -6656,6 +6902,7 @@ pub fn test_detect_circular_type_aliasing_1() {
 
 #[test]
 pub fn test_detect_circular_type_aliasing_2() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
     module Main;
 
@@ -6676,6 +6923,7 @@ pub fn test_detect_circular_type_aliasing_2() {
 
 #[test]
 pub fn test_call_unimplemented_trait_method_regression_issue_43() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
 
@@ -6697,6 +6945,7 @@ pub fn test_call_unimplemented_trait_method_regression_issue_43() {
 
 #[test]
 pub fn test_c_type_aliases() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
@@ -6750,6 +6999,7 @@ pub fn test_c_type_aliases() {
 
 #[test]
 pub fn test_borrow_boxed_data_ptr() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
@@ -6772,6 +7022,7 @@ pub fn test_borrow_boxed_data_ptr() {
 
 #[test]
 pub fn test_get_errno() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
@@ -6794,6 +7045,7 @@ pub fn test_get_errno() {
 
 #[test]
 pub fn test_monadic_bind_and_make_struct_ordering() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
@@ -6823,6 +7075,7 @@ pub fn test_monadic_bind_and_make_struct_ordering() {
 
 #[test]
 pub fn test_struct_act() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
@@ -6939,6 +7192,7 @@ pub fn test_struct_act() {
 
 #[test]
 pub fn test_tuple_functor() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
@@ -6955,6 +7209,7 @@ pub fn test_tuple_functor() {
 }
 #[test]
 pub fn test_empty_struct() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
@@ -6990,6 +7245,7 @@ pub fn test_empty_struct() {
 
 #[test]
 pub fn test_make_struct_to_union() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
 
@@ -7017,6 +7273,7 @@ pub fn test_make_struct_to_union() {
 
 #[test]
 pub fn test_regression_issue_46() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         main: IO ();
@@ -7037,6 +7294,7 @@ pub fn test_regression_issue_46() {
 
 #[test]
 pub fn test_read_file_after_close() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
@@ -7057,6 +7315,7 @@ pub fn test_read_file_after_close() {
 
 #[test]
 pub fn test_circular_type_definition() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         type Foo = unbox struct { func: Foo -> Foo };
@@ -7074,6 +7333,7 @@ pub fn test_circular_type_definition() {
 
 #[test]
 pub fn test_export() {
+    eprintln!("Start: {}", function_name!());
     let source = r##"
         module Main;
         import Debug;
