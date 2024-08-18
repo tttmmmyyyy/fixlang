@@ -106,6 +106,7 @@ pub fn insert_to_hashmap_vec<K: Clone + Eq + Hash, V>(
 }
 
 // A macro to get the name of a function.
+#[allow(unused)]
 macro_rules! function_name {
     () => {{
         fn f() {}

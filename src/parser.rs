@@ -2,6 +2,7 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
+use ast::export_statement::ExportStatement;
 use either::Either;
 use num_bigint::BigInt;
 use std::{cmp::min, mem::swap, sync::Arc};
@@ -145,6 +146,7 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile, config: &Configuration) -> Pr
     let mut trait_aliases: Vec<TraitAlias> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
     let mut import_statements: Vec<ImportStatement> = vec![];
+    let mut export_statements: Vec<ExportStatement> = vec![];
 
     for pair in pairs {
         match pair.as_rule() {
@@ -156,6 +158,7 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile, config: &Configuration) -> Pr
                 &mut type_defns,
                 &mut trait_infos,
                 &mut trait_aliases,
+                &mut export_statements,
             ),
             Rule::trait_impl => {
                 trait_impls.push(parse_trait_impl(pair, &mut ctx));
@@ -172,6 +175,7 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile, config: &Configuration) -> Pr
     fix_mod.add_traits(trait_infos, trait_impls, trait_aliases);
     fix_mod.add_import_statements(import_statements);
     fix_mod.used_tuple_sizes.append(&mut ctx.tuple_sizes);
+    fix_mod.export_statements = std::mem::replace(&mut export_statements, vec![]);
 
     fix_mod
 }
@@ -184,6 +188,7 @@ fn parse_global_defns(
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
     trait_aliases: &mut Vec<TraitAlias>,
+    export_statements: &mut Vec<ExportStatement>,
 ) {
     assert_eq!(pair.as_rule(), Rule::global_defns);
     let pairs = pair.into_inner();
@@ -198,6 +203,7 @@ fn parse_global_defns(
                     type_defns,
                     trait_infos,
                     trait_aliases,
+                    export_statements,
                 );
             }
             Rule::type_defn => {
@@ -215,7 +221,9 @@ fn parse_global_defns(
             Rule::trait_alias_defn => {
                 trait_aliases.push(parse_trait_alias(pair, ctx));
             }
-            Rule::export_statement => {}
+            Rule::export_statement => {
+                export_statements.push(parse_export_statement(pair, ctx));
+            }
             _ => unreachable!(),
         }
     }
@@ -229,6 +237,7 @@ fn parse_global_defns_in_namespace(
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
     trait_aliases: &mut Vec<TraitAlias>,
+    export_statements: &mut Vec<ExportStatement>,
 ) {
     assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
     let src = Span::from_pair(&ctx.source, &pair);
@@ -253,6 +262,7 @@ fn parse_global_defns_in_namespace(
             type_defns,
             trait_infos,
             trait_aliases,
+            export_statements,
         );
     }
     ctx.namespace = bak_namespace;
@@ -510,6 +520,20 @@ fn parse_trait_member_type_impl(
         params,
         value: type_value,
         source: Some(span),
+    }
+}
+
+fn parse_export_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ExportStatement {
+    assert_eq!(pair.as_rule(), Rule::export_statement);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
+    pairs.next().unwrap(); // Skip `EXPORT`.
+    let fix_value_name = parse_capital_fullname(pairs.next().unwrap());
+    let c_function_name = pairs.next().unwrap().as_str().to_string();
+    ExportStatement {
+        fix_value_name,
+        c_function_name,
+        src: Some(span),
     }
 }
 
