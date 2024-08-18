@@ -929,33 +929,6 @@ impl TypeNode {
             .all(|field_ty| field_ty.is_fully_unboxed(type_env))
     }
 
-    // Check if union is contained in a type.
-    pub fn is_free_from_union(&self, type_env: &TypeEnv) -> bool {
-        match &self.ty {
-            Type::TyVar(_) => true,
-            Type::TyCon(tc) => {
-                if let Some(ti) = type_env.tycons.get(tc) {
-                    match &ti.variant {
-                        TyConVariant::Union => false,
-                        _ => true,
-                    }
-                } else {
-                    false
-                }
-            }
-            Type::TyApp(fun, arg) => {
-                fun.is_free_from_union(type_env) && arg.is_free_from_union(type_env)
-            }
-            Type::FunTy(src, dst) => {
-                src.is_free_from_union(type_env) && dst.is_free_from_union(type_env)
-            }
-            Type::AssocTy(_, _) => {
-                // If associated type is used, we cannot determine whether it is free from union, and return false.
-                false
-            }
-        }
-    }
-
     // Create new type node with default info.
     fn new(ty: Type) -> Self {
         Self {

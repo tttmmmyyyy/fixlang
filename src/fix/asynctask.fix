@@ -16,6 +16,14 @@ _get_boxed_none_of_codomain_type = |_func| (
     Boxed { value : Option::none() }
 );
 
+// Evaluate the boxed lazy pointer.
+_run_task_function : Boxed (() -> Ptr) -> Ptr;
+_run_task_function = |boxed_func| (
+    let func = boxed_func.@value;
+    func()
+);
+EXPORT[_run_task_function, fixruntime_run_task_function];
+
 // Get the result of a task.
 // This function blocks the current thread until the task is finished.
 get : Task a -> a;
@@ -65,11 +73,11 @@ make = |func| (
     let func = mark_threaded(func);
 
     // Create task function to be run on a thread.
-    let task_func = |_ : ()| (
+    let task_func : () -> Ptr = |_| (
         // Run the task function.
         let result = func();
         // Return the boxed and threaded value.
-        mark_threaded(Boxed { value : Option::some(result) })
+        mark_threaded(Boxed { value : Option::some(result) }).unsafe_get_retained_ptr_of_boxed_value
     );
     let boxed_task_func = Boxed { value : task_func };
     // Get the native handle of the task.

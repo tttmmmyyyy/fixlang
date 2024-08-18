@@ -1552,7 +1552,7 @@ impl () : Eq {
     eq = |_, _| true;
 }
 
-// Function
+// Functions
 
 // Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
 compose : (a -> b) -> (b -> c) -> a -> c;

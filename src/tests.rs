@@ -7080,22 +7080,18 @@ pub fn test_export() {
 
         value : CInt;
         value = 42.to_CInt;
-
         EXPORT[value, c_value];
 
         increment : CInt -> CInt;
         increment = |x| x + 1.to_CInt;
-
         EXPORT[increment, c_increment];
 
-        add : CInt -> CInt -> CInt;
-        add = |x, y| x + y;
-
-        EXPORT[add, c_add];
+        two_variable : CInt -> CInt -> CInt;
+        two_variable = |x, y| 2.to_CInt * x + y;
+        EXPORT[two_variable, c_two_variable];
 
         io_action : IO ();
         io_action = println("io_action");
-
         EXPORT[io_action, c_io_action];
 
         io_action2 : CInt -> IO ();
@@ -7103,7 +7099,6 @@ pub fn test_export() {
             eval *println("io_action2: " + x.to_string);
             pure()
         };
-
         EXPORT[io_action2, c_io_action2];
 
         io_action3 : CInt -> IO CInt;
@@ -7111,7 +7106,6 @@ pub fn test_export() {
             eval *println("io_action3");
             pure(x + 1.to_CInt)
         };
-
         EXPORT[io_action3, c_io_action3];
 
         main: IO ();
@@ -7126,7 +7120,7 @@ pub fn test_export() {
 
         int c_value();
         int c_increment(int x);
-        int c_add(int x, int y);
+        int c_two_variable(int x, int y);
         void c_io_action();
         void c_io_action2(int x);
         int c_io_action3(int x);
@@ -7142,7 +7136,7 @@ pub fn test_export() {
                 return 1;
             }
 
-            if (c_add(40, 2) != 42) {
+            if (c_two_variable(3, 2) != 8) {
                 return 1;
             }
 

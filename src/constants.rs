@@ -40,7 +40,6 @@ pub const C_DOUBLE_NAME: &str = "CDouble";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 pub const LAZY_NAME: &str = "Lazy";
-pub const BOXED_NAME: &str = "Boxed";
 pub const FUNCTOR_NAME: &str = "Functor";
 pub const DESTRUCTOR_OBJECT_NAME: &str = "Destructor";
 pub const DESTRUCTOR_OBJECT_VALUE_FIELD_IDX: u32 = 0;
