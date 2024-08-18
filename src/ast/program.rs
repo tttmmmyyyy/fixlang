@@ -866,6 +866,7 @@ impl Program {
             stmt.exported_function_type = Some(eft);
             stmt.instantiated_value_expr = Some(instantiated_expr);
         }
+        self.export_statements = export_stmts;
     }
 
     // Instantiate a global value.
