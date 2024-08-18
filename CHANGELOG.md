@@ -9,6 +9,7 @@
 - Add `Std::FFI::unsafe_get_errno`, `Std::FFI::unsafe_clear_errno`.
 - Add `act_{field} : [f : Functor] (F -> f F) -> S -> f S` for each field `{field}` of type `F` of a struct `S`, which is known as "Lens" in Haskell community.
 - Implement `Functor` for tuple types. `map` function acts the last component of tuples.
+- Add `EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `EXPORT`.
 
 ### Changed
 
