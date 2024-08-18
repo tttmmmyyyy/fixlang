@@ -7151,7 +7151,7 @@ pub fn test_export() {
     let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
 
     // Save `c_source` to a file.
-    let c_file = format!("{}/{}", COMPILER_TEST_WORKING_PATH, function_name!());
+    let c_file = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, function_name!());
     let mut file = File::create(&c_file).unwrap();
     file.write_all(c_source.as_bytes()).unwrap();
 
@@ -7160,14 +7160,21 @@ pub fn test_export() {
     let so_file_name = format!("lib{}.so", lib_name);
     let so_file = format!("{}/{}", COMPILER_TEST_WORKING_PATH, so_file_name);
     let mut com = Command::new("gcc");
-    let _ = com
+    let output = com
         .arg("-shared")
         .arg("-fPIC")
         .arg("-o")
         .arg(so_file)
         .arg(&c_file)
         .output()
-        .unwrap();
+        .expect("Failed to run gcc.");
+    if output.stderr.len() > 0 {
+        eprintln!(
+            "{}",
+            String::from_utf8(output.stderr)
+                .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
+        );
+    }
 
     // Link the shared library to the Fix program.
     let mut config = Configuration::develop_compiler();
@@ -7178,5 +7185,5 @@ pub fn test_export() {
         .push(PathBuf::from(COMPILER_TEST_WORKING_PATH));
 
     // Run the Fix program.
-    test_source(&source, Configuration::develop_compiler());
+    test_source(&source, config);
 }
