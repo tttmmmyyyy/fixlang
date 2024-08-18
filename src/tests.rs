@@ -7104,7 +7104,7 @@ pub fn test_export() {
         io_action3 : CInt -> IO CInt;
         io_action3 = |x| do {
             eval *println("io_action3");
-            pure(x + 1)
+            pure(x + 1.to_CInt)
         };
 
         EXPORT[io_action3, c_io_action3];
@@ -7159,14 +7159,13 @@ pub fn test_export() {
 
     // Build `c_source` into a shared library.
     let lib_name = function_name!();
-    let so_file_name = format!("lib{}.so", lib_name);
-    let so_file = format!("{}/{}", COMPILER_TEST_WORKING_PATH, so_file_name);
+    let so_file_path = format!("lib{}.so", lib_name);
     let mut com = Command::new("gcc");
     let output = com
         .arg("-shared")
         .arg("-fPIC")
         .arg("-o")
-        .arg(so_file)
+        .arg(so_file_path.clone())
         .arg(&c_file)
         .output()
         .expect("Failed to run gcc.");
@@ -7182,10 +7181,11 @@ pub fn test_export() {
     let mut config = Configuration::develop_compiler();
     config.add_dyanmic_library(lib_name);
     // Add the library search path.
-    config
-        .library_search_paths
-        .push(PathBuf::from(COMPILER_TEST_WORKING_PATH));
+    config.library_search_paths.push(PathBuf::from("."));
 
     // Run the Fix program.
     test_source(&source, config);
+
+    // Remove the shared library.
+    let _ = fs::remove_file(so_file_path);
 }
