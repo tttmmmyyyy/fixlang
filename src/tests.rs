@@ -7107,6 +7107,8 @@ pub fn test_export() {
             pure(x + 1)
         };
 
+        EXPORT[io_action3, c_io_action3];
+
         main: IO ();
         main = (
             let res = CALL_C[CInt call_fix_values()];
