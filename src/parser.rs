@@ -530,11 +530,11 @@ fn parse_export_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ExportSta
     pairs.next().unwrap(); // Skip `EXPORT`.
     let fix_value_name = pairs.next().unwrap().as_str().to_string();
     let c_function_name = pairs.next().unwrap().as_str().to_string();
-    ExportStatement {
-        fix_value_name: FullName::new(&ctx.namespace, &fix_value_name),
+    ExportStatement::new(
+        FullName::new(&ctx.namespace, &fix_value_name),
         c_function_name,
-        src: Some(span),
-    }
+        Some(span),
+    )
 }
 
 fn parse_predicate_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> QualPredicate {

@@ -1,4 +1,4 @@
-use ast::export_statement::{ExportFunctionType, ExportStatement};
+use ast::export_statement::ExportStatement;
 use build_time::build_time_utc;
 use rand::Rng;
 use std::{
@@ -14,7 +14,6 @@ use inkwell::{
     module::Linkage,
     passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
-    types::BasicType,
 };
 use stopwatch::StopWatch;
 
@@ -86,6 +85,9 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
 
     // Instantiate main function and all called functions.
     let main_expr = program.instantiate_main_function(&typechecker);
+
+    // Instantiate exported functions and all called functions.
+    program.instantiate_exported_values(&typechecker);
 
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
@@ -315,90 +317,7 @@ fn build_exported_c_functions<'c, 'm>(
     export_stmts: &[ExportStatement],
 ) {
     for export_stmt in export_stmts {
-        // If the Fix value is not defined, exit with error.
-        let fix_value_name = &export_stmt.fix_value_name;
-        if !gc.global.contains_key(fix_value_name) {
-            error_exit_with_src(
-                &format!("No value named `{}`.", fix_value_name.to_string()),
-                &export_stmt.src,
-            );
-        }
-
-        // Get the type of the global value.
-        let ty = match gc.global.get(fix_value_name).as_ref().unwrap().ptr {
-            VarValue::Local(_) => {
-                unreachable!()
-            }
-            VarValue::Global(ref _getter, ref ty) => ty.clone(),
-        };
-
-        // Check if `ty` is good as a type of exported Fix value.
-        let res = ExportStatement::validate_type(ty, gc.type_env());
-        if let Err(msg) = res {
-            let msg = format!("Exporting this value is not allowed: {}", msg);
-            error_exit_with_src(&msg, &export_stmt.src);
-        }
-        let ExportFunctionType { doms, codom, is_io } = res.unwrap();
-
-        // Create the LLVM type of the exported C function.
-        let codom_llvm_ty = codom.get_embedded_type(gc, &vec![]);
-        let dom_llvm_tys = doms
-            .iter()
-            .map(|dom| dom.get_embedded_type(gc, &vec![]).into())
-            .collect::<Vec<_>>();
-        let func_ty = codom_llvm_ty.fn_type(&dom_llvm_tys, false);
-
-        // Declare the function.
-        let func = gc.module.add_function(
-            &export_stmt.c_function_name,
-            func_ty,
-            Some(Linkage::External),
-        );
-
-        // Implement the function.
-        let bb = gc.context.append_basic_block(func, "entry");
-        gc.builder().position_at_end(bb);
-
-        // Create Fix values from arguments.
-        let args = func
-            .get_params()
-            .iter()
-            .enumerate()
-            .map(|(i, arg)| {
-                let arg_ty = doms[i].clone();
-                let arg_obj = Object::create_from_value(*arg, arg_ty, gc);
-                arg_obj
-            })
-            .collect::<Vec<_>>();
-
-        // Get the Fix value.
-        let fix_expr = expr_var(export_stmt.fix_value_name.clone(), None);
-        let mut fix_value = gc.eval_expr(fix_expr, None);
-
-        // TODO: Call the uncurried function if possible.
-
-        // Pass the arguments to the Fix value.
-        for arg in args.iter() {
-            fix_value = gc.apply_lambda(fix_value, vec![arg.clone()], None);
-        }
-
-        // If the `fix_value` is `IO C`, then run it.
-        if is_io {
-            let runner = fix_value.load_field_nocap(gc, 0);
-            let runner_ty = type_fun(make_tuple_ty(vec![]), codom);
-            let runner_obj = Object::create_from_value(runner, runner_ty, gc);
-            let unit = allocate_obj(
-                make_tuple_ty(vec![]),
-                &vec![],
-                None,
-                gc,
-                Some("unit_for_exported_io"),
-            );
-            fix_value = gc.apply_lambda(runner_obj, vec![unit], None);
-        }
-
-        // Return the result.
-        gc.builder().build_return(Some(&fix_value.value(gc)));
+        export_stmt.implement(gc);
     }
 }
 

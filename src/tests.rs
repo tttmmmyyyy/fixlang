@@ -7078,13 +7078,13 @@ pub fn test_export() {
         module Main;
         import Debug;
 
-        value : () -> CInt;
-        value = |_| 42.to_CInt;
+        value : CInt;
+        value = 42.to_CInt;
 
         EXPORT[value, c_value];
 
         increment : CInt -> CInt;
-        increment = |x| x + 1;
+        increment = |x| x + 1.to_CInt;
 
         EXPORT[increment, c_increment];
 
@@ -7095,7 +7095,7 @@ pub fn test_export() {
 
         io_action2 : CInt -> IO ();
         io_action2 = |x| do {
-            eval println("io_action2: " + x.to_string);
+            eval *println("io_action2: " + x.to_string);
             pure()
         };
 
@@ -7103,7 +7103,7 @@ pub fn test_export() {
 
         io_action3 : CInt -> IO CInt;
         io_action3 = |x| do {
-            eval println("io_action3");
+            eval *println("io_action3");
             pure(x + 1)
         };
 
