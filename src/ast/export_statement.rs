@@ -110,7 +110,9 @@ impl ExportStatement {
         // Pass the arguments to the Fix value.
         while args.len() > 0 {
             let arity = fix_value.ty.get_lambda_srcs().len();
-            fix_value = gc.apply_lambda(fix_value, args.split_off(arity), None);
+            let rest = args.split_off(arity);
+            fix_value = gc.apply_lambda(fix_value, args, None);
+            args = rest;
             // TODO: update the uncurry optimization so that it will rewrite `ExportStatement::instantiated_value_expr` to the uncurried version.
         }
 
