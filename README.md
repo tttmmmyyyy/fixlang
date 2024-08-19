@@ -108,6 +108,7 @@ Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker
 * [Change log](/CHANGELOG.md)
 * 紹介（日本語）：[HaskellとRustを足して2で割ったような関数型言語Fixを作っている話](https://qiita.com/tttmmmyyyy/items/ddb1c44efd81e3fc2370)
 
-## Discord
+## Discord 
 
-https://discord.gg/ad4GakEA7R
+* https://discord.gg/ad4GakEA7R
+* Mostly Japanese speakers here, but English is also welcome!
