@@ -2241,7 +2241,7 @@ pub fn test_call_c() {
             main : IO ();
             main = (
                 eval "Hello C function! Number = %d\n".borrow_c_str(|ptr|
-                    let _ = CALL_C[I32 printf(Ptr, ...), ptr, 42];
+                    let _ = FFI_CALL[I32 printf(Ptr, ...), ptr, 42];
                     ()
                 );
                 pure()
@@ -6759,7 +6759,7 @@ pub fn test_borrow_boxed_data_ptr() {
             let x : Boxed I32 = Boxed { value : 0_I32 };
             eval x.unsafe_borrow_boxed_data_ptr(|ptr|
                 "%d".borrow_c_str(|c_str|
-                    let _ = CALL_C[CInt snprintf(Ptr, CSizeT, Ptr, ...), ptr, 4.to_CSizeT, c_str, 123.to_CInt];
+                    let _ = FFI_CALL[CInt snprintf(Ptr, CSizeT, Ptr, ...), ptr, 4.to_CSizeT, c_str, 123.to_CInt];
                     ()
                 )
             );
@@ -6781,7 +6781,7 @@ pub fn test_get_errno() {
             let errno = "a_path_where_no_file_exists".borrow_c_str(|file|
                 "invalid_file_mode".borrow_c_str(|mode|
                     eval unsafe_clear_errno();
-                    let _ = CALL_C[Ptr fopen(Ptr, Ptr), file, mode];
+                    let _ = FFI_CALL[Ptr fopen(Ptr, Ptr), file, mode];
                     unsafe_get_errno()
                 )
             );
@@ -7080,37 +7080,37 @@ pub fn test_export() {
 
         value : CInt;
         value = 42.to_CInt;
-        EXPORT[value, c_value];
+        FFI_EXPORT[value, c_value];
 
         increment : CInt -> CInt;
         increment = |x| x + 1.to_CInt;
-        EXPORT[increment, c_increment];
+        FFI_EXPORT[increment, c_increment];
 
         two_variable : CInt -> CInt -> CInt;
         two_variable = |x, y| 2.to_CInt * x + y;
-        EXPORT[two_variable, c_two_variable];
+        FFI_EXPORT[two_variable, c_two_variable];
 
         io_action : IO ();
         io_action = println("io_action");
-        EXPORT[io_action, c_io_action];
+        FFI_EXPORT[io_action, c_io_action];
 
         io_action2 : CInt -> IO ();
         io_action2 = |x| do {
             eval *println("io_action2: " + x.to_string);
             pure()
         };
-        EXPORT[io_action2, c_io_action2];
+        FFI_EXPORT[io_action2, c_io_action2];
 
         io_action3 : CInt -> IO CInt;
         io_action3 = |x| do {
             eval *println("io_action3");
             pure(x + 1.to_CInt)
         };
-        EXPORT[io_action3, c_io_action3];
+        FFI_EXPORT[io_action3, c_io_action3];
 
         main: IO ();
         main = (
-            let res = CALL_C[CInt call_fix_values()];
+            let res = FFI_CALL[CInt call_fix_values()];
             eval assert_eq(|_|"", res, 0.to_CInt);
             pure()
         );

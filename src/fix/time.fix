@@ -42,7 +42,7 @@ _datetime_to_time_inner = |is_local, dt| (
             0
         }
     ];
-    let sec = buf.borrow_ptr(|ptr| CALL_C[I64 fixruntime_timegmlocal(U8, Ptr), if is_local { 1_U8 } else { 0_U8 }, ptr]);
+    let sec = buf.borrow_ptr(|ptr| FFI_CALL[I64 fixruntime_timegmlocal(U8, Ptr), if is_local { 1_U8 } else { 0_U8 }, ptr]);
     if sec == -1 {
         Result::err $ "An error (maybe overflow) occurred."
     } else {
@@ -56,7 +56,7 @@ _datetime_to_time_inner = |is_local, dt| (
 _time_to_datetime_inner : Bool -> Time -> Result ErrMsg DateTime;
 _time_to_datetime_inner = |is_local, Time {sec: s, nanosec : ns}| (
     let buf : Array I64 = Array::empty(10)._unsafe_set_size(10); // sec, min, hour, mday, mon, year(-1900), wday, yday, isdst, is_error.
-    eval CALL_C[() fixruntime_gmlocaltime(U8, I64, Ptr), if is_local { 1_U8 } else { 0_U8 }, s, buf._get_ptr];
+    eval FFI_CALL[() fixruntime_gmlocaltime(U8, I64, Ptr), if is_local { 1_U8 } else { 0_U8 }, s, buf._get_ptr];
     if buf.@(8) == 1 {
         Result::err $ "An error (maybe overflow) occurred."
     } else {
@@ -92,7 +92,7 @@ get_now : IO Time;
 get_now = (
     IO { _data : |_| (
         let buf: Array I64 = Array::empty(2)._unsafe_set_size(2); // sec, usec.
-        eval CALL_C[() fixruntime_clock_gettime(Ptr), buf._get_ptr];
+        eval FFI_CALL[() fixruntime_clock_gettime(Ptr), buf._get_ptr];
         Time { sec : buf.@(0), nanosec : buf.@(1).to_U32 }
     )}
 );
@@ -102,7 +102,7 @@ get_now_monotonic : IO Time;
 get_now_monotonic = (
     IO::from_func $ |_| (
         let buf: Array I64 = Array::empty(2)._unsafe_set_size(2); // sec, usec.
-        eval CALL_C[() fixruntime_clock_gettime_monotonic(Ptr), buf._get_ptr];
+        eval FFI_CALL[() fixruntime_clock_gettime_monotonic(Ptr), buf._get_ptr];
         Time { sec : buf.@(0), nanosec : buf.@(1).to_U32 }
     )
 );

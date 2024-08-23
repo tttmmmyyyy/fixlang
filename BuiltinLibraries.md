@@ -2180,8 +2180,8 @@ Typically, this type is used to manage resources allocated by C function in Fix'
 ```
 type Resource = unbox struct { _dtor : Destructor Ptr };
 
-let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
-let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+let handle = FFI_CALL[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+let dtor = Destructor::make(handle, |handle| FFI_CALL[() c_function_that_deallocates_resource(Ptr), handle]);
 let obj = Resource { _dtor : dtor };
 // Then, when `obj` is deallocated from Fix's memory space, the resouce of C'side will be deallocated.
 ```
@@ -2191,8 +2191,8 @@ So, the global value defined as
 ```
 resource : Resource;
 resource = (
-    let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
-    let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+    let handle = FFI_CALL[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+    let dtor = Destructor::make(handle, |handle| FFI_CALL[() c_function_that_deallocates_resource(Ptr), handle]);
     Resource { _dtor : dtor }
 );
 ```
@@ -2202,8 +2202,8 @@ Let's take a less intuitive example.
 ```
 main : IO ();
 main = (
-    let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
-    let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+    let handle = FFI_CALL[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+    let dtor = Destructor::make(handle, |handle| FFI_CALL[() c_function_that_deallocates_resource(Ptr), handle]);
     let res = Resource { _dtor : dtor };
     eval *println("Resource allocated.");
     // ... some code uses `res` ... 
@@ -2213,8 +2213,8 @@ If we desugar the syntax of monadic *-operator, the above is equivalent to the f
 ```
 main : IO ();
 main = (
-    let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
-    let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+    let handle = FFI_CALL[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+    let dtor = Destructor::make(handle, |handle| FFI_CALL[() c_function_that_deallocates_resource(Ptr), handle]);
     let res = Resource { _dtor : dtor };
     println("Resource allocated.").bind(|_| ... some code uses `res` ... )
 );
@@ -2226,8 +2226,8 @@ If this is a problem for you, you should cover up the side effects of resource a
 ```
 allocate_resource : IO Resource;
 allocate_resource = IO::from_func $ |_| (
-    let handle = CALL_C[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
-    let dtor = Destructor::make(handle, |handle| CALL_C[() c_function_that_deallocates_resource(Ptr), handle]);
+    let handle = FFI_CALL[Ptr c_function_that_allocates_resource_and_returns_handle_to_it()];
+    let dtor = Destructor::make(handle, |handle| FFI_CALL[() c_function_that_deallocates_resource(Ptr), handle]);
     Resource { _dtor : dtor };
 );
 ```

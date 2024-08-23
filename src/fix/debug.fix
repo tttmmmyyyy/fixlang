@@ -7,8 +7,8 @@ _debug_print_to_stream : IOHandle -> String -> ();
 _debug_print_to_stream = |hdl, msg| (
     msg.borrow_c_str(|str| (
         let hdl = hdl._file_ptr;
-        let _ = CALL_C[I32 fputs(Ptr, Ptr), str, hdl];
-        let _ = CALL_C[I32 fflush(Ptr), hdl];
+        let _ = FFI_CALL[I32 fputs(Ptr, Ptr), str, hdl];
+        let _ = FFI_CALL[I32 fflush(Ptr), hdl];
         ()
     ))
 );
@@ -44,10 +44,10 @@ assert_unique = |msg, x| (
 // Get clocks (cpu time) elapsed while executing a function.
 consumed_time_while : (a -> b) -> a -> (b, F64);
 consumed_time_while = |f, x| (
-    let s = CALL_C[I64 fixruntime_clock()];
+    let s = FFI_CALL[I64 fixruntime_clock()];
     let r = f(x);
-    let t = CALL_C[I64 fixruntime_clock()];
-    let t = CALL_C[F64 fixruntime_clocks_to_sec(I64), t - s];
+    let t = FFI_CALL[I64 fixruntime_clock()];
+    let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
     (r, t)
 );
 
@@ -55,10 +55,10 @@ consumed_time_while = |f, x| (
 consumed_time_while_io : IO a -> IO (a, F64);
 consumed_time_while_io = |io| (
     IO { _data : |_| (
-        let s = CALL_C[I64 fixruntime_clock()];
+        let s = FFI_CALL[I64 fixruntime_clock()];
         let r = io._unsafe_perform;
-        let t = CALL_C[I64 fixruntime_clock()];
-        let t = CALL_C[F64 fixruntime_clocks_to_sec(I64), t - s];
+        let t = FFI_CALL[I64 fixruntime_clock()];
+        let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
         (r, t)
     )}
 );

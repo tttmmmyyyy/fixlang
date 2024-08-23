@@ -1935,7 +1935,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Call c function
         let ret_c_val =
             self.builder()
-                .build_call(c_fun, &args_vals, &format!("CALL_C({})", fun_name));
+                .build_call(c_fun, &args_vals, &format!("FFI_CALL({})", fun_name));
         match ret_c_val.try_as_basic_value() {
             Either::Left(ret_c_val) => obj.store_field_nocap(self, 0, ret_c_val),
             Either::Right(_) => {}

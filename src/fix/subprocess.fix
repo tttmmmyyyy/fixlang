@@ -39,12 +39,12 @@ run_with_stream = |com, args, worker| (
         let out_error : Array Ptr = Array::empty(1)._unsafe_set_size(1);
         let out_files : Array Ptr = Array::empty(3)._unsafe_set_size(3);
         let out_pid : Array I64 = Array::empty(1)._unsafe_set_size(1);
-        eval CALL_C[() fixruntime_fork_execvp(Ptr, Ptr, Ptr, Ptr, Ptr), com, args, out_error._get_ptr, out_files._get_ptr, out_pid._get_ptr];
+        eval FFI_CALL[() fixruntime_fork_execvp(Ptr, Ptr, Ptr, Ptr, Ptr), com, args, out_error._get_ptr, out_files._get_ptr, out_pid._get_ptr];
         if out_error.@(0) != nullptr {
             // Some error occurred.
             let msg_ptr = out_error.@(0);
             let err_msg = String::_unsafe_from_c_str_ptr(msg_ptr);
-            eval CALL_C[() free(Ptr), msg_ptr];
+            eval FFI_CALL[() free(Ptr), msg_ptr];
             IOFail::throw $ err_msg
         };
         let handles = (
@@ -65,7 +65,7 @@ run_with_stream = |com, args, worker| (
         let out_exit_status_available : Array U8 = Array::empty(1)._unsafe_set_size(1);
         let out_stop_signal : Array U8 = Array::empty(1)._unsafe_set_size(1);
         let out_stop_signal_available : Array U8 = Array::empty(1)._unsafe_set_size(1);
-        eval CALL_C[() fixruntime_wait_subprocess(I64, F64, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr), 
+        eval FFI_CALL[() fixruntime_wait_subprocess(I64, F64, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr), 
             pid, -1.0, // No timeout 
             out_is_timeout._get_ptr,
             out_wait_failed._get_ptr, 

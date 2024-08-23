@@ -1,4 +1,4 @@
-// Export syntax: `EXPORT[fix_value_name, c_functio_name];`
+// Export syntax: `FFI_EXPORT[fix_value_name, c_functio_name];`
 
 use std::sync::Arc;
 use std::usize;

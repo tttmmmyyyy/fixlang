@@ -16,22 +16,22 @@ _gcd_nonneg = |n, m| (
 // Calculate arc cosine of the argument.
 // This is wrapper of C's acos.
 acos : F64 -> F64;
-acos = |x| CALL_C[F64 acos(F64), x];
+acos = |x| FFI_CALL[F64 acos(F64), x];
 
 // Calculate arc sine of the argument.
 // This is wrapper of C's asin.
 asin : F64 -> F64;
-asin = |x| CALL_C[F64 asin(F64), x];
+asin = |x| FFI_CALL[F64 asin(F64), x];
 
 // Calculate arc tangent of the argument.
 // This is wrapper of C's atan.
 atan : F64 -> F64;
-atan = |x| CALL_C[F64 atan(F64), x];
+atan = |x| FFI_CALL[F64 atan(F64), x];
 
 // Calculate arc tangent of y/x for argument x, y.
 // This is wrapper of C's atan2.
 atan2 : F64 -> F64 -> F64;
-atan2 = |x, y| CALL_C[F64 atan2(F64, F64), x, y];
+atan2 = |x, y| FFI_CALL[F64 atan2(F64, F64), x, y];
 
 // Calculate table (2-dimensional array) of binomial coefficients.
 // `binomial_coefficients(m)` evaluates to an array of arrays `table` where `table.@(n).@(r)` is the binomial coefficient "binom(n, r)" for 0 <= n <= m and 0 <= r <= n.
@@ -54,40 +54,40 @@ binomial_coefficients = |m| (
 // Calculate the smallest integral value not less than the argument.
 // This is wrapper of C's ceil.
 ceil : F64 -> F64;
-ceil = |x| CALL_C[F64 ceil(F64), x];
+ceil = |x| FFI_CALL[F64 ceil(F64), x];
 
 // Calculate the cosine of the argument.
 // This is wrapper of C's cos.
 cos : F64 -> F64;
-cos = |x| CALL_C[F64 cos(F64), x];
+cos = |x| FFI_CALL[F64 cos(F64), x];
 
 // Calculate the hyperbolic cosine of the argument.
 // This is wrapper of C's cosh.
 cosh : F64 -> F64;
-cosh = |x| CALL_C[F64 cosh(F64), x];
+cosh = |x| FFI_CALL[F64 cosh(F64), x];
 
 // Calculate the natural exponential of the argument.
 // This is wrapper of C's exp.
 exp : F64 -> F64;
-exp = |x| CALL_C[F64 exp(F64), x];
+exp = |x| FFI_CALL[F64 exp(F64), x];
 
 // Calculate the largest integral value not greater than the argument.
 // This is wrapper of C's floor.
 floor : F64 -> F64;
-floor = |x| CALL_C[F64 floor(F64), x];
+floor = |x| FFI_CALL[F64 floor(F64), x];
 
 // Calculate the floating point remainder of division. 
 // `x.fmod(y)` evaluates to the remainder of dividing x by y.
 // This is wrapper of C's fmod.
 fmod : F64 -> F64 -> F64;
-fmod = |y, x| CALL_C[F64 fmod(F64, F64), x, y];
+fmod = |y, x| FFI_CALL[F64 fmod(F64, F64), x, y];
 
 // Split a floating point number to normalized fraction and an exponent.
 // This is wrapper of C's frexp. 
 frexp : F64 -> (F64, I32);
 frexp = |x| (
     let e = Array::fill(1, 0_I32);
-    let f = e.borrow_ptr(|ptr| CALL_C[F64 frexp(F64, Ptr), x, ptr]);
+    let f = e.borrow_ptr(|ptr| FFI_CALL[F64 frexp(F64, Ptr), x, ptr]);
     (f, e.@(0))
 );
 
@@ -99,24 +99,24 @@ gcd = |n, m| _gcd_nonneg(n.abs, m.abs);
 // Multiply a floating point number by power of two.
 // This is wrapper of C's ldexp. 
 ldexp : I32 -> F64 -> F64;
-ldexp = |e, x| CALL_C[F64 ldexp(F64, I32), x, e];
+ldexp = |e, x| FFI_CALL[F64 ldexp(F64, I32), x, e];
 
 // Calculate natural logarithm.
 // This is wrapper of C's log. 
 log : F64 -> F64;
-log = |x| CALL_C[F64 log(F64), x];
+log = |x| FFI_CALL[F64 log(F64), x];
 
 // Calculate base-10 logarithm.
 // This is wrapper of C's log10. 
 log10 : F64 -> F64;
-log10 = |x| CALL_C[F64 log10(F64), x];
+log10 = |x| FFI_CALL[F64 log10(F64), x];
 
 // Convert a floating pointer number into the pair of fractional part and integral part.
 // This is wrapper of C's modf.
 modf : F64 -> (F64, F64);
 modf = |x| (
     let int = Array::fill(1, 0.0);
-    let fr = int.borrow_ptr(|ptr| CALL_C[F64 modf(F64, Ptr), x, ptr]);
+    let fr = int.borrow_ptr(|ptr| FFI_CALL[F64 modf(F64, Ptr), x, ptr]);
     (fr, int.@(0))
 );
 
@@ -132,29 +132,29 @@ pi64 = 3.141592653589793;
 // `x.pow(y)` evaluates to x^y.
 // This is wrapper of C's pow.
 pow : F64 -> F64 -> F64;
-pow = |y, x| CALL_C[F64 pow(F64, F64), x, y];
+pow = |y, x| FFI_CALL[F64 pow(F64, F64), x, y];
 
 // Calculate the sine of the argument.
 // This is wrapper of C's sin.
 sin : F64 -> F64;
-sin = |x| CALL_C[F64 sin(F64), x];
+sin = |x| FFI_CALL[F64 sin(F64), x];
 
 // Calculate the hyperbolic sine of the argument.
 // This is wrapper of C's sinh.
 sinh : F64 -> F64;
-sinh = |x| CALL_C[F64 sinh(F64), x];
+sinh = |x| FFI_CALL[F64 sinh(F64), x];
 
 // Calculate square root of the argument.
 // This is wrapper of C's sqrt.
 sqrt : F64 -> F64;
-sqrt = |x| CALL_C[F64 sqrt(F64), x];
+sqrt = |x| FFI_CALL[F64 sqrt(F64), x];
 
 // Calculate the tangent of the argument.
 // This is wrapper of C's tan.
 tan : F64 -> F64;
-tan = |x| CALL_C[F64 tan(F64), x];
+tan = |x| FFI_CALL[F64 tan(F64), x];
 
 // Calculate the hyperbolic tangent of the argument.
 // This is wrapper of C's tanh.
 tanh : F64 -> F64;
-tanh = |x| CALL_C[F64 tanh(F64), x];
+tanh = |x| FFI_CALL[F64 tanh(F64), x];

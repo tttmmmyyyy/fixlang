@@ -990,7 +990,7 @@ Since Fix is functional, only evaluating an expression and ignoring the result h
 Typical use-cases of `eval` are to call functions which return `()` to get side-effects.
 
 - Calling functions in `Debug` module, such as `assert : Lazy String -> Bool -> ()` or `debug_println : String -> ()`. 
-- Calling C functions by CALL_C. 
+- Calling C functions by FFI_CALL. 
 - Sequentially calling I/O functions. 
 
 Example: 
@@ -1002,7 +1002,7 @@ import Debug;
 main : IO ();
 main = (
     eval assert(|_|"1 is not 2!", 1 == 2);
-    eval "Contradiction: ".borrow_c_str(|ptr| let _ = CALL_C[I32 printf(Ptr, ...), ptr]; ());
+    eval "Contradiction: ".borrow_c_str(|ptr| let _ = FFI_CALL[I32 printf(Ptr, ...), ptr]; ());
     eval *println("1 is equal to 2!");
     pure()
 );
@@ -1010,7 +1010,7 @@ main = (
 [Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/?src2=bW9kdWxlIE1haW47DQppbXBvcnQgRGVidWc7DQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgZXZhbCBhc3NlcnQofF98IjEgaXMgbm90IDIhIiwgMSA9PSAyKTsNCiAgICBldmFsICJDb250cmFkaWN0aW9uOiAiLmJvcnJvd19jX3N0cih8cHRyfCBDQUxMX0NbSTMyIHByaW50ZihQdHIsIC4uLiksIHB0cl0pOw0KICAgIGV2YWwgKnByaW50bG4oIjEgaXMgZXF1YWwgdG8gMiEiKTsNCiAgICBwdXJlKCkNCik7)
 
 For detail of `*` operator in front of `print` and `println`, see [Monads](#monads). 
-For CALL_C, see [Calling C functions from Fix](#calling-c-functions-from-fix).
+For FFI_CALL, see [Calling C functions from Fix](#calling-c-functions-from-fix).
 
 ## Type annotation
 
@@ -1561,7 +1561,7 @@ The programmer has a responsibility to hide the side effect of a foreign functio
 To call a C function, use the following expression:
 
 ```
-CALL_C[{c_function_signature}, {arg_0}, {arg_1}, ...]
+FFI_CALL[{c_function_signature}, {arg_0}, {arg_1}, ...]
 ```
 
 Example: 
@@ -1570,7 +1570,7 @@ Example:
 main : IO ();
 main = (
     eval "Hello C function!\n".borrow_c_str(|ptr|
-        let _ = CALL_C[I32 printf(Ptr, ...), ptr]; // Explicitly ignore the result of `printf`.
+        let _ = FFI_CALL[I32 printf(Ptr, ...), ptr]; // Explicitly ignore the result of `printf`.
         ()
     );
     pure()
@@ -1587,12 +1587,12 @@ In `{c_function_signature}`, you need to specify type of return value and argume
 
 ### Exporting Fix values / functions to C
 
-You can export a value of Fix using `EXPORT[{fix_value_name}, {c_function_name}];`:
+You can export a value of Fix using `FFI_EXPORT[{fix_value_name}, {c_function_name}];`:
 
 ```
 increment : CInt -> CInt;
 increment = |x| x + 1.to_CInt;
-EXPORT[increment, c_increment]; // Define a C function `int c_increment(int)`.
+FFI_EXPORT[increment, c_increment]; // Define a C function `int c_increment(int)`.
 ```
 
 You can declare and call `int c_increment(int)` in a C program that will be linked to Fix program.
@@ -1601,22 +1601,22 @@ The signature of the exported C function is automatically determined by the type
 
 ```
 x : CInt; 
-EXPORT[x, f]; // int f(void);
+FFI_EXPORT[x, f]; // int f(void);
 
 x : CInt -> CInt;
-EXPORT[x, f]; // int f(int);
+FFI_EXPORT[x, f]; // int f(int);
 
 x : CInt -> CInt;
-EXPORT[x, f]; // int f(int);
+FFI_EXPORT[x, f]; // int f(int);
 
 x : IO ();
-EXPORT[x, f]; // void f(void);
+FFI_EXPORT[x, f]; // void f(void);
 
 x : IO CInt;
-EXPORT[x, f]; // int f(void);
+FFI_EXPORT[x, f]; // int f(void);
 
 x : CInt -> IO CInt;
-EXPORT[x, f]; // int f(int);
+FFI_EXPORT[x, f]; // int f(int);
 ```
 
 ### Sending Fix boxed values to C
@@ -1681,7 +1681,7 @@ void access_vec(Vec* v) {
 ```
 
 If you want to access to the fields `x` and `y` of Fix's object `vec` from C side, `Std::FFI::unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b` will be useful: 
-`vec.unsafe_borrow_boxed_data_ptr(|p| CALL_C[() access_vec(Ptr), p])` will allows `access_vec` on work on `vec.@x` and `vec.@y`.
+`vec.unsafe_borrow_boxed_data_ptr(|p| FFI_CALL[() access_vec(Ptr), p])` will allows `access_vec` on work on `vec.@x` and `vec.@y`.
 
 NOTE: 
 At least in the current version of Fix, the memory layout of Fix's struct is determined by the default behaviour of LLVM, and as long as I know it is equivalent to C's struct memory layout. 

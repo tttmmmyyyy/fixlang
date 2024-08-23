@@ -527,7 +527,7 @@ fn parse_export_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ExportSta
     assert_eq!(pair.as_rule(), Rule::export_statement);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    pairs.next().unwrap(); // Skip `EXPORT`.
+    pairs.next().unwrap(); // Skip `FFI_EXPORT`.
     let fix_value_name = pairs.next().unwrap().as_str().to_string();
     let c_function_name = pairs.next().unwrap().as_str().to_string();
     ExportStatement::new(
@@ -1494,7 +1494,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
     // Validate number of arguments.
     if args.len() < param_tys.len() || (!is_var_args && args.len() > param_tys.len()) {
         error_exit_with_src(
-            "Wrong number of arguments in CALL_C expression.",
+            "Wrong number of arguments in FFI_CALL expression.",
             &Some(span),
         );
     }
@@ -2054,7 +2054,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::import_items_negative => "`hiding`".to_string(),
         Rule::semicolon => "`;`".to_string(),
         Rule::extra_comma => ",".to_string(),
-        Rule::export_symbol => "EXPORT".to_string(),
+        Rule::export_symbol => "FFI_EXPORT".to_string(),
         _ => format!("{:?}", r),
     }
 }

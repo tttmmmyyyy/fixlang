@@ -364,11 +364,11 @@ namespace FFI {
 
     // Get errno which is set by C functions.
     unsafe_get_errno : () -> CInt;
-    unsafe_get_errno = |_| CALL_C[CInt fixruntime_get_errno()];
+    unsafe_get_errno = |_| FFI_CALL[CInt fixruntime_get_errno()];
 
     // Set errno to zero.
     unsafe_clear_errno : () -> ();
-    unsafe_clear_errno = |_| CALL_C[() fixruntime_clear_errno()];
+    unsafe_clear_errno = |_| FFI_CALL[() fixruntime_clear_errno()];
 
     // `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
     // When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
@@ -411,9 +411,9 @@ namespace IO {
             loop("", |str|
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
-                let fgets_res = CALL_C[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, file_ptr];
+                let fgets_res = FFI_CALL[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, file_ptr];
                 if fgets_res == nullptr { 
-                    let err = CALL_C[I32 ferror(Ptr), file_ptr];
+                    let err = FFI_CALL[I32 ferror(Ptr), file_ptr];
                     if err != 0_I32 { 
                         let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
                         break $ Result::err(err)
@@ -421,7 +421,7 @@ namespace IO {
                         break $ Result::ok(str)
                     }
                 };
-                let strlen = CALL_C[I64 strlen(Ptr), buf._get_ptr];
+                let strlen = FFI_CALL[I64 strlen(Ptr), buf._get_ptr];
                 let buf = buf._unsafe_set_size(strlen + 1);
                 let read = String { _data : buf };
                 let str = str + read;
@@ -453,7 +453,7 @@ namespace IO {
     eprint = |str| (
         IO { _data : |_| (
             eval str.borrow_c_str(|c_ptr|
-                let _ = CALL_C[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr];
+                let _ = FFI_CALL[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr];
                 ()
             );
             ()
@@ -470,7 +470,7 @@ namespace IO {
 
     // Exit the program with an error code.
     exit : I64 -> IO a;
-    exit = |code| IO { _data : |_| eval CALL_C[() exit(I32), code.to_I32]; abort() };
+    exit = |code| IO { _data : |_| eval FFI_CALL[() exit(I32), code.to_I32]; abort() };
 
     // Exit the program with an error message and an error code.
     // The error message is written to the standard error output.
@@ -487,7 +487,7 @@ namespace IO {
     get_arg = |n| (
         let argc = *get_arg_count;
         if n >= argc { pure $ Option::none() };
-        let arg_ptr = CALL_C[Ptr fixruntime_get_argv(I64), n];
+        let arg_ptr = FFI_CALL[Ptr fixruntime_get_argv(I64), n];
         pure $ Option::some(String::_unsafe_from_c_str_ptr(arg_ptr))
     );
 
@@ -495,7 +495,7 @@ namespace IO {
     get_arg_count : IO I64;
     get_arg_count = (
         eval *pure();
-        let argc = CALL_C[I32 fixruntime_get_argc()].to_I64;
+        let argc = FFI_CALL[I32 fixruntime_get_argc()].to_I64;
         pure $ argc
     );
 
@@ -528,7 +528,7 @@ namespace IO {
     is_eof : IOHandle -> IO Bool;
     is_eof = |handle| (
         eval *pure();
-        pure $ CALL_C[I32 feof(Ptr), handle._file_ptr] != 0_I32
+        pure $ FFI_CALL[I32 feof(Ptr), handle._file_ptr] != 0_I32
     );
 
     // Loop on lines read from an `IOHandle`.
@@ -587,7 +587,7 @@ namespace IO {
             let path_str = path.to_string;
             let res = path_str.borrow_c_str(|path_ptr|
                 mode.borrow_c_str(|mode_str|
-                    let file_ptr = CALL_C[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
+                    let file_ptr = FFI_CALL[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
                     if file_ptr == nullptr { 
                         Result::err $ "Failed to open a file: " + path_str
                     } else {
@@ -604,7 +604,7 @@ namespace IO {
     print = |str| (
         IO { _data : |_| (
             eval str.borrow_c_str(|c_ptr|
-                let _ = CALL_C[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr];
+                let _ = FFI_CALL[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr];
                 ()
             );
             ()
@@ -656,10 +656,10 @@ namespace IO {
         eval *pure();
         let buf = Array::empty(n);
         let len = buf.borrow_ptr(|ptr| (
-            CALL_C[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr]
+            FFI_CALL[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr]
         ));
         // Check error.
-        let err = CALL_C[I32 ferror(Ptr), handle._file_ptr];
+        let err = FFI_CALL[I32 ferror(Ptr), handle._file_ptr];
         if err != 0_I32 { 
             let err = "Std::IO::read_n_bytes failed!: some error occurred in fread.";
             IOFail::from_result $ Result::err(err)
@@ -675,21 +675,21 @@ namespace IO {
     // The handle for standard error.
     stderr : IOHandle;
     stderr = (
-        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 2_I32, mode]);
+        let ptr = "a".borrow_c_str(|mode| FFI_CALL[Ptr fdopen(I32, Ptr), 2_I32, mode]);
         IOHandle::from_file_ptr $ ptr
     );
 
     // The handle for standard input.
     stdin : IOHandle;
     stdin = (
-        let ptr = "r".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 0_I32, mode]);
+        let ptr = "r".borrow_c_str(|mode| FFI_CALL[Ptr fdopen(I32, Ptr), 0_I32, mode]);
         IOHandle::from_file_ptr $ ptr
     );
 
     // The handle for standard output.
     stdout : IOHandle;
     stdout = (
-        let ptr = "a".borrow_c_str(|mode| CALL_C[Ptr fdopen(I32, Ptr), 1_I32, mode]);
+        let ptr = "a".borrow_c_str(|mode| FFI_CALL[Ptr fdopen(I32, Ptr), 1_I32, mode]);
         IOHandle::from_file_ptr $ ptr
     );
 
@@ -709,7 +709,7 @@ namespace IO {
         eval *pure();
         let res = array.borrow_ptr(|ptr| (
             let n = array.get_size;
-            let res = CALL_C[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr];
+            let res = FFI_CALL[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr];
             if res < n { Result::err $ "Std::IO::write_bytes failed!: some error occurred in fwrite." };
             Result::ok()
         ));
@@ -730,7 +730,7 @@ namespace IO {
         eval *pure();
         let res = content.borrow_c_str(|c_str| (
             let file_ptr = handle._file_ptr;
-            let res = CALL_C[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr];
+            let res = FFI_CALL[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr];
             if res < 0_I32 { Result::err $ "Std::IO::write_string failed!: some error occurred in fputs." };
             Result::ok()
         ));
@@ -765,14 +765,14 @@ namespace IO::IOHandle {
     // To close an `IOHandle`, use `IO::close_file`.
     _file_ptr : IOHandle -> Ptr;
     _file_ptr = |handle| handle.@_data.borrow(|handle_ptr| 
-        CALL_C[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]
+        FFI_CALL[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]
     );
 
     // Close an `IOHandle`. 
     // This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
     _unsafe_close : IOHandle -> ();
     _unsafe_close = |handle| (
-        eval handle.@_data.borrow(|handle_ptr| CALL_C[() fixruntime_iohandle_close(Ptr), handle_ptr]);
+        eval handle.@_data.borrow(|handle_ptr| FFI_CALL[() fixruntime_iohandle_close(Ptr), handle_ptr]);
         ()
     );
 
@@ -780,8 +780,8 @@ namespace IO::IOHandle {
     // DO NOT create two `IOHandle`s from a single file pointer.
     from_file_ptr : Ptr -> IOHandle;
     from_file_ptr = |file_ptr| (
-        let handle_ptr = CALL_C[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
-        let dtor = |handle_ptr| CALL_C[() fixruntime_iohandle_delete(Ptr), handle_ptr];
+        let handle_ptr = FFI_CALL[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
+        let dtor = |handle_ptr| FFI_CALL[() fixruntime_iohandle_delete(Ptr), handle_ptr];
         IOHandle { _data : Destructor::make(handle_ptr, dtor) }
     );
 }
@@ -1356,7 +1356,7 @@ namespace String {
     _unsafe_from_c_str : Array U8 -> String;
     _unsafe_from_c_str = |buf| (
         // Return length.
-        let len = buf.borrow_ptr(|ptr| CALL_C[I64 strlen(Ptr), ptr]);
+        let len = buf.borrow_ptr(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
         let buf = buf._unsafe_set_size(len + 1);
         String { _data : buf }
     );
@@ -1365,10 +1365,10 @@ namespace String {
     // If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
     _unsafe_from_c_str_ptr : Ptr -> String;
     _unsafe_from_c_str_ptr = |ptr| (
-        let len = CALL_C[I64 strlen(Ptr), ptr];
+        let len = FFI_CALL[I64 strlen(Ptr), ptr];
         let buf_len = len + 1;
         let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
-        let _ = CALL_C[Ptr memcpy(Ptr, Ptr, I64), buf._get_ptr, ptr, buf_len];
+        let _ = FFI_CALL[Ptr memcpy(Ptr, Ptr, I64), buf._get_ptr, ptr, buf_len];
         String { _data : buf }
     );
 
@@ -1407,7 +1407,7 @@ namespace String {
     find : String -> I64 -> String -> Option I64;
     find = |tok, start, str| (
         let start = min(start, str.get_size);
-        let pos = CALL_C[Ptr strstr(Ptr, Ptr), str._get_c_str.add_offset(start), tok._get_c_str];
+        let pos = FFI_CALL[Ptr strstr(Ptr, Ptr), str._get_c_str.add_offset(start), tok._get_c_str];
         let _ = tok; // Prolong lifetime.
         if pos == nullptr {
             Option::none()
@@ -1497,7 +1497,7 @@ namespace String {
 
     // Removing leading whitespace characters.
     strip_first_spaces : String -> String;
-    strip_first_spaces = strip_first_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
+    strip_first_spaces = strip_first_bytes(|c| FFI_CALL[I32 isspace(I32), c.to_I32] > 0_I32);
 
     // Removes the last byte of a string while it satisifies the specified condition.
     strip_last_bytes : (U8 -> Bool) -> String -> String;
@@ -1518,7 +1518,7 @@ namespace String {
 
     // Removing trailing whitespace characters.
     strip_last_spaces : String -> String;
-    strip_last_spaces = strip_last_bytes(|c| CALL_C[I32 isspace(I32), c.to_I32] > 0_I32);
+    strip_last_spaces = strip_last_bytes(|c| FFI_CALL[I32 isspace(I32), c.to_I32] > 0_I32);
 
     // Strip leading and trailing whitespace characters.
     strip_spaces : String -> String;
@@ -1760,12 +1760,12 @@ namespace F64 {
 namespace Ptr {
     // Add an offset to a pointer.
     add_offset : I64 -> Ptr -> Ptr;
-    add_offset = |off, ptr| CALL_C[Ptr fixruntime_ptr_add_offset(Ptr, I64), ptr, off];
+    add_offset = |off, ptr| FFI_CALL[Ptr fixruntime_ptr_add_offset(Ptr, I64), ptr, off];
 
     // Subtract two pointers.
     // Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
     subtract_ptr : Ptr -> Ptr -> I64;
-    subtract_ptr = |rhs, lhs| CALL_C[I64 fixruntime_subtract_ptr(Ptr, Ptr), lhs, rhs];
+    subtract_ptr = |rhs, lhs| FFI_CALL[I64 fixruntime_subtract_ptr(Ptr, Ptr), lhs, rhs];
 }
 
 // ToString, FromString implementations for fundamental types
@@ -1773,14 +1773,14 @@ namespace Ptr {
 impl Ptr : ToString {
     to_string = |v| (
         let data = Array::empty(17);
-        eval CALL_C[() fixruntime_ptr_to_str(Ptr, Ptr), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_ptr_to_str(Ptr, Ptr), data._get_ptr, v];
         String::_unsafe_from_c_str(data)
     );
 }
 impl U8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_set_size(1);
-        eval CALL_C[() fixruntime_u8_to_bytes(Ptr, U8), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_u8_to_bytes(Ptr, U8), data._get_ptr, v];
         data
     );
 }
@@ -1789,14 +1789,14 @@ impl U8 : FromBytes {
         if bs.get_size != 1 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U8."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U8 fixruntime_u8_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[U8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
 }
 impl U8 : ToString {
     to_string = |v| (
         let data = Array::empty(4); // len(255) + 1
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_u8_to_str(Ptr, U8), ptr, v]
+            FFI_CALL[() fixruntime_u8_to_str(Ptr, U8), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -1808,7 +1808,7 @@ impl U8 : FromString {
 impl U16 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(2)._unsafe_set_size(2);
-        eval CALL_C[() fixruntime_u16_to_bytes(Ptr, U16), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_u16_to_bytes(Ptr, U16), data._get_ptr, v];
         data
     );
 }
@@ -1817,14 +1817,14 @@ impl U16 : FromBytes {
         if bs.get_size != 2 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U16."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U16 fixruntime_u16_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[U16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
 }
 impl U16 : ToString {
     to_string = |v| (
         let data = Array::empty(6); // len(65535) + 1
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_u16_to_str(Ptr, U16), ptr, v]
+            FFI_CALL[() fixruntime_u16_to_str(Ptr, U16), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -1836,7 +1836,7 @@ impl U16 : FromString {
 impl U32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        eval CALL_C[() fixruntime_u32_to_bytes(Ptr, U32), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_u32_to_bytes(Ptr, U32), data._get_ptr, v];
         data
     );
 }
@@ -1845,14 +1845,14 @@ impl U32 : FromBytes {
         if bs.get_size != 4 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U32."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U32 fixruntime_u32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
 }
 impl U32 : ToString {
     to_string = |v| (
         let data = Array::empty(11);
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_u32_to_str(Ptr, U32), ptr, v]
+            FFI_CALL[() fixruntime_u32_to_str(Ptr, U32), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -1864,7 +1864,7 @@ impl U32 : FromString {
 impl U64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        eval CALL_C[() fixruntime_u64_to_bytes(Ptr, U64), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_u64_to_bytes(Ptr, U64), data._get_ptr, v];
         data
     );
 }
@@ -1873,14 +1873,14 @@ impl U64 : FromBytes {
         if bs.get_size != 8 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U64."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[U64 fixruntime_u64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
 }
 impl U64 : ToString {
     to_string = |v| (
         let data = Array::empty(21);
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_u64_to_str(Ptr, U64), ptr, v]
+            FFI_CALL[() fixruntime_u64_to_str(Ptr, U64), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -1888,10 +1888,10 @@ impl U64 : ToString {
 impl U64 : FromString {
     from_string = |str| (
         str.borrow_c_str(|c_str| (
-            let v = CALL_C[U64 fixruntime_strtoull_10(Ptr), c_str];
-            let err = CALL_C[U8 fixruntime_is_einval()];
+            let v = FFI_CALL[U64 fixruntime_strtoull_10(Ptr), c_str];
+            let err = FFI_CALL[U8 fixruntime_is_einval()];
             if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str) };
-            let err = CALL_C[U8 fixruntime_is_erange()];
+            let err = FFI_CALL[U8 fixruntime_is_erange()];
             if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str) };
             Result::ok(v)
         ))
@@ -1901,7 +1901,7 @@ impl U64 : FromString {
 impl I8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_set_size(1);
-        eval CALL_C[() fixruntime_u8_to_bytes(Ptr, I8), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_u8_to_bytes(Ptr, I8), data._get_ptr, v];
         data
     );
 }
@@ -1910,14 +1910,14 @@ impl I8 : FromBytes {
         if bs.get_size != 1 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I8."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I8 fixruntime_u8_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[I8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
 }
 impl I8 : ToString {
     to_string = |v| (
         let data = Array::empty(5); // len(-128) + 1
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_i8_to_str(Ptr, I8), ptr, v]
+            FFI_CALL[() fixruntime_i8_to_str(Ptr, I8), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -1929,7 +1929,7 @@ impl I8 : FromString {
 impl I16 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(2)._unsafe_set_size(2);
-        eval CALL_C[() fixruntime_u16_to_bytes(Ptr, I16), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_u16_to_bytes(Ptr, I16), data._get_ptr, v];
         data
     );
 }
@@ -1938,14 +1938,14 @@ impl I16 : FromBytes {
         if bs.get_size != 2 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I16."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I16 fixruntime_u16_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[I16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
 }
 impl I16 : ToString {
     to_string = |v| (
         let data = Array::empty(7); // len(-32768) + 1
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_i16_to_str(Ptr, I16), ptr, v]
+            FFI_CALL[() fixruntime_i16_to_str(Ptr, I16), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -1957,7 +1957,7 @@ impl I16 : FromString {
 impl I32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        eval CALL_C[() fixruntime_u32_to_bytes(Ptr, I32), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_u32_to_bytes(Ptr, I32), data._get_ptr, v];
         data
     );
 }
@@ -1966,14 +1966,14 @@ impl I32 : FromBytes {
         if bs.get_size != 4 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I32."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I32 fixruntime_u32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[I32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
 }
 impl I32 : ToString {
     to_string = |v| (
         let data = Array::empty(12);
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_i32_to_str(Ptr, I32), ptr, v]
+            FFI_CALL[() fixruntime_i32_to_str(Ptr, I32), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -1985,7 +1985,7 @@ impl I32 : FromString {
 impl I64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        eval CALL_C[() fixruntime_u64_to_bytes(Ptr, I64), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_u64_to_bytes(Ptr, I64), data._get_ptr, v];
         data
     );
 }
@@ -1994,14 +1994,14 @@ impl I64 : FromBytes {
         if bs.get_size != 8 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I64."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[I64 fixruntime_u64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[I64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
 }
 impl I64 : ToString {
     to_string = |v| (
         let data = Array::empty(21);
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_i64_to_str(Ptr, I64), ptr, v]
+            FFI_CALL[() fixruntime_i64_to_str(Ptr, I64), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -2009,10 +2009,10 @@ impl I64 : ToString {
 impl I64 : FromString {
     from_string = |str| (
         str.borrow_c_str(|c_str| (
-            let v = CALL_C[I64 fixruntime_strtoll_10(Ptr), c_str];
-            let err = CALL_C[U8 fixruntime_is_einval()];
+            let v = FFI_CALL[I64 fixruntime_strtoll_10(Ptr), c_str];
+            let err = FFI_CALL[U8 fixruntime_is_einval()];
             if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str) };
-            let err = CALL_C[U8 fixruntime_is_erange()];
+            let err = FFI_CALL[U8 fixruntime_is_erange()];
             if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str) };
             Result::ok(v)
         ))
@@ -2022,7 +2022,7 @@ impl I64 : FromString {
 impl F32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        eval CALL_C[() fixruntime_f32_to_bytes(Ptr, F32), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_f32_to_bytes(Ptr, F32), data._get_ptr, v];
         data
     );
 }
@@ -2031,13 +2031,13 @@ impl F32 : FromBytes {
         if bs.get_size != 4 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F32."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[F32 fixruntime_f32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[F32 fixruntime_f32_from_bytes(Ptr), ptr])
     );
 }
 impl F32 : ToString {
     to_string = |v| (
         let data = Array::empty(50);
-        eval CALL_C[() fixruntime_f32_to_str(Ptr, F32), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_f32_to_str(Ptr, F32), data._get_ptr, v];
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2046,7 +2046,7 @@ namespace F32 {
     to_string_exp : F32 -> String;
     to_string_exp = |v| (
         let data = Array::empty(50);
-        eval CALL_C[() fixruntime_f32_to_str_exp(Ptr, F32), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_f32_to_str_exp(Ptr, F32), data._get_ptr, v];
         String::_unsafe_from_c_str(data)
     );
 
@@ -2054,7 +2054,7 @@ namespace F32 {
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
-        eval CALL_C[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), data._get_ptr, v, prec];
+        eval FFI_CALL[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), data._get_ptr, v, prec];
         String::_unsafe_from_c_str(data)
     );
 
@@ -2062,17 +2062,17 @@ namespace F32 {
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
-        eval CALL_C[() fixruntime_f32_to_str_precision(Ptr, F32, U8), data._get_ptr, v, prec];
+        eval FFI_CALL[() fixruntime_f32_to_str_precision(Ptr, F32, U8), data._get_ptr, v, prec];
         String::_unsafe_from_c_str(data)
     );
 }
 impl F32 : FromString {
     from_string = |str| (
         str.borrow_c_str(|c_str| (
-            let v = CALL_C[F32 fixruntime_strtof(Ptr), c_str];
-            let err = CALL_C[U8 fixruntime_is_einval()];
+            let v = FFI_CALL[F32 fixruntime_strtof(Ptr), c_str];
+            let err = FFI_CALL[U8 fixruntime_is_einval()];
             if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
-            let err = CALL_C[U8 fixruntime_is_erange()];
+            let err = FFI_CALL[U8 fixruntime_is_erange()];
             if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
             Result::ok(v)
         ))
@@ -2082,7 +2082,7 @@ impl F32 : FromString {
 impl F64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        eval CALL_C[() fixruntime_f64_to_bytes(Ptr, F64), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_f64_to_bytes(Ptr, F64), data._get_ptr, v];
         data
     );
 }
@@ -2091,14 +2091,14 @@ impl F64 : FromBytes {
         if bs.get_size != 8 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F64."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| CALL_C[F64 fixruntime_f64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[F64 fixruntime_f64_from_bytes(Ptr), ptr])
     );
 }
 impl F64 : ToString {
     to_string = |v| (
         let data = Array::empty(500);
         eval data.borrow_ptr(|ptr| (
-            CALL_C[() fixruntime_f64_to_str(Ptr, F64), ptr, v]
+            FFI_CALL[() fixruntime_f64_to_str(Ptr, F64), ptr, v]
         ));
         String::_unsafe_from_c_str(data)
     );
@@ -2108,7 +2108,7 @@ namespace F64 {
     to_string_exp : F64 -> String;
     to_string_exp = |v| (
         let data = Array::empty(500);
-        eval CALL_C[() fixruntime_f64_to_str_exp(Ptr, F64), data._get_ptr, v];
+        eval FFI_CALL[() fixruntime_f64_to_str_exp(Ptr, F64), data._get_ptr, v];
         String::_unsafe_from_c_str(data)
     );
 
@@ -2116,7 +2116,7 @@ namespace F64 {
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
-        eval CALL_C[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), data._get_ptr, v, prec];
+        eval FFI_CALL[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), data._get_ptr, v, prec];
         String::_unsafe_from_c_str(data)
     );
 
@@ -2124,17 +2124,17 @@ namespace F64 {
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
-        eval CALL_C[() fixruntime_f64_to_str_precision(Ptr, F64, U8), data._get_ptr, v, prec];
+        eval FFI_CALL[() fixruntime_f64_to_str_precision(Ptr, F64, U8), data._get_ptr, v, prec];
         String::_unsafe_from_c_str(data)
     );
 }
 impl F64 : FromString {
     from_string = |str| (
         str.borrow_c_str(|c_str| (
-            let v = CALL_C[F64 fixruntime_strtod(Ptr), c_str];
-            let err = CALL_C[U8 fixruntime_is_einval()];
+            let v = FFI_CALL[F64 fixruntime_strtod(Ptr), c_str];
+            let err = FFI_CALL[U8 fixruntime_is_einval()];
             if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
-            let err = CALL_C[U8 fixruntime_is_erange()];
+            let err = FFI_CALL[U8 fixruntime_is_erange()];
             if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
             Result::ok(v)
         ))

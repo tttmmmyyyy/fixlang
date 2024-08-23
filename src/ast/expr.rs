@@ -801,7 +801,7 @@ impl Expr {
             }
             Expr::CallC(fun_name, _, _, _, args) => {
                 format!(
-                    "CALL_C[{}{}]",
+                    "FFI_CALL[{}{}]",
                     fun_name,
                     args.iter()
                         .map(|e| ", ".to_string() + &e.expr.to_string())

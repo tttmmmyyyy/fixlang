@@ -276,10 +276,10 @@ global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep
 
 module = { module_defn ~ (sep* ~ (global_defns | trait_impl | import_statement))* }
 
-// === FFI (CALL_C) ===
+// === FFI (FFI_CALL) ===
 expr_call_c = { ffi_call_c_symbol ~ sep* ~ "[" ~ sep* ~ ffi_c_fun_ty ~ sep+ ~ ffi_c_fun_name ~ sep* ~ "(" ~ sep* ~ ffi_param_tys ~ (sep* ~ "," ~ sep* ~ ffi_var_args)? ~ sep* ~ ")" ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ "]" }
 
-ffi_call_c_symbol = _{ "CALL_C" }
+ffi_call_c_symbol = _{ "FFI_CALL" }
 
 ffi_c_fun_char = _{ !("(") ~ ANY }
 
@@ -295,9 +295,9 @@ ffi_param_tys = { (ffi_c_fun_ty ~ (sep* ~ "," ~ sep* ~ ffi_c_fun_ty)*) | "" }
 
 ffi_var_args = { "..." }
 
-// === FFI (EXPORT) === 
+// === FFI (FFI_EXPORT) === 
 
-export_symbol = { "EXPORT" }
+export_symbol = { "FFI_EXPORT" }
 
 exported_c_function_char = _{ !"]" ~ ANY }
 

@@ -9,7 +9,7 @@
 - Add `Std::FFI::unsafe_get_errno`, `Std::FFI::unsafe_clear_errno`.
 - Add `act_{field} : [f : Functor] (F -> f F) -> S -> f S` for each field `{field}` of type `F` of a struct `S`, which is known as "Lens" in Haskell community.
 - Implement `Functor` for tuple types. `map` function acts the last component of tuples.
-- Add `EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `EXPORT`.
+- Add `FFI_EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `FFI_EXPORT`.
 
 ### Changed
 
@@ -20,6 +20,7 @@
 - Rename `Std::PunchedArray::plug_in!` and `Std::PunchedArray::punch!` to `Std::PunchedArray::plug_in` and `Std::PunchedArray::unsafe_punch` respectively.
 - Allow making empty structs.
 - Forbid underscores in type names, trait names, module names and namespaces.
+- Changed `CALL_C` to `FFI_CALL`.
 
 ### Fixed
 
