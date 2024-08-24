@@ -61,7 +61,7 @@
     - [Unions](#unions-2)
   - [Foreign function interface (FFI)](#foreign-function-interface-ffi)
     - [Calling a foreign function in Fix](#calling-a-foreign-function-in-fix)
-    - [Exporting Fix values / functions to C](#exporting-fix-values--functions-to-c)
+    - [Exporting Fix values / functions to a foreign language](#exporting-fix-values--functions-to-a-foreign-language)
     - [Sending Fix boxed values to C](#sending-fix-boxed-values-to-c)
     - [Retaining / releasing Fix's value from C](#retaining--releasing-fixs-value-from-c)
     - [Casting back a `Ptr` to a Fix value](#casting-back-a-ptr-to-a-fix-value)
@@ -1551,7 +1551,7 @@ type Weight = box union { pound: I64, kilograms: I64 };
 
 ## Foreign function interface (FFI)
 
-You can link a static or shared library to a Fix program by `--static-link` or `--dynamic-link` compiler flag, and call native functions in the Fix program or call Fix functions in the library.
+You can link a static or shared library to a Fix program by `--static-link` (`-s`) or `--dynamic-link` (`-s`) compiler flag, and call native functions in the Fix program or call Fix functions in the library.
 
 Note that using FFI can easily break Fix's assurance such as immutability or memory safety.
 The programmer has a responsibility to hide the side effect of a foreign function into `IO`, and manage resources properly to avoid segmentation fault or memory leak.
@@ -1586,19 +1586,19 @@ For `{return_type}` or `{arg_type_i}`, you can use the following types:
 - `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble` for C's primitive numeric types.
 - `()` instead of `void` for a function that returns nothing.
 
-### Exporting Fix values / functions to C
+### Exporting Fix values / functions to a foreign language
 
-You can export a value of Fix using `FFI_EXPORT[{fix_value_name}, {c_function_name}];`:
+You can export a value of Fix using `FFI_EXPORT[{fix_value_name}, {c_function_name}];` to make it available from a foreign language.
 
 ```
-increment : CInt -> CInt;
-increment = |x| x + 1.to_CInt;
-FFI_EXPORT[increment, c_increment]; // Define a C function `int c_increment(int)`.
+fix_increment : CInt -> CInt;
+fix_increment = |x| x + 1.to_CInt;
+FFI_EXPORT[fix_increment, increment]; // Define a function `int increment(int)`.
 ```
 
-You can declare and call `int c_increment(int)` in a C program that will be linked to Fix program.
+If the foreign language is C, you should declare `int increment(int);` and call it to use `fix_increment` in the C program.
 
-The signature of the exported C function is automatically determined by the type of the exported Fix value, as demonstrated in the following code:
+The signature of the exported function is automatically determined by the type of the exported Fix value, as demonstrated in the following code:
 
 ```
 x : CInt; 
