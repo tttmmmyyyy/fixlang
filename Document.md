@@ -64,8 +64,6 @@
     - [Export a Fix value or function to a foreign language](#export-a-fix-value-or-function-to-a-foreign-language)
     - [Managing a foreign resource in Fix](#managing-a-foreign-resource-in-fix)
     - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
-    - [Retaining / releasing Fix's value from C (deprecated)](#retaining--releasing-fixs-value-from-c-deprecated)
-    - [Sharing a `Ptr` between multiple threads](#sharing-a-ptr-between-multiple-threads)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
 - [Tips](#tips)
@@ -1639,24 +1637,22 @@ The function `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr` retur
 Here, "retained" means that the pointer has a shared ownership of the value, and you are responsible for decrementing the reference counter to avoid memory leak.
 You can get back a Fix value from a retained pointer by `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
 
-If you have a retained pointer of a Fix value in a foreign language, you may need to decrement the reference counter when you drop the pointer, or increment the reference counter when you copy the pointer.
-To do this: TODO.
+If you have a retained pointer of a Fix value in a foreign language, you may need to release it (i.e., decrement the reference counter) when you drop the pointer, or retain it (i.e., increment the reference counter) when you copy the pointer.
+To do this, first get the pointer to the retain / release function for a Fix value by `Std::FFI::unsafe_get_release_function_of_boxed_value` and `Std::FFI::unsafe_get_retain_function_of_boxed_value`:
 
-### Retaining / releasing Fix's value from C (deprecated)
-
-You can get a function pointer of retain / release function by the followings:
 - `Std::FFI::unsafe_get_release_function_of_boxed_value : a -> Ptr`
 - `Std::FFI::unsafe_get_retain_function_of_boxed_value : a -> Ptr`
 
-They return a function pointer of type `void (*)(void*)`.
+Each function returns a function pointer of type `void (*)(void*)`.
+Then you can retain / release a Fix's value of type `a` via the function pointer.
 
-### Sharing a `Ptr` between multiple threads
-
+NOTE:
 Fix's reference counting is not thread-safe by default. 
-Retaining / releasing a pointer to a Fix's value from multiple threads simultaneously may cause memory leak or segmentation fault.
+So if you get a pointer to a Fix's boxed value and share it between multiple threads, then retaining / releasing the pointer in the way described above may cause data race.
 
-To avoid this problem, add the `--threaded` compiler flag, and call `Std::mark_threaded : a -> a` on the value before obtaining the pointer.
-The `Std::mark_threaded` function traverses all values reachable from the given value, and changes them into multi-threaded mode so that the reference counting on them will be done atomically.
+To avoid this, first add the `--threaded` compiler flag.
+Moreover, call `Std::mark_threaded : a -> a` on the boxed value before obtaining the pointer.
+The `Std::mark_threaded` function traverses all values reachable from the given value, and changes them into multi-threaded mode so that the reference counting on them will be done in thread-safe manner.
 
 ### Accessing fields of Fix's struct value from C
 
