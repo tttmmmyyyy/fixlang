@@ -60,12 +60,11 @@
     - [Structs](#structs-2)
     - [Unions](#unions-2)
   - [Foreign function interface (FFI)](#foreign-function-interface-ffi)
-    - [Calling a foreign function in Fix](#calling-a-foreign-function-in-fix)
-    - [Exporting Fix values / functions to a foreign language](#exporting-fix-values--functions-to-a-foreign-language)
-    - [Sending Fix boxed values to C](#sending-fix-boxed-values-to-c)
-    - [Retaining / releasing Fix's value from C](#retaining--releasing-fixs-value-from-c)
-    - [Casting back a `Ptr` to a Fix value](#casting-back-a-ptr-to-a-fix-value)
-    - [Managing C resource from Fix](#managing-c-resource-from-fix)
+    - [Call a foreign function in Fix](#call-a-foreign-function-in-fix)
+    - [Export a Fix value or function to a foreign language](#export-a-fix-value-or-function-to-a-foreign-language)
+    - [Managing a foreign resource in Fix](#managing-a-foreign-resource-in-fix)
+    - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
+    - [Retaining / releasing Fix's value from C (deprecated)](#retaining--releasing-fixs-value-from-c-deprecated)
     - [Sharing a `Ptr` between multiple threads](#sharing-a-ptr-between-multiple-threads)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
@@ -1556,7 +1555,7 @@ You can link a static or shared library to a Fix program by `--static-link` (`-s
 Note that using FFI can easily break Fix's assurance such as immutability or memory safety.
 The programmer has a responsibility to hide the side effect of a foreign function into `IO`, and manage resources properly to avoid segmentation fault or memory leak.
 
-### Calling a foreign function in Fix
+### Call a foreign function in Fix
 
 Use the `FFI_CALL` expression to call a foreign function in Fix. The syntax is as follows:
 
@@ -1586,7 +1585,7 @@ For `{return_type}` or `{arg_type_i}`, you can use the following types:
 - `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble` for C's primitive numeric types.
 - `()` instead of `void` for a function that returns nothing.
 
-### Exporting Fix values / functions to a foreign language
+### Export a Fix value or function to a foreign language
 
 You can export a value of Fix using `FFI_EXPORT[{fix_value_name}, {c_function_name}];` to make it available from a foreign language.
 
@@ -1620,40 +1619,36 @@ x : CInt -> IO CInt;
 FFI_EXPORT[x, f]; // int f(int);
 ```
 
-### Sending Fix boxed values to C
+### Managing a foreign resource in Fix
 
-NOTE: To understand the contents of this and following sections, you will need to be familiar with scope-based reference counters, such as C++'s `shared_ptr` or Rust's `Rc`.
+Some C functions allocate a resource which should be deallocated by another C function in the end. 
+Most famous examples may be `malloc` / `free` and `fopen` / `fclose`.
 
-The function `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr` returns a pointer to a Fix's value of *boxed type*.
-Then you can send the pointer to C world.
+If you allocate a resource using `FFI_CALL`, then you need to call the deallocation function again by `FFI_CALL` at the end of the resource's lifetime.
 
-The returned pointer is "retained" in the sense that it has a (shared) ownership of the Fix's value. 
-You have a responsibility to "release" (i.e., decrement the reference counter) it to avoid resource leak.
+A useful way to manage the resource properly is to use `Std::FFI::Destructor` type.
+This is a boxed wrapper type of a specified type associated with a deallocation function.
+When a value of `Destructor` type is dropped, the deallocation function is called automatically.
+So you can use `Destructor` to wrap a "handle" to a foreign resource and to call the deallocation function automatically when the `Destructor` value is no longer used in Fix code.
 
-### Retaining / releasing Fix's value from C
+For details, see [the document for `Destructor`](./BuiltinLibraries.md#type-destructor).
+
+### Managing ownership of Fix's boxed value in a foreign language
+
+The function `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr` returns a retained pointer to a *boxed* value allocated by Fix.
+Here, "retained" means that the pointer has a shared ownership of the value, and you are responsible for decrementing the reference counter to avoid memory leak.
+You can get back a Fix value from a retained pointer by `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
+
+If you have a retained pointer of a Fix value in a foreign language, you may need to decrement the reference counter when you drop the pointer, or increment the reference counter when you copy the pointer.
+To do this: TODO.
+
+### Retaining / releasing Fix's value from C (deprecated)
 
 You can get a function pointer of retain / release function by the followings:
 - `Std::FFI::unsafe_get_release_function_of_boxed_value : a -> Ptr`
 - `Std::FFI::unsafe_get_retain_function_of_boxed_value : a -> Ptr`
 
-They return a function pointer of type `void (*)(void*)`. 
-
-To manage reference counter of Fix values from C side, you need to send the function pointers to C world, and call them on a pointer which directs to a Fix value.
-
-### Casting back a `Ptr` to a Fix value
-
-To cast a `Ptr` value which directs a Fix boxed value to a typed Fix's value, use `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
-
-Note that, once casted to a typed Fix value, the responsibility to release the pointer will be on the Fix compiler, not on you. 
-
-### Managing C resource from Fix
-
-Some C functions allocate a resource which should be deallocated by another C function in the end. 
-Most famous examples may be `malloc` / `free` and `fopen` / `fclose`.
-
-If you try to create a Fix's type which wraps a C resource, and want to call the deallocation function automatically at the end of Fix value's lifetime, `Std::FFI::Destructor` will be useful.
-
-For details, [see the document for `Destructor`](./BuiltinLibraries.md#namespace-destructor).
+They return a function pointer of type `void (*)(void*)`.
 
 ### Sharing a `Ptr` between multiple threads
 
