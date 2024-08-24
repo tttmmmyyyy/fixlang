@@ -1482,24 +1482,17 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
     let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx);
     let fun_name = pairs.next().unwrap().as_str().to_string();
     let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx);
-    let is_var_args =
-        if pairs.peek().is_some() && pairs.peek().unwrap().as_rule() == Rule::ffi_var_args {
-            pairs.next();
-            true
-        } else {
-            false
-        };
     let args: Vec<_> = pairs.map(|pair| parse_expr(pair, ctx)).collect();
 
     // Validate number of arguments.
-    if args.len() < param_tys.len() || (!is_var_args && args.len() > param_tys.len()) {
+    if args.len() < param_tys.len() || args.len() > param_tys.len() {
         error_exit_with_src(
             "Wrong number of arguments in FFI_CALL expression.",
             &Some(span),
         );
     }
 
-    expr_call_c(fun_name, ret_ty, param_tys, is_var_args, args, Some(span))
+    expr_ffi_call(fun_name, ret_ty, param_tys, args, Some(span))
 }
 
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {

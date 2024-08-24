@@ -2233,7 +2233,7 @@ pub fn test93() {
 }
 
 #[test]
-pub fn test_call_c() {
+pub fn test_ffi_call() {
     // Test FFI
     let source = r#"
             module Main; import Debug;
@@ -2241,7 +2241,7 @@ pub fn test_call_c() {
             main : IO ();
             main = (
                 eval "Hello C function! Number = %d\n".borrow_c_str(|ptr|
-                    let _ = FFI_CALL[I32 printf(Ptr, ...), ptr, 42];
+                    let _ = FFI_CALL[I32 printf(Ptr, I32), ptr, 42.to_I32];
                     ()
                 );
                 pure()
@@ -6759,7 +6759,7 @@ pub fn test_borrow_boxed_data_ptr() {
             let x : Boxed I32 = Boxed { value : 0_I32 };
             eval x.unsafe_borrow_boxed_data_ptr(|ptr|
                 "%d".borrow_c_str(|c_str|
-                    let _ = FFI_CALL[CInt snprintf(Ptr, CSizeT, Ptr, ...), ptr, 4.to_CSizeT, c_str, 123.to_CInt];
+                    let _ = FFI_CALL[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt];
                     ()
                 )
             );

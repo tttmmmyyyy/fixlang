@@ -421,17 +421,16 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_call_c_arg(&self, arg: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
+    pub fn set_ffi_call_arg(&self, arg: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
         let mut ret = self.clone();
         match &*self.expr {
-            Expr::CallC(fun_name, ret_ty, param_tys, is_var_args, args) => {
+            Expr::FFICall(fun_name, ret_ty, param_tys, args) => {
                 let mut args = args.clone();
                 args[idx] = arg;
-                ret.expr = Arc::new(Expr::CallC(
+                ret.expr = Arc::new(Expr::FFICall(
                     fun_name.clone(),
                     ret_ty.clone(),
                     param_tys.clone(),
-                    *is_var_args,
                     args,
                 ));
             }
@@ -442,15 +441,14 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_call_c_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
+    pub fn set_ffi_call_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
         let mut ret = self.clone();
         match &*self.expr {
-            Expr::CallC(fun_name, ret_ty, param_tys, is_var_args, _) => {
-                ret.expr = Arc::new(Expr::CallC(
+            Expr::FFICall(fun_name, ret_ty, param_tys, _) => {
+                ret.expr = Arc::new(Expr::FFICall(
                     fun_name.clone(),
                     ret_ty.clone(),
                     param_tys.clone(),
-                    *is_var_args,
                     args,
                 ));
             }
@@ -560,10 +558,10 @@ impl ExprNode {
                 }
                 expr
             }
-            Expr::CallC(_, _, _, _, args) => {
+            Expr::FFICall(_, _, _, args) => {
                 let mut expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {
-                    expr = expr.set_call_c_arg(arg.resolve_namespace(ctx), i);
+                    expr = expr.set_ffi_call_arg(arg.resolve_namespace(ctx), i);
                 }
                 expr
             }
@@ -625,10 +623,10 @@ impl ExprNode {
                 }
                 expr
             }
-            Expr::CallC(_, _, _, _, args) => {
+            Expr::FFICall(_, _, _, args) => {
                 let mut expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {
-                    expr = expr.set_call_c_arg(arg.resolve_type_aliases(type_env), i);
+                    expr = expr.set_ffi_call_arg(arg.resolve_type_aliases(type_env), i);
                 }
                 expr
             }
@@ -683,7 +681,7 @@ impl ExprNode {
                 }
                 free_vars
             }
-            Expr::CallC(_, _, _, _, args) => {
+            Expr::FFICall(_, _, _, args) => {
                 let mut free_vars: HashSet<FullName> = Default::default();
                 for (_, e) in args.iter().enumerate() {
                     free_vars.extend(e.depending_global_values());
@@ -709,11 +707,10 @@ pub enum Expr {
     // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakeStruct x y`.
     // `MakeStruct x y` is compiled to a more performant code than function call (currently).
     MakeStruct(Arc<TyCon>, Vec<(Name, Arc<ExprNode>)>),
-    CallC(
+    FFICall(
         Name,               /* function name */
         Arc<TyCon>,         /* Return type */
         Vec<Arc<TyCon>>,    /* Parameter types */
-        bool,               /* Is va_args? */
         Vec<Arc<ExprNode>>, /* Arguments */
     ),
 }
@@ -799,7 +796,7 @@ impl Expr {
                         .join(", ")
                 )
             }
-            Expr::CallC(fun_name, _, _, _, args) => {
+            Expr::FFICall(fun_name, _, _, args) => {
                 format!(
                     "FFI_CALL[{}{}]",
                     fun_name,
@@ -900,15 +897,14 @@ pub fn expr_array_lit(elems: Vec<Arc<ExprNode>>, src: Option<Span>) -> Arc<ExprN
     Arc::new(Expr::ArrayLit(elems)).into_expr_info(src)
 }
 
-pub fn expr_call_c(
+pub fn expr_ffi_call(
     fun_name: Name,
     ret_ty: Arc<TyCon>,
     param_tys: Vec<Arc<TyCon>>,
-    is_va_args: bool,
     args: Vec<Arc<ExprNode>>,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::CallC(fun_name, ret_ty, param_tys, is_va_args, args)).into_expr_info(src)
+    Arc::new(Expr::FFICall(fun_name, ret_ty, param_tys, args)).into_expr_info(src)
 }
 
 // TODO: Use persistent binary search tree avoid O(n^2) complexity of calculate_free_vars?
@@ -997,12 +993,12 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             }
             ei.set_free_vars(free_vars)
         }
-        Expr::CallC(_, _, _, _, args) => {
+        Expr::FFICall(_, _, _, args) => {
             let mut free_vars: HashSet<FullName> = Default::default();
             let mut ei = ei.clone();
             for (i, e) in args.iter().enumerate() {
                 let e = calculate_free_vars(e.clone());
-                ei = ei.set_call_c_arg(e.clone(), i);
+                ei = ei.set_ffi_call_arg(e.clone(), i);
                 free_vars.extend(e.free_vars.clone().unwrap());
             }
             ei.set_free_vars(free_vars)

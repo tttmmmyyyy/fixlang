@@ -985,11 +985,11 @@ impl Program {
                 }
                 expr
             }
-            Expr::CallC(_, _, _, _, args) => {
+            Expr::FFICall(_, _, _, args) => {
                 let mut expr = expr.clone();
                 for (i, e) in args.iter().enumerate() {
                     let e = self.instantiate_expr(e);
-                    expr = expr.set_call_c_arg(e, i);
+                    expr = expr.set_ffi_call_arg(e, i);
                 }
                 expr
             }

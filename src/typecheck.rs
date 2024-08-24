@@ -845,7 +845,7 @@ impl TypeCheckContext {
                 }
                 ei
             }
-            Expr::CallC(_, ret_ty, param_tys, is_va_args, args) => {
+            Expr::FFICall(_, ret_ty, param_tys, args) => {
                 let ret_ty = type_tycon(ret_ty);
                 if let Err(_) = self.unify_rollback_if_err(&ty, &ret_ty) {
                     error_exit_with_src(
@@ -863,14 +863,9 @@ impl TypeCheckContext {
                     .collect::<Vec<_>>();
                 let mut ei = ei.clone();
                 for (i, e) in args.iter().enumerate() {
-                    let expect_ty = if i < param_tys.len() {
-                        param_tys[i].clone()
-                    } else {
-                        assert!(is_va_args);
-                        type_tyvar_star(&self.new_tyvar())
-                    };
-                    let e = self.unify_type_of_expr(e, expect_ty);
-                    ei = ei.set_call_c_arg(e, i);
+                    assert!(i < param_tys.len());
+                    let e = self.unify_type_of_expr(e, param_tys[i].clone());
+                    ei = ei.set_ffi_call_arg(e, i);
                 }
                 ei
             }
@@ -1233,9 +1228,9 @@ impl TypeCheckContext {
                 let elems = elems.iter().map(|e| self.finish_inferred_types(e.clone())).collect::<Vec<_>>();
                 expr.set_array_lit_elems(elems)
             }
-            Expr::CallC(_, _, _, _, args) => {
+            Expr::FFICall(_, _, _, args) => {
                 let args = args.iter().map(|arg| self.finish_inferred_types(arg.clone())).collect::<Vec<_>>();
-                expr.set_call_c_args(args)
+                expr.set_ffi_call_args(args)
             }
         }
     }

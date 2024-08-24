@@ -217,11 +217,11 @@ fn replace_closure_call_to_funptr_call_subexprs(
             }
             expr
         }
-        Expr::CallC(_, _, _, _, args) => {
+        Expr::FFICall(_, _, _, args) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
-                expr =
-                    expr.set_call_c_arg(replace_closure_call_to_funptr_call_subexprs(e, symbols), i)
+                expr = expr
+                    .set_ffi_call_arg(replace_closure_call_to_funptr_call_subexprs(e, symbols), i)
             }
             expr
         }
@@ -407,11 +407,11 @@ fn replace_free_var(
             }
             Ok(expr)
         }
-        Expr::CallC(_, _, _, _, elems) => {
+        Expr::FFICall(_, _, _, elems) => {
             let mut expr = expr.clone();
             for (i, e) in elems.iter().enumerate() {
                 let e = replace_free_var(e, from, to, scope)?;
-                expr = expr.set_call_c_arg(e, i);
+                expr = expr.set_ffi_call_arg(e, i);
             }
             Ok(expr)
         }

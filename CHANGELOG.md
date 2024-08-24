@@ -25,7 +25,8 @@
 ### Fixed
 
 - Fix an issue on `Std::Array::act` which may cause memory leak.
-- Fix #45, #46, #47, 49.
+- Fix #45, #46, #47, #49.
+- Disallow `...` in argument types list in `CALL_C` (`FFI_CALL`) because there is no way to handle variadic arguments in Fix.
 
 ## [0.2.0] - 2024-06-12
 

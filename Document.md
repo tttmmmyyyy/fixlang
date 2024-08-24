@@ -60,7 +60,7 @@
     - [Structs](#structs-2)
     - [Unions](#unions-2)
   - [Foreign function interface (FFI)](#foreign-function-interface-ffi)
-    - [Calling C functions from Fix](#calling-c-functions-from-fix)
+    - [Calling a foreign function in Fix](#calling-a-foreign-function-in-fix)
     - [Exporting Fix values / functions to C](#exporting-fix-values--functions-to-c)
     - [Sending Fix boxed values to C](#sending-fix-boxed-values-to-c)
     - [Retaining / releasing Fix's value from C](#retaining--releasing-fixs-value-from-c)
@@ -1551,17 +1551,17 @@ type Weight = box union { pound: I64, kilograms: I64 };
 
 ## Foreign function interface (FFI)
 
-You can link a native (C) library to a Fix program by `--static-link` or `--dynamic-link` compiler flag, and call the linked C functions from Fix side.
+You can link a static or shared library to a Fix program by `--static-link` or `--dynamic-link` compiler flag, and call native functions in the Fix program or call Fix functions in the library.
 
 Note that using FFI can easily break Fix's assurance such as immutability or memory safety.
-The programmer has a responsibility to hide the side effect of a foreign function into `IO`, and manage resources properly.
+The programmer has a responsibility to hide the side effect of a foreign function into `IO`, and manage resources properly to avoid segmentation fault or memory leak.
 
-### Calling C functions from Fix
+### Calling a foreign function in Fix
 
-To call a C function, use the following expression:
+Use the `FFI_CALL` expression to call a foreign function in Fix. The syntax is as follows:
 
 ```
-FFI_CALL[{c_function_signature}, {arg_0}, {arg_1}, ...]
+FFI_CALL[{function_signature}, {arg_0}, {arg_1}, ...]
 ```
 
 Example: 
@@ -1570,20 +1570,21 @@ Example:
 main : IO ();
 main = (
     eval "Hello C function!\n".borrow_c_str(|ptr|
-        let _ = FFI_CALL[I32 printf(Ptr, ...), ptr]; // Explicitly ignore the result of `printf`.
+        let _ = FFI_CALL[I32 printf(Ptr), ptr]; // Explicitly ignore the result of `printf`.
         ()
     );
     pure()
 );
 ```
 
-In `{c_function_signature}`, you need to specify type of return value and arguments. 
+In `{c_function_signature}`, you need to specify the name and the signature of the foreign function to call.
+The signature should be written in the form of `{return_type} {function_name}({arg_type_0}, {arg_type_1}, ...)`.
+For `{return_type}` or `{arg_type_i}`, you can use the following types:
 
-- Use `Ptr` for pointers.
-- Use `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64` for numeric types. 
-- Moreover, there are type aliases `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble` to concrete Fix numeric types depending on the system gcc.
-- Use `...` for `va_arg`.
-- If return type is `void`, put `()` before the function name.
+- `Ptr` for pointers.
+- `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64` for primitive numeric types.
+- `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble` for C's primitive numeric types.
+- `()` instead of `void` for a function that returns nothing.
 
 ### Exporting Fix values / functions to C
 
