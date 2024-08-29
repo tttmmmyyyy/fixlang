@@ -29,6 +29,7 @@ mod runner;
 mod runtime;
 // mod segcache;
 mod cpu_features;
+mod language_server;
 mod sourcefile;
 mod stdlib;
 mod stopwatch;
@@ -64,6 +65,7 @@ use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
+use language_server::launch_language_server;
 use misc::*;
 use object::*;
 use parser::*;
@@ -83,6 +85,7 @@ use typecheck::*;
 use uncurry_optimization::*;
 
 fn main() {
+    // Options
     let source_file = Arg::new("source-files")
         .long("file")
         .short('f')
@@ -156,6 +159,8 @@ fn main() {
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
             NOTE: Separate compilation is disabled under the default optimization level.\n",
         );
+
+    // "fix run" subcommand
     let run_subc = App::new("run")
         .about("Executes a Fix program.")
         .arg(source_file.clone())
@@ -169,6 +174,8 @@ fn main() {
         .arg(threaded.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone());
+
+    // "fix build" subcommand
     let build_subc = App::new("build")
         .about("Builds an executable binary from source files.")
         .arg(source_file.clone())
@@ -182,13 +189,20 @@ fn main() {
         .arg(threaded.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone());
+
+    // "fix clean" subcommand
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
+
+    // "fix language-server" subcommand
+    let lsp_subc = App::new("language-server").about("Launch language server for Fix.");
+
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
         .subcommand(run_subc)
         .subcommand(build_subc)
-        .subcommand(clean_subc);
+        .subcommand(clean_subc)
+        .subcommand(lsp_subc);
 
     fn read_source_files_options(m: &ArgMatches) -> Vec<PathBuf> {
         m.get_many::<String>("source-files")
@@ -271,6 +285,9 @@ fn main() {
         }
         Some(("clean", _m)) => {
             clean_command();
+        }
+        Some(("language-server", _m)) => {
+            launch_language_server();
         }
         _ => eprintln!("Unknown command!"),
     }
