@@ -1,4 +1,4 @@
-use std::io::{BufRead, Write};
+use std::io::{Read, Write};
 
 // Launch the language server
 pub fn launch_language_server() {
@@ -13,10 +13,11 @@ pub fn launch_language_server() {
         .unwrap();
 
     let stdin = std::io::stdin();
-    let mut handle = stdin.lock();
-    let mut buffer = String::new();
-    while handle.read_line(&mut buffer).unwrap() > 0 {
-        log_file.write_all(buffer.as_bytes()).unwrap();
-        buffer.clear();
+    let mut stdin = stdin.lock();
+
+    let mut buffer = [0; 1];
+    while stdin.read_exact(&mut buffer).is_ok() {
+        log_file.write_all(&buffer).unwrap();
+        log_file.flush().unwrap();
     }
 }

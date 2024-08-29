@@ -23,6 +23,7 @@ serde-pickle = "1.1.1"
 regex = "1.9.3"
 rand = "0.8.5"
 num-bigint = "0.4.4"
+lsp-types = "0.97.0"
 
 [[bin]]
 name = "fix"
