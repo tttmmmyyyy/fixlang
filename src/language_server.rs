@@ -2,7 +2,7 @@ use lsp_types::{InitializeParams, InitializeResult};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::constants::LSP_LOG_FILE_PATH;
+use crate::{constants::LSP_LOG_FILE_PATH, Configuration};
 use std::{
     fs::File,
     io::{Read, Write},
@@ -41,7 +41,7 @@ impl JSONRPCMessage {
 }
 
 // Launch the language server
-pub fn launch_language_server() {
+pub fn launch_language_server(mut config: Configuration) {
     let mut log_file = open_log_file();
     write_log(&mut log_file, "Language server started.\n");
 

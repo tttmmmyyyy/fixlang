@@ -250,13 +250,17 @@ fn main() {
     }
 
     fn create_config_from_args_and_projfile(
-        args: &ArgMatches,
+        args: Option<&ArgMatches>,
         proj: &ProjectFile,
     ) -> Configuration {
         let mut config = Configuration::release();
 
         // Set `source_files`.
-        let mut files_from_args = read_source_files_options(args);
+        let mut files_from_args = if let Some(args) = args {
+            read_source_files_options(args)
+        } else {
+            vec![]
+        };
         let mut files_from_proj = proj
             .files
             .iter()
@@ -271,55 +275,56 @@ fn main() {
         } else {
             error_exit("No source files are specified.");
         }
+        if let Some(args) = args {
+            // Set `output_file_path`.
+            config.out_file_path = read_output_file_option(args);
 
-        // Set `output_file_path`.
-        config.out_file_path = read_output_file_option(args);
+            // Set `linked_libraries`.
+            config
+                .linked_libraries
+                .append(&mut read_library_options(args));
 
-        // Set `linked_libraries`.
-        config
-            .linked_libraries
-            .append(&mut read_library_options(args));
+            // Set `library_search_paths`.
+            config
+                .library_search_paths
+                .append(&mut read_library_paths_option(args));
 
-        // Set `library_search_paths`.
-        config
-            .library_search_paths
-            .append(&mut read_library_paths_option(args));
+            // Set `emit_llvm`.
+            config.emit_llvm = args.contains_id("emit-llvm");
 
-        // Set `emit_llvm`.
-        config.emit_llvm = args.contains_id("emit-llvm");
-
-        // Set `threaded`.
-        if args.contains_id("threaded") {
-            config.set_threaded();
-        }
-
-        // Set `debug_info`.
-        if args.contains_id("debug-info") {
-            config.set_debug_info();
-        }
-
-        // Set `opt_level`.
-        if args.contains_id("opt-level") {
-            // These lines should be after calling `set_debug_info`; otherwise, user cannot specify the optimization level while generating debug information.
-            let opt_level = args.get_one::<String>("opt-level").unwrap();
-            match opt_level.as_str() {
-                "none" => config.set_fix_opt_level(FixOptimizationLevel::None),
-                "minimum" => config.set_fix_opt_level(FixOptimizationLevel::Minimum),
-                "separated" => config.set_fix_opt_level(FixOptimizationLevel::Separated),
-                "default" => config.set_fix_opt_level(FixOptimizationLevel::Default),
-                _ => panic!("Unknown optimization level: {}", opt_level),
+            // Set `threaded`.
+            if args.contains_id("threaded") {
+                config.set_threaded();
             }
-        }
 
-        // Set `verbose`.
-        if args.contains_id("verbose") {
-            config.verbose = true;
-        }
+            // Set `debug_info`.
+            if args.contains_id("debug-info") {
+                config.set_debug_info();
+            }
 
-        // Set `max_cu_size`.
-        config.max_cu_size = *args
-            .get_one::<usize>("max-cu-size")
-            .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
+            // Set `opt_level`.
+            if args.contains_id("opt-level") {
+                // These lines should be after calling `set_debug_info`; otherwise, user cannot specify the optimization level while generating debug information.
+                let opt_level = args.get_one::<String>("opt-level").unwrap();
+                match opt_level.as_str() {
+                    "none" => config.set_fix_opt_level(FixOptimizationLevel::None),
+                    "minimum" => config.set_fix_opt_level(FixOptimizationLevel::Minimum),
+                    "separated" => config.set_fix_opt_level(FixOptimizationLevel::Separated),
+                    "default" => config.set_fix_opt_level(FixOptimizationLevel::Default),
+                    _ => panic!("Unknown optimization level: {}", opt_level),
+                }
+            }
+
+            // Set `verbose`.
+            if args.contains_id("verbose") {
+                config.verbose = true;
+            }
+
+            // Set `max_cu_size`.
+            config.max_cu_size = *args
+                .get_one::<usize>("max-cu-size")
+                .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
+        }
 
         config
     }
@@ -329,13 +334,16 @@ fn main() {
 
     match app.get_matches().subcommand() {
         Some(("run", args)) => {
-            run_file(create_config_from_args_and_projfile(args, &proj_file));
+            run_file(create_config_from_args_and_projfile(Some(args), &proj_file));
         }
         Some(("build", args)) => {
-            build_file(&mut create_config_from_args_and_projfile(args, &proj_file));
+            build_file(&mut create_config_from_args_and_projfile(
+                Some(args),
+                &proj_file,
+            ));
         }
         Some(("language-server", _args)) => {
-            launch_language_server();
+            launch_language_server(create_config_from_args_and_projfile(None, &proj_file));
         }
         Some(("clean", _args)) => {
             clean_command();

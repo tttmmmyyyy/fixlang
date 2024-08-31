@@ -67,7 +67,7 @@
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
 - [Compiler usage](#compiler-usage)
-  - [Project (Experimental)](#project-experimental)
+  - [Project file (Experimental)](#project-file-experimental)
   - [Debugging](#debugging)
   - [Language Server Protocol (Experimental)](#language-server-protocol-experimental)
 
@@ -1711,7 +1711,7 @@ The following is the table of operators sorted by its precedence (operator of hi
 
 # Compiler usage
 
-## Project (Experimental)
+## Project file (Experimental)
 
 When the "fixproj.toml" file is in the current directory, "fix build" and "fix run" will refelct the configuration in the file.
 
@@ -1729,3 +1729,6 @@ There are some notes on debugging Fix program:
 - Currently, we are not able to tell the debugger the size of an array which is determined at run time. So we are always setting the array size to 100 in the debug information. You cannot show elements indexed after 100, and if the array is shorter than 100, invalid values are shown.
 
 ## Language Server Protocol (Experimental)
+
+Running `fix language-server` starts a language server which supports Language Server Protocol (LSP). 
+The language server recognizes the Fix source files by "fixproj.toml".

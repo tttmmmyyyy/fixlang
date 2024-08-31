@@ -119,13 +119,6 @@ impl Configuration {
         Self::default()
     }
 
-    // Update the configuration from the project file.
-    pub fn set_from_project_file(&mut self, project_file: &ProjectFile) {
-        for file in &project_file.files {
-            self.source_files.push(PathBuf::from(file));
-        }
-    }
-
     // Usual configuration for compiler development
     #[allow(dead_code)]
     pub fn develop_compiler() -> Configuration {
