@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::cpu_features::CpuFeatures;
 
 use crate::constants::{CHECK_C_TYPES_EXEC_PATH, CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
+use crate::project::ProjectFile;
 use crate::{misc::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
@@ -116,6 +117,13 @@ impl Configuration {
     // Configuration for release build.
     pub fn release() -> Configuration {
         Self::default()
+    }
+
+    // Update the configuration from the project file.
+    pub fn set_from_project_file(&mut self, project_file: &ProjectFile) {
+        for file in &project_file.files {
+            self.source_files.push(PathBuf::from(file));
+        }
     }
 
     // Usual configuration for compiler development

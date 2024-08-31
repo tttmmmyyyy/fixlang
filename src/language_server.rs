@@ -212,7 +212,7 @@ fn write_log(file: &mut File, message: &str) {
 }
 
 // Handle "initialize" method.
-fn handle_initialize(id: u32, _params: &InitializeParams, log_file: &mut File) {
+fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: &mut File) {
     // Return empty capabilities.
     let result = InitializeResult {
         capabilities: Default::default(),

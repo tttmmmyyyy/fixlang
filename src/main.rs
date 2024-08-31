@@ -13,6 +13,7 @@ extern crate regex;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_pickle;
+extern crate toml;
 
 mod ast;
 mod borrowing_optimization;
@@ -31,6 +32,7 @@ mod runtime;
 // mod segcache;
 mod cpu_features;
 mod language_server;
+mod project;
 mod sourcefile;
 mod stdlib;
 mod stopwatch;
@@ -72,6 +74,7 @@ use object::*;
 use parser::*;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
+use project::ProjectFile;
 use runner::*;
 use runtime::*;
 use sourcefile::*;
@@ -90,11 +93,14 @@ fn main() {
     let source_file = Arg::new("source-files")
         .long("file")
         .short('f')
-        .help("Source files to be compiled and linked. Exactly one file of them must define `Main` module and `main : IO ()`.")
         .action(clap::ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
-        .required(true);
+        .help(
+            "Source files to be compiled and linked. \n\
+             Exactly one file of them must define `Main` module and `main : IO ()`. \n\
+             The option overrides the \"files\" specified in \"fixproj.toml\".",
+        );
     let static_link_library = Arg::new("static-link-library")
         .long("static-link")
         .short('s')
@@ -206,10 +212,11 @@ fn main() {
         .subcommand(lsp_subc);
 
     fn read_source_files_options(m: &ArgMatches) -> Vec<PathBuf> {
-        m.get_many::<String>("source-files")
-            .unwrap()
-            .map(|s| PathBuf::from(s))
-            .collect()
+        let files = m.get_many::<String>("source-files");
+        if files.is_none() {
+            return vec![];
+        }
+        files.unwrap().map(|s| PathBuf::from(s)).collect()
     }
 
     fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
@@ -242,24 +249,59 @@ fn main() {
             .collect::<Vec<_>>()
     }
 
-    fn create_config_from_matches(m: &ArgMatches) -> Configuration {
+    fn create_config_from_args_and_projfile(
+        args: &ArgMatches,
+        proj: &ProjectFile,
+    ) -> Configuration {
         let mut config = Configuration::release();
-        config.source_files = read_source_files_options(m);
-        config.out_file_path = read_output_file_option(m);
-        config.linked_libraries.append(&mut read_library_options(m));
+
+        // Set `source_files`.
+        let mut files_from_args = read_source_files_options(args);
+        let mut files_from_proj = proj
+            .files
+            .iter()
+            .map(|f| PathBuf::from(f))
+            .collect::<Vec<_>>();
+        if files_from_args.len() > 0 {
+            // If the user specifies source files by command line options, use them.
+            config.source_files.append(&mut files_from_args);
+        } else if files_from_proj.len() > 0 {
+            // If the user does not specify source files by command line options, use the source files in the project file.
+            config.source_files.append(&mut files_from_proj);
+        } else {
+            error_exit("No source files are specified.");
+        }
+
+        // Set `output_file_path`.
+        config.out_file_path = read_output_file_option(args);
+
+        // Set `linked_libraries`.
+        config
+            .linked_libraries
+            .append(&mut read_library_options(args));
+
+        // Set `library_search_paths`.
         config
             .library_search_paths
-            .append(&mut read_library_paths_option(m));
-        config.emit_llvm = m.contains_id("emit-llvm");
-        if m.contains_id("threaded") {
+            .append(&mut read_library_paths_option(args));
+
+        // Set `emit_llvm`.
+        config.emit_llvm = args.contains_id("emit-llvm");
+
+        // Set `threaded`.
+        if args.contains_id("threaded") {
             config.set_threaded();
         }
-        if m.contains_id("debug-info") {
+
+        // Set `debug_info`.
+        if args.contains_id("debug-info") {
             config.set_debug_info();
         }
-        if m.contains_id("opt-level") {
+
+        // Set `opt_level`.
+        if args.contains_id("opt-level") {
             // These lines should be after calling `set_debug_info`; otherwise, user cannot specify the optimization level while generating debug information.
-            let opt_level = m.get_one::<String>("opt-level").unwrap();
+            let opt_level = args.get_one::<String>("opt-level").unwrap();
             match opt_level.as_str() {
                 "none" => config.set_fix_opt_level(FixOptimizationLevel::None),
                 "minimum" => config.set_fix_opt_level(FixOptimizationLevel::Minimum),
@@ -268,27 +310,35 @@ fn main() {
                 _ => panic!("Unknown optimization level: {}", opt_level),
             }
         }
-        if m.contains_id("verbose") {
+
+        // Set `verbose`.
+        if args.contains_id("verbose") {
             config.verbose = true;
         }
-        config.max_cu_size = *m
+
+        // Set `max_cu_size`.
+        config.max_cu_size = *args
             .get_one::<usize>("max-cu-size")
             .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
+
         config
     }
 
+    // Read the project file.
+    let proj_file = ProjectFile::read_file();
+
     match app.get_matches().subcommand() {
-        Some(("run", m)) => {
-            run_file(create_config_from_matches(m));
+        Some(("run", args)) => {
+            run_file(create_config_from_args_and_projfile(args, &proj_file));
         }
-        Some(("build", m)) => {
-            build_file(&mut create_config_from_matches(m));
+        Some(("build", args)) => {
+            build_file(&mut create_config_from_args_and_projfile(args, &proj_file));
         }
-        Some(("clean", _m)) => {
-            clean_command();
-        }
-        Some(("language-server", _m)) => {
+        Some(("language-server", _args)) => {
             launch_language_server();
+        }
+        Some(("clean", _args)) => {
+            clean_command();
         }
         _ => eprintln!("Unknown command!"),
     }
