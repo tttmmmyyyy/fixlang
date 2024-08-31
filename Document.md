@@ -66,8 +66,10 @@
     - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
-- [Tips](#tips)
-  - [How to debug Fix program](#how-to-debug-fix-program)
+- [Compiler usage](#compiler-usage)
+  - [Project (Experimental)](#project-experimental)
+  - [Debugging](#debugging)
+  - [Language Server Protocol (Experimental)](#language-server-protocol-experimental)
 
 
 # Tutorial
@@ -1707,9 +1709,16 @@ The following is the table of operators sorted by its precedence (operator of hi
 | &#124;&#124;      | right associative binary | -                                   | short-circuit logical OR                                           |
 | $                 | right associative binary | -                                   | right associative function application: f $ g $ x = f(g(x))        |
 
-# Tips 
+# Compiler usage
 
-## How to debug Fix program
+## Project (Experimental)
+
+When the "fixproj.toml" file is in the current directory, "fix build" and "fix run" will refelct the configuration in the file.
+
+Following fields are available in the "fixproj.toml" file:
+- `files`: A list of Fix source files. With this field, you do not need to specify the source files in the command line argument. If you specify `--files` (`-f`) option in the command line, the `files` in the "fixproj.toml" will be ignored.
+
+## Debugging
 
 Running `fix build` with `-g` option generates executable binary with DWARF debugging information. Then you can debug the binary by lldb, gdb or other GUI debuggers such as [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb). 
 
@@ -1718,3 +1727,5 @@ In VSCode, you cannot put a breakpoint in *.fix files by default. As a workaroun
 There are some notes on debugging Fix program:
 - Unlike other languages, Fix does not release local variables at the end of their scope, but at the last point of use. So if you break after the last use of a local variable, the debugger may show you an invalid value.
 - Currently, we are not able to tell the debugger the size of an array which is determined at run time. So we are always setting the array size to 100 in the debug information. You cannot show elements indexed after 100, and if the array is shorter than 100, invalid values are shown.
+
+## Language Server Protocol (Experimental)
