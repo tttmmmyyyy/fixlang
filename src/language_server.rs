@@ -1,4 +1,4 @@
-use lsp_types::{InitializeParams, InitializeResult};
+use lsp_types::{InitializeParams, InitializeResult, InitializedParams};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 
@@ -134,13 +134,21 @@ pub fn launch_language_server(mut config: Configuration) {
         let message = message.unwrap();
 
         // Depending on the method, handle the message.
-        if message.method.as_ref().unwrap() == "initialize" {
+        let method = message.method.as_ref().unwrap();
+        if method == "initialize" {
             let params: Option<InitializeParams> =
                 parase_params(message.params.unwrap(), &mut log_file);
             if params.is_none() {
                 continue;
             }
             handle_initialize(message.id.unwrap(), &params.unwrap(), &mut log_file);
+        } else if method == "initialized" {
+            let params: Option<InitializedParams> =
+                parase_params(message.params.unwrap(), &mut log_file);
+            if params.is_none() {
+                continue;
+            }
+            handle_initialized(&params.unwrap(), &mut log_file);
         }
     }
 }
@@ -219,4 +227,9 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: &mut File) 
         server_info: None,
     };
     send_response(id, Some(&result))
+}
+
+// Handle "initialized" method.
+fn handle_initialized(_params: &InitializedParams, _log_file: &mut File) {
+    write_log(_log_file, "Initialized.\n");
 }
