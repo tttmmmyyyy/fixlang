@@ -86,6 +86,7 @@ pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 pub const CTRL_BLK_OBJ_ID_IDX: u32 = 2;
 
+// Paths
 pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const DOT_FIXLANG: &str = ".fixlang";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
@@ -277,3 +278,6 @@ pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";
 
 pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE: usize = 128;
 pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR: &str = "128";
+
+// Language server
+pub const LSP_DIAGNOTICS_DELAY_MS: u64 = 3000;

@@ -41,7 +41,7 @@ impl JSONRPCMessage {
 }
 
 // Launch the language server
-pub fn launch_language_server(mut config: Configuration) {
+pub fn launch_language_server() {
     let mut log_file = open_log_file();
     write_log(&mut log_file, "Language server started.\n");
 
@@ -116,11 +116,6 @@ pub fn launch_language_server(mut config: Configuration) {
         }
         let message = message.unwrap();
 
-        // Write the message to the log file.
-        // write_log(&mut log_file, "Message: \n");
-        // write_log(&mut log_file, &message);
-        // write_log(&mut log_file, "\n");
-
         // Parse the message as JSONRPCMessage.
         let message: Result<JSONRPCMessage, _> = serde_json::from_str(&message);
         if message.is_err() {
@@ -134,21 +129,27 @@ pub fn launch_language_server(mut config: Configuration) {
         let message = message.unwrap();
 
         // Depending on the method, handle the message.
-        let method = message.method.as_ref().unwrap();
-        if method == "initialize" {
-            let params: Option<InitializeParams> =
-                parase_params(message.params.unwrap(), &mut log_file);
-            if params.is_none() {
-                continue;
+        if let Some(method) = message.method.as_ref() {
+            let id = message.id.unwrap();
+            if method == "initialize" {
+                let params: Option<InitializeParams> =
+                    parase_params(message.params.unwrap(), &mut log_file);
+                if params.is_none() {
+                    continue;
+                }
+                handle_initialize(id, &params.unwrap(), &mut log_file);
+            } else if method == "initialized" {
+                let params: Option<InitializedParams> =
+                    parase_params(message.params.unwrap(), &mut log_file);
+                if params.is_none() {
+                    continue;
+                }
+                handle_initialized(&params.unwrap(), &mut log_file);
+            } else if method == "shutdown" {
+                handle_shutdown(id, &mut log_file);
+            } else if method == "exit" {
+                break;
             }
-            handle_initialize(message.id.unwrap(), &params.unwrap(), &mut log_file);
-        } else if method == "initialized" {
-            let params: Option<InitializedParams> =
-                parase_params(message.params.unwrap(), &mut log_file);
-            if params.is_none() {
-                continue;
-            }
-            handle_initialized(&params.unwrap(), &mut log_file);
         }
     }
 }
@@ -231,5 +232,12 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: &mut File) 
 
 // Handle "initialized" method.
 fn handle_initialized(_params: &InitializedParams, _log_file: &mut File) {
-    write_log(_log_file, "Initialized.\n");
+    // TODO: Launch the diagnostics thread.
+}
+
+// Handle "shutdown" method.
+fn handle_shutdown(id: u32, _log_file: &mut File) {
+    // TODO: Shutdown the diagnostics thread.
+    let param: Option<&()> = None;
+    send_response(id, param);
 }

@@ -272,8 +272,6 @@ fn main() {
         } else if files_from_proj.len() > 0 {
             // If the user does not specify source files by command line options, use the source files in the project file.
             config.source_files.append(&mut files_from_proj);
-        } else {
-            error_exit("No source files are specified.");
         }
         if let Some(args) = args {
             // Set `output_file_path`.
@@ -329,21 +327,20 @@ fn main() {
         config
     }
 
-    // Read the project file.
-    let proj_file = ProjectFile::read_file();
-
     match app.get_matches().subcommand() {
         Some(("run", args)) => {
+            let proj_file = ProjectFile::read_file();
             run_file(create_config_from_args_and_projfile(Some(args), &proj_file));
         }
         Some(("build", args)) => {
+            let proj_file = ProjectFile::read_file();
             build_file(&mut create_config_from_args_and_projfile(
                 Some(args),
                 &proj_file,
             ));
         }
         Some(("language-server", _args)) => {
-            launch_language_server(create_config_from_args_and_projfile(None, &proj_file));
+            launch_language_server();
         }
         Some(("clean", _args)) => {
             clean_command();
