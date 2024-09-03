@@ -130,14 +130,17 @@ pub fn launch_language_server() {
 
         // Depending on the method, handle the message.
         if let Some(method) = message.method.as_ref() {
-            let id = message.id.unwrap();
             if method == "initialize" {
+                let id = parse_id(&message, method, &mut log_file);
+                if id.is_none() {
+                    continue;
+                }
                 let params: Option<InitializeParams> =
                     parase_params(message.params.unwrap(), &mut log_file);
                 if params.is_none() {
                     continue;
                 }
-                handle_initialize(id, &params.unwrap(), &mut log_file);
+                handle_initialize(id.unwrap(), &params.unwrap(), &mut log_file);
             } else if method == "initialized" {
                 let params: Option<InitializedParams> =
                     parase_params(message.params.unwrap(), &mut log_file);
@@ -146,8 +149,13 @@ pub fn launch_language_server() {
                 }
                 handle_initialized(&params.unwrap(), &mut log_file);
             } else if method == "shutdown" {
-                handle_shutdown(id, &mut log_file);
+                let id = parse_id(&message, method, &mut log_file);
+                if id.is_none() {
+                    continue;
+                }
+                handle_shutdown(id.unwrap(), &mut log_file);
             } else if method == "exit" {
+                write_log(&mut log_file, "Exiting the language server.\n");
                 break;
             }
         }
@@ -162,6 +170,21 @@ fn parase_params<T: DeserializeOwned>(params: Value, log_file: &mut File) -> Opt
         return None;
     }
     params.ok()
+}
+
+fn parse_id(message: &JSONRPCMessage, method: &str, log_file: &mut File) -> Option<u32> {
+    if message.id.is_none() {
+        write_log(
+            log_file,
+            format!(
+                "Failed to get \"id\" from the message for method \"{}\".\n",
+                method
+            )
+            .as_str(),
+        );
+        return None;
+    }
+    message.id
 }
 
 fn send_response<T: Serialize>(id: u32, result: Option<&T>) {
