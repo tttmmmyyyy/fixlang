@@ -1,14 +1,17 @@
 use lsp_types::{
-    InitializeParams, InitializeResult, InitializedParams, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
+    DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{constants::LSP_LOG_FILE_PATH, Configuration};
+use crate::{
+    constants::LSP_LOG_FILE_PATH, error::Errors, project::ProjectFile, Configuration, Span,
+};
 use std::{
     fs::File,
     io::{Read, Write},
+    str::FromStr,
     sync::{
         mpsc::{self, Receiver, Sender},
         Arc, Mutex,
@@ -386,12 +389,85 @@ fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mute
                 break;
             }
             DiagnosticsMessage::OnSaveFile => {
-                run_diagnostics(log_file.clone());
+                let res = run_diagnostics(log_file.clone());
+                if res.is_err() {
+                    send_diagnostics_notification(res.unwrap_err(), log_file.clone());
+                }
             }
         }
     }
 }
 
-fn run_diagnostics(log_file: Arc<Mutex<File>>) {
-    // TODO: check if the file has been changed actually after previous diagnostics.
+// Convert a `Span` into a `Range`.
+fn span_to_range(span: &Span) -> lsp_types::Range {
+    let (start_line, start_column) = span.start_line_col();
+    let (end_line, end_column) = span.end_line_col();
+    lsp_types::Range {
+        start: lsp_types::Position {
+            line: start_line as u32,
+            character: start_column as u32,
+        },
+        end: lsp_types::Position {
+            line: end_line as u32,
+            character: end_column as u32,
+        },
+    }
+}
+
+// Send the diagnostics notification to the client.
+fn send_diagnostics_notification(errs: Errors, log_file: Arc<Mutex<File>>) {
+    // Organize the errors by file paths.
+    for (path, errs) in errs.organize_by_path() {
+        // Convert path into Uri.
+        let path = path.to_str();
+        if path.is_none() {
+            let mut msg = "Failed to convert a path into string: \n".to_string();
+            msg.push_str(&format!("{:?}\n", path));
+            write_log(log_file.clone(), msg.as_str());
+            continue;
+        }
+        let path = path.unwrap();
+        let uri = Uri::from_str(path);
+        if uri.is_err() {
+            let mut msg = "Failed to convert a path into Uri: \n".to_string();
+            msg.push_str(&format!("{}\n", path));
+            write_log(log_file.clone(), msg.as_str());
+            continue;
+        }
+        let uri = uri.unwrap();
+
+        // Send the diagnostics notification for each file.
+        let params = lsp_types::PublishDiagnosticsParams {
+            uri,
+            diagnostics: errs
+                .iter()
+                .map(|err| lsp_types::Diagnostic {
+                    range: err
+                        .srcs
+                        .first()
+                        .map(|span| span_to_range(span))
+                        .unwrap_or_default(),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: None,
+                    code_description: None,
+                    source: None,
+                    message: err.msg.clone(),
+                    tags: None,
+                    related_information: None,
+                    data: None,
+                })
+                .collect(),
+            version: None,
+        };
+        send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
+    }
+}
+
+fn run_diagnostics(log_file: Arc<Mutex<File>>) -> Result<(), Errors> {
+    // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
+
+    // Open the project file.
+    let project_file = ProjectFile::read_file()?;
+
+    Ok(())
 }

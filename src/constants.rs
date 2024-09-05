@@ -278,6 +278,3 @@ pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";
 
 pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE: usize = 128;
 pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR: &str = "128";
-
-// Language server
-pub const LSP_DIAGNOTICS_DELAY_MS: u64 = 3000;

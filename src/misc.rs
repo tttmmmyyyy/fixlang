@@ -1,51 +1,6 @@
 use super::*;
 use std::{fs, hash::Hash};
 
-pub fn error_exit(msg: &str) -> ! {
-    // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
-    // We replace it to empty.
-    std::panic::set_hook(Box::new(move |info| {
-        let payload = info.payload();
-        let msg = payload
-            .downcast_ref::<String>()
-            .cloned()
-            .unwrap_or(format!("{:?}", payload));
-        eprintln!("{}", msg);
-    }));
-    panic!("error: {}", msg);
-}
-
-pub fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
-    let mut str = String::default();
-    str += msg;
-    str += "\n";
-    match src {
-        None => {}
-        Some(v) => {
-            str += "\n";
-            str += &v.to_string();
-        }
-    };
-    error_exit(&str)
-}
-
-pub fn error_exit_with_srcs(msg: &str, srcs: &[&Option<Span>]) -> ! {
-    let mut str = String::default();
-    str += msg;
-    str += "\n";
-    for src in srcs {
-        match src {
-            None => {}
-            Some(v) => {
-                str += "\n";
-                str += &v.to_string();
-            }
-        }
-    }
-
-    error_exit(&str)
-}
-
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
     format!("{}.{}.fix", file_name, hash)
 }

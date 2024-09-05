@@ -1,6 +1,8 @@
 use core::panic;
 use std::sync::Arc;
 
+use crate::error::error_exit_with_src;
+use crate::error::error_exit_with_srcs;
 use inkwell::types::BasicType;
 use serde::{Deserialize, Serialize};
 

@@ -31,6 +31,7 @@ mod runner;
 mod runtime;
 // mod segcache;
 mod cpu_features;
+mod error;
 mod language_server;
 mod project;
 mod sourcefile;
@@ -57,6 +58,7 @@ use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
 use configuration::*;
 use constants::*;
+use error::exit_if_err;
 use generator::*;
 use graph::*;
 use inkwell::builder::Builder;
@@ -329,11 +331,11 @@ fn main() {
 
     match app.get_matches().subcommand() {
         Some(("run", args)) => {
-            let proj_file = ProjectFile::read_file();
+            let proj_file = exit_if_err(ProjectFile::read_file());
             run_file(create_config_from_args_and_projfile(Some(args), &proj_file));
         }
         Some(("build", args)) => {
-            let proj_file = ProjectFile::read_file();
+            let proj_file = exit_if_err(ProjectFile::read_file());
             build_file(&mut create_config_from_args_and_projfile(
                 Some(args),
                 &proj_file,

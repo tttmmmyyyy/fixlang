@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::error::error_exit;
 use inkwell::module::Linkage;
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};

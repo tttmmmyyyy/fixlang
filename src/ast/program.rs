@@ -1,4 +1,5 @@
 use build_time::build_time_utc;
+use error::{error_exit, error_exit_with_src, error_exit_with_srcs};
 use export_statement::{ExportStatement, ExportedFunctionType};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc, vec};

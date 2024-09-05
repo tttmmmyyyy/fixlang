@@ -7,11 +7,14 @@ use crate::{parser::Rule, runner::read_file};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
+    // The file path.
+    pub file_path: PathBuf,
     #[serde(skip)]
+    // Cached content of the file.
     pub string: Option<Arc<String>>,
+    // Hash of the file content.
     #[serde(skip)]
     pub hash: Option<String>,
-    pub file_path: PathBuf,
 }
 
 impl SourceFile {
@@ -144,6 +147,13 @@ impl Span {
         let source_string = self.input.string();
         let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
         span.start_pos().line_col()
+    }
+
+    // Get line and column number of end.
+    pub fn end_line_col(&self) -> (usize, usize) {
+        let source_string = self.input.string();
+        let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
+        span.end_pos().line_col()
     }
 
     // Show source codes around this span.

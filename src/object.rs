@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::error::error_exit;
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},

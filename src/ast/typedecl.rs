@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use crate::error::error_exit_with_src;
+
 use super::*;
 
 // Declaration of user-defind types.
