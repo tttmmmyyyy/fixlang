@@ -5,7 +5,7 @@ use std::{
 
 use serde::Deserialize;
 
-use crate::{error::error_exit, error::Errors, PROJECT_FILE_PATH};
+use crate::{error::Errors, PROJECT_FILE_PATH};
 
 #[derive(Deserialize, Default)]
 pub struct ProjectFile {

@@ -16,7 +16,7 @@ impl Errors {
     pub fn to_string(&self) -> String {
         let mut str = String::default();
         for err in &self.errs {
-            str += &err.to_String();
+            str += &err.to_string();
             str += "\n\n";
         }
         str
@@ -59,7 +59,7 @@ impl Error {
         }
     }
 
-    pub fn to_String(&self) -> String {
+    pub fn to_string(&self) -> String {
         let mut str = String::default();
         str += &self.msg;
         str += "\n";
