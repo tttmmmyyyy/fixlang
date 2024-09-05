@@ -52,6 +52,8 @@ impl JSONRPCMessage {
 
 // Messaages sent for diagnostic thread.
 enum DiagnosticsMessage {
+    // Started the diagnostics thread.
+    Start,
     // A file is saved.
     OnSaveFile,
     // Stop the diagnostics thread.
@@ -179,6 +181,7 @@ pub fn launch_language_server() {
                 }
                 handle_initialized(
                     &params.unwrap(),
+                    diag_send.clone(),
                     diag_recv.take().unwrap(),
                     log_file.clone(),
                 );
@@ -341,14 +344,22 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<F
 // Handle "initialized" method.
 fn handle_initialized(
     _params: &InitializedParams,
+    diag_send: Sender<DiagnosticsMessage>,
     diag_recv: Receiver<DiagnosticsMessage>,
     log_file: Arc<Mutex<File>>,
 ) {
     // Launch the diagnostics thread.
-    // TODO: launch the diagnostics thread only when `publishDiagnostics` is supported in client.
+    let log_file_cloned = log_file.clone();
     std::thread::spawn(|| {
-        diagnostics_thread(diag_recv, log_file);
+        diagnostics_thread(diag_recv, log_file_cloned);
     });
+
+    // Send `Start` message to the diagnostics thread.
+    if let Err(e) = diag_send.send(DiagnosticsMessage::Start) {
+        let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
+        msg.push_str(&format!("{:?}\n", e));
+        write_log(log_file.clone(), msg.as_str());
+    }
 }
 
 // Handle "shutdown" method.
@@ -383,17 +394,16 @@ fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mute
             // If the sender is dropped, stop the diagnostics thread.
             break;
         }
-        match msg.unwrap() {
+        let res = match msg.unwrap() {
             DiagnosticsMessage::Stop => {
                 // Stop the diagnostics thread.
                 break;
             }
-            DiagnosticsMessage::OnSaveFile => {
-                let res = run_diagnostics(log_file.clone());
-                if res.is_err() {
-                    send_diagnostics_notification(res.unwrap_err(), log_file.clone());
-                }
-            }
+            DiagnosticsMessage::OnSaveFile => run_diagnostics(log_file.clone()),
+            DiagnosticsMessage::Start => run_diagnostics(log_file.clone()),
+        };
+        if res.is_err() {
+            send_diagnostics_notification(res.unwrap_err(), log_file.clone());
         }
     }
 }
