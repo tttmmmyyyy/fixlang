@@ -23,13 +23,13 @@ impl Errors {
     }
 
     // Organize all `Error`s by the path of its (first) `Span`.
-    // If an `Error` has no `Span`, it will be considered as having a path `.`.
+    // If an `Error` has no `Span`, it will be considered as having a path `./`.
     pub fn organize_by_path(&self) -> Vec<(PathBuf, Vec<Error>)> {
         // Organize errors into a hashmap.
         let mut map: HashMap<PathBuf, Vec<Error>> = HashMap::default();
         for err in &self.errs {
             let path = match err.srcs.first() {
-                None => PathBuf::from("."),
+                None => PathBuf::from("./"),
                 Some(span) => span.input.file_path.clone(),
             };
             misc::insert_to_hashmap_vec(&mut map, &path, err.clone());

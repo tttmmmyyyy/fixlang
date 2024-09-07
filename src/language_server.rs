@@ -250,7 +250,7 @@ fn send_notification<T: Serialize>(method: String, params: Option<&T>) {
 fn send_message(msg: &JSONRPCMessage) {
     let msg = serde_json::to_string(msg).unwrap();
     let content_length = msg.len();
-    println!("Content-Length: {}\r\n\r\n{}", content_length, msg);
+    print!("Content-Length: {}\r\n\r\n{}", content_length, msg);
     std::io::stdout()
         .flush()
         .expect("Failed to flush the stdout.");
@@ -477,7 +477,7 @@ fn run_diagnostics(log_file: Arc<Mutex<File>>) -> Result<(), Errors> {
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
     // Open the project file.
-    let project_file = ProjectFile::read_file()?;
+    let project_file = ProjectFile::read_file(true)?;
 
     Ok(())
 }

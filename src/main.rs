@@ -331,11 +331,11 @@ fn main() {
 
     match app.get_matches().subcommand() {
         Some(("run", args)) => {
-            let proj_file = exit_if_err(ProjectFile::read_file());
+            let proj_file = exit_if_err(ProjectFile::read_file(false));
             run_file(create_config_from_args_and_projfile(Some(args), &proj_file));
         }
         Some(("build", args)) => {
-            let proj_file = exit_if_err(ProjectFile::read_file());
+            let proj_file = exit_if_err(ProjectFile::read_file(false));
             build_file(&mut create_config_from_args_and_projfile(
                 Some(args),
                 &proj_file,
