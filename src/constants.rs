@@ -87,8 +87,8 @@ pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 pub const CTRL_BLK_OBJ_ID_IDX: u32 = 2;
 
 // Paths
-pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const DOT_FIXLANG: &str = ".fixlang";
+pub const TYPE_CHECK_CACHE_PATH: &str = ".fixlang/type_check_cache";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const COMPILATION_UNITS_PATH: &str = ".fixlang/intermediate/units";
 pub const TEMPORARY_SRC_PATH: &str = ".fixlang/tmp_src";

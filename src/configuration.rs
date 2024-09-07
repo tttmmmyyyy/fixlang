@@ -135,7 +135,7 @@ impl Configuration {
     }
 
     // Create configuration for language server.
-    pub fn for_language_server() -> Configuration {
+    pub fn language_server() -> Configuration {
         let mut config = Self::default();
         config.for_language_server = true;
         config

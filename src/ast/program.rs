@@ -671,7 +671,7 @@ impl Program {
             required_scheme: &Arc<Scheme>,
         ) -> Option<TypedExpr> {
             let cache_file_name = cache_file_name(name, hash_of_dependent_codes, required_scheme);
-            let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
+            let cache_dir: PathBuf = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_display = cache_file.display();
             if !cache_file.exists() {

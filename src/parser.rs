@@ -100,7 +100,7 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 // Given source code, save it to temporary file (with the given file name and hash value) and the parse the program.
 // This is used to parse the source code that is not saved to a file, e.g., source code embedded to the compiler or test code.
 // Saving a source code to a file is necessary for:
-// - Generate debug information, in which source location is required.
+// - Generate debug information, which requires source locations.
 pub fn parse_and_save_to_temporary_file(
     source: &str,
     file_name: &str,
