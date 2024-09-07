@@ -3,7 +3,6 @@ use crate::error::error_exit;
 use build_time::build_time_utc;
 use rand::Rng;
 use std::{
-    env,
     fs::{self, create_dir_all, remove_dir_all},
     panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
@@ -457,11 +456,7 @@ pub fn touch_directory<P>(rel_path: P) -> PathBuf
 where
     P: AsRef<Path>,
 {
-    let cur_dir = match env::current_dir() {
-        Err(why) => panic!("Failed to get current directory: {}", why),
-        Ok(dir) => dir,
-    };
-    let res = cur_dir.join(rel_path);
+    let res = PathBuf::new().join(rel_path);
     match create_dir_all(&res) {
         Err(why) => panic!("Failed to create directory {}: {}", res.display(), why),
         Ok(_) => {}
