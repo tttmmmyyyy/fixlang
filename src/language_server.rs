@@ -372,8 +372,8 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>, _log_file: Ar
     }
 
     // Respond to the client.
-    let param: Option<&()> = None;
-    send_response(id, param);
+    let param = Some(serde_json::to_value(None::<()>).unwrap());
+    send_response(id, param.as_ref());
 }
 
 // Handle "textDocument/didSave" method.
