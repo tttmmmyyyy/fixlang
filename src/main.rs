@@ -251,95 +251,76 @@ fn main() {
             .collect::<Vec<_>>()
     }
 
-    fn create_config_from_args_and_projfile(
-        args: Option<&ArgMatches>,
-        proj: &ProjectFile,
-    ) -> Configuration {
-        let mut config = Configuration::release();
-
+    fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) {
         // Set `source_files`.
-        let mut files_from_args = if let Some(args) = args {
-            read_source_files_options(args)
-        } else {
-            vec![]
-        };
-        let mut files_from_proj = proj
-            .files
-            .iter()
-            .map(|f| PathBuf::from(f))
-            .collect::<Vec<_>>();
-        if files_from_args.len() > 0 {
-            // If the user specifies source files by command line options, use them.
-            config.source_files.append(&mut files_from_args);
-        } else if files_from_proj.len() > 0 {
-            // If the user does not specify source files by command line options, use the source files in the project file.
-            config.source_files.append(&mut files_from_proj);
-        }
-        if let Some(args) = args {
-            // Set `output_file_path`.
-            config.out_file_path = read_output_file_option(args);
+        config
+            .source_files
+            .append(&mut read_source_files_options(args));
 
-            // Set `linked_libraries`.
-            config
-                .linked_libraries
-                .append(&mut read_library_options(args));
+        // Set `output_file_path`.
+        config.out_file_path = read_output_file_option(args);
 
-            // Set `library_search_paths`.
-            config
-                .library_search_paths
-                .append(&mut read_library_paths_option(args));
+        // Set `linked_libraries`.
+        config
+            .linked_libraries
+            .append(&mut read_library_options(args));
 
-            // Set `emit_llvm`.
-            config.emit_llvm = args.contains_id("emit-llvm");
+        // Set `library_search_paths`.
+        config
+            .library_search_paths
+            .append(&mut read_library_paths_option(args));
 
-            // Set `threaded`.
-            if args.contains_id("threaded") {
-                config.set_threaded();
-            }
+        // Set `emit_llvm`.
+        config.emit_llvm = args.contains_id("emit-llvm");
 
-            // Set `debug_info`.
-            if args.contains_id("debug-info") {
-                config.set_debug_info();
-            }
-
-            // Set `opt_level`.
-            if args.contains_id("opt-level") {
-                // These lines should be after calling `set_debug_info`; otherwise, user cannot specify the optimization level while generating debug information.
-                let opt_level = args.get_one::<String>("opt-level").unwrap();
-                match opt_level.as_str() {
-                    "none" => config.set_fix_opt_level(FixOptimizationLevel::None),
-                    "minimum" => config.set_fix_opt_level(FixOptimizationLevel::Minimum),
-                    "separated" => config.set_fix_opt_level(FixOptimizationLevel::Separated),
-                    "default" => config.set_fix_opt_level(FixOptimizationLevel::Default),
-                    _ => panic!("Unknown optimization level: {}", opt_level),
-                }
-            }
-
-            // Set `verbose`.
-            if args.contains_id("verbose") {
-                config.verbose = true;
-            }
-
-            // Set `max_cu_size`.
-            config.max_cu_size = *args
-                .get_one::<usize>("max-cu-size")
-                .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
+        // Set `threaded`.
+        if args.contains_id("threaded") {
+            config.set_threaded();
         }
 
+        // Set `debug_info`.
+        if args.contains_id("debug-info") {
+            config.set_debug_info();
+        }
+
+        // Set `opt_level`.
+        if args.contains_id("opt-level") {
+            // These lines should be after calling `set_debug_info`; otherwise, user cannot specify the optimization level while generating debug information.
+            let opt_level = args.get_one::<String>("opt-level").unwrap();
+            match opt_level.as_str() {
+                "none" => config.set_fix_opt_level(FixOptimizationLevel::None),
+                "minimum" => config.set_fix_opt_level(FixOptimizationLevel::Minimum),
+                "separated" => config.set_fix_opt_level(FixOptimizationLevel::Separated),
+                "default" => config.set_fix_opt_level(FixOptimizationLevel::Default),
+                _ => panic!("Unknown optimization level: {}", opt_level),
+            }
+        }
+
+        // Set `verbose`.
+        if args.contains_id("verbose") {
+            config.verbose = true;
+        }
+
+        // Set `max_cu_size`.
+        config.max_cu_size = *args
+            .get_one::<usize>("max-cu-size")
+            .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
+    }
+
+    fn create_config(args: &ArgMatches) -> Configuration {
+        let mut config = Configuration::release();
+        set_config_from_args(&mut config, args);
+        let proj_file = exit_if_err(ProjectFile::read_file(false));
+        ProjectFile::set_config_from_proj_file(&mut config, &proj_file);
         config
     }
 
     match app.get_matches().subcommand() {
         Some(("run", args)) => {
-            let proj_file = exit_if_err(ProjectFile::read_file(false));
-            run_file(create_config_from_args_and_projfile(Some(args), &proj_file));
+            run_file(create_config(args));
         }
         Some(("build", args)) => {
-            let proj_file = exit_if_err(ProjectFile::read_file(false));
-            build_file(&mut create_config_from_args_and_projfile(
-                Some(args),
-                &proj_file,
-            ));
+            build_file(&mut create_config(args));
         }
         Some(("language-server", _args)) => {
             launch_language_server();

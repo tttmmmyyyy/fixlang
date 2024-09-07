@@ -1,4 +1,3 @@
-use either::Either;
 use lsp_types::{
     DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri,
@@ -484,11 +483,15 @@ fn send_diagnostics_notification(errs: Errors, log_file: Arc<Mutex<File>>) {
     }
 }
 
-fn run_diagnostics(log_file: Arc<Mutex<File>>) -> Result<(), Errors> {
+fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<(), Errors> {
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
-    // Open the project file.
+    // Read the project file.
     let project_file = ProjectFile::read_file(true)?;
+
+    // Create the configuration.
+    let mut config = Configuration::for_language_server();
+    ProjectFile::set_config_from_proj_file(&mut config, &project_file);
 
     Ok(())
 }

@@ -1,11 +1,12 @@
 use std::{
     fs::File,
     io::{ErrorKind, Read},
+    path::PathBuf,
 };
 
 use serde::Deserialize;
 
-use crate::{error::Errors, PROJECT_FILE_PATH};
+use crate::{error::Errors, Configuration, PROJECT_FILE_PATH};
 
 #[derive(Deserialize, Default)]
 pub struct ProjectFile {
@@ -62,5 +63,11 @@ impl ProjectFile {
                 )))
             }
         }
+    }
+
+    // Update a configuration from a project file.
+    pub fn set_config_from_proj_file(config: &mut Configuration, proj_file: &ProjectFile) {
+        let mut files = proj_file.files.iter().map(|f| PathBuf::from(f)).collect();
+        config.source_files.append(&mut files);
     }
 }

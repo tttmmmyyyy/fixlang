@@ -1716,7 +1716,7 @@ The following is the table of operators sorted by its precedence (operator of hi
 When the "fixproj.toml" file is in the current directory, "fix build" and "fix run" will refelct the configuration in the file.
 
 Following fields are available in the "fixproj.toml" file:
-- `files`: A list of Fix source files. With this field, you do not need to specify the source files in the command line argument. If you specify `--files` (`-f`) option in the command line, the `files` in the "fixproj.toml" will be ignored.
+- `files`: A list of Fix source files.
 
 ## Debugging
 
