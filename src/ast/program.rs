@@ -1,5 +1,5 @@
 use build_time::build_time_utc;
-use error::{error_exit, error_exit_with_src, error_exit_with_srcs};
+use error::{error_exit, error_exit_with_src, error_exit_with_srcs, Errors};
 use export_statement::{ExportStatement, ExportedFunctionType};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc, vec};
@@ -137,6 +137,13 @@ impl SymbolExpr {
                     method_impl.resolve_type_aliases(type_env);
                 }
             }
+        }
+    }
+
+    pub fn source(&self) -> Option<Span> {
+        match self {
+            SymbolExpr::Simple(e) => e.expr.source.clone(),
+            SymbolExpr::Method(ms) => ms.first().map(|m| m.expr.expr.source.clone()).flatten(),
         }
     }
 }
@@ -388,22 +395,28 @@ impl Program {
     }
 
     // Add import statements.
-    pub fn add_import_statements(&mut self, imports: Vec<ImportStatement>) {
+    pub fn add_import_statements(&mut self, imports: Vec<ImportStatement>) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for stmt in imports {
-            self.add_import_statement(stmt);
+            errors.eat_err(self.add_import_statement(stmt));
         }
+        errors.to_result()
     }
 
-    pub fn add_import_statement(&mut self, import_statement: ImportStatement) {
+    // Add an import statement.
+    pub fn add_import_statement(
+        &mut self,
+        import_statement: ImportStatement,
+    ) -> Result<(), Errors> {
         // Refuse importing the module itself.
         if import_statement.module == import_statement.importer {
-            error_exit_with_src(
+            return Err(Errors::from_msg_srcs(
                 &format!(
                     "Module `{}` cannot import itself.",
                     import_statement.module.to_string()
                 ),
-                &import_statement.source,
-            );
+                &[&import_statement.source],
+            ));
         }
 
         // When user imports `Std` explicitly, remove implicit `Std` import statement.
@@ -419,6 +432,8 @@ impl Program {
         }
 
         self.add_import_statement_no_verify(import_statement);
+
+        Ok(())
     }
 
     pub fn add_import_statement_no_verify(&mut self, import_statement: ImportStatement) {
@@ -445,8 +460,8 @@ impl Program {
         trait_infos: Vec<TraitInfo>,
         trait_impls: Vec<TraitInstance>,
         trait_aliases: Vec<TraitAlias>,
-    ) {
-        self.trait_env.add(trait_infos, trait_impls, trait_aliases);
+    ) -> Result<(), Errors> {
+        self.trait_env.add(trait_infos, trait_impls, trait_aliases)
     }
 
     // Register declarations of user-defined types.
@@ -472,8 +487,8 @@ impl Program {
                 error_exit_with_srcs(
                     &format!("Duplicate definition of type `{}`.", tycon.to_string()),
                     &[
-                        &type_decl.source.as_ref().map(|s| s.to_single_character()),
-                        &other_src.as_ref().map(|s| s.to_single_character()),
+                        &type_decl.source.as_ref().map(|s| s.to_head_character()),
+                        &other_src.as_ref().map(|s| s.to_head_character()),
                     ],
                 );
             }
@@ -525,15 +540,28 @@ impl Program {
     }
 
     // Add a global value.
-    pub fn add_global_value(&mut self, name: FullName, (expr, scm): (Arc<ExprNode>, Arc<Scheme>)) {
+    pub fn add_global_value(
+        &mut self,
+        name: FullName,
+        (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
+    ) -> Result<(), Errors> {
+        // Check duplicate definition.
         if self.global_values.contains_key(&name) {
-            error_exit_with_src(
+            let this = expr.source.as_ref().map(|s| s.to_head_character());
+            let other = self
+                .global_values
+                .get(&name)
+                .unwrap()
+                .expr
+                .source()
+                .map(|s| s.to_head_character());
+            return Err(Errors::from_msg_srcs(
                 &format!(
                     "Duplicated definition for global value: `{}`",
                     name.to_string()
                 ),
-                &Span::unite_opt(scm.ty.get_source(), &expr.source),
-            );
+                &[&this, &other],
+            ));
         }
         self.global_values.insert(
             name,
@@ -542,16 +570,24 @@ impl Program {
                 expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
             },
         );
+        Ok(())
     }
 
     // Add global values.
-    pub fn add_global_values(&mut self, exprs: Vec<GlobalValueDefn>, types: Vec<GlobalValueDecl>) {
+    pub fn add_global_values(
+        &mut self,
+        exprs: Vec<GlobalValueDefn>,
+        types: Vec<GlobalValueDecl>,
+    ) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
         struct GlobalValue {
             defn: Option<GlobalValueDefn>,
             decl: Option<GlobalValueDecl>,
         }
-
         let mut global_values: HashMap<FullName, GlobalValue> = Default::default();
+
+        // Register definitions checking duplication.
         for defn in exprs {
             if !global_values.contains_key(&defn.name) {
                 global_values.insert(
@@ -564,26 +600,28 @@ impl Program {
             } else {
                 let gv = global_values.get_mut(&defn.name).unwrap();
                 if gv.defn.is_some() {
-                    error_exit_with_srcs(
+                    errors.append(Errors::from_msg_srcs(
                         &format!(
                             "Duplicate definition for global value: `{}`.",
                             defn.name.to_string()
                         ),
                         &[
-                            &defn.src.map(|s| s.to_single_character()),
+                            &defn.src.map(|s| s.to_head_character()),
                             &gv.defn
                                 .as_ref()
                                 .unwrap()
                                 .src
                                 .as_ref()
-                                .map(|s| s.to_single_character()),
+                                .map(|s| s.to_head_character()),
                         ],
-                    );
+                    ));
                 } else {
                     gv.defn = Some(defn);
                 }
             }
         }
+
+        // Register declarations checking duplication.
         for decl in types {
             if !global_values.contains_key(&decl.name) {
                 global_values.insert(
@@ -596,47 +634,47 @@ impl Program {
             } else {
                 let gv = global_values.get_mut(&decl.name).unwrap();
                 if gv.decl.is_some() {
-                    error_exit_with_srcs(
+                    errors.append(Errors::from_msg_srcs(
                         &format!("Duplicate declaration for `{}`.", decl.name.to_string()),
                         &[
-                            &decl.src.map(|s| s.to_single_character()),
+                            &decl.src.map(|s| s.to_head_character()),
                             &gv.decl
                                 .as_ref()
                                 .unwrap()
                                 .src
                                 .as_ref()
-                                .map(|s| s.to_single_character()),
+                                .map(|s| s.to_head_character()),
                         ],
-                    );
+                    ));
                 } else {
                     gv.decl = Some(decl);
                 }
             }
         }
 
+        // Check that definitions and declarations are paired.
         for (name, gv) in global_values {
             if gv.defn.is_none() {
-                error_exit_with_src(
-                    &format!("Global value `{}` lacks declaration.", name.to_string()),
-                    &gv.decl
-                        .unwrap()
-                        .src
-                        .as_ref()
-                        .map(|s| s.to_single_character()),
-                )
+                errors.append(Errors::from_msg_srcs(
+                    &format!("Global value `{}` lacks its expression.", name.to_string()),
+                    &[&gv.decl.unwrap().src.as_ref().map(|s| s.to_head_character())],
+                ));
+            } else if gv.decl.is_none() {
+                errors.append(Errors::from_msg_srcs(
+                    &format!(
+                        "Global value `{}` lacks its type signature.",
+                        name.to_string()
+                    ),
+                    &[&gv.defn.unwrap().src.as_ref().map(|s| s.to_head_character())],
+                ));
+            } else {
+                errors.eat_err(
+                    self.add_global_value(name, (gv.defn.unwrap().expr, gv.decl.unwrap().ty)),
+                );
             }
-            if gv.decl.is_none() {
-                error_exit_with_src(
-                    &format!("Global value `{}` lacks definition.", name.to_string()),
-                    &gv.defn
-                        .unwrap()
-                        .src
-                        .as_ref()
-                        .map(|s| s.to_single_character()),
-                )
-            }
-            self.add_global_value(name, (gv.defn.unwrap().expr, gv.decl.unwrap().ty))
         }
+
+        errors.to_result()
     }
 
     // - Resolve namespace of type and trats in expression,
@@ -1194,7 +1232,7 @@ impl Program {
                         if !field.ty.is_assoc_ty_free() {
                             error_exit_with_src(
                                 "Associated type is not allowed in the field type of a struct.",
-                                &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                                &type_defn.source.as_ref().map(|s| s.to_head_character()),
                             );
                         }
                     }
@@ -1206,7 +1244,7 @@ impl Program {
                                     field_name,
                                     type_name.to_string()
                                 ),
-                                &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                                &type_defn.source.as_ref().map(|s| s.to_head_character()),
                             );
                         }
                         _ => {}
@@ -1217,7 +1255,7 @@ impl Program {
                         if !field.ty.is_assoc_ty_free() {
                             error_exit_with_src(
                                 "Associated type is not allowed in the field type of a union.",
-                                &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                                &type_defn.source.as_ref().map(|s| s.to_head_character()),
                             );
                         }
                     }
@@ -1229,7 +1267,7 @@ impl Program {
                                     field_name,
                                     type_name.to_string()
                                 ),
-                                &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                                &type_defn.source.as_ref().map(|s| s.to_head_character()),
                             );
                         }
                         _ => {}
@@ -1239,7 +1277,7 @@ impl Program {
                     if !ta.value.is_assoc_ty_free() {
                         error_exit_with_src(
                             "Associated type is not allowed in the right-hand side of a type alias.",
-                            &type_defn.source.as_ref().map(|s| s.to_single_character()),
+                            &type_defn.source.as_ref().map(|s| s.to_head_character()),
                         );
                     }
                 } // Nothing to do.
@@ -1344,25 +1382,35 @@ impl Program {
 
     // Link an module.
     // * extend - If true, the module defined in `other` allowed to conflict with a module already in `self`.
-    //            This is used for extending implementation of a module already linked to `self` afterwards.
-    pub fn link(&mut self, mut other: Program, extend: bool) {
-        // Merge module file paths.
+    //            This is used for extending implementation of a module already linked to `self`.
+    pub fn link(&mut self, mut other: Program, extend: bool) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
+        // Merge `module_to_files`.
+        // Also, check if there is a module defined in two files.
         for (mod_name, file) in &other.module_to_files {
             let file = file.clone();
             if self.module_to_files.contains_key(mod_name) {
-                let another = self.module_to_files.get(mod_name).unwrap();
+                // If the module is already defined,
                 if extend {
-                    break;
+                    // If extending mode, this is not a problem.
+                    continue;
                 }
-                error_exit(&format!(
+                let another_file = self.module_to_files.get(mod_name).unwrap();
+                let msg = format!(
                     "Module `{}` is defined in two files: \"{}\" and \"{}\".",
                     mod_name,
-                    another.file_path.to_str().unwrap(),
+                    another_file.file_path.to_str().unwrap(),
                     file.file_path.to_str().unwrap()
-                ));
+                );
+                errors.append(Errors::from_msg(&msg));
+                continue;
             }
             self.module_to_files.insert(mod_name.clone(), file);
         }
+
+        // Throw an error if necessary.
+        errors.to_result()?;
 
         // If already linked, do nothing.
         if !extend
@@ -1370,10 +1418,10 @@ impl Program {
                 .linked_mods()
                 .contains(&other.get_name_if_single_module())
         {
-            return;
+            return Ok(());
         }
 
-        // Merge visible_mods.
+        // Merge `mod_to_import_stmts`.
         for (importer, importee) in &other.mod_to_import_stmts {
             if let Some(old_importee) = self.mod_to_import_stmts.get_mut(importer) {
                 old_importee.extend(importee.iter().cloned());
@@ -1387,13 +1435,13 @@ impl Program {
         self.add_type_defns(other.type_defns);
 
         // Merge traits and instances.
-        self.trait_env.import(other.trait_env);
+        errors.eat_err(self.trait_env.import(other.trait_env));
 
         // Merge global values.
         for (name, gv) in other.global_values {
             let ty = gv.scm;
             if let SymbolExpr::Simple(expr) = gv.expr {
-                self.add_global_value(name, (expr.expr, ty));
+                errors.eat_err(self.add_global_value(name, (expr.expr, ty)));
             }
         }
 
@@ -1402,16 +1450,18 @@ impl Program {
 
         // Merge used_tuple_sizes.
         self.used_tuple_sizes.append(&mut other.used_tuple_sizes);
+
+        errors.to_result()
     }
 
     // Link built-in modules following unsolved import statements.
     // This function may mutate config to add dynamically linked libraries.
-    pub fn resolve_imports(&mut self, config: &mut Configuration) {
+    pub fn resolve_imports(&mut self, config: &mut Configuration) -> Result<(), Errors> {
         let mut unresolved_imports = self.import_statements();
 
         loop {
             if unresolved_imports.is_empty() {
-                break;
+                break Ok(());
             }
             let import_stmt = unresolved_imports.pop().unwrap();
             let module = import_stmt.module;
@@ -1428,12 +1478,12 @@ impl Program {
             {
                 if module == *mod_name {
                     let mut fixmod =
-                        parse_and_save_to_temporary_file(source_content, file_name, config);
+                        parse_and_save_to_temporary_file(source_content, file_name, config)?;
                     if let Some(mod_modifier) = mod_modifier {
                         mod_modifier(&mut fixmod);
                     }
                     unresolved_imports.append(&mut fixmod.import_statements());
-                    self.link(fixmod, false);
+                    self.link(fixmod, false)?;
                     if let Some(config_modifier) = config_modifier {
                         config_modifier(config);
                     }
@@ -1445,10 +1495,10 @@ impl Program {
                 continue;
             }
 
-            error_exit_with_src(
+            return Err(Errors::from_msg_srcs(
                 &format!("Cannot find module `{}`.", module),
-                &import_stmt.source,
-            );
+                &[&import_stmt.source],
+            ));
         }
     }
 

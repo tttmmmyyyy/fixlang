@@ -7,9 +7,55 @@ pub struct Errors {
 }
 
 impl Errors {
+    pub fn empty() -> Errors {
+        Errors { errs: vec![] }
+    }
+
+    fn has_error(&self) -> bool {
+        !self.errs.is_empty()
+    }
+
+    pub fn to_result(&mut self) -> Result<(), Errors> {
+        if self.has_error() {
+            Err(std::mem::replace(self, Errors::empty()))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn append(&mut self, mut other: Errors) {
+        self.errs.append(&mut other.errs);
+    }
+
+    // Append the error in `res` if it is an error.
+    pub fn eat_err(&mut self, res: Result<(), Errors>) {
+        match res {
+            Ok(_v) => {}
+            Err(errs) => {
+                self.append(errs);
+            }
+        }
+    }
+
+    // Otherwise, append the error in `res` if it is an error.
+    pub fn eat_err_or<T>(&mut self, res: Result<T, Errors>, do_if_ok: impl FnOnce(T)) {
+        match res {
+            Ok(v) => do_if_ok(v),
+            Err(errs) => {
+                self.append(errs);
+            }
+        }
+    }
+
     pub fn from_msg(msg: &str) -> Errors {
         Errors {
             errs: vec![Error::from_msg(msg)],
+        }
+    }
+
+    pub fn from_msg_srcs(msg: &str, srcs: &[&Option<Span>]) -> Errors {
+        Errors {
+            errs: vec![Error::from_msg_srcs(msg, srcs)],
         }
     }
 
@@ -23,13 +69,13 @@ impl Errors {
     }
 
     // Organize all `Error`s by the path of its (first) `Span`.
-    // If an `Error` has no `Span`, it will be considered as having a path `./`.
+    // If an `Error` has no `Span`, it will be considered as having a default PathBuf.
     pub fn organize_by_path(&self) -> Vec<(PathBuf, Vec<Error>)> {
         // Organize errors into a hashmap.
         let mut map: HashMap<PathBuf, Vec<Error>> = HashMap::default();
         for err in &self.errs {
             let path = match err.srcs.first() {
-                None => PathBuf::from("./"),
+                None => PathBuf::new(),
                 Some(span) => span.input.file_path.clone(),
             };
             misc::insert_to_hashmap_vec(&mut map, &path, err.clone());
@@ -59,6 +105,13 @@ impl Error {
         }
     }
 
+    pub fn from_msg_srcs(msg: &str, srcs: &[&Option<Span>]) -> Error {
+        Error {
+            msg: msg.to_string(),
+            srcs: srcs.iter().filter_map(|x| (*x).clone()).collect(),
+        }
+    }
+
     pub fn to_string(&self) -> String {
         let mut str = String::default();
         str += &self.msg;
@@ -75,14 +128,20 @@ pub fn error_exit(msg: &str) -> ! {
     // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
     // We replace it to empty.
     std::panic::set_hook(Box::new(move |info| {
-        let payload = info.payload();
-        let msg = payload
-            .downcast_ref::<String>()
-            .cloned()
-            .unwrap_or(format!("{:?}", payload));
+        let msg = any_to_string(info.payload());
         eprintln!("{}", msg);
     }));
     panic!("error: {}", msg);
+}
+
+pub fn any_to_string(any: &dyn std::any::Any) -> String {
+    if let Some(s) = any.downcast_ref::<String>() {
+        s.clone()
+    } else if let Some(s) = any.downcast_ref::<&str>() {
+        s.to_string()
+    } else {
+        format!("{:?}", any)
+    }
 }
 
 pub fn exit_if_err<T>(err: Result<T, Errors>) -> T {

@@ -6,7 +6,11 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    constants::LSP_LOG_FILE_PATH, error::Errors, project::ProjectFile, Configuration, Span,
+    constants::LSP_LOG_FILE_PATH,
+    error::{any_to_string, Errors},
+    project::ProjectFile,
+    runner::load_source_files,
+    Configuration, Span,
 };
 use std::{
     fs::File,
@@ -361,7 +365,14 @@ fn handle_initialized(
     // Launch the diagnostics thread.
     let log_file_cloned = log_file.clone();
     std::thread::spawn(|| {
-        diagnostics_thread(diag_recv, log_file_cloned);
+        let res = std::panic::catch_unwind(|| {
+            diagnostics_thread(diag_recv, log_file_cloned.clone());
+        });
+        if res.is_err() {
+            let mut msg = "Panic occurred in the diagnostics thread: \n".to_string();
+            msg.push_str(&format!("{}\n", any_to_string(res.err().as_ref().unwrap())));
+            write_log(log_file_cloned, msg.as_str());
+        }
     });
 
     // Send `Start` message to the diagnostics thread.
@@ -436,8 +447,20 @@ fn span_to_range(span: &Span) -> lsp_types::Range {
 
 // Send the diagnostics notification to the client.
 fn send_diagnostics_notification(errs: Errors, log_file: Arc<Mutex<File>>) {
+    let cdir = std::env::current_dir();
+    if cdir.is_err() {
+        let mut msg = "Failed to get the current directory: \n".to_string();
+        msg.push_str(&format!("{:?}\n", cdir.err().unwrap()));
+        write_log(log_file.clone(), msg.as_str());
+        return;
+    }
+    let cdir = cdir.unwrap();
+
     // Organize the errors by file paths.
     for (path, errs) in errs.organize_by_path() {
+        // Convert path to absolute path.
+        let path = cdir.join(path);
+
         // Convert path into Uri.
         let path = path.to_str();
         if path.is_none() {
@@ -446,8 +469,8 @@ fn send_diagnostics_notification(errs: Errors, log_file: Arc<Mutex<File>>) {
             write_log(log_file.clone(), msg.as_str());
             continue;
         }
-        let path = path.unwrap();
-        let uri = Uri::from_str(path);
+        let path = "file://".to_string() + path.unwrap();
+        let uri = Uri::from_str(&path);
         if uri.is_err() {
             let mut msg = "Failed to convert a path into Uri: \n".to_string();
             msg.push_str(&format!("{}\n", path));
@@ -492,6 +515,9 @@ fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<(), Errors> {
     // Create the configuration.
     let mut config = Configuration::language_server();
     ProjectFile::set_config_from_proj_file(&mut config, &project_file);
+
+    // Load source files.
+    let program = load_source_files(&mut config);
 
     Ok(())
 }

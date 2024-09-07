@@ -134,7 +134,7 @@ impl TypeDefn {
                         v.name,
                         self.name.to_string()
                     ),
-                    &self.source.as_ref().map(|s| s.to_single_character()),
+                    &self.source.as_ref().map(|s| s.to_head_character()),
                 )
             }
         }

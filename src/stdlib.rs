@@ -5,7 +5,7 @@ pub const FIX_NAME: &str = "fix";
 const STD_SOURCE: &str = include_str!("fix/std.fix");
 
 pub fn make_std_mod(config: &Configuration) -> Program {
-    let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std", config);
+    let mut fix_module = exit_if_err(parse_and_save_to_temporary_file(STD_SOURCE, "std", config));
 
     // Add C types type aliases.
     let c_types = config.c_type_sizes.get_c_types();
@@ -15,14 +15,7 @@ pub fn make_std_mod(config: &Configuration) -> Program {
         } else {
             make_integral_ty(&format!("{}{}", sign, size))
         };
-        if fix_type.is_none() {
-            println!(
-                "Warning: Type alias `{}` is not supported in this system.",
-                name
-            );
-            continue;
-        }
-        let fix_type = fix_type.unwrap();
+        let fix_type = fix_type.expect("Type alias `{}` is not supported in this system.");
         fix_module.add_type_defns(vec![TypeDefn {
             name: FullName::from_strs(&[STD_NAME, FFI_NAME], name),
             value: TypeDeclValue::Alias(TypeAlias { value: fix_type }),
@@ -622,5 +615,9 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
 // Create module which defines traits such as ToString or Eq for tuples.
 pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Program {
     let src = make_tuple_traits_source(sizes);
-    parse_and_save_to_temporary_file(&src, "std_tuple_traits", config)
+    exit_if_err(parse_and_save_to_temporary_file(
+        &src,
+        "std_tuple_traits",
+        config,
+    ))
 }

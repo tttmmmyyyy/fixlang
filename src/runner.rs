@@ -1,6 +1,7 @@
 use crate::ast::export_statement::ExportStatement;
 use crate::error::error_exit;
 use build_time::build_time_utc;
+use error::Errors;
 use rand::Rng;
 use std::{
     fs::{self, create_dir_all, remove_dir_all},
@@ -464,15 +465,32 @@ where
     res
 }
 
-pub fn load_file(config: &mut Configuration) -> Program {
-    // Link all modules specified in source_files.
-    let mut target_mod = make_std_mod(config);
+// Load all source files specified in the configuration, link them, and return the resulting `Program`.
+pub fn load_source_files(config: &mut Configuration) -> Result<Program, Errors> {
+    // Load all source files.
+    let mut modules = vec![];
+    let mut errors = Errors::empty();
+
     for file_path in &config.source_files {
-        let fix_mod = parse_file_path(file_path.clone(), config);
-        target_mod.link(fix_mod, false);
+        let res = parse_file_path(file_path.clone(), config);
+        errors.eat_err_or(res, |prog| modules.push(prog));
     }
-    target_mod.resolve_imports(config);
-    target_mod
+
+    // If an error occurres in parsing, return the error.
+    errors.to_result()?;
+
+    // Create `Std` module.
+    let mut target_mod = make_std_mod(config);
+
+    // Link all modules.
+    for mod_ in modules {
+        target_mod.link(mod_, false)?; // If an error occurres in linking, return the error.
+    }
+
+    // Resolve imports.
+    target_mod.resolve_imports(config)?;
+
+    Ok(target_mod)
 }
 
 // Run the program specified in the configuration, and return the exit code.
@@ -484,7 +502,7 @@ pub fn run_file(mut config: Configuration) -> i32 {
     config.out_file_path = Some(PathBuf::from(a_out_path.clone()));
 
     // Build executable file.
-    build_file(&mut config);
+    exit_if_err(build_file(&mut config));
 
     // Run the executable file.
     let mut com = if config.valgrind_tool == ValgrindTool::None {
@@ -538,13 +556,18 @@ fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> T
     }
 }
 
-pub fn build_file(config: &mut Configuration) {
+pub fn build_file(config: &mut Configuration) -> Result<(), Errors> {
     let exec_path = config.get_output_executable_file_path();
 
     // Create intermediate directory.
     fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
 
-    let program = load_file(config);
+    let program = load_source_files(config)?;
+
+    if config.for_language_server {
+        return Ok(());
+    }
+
     let obj_paths = build_object_files(program, config.clone());
 
     let mut library_search_path_opts: Vec<String> = vec![];
@@ -645,6 +668,8 @@ pub fn build_file(config: &mut Configuration) {
                 .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
         );
     }
+
+    Ok(())
 }
 
 // A function implementing `fix clean` command.

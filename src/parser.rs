@@ -6,6 +6,7 @@ use crate::error::error_exit;
 use crate::error::error_exit_with_src;
 use ast::export_statement::ExportStatement;
 use either::Either;
+use error::Errors;
 use num_bigint::BigInt;
 use std::{cmp::min, mem::swap, sync::Arc};
 
@@ -105,7 +106,7 @@ pub fn parse_and_save_to_temporary_file(
     source: &str,
     file_name: &str,
     config: &Configuration,
-) -> Program {
+) -> Result<Program, Errors> {
     let hash = format!("{:x}", md5::compute(source));
     if !check_temporary_source(file_name, &hash) {
         save_temporary_source(source, file_name, &hash);
@@ -113,18 +114,24 @@ pub fn parse_and_save_to_temporary_file(
     parse_file_path(temporary_source_path(file_name, &hash), config)
 }
 
-pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Program {
+pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Program, Errors> {
     let source = SourceFile::from_file_path(file_path);
     let source_code = source.string();
     let file = FixParser::parse(Rule::file, &source_code);
     let file = match file {
         Ok(res) => res,
-        Err(e) => error_exit(&message_parse_error(e, &source)),
+        Err(e) => {
+            return Err(Errors::from_msg(&message_parse_error(e, &source)));
+        }
     };
     parse_file(file, source, config)
 }
 
-fn parse_file(mut file: Pairs<Rule>, src: SourceFile, config: &Configuration) -> Program {
+fn parse_file(
+    mut file: Pairs<Rule>,
+    src: SourceFile,
+    config: &Configuration,
+) -> Result<Program, Errors> {
     let pair = file.next().unwrap();
     match pair.as_rule() {
         Rule::module => return parse_module(pair, src, config),
@@ -132,8 +139,14 @@ fn parse_file(mut file: Pairs<Rule>, src: SourceFile, config: &Configuration) ->
     }
 }
 
-fn parse_module(pair: Pair<Rule>, src: SourceFile, config: &Configuration) -> Program {
+fn parse_module(
+    pair: Pair<Rule>,
+    src: SourceFile,
+    config: &Configuration,
+) -> Result<Program, Errors> {
     assert_eq!(pair.as_rule(), Rule::module);
+    let mut errors = Errors::empty();
+
     let mut ctx: ParseContext = ParseContext::from_source(src.clone(), config);
 
     let mut pairs = pair.into_inner();
@@ -172,14 +185,14 @@ fn parse_module(pair: Pair<Rule>, src: SourceFile, config: &Configuration) -> Pr
         }
     }
 
-    fix_mod.add_global_values(global_value_defns, global_value_decls);
+    errors.eat_err(fix_mod.add_global_values(global_value_defns, global_value_decls));
     fix_mod.add_type_defns(type_defns);
-    fix_mod.add_traits(trait_infos, trait_impls, trait_aliases);
-    fix_mod.add_import_statements(import_statements);
+    errors.eat_err(fix_mod.add_traits(trait_infos, trait_impls, trait_aliases));
+    errors.eat_err(fix_mod.add_import_statements(import_statements));
     fix_mod.used_tuple_sizes.append(&mut ctx.tuple_sizes);
     fix_mod.export_statements = std::mem::replace(&mut export_statements, vec![]);
 
-    fix_mod
+    errors.to_result().map(|_| fix_mod)
 }
 
 fn parse_global_defns(
@@ -247,7 +260,7 @@ fn parse_global_defns_in_namespace(
     let namespace = parse_namespace(pairs.next().unwrap(), ctx);
     // Do not allow period in namepsace: it is allowed only in module name.
     if namespace.names.iter().any(|s| s.contains(MODULE_SEPARATOR)) {
-        let src = src.to_single_character();
+        let src = src.to_head_character();
         error_exit_with_src(
             "Period is not allowed in namespace: it is only allowed in module name.",
             &Some(src),

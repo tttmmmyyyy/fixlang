@@ -119,7 +119,7 @@ impl Span {
         }
     }
 
-    pub fn to_single_character(&self) -> Self {
+    pub fn to_head_character(&self) -> Self {
         Self {
             input: self.input.clone(),
             start: self.start,

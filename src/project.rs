@@ -6,7 +6,7 @@ use std::{
 
 use serde::Deserialize;
 
-use crate::{error::Errors, Configuration, PROJECT_FILE_PATH};
+use crate::{error::Errors, Configuration, SourceFile, Span, PROJECT_FILE_PATH};
 
 #[derive(Deserialize, Default)]
 pub struct ProjectFile {
@@ -57,10 +57,17 @@ impl ProjectFile {
         match toml::from_str(&content) {
             Ok(v) => Ok(v),
             Err(e) => {
-                return Err(Errors::from_msg(&format!(
-                    "Failed to parse file \"{}\": {:?}",
-                    PROJECT_FILE_PATH, e
-                )))
+                let input = SourceFile::from_file_path(PathBuf::from(PROJECT_FILE_PATH));
+                let (start, end) = e.span().map(|r| (r.start, r.end)).unwrap_or((0, 0));
+                let span = Span { start, end, input };
+                return Err(Errors::from_msg_srcs(
+                    &format!(
+                        "Failed to parse file \"{}\": {}",
+                        PROJECT_FILE_PATH,
+                        e.message()
+                    ),
+                    &[&Some(span)],
+                ));
             }
         }
     }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::error::error_exit;
 use crate::error::error_exit_with_src;
 use crate::error::error_exit_with_srcs;
+use error::Errors;
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -319,7 +320,7 @@ impl TraitInstance {
             .method_expr(method_name)
             .source
             .as_ref()
-            .map(|src| src.to_single_character());
+            .map(|src| src.to_head_character());
         let ty = ty.set_source(source);
 
         Scheme::generalize(&kind_signs, preds, eqs, ty)
@@ -952,7 +953,7 @@ impl TraitEnv {
                                 impl_method,
                                 trait_id.to_string(),
                             ),
-                            &impl_expr.source.as_ref().map(|s| s.to_single_character()),
+                            &impl_expr.source.as_ref().map(|s| s.to_head_character()),
                         )
                     }
                 }
@@ -979,7 +980,7 @@ impl TraitEnv {
                                 impl_assoc_type,
                                 trait_id.to_string(),
                             ),
-                            &impl_info.source.as_ref().map(|s| s.to_single_character()),
+                            &impl_info.source.as_ref().map(|s| s.to_head_character()),
                         )
                     }
                     // Validate free variable of associated type implementation.
@@ -995,7 +996,7 @@ impl TraitEnv {
                         {
                             error_exit_with_src(
                                 &format!("Unknown type variable `{}`.", used_tv.name),
-                                &impl_info.source.as_ref().map(|s| s.to_single_character()),
+                                &impl_info.source.as_ref().map(|s| s.to_head_character()),
                             )
                         }
                     }
@@ -1018,7 +1019,7 @@ impl TraitEnv {
                             ty.to_string_normalize(),
                             instance_def_mod.to_string(),
                         ),
-                        &inst.source.as_ref().map(|s| s.to_single_character()),
+                        &inst.source.as_ref().map(|s| s.to_head_character()),
                     );
                 }
             }
@@ -1038,8 +1039,8 @@ impl TraitEnv {
                             trait_id.to_string()
                         ),
                         &[
-                            &inst_i.source.as_ref().map(|s| s.to_single_character()),
-                            &inst_j.source.as_ref().map(|s| s.to_single_character()),
+                            &inst_i.source.as_ref().map(|s| s.to_head_character()),
+                            &inst_j.source.as_ref().map(|s| s.to_head_character()),
                         ],
                     );
                 }
@@ -1130,29 +1131,32 @@ impl TraitEnv {
         trait_infos: Vec<TraitInfo>,
         trait_impls: Vec<TraitInstance>,
         trait_aliases: Vec<TraitAlias>,
-    ) {
+    ) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for trait_info in trait_infos {
-            self.add_trait(trait_info);
+            errors.eat_err(self.add_trait(trait_info));
         }
         for trait_impl in trait_impls {
             self.add_instance(trait_impl);
         }
         for trait_alias in trait_aliases {
-            self.add_alias(trait_alias);
+            errors.eat_err(self.add_alias(trait_alias));
         }
+        errors.to_result()
     }
 
     // Add a trait to TraitEnv.
-    pub fn add_trait(&mut self, info: TraitInfo) {
-        // Check duplicate definition.
+    pub fn add_trait(&mut self, info: TraitInfo) -> Result<(), Errors> {
+        // Check Duplicate definition.
         if self.traits.contains_key(&info.id) {
             let info1 = self.traits.get(&info.id).unwrap();
-            error_exit_with_srcs(
+            return Err(Errors::from_msg_srcs(
                 &format!("Duplicate definition for trait {}.", info.id.to_string()),
                 &[&info1.source, &info.source],
-            );
+            ));
         }
         self.traits.insert(info.id.clone(), info);
+        Ok(())
     }
 
     // Add an instance.
@@ -1165,16 +1169,20 @@ impl TraitEnv {
     }
 
     // Add an trait alias.
-    fn add_alias(&mut self, alias: TraitAlias) {
+    fn add_alias(&mut self, alias: TraitAlias) -> Result<(), Errors> {
         // Check duplicate definition.
         if self.aliases.contains_key(&alias.id) {
             let alias1 = self.aliases.get(&alias.id).unwrap();
-            error_exit_with_srcs(
-                &format!("Duplicate definition for trait {}.", alias.id.to_string()),
+            return Err(Errors::from_msg_srcs(
+                &format!(
+                    "Duplicate definition for trait alias {}.",
+                    alias.id.to_string()
+                ),
                 &[&alias1.source, &alias.source],
-            );
+            ));
         }
         self.aliases.insert(alias.id.clone(), alias);
+        Ok(())
     }
 
     pub fn qualified_predicates(&self) -> HashMap<TraitId, Vec<QualPredScheme>> {
@@ -1521,9 +1529,12 @@ impl TraitEnv {
         res
     }
 
-    pub fn import(&mut self, other: TraitEnv) {
+    pub fn import(&mut self, other: TraitEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for (_, ti) in other.traits {
-            self.add_trait(ti);
+            if let Err(es) = self.add_trait(ti) {
+                errors.append(es);
+            }
         }
         for (_, insts) in other.instances {
             for inst in insts {
@@ -1531,7 +1542,11 @@ impl TraitEnv {
             }
         }
         for (_, alias) in other.aliases {
-            self.add_alias(alias);
+            if let Err(es) = self.add_alias(alias) {
+                errors.append(es);
+            }
         }
+        errors.to_result()?;
+        Ok(())
     }
 }
