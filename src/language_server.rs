@@ -1,3 +1,4 @@
+use either::Either;
 use lsp_types::{
     DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri,
@@ -31,6 +32,8 @@ pub struct JSONRPCMessage {
     pub params: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<Value>,
 }
 
 impl JSONRPCMessage {
@@ -39,6 +42,7 @@ impl JSONRPCMessage {
         method: Option<String>,
         params: Option<Value>,
         result: Option<Value>,
+        error: Option<Value>,
     ) -> Self {
         JSONRPCMessage {
             jsonrpc: "2.0".to_string(),
@@ -46,6 +50,7 @@ impl JSONRPCMessage {
             method,
             params,
             result,
+            error,
         }
     }
 }
@@ -227,21 +232,27 @@ fn parse_id(message: &JSONRPCMessage, method: &str, log_file: Arc<Mutex<File>>) 
     message.id
 }
 
-fn send_response<T: Serialize>(id: u32, result: Option<&T>) {
+fn send_response<T: Serialize, E: Serialize>(id: u32, result: Result<T, E>) {
+    let (res, err) = match result {
+        Ok(res) => (Some(res), None),
+        Err(err) => (None, Some(err)),
+    };
     let msg = JSONRPCMessage::new(
         Some(id),
         None,
         None,
-        result.map(|result| serde_json::to_value(result).unwrap()),
+        res.map(|res| serde_json::to_value(res).unwrap()),
+        err.map(|err| serde_json::to_value(err).unwrap()),
     );
     send_message(&msg);
 }
 
-fn send_notification<T: Serialize>(method: String, params: Option<&T>) {
+fn send_notification<T: Serialize>(method: String, params: Option<T>) {
     let msg = JSONRPCMessage::new(
         None,
         Some(method),
         params.map(|params| serde_json::to_value(params).unwrap()),
+        None,
         None,
     );
     send_message(&msg);
@@ -338,7 +349,7 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<F
         },
         server_info: None,
     };
-    send_response(id, Some(&result))
+    send_response(id, Ok::<_, ()>(result))
 }
 
 // Handle "initialized" method.
@@ -372,8 +383,8 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>, _log_file: Ar
     }
 
     // Respond to the client.
-    let param = Some(serde_json::to_value(None::<()>).unwrap());
-    send_response(id, param.as_ref());
+    let param = Ok::<_, ()>(serde_json::to_value(None::<()>).unwrap());
+    send_response(id, param);
 }
 
 // Handle "textDocument/didSave" method.
