@@ -38,7 +38,7 @@ fn build_object_files<'c>(
     )?;
 
     // Validate export statements.
-    program.validate_export_statements();
+    program.validate_export_statements()?;
 
     // Calculate list of type constructors.
     program.calculate_type_env();

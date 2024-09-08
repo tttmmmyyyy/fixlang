@@ -62,8 +62,9 @@ impl Errors {
     pub fn to_string(&self) -> String {
         let mut str = String::default();
         for err in &self.errs {
+            str += "- ";
             str += &err.to_string();
-            str += "\n\n";
+            str += "\n";
         }
         str
     }
@@ -128,7 +129,7 @@ pub fn error_exit(msg: &str) -> ! {
         let msg = any_to_string(info.payload());
         eprintln!("{}", msg);
     }));
-    panic!("error: {}", msg);
+    panic!("The following error(s) occurred: \n\n{}", msg);
 }
 
 pub fn any_to_string(any: &dyn std::any::Any) -> String {

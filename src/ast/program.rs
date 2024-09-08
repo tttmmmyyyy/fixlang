@@ -1118,11 +1118,16 @@ impl Program {
     }
 
     // Validate and update export statements.
-    pub fn validate_export_statements(&self) {
+    pub fn validate_export_statements(&self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
         // Validate each export statement.
         for stmt in &self.export_statements {
-            stmt.validate_names();
+            errors.eat_err(stmt.validate_names(&stmt.src));
         }
+
+        // Throw errors if any.
+        errors.to_result()?;
 
         // Check if there are multiple export statements having the same `c_function_name`.
         let mut c_function_names: Vec<(String, Option<Span>)> = Default::default();
@@ -1131,16 +1136,20 @@ impl Program {
                 .iter()
                 .find(|(name, _)| *name == stmt.c_function_name)
             {
-                error_exit_with_srcs(
-                    &format!(
+                errors.append(Errors::from_msg_srcs(
+                    format!(
                         "Multiple export statements have the same C function name `{}`.",
                         stmt.c_function_name
                     ),
                     &[&stmt.src, span],
-                );
+                ));
+                continue;
             }
             c_function_names.push((stmt.c_function_name.clone(), stmt.src.clone()));
         }
+
+        errors.to_result()?;
+        Ok(())
     }
 
     pub fn set_kinds(&mut self) {

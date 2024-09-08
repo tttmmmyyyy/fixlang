@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::{
     constants::LSP_LOG_FILE_PATH,
-    error::{any_to_string, Errors},
+    error::{any_to_string, Error, Errors},
     project::ProjectFile,
     runner::build_file,
     Configuration, Span,
@@ -491,7 +491,10 @@ fn send_diagnostics_notification(
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(path));
         if uri.is_err() {
-            write_log(log_file.clone(), &(uri.unwrap_err() + "\n"));
+            write_log(
+                log_file.clone(),
+                &format!("Failed to convert path to uri: {:?}\n", uri.unwrap_err()),
+            );
             continue;
         }
         let uri = uri.unwrap();
@@ -501,21 +504,7 @@ fn send_diagnostics_notification(
             uri,
             diagnostics: errs
                 .iter()
-                .map(|err| lsp_types::Diagnostic {
-                    range: err
-                        .srcs
-                        .first()
-                        .map(|span| span_to_range(span))
-                        .unwrap_or_default(),
-                    severity: Some(DiagnosticSeverity::ERROR),
-                    code: None,
-                    code_description: None,
-                    source: None,
-                    message: err.msg.clone(),
-                    tags: None,
-                    related_information: None,
-                    data: None,
-                })
+                .map(|err| error_to_diagnostics(err, &cdir, log_file.clone()))
                 .collect(),
             version: None,
         };
@@ -542,6 +531,62 @@ fn send_diagnostics_notification(
     }
 
     err_paths
+}
+
+// Convert an `Error` into a diagnostic message.
+fn error_to_diagnostics(
+    err: &Error,
+    cdir: &PathBuf,
+    log_file: Arc<Mutex<File>>,
+) -> lsp_types::Diagnostic {
+    // Show error at the first span in `err`.
+    let range = err
+        .srcs
+        .first()
+        .map(|span| span_to_range(span))
+        .unwrap_or_default();
+
+    // Other spans are shown in related informations.
+    let mut related_information = vec![];
+    for span in err.srcs.iter().skip(1) {
+        // Convert path to uri.
+        let uri = path_to_uri(&cdir.join(&span.input.file_path));
+        if uri.is_err() {
+            write_log(
+                log_file.clone(),
+                &format!("Failed to convert path to uri: {:?}\n", uri.unwrap_err()),
+            );
+            continue;
+        }
+        let uri = uri.unwrap();
+
+        // Create related informations.
+        let related = lsp_types::DiagnosticRelatedInformation {
+            location: lsp_types::Location {
+                uri,
+                range: span_to_range(span),
+            },
+            message: "see also here".to_string(),
+        };
+        related_information.push(related);
+    }
+    let related_information = if related_information.is_empty() {
+        None
+    } else {
+        Some(related_information)
+    };
+
+    lsp_types::Diagnostic {
+        range,
+        severity: Some(DiagnosticSeverity::ERROR),
+        code: None,
+        code_description: None,
+        source: None,
+        message: err.msg.clone(),
+        tags: None,
+        related_information,
+        data: None,
+    }
 }
 
 fn path_to_uri(path: &PathBuf) -> Result<Uri, String> {

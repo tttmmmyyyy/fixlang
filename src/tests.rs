@@ -5846,11 +5846,7 @@ pub fn test_typedef_kind_mismatch() {
     main : IO ();
     main = pure();
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_compiler(),
-        "error: Kind mismatch",
-    );
+    test_source_fail(&source, Configuration::develop_compiler(), "Kind mismatch");
 }
 
 #[test]

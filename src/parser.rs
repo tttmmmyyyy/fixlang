@@ -2062,6 +2062,8 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::semicolon => "`;`".to_string(),
         Rule::extra_comma => ",".to_string(),
         Rule::export_symbol => "FFI_EXPORT".to_string(),
+        Rule::global_defns => "definitions".to_string(),
+        Rule::exported_c_function_name => "C function name".to_string(),
         _ => format!("{:?}", r),
     }
 }

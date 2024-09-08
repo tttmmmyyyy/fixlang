@@ -15,12 +15,13 @@ use crate::ast::types::Scheme;
 use crate::ast::types::TypeNode;
 use crate::ast::Type;
 use crate::builtin::*;
-use crate::error::error_exit_with_src;
 use crate::generator::GenerationContext;
 use crate::generator::Object;
 use crate::object::allocate_obj;
 use crate::sourcefile::Span;
 use crate::uncurry_optimization;
+
+use super::error::Errors;
 
 #[derive(Clone)]
 pub struct ExportStatement {
@@ -47,7 +48,8 @@ impl ExportStatement {
     }
 
     // Validate the names in the export statement.
-    pub fn validate_names(&self) {
+    // - src: The source of the export statement. Used for error messages.
+    pub fn validate_names(&self, src: &Option<Span>) -> Result<(), Errors> {
         // If `c_function_name` is not a valid C function name, exit with error
         // The first character should be a letter or an underscore
         // The rest of the characters should be a letter, a digit or an underscore
@@ -55,20 +57,21 @@ impl ExportStatement {
             && self.c_function_name.chars().next().unwrap() != '_'
         {
             let msg = format!(
-                "{} is not a valid C function name. The first character should be a letter or an underscore.",
+                "`{}` is not a valid C function name. The first character should be a letter or an underscore.",
                 &self.c_function_name
             );
-            error_exit_with_src(&msg, &self.src);
+            return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }
         for c in self.c_function_name.chars() {
             if !c.is_alphanumeric() && c != '_' {
                 let msg = format!(
-                    "{} is not a valid C function name. The rest of the characters should be a letter, a digit or an underscore.",
+                    "`{}` is not a valid C function name. The rest of the characters should be a letter, a digit or an underscore.",
                     &self.c_function_name
                 );
-                error_exit_with_src(&msg, &self.src);
+                return Err(Errors::from_msg_srcs(msg, &vec![src]));
             }
         }
+        Ok(())
     }
 
     // Implement the exported c function.
