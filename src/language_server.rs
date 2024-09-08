@@ -413,11 +413,14 @@ fn handle_textdocument_did_save(diag_send: Sender<DiagnosticsMessage>, log_file:
 fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mutex<File>>) {
     let mut prev_err_paths = HashSet::new();
     loop {
+        // Wait for a message.
         let msg = msg_recv.recv();
         if msg.is_err() {
             // If the sender is dropped, stop the diagnostics thread.
             break;
         }
+
+        // Run diagnostics.
         let res = match msg.unwrap() {
             DiagnosticsMessage::Stop => {
                 // Stop the diagnostics thread.
@@ -426,6 +429,8 @@ fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mute
             DiagnosticsMessage::OnSaveFile => run_diagnostics(log_file.clone()),
             DiagnosticsMessage::Start => run_diagnostics(log_file.clone()),
         };
+
+        // Send the diagnostics notification.
         let errs = match res {
             Ok(_) => Errors::empty(),
             Err(errs) => errs,
