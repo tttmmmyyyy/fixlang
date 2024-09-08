@@ -1646,7 +1646,9 @@ impl Program {
     }
 
     // Check if all items referred in import statements are defined.
-    pub fn validate_import_statements(&self) {
+    pub fn validate_import_statements(&self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
         let stmts = self.import_statements();
         let items = stmts.iter().map(|stmt| stmt.referred_items()).flatten();
 
@@ -1660,19 +1662,19 @@ impl Program {
                     if values.contains(&name) {
                         continue;
                     }
-                    error_exit_with_src(
-                        &format!("Cannot find value named `{}`.", name.to_string()),
-                        &src,
-                    );
+                    errors.append(Errors::from_msg_srcs(
+                        format!("Cannot find value named `{}`.", name.to_string()),
+                        &[&src],
+                    ));
                 }
                 ImportItem::TypeOrTrait(name, src) => {
                     if types.contains(&name) || traits.contains(&name) {
                         continue;
                     }
-                    error_exit_with_src(
-                        &format!("Cannot find entity named `{}`.", name.to_string()),
-                        &src,
-                    );
+                    errors.append(Errors::from_msg_srcs(
+                        format!("Cannot find entity named `{}`.", name.to_string()),
+                        &[&src],
+                    ));
                 }
                 ImportItem::NameSpace(namespace, src) => {
                     // Search for an entity that is in the namespace.
@@ -1685,15 +1687,16 @@ impl Program {
                     if traits.iter().any(|name| name.is_in_namespace(&namespace)) {
                         continue;
                     }
-                    error_exit_with_src(
-                        &format!(
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
                             "Namespace `{}` is not defined or empty.",
                             namespace.to_string()
                         ),
-                        &src,
-                    );
+                        &[&src],
+                    ));
                 }
             }
         }
+        errors.to_result()
     }
 }

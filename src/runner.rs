@@ -66,7 +66,7 @@ fn build_object_files<'c>(
 
     // Check if all items referred in import statements are defined.
     // This check should be done after `add_methods` and `create_trait_method_symbols`.
-    program.validate_import_statements();
+    program.validate_import_statements()?;
 
     // Set and check kinds that appear in the module.
     program.set_kinds();
