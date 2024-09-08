@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::error::error_exit;
 use crate::error::Errors;
 use serde::{Deserialize, Serialize};
 
@@ -62,21 +61,22 @@ where
     fn get_mut(self: &mut Self, name: &str) -> Option<&mut ScopeValue<T>> {
         self.var.get_mut(name)
     }
-    pub fn add_global(&mut self, name: Name, namespace: &NameSpace, value: &T) {
+    pub fn add_global(&mut self, name: Name, namespace: &NameSpace, value: &T) -> Result<(), Errors> {
         if !self.var.contains_key(&name) {
             self.var.insert(name.clone(), Default::default());
         }
         if self.var[&name].global.contains_key(namespace) {
-            error_exit(&format!(
+            return Err(Errors::from_msg(format!(
                 "Duplicate definition for `{}.{}`",
                 namespace.to_string(),
                 name
-            ))
+            )));
         }
         self.get_mut(&name)
             .unwrap()
             .global
             .insert(namespace.clone(), value.clone());
+        Ok(())
     }
 
     // Get candidates list for overload resolution.
@@ -696,7 +696,7 @@ impl TypeCheckContext {
                 Ok(ei.set_lam_body(body))
             }
             Expr::Let(pat, val, body) => {
-                pat.error_if_invalid(&self.type_env);
+                pat.validate(&self.type_env)?;
                 let (pat_ty, var_ty) = pat.pattern.get_type(self)?;
                 let val = self.unify_type_of_expr(val, pat_ty.clone())?;
                 let var_scm = var_ty.iter().map(|(name, ty)| {

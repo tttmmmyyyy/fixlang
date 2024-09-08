@@ -83,7 +83,7 @@ fn build_object_files<'c>(
     for (name, defn) in &program.global_values {
         typechecker
             .scope
-            .add_global(name.name.clone(), &name.namespace, &defn.scm);
+            .add_global(name.name.clone(), &name.namespace, &defn.scm)?;
     }
 
     // Instantiate all exported values (including `Main::main`) and values called from them.
