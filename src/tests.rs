@@ -17,7 +17,7 @@ pub fn test0() {
 
             main : IO ();
             main = (
-                // eval assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 1e1_I64);
+                eval assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 1e1_I64);
                 pure()
             );
         "#;
