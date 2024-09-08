@@ -41,7 +41,7 @@ fn build_object_files<'c>(
     program.validate_export_statements()?;
 
     // Calculate list of type constructors.
-    program.calculate_type_env();
+    program.calculate_type_env()?;
 
     // Infer namespaces of traits and types that appear in declarations and associated type implementations.
     program.resolve_namespace_capital_names_not_in_expression();

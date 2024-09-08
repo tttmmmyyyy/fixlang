@@ -1,5 +1,5 @@
 use build_time::build_time_utc;
-use error::{error_exit, error_exit_with_src, error_exit_with_srcs, Errors};
+use error::{error_exit, error_exit_with_src, Errors};
 use export_statement::{ExportStatement, ExportedFunctionType};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc, vec};
@@ -470,11 +470,15 @@ impl Program {
     }
 
     // Calculate list of type constructors including user-defined types.
-    pub fn calculate_type_env(&mut self) {
+    pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         let mut tycons = bulitin_tycons();
         let mut aliases: HashMap<TyCon, TyAliasInfo> = HashMap::new();
         for type_decl in &mut self.type_defns {
+            // Set kinds of type variables in the right hand side of type definition.
             type_decl.set_kinds_in_value();
+
+            // Check duplicate type definition.
             let tycon = type_decl.tycon();
             if tycons.contains_key(&tycon) || aliases.contains_key(&tycon) {
                 let other_src = if tycons.contains_key(&tycon) {
@@ -484,13 +488,14 @@ impl Program {
                     let ta = aliases.get(&tycon).unwrap();
                     ta.source.clone()
                 };
-                error_exit_with_srcs(
-                    &format!("Duplicate definition of type `{}`.", tycon.to_string()),
+                errors.append(Errors::from_msg_srcs(
+                    format!("Duplicate definition of type `{}`.", tycon.to_string()),
                     &[
                         &type_decl.source.as_ref().map(|s| s.to_head_character()),
                         &other_src.as_ref().map(|s| s.to_head_character()),
                     ],
-                );
+                ));
+                continue;
             }
             if type_decl.is_alias() {
                 aliases.insert(tycon.clone(), type_decl.alias_info());
@@ -506,7 +511,10 @@ impl Program {
                 }
             }
         }
+        // Create type environment.
         self.type_env = TypeEnv::new(tycons, aliases);
+
+        errors.to_result()
     }
 
     // Get list of type constructors including user-defined types.
