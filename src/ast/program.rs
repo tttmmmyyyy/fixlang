@@ -411,7 +411,7 @@ impl Program {
         // Refuse importing the module itself.
         if import_statement.module == import_statement.importer {
             return Err(Errors::from_msg_srcs(
-                &format!(
+                format!(
                     "Module `{}` cannot import itself.",
                     import_statement.module.to_string()
                 ),
@@ -556,7 +556,7 @@ impl Program {
                 .source()
                 .map(|s| s.to_head_character());
             return Err(Errors::from_msg_srcs(
-                &format!(
+                format!(
                     "Duplicated definition for global value: `{}`",
                     name.to_string()
                 ),
@@ -601,7 +601,7 @@ impl Program {
                 let gv = global_values.get_mut(&defn.name).unwrap();
                 if gv.defn.is_some() {
                     errors.append(Errors::from_msg_srcs(
-                        &format!(
+                        format!(
                             "Duplicate definition for global value: `{}`.",
                             defn.name.to_string()
                         ),
@@ -635,7 +635,7 @@ impl Program {
                 let gv = global_values.get_mut(&decl.name).unwrap();
                 if gv.decl.is_some() {
                     errors.append(Errors::from_msg_srcs(
-                        &format!("Duplicate declaration for `{}`.", decl.name.to_string()),
+                        format!("Duplicate declaration for `{}`.", decl.name.to_string()),
                         &[
                             &decl.src.map(|s| s.to_head_character()),
                             &gv.decl
@@ -656,12 +656,12 @@ impl Program {
         for (name, gv) in global_values {
             if gv.defn.is_none() {
                 errors.append(Errors::from_msg_srcs(
-                    &format!("Global value `{}` lacks its expression.", name.to_string()),
+                    format!("Global value `{}` lacks its expression.", name.to_string()),
                     &[&gv.decl.unwrap().src.as_ref().map(|s| s.to_head_character())],
                 ));
             } else if gv.decl.is_none() {
                 errors.append(Errors::from_msg_srcs(
-                    &format!(
+                    format!(
                         "Global value `{}` lacks its type signature.",
                         name.to_string()
                     ),
@@ -1404,7 +1404,7 @@ impl Program {
                     another_file.file_path.to_str().unwrap(),
                     file.file_path.to_str().unwrap()
                 );
-                errors.append(Errors::from_msg(&msg));
+                errors.append(Errors::from_msg(msg));
                 continue;
             }
             self.module_to_files.insert(mod_name.clone(), file);
@@ -1497,7 +1497,7 @@ impl Program {
             }
 
             return Err(Errors::from_msg_srcs(
-                &format!("Cannot find module `{}`.", module),
+                format!("Cannot find module `{}`.", module),
                 &[&import_stmt.source],
             ));
         }

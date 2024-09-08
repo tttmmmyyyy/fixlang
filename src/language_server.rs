@@ -445,8 +445,12 @@ fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mute
 
 // Convert a `Span` into a `Range`.
 fn span_to_range(span: &Span) -> lsp_types::Range {
-    let (start_line, start_column) = span.start_line_col();
-    let (end_line, end_column) = span.end_line_col();
+    fn pair_to_zero_indexed((x, y): (usize, usize)) -> (usize, usize) {
+        (x - 1, y - 1)
+    }
+
+    let (start_line, start_column) = pair_to_zero_indexed(span.start_line_col());
+    let (end_line, end_column) = pair_to_zero_indexed(span.end_line_col());
     lsp_types::Range {
         start: lsp_types::Position {
             line: start_line as u32,

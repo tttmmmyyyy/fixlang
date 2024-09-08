@@ -1151,7 +1151,7 @@ impl TraitEnv {
         if self.traits.contains_key(&info.id) {
             let info1 = self.traits.get(&info.id).unwrap();
             return Err(Errors::from_msg_srcs(
-                &format!("Duplicate definition for trait {}.", info.id.to_string()),
+                format!("Duplicate definition for trait {}.", info.id.to_string()),
                 &[&info1.source, &info.source],
             ));
         }
@@ -1174,7 +1174,7 @@ impl TraitEnv {
         if self.aliases.contains_key(&alias.id) {
             let alias1 = self.aliases.get(&alias.id).unwrap();
             return Err(Errors::from_msg_srcs(
-                &format!(
+                format!(
                     "Duplicate definition for trait alias {}.",
                     alias.id.to_string()
                 ),

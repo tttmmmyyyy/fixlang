@@ -25,7 +25,7 @@ impl ProjectFile {
                 ErrorKind::NotFound => {
                     // If the file does not exist, return the empty `ProjectFile`.
                     if err_if_not_found {
-                        return Err(Errors::from_msg(&format!(
+                        return Err(Errors::from_msg(format!(
                             "File \"{}\" not found.",
                             PROJECT_FILE_PATH
                         )));
@@ -35,7 +35,7 @@ impl ProjectFile {
                 }
                 _ => {
                     // If the file exists but cannot be opened, raise error.
-                    return Err(Errors::from_msg(&format!(
+                    return Err(Errors::from_msg(format!(
                         "Failed to open file \"{}\": {:?}",
                         PROJECT_FILE_PATH, err
                     )));
@@ -47,7 +47,7 @@ impl ProjectFile {
         // Read the content of the file.
         let mut content = String::new();
         if let Err(e) = file.read_to_string(&mut content) {
-            return Err(Errors::from_msg(&format!(
+            return Err(Errors::from_msg(format!(
                 "Failed to read file \"{}\": {:?}",
                 PROJECT_FILE_PATH, e
             )));
@@ -61,7 +61,7 @@ impl ProjectFile {
                 let (start, end) = e.span().map(|r| (r.start, r.end)).unwrap_or((0, 0));
                 let span = Span { start, end, input };
                 return Err(Errors::from_msg_srcs(
-                    &format!(
+                    format!(
                         "Failed to parse file \"{}\": {}",
                         PROJECT_FILE_PATH,
                         e.message()

@@ -120,7 +120,7 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
     let file = match file {
         Ok(res) => res,
         Err(e) => {
-            return Err(Errors::from_msg(&message_parse_error(e, &source)));
+            return Err(message_parse_error(e, &source));
         }
     };
     parse_file(file, source, config)
@@ -2066,7 +2066,7 @@ fn rule_to_string(r: &Rule) -> String {
     }
 }
 
-fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> String {
+fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
     let mut msg: String = Default::default();
 
     #[allow(unused)]
@@ -2105,9 +2105,8 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> String {
         msg += "\n";
         msg += &suggestion.unwrap();
     }
-    msg += "\n";
 
-    // Show line and column number.
+    // Create span (source location).
     let span = match e.location {
         pest::error::InputLocation::Pos(s) => Span {
             input: src.clone(),
@@ -2120,7 +2119,6 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> String {
             end: e,
         },
     };
-    msg += "\n";
-    msg += &span.to_string();
-    msg
+
+    Errors::from_msg_srcs(msg, &[&Some(span)])
 }

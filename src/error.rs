@@ -47,13 +47,13 @@ impl Errors {
         }
     }
 
-    pub fn from_msg(msg: &str) -> Errors {
+    pub fn from_msg(msg: String) -> Errors {
         Errors {
             errs: vec![Error::from_msg(msg)],
         }
     }
 
-    pub fn from_msg_srcs(msg: &str, srcs: &[&Option<Span>]) -> Errors {
+    pub fn from_msg_srcs(msg: String, srcs: &[&Option<Span>]) -> Errors {
         Errors {
             errs: vec![Error::from_msg_srcs(msg, srcs)],
         }
@@ -98,16 +98,13 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn from_msg(msg: &str) -> Error {
-        Error {
-            msg: msg.to_string(),
-            srcs: vec![],
-        }
+    pub fn from_msg(msg: String) -> Error {
+        Error { msg, srcs: vec![] }
     }
 
-    pub fn from_msg_srcs(msg: &str, srcs: &[&Option<Span>]) -> Error {
+    pub fn from_msg_srcs(msg: String, srcs: &[&Option<Span>]) -> Error {
         Error {
-            msg: msg.to_string(),
+            msg,
             srcs: srcs.iter().filter_map(|x| (*x).clone()).collect(),
         }
     }
