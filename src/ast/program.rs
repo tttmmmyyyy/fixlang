@@ -95,10 +95,14 @@ pub struct GlobalValue {
 }
 
 impl GlobalValue {
-    pub fn resolve_namespace_in_declaration(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace_in_declaration(
+        &mut self,
+        ctx: &NameResolutionContext,
+    ) -> Result<(), Errors> {
         // If this function is called for methods, we must call resolve_namespace on MethodImpl.ty.
         assert!(matches!(self.expr, SymbolExpr::Simple(_)));
-        self.scm = self.scm.resolve_namespace(ctx);
+        self.scm = self.scm.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
@@ -242,7 +246,8 @@ impl<'a> NameResolutionContext {
         &self,
         short_name: &FullName,
         accept_types: &[NameResolutionType],
-    ) -> Result<FullName, String> {
+        span: &Option<Span>,
+    ) -> Result<FullName, Errors> {
         let accept_type_string = accept_types
             .iter()
             .map(|nrt| nrt.to_string())
@@ -264,10 +269,13 @@ impl<'a> NameResolutionContext {
             })
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
-            Err(format!(
-                "Unknown {} name `{}`.",
-                accept_type_string,
-                short_name.to_string()
+            Err(Errors::from_msg_srcs(
+                format!(
+                    "Unknown {} name `{}`.",
+                    accept_type_string,
+                    short_name.to_string()
+                ),
+                &[span],
             ))
         } else if candidates.len() == 1 {
             Ok(candidates[0].clone())
@@ -284,7 +292,7 @@ impl<'a> NameResolutionContext {
                 short_name.to_string(),
                 candidates
             );
-            Err(msg)
+            Err(Errors::from_msg_srcs(msg, &[span]))
         }
     }
 }
@@ -696,7 +704,7 @@ impl Program {
         name: &FullName,
         define_module: &Name,
         tc: &TypeCheckContext,
-    ) {
+    ) -> Result<(), Errors> {
         fn cache_file_name(
             name: &FullName,
             hash_of_dependent_codes: &str,
@@ -791,7 +799,7 @@ impl Program {
         if cache.is_some() {
             // If cache is available,
             *te = cache.unwrap();
-            return;
+            return Ok(());
         }
 
         // Perform namespace inference.
@@ -801,7 +809,7 @@ impl Program {
             self.assoc_ty_to_arity(),
             self.mod_to_import_stmts[define_module].clone(),
         );
-        te.expr = te.expr.resolve_namespace(&nrctx);
+        te.expr = te.expr.resolve_namespace(&nrctx)?;
 
         // Resolve type aliases in expression.
         te.expr = te.expr.resolve_type_aliases(&tc.type_env);
@@ -814,6 +822,8 @@ impl Program {
 
         // Save the result to cache file.
         save_cache(te, required_scheme, name, &hash_of_dependent_codes);
+
+        Ok(())
     }
 
     // Instantiate symbol.
@@ -828,13 +838,13 @@ impl Program {
                 // Perform type-checking.
                 let define_module = sym.generic_name.module();
                 let mut e = e.clone();
-                self.resolve_and_check_type(
+                exit_if_err(self.resolve_and_check_type(
                     &mut e,
                     &global_sym.scm,
                     &sym.generic_name,
                     &define_module,
                     tc,
-                );
+                ));
                 // Calculate free vars.
                 e.calculate_free_vars();
                 // Specialize e's type to the required type `sym.ty`.
@@ -860,13 +870,13 @@ impl Program {
                     // Perform type-checking.
                     let define_module = method.define_module.clone();
                     let mut e = method.expr.clone();
-                    self.resolve_and_check_type(
+                    exit_if_err(self.resolve_and_check_type(
                         &mut e,
                         &method.ty,
                         &sym.generic_name,
                         &define_module,
                         tc,
-                    );
+                    ));
                     // Calculate free vars.
                     e.calculate_free_vars();
                     // Specialize e's type to the required type `sym.ty`.
@@ -1179,7 +1189,7 @@ impl Program {
 
     // Infer namespaces of traits and types that appear in declarations and associated type implementations.
     // NOTE: names in the lhs of definition of types/traits/global_values have to be full-named already when this function called.
-    pub fn resolve_namespace_in_type_signs(&mut self) {
+    pub fn resolve_namespace_in_type_signs(&mut self) -> Result<(), Errors> {
         let mut ctx = NameResolutionContext::new(
             &self.tycon_names_with_aliases(),
             &self.trait_names_with_aliases(),
@@ -1191,7 +1201,7 @@ impl Program {
             let mut tycons = (*self.type_env.tycons).clone();
             for (tc, ti) in &mut tycons {
                 ctx.import_statements = self.mod_to_import_stmts[&tc.name.module()].clone();
-                ti.resolve_namespace(&ctx);
+                ti.resolve_namespace(&ctx)?;
             }
             self.type_env.tycons = Arc::new(tycons);
         }
@@ -1200,21 +1210,22 @@ impl Program {
             let mut aliases = (*self.type_env.aliases).clone();
             for (tc, ta) in &mut aliases {
                 ctx.import_statements = self.mod_to_import_stmts[&tc.name.module()].clone();
-                ta.resolve_namespace(&ctx);
+                ta.resolve_namespace(&ctx)?;
             }
             self.type_env.aliases = Arc::new(aliases);
         }
 
         self.trait_env
-            .resolve_namespace(&mut ctx, &self.mod_to_import_stmts);
+            .resolve_namespace(&mut ctx, &self.mod_to_import_stmts)?;
         for decl in &mut self.type_defns {
             ctx.import_statements = self.mod_to_import_stmts[&decl.name.module()].clone();
-            decl.resolve_namespace(&ctx);
+            decl.resolve_namespace(&ctx)?;
         }
         for (name, sym) in &mut self.global_values {
             ctx.import_statements = self.mod_to_import_stmts[&name.module()].clone();
-            sym.resolve_namespace_in_declaration(&ctx);
+            sym.resolve_namespace_in_declaration(&ctx)?;
         }
+        Ok(())
     }
 
     // Resolve type aliases that appear in declarations and associated type implementations.

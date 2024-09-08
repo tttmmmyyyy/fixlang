@@ -1,4 +1,5 @@
-use error::error_exit_with_src;
+use crate::error::error_exit_with_src;
+use crate::error::Errors;
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -505,66 +506,69 @@ impl ExprNode {
         }
     }
 
-    pub fn resolve_namespace(self: &Arc<ExprNode>, ctx: &NameResolutionContext) -> Arc<ExprNode> {
+    pub fn resolve_namespace(
+        self: &Arc<ExprNode>,
+        ctx: &NameResolutionContext,
+    ) -> Result<Arc<ExprNode>, Errors> {
         match &*self.expr {
             Expr::Var(_) => {
                 // Resolution of names of variables will be done in type checking phase.
-                self.clone()
+                Ok(self.clone())
             }
             Expr::LLVM(lit) => {
                 let mut lit = lit.as_ref().clone();
-                lit.ty = lit.ty.resolve_namespace(ctx);
-                self.clone().set_lit_lit(Arc::new(lit))
+                lit.ty = lit.ty.resolve_namespace(ctx)?;
+                Ok(self.clone().set_lit_lit(Arc::new(lit)))
             }
             Expr::App(fun, args) => {
-                let args = args.iter().map(|arg| arg.resolve_namespace(ctx)).collect();
-                self.clone()
-                    .set_app_func(fun.resolve_namespace(ctx))
-                    .set_app_args(args)
+                let mut args_res: Vec<Arc<ExprNode>> = vec![];
+                for arg in args {
+                    args_res.push(arg.resolve_namespace(ctx)?);
+                }
+                Ok(self
+                    .clone()
+                    .set_app_func(fun.resolve_namespace(ctx)?)
+                    .set_app_args(args_res))
             }
-            Expr::Lam(_, body) => self.clone().set_lam_body(body.resolve_namespace(ctx)),
-            Expr::Let(pat, bound, value) => self
+            Expr::Lam(_, body) => Ok(self.clone().set_lam_body(body.resolve_namespace(ctx)?)),
+            Expr::Let(pat, bound, value) => Ok(self
                 .clone()
-                .set_let_pat(pat.resolve_namespace(ctx))
-                .set_let_bound(bound.resolve_namespace(ctx))
-                .set_let_value(value.resolve_namespace(ctx)),
-            Expr::If(cond, then_expr, else_expr) => self
+                .set_let_pat(pat.resolve_namespace(ctx)?)
+                .set_let_bound(bound.resolve_namespace(ctx)?)
+                .set_let_value(value.resolve_namespace(ctx)?)),
+            Expr::If(cond, then_expr, else_expr) => Ok(self
                 .clone()
-                .set_if_cond(cond.resolve_namespace(ctx))
-                .set_if_then(then_expr.resolve_namespace(ctx))
-                .set_if_else(else_expr.resolve_namespace(ctx)),
-            Expr::TyAnno(expr, ty) => self
+                .set_if_cond(cond.resolve_namespace(ctx)?)
+                .set_if_then(then_expr.resolve_namespace(ctx)?)
+                .set_if_else(else_expr.resolve_namespace(ctx)?)),
+            Expr::TyAnno(expr, ty) => Ok(self
                 .clone()
-                .set_tyanno_expr(expr.resolve_namespace(ctx))
-                .set_tyanno_ty(ty.resolve_namespace(ctx)),
+                .set_tyanno_expr(expr.resolve_namespace(ctx)?)
+                .set_tyanno_ty(ty.resolve_namespace(ctx)?)),
             Expr::MakeStruct(tc, fields) => {
                 let mut expr = self.clone();
                 let mut tc = tc.as_ref().clone();
-                let resolve_result = tc.resolve_namespace(ctx);
-                if resolve_result.is_err() {
-                    let msg = resolve_result.unwrap_err();
-                    error_exit_with_src(&msg, &self.source)
-                }
+                tc.resolve_namespace(ctx, &self.source)?;
                 expr = expr.set_make_struct_tycon(Arc::new(tc));
                 for (field_name, field_expr) in fields {
-                    let field_expr = field_expr.resolve_namespace(ctx);
+                    let field_expr = field_expr.resolve_namespace(ctx)?;
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }
-                expr
+                Ok(expr)
             }
             Expr::ArrayLit(elems) => {
                 let mut expr = self.clone();
                 for (i, elem) in elems.iter().enumerate() {
-                    expr = expr.set_array_lit_elem(elem.resolve_namespace(ctx), i);
+                    expr = expr.set_array_lit_elem(elem.resolve_namespace(ctx)?, i);
                 }
-                expr
+                Ok(expr)
             }
             Expr::FFICall(_, _, _, args) => {
                 let mut expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {
-                    expr = expr.set_ffi_call_arg(arg.resolve_namespace(ctx), i);
+                    expr = expr.set_ffi_call_arg(arg.resolve_namespace(ctx)?, i);
                 }
-                expr
+                Ok(expr)
             }
         }
     }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::error::error_exit_with_src;
 use crate::error::error_exit_with_srcs;
+use crate::error::Errors;
 use inkwell::types::BasicType;
 use serde::{Deserialize, Serialize};
 
@@ -35,8 +36,12 @@ pub struct TyAssoc {
 }
 
 impl TyAssoc {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
-        self.name = ctx.resolve(&self.name, &[NameResolutionType::AssocTy])?;
+    pub fn resolve_namespace(
+        &mut self,
+        ctx: &NameResolutionContext,
+        span: &Option<Span>,
+    ) -> Result<(), Errors> {
+        self.name = ctx.resolve(&self.name, &[NameResolutionType::AssocTy], span)?;
         Ok(())
     }
 
@@ -106,10 +111,15 @@ impl TyCon {
         self.name.to_string()
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
+    pub fn resolve_namespace(
+        &mut self,
+        ctx: &NameResolutionContext,
+        span: &Option<Span>,
+    ) -> Result<(), Errors> {
         self.name = ctx.resolve(
             &self.name,
             &[NameResolutionType::TyCon, NameResolutionType::AssocTy],
+            span,
         )?;
         Ok(())
     }
@@ -230,10 +240,12 @@ pub struct TyConInfo {
 }
 
 impl TyConInfo {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for field in &mut self.fields {
-            field.resolve_namespace(ctx);
+            errors.eat_err(field.resolve_namespace(ctx));
         }
+        errors.to_result()
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
@@ -252,8 +264,9 @@ pub struct TyAliasInfo {
 }
 
 impl TyAliasInfo {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.value = self.value.resolve_namespace(ctx);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.value = self.value.resolve_namespace(ctx)?;
+        Ok(())
     }
 }
 
@@ -530,16 +543,16 @@ impl TypeNode {
 
     // Resolve namespaces of tycons / type aliases / trait / trait aliases / associated types that appear in a type.
     // Also, replaces TyCon node to an AssocTy node if necessary.
-    pub fn resolve_namespace(self: &Arc<TypeNode>, ctx: &NameResolutionContext) -> Arc<TypeNode> {
+    pub fn resolve_namespace(
+        self: &Arc<TypeNode>,
+        ctx: &NameResolutionContext,
+    ) -> Result<Arc<TypeNode>, Errors> {
         match &self.ty {
-            Type::TyVar(_tv) => self.clone(),
+            Type::TyVar(_tv) => Ok(self.clone()),
             Type::TyCon(tc) => {
                 let mut tc = tc.as_ref().clone();
-                let resolve_result = tc.resolve_namespace(ctx);
-                if resolve_result.is_err() {
-                    error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
-                }
-                self.set_tycon_tc(Arc::new(tc))
+                tc.resolve_namespace(ctx, &self.info.source)?;
+                Ok(self.set_tycon_tc(Arc::new(tc)))
             }
             Type::TyApp(fun, arg) => {
                 let app_seq = self.flatten_type_application();
@@ -547,16 +560,18 @@ impl TypeNode {
                     Type::TyCon(tc) => {
                         // In this case, replase self to associated type application if necessary.
                         let mut tc = tc.as_ref().clone();
-                        let result = tc.resolve_namespace(ctx);
-                        if result.is_err() {
-                            error_exit_with_src(&result.unwrap_err(), &app_seq[0].info.source)
-                        }
+                        tc.resolve_namespace(ctx, &app_seq[0].info.source)?;
                         if ctx.candidates[&tc.name] == NameResolutionType::AssocTy {
                             let assoc_ty_name = tc.name;
                             let arity: usize = ctx.assoc_ty_to_arity[&assoc_ty_name];
                             let (_, args) = app_seq.split_at(1);
                             if args.len() < arity {
-                                error_exit_with_src(&format!("Associated type `{}` has arity {}, but supplied {} types. All appearance of associated type has to be saturated.", assoc_ty_name.to_string(), arity, args.len()), &app_seq[0].info.source);
+                                return Err(Errors::from_msg_srcs(format!(
+                                    "Associated type `{}` has arity {}, but supplied {} types. All appearance of associated type has to be saturated.",
+                                    assoc_ty_name.to_string(),
+                                    arity,
+                                    args.len()
+                                ), &[&app_seq[0].info.source]));
                             }
                             let (assoc_ty_args, following_args) = args.split_at(arity);
                             let assoc_ty_span = args[0].get_source().clone();
@@ -578,23 +593,21 @@ impl TypeNode {
                     }
                     _ => {}
                 }
-                self.set_tyapp_fun(fun.resolve_namespace(ctx))
-                    .set_tyapp_arg(arg.resolve_namespace(ctx))
+                Ok(self
+                    .set_tyapp_fun(fun.resolve_namespace(ctx)?)
+                    .set_tyapp_arg(arg.resolve_namespace(ctx)?))
             }
-            Type::FunTy(src, dst) => self
-                .set_funty_src(src.resolve_namespace(ctx))
-                .set_funty_dst(dst.resolve_namespace(ctx)),
+            Type::FunTy(src, dst) => Ok(self
+                .set_funty_src(src.resolve_namespace(ctx)?)
+                .set_funty_dst(dst.resolve_namespace(ctx)?)),
             Type::AssocTy(assoc_ty, args) => {
                 let mut assoc_ty = assoc_ty.clone();
-                let result = assoc_ty.resolve_namespace(ctx);
-                if result.is_err() {
-                    error_exit_with_src(&result.unwrap_err(), &self.info.source)
+                assoc_ty.resolve_namespace(ctx, &self.info.source)?;
+                let mut res_args: Vec<Arc<TypeNode>> = vec![];
+                for arg in args {
+                    res_args.push(arg.resolve_namespace(ctx)?);
                 }
-                let args = args
-                    .iter()
-                    .map(|arg| arg.resolve_namespace(ctx))
-                    .collect::<Vec<_>>();
-                self.set_assocty_name(assoc_ty).set_assocty_args(args)
+                Ok(self.set_assocty_name(assoc_ty).set_assocty_args(res_args))
             }
         }
     }
@@ -1765,16 +1778,16 @@ We will support more general constraints by implementing such conversion in a fu
         ret
     }
 
-    pub fn resolve_namespace(&self, ctx: &NameResolutionContext) -> Arc<Scheme> {
+    pub fn resolve_namespace(&self, ctx: &NameResolutionContext) -> Result<Arc<Scheme>, Errors> {
         let mut res = self.clone();
         for p in &mut res.predicates {
-            p.resolve_namespace(ctx);
+            p.resolve_namespace(ctx)?;
         }
         for eq in &mut res.equalities {
-            eq.resolve_namespace(ctx);
+            eq.resolve_namespace(ctx)?;
         }
-        res.ty = res.ty.resolve_namespace(ctx);
-        Arc::new(res)
+        res.ty = res.ty.resolve_namespace(ctx)?;
+        Ok(Arc::new(res))
     }
 
     pub fn resolve_type_aliases(&self, type_env: &TypeEnv) -> Arc<Scheme> {

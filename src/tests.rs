@@ -5798,7 +5798,7 @@ pub fn test_typedef_unknown_tyvar() {
     test_source_fail(
         &source,
         Configuration::develop_compiler(),
-        " Unknown type variable `a` in the definition of type `Main::Hoge`.",
+        "Unknown type variable `a` in the definition of type `Main::Hoge`.",
     );
 }
 
@@ -5961,7 +5961,7 @@ pub fn test_duplicated_struct_name() {
     test_source_fail(
         &source,
         Configuration::develop_compiler(),
-        "Duplicate definition of type `Main::Hoge`.",
+        "Duplicate definitions of type `Main::Hoge`.",
     );
 }
 

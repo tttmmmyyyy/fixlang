@@ -27,8 +27,12 @@ impl TraitId {
         self.name.clone()
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), String> {
-        self.name = ctx.resolve(&self.name, &[NameResolutionType::Trait])?;
+    pub fn resolve_namespace(
+        &mut self,
+        ctx: &NameResolutionContext,
+        span: &Option<Span>,
+    ) -> Result<(), Errors> {
+        self.name = ctx.resolve(&self.name, &[NameResolutionType::Trait], span)?;
         Ok(())
     }
 }
@@ -86,8 +90,9 @@ impl AssocTypeImpl {
         self.value = self.value.resolve_type_aliases(type_env);
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.value = self.value.resolve_namespace(ctx);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.value = self.value.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     pub fn set_kinds(&mut self, trait_inst: &TraitInstance, kind_env: &KindEnv) {
@@ -158,10 +163,12 @@ pub struct TraitInfo {
 
 impl TraitInfo {
     // Resolve namespace.
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for (_name, qt) in &mut self.methods {
-            qt.resolve_namespace(ctx);
+            errors.eat_err(qt.resolve_namespace(ctx));
         }
+        errors.to_result()
     }
 
     // Resolve type aliases
@@ -265,11 +272,15 @@ impl TraitInstance {
         }
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.qual_pred.resolve_namespace(ctx);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.qual_pred.resolve_namespace(ctx)?;
+
+        let mut errors = Errors::empty();
         for (_assoc_ty_name, assoc_ty_impl) in &mut self.assoc_types {
-            assoc_ty_impl.resolve_namespace(ctx);
+            errors.eat_err(assoc_ty_impl.resolve_namespace(ctx));
         }
+
+        errors.to_result()
 
         // This function is called only by resolve_namespace_in_declaration, so we don't need to see into expression.
 
@@ -352,13 +363,11 @@ pub struct TraitAlias {
 
 impl TraitAlias {
     // Resolve namespace of trait names in value.
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         for trait_id in &mut self.value {
-            let res = trait_id.resolve_namespace(ctx);
-            if res.is_err() {
-                error_exit_with_src(&res.unwrap_err(), &self.source);
-            }
+            trait_id.resolve_namespace(ctx, &self.source)?;
         }
+        Ok(())
     }
 }
 
@@ -419,14 +428,15 @@ impl QualPredicate {
         s
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         for p in &mut self.pred_constraints {
-            p.resolve_namespace(ctx);
+            p.resolve_namespace(ctx)?;
         }
         for eq in &mut self.eq_constraints {
-            eq.resolve_namespace(ctx);
+            eq.resolve_namespace(ctx)?;
         }
-        self.predicate.resolve_namespace(ctx);
+        self.predicate.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
@@ -539,14 +549,15 @@ pub struct QualType {
 
 impl QualType {
     // Resolve namespace.
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         for pred in &mut self.preds {
-            pred.resolve_namespace(ctx);
+            pred.resolve_namespace(ctx)?;
         }
         for eq in &mut self.eqs {
-            eq.resolve_namespace(ctx);
+            eq.resolve_namespace(ctx)?;
         }
-        self.ty = self.ty.resolve_namespace(ctx);
+        self.ty = self.ty.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     // Resolve type aliases
@@ -608,12 +619,10 @@ impl Predicate {
         }
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        let resolve_result = self.trait_id.resolve_namespace(ctx);
-        if resolve_result.is_err() {
-            error_exit_with_src(&resolve_result.unwrap_err(), &self.source)
-        }
-        self.ty = self.ty.resolve_namespace(ctx);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.trait_id.resolve_namespace(ctx, &self.source)?;
+        self.ty = self.ty.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
@@ -754,15 +763,13 @@ impl Equality {
         self.value = self.value.resolve_type_aliases(type_env);
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        let result = self.assoc_type.resolve_namespace(ctx);
-        if result.is_err() {
-            error_exit_with_src(&result.unwrap_err(), &self.source)
-        }
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.assoc_type.resolve_namespace(ctx, &self.source)?;
         for arg in &mut self.args {
-            *arg = arg.resolve_namespace(ctx);
+            *arg = arg.resolve_namespace(ctx)?;
         }
-        self.value = self.value.resolve_namespace(ctx);
+        self.value = self.value.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     // pub fn is_all_args_tyvar(&self) -> bool {
@@ -1052,12 +1059,15 @@ impl TraitEnv {
         &mut self,
         ctx: &mut NameResolutionContext,
         imported_modules: &HashMap<Name, Vec<ImportStatement>>,
-    ) {
+    ) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
         // Resolve names in trait aliases.
         for (trait_id, alias_info) in &mut self.aliases {
             ctx.import_statements = imported_modules[&trait_id.name.module()].clone();
-            alias_info.resolve_namespace(ctx);
+            errors.eat_err(alias_info.resolve_namespace(ctx));
         }
+        errors.to_result()?; // Throw errors if any.
 
         // Resolve names in trait definitions.
         for (trait_id, trait_info) in &mut self.traits {
@@ -1066,11 +1076,13 @@ impl TraitEnv {
             assert!(
                 trait_id.name
                     == ctx
-                        .resolve(&trait_id.name, &[NameResolutionType::Trait])
+                        .resolve(&trait_id.name, &[NameResolutionType::Trait], &None)
+                        .ok()
                         .unwrap()
             );
-            trait_info.resolve_namespace(ctx);
+            errors.eat_err(trait_info.resolve_namespace(ctx));
         }
+        errors.to_result()?; // Throw errors if any.
 
         // Resolve names in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
@@ -1082,14 +1094,12 @@ impl TraitEnv {
 
                 // Resolve trait_id's namespace.
                 let mut trait_id = trait_id.clone();
-                let resolve_result = trait_id.resolve_namespace(ctx);
-                if resolve_result.is_err() {
-                    let src = inst.qual_pred.predicate.source.clone();
-                    error_exit_with_src(&resolve_result.unwrap_err(), &src)
-                }
+                errors.eat_err(
+                    trait_id.resolve_namespace(ctx, &inst.qual_pred.predicate.source.clone()),
+                );
 
                 // Resolve names in TrantInstance.
-                inst.resolve_namespace(ctx);
+                errors.eat_err(inst.resolve_namespace(ctx));
 
                 // Insert to instances_resolved
                 if !instances_resolved.contains_key(&trait_id) {
@@ -1098,7 +1108,10 @@ impl TraitEnv {
                 instances_resolved.get_mut(&trait_id).unwrap().push(inst);
             }
         }
+
+        errors.to_result()?; // Throw errors if any.
         self.instances = instances_resolved;
+        Ok(())
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {

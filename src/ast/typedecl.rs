@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::error::error_exit_with_src;
+use crate::error::{error_exit_with_src, Errors};
 
 use super::*;
 
@@ -14,14 +14,16 @@ pub struct TypeDefn {
 }
 
 impl TypeDefn {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         assert!(
             self.name
                 == ctx
-                    .resolve(&self.name, &[NameResolutionType::TyCon])
+                    .resolve(&self.name, &[NameResolutionType::TyCon], &None)
+                    .ok()
                     .unwrap()
         );
-        self.value.resolve_namespace(ctx);
+        self.value.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
@@ -164,7 +166,7 @@ pub enum TypeDeclValue {
 }
 
 impl TypeDeclValue {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         match self {
             TypeDeclValue::Struct(s) => s.resolve_namespace(ctx),
             TypeDeclValue::Union(u) => u.resolve_namespace(ctx),
@@ -203,10 +205,12 @@ pub struct Struct {
 }
 
 impl Struct {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for f in &mut self.fields {
-            f.resolve_namespace(ctx);
+            errors.eat_err(f.resolve_namespace(ctx));
         }
+        errors.to_result()
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
@@ -229,10 +233,12 @@ pub struct Union {
 }
 
 impl Union {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for f in &mut self.fields {
-            f.resolve_namespace(ctx);
+            errors.eat_err(f.resolve_namespace(ctx));
         }
+        errors.to_result()
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
@@ -254,8 +260,9 @@ pub struct TypeAlias {
 }
 
 impl TypeAlias {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.value = self.value.resolve_namespace(ctx);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.value = self.value.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
@@ -271,8 +278,9 @@ pub struct Field {
 }
 
 impl Field {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) {
-        self.ty = self.ty.resolve_namespace(ctx);
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.ty = self.ty.resolve_namespace(ctx)?;
+        Ok(())
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {

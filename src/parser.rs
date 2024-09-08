@@ -339,7 +339,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
             Either::Left((name, qual_type)) => {
                 if methods.contains_key(&name) {
                     error_exit_with_src(
-                        &format!("Duplicate definition of member `{}`.", name),
+                        &format!("Duplicate definitions of member `{}`.", name),
                         &Some(span),
                     );
                 }
@@ -349,7 +349,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
                 if type_syns.contains_key(&assoc_type.name.to_string()) {
                     error_exit_with_src(
                         &format!(
-                            "Duplicate definition of associated type `{}`.",
+                            "Duplicate definitions of associated type `{}`.",
                             assoc_type.name.to_string()
                         ),
                         &Some(span),

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use error::error_exit_with_src;
+use crate::error::error_exit_with_src;
+use crate::error::Errors;
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -69,32 +70,35 @@ impl PatternNode {
         }
     }
 
-    pub fn resolve_namespace(self: &PatternNode, ctx: &NameResolutionContext) -> Arc<PatternNode> {
+    pub fn resolve_namespace(
+        self: &PatternNode,
+        ctx: &NameResolutionContext,
+    ) -> Result<Arc<PatternNode>, Errors> {
         match &self.pattern {
             Pattern::Var(_, ty) => {
-                self.set_var_tyanno(ty.as_ref().map(|ty| ty.resolve_namespace(ctx)))
+                let ty = ty
+                    .as_ref()
+                    .map(|ty| ty.resolve_namespace(ctx))
+                    .transpose()?;
+                Ok(self.set_var_tyanno(ty))
             }
             Pattern::Struct(tc, field_to_pat) => {
                 let mut tc = tc.as_ref().clone();
-                let resolve_result = tc.resolve_namespace(ctx);
-                if resolve_result.is_err() {
-                    error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
+                tc.resolve_namespace(ctx, &self.info.source)?;
+                let mut field_to_pat_res = vec![];
+                for (field_name, pat) in field_to_pat {
+                    field_to_pat_res.push((field_name.clone(), pat.resolve_namespace(ctx)?));
                 }
-                let field_to_pat = field_to_pat
-                    .iter()
-                    .map(|(field_name, pat)| (field_name.clone(), pat.resolve_namespace(ctx)))
-                    .collect::<Vec<_>>();
-                self.set_struct_tycon(Arc::new(tc))
-                    .set_struct_field_to_pat(field_to_pat)
+                Ok(self
+                    .set_struct_tycon(Arc::new(tc))
+                    .set_struct_field_to_pat(field_to_pat_res))
             }
             Pattern::Union(tc, _, pat) => {
                 let mut tc = tc.as_ref().clone();
-                let resolve_result = tc.resolve_namespace(ctx);
-                if resolve_result.is_err() {
-                    error_exit_with_src(&resolve_result.unwrap_err(), &self.info.source)
-                }
-                self.set_union_tycon(Arc::new(tc))
-                    .set_union_pat(pat.resolve_namespace(ctx))
+                tc.resolve_namespace(ctx, &self.info.source)?;
+                Ok(self
+                    .set_union_tycon(Arc::new(tc))
+                    .set_union_pat(pat.resolve_namespace(ctx)?))
             }
         }
     }
