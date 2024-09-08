@@ -140,7 +140,7 @@ impl TypeDefn {
         }
     }
 
-    // Correct kind of type variables in `self.value` using kind information in `self.tyvars`.
+    // Set kinds to type variables in `self.value` using kind information in `self.tyvars`.
     pub fn set_kinds_in_value(&mut self) {
         let kind_scope: HashMap<_, _> = self
             .tyvars
