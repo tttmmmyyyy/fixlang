@@ -996,6 +996,7 @@ impl TypeCheckContext {
 
     // Update unification to unify two types.
     // When unification fails, it has no side effect to self.
+    // TODO: This function is now unnecessary.
     pub fn unify_rollback(
         &mut self,
         ty1: &Arc<TypeNode>,
@@ -1004,10 +1005,10 @@ impl TypeCheckContext {
         let mut cloned_self = self.clone();
         match UnifOrOtherErr::extract_others(cloned_self.unify(ty1, ty2))? {
             Ok(_) => {
+                *self = cloned_self;
                 return Ok(());
             }
             Err(e) => {
-                *self = cloned_self;
                 return Err(e.into());
             }
         }
