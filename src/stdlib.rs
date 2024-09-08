@@ -624,11 +624,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
 }
 
 // Create module which defines traits such as ToString or Eq for tuples.
-pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Program {
+pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Result<Program, Errors> {
     let src = make_tuple_traits_source(sizes);
-    exit_if_err(parse_and_save_to_temporary_file(
-        &src,
-        "std_tuple_traits",
-        config,
-    ))
+    parse_and_save_to_temporary_file(&src, "std_tuple_traits", config)
 }

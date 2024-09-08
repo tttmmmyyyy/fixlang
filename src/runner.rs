@@ -33,7 +33,7 @@ fn build_object_files<'c>(
 
     // Add trait implementations for tuples such as ToString or Eq.
     program.link(
-        make_tuple_traits_mod(&program.used_tuple_sizes, &config),
+        make_tuple_traits_mod(&program.used_tuple_sizes, &config)?,
         true,
     )?;
 
