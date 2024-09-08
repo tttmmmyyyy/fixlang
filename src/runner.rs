@@ -69,7 +69,7 @@ fn build_object_files<'c>(
     program.validate_import_statements()?;
 
     // Set and check kinds that appear in the module.
-    program.set_kinds();
+    program.set_kinds()?;
 
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::new(

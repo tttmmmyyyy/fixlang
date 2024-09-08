@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use crate::error::error_exit;
-use crate::error::error_exit_with_src;
-use error::Errors;
+use crate::error::Errors;
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -95,21 +93,25 @@ impl AssocTypeImpl {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, trait_inst: &TraitInstance, kind_env: &KindEnv) {
+    pub fn set_kinds(
+        &mut self,
+        trait_inst: &TraitInstance,
+        kind_env: &KindEnv,
+    ) -> Result<(), Errors> {
         let assoc_ty_name = TyAssoc {
             name: FullName::new(&trait_inst.trait_id().name.to_namespace(), &self.name),
         };
         let param_kinds = &kind_env.assoc_tys.get(&assoc_ty_name).unwrap().param_kinds;
         if self.params.len() != param_kinds.len() {
-            error_exit_with_src(
-                &format!(
+            return Err(Errors::from_msg_srcs(
+                format!(
                     "Invalid number of parameters for associated type `{}`. Expect: {}, found: {}.",
                     self.name,
                     param_kinds.len(),
                     self.params.len()
                 ),
-                &self.source,
-            )
+                &[&self.source],
+            ));
         }
         let mut tvs_in_value = vec![];
         trait_inst.impl_type().free_vars_to_vec(&mut tvs_in_value);
@@ -122,6 +124,7 @@ impl AssocTypeImpl {
             tv_to_kind.insert(tv_in_value.name.clone(), tv_in_value.kind.clone());
         }
         self.value = self.value.set_kinds(&tv_to_kind);
+        Ok(())
     }
 }
 
@@ -204,30 +207,31 @@ impl TraitInfo {
 
     // Validate kind_signs and set it to self.type_var.
     // Also, set kinds of parameters of associated type definition.
-    pub fn set_trait_kind(&mut self) {
+    pub fn set_trait_kind(&mut self) -> Result<(), Errors> {
         if self.kind_signs.len() >= 2 {
             let span = Span::unite_opt(&self.kind_signs[0].source, &self.kind_signs[1].source);
-            error_exit_with_src(
-                "You can specify at most one constraint of the form `{type-variable} : {kind}` as the assumption of trait definition.",
-                &span,
-            );
+            return Err(Errors::from_msg_srcs(
+                "You can specify at most one constraint of the form `{type-variable} : {kind}` as the assumption of trait definition.".to_string(),
+                &[&span],
+            ));
         }
         if self.kind_signs.len() > 0 {
             if self.kind_signs[0].tyvar != self.type_var.name {
-                error_exit_with_src(
-                    &format!(
+                return Err(Errors::from_msg_srcs(
+                    format!(
                         "The type variable used in the assumption of trait `{}` has to be `{}`.",
                         self.id.to_string(),
                         self.type_var.name,
                     ),
-                    &self.kind_signs[0].source,
-                );
+                    &[&self.kind_signs[0].source],
+                ));
             }
             self.type_var = self.type_var.set_kind(self.kind_signs[0].kind.clone());
         }
         for (_, assoc_ty_defn) in &mut self.assoc_types {
             assoc_ty_defn.set_kinds(self.type_var.kind.clone());
         }
+        Ok(())
     }
 
     // pub fn assoc_type_info(&self, assoc_type_name: &Name) -> AssocTypeInfo {
@@ -256,14 +260,14 @@ pub struct TraitInstance {
 }
 
 impl TraitInstance {
-    pub fn set_kinds_in_qual_pred(&mut self, kind_env: &KindEnv) {
+    pub fn set_kinds_in_qual_pred(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
         let mut scope = HashMap::new();
         let preds = &self.qual_pred.pred_constraints;
         let eqs = &self.qual_pred.eq_constraints;
         let kind_signs = &self.qual_pred.kind_constraints;
         let res = QualPredicate::extend_kind_scope(&mut scope, preds, eqs, kind_signs, kind_env);
         if res.is_err() {
-            error_exit_with_src(&res.unwrap_err(), &self.source);
+            return Err(Errors::from_msg_srcs(res.unwrap_err(), &[&self.source]));
         }
         self.qual_pred.predicate.set_kinds(&scope);
         for pred in &mut self.qual_pred.pred_constraints {
@@ -272,6 +276,7 @@ impl TraitInstance {
         for eq in &mut self.qual_pred.eq_constraints {
             eq.set_kinds(&scope);
         }
+        Ok(())
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
@@ -652,35 +657,36 @@ impl Predicate {
         self.ty = self.ty.set_kinds(scope);
     }
 
-    pub fn check_kinds(&self, kind_env: &KindEnv) {
+    pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {
         let expected = &kind_env.traits_and_aliases[&self.trait_id];
-        let found = self.ty.kind(kind_env);
+        let found = self.ty.kind(kind_env)?;
         if *expected != found {
-            error_exit_with_src(
-                &format!(
+            return Err(Errors::from_msg_srcs(
+                format!(
                     "Kind mismatch in `{}`. Expect: {}, found: {}.",
                     self.to_string_normalize(),
                     expected.to_string(),
                     found.to_string()
                 ),
-                &self.source,
-            )
+                &[&self.source],
+            ));
         }
+        Ok(())
     }
 
     // If the trait used in this predicate is a trait alias, resolve it to a set of predicates that are not using trait aliases.
-    pub fn resolve_trait_aliases(&self, trait_env: &TraitEnv) -> Vec<Predicate> {
+    pub fn resolve_trait_aliases(&self, trait_env: &TraitEnv) -> Result<Vec<Predicate>, Errors> {
         if !trait_env.is_alias(&self.trait_id) {
-            return vec![self.clone()];
+            return Ok(vec![self.clone()]);
         }
-        let trait_ids = trait_env.resolve_aliases(&self.trait_id);
+        let trait_ids = trait_env.resolve_aliases(&self.trait_id)?;
         let mut res = vec![];
         for trait_id in trait_ids {
             let mut p = self.clone();
             p.trait_id = trait_id;
             res.push(p);
         }
-        res
+        Ok(res)
     }
 }
 
@@ -715,45 +721,46 @@ impl Equality {
         self.value.free_vars_to_vec(buf);
     }
 
-    pub fn check_kinds(&self, kind_env: &KindEnv) {
+    pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {
         let kind_info = kind_env.assoc_tys.get(&self.assoc_type).unwrap();
         if self.args.len() != kind_info.param_kinds.len() {
-            error_exit_with_src(
-                &format!(
+            return Err(Errors::from_msg_srcs(
+                format!(
                     "Invalid number of arguments for associated type `{}`. Expect: {}, found: {}.",
                     self.assoc_type.name.to_string(),
                     kind_info.param_kinds.len(),
                     self.args.len()
                 ),
-                &self.source,
-            )
+                &[&self.source],
+            ));
         }
         for (arg, expect_kind) in self.args.iter().zip(kind_info.param_kinds.iter()) {
-            let found_kind = arg.kind(kind_env);
+            let found_kind = arg.kind(kind_env)?;
             if *expect_kind != found_kind {
-                error_exit_with_src(
-                    &format!(
+                return Err(Errors::from_msg_srcs(
+                    format!(
                         "Kind mismatch in `{}`. Expect: {}, found: {}.",
                         arg.to_string(),
                         expect_kind.to_string(),
                         found_kind.to_string()
                     ),
-                    &self.source,
-                )
+                    &[&self.source],
+                ));
             }
         }
-        let found_kind = self.value.kind(kind_env);
+        let found_kind = self.value.kind(kind_env)?;
         if kind_info.value_kind != found_kind {
-            error_exit_with_src(
-                &format!(
+            return Err(Errors::from_msg_srcs(
+                format!(
                     "Kind mismatch in `{}`. Expect: {}, found: {}.",
                     self.value.to_string(),
                     kind_info.value_kind.to_string(),
                     found_kind.to_string()
                 ),
-                &self.source,
-            )
+                &[&self.source],
+            ));
         }
+        Ok(())
     }
 
     pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
@@ -1485,33 +1492,41 @@ impl TraitEnv {
     // }
 
     // Resolve trait aliases.
-    fn resolve_aliases(&self, trait_id: &TraitId) -> Vec<TraitId> {
+    fn resolve_aliases(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
         fn resolve_aliases_inner(
             env: &TraitEnv,
             trait_id: &TraitId,
             res: &mut Vec<TraitId>,
             visited: &mut HashSet<TraitId>,
-        ) {
+        ) -> Result<(), Errors> {
             if visited.contains(trait_id) {
-                error_exit(&format!(
-                    "Circular aliasing detected in trait alias `{}`.",
-                    trait_id.to_string()
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "Circular aliasing detected in trait alias `{}`.",
+                        trait_id.to_string()
+                    ),
+                    &[&env
+                        .aliases
+                        .get(trait_id)
+                        .map(|ta| ta.source.clone())
+                        .flatten()],
                 ));
             }
             visited.insert(trait_id.clone());
             if env.traits.contains_key(trait_id) {
                 res.push(trait_id.clone());
-                return;
+                return Ok(());
             }
             for v in &env.aliases.get(trait_id).unwrap().value {
-                resolve_aliases_inner(env, v, res, visited);
+                resolve_aliases_inner(env, v, res, visited)?;
             }
+            Ok(())
         }
 
         let mut res = vec![];
         let mut visited = HashSet::new();
-        resolve_aliases_inner(self, trait_id, &mut res, &mut visited);
-        res
+        resolve_aliases_inner(self, trait_id, &mut res, &mut visited)?;
+        Ok(res)
     }
 
     // Check if a trait name is an alias.
@@ -1520,13 +1535,21 @@ impl TraitEnv {
     }
 
     // Set kinds in TraitInfo, TraitAlias and TraitInstances.
-    pub fn set_kinds_in_trait_and_alias_defns(&mut self) {
+    pub fn set_kinds_in_trait_and_alias_defns(&mut self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
+        // Set kinds in trait definitions.
         for (_id, ti) in &mut self.traits {
-            ti.set_trait_kind();
+            errors.eat_err(ti.set_trait_kind());
         }
+
+        // Throw errors if any.
+        errors.to_result()?;
+
+        // Set kinds in trait aliases definitions.
         let mut resolved_aliases: HashMap<TraitId, Vec<TraitId>> = HashMap::new();
         for (id, _) in &self.aliases {
-            resolved_aliases.insert(id.clone(), self.resolve_aliases(id));
+            resolved_aliases.insert(id.clone(), self.resolve_aliases(id)?); // If circular aliasing is detected, throw it immediately.
         }
         for (id, ta) in &mut self.aliases {
             let mut kinds = resolved_aliases
@@ -1537,30 +1560,33 @@ impl TraitEnv {
             let kind = kinds.next().unwrap();
             for k in kinds {
                 if k != kind {
-                    error_exit_with_src(
-                        &format!(
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
                             "Kind mismatch in the definition of trait alias `{}`.",
                             id.to_string()
                         ),
-                        &ta.source,
-                    )
+                        &[&ta.source],
+                    ));
                 }
             }
             ta.kind = kind;
         }
+        errors.to_result()
     }
 
-    pub fn set_kinds_in_trait_instances(&mut self, kind_env: &KindEnv) {
+    pub fn set_kinds_in_trait_instances(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for (_trait_id, trait_impls) in &mut self.instances {
             for inst in trait_impls {
-                inst.set_kinds_in_qual_pred(kind_env);
+                errors.eat_err(inst.set_kinds_in_qual_pred(kind_env));
                 let mut assoc_tys = std::mem::replace(&mut inst.assoc_types, HashMap::default());
                 for (_, assoc_ty_impl) in &mut assoc_tys {
-                    assoc_ty_impl.set_kinds(&inst, kind_env);
+                    errors.eat_err(assoc_ty_impl.set_kinds(&inst, kind_env));
                 }
                 inst.assoc_types = assoc_tys;
             }
         }
+        errors.to_result()
     }
 
     pub fn trait_kind_map_with_aliases(&self) -> HashMap<TraitId, Arc<Kind>> {

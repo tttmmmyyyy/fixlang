@@ -1,5 +1,5 @@
 use build_time::build_time_utc;
-use error::{error_exit, error_exit_with_src, Errors};
+use error::{error_exit, Errors};
 use export_statement::{ExportStatement, ExportedFunctionType};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc, vec};
@@ -111,18 +111,19 @@ impl GlobalValue {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, kind_env: &KindEnv) {
-        self.scm = self.scm.set_kinds(kind_env);
-        self.scm.check_kinds(kind_env);
+    pub fn set_kinds(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
+        self.scm = self.scm.set_kinds(kind_env)?;
+        self.scm.check_kinds(kind_env)?;
         match &mut self.expr {
             SymbolExpr::Simple(_) => {}
             SymbolExpr::Method(ms) => {
                 for m in ms {
-                    m.ty = m.ty.set_kinds(kind_env);
-                    m.ty.check_kinds(kind_env);
+                    m.ty = m.ty.set_kinds(kind_env)?;
+                    m.ty.check_kinds(kind_env)?;
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -821,7 +822,7 @@ impl Program {
         // Perform type-checking.
         let mut tc = tc.clone();
         tc.current_module = Some(define_module.clone());
-        te.expr = tc.check_type(te.expr.clone(), required_scheme.clone());
+        te.expr = tc.check_type(te.expr.clone(), required_scheme.clone())?;
         te.substitution = tc.substitution;
 
         // Save the result to cache file.
@@ -867,7 +868,7 @@ impl Program {
                 assert!(tc.substitution.is_empty());
                 tc.substitution = std::mem::replace(&mut e.substitution, Substitution::default());
                 tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
-                tc.finish_inferred_types(e.expr)
+                tc.finish_inferred_types(e.expr)?
             }
             SymbolExpr::Method(impls) => {
                 let mut opt_e: Option<Arc<ExprNode>> = None;
@@ -900,7 +901,7 @@ impl Program {
                     tc.substitution =
                         std::mem::replace(&mut e.substitution, Substitution::default());
                     tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
-                    opt_e = Some(tc.finish_inferred_types(e.expr));
+                    opt_e = Some(tc.finish_inferred_types(e.expr)?);
                     break;
                 }
                 opt_e.unwrap()
@@ -1207,13 +1208,15 @@ impl Program {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self) {
-        self.trait_env.set_kinds_in_trait_and_alias_defns();
+    pub fn set_kinds(&mut self) -> Result<(), Errors> {
+        self.trait_env.set_kinds_in_trait_and_alias_defns()?;
         let kind_env = self.kind_env();
-        self.trait_env.set_kinds_in_trait_instances(&kind_env);
+        self.trait_env.set_kinds_in_trait_instances(&kind_env)?;
+        let mut errors = Errors::empty();
         for (_name, sym) in &mut self.global_values {
-            sym.set_kinds(&kind_env);
+            errors.eat_err(sym.set_kinds(&kind_env));
         }
+        errors.to_result()
     }
 
     pub fn kind_env(&self) -> KindEnv {

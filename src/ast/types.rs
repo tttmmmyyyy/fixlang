@@ -975,13 +975,13 @@ impl TypeNode {
     }
 
     // Calculate kind.
-    pub fn kind(self: &Arc<TypeNode>, kind_env: &KindEnv) -> Arc<Kind> {
+    pub fn kind(self: &Arc<TypeNode>, kind_env: &KindEnv) -> Result<Arc<Kind>, Errors> {
         match &self.ty {
-            Type::TyVar(tv) => tv.kind.clone(),
-            Type::TyCon(tc) => kind_env.tycons.get(&tc).unwrap().clone(),
+            Type::TyVar(tv) => Ok(tv.kind.clone()),
+            Type::TyCon(tc) => Ok(kind_env.tycons.get(&tc).unwrap().clone()),
             Type::TyApp(fun, arg) => {
-                let fun_kind = fun.kind(kind_env);
-                let arg_kind = arg.kind(kind_env);
+                let fun_kind = fun.kind(kind_env)?;
+                let arg_kind = arg.kind(kind_env)?;
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
@@ -993,12 +993,19 @@ impl TypeNode {
                             let self_str = &type_strs[0];
                             let fun_str = &type_strs[1];
                             let arg_str = &type_strs[2];
-                            error_exit_with_src(
-                                &format!("Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.", self_str, fun_str, fun_kind.to_string(), arg_str, arg_kind.to_string()),
-                                &self.get_source(),
-                            );
+                            return Err(Errors::from_msg_srcs(
+                                format!(
+                                    "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
+                                    self_str,
+                                    fun_str,
+                                    fun_kind.to_string(),
+                                    arg_str,
+                                    arg_kind.to_string()
+                                ),
+                                &[self.get_source()],
+                            ));
                         }
-                        res.clone()
+                        Ok(res.clone())
                     }
                     Kind::Star => {
                         let type_strs = TypeNode::to_string_normalize_many(&[
@@ -1009,53 +1016,66 @@ impl TypeNode {
                         let self_str = &type_strs[0];
                         let fun_str = &type_strs[1];
                         let arg_str = &type_strs[2];
-                        error_exit_with_src(
-                            &format!("Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.", self_str, fun_str, fun_kind.to_string(), arg_str, arg_kind.to_string()),
-                            &self.get_source(),
-                        )
+                        return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
+                                self_str,
+                                fun_str,
+                                fun_kind.to_string(),
+                                arg_str,
+                                arg_kind.to_string()
+                            ),
+                            &[self.get_source()],
+                        ));
                     }
                 }
             }
             Type::FunTy(dom, codom) => {
-                let arg_kind = dom.kind(kind_env);
+                let arg_kind = dom.kind(kind_env)?;
                 if arg_kind != kind_star() {
-                    error_exit_with_src(
-                        &format!(
+                    return Err(Errors::from_msg_srcs(
+                        format!(
                             "Cannot form function type `{}` since its domain type `{}` has kind `{}`.",
                             self.to_string_normalize(),
                             dom.to_string_normalize(),
                             arg_kind.to_string()
                         ),
-                        self.get_source(),
-                    )
+                        &[self.get_source()],
+                    ));
                 }
-                let ret_kind = codom.kind(kind_env);
+                let ret_kind = codom.kind(kind_env)?;
                 if ret_kind != kind_star() {
-                    error_exit_with_src(
-                        &format!("Cannot form function type `{}` since its codomain type `{}` has kind `{}`.", self.to_string_normalize(), codom.to_string_normalize(), ret_kind.to_string()),
-                        self.get_source(),
-                    )
+                    return Err(Errors::from_msg_srcs(
+                        format!(
+                            "Cannot form function type `{}` since its codomain type `{}` has kind `{}`.",
+                            self.to_string_normalize(),
+                            codom.to_string_normalize(),
+                            ret_kind.to_string()
+                        ),
+                        &[self.get_source()],
+                    ));
                 }
-                kind_star()
+                Ok(kind_star())
             }
             Type::AssocTy(assoc_ty, args) => {
                 let kind_info = kind_env.assoc_tys.get(&assoc_ty).unwrap().clone();
                 assert_eq!(kind_info.param_kinds.len(), args.len());
                 for i in 0..args.len() {
                     let expected = &kind_info.param_kinds[i];
-                    let found = args[i].kind(kind_env);
+                    let found = args[i].kind(kind_env)?;
                     if *expected != found {
-                        error_exit_with_src(
-                            &format!(
-                                "Kind mismatch. Expected `{}`, found `{}`.",
+                        return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Kind mismatch in `{}`. Expected `{}`, found `{}`.",
+                                self.to_string_normalize(),
                                 expected.to_string(),
                                 found.to_string()
                             ),
-                            args[i].get_source(),
-                        );
+                            &[args[i].get_source()],
+                        ));
                     }
                 }
-                kind_info.value_kind.clone()
+                Ok(kind_info.value_kind.clone())
             }
         }
     }
@@ -1538,12 +1558,11 @@ impl Scheme {
                 ));
             }
         }
-        let preds = self
-            .predicates
-            .iter()
-            .map(|pred| pred.resolve_trait_aliases(trait_env))
-            .flatten()
-            .collect::<Vec<_>>();
+        let mut preds = vec![];
+        for pred in &self.predicates {
+            let mut pred = pred.resolve_trait_aliases(trait_env)?;
+            preds.append(&mut pred);
+        }
         for eq in &self.equalities {
             // Right hand side of an equality should be free from associated type.
             // This ensures that the reduction of a type terminates in a finite number of steps.
@@ -1676,7 +1695,7 @@ impl Scheme {
         constraints_str + &ty.to_string()
     }
 
-    pub fn set_kinds(&self, kind_env: &KindEnv) -> Arc<Scheme> {
+    pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
         let mut ret = self.clone();
         let mut scope: HashMap<Name, Arc<Kind>> = Default::default();
         // If a kind in `self.vars` is not `*`, then the kind is explicitly specified by user, so we insert it into `scope`.
@@ -1697,7 +1716,7 @@ impl Scheme {
             for i in 1..ret.predicates.len() {
                 span = Span::unite_opt(&span, &ret.predicates[i].source);
             }
-            error_exit_with_src(&msg, &span);
+            return Err(Errors::from_msg_srcs(msg, &[&span]));
         }
         for p in &mut ret.predicates {
             p.set_kinds(&scope);
@@ -1711,17 +1730,18 @@ impl Scheme {
                 *tv = tv.set_kind(scope[&tv.name].clone());
             }
         }
-        Arc::new(ret)
+        Ok(Arc::new(ret))
     }
 
-    pub fn check_kinds(&self, kind_env: &KindEnv) {
+    pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {
         for p in &self.predicates {
-            p.check_kinds(kind_env);
+            p.check_kinds(kind_env)?;
         }
         for eq in &self.equalities {
-            eq.check_kinds(kind_env);
+            eq.check_kinds(kind_env)?;
         }
-        self.ty.kind(kind_env);
+        self.ty.kind(kind_env)?;
+        Ok(())
     }
 
     // Create new instance.
