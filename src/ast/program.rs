@@ -105,9 +105,10 @@ impl GlobalValue {
         Ok(())
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.scm = self.scm.resolve_type_aliases(type_env);
-        self.expr.resolve_type_aliases(type_env);
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.scm = self.scm.resolve_type_aliases(type_env)?;
+        self.expr.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 
     pub fn set_kinds(&mut self, kind_env: &KindEnv) {
@@ -133,13 +134,15 @@ pub enum SymbolExpr {
 }
 
 impl SymbolExpr {
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         match self {
-            SymbolExpr::Simple(_) => {}
+            SymbolExpr::Simple(_) => Ok(()),
             SymbolExpr::Method(impls) => {
+                let mut errors = Errors::empty();
                 for method_impl in impls {
-                    method_impl.resolve_type_aliases(type_env);
+                    errors.eat_err(method_impl.resolve_type_aliases(type_env));
                 }
+                errors.to_result()
             }
         }
     }
@@ -190,8 +193,9 @@ pub struct MethodImpl {
 }
 
 impl MethodImpl {
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.ty = self.ty.resolve_type_aliases(type_env);
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.ty = self.ty.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 }
 
@@ -812,7 +816,7 @@ impl Program {
         te.expr = te.expr.resolve_namespace(&nrctx)?;
 
         // Resolve type aliases in expression.
-        te.expr = te.expr.resolve_type_aliases(&tc.type_env);
+        te.expr = te.expr.resolve_type_aliases(&tc.type_env)?;
 
         // Perform type-checking.
         let mut tc = tc.clone();
@@ -827,10 +831,21 @@ impl Program {
     }
 
     // Instantiate symbol.
-    fn instantiate_symbol(&mut self, sym: &mut InstantiatedSymbol, tc: &TypeCheckContext) {
+    fn instantiate_symbol(
+        &mut self,
+        sym: &mut InstantiatedSymbol,
+        tc: &TypeCheckContext,
+    ) -> Result<(), Errors> {
         assert!(sym.expr.is_none());
         if !sym.ty.free_vars().is_empty() {
-            error_exit_with_src(&format!("Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add type annotation.", sym.generic_name.to_string(), sym.ty.to_string_normalize()), &sym.expr.as_ref().unwrap().source);
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add type annotation.",
+                    sym.generic_name.to_string(),
+                    sym.ty.to_string_normalize()
+                ),
+                &[&sym.expr.as_ref().unwrap().source],
+            ));
         }
         let global_sym = self.global_values.get(&sym.generic_name).unwrap();
         let expr = match &global_sym.expr {
@@ -838,13 +853,13 @@ impl Program {
                 // Perform type-checking.
                 let define_module = sym.generic_name.module();
                 let mut e = e.clone();
-                exit_if_err(self.resolve_and_check_type(
+                self.resolve_and_check_type(
                     &mut e,
                     &global_sym.scm,
                     &sym.generic_name,
                     &define_module,
                     tc,
-                ));
+                )?;
                 // Calculate free vars.
                 e.calculate_free_vars();
                 // Specialize e's type to the required type `sym.ty`.
@@ -870,13 +885,13 @@ impl Program {
                     // Perform type-checking.
                     let define_module = method.define_module.clone();
                     let mut e = method.expr.clone();
-                    exit_if_err(self.resolve_and_check_type(
+                    self.resolve_and_check_type(
                         &mut e,
                         &method.ty,
                         &sym.generic_name,
                         &define_module,
                         tc,
-                    ));
+                    )?;
                     // Calculate free vars.
                     e.calculate_free_vars();
                     // Specialize e's type to the required type `sym.ty`.
@@ -891,39 +906,52 @@ impl Program {
                 opt_e.unwrap()
             }
         };
-        sym.expr = Some(self.instantiate_expr(&expr));
+        sym.expr = Some(self.instantiate_expr(&expr)?);
+        Ok(())
     }
 
     // Instantiate all symbols.
-    pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) {
+    pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         while !self.deferred_instantiation.is_empty() {
             let sym = self.deferred_instantiation.pop().unwrap();
             let name = sym.instantiated_name.clone();
             let mut sym = sym.clone();
-            self.instantiate_symbol(&mut sym, tc);
+            errors.eat_err(self.instantiate_symbol(&mut sym, tc));
             self.instantiated_symbols.insert(name, sym);
         }
+        errors.to_result()
     }
 
     // Instantiate main function.
-    pub fn instantiate_main_function(&mut self, tc: &TypeCheckContext) -> Arc<ExprNode> {
+    pub fn instantiate_main_function(
+        &mut self,
+        tc: &TypeCheckContext,
+    ) -> Result<Arc<ExprNode>, Errors> {
         let main_func_name = FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME);
         let main_ty = make_io_unit_ty();
-        self.instantiate_exported_value(&main_func_name, Some(main_ty), &None, tc)
-            .0
+        let (expr, _ty) =
+            self.instantiate_exported_value(&main_func_name, Some(main_ty), &None, tc)?;
+        Ok(expr)
     }
 
     // Instantiate exported values.
     // In this function, `ExportStatement`s are updated.
-    pub fn instantiate_exported_values(&mut self, tc: &TypeCheckContext) {
+    pub fn instantiate_exported_values(&mut self, tc: &TypeCheckContext) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         let mut export_stmts = std::mem::replace(&mut self.export_statements, vec![]);
         for stmt in &mut export_stmts {
-            let (instantiated_expr, eft) =
-                self.instantiate_exported_value(&stmt.fix_value_name, None, &stmt.src, tc);
-            stmt.exported_function_type = Some(eft);
-            stmt.instantiated_value_expr = Some(instantiated_expr);
+            errors.eat_err_or(
+                self.instantiate_exported_value(&stmt.fix_value_name, None, &stmt.src, tc),
+                |(instantiated_expr, eft)| {
+                    stmt.exported_function_type = Some(eft);
+                    stmt.instantiated_value_expr = Some(instantiated_expr);
+                },
+            );
         }
+        errors.to_result()?;
         self.export_statements = export_stmts;
+        Ok(())
     }
 
     // Instantiate a global value.
@@ -935,14 +963,14 @@ impl Program {
         required_ty: Option<Arc<TypeNode>>,
         required_src: &Option<Span>,
         tc: &TypeCheckContext,
-    ) -> (Arc<ExprNode>, ExportedFunctionType) {
+    ) -> Result<(Arc<ExprNode>, ExportedFunctionType), Errors> {
         // Check if the value is defined.
         let gv = self.global_values.get(value_name);
         if gv.is_none() {
-            error_exit_with_src(
-                &format!("Value `{}` is not found.", value_name.to_string()),
-                &required_src,
-            );
+            return Err(Errors::from_msg_srcs(
+                format!("Value `{}` is not found.", value_name.to_string()),
+                &[required_src],
+            ));
         }
 
         // Validate the type of the value.
@@ -950,14 +978,14 @@ impl Program {
         let (required_ty, eft) = if let Some(required_ty) = required_ty {
             // If the type of the value is specified, check if it matches the required type.
             if gv.scm.to_string() != required_ty.to_string() {
-                error_exit_with_src(
-                    &format!(
+                return Err(Errors::from_msg_srcs(
+                    format!(
                         "The value `{}` should have type `{}`.",
                         value_name.to_string(),
                         required_ty.to_string()
                     ),
-                    &required_src,
-                );
+                    &[required_src],
+                ));
             }
             let eft = ExportedFunctionType {
                 doms: vec![],
@@ -967,69 +995,65 @@ impl Program {
             (required_ty, eft)
         } else {
             // If the type of the value is not specified, check if it is good as the type of an exported value.
-            let res = ExportedFunctionType::validate(gv.scm.clone(), &tc.type_env);
-            if res.is_err() {
-                error_exit_with_src(
-                    &format!(
-                        "The type of the value `{}` is not suitable for export: {}",
-                        value_name.to_string(),
-                        res.err().unwrap()
-                    ),
-                    &required_src,
-                );
-            }
-            (gv.scm.ty.clone(), res.ok().unwrap())
+            let err_msg_prefix = format!(
+                "The type of the value `{}` is not suitable for export: ",
+                value_name.to_string(),
+            );
+            let eft = ExportedFunctionType::validate(
+                gv.scm.clone(),
+                &tc.type_env,
+                err_msg_prefix,
+                required_src,
+            )?;
+            (gv.scm.ty.clone(), eft)
         };
-        let inst_name = self.require_instantiated_symbol(&value_name, &required_ty);
-        self.instantiate_symbols(tc);
+        let inst_name = self.require_instantiated_symbol(&value_name, &required_ty)?;
+        self.instantiate_symbols(tc)?;
         let expr = expr_var(inst_name, None).set_inferred_type(required_ty);
-        (expr, eft)
+        Ok((expr, eft))
     }
 
     // Instantiate expression.
-    fn instantiate_expr(&mut self, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+    fn instantiate_expr(&mut self, expr: &Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
                 if v.name.is_local() {
                     expr.clone()
                 } else {
                     let instance =
-                        self.require_instantiated_symbol(&v.name, &expr.ty.as_ref().unwrap());
+                        self.require_instantiated_symbol(&v.name, &expr.ty.as_ref().unwrap())?;
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
                 }
             }
             Expr::LLVM(_) => expr.clone(),
             Expr::App(fun, args) => {
-                let fun = self.instantiate_expr(fun);
-                let args = args
-                    .iter()
-                    .map(|arg| self.instantiate_expr(arg))
-                    .collect::<Vec<_>>();
+                let fun = self.instantiate_expr(fun)?;
+                let args = collect_results(args.iter().map(|arg| self.instantiate_expr(arg)))?;
                 expr.set_app_func(fun).set_app_args(args)
             }
-            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(body)),
+            Expr::Lam(_, body) => expr.set_lam_body(self.instantiate_expr(body)?),
             Expr::Let(_, bound, val) => {
-                let bound = self.instantiate_expr(bound);
-                let val = self.instantiate_expr(val);
+                let bound = self.instantiate_expr(bound)?;
+                let val = self.instantiate_expr(val)?;
                 expr.set_let_bound(bound).set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.instantiate_expr(cond);
-                let then_expr = self.instantiate_expr(then_expr);
-                let else_expr = self.instantiate_expr(else_expr);
+                let cond = self.instantiate_expr(cond)?;
+                let then_expr = self.instantiate_expr(then_expr)?;
+                let else_expr = self.instantiate_expr(else_expr)?;
                 expr.set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
             Expr::TyAnno(e, _) => {
-                let e = self.instantiate_expr(e);
+                let e = self.instantiate_expr(e)?;
                 expr.set_tyanno_expr(e)
             }
             Expr::MakeStruct(_, fields) => {
                 let mut expr = expr.clone();
                 for (field_name, field_expr) in fields {
-                    let field_expr = self.instantiate_expr(field_expr);
+                    let field_expr = self.instantiate_expr(field_expr)?;
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }
                 expr
@@ -1037,7 +1061,7 @@ impl Program {
             Expr::ArrayLit(elems) => {
                 let mut expr = expr.clone();
                 for (i, e) in elems.iter().enumerate() {
-                    let e = self.instantiate_expr(e);
+                    let e = self.instantiate_expr(e)?;
                     expr = expr.set_array_lit_elem(e, i);
                 }
                 expr
@@ -1045,7 +1069,7 @@ impl Program {
             Expr::FFICall(_, _, _, args) => {
                 let mut expr = expr.clone();
                 for (i, e) in args.iter().enumerate() {
-                    let e = self.instantiate_expr(e);
+                    let e = self.instantiate_expr(e)?;
                     expr = expr.set_ffi_call_arg(e, i);
                 }
                 expr
@@ -1053,17 +1077,21 @@ impl Program {
         };
         // If the type of an expression contains undetermied type variable after instantiation, raise an error.
         if !ret.ty.as_ref().unwrap().free_vars().is_empty() {
-            error_exit_with_src(
-                "The type of an expression cannot be determined. You need to add type annotation to help type inference.",
-                &expr.source,
-            );
+            return Err(Errors::from_msg_srcs(
+                "The type of an expression cannot be determined. You need to add type annotation to help type inference.".to_string(),
+                &[&ret.source],
+            ));
         }
-        calculate_free_vars(ret)
+        Ok(calculate_free_vars(ret))
     }
 
     // Require instantiate generic symbol such that it has a specified type.
-    pub fn require_instantiated_symbol(&mut self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
-        let inst_name = self.determine_instantiated_symbol_name(name, ty);
+    pub fn require_instantiated_symbol(
+        &mut self,
+        name: &FullName,
+        ty: &Arc<TypeNode>,
+    ) -> Result<FullName, Errors> {
+        let inst_name = self.determine_instantiated_symbol_name(name, ty)?;
         if !self.instantiated_symbols.contains_key(&inst_name)
             && self
                 .deferred_instantiation
@@ -1077,18 +1105,22 @@ impl Program {
                 expr: None,
             });
         }
-        inst_name
+        Ok(inst_name)
     }
 
     // Determine the name of instantiated generic symbol so that it has a specified type.
     // tc: a typechecker (substituion) under which ty should be interpreted.
-    fn determine_instantiated_symbol_name(&self, name: &FullName, ty: &Arc<TypeNode>) -> FullName {
-        let ty = ty.resolve_type_aliases(&self.type_env());
+    fn determine_instantiated_symbol_name(
+        &self,
+        name: &FullName,
+        ty: &Arc<TypeNode>,
+    ) -> Result<FullName, Errors> {
+        let ty = ty.resolve_type_aliases(&self.type_env())?;
         let hash = ty.hash();
         let mut name = name.clone();
         name.name += INSTANCIATED_NAME_SEPARATOR;
         name.name += &hash;
-        name
+        Ok(name)
     }
 
     // Create symbols of trait methods from TraitEnv.
@@ -1229,28 +1261,40 @@ impl Program {
     }
 
     // Resolve type aliases that appear in declarations and associated type implementations.
-    pub fn resolve_type_aliases_in_declaration(&mut self) {
-        // Resolve in type constructors.
-        {
-            let type_env = self.type_env();
-            let mut tycons = (*self.type_env.tycons).clone();
-            for (_, ti) in &mut tycons {
-                ti.resolve_type_aliases(&type_env);
-            }
-            self.type_env.tycons = Arc::new(tycons);
-        }
+    pub fn resolve_type_aliases_in_declaration(&mut self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
+        // Resolve aliases in type constructors.
         let type_env = self.type_env();
-        self.trait_env.resolve_type_aliases(&type_env);
+        let mut tycons = (*self.type_env.tycons).clone();
+        for (_, ti) in &mut tycons {
+            errors.eat_err(ti.resolve_type_aliases(&type_env));
+        }
+        errors.to_result()?; // Throw errors if any.
+        self.type_env.tycons = Arc::new(tycons);
+
+        // Get the updated type env.
+        let type_env = self.type_env();
+
+        // Resolve aliases in type aliases.
+        errors.eat_err(self.trait_env.resolve_type_aliases(&type_env));
+
+        // Resolve aliases in type definitions.
         for decl in &mut self.type_defns {
-            decl.resolve_type_aliases(&type_env);
+            errors.eat_err(decl.resolve_type_aliases(&type_env));
         }
+
+        // Resolve aliases in type signatures of global values.
         for (_, sym) in &mut self.global_values {
-            sym.resolve_type_aliases(&type_env);
+            errors.eat_err(sym.resolve_type_aliases(&type_env));
         }
+
+        errors.to_result()
     }
 
     // Validate user-defined types
-    pub fn validate_type_defns(&self) {
+    pub fn validate_type_defns(&self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for type_defn in &self.type_defns {
             type_defn.check_tyvars();
             let type_name = &type_defn.name;
@@ -1258,22 +1302,23 @@ impl Program {
                 TypeDeclValue::Struct(str) => {
                     for field in &str.fields {
                         if !field.ty.is_assoc_ty_free() {
-                            error_exit_with_src(
-                                "Associated type is not allowed in the field type of a struct.",
-                                &type_defn.source.as_ref().map(|s| s.to_head_character()),
-                            );
+                            errors.append(Errors::from_msg_srcs(
+                                "Associated type is not allowed in the field type of a struct."
+                                    .to_string(),
+                                &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                            ));
                         }
                     }
                     match Field::check_duplication(&str.fields) {
                         Some(field_name) => {
-                            error_exit_with_src(
-                                &format!(
+                            errors.append(Errors::from_msg_srcs(
+                                format!(
                                     "Duplicate field `{}` in the definition of struct `{}`.",
                                     field_name,
                                     type_name.to_string()
                                 ),
-                                &type_defn.source.as_ref().map(|s| s.to_head_character()),
-                            );
+                                &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                            ));
                         }
                         _ => {}
                     }
@@ -1281,36 +1326,38 @@ impl Program {
                 TypeDeclValue::Union(union) => {
                     for field in &union.fields {
                         if !field.ty.is_assoc_ty_free() {
-                            error_exit_with_src(
-                                "Associated type is not allowed in the field type of a union.",
-                                &type_defn.source.as_ref().map(|s| s.to_head_character()),
-                            );
+                            errors.append(Errors::from_msg_srcs(
+                                "Associated type is not allowed in the field type of a union."
+                                    .to_string(),
+                                &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                            ));
                         }
                     }
                     match Field::check_duplication(&union.fields) {
                         Some(field_name) => {
-                            error_exit_with_src(
-                                &format!(
-                                    "Duplicate field `{}` in the definition of union `{}`",
+                            errors.append(Errors::from_msg_srcs(
+                                format!(
+                                    "Duplicate field `{}` in the definition of union `{}`.",
                                     field_name,
                                     type_name.to_string()
                                 ),
-                                &type_defn.source.as_ref().map(|s| s.to_head_character()),
-                            );
+                                &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                            ));
                         }
                         _ => {}
                     }
                 }
                 TypeDeclValue::Alias(ta) => {
                     if !ta.value.is_assoc_ty_free() {
-                        error_exit_with_src(
-                            "Associated type is not allowed in the right-hand side of a type alias.",
-                            &type_defn.source.as_ref().map(|s| s.to_head_character()),
-                        );
+                        errors.append(Errors::from_msg_srcs(
+                            "Associated type is not allowed in the right-hand side of a type alias.".to_string(),
+                            &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                        ));
                     }
                 } // Nothing to do.
             }
         }
+        errors.to_result()
     }
 
     pub fn validate_trait_env(&mut self) {

@@ -47,10 +47,10 @@ fn build_object_files<'c>(
     program.resolve_namespace_in_type_signs()?;
 
     // Resolve type aliases that appear in declarations and associated type implementations.
-    program.resolve_type_aliases_in_declaration();
+    program.resolve_type_aliases_in_declaration()?;
 
     // Validate user-defined types.
-    program.validate_type_defns();
+    program.validate_type_defns()?;
 
     // Add struct / union methods
     program.add_methods()?;
@@ -86,11 +86,9 @@ fn build_object_files<'c>(
             .add_global(name.name.clone(), &name.namespace, &defn.scm);
     }
 
-    // Instantiate main function and all called functions.
-    let main_expr = program.instantiate_main_function(&typechecker);
-
-    // Instantiate exported functions and all called functions.
-    program.instantiate_exported_values(&typechecker);
+    // Instantiate all exported values (including `Main::main`) and values called from them.
+    let main_expr = program.instantiate_main_function(&typechecker)?;
+    program.instantiate_exported_values(&typechecker)?;
 
     // If it is for language server, we don't need to generate object files.
     if config.language_server_mode {

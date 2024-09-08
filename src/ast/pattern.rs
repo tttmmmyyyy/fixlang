@@ -103,34 +103,40 @@ impl PatternNode {
         }
     }
 
-    pub fn resolve_type_aliases(self: &PatternNode, type_env: &TypeEnv) -> Arc<PatternNode> {
+    pub fn resolve_type_aliases(
+        self: &PatternNode,
+        type_env: &TypeEnv,
+    ) -> Result<Arc<PatternNode>, Errors> {
         match &self.pattern {
-            Pattern::Var(_, ty) => {
-                self.set_var_tyanno(ty.as_ref().map(|ty| ty.resolve_type_aliases(type_env)))
-            }
+            Pattern::Var(_, ty) => Ok(self.set_var_tyanno(
+                ty.as_ref()
+                    .map(|ty| ty.resolve_type_aliases(type_env))
+                    .transpose()?,
+            )),
             Pattern::Struct(tc, field_to_pat) => {
                 if type_env.aliases.contains_key(tc) {
-                    error_exit_with_src(
-                        "In struct pattern, cannot use type alias instead of struct name.",
-                        &self.info.source,
-                    );
+                    return Err(Errors::from_msg_srcs(
+                        "In struct pattern, cannot use type alias instead of struct name."
+                            .to_string(),
+                        &[&self.info.source],
+                    ));
                 }
-                let field_to_pat = field_to_pat
-                    .iter()
-                    .map(|(field_name, pat)| {
-                        (field_name.clone(), pat.resolve_type_aliases(type_env))
-                    })
-                    .collect::<Vec<_>>();
-                self.set_struct_field_to_pat(field_to_pat)
+                let mut field_to_pat_res = vec![];
+                for (field_name, pat) in field_to_pat {
+                    field_to_pat_res
+                        .push((field_name.clone(), pat.resolve_type_aliases(type_env)?));
+                }
+                Ok(self.set_struct_field_to_pat(field_to_pat_res))
             }
             Pattern::Union(tc, _, pat) => {
                 if type_env.aliases.contains_key(tc) {
-                    error_exit_with_src(
-                        "In union pattern, cannot use type alias instead of union name.",
-                        &self.info.source,
-                    );
+                    return Err(Errors::from_msg_srcs(
+                        "In union pattern, cannot use type alias instead of union name."
+                            .to_string(),
+                        &[&self.info.source],
+                    ));
                 }
-                self.set_union_pat(pat.resolve_type_aliases(type_env))
+                Ok(self.set_union_pat(pat.resolve_type_aliases(type_env)?))
             }
         }
     }

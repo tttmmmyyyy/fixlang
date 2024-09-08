@@ -182,25 +182,34 @@ impl ExportedFunctionType {
     }
 
     // Check if a type is valid for a value which is exported.
-    pub fn validate(scm: Arc<Scheme>, type_env: &TypeEnv) -> Result<ExportedFunctionType, String> {
+    // - src: Used for error messages.
+    pub fn validate(
+        scm: Arc<Scheme>,
+        type_env: &TypeEnv,
+        err_msg_prefix: String,
+        src: &Option<Span>,
+    ) -> Result<ExportedFunctionType, Errors> {
         // The scheme should have no constraints.
         if scm.to_string() != scm.ty.to_string() {
-            return Result::Err(
-                "the type of an exported value should not have any constraints.".to_string(),
-            );
+            return Err(Errors::from_msg_srcs(
+                err_msg_prefix + "the type of an exported value should not have any constraints.",
+                &[src],
+            ));
         }
 
         let ty = scm.ty.clone();
 
         // The type cannot contain any type variables.
         if ty.free_vars_vec().len() > 0 {
-            return Result::Err(
-                "the type of an exported value should not contain any type variables.".to_string(),
-            );
+            return Err(Errors::from_msg_srcs(
+                err_msg_prefix
+                    + "the type of an exported value should not contain any type variables.",
+                &[src],
+            ));
         }
 
         // Resolve type aliases in `ty`.
-        let ty = ty.resolve_type_aliases(type_env);
+        let ty = ty.resolve_type_aliases(type_env)?;
 
         // Split the type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], C)`.
         let (doms, mut codom) = ty.collect_app_src(usize::MAX);

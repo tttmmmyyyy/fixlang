@@ -38,9 +38,9 @@ impl Errors {
     }
 
     // Otherwise, append the error in `res` if it is an error.
-    pub fn eat_err_or<T>(&mut self, res: Result<T, Errors>, do_if_ok: impl FnOnce(T)) {
+    pub fn eat_err_or<T>(&mut self, res: Result<T, Errors>, act_if_ok: impl FnOnce(T)) {
         match res {
-            Ok(v) => do_if_ok(v),
+            Ok(v) => act_if_ok(v),
             Err(errs) => {
                 self.append(errs);
             }

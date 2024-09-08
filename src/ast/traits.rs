@@ -86,8 +86,9 @@ pub struct AssocTypeImpl {
 }
 
 impl AssocTypeImpl {
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.value = self.value.resolve_type_aliases(type_env);
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.value = self.value.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
@@ -172,10 +173,12 @@ impl TraitInfo {
     }
 
     // Resolve type aliases
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for (_name, qt) in &mut self.methods {
-            qt.resolve_type_aliases(type_env);
+            errors.eat_err(qt.resolve_type_aliases(type_env));
         }
+        errors.to_result()
     }
 
     // Get type-scheme of a method.
@@ -289,11 +292,13 @@ impl TraitInstance {
         // }
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.qual_pred.resolve_type_aliases(type_env);
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+        errors.eat_err(self.qual_pred.resolve_type_aliases(type_env));
         for (_assoc_ty_name, assoc_ty_impl) in &mut self.assoc_types {
-            assoc_ty_impl.resolve_type_aliases(type_env);
+            errors.eat_err(assoc_ty_impl.resolve_type_aliases(type_env));
         }
+        errors.to_result()
     }
 
     // Get trait id.
@@ -439,14 +444,15 @@ impl QualPredicate {
         Ok(())
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         for p in &mut self.pred_constraints {
-            p.resolve_type_aliases(type_env);
+            p.resolve_type_aliases(type_env)?;
         }
         for eq in &mut self.eq_constraints {
-            eq.resolve_type_aliases(type_env);
+            eq.resolve_type_aliases(type_env)?;
         }
-        self.predicate.resolve_type_aliases(type_env);
+        self.predicate.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 
     pub fn extend_kind_scope(
@@ -561,14 +567,15 @@ impl QualType {
     }
 
     // Resolve type aliases
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         for pred in &mut self.preds {
-            pred.resolve_type_aliases(type_env);
+            pred.resolve_type_aliases(type_env)?;
         }
         for eq in &mut self.eqs {
-            eq.resolve_type_aliases(type_env);
+            eq.resolve_type_aliases(type_env)?;
         }
-        self.ty = self.ty.resolve_type_aliases(type_env);
+        self.ty = self.ty.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 
     pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
@@ -625,8 +632,9 @@ impl Predicate {
         Ok(())
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.ty = self.ty.resolve_type_aliases(type_env);
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.ty = self.ty.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 
     pub fn to_string_normalize(&self) -> String {
@@ -756,11 +764,12 @@ impl Equality {
         self.value = self.value.set_kinds(scope);
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         for arg in &mut self.args {
-            *arg = arg.resolve_type_aliases(type_env);
+            *arg = arg.resolve_type_aliases(type_env)?;
         }
-        self.value = self.value.resolve_type_aliases(type_env);
+        self.value = self.value.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
@@ -1114,10 +1123,12 @@ impl TraitEnv {
         Ok(())
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
         // Resolve aliases in trait definitions.
         for (_, trait_info) in &mut self.traits {
-            trait_info.resolve_type_aliases(type_env);
+            errors.eat_err(trait_info.resolve_type_aliases(type_env));
         }
 
         // Resolve aliases in trait implementations.
@@ -1126,7 +1137,7 @@ impl TraitEnv {
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Resolve names in TrantInstance.
-                inst.resolve_type_aliases(type_env);
+                errors.eat_err(inst.resolve_type_aliases(type_env));
 
                 // Insert to instances_resolved
                 if !instances_resolved.contains_key(&trait_id) {
@@ -1135,7 +1146,9 @@ impl TraitEnv {
                 instances_resolved.get_mut(&trait_id).unwrap().push(inst);
             }
         }
+        errors.to_result()?; // Throw errors if any.
         self.instances = instances_resolved;
+        Ok(())
     }
 
     // Add traits.

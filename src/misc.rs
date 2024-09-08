@@ -22,6 +22,17 @@ pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) {
     fs::write(path, source).expect(&format!("Failed to generate temporary file {}", file_name));
 }
 
+pub fn collect_results<T, E>(results: impl Iterator<Item = Result<T, E>>) -> Result<Vec<T>, E> {
+    let mut ok_results = vec![];
+    for result in results {
+        match result {
+            Ok(v) => ok_results.push(v),
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(ok_results)
+}
+
 pub fn flatten_opt<T>(o: Option<Option<T>>) -> Option<T> {
     match o {
         Some(o) => o,

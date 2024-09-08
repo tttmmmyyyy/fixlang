@@ -26,8 +26,9 @@ impl TypeDefn {
         Ok(())
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.value.resolve_type_aliases(type_env);
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.value.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 
     pub fn tycon(&self) -> TyCon {
@@ -174,11 +175,11 @@ impl TypeDeclValue {
         }
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         match self {
             TypeDeclValue::Struct(s) => s.resolve_type_aliases(type_env),
             TypeDeclValue::Union(u) => u.resolve_type_aliases(type_env),
-            TypeDeclValue::Alias(_) => {} // Nothing to do.
+            TypeDeclValue::Alias(_) => Ok(()), // Nothing to do.
         }
     }
 
@@ -206,17 +207,17 @@ pub struct Struct {
 
 impl Struct {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
-        let mut errors = Errors::empty();
         for f in &mut self.fields {
-            errors.eat_err(f.resolve_namespace(ctx));
+            f.resolve_namespace(ctx)?;
         }
-        errors.to_result()
+        Ok(())
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         for f in &mut self.fields {
-            f.resolve_type_aliases(type_env);
+            f.resolve_type_aliases(type_env)?;
         }
+        Ok(())
     }
 
     pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
@@ -234,17 +235,17 @@ pub struct Union {
 
 impl Union {
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
-        let mut errors = Errors::empty();
         for f in &mut self.fields {
-            errors.eat_err(f.resolve_namespace(ctx));
+            f.resolve_namespace(ctx)?;
         }
-        errors.to_result()
+        Ok(())
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         for f in &mut self.fields {
-            f.resolve_type_aliases(type_env);
+            f.resolve_type_aliases(type_env)?;
         }
+        Ok(())
     }
 
     pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
@@ -283,8 +284,9 @@ impl Field {
         Ok(())
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
-        self.ty = self.ty.resolve_type_aliases(type_env);
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.ty = self.ty.resolve_type_aliases(type_env)?;
+        Ok(())
     }
 
     // Check if fields are duplicated. If duplication is found, it returns the duplicated field.

@@ -248,10 +248,12 @@ impl TyConInfo {
         errors.to_result()
     }
 
-    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) {
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for field in &mut self.fields {
-            field.resolve_type_aliases(type_env);
+            errors.eat_err(field.resolve_type_aliases(type_env));
         }
+        errors.to_result()
     }
 }
 
@@ -715,7 +717,10 @@ impl TypeNode {
     }
 
     // Remove type aliases in a type.
-    pub fn resolve_type_aliases(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
+    pub fn resolve_type_aliases(
+        self: &Arc<TypeNode>,
+        env: &TypeEnv,
+    ) -> Result<Arc<TypeNode>, Errors> {
         let self_src = self.get_source().clone();
         self.resolve_type_aliases_inner(env, vec![], &self_src)
     }
@@ -728,14 +733,14 @@ impl TypeNode {
         env: &TypeEnv,
         mut type_name_path: Vec<String>,
         entry_type_src: &Option<Span>,
-    ) -> Arc<TypeNode> {
+    ) -> Result<Arc<TypeNode>, Errors> {
         // Check circular aliasing.
         let type_name = self.to_string_normalize();
         if type_name_path.contains(&type_name) {
-            error_exit_with_src(
-                &format!("Circular type aliasing is found in `{}`.", type_name),
-                entry_type_src,
-            )
+            return Err(Errors::from_msg_srcs(
+                format!("Circular type aliasing is found in `{}`.", type_name),
+                &[entry_type_src],
+            ));
         }
         type_name_path.push(type_name);
 
@@ -748,14 +753,14 @@ impl TypeNode {
                 if let Some(ta) = env.aliases.get(&tc) {
                     // When the type alias is not fully applied, raise error.
                     if app_seq.len() - 1 < ta.tyvars.len() {
-                        error_exit_with_src(
-                            &format!(
+                        return Err(Errors::from_msg_srcs(
+                            format!(
                                 "Cannot resolve type alias `{}` in `{}` because it is not fully applied.",
                                 tc.to_string(),
-                                Arc::new(self.clone()).to_string_normalize()
+                                self.to_string_normalize()
                             ),
-                            toplevel_ty.get_source(),
-                        )
+                            &[toplevel_ty.get_source()],
+                        ));
                     }
 
                     // Resolve alias and calculate type application.
@@ -787,38 +792,35 @@ impl TypeNode {
         }
         // Treat other cases.
         match &self.ty {
-            Type::TyVar(_) => self.clone(),
-            Type::FunTy(dom_ty, codom_ty) => self
+            Type::TyVar(_) => Ok(self.clone()),
+            Type::FunTy(dom_ty, codom_ty) => Ok(self
                 .set_funty_src(dom_ty.resolve_type_aliases_inner(
                     env,
                     type_name_path.clone(),
                     entry_type_src,
-                ))
+                )?)
                 .set_funty_dst(codom_ty.resolve_type_aliases_inner(
                     env,
                     type_name_path,
                     entry_type_src,
-                )),
-            Type::TyCon(_) => self.clone(),
-            Type::TyApp(fun_ty, arg_ty) => self
+                )?)),
+            Type::TyCon(_) => Ok(self.clone()),
+            Type::TyApp(fun_ty, arg_ty) => Ok(self
                 .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(
                     env,
                     type_name_path.clone(),
                     entry_type_src,
-                ))
+                )?)
                 .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(
                     env,
                     type_name_path,
                     entry_type_src,
-                )),
+                )?)),
             Type::AssocTy(_, args) => {
-                let args = args
-                    .iter()
-                    .map(|arg| {
-                        arg.resolve_type_aliases_inner(env, type_name_path.clone(), entry_type_src)
-                    })
-                    .collect::<Vec<_>>();
-                self.set_assocty_args(args)
+                let args = collect_results(args.iter().map(|arg| {
+                    arg.resolve_type_aliases_inner(env, type_name_path.clone(), entry_type_src)
+                }))?;
+                Ok(self.set_assocty_args(args))
             }
         }
     }
@@ -1790,16 +1792,16 @@ We will support more general constraints by implementing such conversion in a fu
         Ok(Arc::new(res))
     }
 
-    pub fn resolve_type_aliases(&self, type_env: &TypeEnv) -> Arc<Scheme> {
+    pub fn resolve_type_aliases(&self, type_env: &TypeEnv) -> Result<Arc<Scheme>, Errors> {
         let mut res = self.clone();
         for p in &mut res.predicates {
-            p.resolve_type_aliases(type_env);
+            p.resolve_type_aliases(type_env)?;
         }
         for eq in &mut res.equalities {
-            eq.resolve_type_aliases(type_env);
+            eq.resolve_type_aliases(type_env)?;
         }
-        res.ty = res.ty.resolve_type_aliases(type_env);
-        Arc::new(res)
+        res.ty = res.ty.resolve_type_aliases(type_env)?;
+        Ok(Arc::new(res))
     }
 }
 
