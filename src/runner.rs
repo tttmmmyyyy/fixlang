@@ -22,7 +22,10 @@ use self::{compile_unit::CompileUnit, cpu_features::CpuFeatures};
 use super::*;
 
 // Compile the program, and returns the path of object files to be linked.
-fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<PathBuf> {
+fn build_object_files<'c>(
+    mut program: Program,
+    config: Configuration,
+) -> Result<Vec<PathBuf>, Errors> {
     let _sw = StopWatch::new("build_module", config.show_build_times);
 
     // Add tuple definitions.
@@ -32,7 +35,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     program.link(
         make_tuple_traits_mod(&program.used_tuple_sizes, &config),
         true,
-    );
+    )?;
 
     // Validate export statements.
     program.validate_export_statements();
@@ -50,7 +53,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
     program.validate_type_defns();
 
     // Add struct / union methods
-    program.add_methods();
+    program.add_methods()?;
 
     // Validate trait env.
     program.validate_trait_env();
@@ -242,7 +245,7 @@ fn build_object_files<'c>(mut program: Program, config: Configuration) -> Vec<Pa
         t.join().unwrap();
     }
 
-    obj_paths
+    Ok(obj_paths)
 }
 
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
@@ -480,7 +483,7 @@ pub fn load_source_files(config: &mut Configuration) -> Result<Program, Errors> 
     errors.to_result()?;
 
     // Create `Std` module.
-    let mut target_mod = make_std_mod(config);
+    let mut target_mod = make_std_mod(config)?;
 
     // Link all modules.
     for mod_ in modules {
@@ -564,11 +567,12 @@ pub fn build_file(config: &mut Configuration) -> Result<(), Errors> {
 
     let program = load_source_files(config)?;
 
-    if config.for_language_server {
+    let obj_paths = build_object_files(program, config.clone())?;
+
+    // If the program is for language server, we don't need to build binary file.
+    if config.language_server_mode {
         return Ok(());
     }
-
-    let obj_paths = build_object_files(program, config.clone());
 
     let mut library_search_path_opts: Vec<String> = vec![];
     for path in &config.library_search_paths {

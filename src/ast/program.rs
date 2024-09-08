@@ -1289,91 +1289,92 @@ impl Program {
         self.trait_env.validate(self.kind_env());
     }
 
-    pub fn add_methods(self: &mut Program) {
+    pub fn add_methods(self: &mut Program) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for decl in &self.type_defns.clone() {
             match &decl.value {
                 TypeDeclValue::Struct(str) => {
                     let struct_name = decl.name.clone();
                     for field in &str.fields {
-                        // Add Getter function
-                        self.add_global_value(
+                        // Add getter function
+                        errors.eat_err(self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("{}{}", STRUCT_GETTER_SYMBOL, &field.name),
                             ),
                             struct_get(&struct_name, decl, &field.name),
-                        );
-
-                        // Add setter functions and modifier functions.
-
-                        // We omit `mod_t!`
-                        self.add_global_value(
-                            FullName::new(
-                                &decl.name.to_namespace(),
-                                &format!("{}{}", STRUCT_MODIFIER_SYMBOL, &field.name,),
-                            ),
-                            struct_mod(&struct_name, decl, &field.name),
-                        );
-                        self.add_global_value(
+                        ));
+                        // Add setter function
+                        errors.eat_err(self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("{}{}", STRUCT_SETTER_SYMBOL, &field.name,),
                             ),
                             struct_set(&struct_name, decl, &field.name),
-                        );
+                        ));
+                        // Add modifier functions.
+                        errors.eat_err(self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_MODIFIER_SYMBOL, &field.name,),
+                            ),
+                            struct_mod(&struct_name, decl, &field.name),
+                        ));
                         // Add punch functions.
-                        self.add_global_value(
+                        errors.eat_err(self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
                             ),
                             struct_punch(&struct_name, decl, &field.name),
-                        );
+                        ));
                         // Add plug-in functions.
-                        self.add_global_value(
+                        errors.eat_err(self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
                             ),
                             struct_plug_in(&struct_name, decl, &field.name),
-                        );
+                        ));
                         // Add act functions
-                        self.add_global_value(
+                        errors.eat_err(self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("{}{}", STRUCT_ACT_SYMBOL, &field.name),
                             ),
                             struct_act(&struct_name, decl, &field.name),
-                        );
+                        ));
                     }
                 }
                 TypeDeclValue::Union(union) => {
                     let union_name = &decl.name;
                     for field in &union.fields {
-                        self.add_global_value(
+                        errors.eat_err(self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &field.name),
                             union_new(&union_name, &field.name, decl),
-                        );
-                        self.add_global_value(
+                        ));
+                        errors.eat_err(self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &format!("as_{}", field.name)),
                             union_as(&union_name, &field.name, decl),
-                        );
-                        self.add_global_value(
+                        ));
+                        errors.eat_err(self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &format!("is_{}", field.name)),
                             union_is(&union_name, &field.name, decl),
-                        );
-                        self.add_global_value(
+                        ));
+                        errors.eat_err(self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
                                 &format!("mod_{}", field.name),
                             ),
                             union_mod_function(&union_name, &field.name, decl),
-                        );
+                        ));
                     }
                 }
                 TypeDeclValue::Alias(_) => {} // Nothing to do
             }
         }
+        errors.to_result()?;
+        Ok(())
     }
 
     pub fn linked_mods(&self) -> HashSet<Name> {

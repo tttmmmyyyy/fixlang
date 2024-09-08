@@ -69,7 +69,7 @@ pub struct Configuration {
     // Sizes of C types.
     pub c_type_sizes: CTypeSizes,
     // Is this configuration for language server?
-    pub for_language_server: bool,
+    pub language_server_mode: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -110,7 +110,7 @@ impl Default for Configuration {
             valgrind_tool: ValgrindTool::None,
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check(),
-            for_language_server: false,
+            language_server_mode: false,
         }
     }
 }
@@ -137,7 +137,7 @@ impl Configuration {
     // Create configuration for language server.
     pub fn language_server() -> Configuration {
         let mut config = Self::default();
-        config.for_language_server = true;
+        config.language_server_mode = true;
         config
     }
 

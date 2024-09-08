@@ -1,11 +1,15 @@
+use crate::error::Errors;
+
 use super::*;
 
 pub const FIX_NAME: &str = "fix";
 
 const STD_SOURCE: &str = include_str!("fix/std.fix");
 
-pub fn make_std_mod(config: &Configuration) -> Program {
-    let mut fix_module = exit_if_err(parse_and_save_to_temporary_file(STD_SOURCE, "std", config));
+pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
+    let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std", config)?;
+
+    let mut errors = Errors::empty();
 
     // Add C types type aliases.
     let c_types = config.c_type_sizes.get_c_types();
@@ -28,18 +32,20 @@ pub fn make_std_mod(config: &Configuration) -> Program {
     fix_module.type_defns.push(loop_result_defn());
 
     // Traits
-    fix_module.trait_env.add_trait(eq_trait());
-    fix_module.trait_env.add_trait(add_trait());
-    fix_module.trait_env.add_trait(subtract_trait());
-    fix_module.trait_env.add_trait(negate_trait());
-    fix_module.trait_env.add_trait(not_trait());
-    fix_module.trait_env.add_trait(multiply_trait());
-    fix_module.trait_env.add_trait(divide_trait());
-    fix_module.trait_env.add_trait(remainder_trait());
-    fix_module.trait_env.add_trait(less_than_trait());
-    fix_module
-        .trait_env
-        .add_trait(less_than_or_equal_to_trait());
+    errors.eat_err(fix_module.trait_env.add_trait(eq_trait()));
+    errors.eat_err(fix_module.trait_env.add_trait(add_trait()));
+    errors.eat_err(fix_module.trait_env.add_trait(subtract_trait()));
+    errors.eat_err(fix_module.trait_env.add_trait(negate_trait()));
+    errors.eat_err(fix_module.trait_env.add_trait(not_trait()));
+    errors.eat_err(fix_module.trait_env.add_trait(multiply_trait()));
+    errors.eat_err(fix_module.trait_env.add_trait(divide_trait()));
+    errors.eat_err(fix_module.trait_env.add_trait(remainder_trait()));
+    errors.eat_err(fix_module.trait_env.add_trait(less_than_trait()));
+    errors.eat_err(
+        fix_module
+            .trait_env
+            .add_trait(less_than_or_equal_to_trait()),
+    );
 
     // Trait instances
 
@@ -174,10 +180,10 @@ pub fn make_std_mod(config: &Configuration) -> Program {
         for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            fix_module.add_global_value(
+            errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_integral_function(from.clone(), to.clone()),
-            );
+            ));
         }
     }
     // Cast function from integer to C integers.
@@ -192,10 +198,10 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             }
             let to_type = to_type.unwrap();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            fix_module.add_global_value(
+            errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_integral_function(from.clone(), to_type),
-            );
+            ));
         }
     }
     // Cast function between floats.
@@ -203,10 +209,10 @@ pub fn make_std_mod(config: &Configuration) -> Program {
         for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            fix_module.add_global_value(
+            errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to.clone()),
-            );
+            ));
         }
     }
     // Cast function from floats to C floats.
@@ -221,10 +227,10 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             }
             let to_type = to_type.unwrap();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            fix_module.add_global_value(
+            errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to_type.clone()),
-            );
+            ));
         }
     }
     // Cast from integers to floats.
@@ -232,10 +238,10 @@ pub fn make_std_mod(config: &Configuration) -> Program {
         for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            fix_module.add_global_value(
+            errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_int_to_float_function(from.clone(), to.clone()),
-            );
+            ));
         }
     }
     // Cast from integers to C floats.
@@ -250,10 +256,10 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             }
             let to_type = to_type.unwrap();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            fix_module.add_global_value(
+            errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_int_to_float_function(from.clone(), to_type),
-            );
+            ));
         }
     }
     // Cast from floats to integers.
@@ -261,10 +267,10 @@ pub fn make_std_mod(config: &Configuration) -> Program {
         for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            fix_module.add_global_value(
+            errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to.clone()),
-            );
+            ));
         }
     }
     // Cast from floats to C integers.
@@ -279,145 +285,150 @@ pub fn make_std_mod(config: &Configuration) -> Program {
             }
             let to_type = to_type.unwrap();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            fix_module.add_global_value(
+            errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to_type),
-            );
+            ));
         }
     }
     // Bit operations
     for int_ty in integral_types {
         let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
-        fix_module.add_global_value(
+        errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_left"),
             shift_function(int_ty.clone(), true),
-        );
-        fix_module.add_global_value(
+        ));
+        errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_right"),
             shift_function(int_ty.clone(), false),
-        );
-        fix_module.add_global_value(
+        ));
+        errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_xor"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Xor),
-        );
-        fix_module.add_global_value(
+        ));
+        errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_and"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::And),
-        );
-        fix_module.add_global_value(
+        ));
+        errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_or"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Or),
-        );
+        ));
     }
 
     // Basic functions
-    fix_module.add_global_value(FullName::from_strs(&[STD_NAME], FIX_NAME), fix());
-    fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "loop"), state_loop());
-    fix_module.add_global_value(
+    errors.eat_err(fix_module.add_global_value(FullName::from_strs(&[STD_NAME], FIX_NAME), fix()));
+    errors.eat_err(
+        fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "loop"), state_loop()),
+    );
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "mark_threaded"),
         mark_threaded_function(),
-    );
+    ));
 
     // Array
-    fix_module.add_global_value(
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "fill"),
         fill_array(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set"),
         unsafe_set_array(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set_size"),
         unsafe_set_size_array(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_get"),
         unsafe_get_array(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique"),
         force_unique_array(),
-    );
-    fix_module.add_global_value(array_getter_function_name(), read_array());
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(array_getter_function_name(), read_array()));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
         set_array(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "empty"),
         make_empty(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
         mod_array(false),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_capacity"),
         get_capacity_array(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_size"),
         get_size_array(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
-    );
+    ));
     // Debug
-    fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "abort"), abort_function());
+    errors.eat_err(
+        fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "abort"), abort_function()),
+    );
 
     // Numeric constants
     for type_name in [F32_NAME, F64_NAME] {
-        fix_module.add_global_value(
+        errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, type_name], "infinity"),
             infinity_value(type_name),
-        );
-        fix_module.add_global_value(
+        ));
+        errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, type_name], "quiet_nan"),
             quiet_nan_value(type_name),
-        );
+        ));
     }
 
     // FFI
-    fix_module.add_global_value(
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
             &[STD_NAME, FFI_NAME],
             "unsafe_get_retained_ptr_of_boxed_value",
         ),
         get_retained_ptr_of_boxed_value_function(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
             &[STD_NAME, FFI_NAME],
             "unsafe_get_boxed_value_from_retained_ptr",
         ),
         get_boxed_value_from_retained_ptr_function(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
             &[STD_NAME, FFI_NAME],
             "unsafe_get_release_function_of_boxed_value",
         ),
         get_release_function_of_boxed_value(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
             &[STD_NAME, FFI_NAME],
             "unsafe_get_retain_function_of_boxed_value",
         ),
         get_retain_function_of_boxed_value(),
-    );
-    fix_module.add_global_value(
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_unsafe_get_boxed_data_ptr"),
         get_unsafe_get_boxed_ptr(),
-    );
+    ));
 
-    fix_module
+    errors.to_result()?;
+    Ok(fix_module)
 }
 
 pub fn array_getter_function_name() -> FullName {

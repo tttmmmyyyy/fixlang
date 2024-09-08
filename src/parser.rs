@@ -2,7 +2,6 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
-use crate::error::error_exit;
 use crate::error::error_exit_with_src;
 use ast::export_statement::ExportStatement;
 use either::Either;

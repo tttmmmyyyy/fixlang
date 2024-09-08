@@ -320,7 +320,7 @@ fn main() {
             run_file(create_config(args));
         }
         Some(("build", args)) => {
-            build_file(&mut create_config(args));
+            exit_if_err(build_file(&mut create_config(args)));
         }
         Some(("language-server", _args)) => {
             launch_language_server();
