@@ -371,6 +371,11 @@ fn handle_initialized(
             diagnostics_thread(diag_recv, log_file_cloned.clone());
         });
         if res.is_err() {
+            // If a panic occurs in the diagnostics thread,
+            send_diagnostics_error_message(
+                "Diagnostics stopped. This may be a bug in fix compiler. Please report the issue with the errors shown by running \"fix build\" for this project.".to_string(),
+                log_file_cloned.clone(),
+            );
             let mut msg = "Panic occurred in the diagnostics thread: \n".to_string();
             msg.push_str(&format!("{}\n", any_to_string(res.err().as_ref().unwrap())));
             write_log(log_file_cloned, msg.as_str());
@@ -531,6 +536,59 @@ fn send_diagnostics_notification(
     }
 
     err_paths
+}
+
+// Send the diagnostics notification to the client which informs that an error occurred.
+fn send_diagnostics_error_message(msg: String, log_file: Arc<Mutex<File>>) {
+    // Get the current directory.
+    let cdir = std::env::current_dir();
+    if cdir.is_err() {
+        let mut msg = "Failed to get the current directory: \n".to_string();
+        msg.push_str(&format!("{:?}\n", cdir.err().unwrap()));
+        write_log(log_file.clone(), msg.as_str());
+        return;
+    }
+    let cdir = cdir.unwrap();
+    // Convert path to uri.
+    let cdir_uri = path_to_uri(&cdir);
+    if cdir_uri.is_err() {
+        write_log(
+            log_file.clone(),
+            &format!(
+                "Failed to convert path to uri: {:?}\n",
+                cdir_uri.unwrap_err()
+            ),
+        );
+        return;
+    }
+    let cdir_uri = cdir_uri.unwrap();
+
+    // Send the diagnostics notification for each file.
+    let params = lsp_types::PublishDiagnosticsParams {
+        uri: cdir_uri,
+        diagnostics: vec![lsp_types::Diagnostic {
+            range: lsp_types::Range {
+                start: lsp_types::Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: lsp_types::Position {
+                    line: 0,
+                    character: 0,
+                },
+            },
+            severity: Some(DiagnosticSeverity::ERROR),
+            code: None,
+            code_description: None,
+            source: None,
+            message: msg,
+            tags: None,
+            related_information: None,
+            data: None,
+        }],
+        version: None,
+    };
+    send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
 }
 
 // Convert an `Error` into a diagnostic message.

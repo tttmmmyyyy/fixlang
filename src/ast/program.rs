@@ -489,7 +489,7 @@ impl Program {
                     ta.source.clone()
                 };
                 errors.append(Errors::from_msg_srcs(
-                    format!("Duplicate definition of type `{}`.", tycon.to_string()),
+                    format!("Duplicate definitions of type `{}`.", tycon.to_string()),
                     &[
                         &type_decl.source.as_ref().map(|s| s.to_head_character()),
                         &other_src.as_ref().map(|s| s.to_head_character()),
