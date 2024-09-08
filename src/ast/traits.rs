@@ -1070,7 +1070,11 @@ impl TraitEnv {
                     let inst_i = &insts[i];
                     let inst_j = &insts[j];
                     let mut tc = tc.clone();
-                    if tc.unify(&inst_i.impl_type(), &inst_j.impl_type()).is_err() {
+                    if UnifOrOtherErr::extract_others(
+                        tc.unify(&inst_i.impl_type(), &inst_j.impl_type()),
+                    )?
+                    .is_err()
+                    {
                         continue;
                     }
                     errors.append(Errors::from_msg_srcs(

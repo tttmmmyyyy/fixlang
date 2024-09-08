@@ -278,7 +278,7 @@ impl Pattern {
     pub fn get_type(
         &self,
         typechcker: &mut TypeCheckContext,
-    ) -> (Arc<TypeNode>, HashMap<FullName, Arc<TypeNode>>) {
+    ) -> Result<(Arc<TypeNode>, HashMap<FullName, Arc<TypeNode>>), Errors> {
         match self {
             Pattern::Var(v, ty) => {
                 let var_name = v.name.clone();
@@ -287,16 +287,16 @@ impl Pattern {
                 } else {
                     let ty = ty.as_ref().unwrap();
                     if !ty.free_vars().is_empty() {
-                        error_exit_with_src(
-                            "Currently, cannot use type variable in type annotation.",
-                            ty.get_source(),
-                        )
+                        return Err(Errors::from_msg_srcs(
+                            "Currently, cannot use type variable in type annotation.".to_string(),
+                            &[ty.get_source()],
+                        ));
                     }
                     ty.clone()
                 };
                 let mut var_to_ty = HashMap::default();
                 var_to_ty.insert(var_name, ty.clone());
-                (ty, var_to_ty)
+                Ok((ty, var_to_ty))
             }
             Pattern::Struct(tc, field_to_pat) => {
                 let ty = tc.get_struct_union_value_type(typechcker);
@@ -313,10 +313,11 @@ impl Pattern {
                     })
                     .collect::<HashMap<_, _>>();
                 for (field_name, pat) in field_to_pat {
-                    let (pat_ty, var_ty) = pat.pattern.get_type(typechcker);
+                    let (pat_ty, var_ty) = pat.pattern.get_type(typechcker)?;
                     var_to_ty.extend(var_ty);
-                    let unify_res =
-                        typechcker.unify(&pat_ty, field_name_to_ty.get(field_name).unwrap());
+                    let unify_res = UnifOrOtherErr::extract_others(
+                        typechcker.unify(&pat_ty, field_name_to_ty.get(field_name).unwrap()),
+                    )?;
                     if let Err(_) = unify_res {
                         error_exit_with_src(
                             &format!(
@@ -329,7 +330,7 @@ impl Pattern {
                         );
                     }
                 }
-                (ty, var_to_ty)
+                Ok((ty, var_to_ty))
             }
             Pattern::Union(tc, field_name, pat) => {
                 let ty = tc.get_struct_union_value_type(typechcker);
@@ -343,9 +344,10 @@ impl Pattern {
                     .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
                     .unwrap();
                 let field_ty = field_tys[field_idx].clone();
-                let (pat_ty, var_ty) = pat.pattern.get_type(typechcker);
+                let (pat_ty, var_ty) = pat.pattern.get_type(typechcker)?;
                 var_to_ty.extend(var_ty);
-                let unify_res = typechcker.unify(&pat_ty, &field_ty);
+                let unify_res =
+                    UnifOrOtherErr::extract_others(typechcker.unify(&pat_ty, &field_ty))?;
                 if let Err(_) = unify_res {
                     error_exit_with_src(
                         &format!(
@@ -357,7 +359,7 @@ impl Pattern {
                         &pat.info.source,
                     );
                 }
-                (ty, var_to_ty)
+                Ok((ty, var_to_ty))
             }
         }
     }

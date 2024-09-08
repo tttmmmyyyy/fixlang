@@ -697,7 +697,7 @@ impl TypeCheckContext {
             }
             Expr::Let(pat, val, body) => {
                 pat.error_if_invalid(&self.type_env);
-                let (pat_ty, var_ty) = pat.pattern.get_type(self);
+                let (pat_ty, var_ty) = pat.pattern.get_type(self)?;
                 let val = self.unify_type_of_expr(val, pat_ty.clone())?;
                 let var_scm = var_ty.iter().map(|(name, ty)| {
                     (
@@ -1002,13 +1002,13 @@ impl TypeCheckContext {
         ty2: &Arc<TypeNode>,
     ) -> Result<(), UnifOrOtherErr> {
         let mut cloned_self = self.clone();
-        match cloned_self.unify(ty1, ty2) {
+        match UnifOrOtherErr::extract_others(cloned_self.unify(ty1, ty2))? {
             Ok(_) => {
                 return Ok(());
             }
             Err(e) => {
                 *self = cloned_self;
-                return Err(e);
+                return Err(e.into());
             }
         }
     }
@@ -1182,7 +1182,7 @@ impl TypeCheckContext {
                 // But we may be able to reduce it after the predicate is substituted further.
                 // To see if there is possibility for further reduction, we check here the unifiability.
                 let mut tc = self.clone();
-                if tc.unify(&qual_pred.predicate.ty, &pred.ty).is_ok() {
+                if UnifOrOtherErr::extract_others(tc.unify(&qual_pred.predicate.ty, &pred.ty))?.is_ok() {
                     unifiable = true;
                 }
             }
