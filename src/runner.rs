@@ -62,7 +62,7 @@ fn build_object_files<'c>(
     program.create_trait_method_symbols();
 
     // Validate constraints of global value type.
-    program.validate_global_value_types();
+    program.validate_global_value_type_constraints()?;
 
     // Check if all items referred in import statements are defined.
     // This check should be done after `add_methods` and `create_trait_method_symbols`.

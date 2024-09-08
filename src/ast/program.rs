@@ -1153,18 +1153,23 @@ impl Program {
         }
     }
 
-    pub fn validate_global_value_types(&self) {
+    pub fn validate_global_value_type_constraints(&self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for (_name, gv) in &self.global_values {
-            gv.scm.validate_constraints(&self.trait_env);
+            if let Err(e) = gv.scm.validate_constraints(&self.trait_env) {
+                errors.append(e);
+                continue;
+            };
             match gv.expr {
                 SymbolExpr::Simple(ref _e) => {}
                 SymbolExpr::Method(ref impls) => {
                     for impl_ in impls {
-                        impl_.ty.validate_constraints(&self.trait_env);
+                        errors.eat_err(impl_.ty.validate_constraints(&self.trait_env));
                     }
                 }
             }
         }
+        errors.to_result()
     }
 
     // Validate and update export statements.

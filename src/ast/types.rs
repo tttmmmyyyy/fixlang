@@ -2,7 +2,6 @@ use core::panic;
 use std::sync::Arc;
 
 use crate::error::error_exit_with_src;
-use crate::error::error_exit_with_srcs;
 use crate::error::Errors;
 use inkwell::types::BasicType;
 use serde::{Deserialize, Serialize};
@@ -1520,7 +1519,7 @@ pub struct Scheme {
 }
 
 impl Scheme {
-    pub fn validate_constraints(&self, trait_env: &TraitEnv) {
+    pub fn validate_constraints(&self, trait_env: &TraitEnv) -> Result<(), Errors> {
         // Validate constraints.
         // NOTE:
         // This validation is too restrictive.
@@ -1531,12 +1530,12 @@ impl Scheme {
             // For example, if a user is writing `Elem c = e, Elem c : ToString`, then the typechecker may fail to prove `Elem c : ToString`.
             // Writing `Elem c = e, e : ToString` instead is ok.
             if !pred.ty.is_tyvar() {
-                error_exit_with_src(
-"Trait constraint should be in the form of `{type_var} : {Trait}`.
-NOTE: If you want to put a constraint on an associated type application, e.g., `Elem c : ToString`, you should write `Elem c = e, e : ToString` instead.
-We will support more general constraints by implementing such conversion in a future.",
-                    &pred.source,
-                );
+                return Err(Errors::from_msg_srcs(
+                    "Trait constraint should be in the form of `{type_var} : {Trait}`. \
+                     NOTE: If you want to put a constraint on an associated type application, e.g., `Elem c : ToString`, you should write `Elem c = e, e : ToString` instead. \
+                     We will support more general constraints by implementing such conversion in a future.".to_string(),
+                    &[&pred.source],
+                ));
             }
         }
         let preds = self
@@ -1549,29 +1548,32 @@ We will support more general constraints by implementing such conversion in a fu
             // Right hand side of an equality should be free from associated type.
             // This ensures that the reduction of a type terminates in a finite number of steps.
             if !eq.value.is_assoc_ty_free() {
-                error_exit_with_src(
-"Right side of an equality constraint cannot contain an associated type.
-NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`.
-We will support more general constraints by implementing such conversion in a future.",
-                    &eq.source,
-                );
+                return Err(Errors::from_msg_srcs(
+                    "Right side of an equality constraint cannot contain an associated type. \
+                     NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`. \
+                     We will support more general constraints by implementing such conversion in a future.".to_string(),
+                    &[&eq.source],
+                ));
             }
             // The first argument of the left side of an equality constraint should be a type variable.
             // If this condition is not satisified, then a type can be reduce in two ways, by this equality and by an instance of the associated type,
             // which implies that there is no "normal form" of the type.
             if !eq.args[0].is_tyvar() {
-                error_exit_with_src("The first argument of the left side of an equality constraint should be a type variable.", &eq.source);
+                return Err(Errors::from_msg_srcs(
+                    "The first argument of the left side of an equality constraint should be a type variable.".to_string(),
+                    &[&eq.source],
+                ));
             }
             // The left side of an equality constraint should be free from associated type.
             // This ensures that this equality constraint can be applied without reducing the left side of the equality.
             for arg in &eq.args[1..] {
                 if !arg.is_assoc_ty_free() {
-                    error_exit_with_src(
-"In left side of an equality constraint, arguments of an associated type cannot contain an associated type.
-NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`.
-We will support more general constraints by implementing such conversion in a future.",
-                        &eq.source,
-                    );
+                    return Err(Errors::from_msg_srcs(
+                        "In left side of an equality constraint, arguments of an associated type cannot contain an associated type. \
+                         NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`. \
+                         We will support more general constraints by implementing such conversion in a future.".to_string(),
+                        &[&eq.source],
+                    ));
                 }
             }
             // For each associated type usage, e.g., `Elem c = I64`, we check that `c : Collects` is in the constraint.
@@ -1592,27 +1594,29 @@ We will support more general constraints by implementing such conversion in a fu
                     ty: eq.args[0].clone(),
                     source: None,
                 };
-                error_exit_with_src(
-                    &format!(
+                return Err(Errors::from_msg_srcs(
+                    format!(
                         "The equality constraint `{}` is invalid here because `{}` is not assumed.",
                         eq.to_string(),
                         pred.to_string()
                     ),
-                    &eq.source,
-                );
+                    &[&eq.source],
+                ));
             }
         }
         // We do not allow there are two equality constraints with the same left side.
         for i in 0..self.equalities.len() {
             for j in i + 1..self.equalities.len() {
                 if self.equalities[i].lhs().to_string() == self.equalities[j].lhs().to_string() {
-                    error_exit_with_srcs(
-                        "Multiple equality constraints with the same left side are not allowed.",
+                    return Err(Errors::from_msg_srcs(
+                        "Multiple equality constraints with the same left side are not allowed."
+                            .to_string(),
                         &[&self.equalities[i].source, &self.equalities[j].source],
-                    );
+                    ));
                 }
             }
         }
+        Ok(())
     }
 
     pub fn to_string(&self) -> String {
