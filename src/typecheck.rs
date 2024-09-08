@@ -647,7 +647,7 @@ impl TypeCheckContext {
                 }
             }
             Expr::LLVM(lit) => {
-                if let Err(_) = self.unify_rollback_if_err(&lit.ty, &ty) {
+                if let Err(_) = UnifOrOtherErr::extract_others(self.unify_rollback(&lit.ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -679,7 +679,7 @@ impl TypeCheckContext {
                 let arg_ty = type_tyvar_star(&self.new_tyvar());
                 let body_ty = type_tyvar_star(&self.new_tyvar());
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
-                if let Err(_) = self.unify_rollback_if_err(&fun_ty, &ty) {
+                if let Err(_) = UnifOrOtherErr::extract_others(self.unify_rollback(&fun_ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`",
@@ -738,7 +738,7 @@ impl TypeCheckContext {
                     self.substitute_predicate(req_pred);
                 }
                 self.predicates.append(&mut req_preds.clone());
-                if let Err(_) = self.unify_rollback_if_err(&ty, anno_ty) {
+                if let Err(_) = UnifOrOtherErr::extract_others(self.unify_rollback(&ty, anno_ty))? {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -803,7 +803,7 @@ impl TypeCheckContext {
 
                 // Get field types.
                 let struct_ty = tc.get_struct_union_value_type(self);
-                if let Err(_) = self.unify_rollback_if_err(&struct_ty, &ty) {
+                if let Err(_) = UnifOrOtherErr::extract_others(self.unify_rollback(&struct_ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -833,7 +833,7 @@ impl TypeCheckContext {
                 // Prepare type of element.
                 let elem_ty = type_tyvar_star(&self.new_tyvar());
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
-                if let Err(_) = self.unify_rollback_if_err(&array_ty, &ty) {
+                if let Err(_) = UnifOrOtherErr::extract_others(self.unify_rollback(&array_ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found an array.",
@@ -851,7 +851,7 @@ impl TypeCheckContext {
             }
             Expr::FFICall(_, ret_ty, param_tys, args) => {
                 let ret_ty = type_tycon(ret_ty);
-                if let Err(_) = self.unify_rollback_if_err(&ty, &ret_ty) {
+                if let Err(_) = UnifOrOtherErr::extract_others(self.unify_rollback(&ty, &ret_ty))? {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -996,7 +996,7 @@ impl TypeCheckContext {
 
     // Update unification to unify two types.
     // When unification fails, it has no side effect to self.
-    pub fn unify_rollback_if_err(
+    pub fn unify_rollback(
         &mut self,
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,

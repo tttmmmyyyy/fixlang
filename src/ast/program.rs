@@ -879,7 +879,9 @@ impl Program {
                     // and we do not need to check whether predicates or equality constraints are satisfiable or not.
                     {
                         let mut tc0 = tc.clone();
-                        if tc0.unify(&method.ty.ty, &sym.ty).is_err() {
+                        if UnifOrOtherErr::extract_others(tc0.unify(&method.ty.ty, &sym.ty))?
+                            .is_err()
+                        {
                             continue;
                         }
                     }
