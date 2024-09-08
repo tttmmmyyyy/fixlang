@@ -13,8 +13,10 @@ use crate::{
     Configuration, Span,
 };
 use std::{
+    collections::HashSet,
     fs::File,
     io::{Read, Write},
+    path::PathBuf,
     str::FromStr,
     sync::{
         mpsc::{self, Receiver, Sender},
@@ -409,6 +411,7 @@ fn handle_textdocument_did_save(diag_send: Sender<DiagnosticsMessage>, log_file:
 
 // The entry point of the diagnostics thread.
 fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mutex<File>>) {
+    let mut prev_err_paths = HashSet::new();
     loop {
         let msg = msg_recv.recv();
         if msg.is_err() {
@@ -423,9 +426,15 @@ fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mute
             DiagnosticsMessage::OnSaveFile => run_diagnostics(log_file.clone()),
             DiagnosticsMessage::Start => run_diagnostics(log_file.clone()),
         };
-        if res.is_err() {
-            send_diagnostics_notification(res.unwrap_err(), log_file.clone());
-        }
+        let errs = match res {
+            Ok(_) => Errors::empty(),
+            Err(errs) => errs,
+        };
+        prev_err_paths = send_diagnostics_notification(
+            errs,
+            std::mem::replace(&mut prev_err_paths, HashSet::new()),
+            log_file.clone(),
+        );
     }
 }
 
@@ -446,35 +455,34 @@ fn span_to_range(span: &Span) -> lsp_types::Range {
 }
 
 // Send the diagnostics notification to the client.
-fn send_diagnostics_notification(errs: Errors, log_file: Arc<Mutex<File>>) {
+// Return the paths of the files that have errors.
+// - `prev_err_paths`: The paths of the files that have errors in the previous diagnostics. This is used to clear the diagnostics for the files that have no errors.
+fn send_diagnostics_notification(
+    errs: Errors,
+    mut prev_err_paths: HashSet<PathBuf>,
+    log_file: Arc<Mutex<File>>,
+) -> HashSet<PathBuf> {
+    let mut err_paths = HashSet::new();
+
+    // Get the current directory.
     let cdir = std::env::current_dir();
     if cdir.is_err() {
         let mut msg = "Failed to get the current directory: \n".to_string();
         msg.push_str(&format!("{:?}\n", cdir.err().unwrap()));
         write_log(log_file.clone(), msg.as_str());
-        return;
+        return err_paths;
     }
     let cdir = cdir.unwrap();
 
-    // Organize the errors by file paths.
+    // Send the diagnostics notification for each file that has errors.
     for (path, errs) in errs.organize_by_path() {
-        // Convert path to absolute path.
-        let path = cdir.join(path);
+        err_paths.insert(path.clone());
+        prev_err_paths.remove(&path);
 
-        // Convert path into Uri.
-        let path = path.to_str();
-        if path.is_none() {
-            let mut msg = "Failed to convert a path into string: \n".to_string();
-            msg.push_str(&format!("{:?}\n", path));
-            write_log(log_file.clone(), msg.as_str());
-            continue;
-        }
-        let path = "file://".to_string() + path.unwrap();
-        let uri = Uri::from_str(&path);
+        // Convert path to uri.
+        let uri = path_to_uri(&cdir.join(path));
         if uri.is_err() {
-            let mut msg = "Failed to convert a path into Uri: \n".to_string();
-            msg.push_str(&format!("{}\n", path));
-            write_log(log_file.clone(), msg.as_str());
+            write_log(log_file.clone(), &(uri.unwrap_err() + "\n"));
             continue;
         }
         let uri = uri.unwrap();
@@ -504,6 +512,40 @@ fn send_diagnostics_notification(errs: Errors, log_file: Arc<Mutex<File>>) {
         };
         send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
     }
+
+    // Clear the diagnostics for the files that have no errors.
+    for path in prev_err_paths {
+        // Convert path to uri.
+        let uri = path_to_uri(&cdir.join(path));
+        if uri.is_err() {
+            write_log(log_file.clone(), &(uri.unwrap_err() + "\n"));
+            continue;
+        }
+        let uri = uri.unwrap();
+
+        // Send the empty diagnostics notification for each file.
+        let params = lsp_types::PublishDiagnosticsParams {
+            uri,
+            diagnostics: vec![],
+            version: None,
+        };
+        send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
+    }
+
+    err_paths
+}
+
+fn path_to_uri(path: &PathBuf) -> Result<Uri, String> {
+    let path = path.to_str();
+    if path.is_none() {
+        return Err(format!("Failed to convert a path into string: {:?}", path));
+    }
+    let path = "file://".to_string() + path.unwrap();
+    let uri = Uri::from_str(&path);
+    if uri.is_err() {
+        return Err(format!("Failed to convert a path into Uri: {:?}", path));
+    }
+    Ok(uri.unwrap())
 }
 
 fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<(), Errors> {
