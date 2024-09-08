@@ -92,6 +92,11 @@ fn build_object_files<'c>(
     // Instantiate exported functions and all called functions.
     program.instantiate_exported_values(&typechecker);
 
+    // If it is for language server, we don't need to generate object files.
+    if config.language_server_mode {
+        return Ok(vec![]);
+    }
+
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
         uncurry_optimization(&mut program);
