@@ -56,7 +56,7 @@ fn build_object_files<'c>(
     program.add_methods()?;
 
     // Validate trait env.
-    program.validate_trait_env();
+    program.validate_trait_env()?;
 
     // Create symbols.
     program.create_trait_method_symbols();

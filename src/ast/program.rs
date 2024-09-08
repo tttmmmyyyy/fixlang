@@ -1360,8 +1360,8 @@ impl Program {
         errors.to_result()
     }
 
-    pub fn validate_trait_env(&mut self) {
-        self.trait_env.validate(self.kind_env());
+    pub fn validate_trait_env(&mut self) -> Result<(), Errors> {
+        self.trait_env.validate(self.kind_env())
     }
 
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {

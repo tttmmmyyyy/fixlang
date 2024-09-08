@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::error::error_exit;
 use crate::error::error_exit_with_src;
-use crate::error::error_exit_with_srcs;
 use error::Errors;
 use serde::{Deserialize, Serialize};
 
@@ -867,24 +866,27 @@ impl TraitEnv {
         res
     }
 
-    pub fn validate(&mut self, kind_env: KindEnv) {
+    pub fn validate(&mut self, kind_env: KindEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
         // Check name confliction of traits and aliases.
-        fn create_conflicting_error(env: &TraitEnv, trait_id: &TraitId) {
+        fn create_conflicting_error(env: &TraitEnv, trait_id: &TraitId) -> Errors {
             let this_src = &env.traits.get(trait_id).unwrap().source;
             let other_src = &env.aliases.get(trait_id).unwrap().source;
-            error_exit_with_srcs(
-                &format!("Duplicate definition for `{}`", trait_id.to_string()),
-                &[&this_src, &other_src],
-            );
+            Errors::from_msg_srcs(
+                format!("Duplicate definition for `{}`", trait_id.to_string()),
+                &[this_src, other_src],
+            )
         }
+
         for (trait_id, _) in &self.traits {
             if self.aliases.contains_key(trait_id) {
-                create_conflicting_error(self, trait_id);
+                errors.append(create_conflicting_error(self, trait_id));
             }
         }
         for (trait_id, _) in &self.aliases {
             if self.traits.contains_key(trait_id) {
-                create_conflicting_error(self, trait_id);
+                errors.append(create_conflicting_error(self, trait_id));
             }
         }
 
@@ -892,29 +894,39 @@ impl TraitEnv {
         for (_, ta) in &self.aliases {
             for v in &ta.value {
                 if !self.traits.contains_key(v) && !self.aliases.contains_key(v) {
-                    error_exit_with_src(&format!("Unknown trait `{}`.", v.to_string()), &ta.source);
+                    errors.append(Errors::from_msg_srcs(
+                        format!("Unknown trait `{}`.", v.to_string()),
+                        &[&ta.source],
+                    ));
                 }
             }
         }
-        // Circular aliasing will be detected in `TraitEnv::resolve_aliases`.
 
+        // If some errors are found upto here, throw them.
+        errors.to_result()?;
+
+        // Circular aliasing will be detected in `TraitEnv::resolve_aliases`, so we don't need to check it here.
+
+        // Forbid unrelated trait method:
+        // Check that the type variable in trait definition appears each of the methods' type.
+        // This assumption is used in `InstanciatedSymbol::dependent_modules`.
         for (_trait_id, trait_info) in &self.traits {
             for (method_name, method_ty) in &trait_info.methods {
-                // Forbid unrelated trait method:
-                // Check that the type variable in trait definition appears each of the methods' type.
-                // This assumption is used in `InstanciatedSymbol::dependent_modules`.
                 if !method_ty.ty.contains_tyvar(&trait_info.type_var) {
-                    error_exit_with_src (
-                        &format!(
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
                             "Type variable `{}` used in trait definition has to appear in the type of a method `{}`.",
                             trait_info.type_var.name,
                             method_name,
                         ),
-                        method_ty.ty.get_source()
-                    );
+                        &[&method_ty.ty.get_source()],
+                    ));
                 }
             }
         }
+        // If some errors are found upto here, throw them.
+        errors.to_result()?;
+
         let aliases: HashSet<_> = self.aliases.keys().collect();
         // Prepare TypeCheckContext to use `unify`.
         let tc = TypeCheckContext::new(
@@ -928,10 +940,11 @@ impl TraitEnv {
             for inst in insts.iter_mut() {
                 // check implementation is given for trait, not for trait alias.
                 if aliases.contains(trait_id) {
-                    error_exit_with_src(
-                        "A trait alias cannot be implemented directly. Implement each aliased trait instead.",
-                        &inst.qual_pred.predicate.source,
-                    )
+                    errors.append(Errors::from_msg_srcs(
+                        "A trait alias cannot be implemented directly. Implement each aliased trait instead.".to_string(),
+                        &[&inst.qual_pred.predicate.source],
+                    ));
+                    continue;
                 }
 
                 *inst.trait_id_mut() = trait_id.clone();
@@ -939,15 +952,16 @@ impl TraitEnv {
                 // Check instance head.
                 let implemented_ty = &inst.qual_pred.predicate.ty;
                 if !implemented_ty.is_implementable() {
-                    error_exit_with_src(
-                        &format!(
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
                             "Implementing trait for type `{}` is not allowed. \
                             The head (in this case, `{}`) of the type should be a type constructor.",
                             implemented_ty.to_string(),
-                            implemented_ty.get_head_string()
+                            implemented_ty.get_head_string(),
                         ),
-                        &implemented_ty.get_source(),
-                    );
+                        &[&implemented_ty.get_source()],
+                    ));
+                    continue;
                 }
 
                 // Validate the set of trait methods.
@@ -955,22 +969,22 @@ impl TraitEnv {
                 let impl_methods = &inst.methods;
                 for (trait_method, _) in trait_methods {
                     if !impl_methods.contains_key(trait_method) {
-                        error_exit_with_src(
-                            &format!("Lacking implementation of method `{}`.", trait_method),
-                            &inst.source,
-                        )
+                        errors.append(Errors::from_msg_srcs(
+                            format!("Lacking implementation of method `{}`.", trait_method),
+                            &[&inst.source],
+                        ));
                     }
                 }
                 for (impl_method, impl_expr) in impl_methods {
                     if !trait_methods.contains_key(impl_method) {
-                        error_exit_with_src(
-                            &format!(
+                        errors.append(Errors::from_msg_srcs(
+                            format!(
                                 "`{}` is not a method of trait `{}`.",
                                 impl_method,
                                 trait_id.to_string(),
                             ),
-                            &impl_expr.source.as_ref().map(|s| s.to_head_character()),
-                        )
+                            &[&impl_expr.source],
+                        ));
                     }
                 }
 
@@ -979,25 +993,25 @@ impl TraitEnv {
                 let impl_assoc_types = &inst.assoc_types;
                 for (trait_assoc_type, _) in trait_assoc_types {
                     if !impl_assoc_types.contains_key(trait_assoc_type) {
-                        error_exit_with_src(
-                            &format!(
+                        errors.append(Errors::from_msg_srcs(
+                            format!(
                                 "Lacking implementation of associated type `{}`.",
                                 trait_assoc_type,
                             ),
-                            &inst.source,
-                        )
+                            &[&inst.source],
+                        ));
                     }
                 }
                 for (impl_assoc_type, impl_info) in impl_assoc_types {
                     if !trait_assoc_types.contains_key(impl_assoc_type) {
-                        error_exit_with_src(
-                            &format!(
+                        errors.append(Errors::from_msg_srcs(
+                            format!(
                                 "`{}` is not an associated type of trait `{}`.",
                                 impl_assoc_type,
                                 trait_id.to_string(),
                             ),
-                            &impl_info.source.as_ref().map(|s| s.to_head_character()),
-                        )
+                            &[&impl_info.source],
+                        ));
                     }
                     // Validate free variable of associated type implementation.
                     let mut allowed_tyvars = vec![];
@@ -1010,10 +1024,10 @@ impl TraitEnv {
                             .iter()
                             .all(|allowed_tv| allowed_tv.name != used_tv.name)
                         {
-                            error_exit_with_src(
-                                &format!("Unknown type variable `{}`.", used_tv.name),
-                                &impl_info.source.as_ref().map(|s| s.to_head_character()),
-                            )
+                            errors.append(Errors::from_msg_srcs(
+                                format!("Unknown type variable `{}`.", used_tv.name),
+                                &[&impl_info.source],
+                            ));
                         }
                     }
                 }
@@ -1028,17 +1042,20 @@ impl TraitEnv {
                     ty.toplevel_tycon().unwrap().name.module()
                 };
                 if trait_def_id != *instance_def_mod && type_def_id != *instance_def_mod {
-                    error_exit_with_src(
-                        &format!(
-                            "Implementing trait `{}` for type `{}` in module `{}` is illegal; it is not allowed to implement an external trait for an external type.",
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
+                            "Implementing trait `{}` for type `{}` in module `{}` is illegal; \
+                            it is not allowed to implement an external trait for an external type.",
                             trait_id.to_string(),
                             ty.to_string_normalize(),
                             instance_def_mod.to_string(),
                         ),
-                        &inst.source.as_ref().map(|s| s.to_head_character()),
-                    );
+                        &[&inst.source.as_ref().map(|s| s.to_head_character())],
+                    ));
                 }
             }
+            // Throw errors if any.
+            errors.to_result()?;
 
             // Check overlapping instance.
             for i in 0..insts.len() {
@@ -1049,8 +1066,8 @@ impl TraitEnv {
                     if tc.unify(&inst_i.impl_type(), &inst_j.impl_type()).is_err() {
                         continue;
                     }
-                    error_exit_with_srcs(
-                        &format!(
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
                             "Two trait implementations for `{}` are overlapping.",
                             trait_id.to_string()
                         ),
@@ -1058,10 +1075,12 @@ impl TraitEnv {
                             &inst_i.source.as_ref().map(|s| s.to_head_character()),
                             &inst_j.source.as_ref().map(|s| s.to_head_character()),
                         ],
-                    );
+                    ));
                 }
             }
         }
+
+        errors.to_result()
     }
 
     pub fn resolve_namespace(
