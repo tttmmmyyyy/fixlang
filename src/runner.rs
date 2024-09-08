@@ -44,7 +44,7 @@ fn build_object_files<'c>(
     program.calculate_type_env()?;
 
     // Infer namespaces of traits and types that appear in declarations and associated type implementations.
-    program.resolve_namespace_capital_names_not_in_expression();
+    program.resolve_namespace_in_type_signs();
 
     // Resolve type aliases that appear in declarations and associated type implementations.
     program.resolve_type_aliases_in_declaration();
