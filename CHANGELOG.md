@@ -10,6 +10,7 @@
 - Add `act_{field} : [f : Functor] (F -> f F) -> S -> f S` for each field `{field}` of type `F` of a struct `S`, which is known as "Lens" in Haskell community.
 - Implement `Functor` for tuple types. `map` function acts the last component of tuples.
 - Add `FFI_EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `FFI_EXPORT`.
+- Add experimental support for language server protocol.
 
 ### Changed
 
