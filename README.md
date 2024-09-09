@@ -98,7 +98,7 @@ Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker
 - You can run the source file (with extension ".fix") by `fix run -f {source-files}`.
 - If you want to build executable binary, run `fix build -f {source-files}.`.
 - For more details, see `fix help`, `fix build --help` or `fix run --help`.
-- For debugging, see [this section in Document.md](/Document.md#how-to-debug-fix-program).
+- For debugging, see [this section in Document.md](/Document.md#debugging).
 - We provide syntax highlight plugin for VSCode. See [this repo](https://github.com/tttmmmyyyy/fixlang_syntaxhighlight).
 
 ## Document
