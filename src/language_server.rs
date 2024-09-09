@@ -373,7 +373,7 @@ fn handle_initialized(
         if res.is_err() {
             // If a panic occurs in the diagnostics thread,
             send_diagnostics_error_message(
-                "Diagnostics stopped. This may be a bug in fix compiler. Please report the issue with the errors shown by running \"fix build\" for this project.".to_string(),
+                "Diagnostics stopped. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this! Repo: https://github.com/tttmmmyyyy/fixlang".to_string(),
                 log_file_cloned.clone(),
             );
             let mut msg = "Panic occurred in the diagnostics thread: \n".to_string();
