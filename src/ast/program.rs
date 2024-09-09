@@ -981,13 +981,14 @@ impl Program {
         let (required_ty, eft) = if let Some(required_ty) = required_ty {
             // If the type of the value is specified, check if it matches the required type.
             if gv.scm.to_string() != required_ty.to_string() {
+                let gv_src = gv.scm.ty.get_source();
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "The value `{}` should have type `{}`.",
                         value_name.to_string(),
                         required_ty.to_string()
                     ),
-                    &[required_src],
+                    &[gv_src, required_src],
                 ));
             }
             let eft = ExportedFunctionType {
