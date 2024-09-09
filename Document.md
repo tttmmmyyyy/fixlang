@@ -66,10 +66,10 @@
     - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
-- [Compiler usage](#compiler-usage)
-  - [Project file (Experimental)](#project-file-experimental)
+- [Compiler feature](#compiler-feature)
+  - [Project file](#project-file)
+  - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
-  - [Language Server Protocol (Experimental)](#language-server-protocol-experimental)
 
 
 # Tutorial
@@ -1709,14 +1709,21 @@ The following is the table of operators sorted by its precedence (operator of hi
 | &#124;&#124;      | right associative binary | -                                   | short-circuit logical OR                                           |
 | $                 | right associative binary | -                                   | right associative function application: f $ g $ x = f(g(x))        |
 
-# Compiler usage
+# Compiler feature
 
-## Project file (Experimental)
+## Project file
 
 When the "fixproj.toml" file is in the current directory, "fix build" and "fix run" will refelct the configuration in the file.
 
 Following fields are available in the "fixproj.toml" file:
 - `files`: A list of Fix source files.
+
+## Language Server Protocol
+
+Running `fix language-server` starts a language server which supports Language Server Protocol (LSP). 
+The language server recognizes the Fix source files by "fixproj.toml".
+
+NOTE: Implementation of language server protocol is WIP and not fully functional.
 
 ## Debugging
 
@@ -1727,8 +1734,3 @@ In VSCode, you cannot put a breakpoint in *.fix files by default. As a workaroun
 There are some notes on debugging Fix program:
 - Unlike other languages, Fix does not release local variables at the end of their scope, but at the last point of use. So if you break after the last use of a local variable, the debugger may show you an invalid value.
 - Currently, we are not able to tell the debugger the size of an array which is determined at run time. So we are always setting the array size to 100 in the debug information. You cannot show elements indexed after 100, and if the array is shorter than 100, invalid values are shown.
-
-## Language Server Protocol (Experimental)
-
-Running `fix language-server` starts a language server which supports Language Server Protocol (LSP). 
-The language server recognizes the Fix source files by "fixproj.toml".

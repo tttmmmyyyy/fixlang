@@ -99,7 +99,8 @@ Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker
 - If you want to build executable binary, run `fix build -f {source-files}.`.
 - For more details, see `fix help`, `fix build --help` or `fix run --help`.
 - For debugging, see [this section in Document.md](/Document.md#debugging).
-- We provide syntax highlight plugin for VSCode. See [this repo](https://github.com/tttmmmyyyy/fixlang_syntaxhighlight).
+- An VSCode extension which provides syntax highlights is available in [here](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlangsyntax).
+- Language client extension for VSCode is available in [here](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client). NOTE: Implementation of language server protocol is WIP and not fully functional.
 
 ## Document
 
