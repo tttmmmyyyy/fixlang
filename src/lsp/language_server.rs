@@ -7,8 +7,10 @@ use crate::{
     Configuration, Span,
 };
 use lsp_types::{
-    DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri,
+    CompletionItem, CompletionItemLabelDetails, CompletionOptions, CompletionParams,
+    DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams,
+    PublishDiagnosticsParams, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -90,7 +92,15 @@ pub fn launch_language_server() {
     // Prepare a channel to response from the diagnostics thread.
     let (diag_res_send, diag_res_recv) = mpsc::channel::<DiagnosticsResult>();
 
+    // The last diagnostics result.
+    let mut last_diag: Option<DiagnosticsResult> = None;
+
     loop {
+        // If new diagnostics are available, send store it to `last_diag`.
+        if let Ok(res) = diag_res_recv.try_recv() {
+            last_diag = Some(res);
+        }
+
         // Read a line to get the content length.
         let mut content_length = String::new();
         let res = stdin.read_line(&mut content_length);
@@ -215,6 +225,21 @@ pub fn launch_language_server() {
                 break;
             } else if method == "textDocument/didSave" {
                 handle_textdocument_did_save(diag_req_send.clone(), log_file.clone());
+            } else if method == "textDocument/completion" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().prgoram;
+                let id = parse_id(&message, method, log_file.clone());
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<CompletionParams> =
+                    parase_params(message.params.unwrap(), log_file.clone());
+                if params.is_none() {
+                    continue;
+                }
+                handle_completion(id.unwrap(), &params.unwrap(), program, log_file.clone());
             }
         }
     }
@@ -314,8 +339,9 @@ fn write_log(file: Arc<Mutex<File>>, message: &str) {
 
 // Handle "initialize" method.
 fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<File>>) {
-    // Return empty capabilities.
-    // - The server can respond to DidSaveTextDocument notification.
+    // Return server capabilities.
+    // - DidSaveTextDocument
+    // - textDocument/completion
     let result = InitializeResult {
         capabilities: ServerCapabilities {
             position_encoding: None,
@@ -331,7 +357,13 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<F
             notebook_document_sync: None,
             selection_range_provider: None,
             hover_provider: None,
-            completion_provider: None,
+            completion_provider: Some(CompletionOptions {
+                trigger_characters: Some(vec![" ".to_string(), ".".to_string(), "(".to_string()]),
+                all_commit_characters: None,
+                resolve_provider: None,
+                work_done_progress_options: WorkDoneProgressOptions::default(),
+                completion_item: None,
+            }),
             signature_help_provider: None,
             definition_provider: None,
             type_definition_provider: None,
@@ -422,6 +454,45 @@ fn handle_textdocument_did_save(diag_send: Sender<DiagnosticsMessage>, log_file:
         msg.push_str(&format!("{:?}\n", e));
         write_log(log_file.clone(), msg.as_str());
     }
+}
+
+// Handle "textDocument/completion" method.
+fn handle_completion(
+    id: u32,
+    _params: &CompletionParams,
+    program: &Program,
+    _log_file: Arc<Mutex<File>>,
+) {
+    let mut items = vec![];
+    for (name, gv) in &program.global_values {
+        let detail =
+            " : ".to_string() + &gv.scm.to_string() + ", in " + &name.namespace.to_string();
+        let name = name.name.clone();
+        items.push(CompletionItem {
+            label: name,
+            label_details: Some(CompletionItemLabelDetails {
+                detail: Some(detail),
+                description: None,
+            }),
+            kind: None,
+            detail: None,
+            documentation: None,
+            deprecated: None,
+            preselect: None,
+            sort_text: None,
+            filter_text: None,
+            insert_text: None,
+            insert_text_format: None,
+            insert_text_mode: None,
+            text_edit: None,
+            additional_text_edits: None,
+            command: None,
+            commit_characters: None,
+            data: None,
+            tags: None,
+        });
+    }
+    send_response(id, Ok::<_, ()>(items));
 }
 
 // The entry point of the diagnostics thread.
@@ -523,7 +594,7 @@ fn send_diagnostics_notification(
         let uri = uri.unwrap();
 
         // Send the diagnostics notification for each file.
-        let params = lsp_types::PublishDiagnosticsParams {
+        let params = PublishDiagnosticsParams {
             uri,
             diagnostics: errs
                 .iter()

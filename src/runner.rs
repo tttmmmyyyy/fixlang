@@ -1,6 +1,5 @@
 use super::*;
 use ast::export_statement::ExportStatement;
-use ast::program;
 use build_time::build_time_utc;
 use compile_unit::CompileUnit;
 use cpu_features::CpuFeatures;
