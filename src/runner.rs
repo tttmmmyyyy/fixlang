@@ -1,8 +1,10 @@
-use self::{compile_unit::CompileUnit, cpu_features::CpuFeatures};
 use super::*;
-use crate::ast::export_statement::ExportStatement;
-use crate::error::error_exit;
+use ast::export_statement::ExportStatement;
+use ast::program;
 use build_time::build_time_utc;
+use compile_unit::CompileUnit;
+use cpu_features::CpuFeatures;
+use error::error_exit;
 use error::Errors;
 use inkwell::{
     passes::PassManager,
@@ -18,11 +20,22 @@ use std::{
 };
 use stopwatch::StopWatch;
 
+// The result of `build_object_files` function.
+pub struct BuildObjFilesResult {
+    // Paths of object files generated.
+    // If the function is running for language server, this will be empty.
+    obj_paths: Vec<PathBuf>,
+
+    // The program parsed.
+    // This field is only set when the function is running for language server.
+    program: Option<Program>,
+}
+
 // Compile the program, and returns the path of object files to be linked.
 fn build_object_files<'c>(
     mut program: Program,
     config: Configuration,
-) -> Result<Vec<PathBuf>, Errors> {
+) -> Result<BuildObjFilesResult, Errors> {
     let _sw = StopWatch::new("build_module", config.show_build_times);
 
     // Add tuple definitions.
@@ -87,9 +100,12 @@ fn build_object_files<'c>(
     let main_expr = program.instantiate_main_function(&typechecker)?;
     program.instantiate_exported_values(&typechecker)?;
 
-    // If it is for language server, we don't need to generate object files.
+    // If it is for language server, we don't need to generate object files, so return here.
     if config.language_server_mode {
-        return Ok(vec![]);
+        return Ok(BuildObjFilesResult {
+            obj_paths: vec![],
+            program: Some(program),
+        });
     }
 
     // Perform uncurrying optimization.
@@ -245,7 +261,10 @@ fn build_object_files<'c>(
         t.join().unwrap();
     }
 
-    Ok(obj_paths)
+    Ok(BuildObjFilesResult {
+        obj_paths,
+        program: None,
+    })
 }
 
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
@@ -536,20 +555,31 @@ fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> T
     }
 }
 
-pub fn build_file(config: &mut Configuration) -> Result<(), Errors> {
+// The result of `build_file` function.
+#[derive(Default)]
+pub struct BuildFileResult {
+    // The program parsed.
+    // This field is only set when the function is running for language server.
+    pub program: Option<Program>,
+}
+
+pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors> {
     let exec_path = config.get_output_executable_file_path();
 
     // Create intermediate directory.
     fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
 
     let program = load_source_files(config)?;
-
-    let obj_paths = build_object_files(program, config.clone())?;
+    let build_res = build_object_files(program, config.clone())?;
 
     // If the program is for language server, we don't need to build binary file.
     if config.language_server_mode {
-        return Ok(());
+        let program = build_res.program.unwrap();
+        return Ok(BuildFileResult {
+            program: Some(program),
+        });
     }
+    let obj_paths = build_res.obj_paths;
 
     let mut library_search_path_opts: Vec<String> = vec![];
     for path in &config.library_search_paths {
@@ -650,7 +680,7 @@ pub fn build_file(config: &mut Configuration) -> Result<(), Errors> {
         );
     }
 
-    Ok(())
+    Ok(BuildFileResult::default())
 }
 
 // A function implementing `fix clean` command.

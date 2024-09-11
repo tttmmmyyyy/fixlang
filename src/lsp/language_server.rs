@@ -1,10 +1,4 @@
-use lsp_types::{
-    DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri,
-};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_json::Value;
-
+use crate::ast::program::Program;
 use crate::{
     constants::LSP_LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
@@ -12,6 +6,12 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
+use lsp_types::{
+    DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri,
+};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
 use std::{
     collections::HashSet,
     fs::File,
@@ -60,7 +60,7 @@ impl JSONRPCMessage {
     }
 }
 
-// Messaages sent for diagnostic thread.
+// Requests sent to diagnostic thread.
 enum DiagnosticsMessage {
     // Started the diagnostics thread.
     Start,
@@ -68,6 +68,11 @@ enum DiagnosticsMessage {
     OnSaveFile,
     // Stop the diagnostics thread.
     Stop,
+}
+
+// The result of diagnostics.
+pub struct DiagnosticsResult {
+    pub prgoram: Program,
 }
 
 // Launch the language server
@@ -78,9 +83,12 @@ pub fn launch_language_server() {
     let log_file = open_log_file();
     write_log(log_file.clone(), "Language server started.\n");
 
-    // Prepare a channel to send messages from the main thread to the diagnostics thread.
-    let (diag_send, diag_recv) = mpsc::channel::<DiagnosticsMessage>();
-    let mut diag_recv = Some(diag_recv);
+    // Prepare a channel to send requests to the diagnostics thread.
+    let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
+    let mut diag_req_recv = Some(diag_req_recv);
+
+    // Prepare a channel to response from the diagnostics thread.
+    let (diag_res_send, diag_res_recv) = mpsc::channel::<DiagnosticsResult>();
 
     loop {
         // Read a line to get the content length.
@@ -184,15 +192,16 @@ pub fn launch_language_server() {
                 if params.is_none() {
                     continue;
                 }
-                if diag_recv.is_none() {
+                if diag_req_recv.is_none() {
                     let msg = "\"initialized\" method is sent twice.\n".to_string();
                     write_log(log_file.clone(), msg.as_str());
                     continue;
                 }
                 handle_initialized(
                     &params.unwrap(),
-                    diag_send.clone(),
-                    diag_recv.take().unwrap(),
+                    diag_req_send.clone(),
+                    diag_req_recv.take().unwrap(),
+                    diag_res_send.clone(),
                     log_file.clone(),
                 );
             } else if method == "shutdown" {
@@ -200,12 +209,12 @@ pub fn launch_language_server() {
                 if id.is_none() {
                     continue;
                 }
-                handle_shutdown(id.unwrap(), diag_send.clone(), log_file.clone());
+                handle_shutdown(id.unwrap(), diag_req_send.clone(), log_file.clone());
             } else if method == "exit" {
                 write_log(log_file.clone(), "Exiting the language server.\n");
                 break;
             } else if method == "textDocument/didSave" {
-                handle_textdocument_did_save(diag_send.clone(), log_file.clone());
+                handle_textdocument_did_save(diag_req_send.clone(), log_file.clone());
             }
         }
     }
@@ -360,15 +369,16 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<F
 // Handle "initialized" method.
 fn handle_initialized(
     _params: &InitializedParams,
-    diag_send: Sender<DiagnosticsMessage>,
-    diag_recv: Receiver<DiagnosticsMessage>,
+    diag_req_send: Sender<DiagnosticsMessage>,
+    diag_req_recv: Receiver<DiagnosticsMessage>,
+    diag_res_send: Sender<DiagnosticsResult>,
     log_file: Arc<Mutex<File>>,
 ) {
     // Launch the diagnostics thread.
     let log_file_cloned = log_file.clone();
     std::thread::spawn(|| {
         let res = std::panic::catch_unwind(|| {
-            diagnostics_thread(diag_recv, log_file_cloned.clone());
+            diagnostics_thread(diag_req_recv, diag_res_send, log_file_cloned.clone());
         });
         if res.is_err() {
             // If a panic occurs in the diagnostics thread,
@@ -383,7 +393,7 @@ fn handle_initialized(
     });
 
     // Send `Start` message to the diagnostics thread.
-    if let Err(e) = diag_send.send(DiagnosticsMessage::Start) {
+    if let Err(e) = diag_req_send.send(DiagnosticsMessage::Start) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
         msg.push_str(&format!("{:?}\n", e));
         write_log(log_file.clone(), msg.as_str());
@@ -415,11 +425,16 @@ fn handle_textdocument_did_save(diag_send: Sender<DiagnosticsMessage>, log_file:
 }
 
 // The entry point of the diagnostics thread.
-fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mutex<File>>) {
+fn diagnostics_thread(
+    req_recv: Receiver<DiagnosticsMessage>,
+    res_send: Sender<DiagnosticsResult>,
+    log_file: Arc<Mutex<File>>,
+) {
     let mut prev_err_paths = HashSet::new();
+
     loop {
         // Wait for a message.
-        let msg = msg_recv.recv();
+        let msg = req_recv.recv();
         if msg.is_err() {
             // If the sender is dropped, stop the diagnostics thread.
             break;
@@ -435,9 +450,12 @@ fn diagnostics_thread(msg_recv: Receiver<DiagnosticsMessage>, log_file: Arc<Mute
             DiagnosticsMessage::Start => run_diagnostics(log_file.clone()),
         };
 
-        // Send the diagnostics notification.
+        // Send the result to the main thread and language clinent.
         let errs = match res {
-            Ok(_) => Errors::empty(),
+            Ok(res) => {
+                res_send.send(res).unwrap();
+                Errors::empty()
+            }
             Err(errs) => errs,
         };
         prev_err_paths = send_diagnostics_notification(
@@ -660,7 +678,7 @@ fn path_to_uri(path: &PathBuf) -> Result<Uri, String> {
     Ok(uri.unwrap())
 }
 
-fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<(), Errors> {
+fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<DiagnosticsResult, Errors> {
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
     // Read the project file.
@@ -671,7 +689,7 @@ fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<(), Errors> {
     ProjectFile::set_config_from_proj_file(&mut config, &project_file);
 
     // Build the file and get the errors.
-    build_file(&mut config)?;
+    let program = build_file(&mut config)?.program.unwrap();
 
-    Ok(())
+    Ok(DiagnosticsResult { prgoram: program })
 }

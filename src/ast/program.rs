@@ -86,8 +86,7 @@ pub struct GlobalValueDefn {
 
 pub struct GlobalValue {
     // Type of this symbol.
-    // For example, in case "trait a: Show { show: a -> String }",
-    // the type of method "show" is "a -> String for a: Show",
+    // For example, in case `trait a: Show { show: a -> String }`, the type of method `show` is `[a : Show] a -> String`.
     pub scm: Arc<Scheme>,
     pub expr: SymbolExpr,
     // TODO: add ty_src: Span
