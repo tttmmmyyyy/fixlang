@@ -32,7 +32,7 @@ mod runtime;
 // mod segcache;
 mod cpu_features;
 mod error;
-mod language_server;
+mod lsp;
 mod project;
 mod sourcefile;
 mod stdlib;
@@ -70,7 +70,7 @@ use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
-use language_server::launch_language_server;
+use lsp::language_server::launch_language_server;
 use misc::*;
 use object::*;
 use parser::*;
