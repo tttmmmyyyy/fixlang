@@ -1,4 +1,5 @@
 use crate::ast::program::Program;
+use crate::constants::INSTANCIATED_NAME_SEPARATOR;
 use crate::{
     constants::LSP_LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
@@ -465,14 +466,17 @@ fn handle_completion(
 ) {
     let mut items = vec![];
     for (name, gv) in &program.global_values {
-        let detail =
-            " : ".to_string() + &gv.scm.to_string() + ", in " + &name.namespace.to_string();
-        let name = name.name.clone();
+        let label = name.name.clone();
+        if label.starts_with(INSTANCIATED_NAME_SEPARATOR) {
+            continue;
+        }
+        let detail = " in ".to_string() + &name.namespace.to_string();
+        let desc = gv.scm.to_string();
         items.push(CompletionItem {
-            label: name,
+            label,
             label_details: Some(CompletionItemLabelDetails {
                 detail: Some(detail),
-                description: None,
+                description: Some(desc),
             }),
             kind: None,
             detail: None,
