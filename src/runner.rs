@@ -1,7 +1,13 @@
+use self::{compile_unit::CompileUnit, cpu_features::CpuFeatures};
+use super::*;
 use crate::ast::export_statement::ExportStatement;
 use crate::error::error_exit;
 use build_time::build_time_utc;
 use error::Errors;
+use inkwell::{
+    passes::PassManager,
+    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
+};
 use rand::Rng;
 use std::{
     fs::{self, create_dir_all, remove_dir_all},
@@ -10,16 +16,7 @@ use std::{
     process::{Command, Stdio},
     sync::Arc,
 };
-
-use inkwell::{
-    passes::PassManager,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
-};
 use stopwatch::StopWatch;
-
-use self::{compile_unit::CompileUnit, cpu_features::CpuFeatures};
-
-use super::*;
 
 // Compile the program, and returns the path of object files to be linked.
 fn build_object_files<'c>(
@@ -367,29 +364,6 @@ fn build_main_function<'c, 'm>(
             .into_pointer_value();
         gc.builder().build_store(gv_ptr, arg_val);
     }
-
-    // Store the pointer to `fixruntime_run_function` function defined in LLVM module to the `ptr_fixruntime_run_function` global variable defined in runtime.c.
-    // let run_function_func_ptr_ty: PointerType = gc
-    //     .context
-    //     .i8_type()
-    //     .ptr_type(AddressSpace::from(0))
-    //     .fn_type(
-    //         &[gc.context.i8_type().ptr_type(AddressSpace::from(0)).into()],
-    //         false,
-    //     )
-    //     .ptr_type(AddressSpace::from(0));
-    // let run_task_func_ptr: inkwell::values::GlobalValue = gc.module.add_global(
-    //     run_function_func_ptr_ty,
-    //     Some(AddressSpace::from(0)),
-    //     "ptr_fixruntime_run_function",
-    // );
-    // run_task_func_ptr.set_externally_initialized(true);
-    // run_task_func_ptr.set_linkage(Linkage::External);
-    // let run_function_func = gc.module.get_function(RUNTIME_RUN_FUNCTION).unwrap();
-    // gc.builder().build_store(
-    //     run_task_func_ptr.as_pointer_value(),
-    //     run_function_func.as_global_value().as_pointer_value(),
-    // );
 
     // If both of `AsyncTask` and sanitizer are used, prepare for terminating threads.
     if config.async_task && config.sanitize_memory {
