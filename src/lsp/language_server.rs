@@ -467,19 +467,20 @@ fn handle_completion(
     let mut items = vec![];
     for (name, gv) in &program.global_values {
         let label = name.name.clone();
+        // Skip compiler-defined values.
         if label.starts_with(INSTANCIATED_NAME_SEPARATOR) {
             continue;
         }
-        let detail = " in ".to_string() + &name.namespace.to_string();
-        let desc = gv.scm.to_string();
+        let in_namespace = " in ".to_string() + &name.namespace.to_string();
+        let scheme = gv.scm.to_string();
         items.push(CompletionItem {
             label,
             label_details: Some(CompletionItemLabelDetails {
-                detail: Some(detail),
-                description: Some(desc),
+                detail: Some(in_namespace),
+                description: None,
             }),
             kind: None,
-            detail: None,
+            detail: Some(scheme),
             documentation: None,
             deprecated: None,
             preselect: None,
