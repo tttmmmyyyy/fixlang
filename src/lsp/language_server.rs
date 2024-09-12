@@ -8,8 +8,8 @@ use crate::{
     Configuration, Span,
 };
 use lsp_types::{
-    CompletionItem, CompletionItemLabelDetails, CompletionOptions, CompletionParams,
-    DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams,
+    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
+    CompletionParams, DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams,
     PublishDiagnosticsParams, ServerCapabilities, TextDocumentSyncCapability,
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressOptions,
 };
@@ -359,7 +359,12 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<F
             selection_range_provider: None,
             hover_provider: None,
             completion_provider: Some(CompletionOptions {
-                trigger_characters: Some(vec![" ".to_string(), ".".to_string(), "(".to_string()]),
+                trigger_characters: Some(vec![
+                    " ".to_string(),
+                    ".".to_string(),
+                    "(".to_string(),
+                    ":".to_string(),
+                ]),
                 all_commit_characters: None,
                 resolve_provider: None,
                 work_done_progress_options: WorkDoneProgressOptions::default(),
@@ -479,7 +484,7 @@ fn handle_completion(
                 detail: Some(in_namespace),
                 description: None,
             }),
-            kind: None,
+            kind: Some(CompletionItemKind::FUNCTION),
             detail: Some(scheme),
             documentation: None,
             deprecated: None,
