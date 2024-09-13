@@ -183,6 +183,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_integral_function(from.clone(), to.clone()),
+                None,
             ));
         }
     }
@@ -201,6 +202,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_integral_function(from.clone(), to_type),
+                None,
             ));
         }
     }
@@ -212,6 +214,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to.clone()),
+                None,
             ));
         }
     }
@@ -230,6 +233,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to_type.clone()),
+                None,
             ));
         }
     }
@@ -241,6 +245,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_int_to_float_function(from.clone(), to.clone()),
+                None,
             ));
         }
     }
@@ -259,6 +264,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_int_to_float_function(from.clone(), to_type),
+                None,
             ));
         }
     }
@@ -270,6 +276,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to.clone()),
+                None,
             ));
         }
     }
@@ -288,6 +295,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to_type),
+                None,
             ));
         }
     }
@@ -297,99 +305,127 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_left"),
             shift_function(int_ty.clone(), true),
+            None,
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_right"),
             shift_function(int_ty.clone(), false),
+            None,
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_xor"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Xor),
+            None,
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_and"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::And),
+            None,
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_or"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Or),
+            None,
         ));
     }
 
     // Basic functions
-    errors.eat_err(fix_module.add_global_value(FullName::from_strs(&[STD_NAME], FIX_NAME), fix()));
-    errors.eat_err(
-        fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "loop"), state_loop()),
-    );
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], FIX_NAME),
+        fix(),
+        None,
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], "loop"),
+        state_loop(),
+        None,
+    ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "mark_threaded"),
         mark_threaded_function(),
+        None,
     ));
 
     // Array
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "fill"),
         fill_array(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set"),
         unsafe_set_array(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set_size"),
         unsafe_set_size_array(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_get"),
         unsafe_get_array(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique"),
         force_unique_array(),
+        None,
     ));
-    errors.eat_err(fix_module.add_global_value(array_getter_function_name(), read_array()));
+    errors.eat_err(fix_module.add_global_value(array_getter_function_name(), read_array(), None));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
         set_array(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "empty"),
         make_empty(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
         mod_array(false),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_capacity"),
         get_capacity_array(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_size"),
         get_size_array(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
+        None,
     ));
     // Debug
-    errors.eat_err(
-        fix_module.add_global_value(FullName::from_strs(&[STD_NAME], "abort"), abort_function()),
-    );
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], "abort"),
+        abort_function(),
+        None,
+    ));
 
     // Numeric constants
     for type_name in [F32_NAME, F64_NAME] {
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, type_name], "infinity"),
             infinity_value(type_name),
+            None,
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, type_name], "quiet_nan"),
             quiet_nan_value(type_name),
+            None,
         ));
     }
 
@@ -400,6 +436,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             "unsafe_get_retained_ptr_of_boxed_value",
         ),
         get_retained_ptr_of_boxed_value_function(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
@@ -407,6 +444,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             "unsafe_get_boxed_value_from_retained_ptr",
         ),
         get_boxed_value_from_retained_ptr_function(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
@@ -414,6 +452,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             "unsafe_get_release_function_of_boxed_value",
         ),
         get_release_function_of_boxed_value(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
@@ -421,10 +460,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             "unsafe_get_retain_function_of_boxed_value",
         ),
         get_retain_function_of_boxed_value(),
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_unsafe_get_boxed_data_ptr"),
         get_unsafe_get_boxed_ptr(),
+        None,
     ));
 
     errors.to_result()?;

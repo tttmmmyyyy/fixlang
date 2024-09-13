@@ -4374,15 +4374,16 @@ pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
     TraitInfo {
         id: trait_id,
         type_var: tv_tyvar,
-        methods: HashMap::from([(
-            method_name,
-            QualType {
+        methods: vec![MethodInfo {
+            name: method_name,
+            qual_ty: QualType {
                 preds: vec![],
                 kind_signs: vec![],
                 eqs: vec![],
                 ty: type_fun(tv_type.clone(), tv_type.clone()),
             },
-        )]),
+            source: None,
+        }],
         assoc_types: HashMap::new(),
         kind_signs: vec![],
         source: None,
@@ -4441,15 +4442,18 @@ pub fn binary_operator_trait(
     TraitInfo {
         id: trait_id,
         type_var: tv_tyvar,
-        methods: HashMap::from([(
-            method_name,
-            QualType {
-                preds: vec![],
-                kind_signs: vec![],
-                eqs: vec![],
-                ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
-            },
-        )]),
+        methods: vec![
+            (MethodInfo {
+                name: method_name,
+                qual_ty: QualType {
+                    preds: vec![],
+                    kind_signs: vec![],
+                    eqs: vec![],
+                    ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
+                },
+                source: None,
+            }),
+        ],
         assoc_types: HashMap::default(),
         kind_signs: vec![],
         source: None,

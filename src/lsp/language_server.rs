@@ -9,9 +9,10 @@ use crate::{
 };
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
-    CompletionParams, DiagnosticSeverity, InitializeParams, InitializeResult, InitializedParams,
-    PublishDiagnosticsParams, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressOptions,
+    CompletionParams, DiagnosticSeverity, Documentation, InitializeParams, InitializeResult,
+    InitializedParams, MarkupContent, PublishDiagnosticsParams, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri,
+    WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -478,6 +479,24 @@ fn handle_completion(
         }
         let in_namespace = " in ".to_string() + &name.namespace.to_string();
         let scheme = gv.scm.to_string();
+
+        // Get the documentation.
+        let docs = gv
+            .def_src
+            .as_ref()
+            .map(|src| src.documentation().ok())
+            .flatten();
+        // If the documentation is empty string, treat it as None.
+        let docs = match docs {
+            Some(docs) if docs.is_empty() => None,
+            _ => docs,
+        };
+        let docs = docs.map(|doc_str| {
+            Documentation::MarkupContent(MarkupContent {
+                kind: lsp_types::MarkupKind::Markdown,
+                value: doc_str,
+            })
+        });
         items.push(CompletionItem {
             label,
             label_details: Some(CompletionItemLabelDetails {
@@ -486,7 +505,7 @@ fn handle_completion(
             }),
             kind: Some(CompletionItemKind::FUNCTION),
             detail: Some(scheme),
-            documentation: None,
+            documentation: docs,
             deprecated: None,
             preselect: None,
             sort_text: None,

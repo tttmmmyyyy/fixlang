@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 
-use crate::{parser::Rule, runner::read_file};
+use crate::{error::Errors, parser::Rule, runner::read_file};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
@@ -192,5 +192,69 @@ impl Span {
             ret += "\n";
         }
         ret
+    }
+
+    // Get the documentation of the entity defined at this span.
+    // More specifically, this function returns the content of the consecutive comment lines just before the start of the span.
+    pub fn documentation(&self) -> Result<String, Errors> {
+        // Get a line from the reversed iterator.
+        // Returns the line and whether the end of the iterator is reached.
+        fn get_line(chars: &mut dyn Iterator<Item = char>) -> (String, bool) {
+            let mut ret = String::default();
+            let at_end = loop {
+                let c = chars.next();
+                if c.is_none() {
+                    break true;
+                }
+                let c = c.unwrap();
+                ret.push(c);
+                if c == '\n' {
+                    break false;
+                }
+            };
+            (ret.chars().rev().collect::<String>(), at_end)
+        }
+
+        let mut lines_rev = vec![];
+        let source_string = self.input.string();
+        let mut chars = source_string[0..self.start].chars().rev();
+
+        // Get the string ahead of the definition.
+        let (string_before_defn, _) = get_line(&mut chars);
+
+        // If some non-whitespace characters are found ahead of the definition, there is no document.
+        if string_before_defn.trim().len() > 0 {
+            return Ok(String::default());
+        }
+
+        loop {
+            let (line, reached_start) = get_line(&mut chars);
+            let line = line.trim();
+
+            // Check if `line` is a comment line.
+            if !line.starts_with("//") {
+                break;
+            }
+
+            // If the comment starts with " ", remove it.
+            let comment = if line.starts_with("// ") {
+                line[3..].to_string()
+            } else {
+                line[2..].to_string()
+            };
+
+            lines_rev.push(comment);
+
+            if reached_start {
+                break;
+            }
+        }
+        // Concatenate the lines in reverse order.
+        let mut ret = String::default();
+        for line in lines_rev.iter().rev() {
+            ret += line;
+            ret += "\n";
+        }
+        Ok(ret)
     }
 }

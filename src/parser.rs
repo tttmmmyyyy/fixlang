@@ -332,18 +332,18 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitInfo {
     let impl_type = type_tyvar_star(&trait_tyvar);
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
     let trait_name = pairs.next().unwrap().as_str().to_string();
-    let mut methods: HashMap<Name, QualType> = HashMap::new();
+    let mut methods: Vec<MethodInfo> = vec![];
     let mut type_syns: HashMap<Name, AssocTypeDefn> = HashMap::new();
     for pair in pairs {
         match parse_trait_member_defn(pair, &impl_type, ctx) {
-            Either::Left((name, qual_type)) => {
-                if methods.contains_key(&name) {
+            Either::Left(method_info) => {
+                if methods.iter().any(|mi| mi.name == method_info.name) {
                     error_exit_with_src(
-                        &format!("Duplicate definitions of member `{}`.", name),
-                        &Some(span),
+                        &format!("Duplicate definitions of member `{}`.", method_info.name),
+                        &Some(span), // Bad source location.
                     );
                 }
-                methods.insert(name, qual_type);
+                methods.push(method_info);
             }
             Either::Right(assoc_type) => {
                 if type_syns.contains_key(&assoc_type.name.to_string()) {
@@ -373,28 +373,29 @@ fn parse_trait_member_defn(
     pair: Pair<Rule>,
     impl_type: &Arc<TypeNode>,
     ctx: &mut ParseContext,
-) -> Either<(Name, QualType), AssocTypeDefn> {
+) -> Either<MethodInfo, AssocTypeDefn> {
     assert_eq!(pair.as_rule(), Rule::trait_member_defn);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
-        Rule::trait_member_value_defn => {
-            let (name, qual_type) = parse_trait_member_value_defn(pair, ctx);
-            Either::Left((name, qual_type))
-        }
+        Rule::trait_member_value_defn => Either::Left(parse_trait_member_value_defn(pair, ctx)),
         Rule::trait_member_type_defn => {
-            let assoc_type = parse_trait_member_type_defn(pair, impl_type, ctx);
-            Either::Right(assoc_type)
+            Either::Right(parse_trait_member_type_defn(pair, impl_type, ctx))
         }
         _ => unreachable!(),
     }
 }
 
-fn parse_trait_member_value_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> (Name, QualType) {
+fn parse_trait_member_value_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> MethodInfo {
     assert_eq!(pair.as_rule(), Rule::trait_member_value_defn);
+    let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let method_name = pairs.next().unwrap().as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx);
-    (method_name, qual_type)
+    MethodInfo {
+        name: method_name,
+        qual_ty: qual_type,
+        source: Some(span),
+    }
 }
 
 fn parse_trait_member_type_defn(

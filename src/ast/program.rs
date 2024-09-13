@@ -89,8 +89,7 @@ pub struct GlobalValue {
     // For example, in case `trait a: Show { show: a -> String }`, the type of method `show` is `[a : Show] a -> String`.
     pub scm: Arc<Scheme>,
     pub expr: SymbolExpr,
-    // TODO: add ty_src: Span
-    // TODO: add expr_src: Span
+    pub def_src: Option<Span>,
 }
 
 impl GlobalValue {
@@ -564,6 +563,7 @@ impl Program {
         &mut self,
         name: FullName,
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
+        def_src: Option<Span>,
     ) -> Result<(), Errors> {
         // Check duplicate definition.
         if self.global_values.contains_key(&name) {
@@ -588,6 +588,7 @@ impl Program {
             GlobalValue {
                 scm,
                 expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
+                def_src,
             },
         );
         Ok(())
@@ -688,9 +689,12 @@ impl Program {
                     &[&gv.defn.unwrap().src.as_ref().map(|s| s.to_head_character())],
                 ));
             } else {
-                errors.eat_err(
-                    self.add_global_value(name, (gv.defn.unwrap().expr, gv.decl.unwrap().ty)),
-                );
+                let decl_src = gv.decl.as_ref().unwrap().src.clone();
+                errors.eat_err(self.add_global_value(
+                    name,
+                    (gv.defn.unwrap().expr, gv.decl.unwrap().ty),
+                    decl_src,
+                ));
             }
         }
 
@@ -1129,14 +1133,14 @@ impl Program {
     // Create symbols of trait methods from TraitEnv.
     pub fn create_trait_method_symbols(&mut self) {
         for (trait_id, trait_info) in &self.trait_env.traits {
-            for (method_name, _) in &trait_info.methods {
-                let method_ty = trait_info.method_scheme(method_name);
+            for method_info in &trait_info.methods {
+                let method_ty = trait_info.method_scheme(&method_info.name);
                 let mut method_impls: Vec<MethodImpl> = vec![];
                 let instances = self.trait_env.instances.get(trait_id);
                 if let Some(insntances) = instances {
                     for trait_impl in insntances {
-                        let scm = trait_impl.method_scheme(method_name, trait_info);
-                        let expr = trait_impl.method_expr(method_name);
+                        let scm = trait_impl.method_scheme(&method_info.name, trait_info);
+                        let expr = trait_impl.method_expr(&method_info.name);
                         method_impls.push(MethodImpl {
                             ty: scm,
                             expr: TypedExpr::from_expr(expr),
@@ -1144,12 +1148,13 @@ impl Program {
                         });
                     }
                 }
-                let method_name = FullName::new(&trait_id.name.to_namespace(), &method_name);
+                let method_name = FullName::new(&trait_id.name.to_namespace(), &method_info.name);
                 self.global_values.insert(
                     method_name,
                     GlobalValue {
                         scm: method_ty,
                         expr: SymbolExpr::Method(method_impls),
+                        def_src: method_info.source.clone(),
                     },
                 );
             }
@@ -1388,6 +1393,7 @@ impl Program {
                                 &format!("{}{}", STRUCT_GETTER_SYMBOL, &field.name),
                             ),
                             struct_get(&struct_name, decl, &field.name),
+                            None,
                         ));
                         // Add setter function
                         errors.eat_err(self.add_global_value(
@@ -1396,6 +1402,7 @@ impl Program {
                                 &format!("{}{}", STRUCT_SETTER_SYMBOL, &field.name,),
                             ),
                             struct_set(&struct_name, decl, &field.name),
+                            None,
                         ));
                         // Add modifier functions.
                         errors.eat_err(self.add_global_value(
@@ -1404,6 +1411,7 @@ impl Program {
                                 &format!("{}{}", STRUCT_MODIFIER_SYMBOL, &field.name,),
                             ),
                             struct_mod(&struct_name, decl, &field.name),
+                            None,
                         ));
                         // Add punch functions.
                         errors.eat_err(self.add_global_value(
@@ -1412,6 +1420,7 @@ impl Program {
                                 &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
                             ),
                             struct_punch(&struct_name, decl, &field.name),
+                            None,
                         ));
                         // Add plug-in functions.
                         errors.eat_err(self.add_global_value(
@@ -1420,6 +1429,7 @@ impl Program {
                                 &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
                             ),
                             struct_plug_in(&struct_name, decl, &field.name),
+                            None,
                         ));
                         // Add act functions
                         errors.eat_err(self.add_global_value(
@@ -1428,6 +1438,7 @@ impl Program {
                                 &format!("{}{}", STRUCT_ACT_SYMBOL, &field.name),
                             ),
                             struct_act(&struct_name, decl, &field.name),
+                            None,
                         ));
                     }
                 }
@@ -1437,14 +1448,17 @@ impl Program {
                         errors.eat_err(self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &field.name),
                             union_new(&union_name, &field.name, decl),
+                            None,
                         ));
                         errors.eat_err(self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &format!("as_{}", field.name)),
                             union_as(&union_name, &field.name, decl),
+                            None,
                         ));
                         errors.eat_err(self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &format!("is_{}", field.name)),
                             union_is(&union_name, &field.name, decl),
+                            None,
                         ));
                         errors.eat_err(self.add_global_value(
                             FullName::new(
@@ -1452,6 +1466,7 @@ impl Program {
                                 &format!("mod_{}", field.name),
                             ),
                             union_mod_function(&union_name, &field.name, decl),
+                            None,
                         ));
                     }
                 }
@@ -1527,7 +1542,7 @@ impl Program {
         for (name, gv) in other.global_values {
             let ty = gv.scm;
             if let SymbolExpr::Simple(expr) = gv.expr {
-                errors.eat_err(self.add_global_value(name, (expr.expr, ty)));
+                errors.eat_err(self.add_global_value(name, (expr.expr, ty), None));
             }
         }
 

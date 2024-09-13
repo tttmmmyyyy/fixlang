@@ -128,20 +128,30 @@ impl AssocTypeImpl {
     }
 }
 
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct AssocTypeInfo {
-//     pub name: FullName,
-//     pub arity: usize,
-//     pub kind: Arc<Kind>,
-//     pub source: Option<Span>,
-// }
-
 #[derive(Clone)]
 pub struct AssocTypeKindInfo {
     #[allow(dead_code)]
     pub name: TyAssoc,
     pub param_kinds: Vec<Arc<Kind>>, // Includes `self`.
     pub value_kind: Arc<Kind>,
+}
+
+// Trait method.
+#[derive(Clone)]
+pub struct MethodInfo {
+    pub name: Name,
+    pub qual_ty: QualType,
+    pub source: Option<Span>,
+}
+
+impl MethodInfo {
+    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.qual_ty.resolve_namespace(ctx)
+    }
+
+    pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.qual_ty.resolve_type_aliases(type_env)
+    }
 }
 
 // Traits definitions.
@@ -155,7 +165,7 @@ pub struct TraitInfo {
     // Here, for example, in case "trait a: Show { show: a -> String }",
     // the type of method "show" is "a -> String",
     // and not "a -> String for a : Show".
-    pub methods: HashMap<Name, QualType>,
+    pub methods: Vec<MethodInfo>,
     // Associated type synonyms.
     pub assoc_types: HashMap<Name, AssocTypeDefn>,
     // Kind signatures at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
@@ -168,8 +178,8 @@ impl TraitInfo {
     // Resolve namespace.
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for (_name, qt) in &mut self.methods {
-            errors.eat_err(qt.resolve_namespace(ctx));
+        for mi in &mut self.methods {
+            errors.eat_err(mi.resolve_namespace(ctx));
         }
         errors.to_result()
     }
@@ -177,8 +187,8 @@ impl TraitInfo {
     // Resolve type aliases
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for (_name, qt) in &mut self.methods {
-            errors.eat_err(qt.resolve_type_aliases(type_env));
+        for mi in &mut self.methods {
+            errors.eat_err(mi.resolve_type_aliases(type_env));
         }
         errors.to_result()
     }
@@ -187,22 +197,37 @@ impl TraitInfo {
     // Here, for example, in case "trait a: ToString { to_string : a -> String }",
     // this function returns "[a: ToString] a -> String" as type of "to_string" method.
     pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
-        let mut qual_ty = self.methods.get(name).unwrap().clone();
+        let mut method_info = self
+            .methods
+            .iter()
+            .find(|mi| mi.name == *name)
+            .unwrap()
+            .clone();
         let mut vars = vec![];
-        qual_ty.free_vars_vec(&mut vars);
+        method_info.qual_ty.free_vars_vec(&mut vars);
         let mut preds = vec![Predicate::make(
             self.id.clone(),
             type_from_tyvar(self.type_var.clone()),
         )];
-        preds.append(&mut qual_ty.preds);
-        Scheme::generalize(&qual_ty.kind_signs, preds, qual_ty.eqs, qual_ty.ty)
+        preds.append(&mut method_info.qual_ty.preds);
+        Scheme::generalize(
+            &method_info.qual_ty.kind_signs,
+            preds,
+            method_info.qual_ty.eqs,
+            method_info.qual_ty.ty,
+        )
     }
 
     // Get the type of a method.
     // Here, for example, in case "trait a: ToString { to_string: a -> String }",
     // this function returns "a -> String" as type of "to_string" method.
     pub fn method_ty(&self, name: &Name) -> QualType {
-        self.methods.get(name).unwrap().clone()
+        self.methods
+            .iter()
+            .find(|mi| mi.name == *name)
+            .unwrap()
+            .qual_ty
+            .clone()
     }
 
     // Validate kind_signs and set it to self.type_var.
@@ -233,15 +258,6 @@ impl TraitInfo {
         }
         Ok(())
     }
-
-    // pub fn assoc_type_info(&self, assoc_type_name: &Name) -> AssocTypeInfo {
-    //     let assoc_type = self.assoc_types.get(assoc_type_name).unwrap();
-    //     AssocTypeInfo {
-    //         name: FullName::new(&self.id.name.to_namespace(), assoc_type_name),
-    //         kind: kind_arrow(self.type_var.kind.clone(), assoc_type.kind_applied.clone()),
-    //         source: assoc_type.src.clone(),
-    //     }
-    // }
 }
 
 // Trait instance.
@@ -290,10 +306,6 @@ impl TraitInstance {
         errors.to_result()
 
         // This function is called only by resolve_namespace_in_declaration, so we don't need to see into expression.
-
-        // for (_name, expr) in &mut self.methods {
-        //     *expr = expr.resolve_namespace(ctx);
-        // }
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
@@ -918,15 +930,15 @@ impl TraitEnv {
         // Check that the type variable in trait definition appears each of the methods' type.
         // This assumption is used in `InstanciatedSymbol::dependent_modules`.
         for (_trait_id, trait_info) in &self.traits {
-            for (method_name, method_ty) in &trait_info.methods {
-                if !method_ty.ty.contains_tyvar(&trait_info.type_var) {
+            for method_info in &trait_info.methods {
+                if !method_info.qual_ty.ty.contains_tyvar(&trait_info.type_var) {
                     errors.append(Errors::from_msg_srcs(
                         format!(
                             "Type variable `{}` used in trait definition has to appear in the type of a method `{}`.",
                             trait_info.type_var.name,
-                            method_name,
+                            method_info.name,
                         ),
-                        &[&method_ty.ty.get_source()],
+                        &[&method_info.qual_ty.ty.get_source()],
                     ));
                 }
             }
@@ -974,16 +986,20 @@ impl TraitEnv {
                 // Validate the set of trait methods.
                 let trait_methods = &self.traits[trait_id].methods;
                 let impl_methods = &inst.methods;
-                for (trait_method, _) in trait_methods {
-                    if !impl_methods.contains_key(trait_method) {
+                for trait_method in trait_methods {
+                    if !impl_methods.contains_key(&trait_method.name) {
                         errors.append(Errors::from_msg_srcs(
-                            format!("Lacking implementation of method `{}`.", trait_method),
+                            format!("Lacking implementation of method `{}`.", trait_method.name),
                             &[&inst.source],
                         ));
                     }
                 }
                 for (impl_method, impl_expr) in impl_methods {
-                    if !trait_methods.contains_key(impl_method) {
+                    if !trait_methods
+                        .iter()
+                        .find(|mi| mi.name == *impl_method)
+                        .is_some()
+                    {
                         errors.append(Errors::from_msg_srcs(
                             format!(
                                 "`{}` is not a method of trait `{}`.",

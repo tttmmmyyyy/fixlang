@@ -650,7 +650,7 @@ namespace IO {
         pure $ iter.fold(res, |res, bytes| res.append(bytes))
     );
 
-    // Read at most n bytes [f]rom an IOHandle.
+    // Read at most n bytes from an IOHandle.
     read_n_bytes : IOHandle -> I64 -> IOFail (Array U8);
     read_n_bytes = |handle, n| (
         eval *pure();
