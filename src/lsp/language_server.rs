@@ -841,7 +841,7 @@ fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<DiagnosticsResult, Err
     let project_file = ProjectFile::read_file(true)?;
 
     // Create the configuration.
-    let mut config = Configuration::language_server();
+    let mut config = Configuration::language_server()?;
     ProjectFile::set_config_from_proj_file(&mut config, &project_file);
 
     // Build the file and get the errors.

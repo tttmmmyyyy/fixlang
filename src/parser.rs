@@ -111,16 +111,16 @@ pub fn parse_and_save_to_temporary_file(
 }
 
 pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Program, Errors> {
-    let source = SourceFile::from_file_path(file_path);
+    let source = SourceFile::from_file_path(file_path)?;
+    let source_cloned = source.clone();
     let source_code = source.string();
-    let file = FixParser::parse(Rule::file, &source_code);
-    let file = match file {
+    let file = match FixParser::parse(Rule::file, &source_code) {
         Ok(res) => res,
         Err(e) => {
             return Err(message_parse_error(e, &source));
         }
     };
-    parse_file(file, source, config)
+    parse_file(file, source_cloned, config)
 }
 
 fn parse_file(

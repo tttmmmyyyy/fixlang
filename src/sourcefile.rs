@@ -11,41 +11,29 @@ pub struct SourceFile {
     pub file_path: PathBuf,
     #[serde(skip)]
     // Cached content of the file.
-    pub string: Option<Arc<String>>,
+    pub string: Arc<String>,
     // Hash of the file content.
     #[serde(skip)]
     pub hash: Option<String>,
 }
 
 impl SourceFile {
-    pub fn string(&self) -> String {
-        match &self.string {
-            Some(s) => s.as_str().to_string(),
-            None => match read_file(&self.file_path) {
-                Ok(s) => s,
-                Err(e) => panic!("{}", e),
-            },
-        }
+    pub fn string(&self) -> &str {
+        self.string.as_ref().as_str()
     }
 
-    pub fn from_file_path(file_path: PathBuf) -> Self {
-        let mut src_file = Self {
-            string: None,
-            hash: None,
-            file_path,
-        };
-        src_file.read_file();
-        src_file.set_hash();
-        src_file
-    }
-
-    // Set the values of uninitialized fields.
-    pub fn read_file(&mut self) {
-        if self.string.is_none() {
-            self.string = match read_file(&self.file_path) {
-                Ok(source) => Option::Some(Arc::new(source)),
-                Err(e) => panic!("{}", e),
-            };
+    pub fn from_file_path(file_path: PathBuf) -> Result<Self, Errors> {
+        match read_file(&file_path) {
+            Ok(source) => {
+                let mut src_file = Self {
+                    string: Arc::new(source),
+                    hash: None,
+                    file_path,
+                };
+                src_file.set_hash();
+                Ok(src_file)
+            }
+            Err(e) => Err(Errors::from_msg(e)),
         }
     }
 

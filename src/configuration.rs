@@ -1,20 +1,18 @@
-use std::process::Command;
-use std::{env, path::PathBuf};
-
-use build_time::build_time_utc;
-use inkwell::module::Linkage;
-use inkwell::OptimizationLevel;
-use serde::{Deserialize, Serialize};
-
-use crate::cpu_features::CpuFeatures;
-
 use crate::constants::{CHECK_C_TYPES_EXEC_PATH, CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
+use crate::cpu_features::CpuFeatures;
+use crate::error::{exit_if_err, Errors};
 use crate::{error::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
 };
+use build_time::build_time_utc;
+use inkwell::module::Linkage;
+use inkwell::OptimizationLevel;
+use serde::{Deserialize, Serialize};
+use std::process::Command;
+use std::{env, path::PathBuf};
 
 #[derive(Clone, Copy)]
 pub enum LinkType {
@@ -91,9 +89,9 @@ impl std::fmt::Display for FixOptimizationLevel {
     }
 }
 
-impl Default for Configuration {
-    fn default() -> Self {
-        Configuration {
+impl Configuration {
+    fn new() -> Result<Self, Errors> {
+        Ok(Configuration {
             source_files: vec![],
             sanitize_memory: false,
             fix_opt_level: FixOptimizationLevel::Default, // Fix's optimization level.
@@ -109,23 +107,23 @@ impl Default for Configuration {
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
             valgrind_tool: ValgrindTool::None,
             library_search_paths: vec![],
-            c_type_sizes: CTypeSizes::load_or_check(),
+            c_type_sizes: CTypeSizes::load_or_check()?,
             language_server_mode: false,
-        }
+        })
     }
 }
 
 impl Configuration {
     // Configuration for release build.
     pub fn release() -> Configuration {
-        Self::default()
+        exit_if_err(Self::new())
     }
 
     // Usual configuration for compiler development
     #[allow(dead_code)]
     pub fn develop_compiler() -> Configuration {
         #[allow(unused_mut)]
-        let mut config = Self::default();
+        let mut config = exit_if_err(Self::new());
         config.set_valgrind(ValgrindTool::MemCheck);
         // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
@@ -135,10 +133,10 @@ impl Configuration {
     }
 
     // Create configuration for language server.
-    pub fn language_server() -> Configuration {
-        let mut config = Self::default();
+    pub fn language_server() -> Result<Configuration, Errors> {
+        let mut config = Self::new()?;
         config.language_server_mode = true;
-        config
+        Ok(config)
     }
 
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
@@ -368,7 +366,7 @@ impl CTypeSizes {
     }
 
     // Get the size of each C types by compiling and running a C program.
-    fn from_gcc() -> Self {
+    fn from_gcc() -> Result<Self, Errors> {
         // First, create a C source file to check the size of each C types.
         let c_source = r#"
 #include <stdio.h>
@@ -388,46 +386,58 @@ int main() {
         "#;
         // Then save it to a temporary file ".fixlang/check_c_types.c".
         let check_c_types_path = PathBuf::from(CHECK_C_TYPES_PATH);
+
         // Create parent folders.
         let parent = check_c_types_path.parent().unwrap();
-        if std::fs::create_dir_all(parent).is_err() {
-            error_exit(&format!("Failed to create directory \"{:?}\".", parent));
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return Err(Errors::from_msg(format!(
+                "Failed to create directory \"{:?}\": {}",
+                parent, e
+            )));
         }
-        if std::fs::write(&check_c_types_path, c_source).is_err() {
-            error_exit(&format!(
-                "Failed to write file \"{:?}\".",
-                check_c_types_path
-            ));
+        if let Err(e) = std::fs::write(&check_c_types_path, c_source) {
+            return Err(Errors::from_msg(format!(
+                "Failed to write file \"{:?}\": {}",
+                check_c_types_path, e
+            )));
         }
+
         // Run it by gcc.
         let output = Command::new("gcc")
             .arg(CHECK_C_TYPES_PATH)
             .arg("-o")
             .arg(CHECK_C_TYPES_EXEC_PATH)
             .output();
-        if output.is_err() {
-            error_exit(&format!("Failed to compile \"{}\".", CHECK_C_TYPES_PATH));
+        if let Err(e) = output {
+            return Err(Errors::from_msg(format!(
+                "Failed to compile \"{}\": {}.",
+                CHECK_C_TYPES_PATH, e
+            )));
         }
         let output = output.unwrap();
+
         // Run the program and parse the result to create CTypeSizes.
         if !output.status.success() {
-            error_exit(&format!(
+            return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": \"{}\".",
                 CHECK_C_TYPES_PATH,
                 String::from_utf8_lossy(&output.stderr)
-            ));
+            )));
         }
         let output = Command::new(CHECK_C_TYPES_EXEC_PATH).output();
-        if output.is_err() {
-            error_exit(&format!("Failed to run \"{}\".", CHECK_C_TYPES_EXEC_PATH));
+        if let Err(e) = output {
+            return Err(Errors::from_msg(format!(
+                "Failed to run \"{}\": {}.",
+                CHECK_C_TYPES_EXEC_PATH, e
+            )));
         }
         let output = output.unwrap();
         if !output.status.success() {
-            error_exit(&format!(
+            return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": \"{}\".",
                 CHECK_C_TYPES_EXEC_PATH,
                 String::from_utf8_lossy(&output.stderr)
-            ));
+            )));
         }
         let output = String::from_utf8_lossy(&output.stdout);
         let mut lines = output.lines();
@@ -449,20 +459,29 @@ int main() {
             float,
             double,
         };
-        res
+        Ok(res)
     }
 
-    fn save_to_file(&self) {
+    fn save_to_file(&self) -> Result<(), Errors> {
         // Open json file.
         let path = C_TYPES_JSON_PATH;
         let file = std::fs::File::create(path);
-        if file.is_err() {
-            error_exit(&format!("Failed to create \"{}\".", path));
+        if let Err(e) = file {
+            return Err(Errors::from_msg(format!(
+                "Failed to create \"{}\": {}",
+                path, e
+            )));
         }
         let file = file.unwrap();
+
         // Serialize and write to the file.
-        serde_json::to_writer_pretty(file, self)
-            .expect(format!("Failed to write \"{}\".", path).as_str());
+        if let Err(e) = serde_json::to_writer_pretty(file, self) {
+            return Err(Errors::from_msg(format!(
+                "Failed to write \"{}\": {}",
+                path, e
+            )));
+        }
+        Ok(())
     }
 
     fn load_file() -> Option<Self> {
@@ -484,13 +503,13 @@ int main() {
         Some(sizes.unwrap())
     }
 
-    fn load_or_check() -> Self {
+    fn load_or_check() -> Result<Self, Errors> {
         match Self::load_file() {
-            Some(sizes) => sizes,
+            Some(sizes) => Ok(sizes),
             None => {
-                let sizes = Self::from_gcc();
-                sizes.save_to_file();
-                sizes
+                let sizes = Self::from_gcc()?;
+                sizes.save_to_file()?;
+                Ok(sizes)
             }
         }
     }
