@@ -2,16 +2,14 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
+use super::*;
 use crate::error::error_exit_with_src;
 use ast::export_statement::ExportStatement;
 use either::Either;
 use error::Errors;
 use num_bigint::BigInt;
-use std::{cmp::min, mem::swap, sync::Arc};
-
 use pest::error::Error;
-
-use super::*;
+use std::{cmp::min, mem::swap, sync::Arc};
 
 struct ParseContext {
     // The list of sizes of tuples used in this module.
