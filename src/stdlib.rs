@@ -177,6 +177,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     // Cast function between integers.
     for from in integral_types {
+        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
@@ -184,11 +185,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_integral_function(from.clone(), to.clone()),
                 None,
+                Some(format!(
+                    "Casts a value of `{}` into a value of `{}`.",
+                    from_name, to_name
+                )),
             ));
         }
     }
     // Cast function from integer to C integers.
     for from in integral_types {
+        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for (to_name, sign, size) in &c_types {
             if *sign == "F" {
                 continue;
@@ -203,11 +209,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_integral_function(from.clone(), to_type),
                 None,
+                Some(format!(
+                    "Casts a value of `{}` into a value of `{}`.",
+                    from_name, to_name
+                )),
             ));
         }
     }
     // Cast function between floats.
     for from in float_types {
+        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
@@ -215,11 +226,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to.clone()),
                 None,
+                Some(format!(
+                    "Casts a value of `{}` into a value of `{}`.",
+                    from_name, to_name
+                )),
             ));
         }
     }
     // Cast function from floats to C floats.
     for from in float_types {
+        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for (to_name, sign, size) in &c_types {
             if *sign == "I" {
                 continue;
@@ -234,11 +250,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to_type.clone()),
                 None,
+                Some(format!(
+                    "Casts a value of `{}` into a value of `{}`.",
+                    from_name, to_name
+                )),
             ));
         }
     }
     // Cast from integers to floats.
     for from in integral_types {
+        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
@@ -246,11 +267,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_int_to_float_function(from.clone(), to.clone()),
                 None,
+                Some(format!(
+                    "Casts a value of `{}` into a value of `{}`.",
+                    from_name, to_name
+                )),
             ));
         }
     }
     // Cast from integers to C floats.
     for from in integral_types {
+        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for (to_name, sign, size) in &c_types {
             if *sign == "I" {
                 continue;
@@ -265,11 +291,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_int_to_float_function(from.clone(), to_type),
                 None,
+                Some(format!(
+                    "Casts a value of `{}` into a value of `{}`.",
+                    from_name, to_name
+                )),
             ));
         }
     }
     // Cast from floats to integers.
     for from in float_types {
+        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
@@ -277,11 +308,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to.clone()),
                 None,
+                Some(format!(
+                    "Casts a value of `{}` into a value of `{}`.",
+                    from_name, to_name
+                )),
             ));
         }
     }
     // Cast from floats to C integers.
     for from in float_types {
+        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for (to_name, sign, size) in &c_types {
             if *sign == "F" {
                 continue;
@@ -296,6 +332,10 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to_type),
                 None,
+                Some(format!(
+                    "Casts a value of `{}` into a value of `{}`.",
+                    from_name, to_name
+                )),
             ));
         }
     }
@@ -306,26 +346,31 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_left"),
             shift_function(int_ty.clone(), true),
             None,
+            Some("`v.shift_left(w)` shifts `v` to left by `w` bits.".to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_right"),
             shift_function(int_ty.clone(), false),
             None,
+            Some("`v.shift_right(w)` shifts `v` to right by `w` bits.".to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_xor"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Xor),
             None,
+            Some("Calculates bitwise XOR of two values.".to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_and"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::And),
             None,
+            Some("Calculates bitwise AND of two values.".to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_or"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Or),
             None,
+            Some("Calculates bitwise OR of two values.".to_string()),
         ));
     }
 
@@ -334,85 +379,107 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME], FIX_NAME),
         fix(),
         None,
+        Some(include_str!("./docs/std_fix.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "loop"),
         state_loop(),
         None,
+        Some(include_str!("./docs/std_loop.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),
         None,
+        Some(include_str!("./docs/std_unsafe_is_unique.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "mark_threaded"),
         mark_threaded_function(),
         None,
+        Some(include_str!("./docs/std_mark_threaded.md").to_string()),
     ));
 
     // Array
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "fill"),
-        fill_array(),
-        None,
-    ));
-    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set"),
         unsafe_set_array(),
         None,
+        Some(include_str!("./docs/std_array_unsafe_set.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set_size"),
         unsafe_set_size_array(),
         None,
+        Some(include_str!("./docs/std_array_unsafe_set_size.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_get"),
         unsafe_get_array(),
         None,
+        Some(include_str!("./docs/std_array_unsafe_get.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique"),
         force_unique_array(),
         None,
+        Some(include_str!("./docs/std_array_force_unique.md").to_string()),
     ));
-    errors.eat_err(fix_module.add_global_value(array_getter_function_name(), read_array(), None));
+    errors.eat_err(fix_module.add_global_value(
+        array_getter_function_name(),
+        get_array(),
+        None,
+        Some(include_str!("./docs/std_array_get.md").to_string()),
+    ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
         set_array(),
         None,
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "empty"),
-        make_empty(),
-        None,
+        Some(include_str!("./docs/std_array_set.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
         mod_array(false),
         None,
+        Some(include_str!("./docs/std_array_mod.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_capacity"),
         get_capacity_array(),
         None,
+        Some(include_str!("./docs/std_array_get_capacity.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_size"),
         get_size_array(),
         None,
+        Some(include_str!("./docs/std_array_get_size.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
         None,
+        Some(include_str!("./docs/std_array_get_ptr.md").to_string()),
     ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "empty"),
+        make_empty(),
+        None,
+        Some(include_str!("./docs/std_array_empty.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "fill"),
+        fill_array(),
+        None,
+        Some(include_str!("./docs/std_array_fill.md").to_string()),
+    ));
+
     // Debug
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "abort"),
         abort_function(),
         None,
+        Some(include_str!("./docs/std_abort.md").to_string()),
     ));
 
     // Numeric constants
@@ -421,11 +488,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             FullName::from_strs(&[STD_NAME, type_name], "infinity"),
             infinity_value(type_name),
             None,
+            Some(include_str!("./docs/std_float_infinity.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, type_name], "quiet_nan"),
             quiet_nan_value(type_name),
             None,
+            Some(include_str!("./docs/std_float_quiet_nan.md").to_string()),
         ));
     }
 
@@ -437,6 +506,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         ),
         get_retained_ptr_of_boxed_value_function(),
         None,
+        Some(include_str!("./docs/std_ffi_unsafe_get_retained_ptr_of_boxed_value.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
@@ -445,15 +515,24 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         ),
         get_boxed_value_from_retained_ptr_function(),
         None,
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(
-            &[STD_NAME, FFI_NAME],
-            "unsafe_get_release_function_of_boxed_value",
+        Some(
+            include_str!("./docs/std_ffi_unsafe_get_boxed_value_from_retained_ptr.md").to_string(),
         ),
-        get_release_function_of_boxed_value(),
-        None,
     ));
+    errors.eat_err(
+        fix_module.add_global_value(
+            FullName::from_strs(
+                &[STD_NAME, FFI_NAME],
+                "unsafe_get_release_function_of_boxed_value",
+            ),
+            get_release_function_of_boxed_value(),
+            None,
+            Some(
+                include_str!("./docs/std_ffi_unsafe_get_release_function_of_boxed_value.md")
+                    .to_string(),
+            ),
+        ),
+    );
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
             &[STD_NAME, FFI_NAME],
@@ -461,11 +540,15 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         ),
         get_retain_function_of_boxed_value(),
         None,
+        Some(
+            include_str!("./docs/std_ffi_unsafe_get_retain_function_of_boxed_value.md").to_string(),
+        ),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_unsafe_get_boxed_data_ptr"),
         get_unsafe_get_boxed_ptr(),
         None,
+        Some(include_str!("./docs/std_ffi_unsafe_get_boxed_data_ptr.md").to_string()),
     ));
 
     errors.to_result()?;

@@ -1197,7 +1197,7 @@ impl InlineLLVMShiftBody {
 
         let is_signed = ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        // Perform cast.
+        // Perform shift operation.
         let to_val = if self.is_left {
             gc.builder()
                 .build_left_shift(val, n, "left_shift@shift_function")
@@ -1768,7 +1768,7 @@ impl InlineLLVMArrayGetBody {
 }
 
 // Implementation of Array::get built-in function.
-fn read_array_body(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
+fn get_array_body(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
@@ -1786,13 +1786,13 @@ fn read_array_body(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     )
 }
 
-// "Array::get : Array a -> I64 -> a" built-in function.
-pub fn read_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+// "Array::@ : Array a -> I64 -> a" built-in function.
+pub fn get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("idx")],
         expr_abs(
             vec![var_local("array")],
-            read_array_body("a", "array", "idx"),
+            get_array_body("a", "array", "idx"),
             None,
         ),
         None,
@@ -4383,6 +4383,7 @@ pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
                 ty: type_fun(tv_type.clone(), tv_type.clone()),
             },
             source: None,
+            document: None,
         }],
         assoc_types: HashMap::new(),
         kind_signs: vec![],
@@ -4452,6 +4453,7 @@ pub fn binary_operator_trait(
                     ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
                 },
                 source: None,
+                document: None,
             }),
         ],
         assoc_types: HashMap::default(),

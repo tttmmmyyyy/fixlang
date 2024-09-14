@@ -1,0 +1,1 @@
+Gets a value from an array, without bounds checking and retaining the returned value.

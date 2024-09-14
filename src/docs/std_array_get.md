@@ -1,0 +1,1 @@
+Gets an element of an array at the specified index.

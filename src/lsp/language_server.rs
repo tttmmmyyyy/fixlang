@@ -564,17 +564,7 @@ fn handle_completion_resolve_document(
     let gv = gv.unwrap();
 
     // Get the documentation.
-    let docs = gv
-        .def_src
-        .as_ref()
-        .map(|src| src.documentation().ok())
-        .flatten();
-
-    // If the documentation is empty, treat it as None.
-    let docs = match docs {
-        Some(docs) if docs.is_empty() => None,
-        _ => docs,
-    };
+    let docs = gv.get_document();
 
     // Set the documentation into the given completion item.
     let docs = docs.map(|doc_str| {

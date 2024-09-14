@@ -51,20 +51,24 @@ pub const COMPOSE_FUNCTION_NAME: &str = "compose";
 pub const MAIN_FUNCTION_NAME: &str = "main";
 pub const MAIN_MODULE_NAME: &str = "Main";
 
-pub const ARG_NAME: &str = "#arg";
-pub const EVAL_VAR_NAME: &str = "#eval_var";
-pub const FUNPTR_NAME: &str = "#FunPtr";
-pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
-pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
+// Array methods.
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
+
+// Structure methods.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";
 pub const STRUCT_SETTER_SYMBOL: &str = "set_";
 pub const STRUCT_MODIFIER_SYMBOL: &str = "mod_";
 pub const STRUCT_ACT_SYMBOL: &str = "act_";
+
+// Names used by compiler.
+pub const FUNPTR_NAME: &str = "#FunPtr";
+pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
+pub const ARG_NAME: &str = "#arg";
+pub const EVAL_VAR_NAME: &str = "#eval_var";
+pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
 pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
-
 pub const CAP_NAME: &str = "#CAP";
 
 pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;

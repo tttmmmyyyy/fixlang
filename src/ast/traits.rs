@@ -142,6 +142,9 @@ pub struct MethodInfo {
     pub name: Name,
     pub qual_ty: QualType,
     pub source: Option<Span>,
+    // Document of this method.
+    // This field is used only If document from `source` is not available.
+    pub document: Option<String>,
 }
 
 impl MethodInfo {

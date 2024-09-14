@@ -1,0 +1,1 @@
+Updates the length of an array, without uniqueness checking or validation of the given length value.

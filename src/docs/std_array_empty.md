@@ -1,0 +1,1 @@
+Creates an empty array with specified capacity.

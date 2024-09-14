@@ -94,6 +94,10 @@ pub struct GlobalValue {
     // Source code where this value is defined.
     // For trait methods, this is the source code where the trait method is defined.
     pub def_src: Option<Span>,
+    // The document of this value.
+    // If `def_src` is available, we can also get document from the source code.
+    // We use this field only when document is not available in the source code.
+    pub document: Option<String>,
 }
 
 impl GlobalValue {
@@ -126,6 +130,39 @@ impl GlobalValue {
             }
         }
         Ok(())
+    }
+
+    // Check if this value is a simple value, not a trait method.
+    pub fn is_simple_value(&self) -> bool {
+        matches!(self.expr, SymbolExpr::Simple(_))
+    }
+
+    // Get the document of this value.
+    pub fn get_document(&self) -> Option<String> {
+        // Try to get document from the source code.
+        let docs = self
+            .def_src
+            .as_ref()
+            .map(|src| src.get_document().ok())
+            .flatten();
+
+        // If the documentation is empty, treat it as None.
+        let docs = match docs {
+            Some(docs) if docs.is_empty() => None,
+            _ => docs,
+        };
+
+        // If the document is not available in the source code, use the document field.
+        let docs = match docs {
+            Some(_) => docs,
+            None => self.document.clone(),
+        };
+
+        // Again, if the documentation is empty, treat it as None.
+        match docs {
+            Some(docs) if docs.is_empty() => None,
+            _ => docs,
+        }
     }
 }
 
@@ -564,16 +601,28 @@ impl Program {
         name: FullName,
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
         def_src: Option<Span>,
+        document: Option<String>,
     ) -> Result<(), Errors> {
+        let gv = GlobalValue {
+            scm,
+            expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
+            def_src,
+            document,
+        };
+        self.add_global_value_gv(name, gv)
+    }
+
+    // Add a global value.
+    pub fn add_global_value_gv(&mut self, name: FullName, gv: GlobalValue) -> Result<(), Errors> {
         // Check duplicate definition.
         if self.global_values.contains_key(&name) {
-            let this = expr.source.as_ref().map(|s| s.to_head_character());
+            let this = gv.def_src.map(|s| s.to_head_character());
             let other = self
                 .global_values
                 .get(&name)
                 .unwrap()
-                .expr
-                .source()
+                .def_src
+                .as_ref()
                 .map(|s| s.to_head_character());
             return Err(Errors::from_msg_srcs(
                 format!(
@@ -583,14 +632,7 @@ impl Program {
                 &[&this, &other],
             ));
         }
-        self.global_values.insert(
-            name,
-            GlobalValue {
-                scm,
-                expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
-                def_src,
-            },
-        );
+        self.global_values.insert(name, gv);
         Ok(())
     }
 
@@ -694,6 +736,7 @@ impl Program {
                     name,
                     (gv.defn.unwrap().expr, gv.decl.unwrap().ty),
                     decl_src,
+                    None,
                 ));
             }
         }
@@ -1155,6 +1198,7 @@ impl Program {
                         scm: method_ty,
                         expr: SymbolExpr::Method(method_impls),
                         def_src: method_info.source.clone(),
+                        document: method_info.document.clone(),
                     },
                 );
             }
@@ -1394,15 +1438,23 @@ impl Program {
                             ),
                             struct_get(&struct_name, decl, &field.name),
                             None,
+                            Some(format!(
+                                "Retrieves the field `{}` from a value of `{}`",
+                                &field.name, struct_name.name
+                            )),
                         ));
                         // Add setter function
                         errors.eat_err(self.add_global_value(
                             FullName::new(
                                 &decl.name.to_namespace(),
-                                &format!("{}{}", STRUCT_SETTER_SYMBOL, &field.name,),
+                                &format!("{}{}", STRUCT_SETTER_SYMBOL, &field.name),
                             ),
                             struct_set(&struct_name, decl, &field.name),
                             None,
+                            Some(format!(
+                                "Updates a value of `{}` by setting field `{}` to a specified one.",
+                                struct_name.name, &field.name,
+                            )),
                         ));
                         // Add modifier functions.
                         errors.eat_err(self.add_global_value(
@@ -1412,6 +1464,23 @@ impl Program {
                             ),
                             struct_mod(&struct_name, decl, &field.name),
                             None,
+                            Some(format!(
+                                "Updates a value of `{}` by applying a function to field `{}`.",
+                                struct_name.name, &field.name,
+                            )),
+                        ));
+                        // Add act functions
+                        errors.eat_err(self.add_global_value(
+                            FullName::new(
+                                &decl.name.to_namespace(),
+                                &format!("{}{}", STRUCT_ACT_SYMBOL, &field.name),
+                            ),
+                            struct_act(&struct_name, decl, &field.name),
+                            None,
+                            Some(format!(
+                                "Updates a value of `{}` by applying a functorial action to field `{}`.",
+                                struct_name.name, &field.name,
+                            )),
                         ));
                         // Add punch functions.
                         errors.eat_err(self.add_global_value(
@@ -1420,6 +1489,7 @@ impl Program {
                                 &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
                             ),
                             struct_punch(&struct_name, decl, &field.name),
+                            None,
                             None,
                         ));
                         // Add plug-in functions.
@@ -1430,14 +1500,6 @@ impl Program {
                             ),
                             struct_plug_in(&struct_name, decl, &field.name),
                             None,
-                        ));
-                        // Add act functions
-                        errors.eat_err(self.add_global_value(
-                            FullName::new(
-                                &decl.name.to_namespace(),
-                                &format!("{}{}", STRUCT_ACT_SYMBOL, &field.name),
-                            ),
-                            struct_act(&struct_name, decl, &field.name),
                             None,
                         ));
                     }
@@ -1449,16 +1511,28 @@ impl Program {
                             FullName::new(&decl.name.to_namespace(), &field.name),
                             union_new(&union_name, &field.name, decl),
                             None,
+                            Some(format!(
+                                "Constructs a value of union `{}` taking the variant `{}`.",
+                                union_name.name, &field.name
+                            )),
                         ));
                         errors.eat_err(self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &format!("as_{}", field.name)),
                             union_as(&union_name, &field.name, decl),
                             None,
+                            Some(format!(
+                                "Unwraps a union value of `{}` as the variant `{}`.\n\nIf the value is not the variant `{}`, this function aborts.",
+                                union_name.name, &field.name, &field.name,
+                            )),
                         ));
                         errors.eat_err(self.add_global_value(
                             FullName::new(&decl.name.to_namespace(), &format!("is_{}", field.name)),
                             union_is(&union_name, &field.name, decl),
                             None,
+                            Some(format!(
+                                "Checks if a union value of `{}` is the variant `{}`.",
+                                union_name.name, &field.name,
+                            )),
                         ));
                         errors.eat_err(self.add_global_value(
                             FullName::new(
@@ -1467,6 +1541,10 @@ impl Program {
                             ),
                             union_mod_function(&union_name, &field.name, decl),
                             None,
+                            Some(format!(
+                                "Updates a value of union `{}` by applying a function if it is the variant `{}`, or doing nothing otherwise.",
+                                union_name.name, &field.name,
+                            )),
                         ));
                     }
                 }
@@ -1540,9 +1618,8 @@ impl Program {
 
         // Merge global values.
         for (name, gv) in other.global_values {
-            let ty = gv.scm;
-            if let SymbolExpr::Simple(expr) = gv.expr {
-                errors.eat_err(self.add_global_value(name, (expr.expr, ty), None));
+            if gv.is_simple_value() {
+                errors.eat_err(self.add_global_value_gv(name, gv));
             }
         }
 

@@ -194,9 +194,9 @@ impl Span {
         ret
     }
 
-    // Get the documentation of the entity defined at this span.
+    // Get the document of the entity defined at this span.
     // More specifically, this function returns the content of the consecutive comment lines just before the start of the span.
-    pub fn documentation(&self) -> Result<String, Errors> {
+    pub fn get_document(&self) -> Result<String, Errors> {
         // Get a line from the reversed iterator.
         // Returns the line and whether the end of the iterator is reached.
         fn get_line(chars: &mut dyn Iterator<Item = char>) -> (String, bool) {

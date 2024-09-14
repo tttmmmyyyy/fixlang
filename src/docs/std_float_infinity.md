@@ -1,0 +1,1 @@
+The infinity value for the given floating point type.

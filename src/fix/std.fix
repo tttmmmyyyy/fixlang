@@ -352,8 +352,8 @@ type Boxed a = box struct { value : a };
 type ErrMsg = String;
 
 namespace FFI {
-    // Borrow a pointer to the data of a boxed value.
-    // For detail, see the document of `_unsafe_get_boxed_data_ptr`.
+    // Borrows a pointer to the data of a boxed value.
+    // For more details, see the document of `_unsafe_get_boxed_data_ptr`.
     unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b;
     unsafe_borrow_boxed_data_ptr = |act, val| (
         let ptr = val._unsafe_get_boxed_data_ptr;
@@ -1559,6 +1559,23 @@ compose : (a -> b) -> (b -> c) -> a -> c;
 compose = |f, g, a| g(f(a));
 
 // Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
+// 
+// It is convenient to use `continue_m` and `break_m` to create monadic loop body function.
+// 
+// The following program prints "Hello World! (i)" for i = 0, 1, 2.
+// 
+// ```
+// module Main;
+// 
+// main : IO ();
+// main = (
+//     loop_m(0, |i| (
+//         if i == 3 { break_m $ () };
+//         eval *println("Hello World! (" + i.to_string + ")");
+//         continue_m $ i + 1
+//     ))
+// );
+// ```
 loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r;
 loop_m = |s, f| (
     let res = *f(s);

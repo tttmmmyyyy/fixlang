@@ -1,0 +1,1 @@
+Gets the capacity of an array.

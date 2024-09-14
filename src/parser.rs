@@ -395,6 +395,7 @@ fn parse_trait_member_value_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Me
         name: method_name,
         qual_ty: qual_type,
         source: Some(span),
+        document: None, // Document can be obtained from `source`
     }
 }
 

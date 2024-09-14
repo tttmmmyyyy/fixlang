@@ -1,0 +1,1 @@
+A floating number represented by `01...1` in binary.

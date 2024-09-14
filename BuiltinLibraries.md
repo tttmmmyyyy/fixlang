@@ -1346,20 +1346,23 @@ Sets a value into an array, without uniqueness checking, bounds checking and rel
 
 #### `_get_ptr : Array a -> Ptr`
 Get the pointer to the memory region where elements are stored.
-Note that in case the array is not used after call of this function, the returned pointer will be already released.
+
+This function is dangerous because if the array is not used after call of this function, the array will be deallocated soon and the returned pointer will be dangling.
+Try using `borrow_ptr` instead.
 
 #### `_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
 Sort elements in a range of an array by "less than" comparator.
 This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
 #### `act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`
-Functorial version of `Array::mod`, a.k.a. "lens" for arrays in Haskell community.
+Updates the element at the specified index by applying a functorial action.
 
 This function can be defined for any functor `f` in general, but it is easier to understand the behavior when `f` is a monad: the monadic action `act(idx, fun, arr)` first performs `fun(arr.@(idx))` to get a value `elm`, and returns a pure value `arr.set(idx, elm)`. In short, this function modifies an array by a monadic action. 
 
 This behavior can be implemented as `fun(arr.@(idx)).bind(|elm| pure $ arr.set(idx, elm))`. As we have identity `map(f) == bind(|x| pure $ f(x))` for `map` of a functor underlying a monad, it can be written as `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))` and therefore this function requires `f` to be a functor, not a monad.
 
-What is special about this function is that if you call `arr.act(idx, fun)` when both of `arr` and `arr.@(idx)` are unique, it is assured that `fun` receives the unique value.
+If you call `arr.act(idx, fun)` when both of `arr` and `arr.@(idx)` are unique, it is assured that `fun` receives the unique value.
+
 If you call `act` on an array which is shared, this function clones the given array when inserting the result of your action into the array. This means that you don't need to pay cloning cost when your action failed, as expected.
 
 #### `append : Array a -> Array a -> Array a`
@@ -1373,8 +1376,10 @@ Call a function with a pointer to the memory region where elements are stored.
 Creates an empty array with specified capacity.
 
 #### `fill : I64 -> a -> Array a`
-Creates an array filled with the initial value.
+Creates an array of the specified length filled with the initial value.
+
 The capacity is set to the same value as the length.
+
 Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
 #### `find_by : [a : Eq] (a -> Bool) -> Array a -> Option I64`
@@ -1392,7 +1397,7 @@ Creates an array by a mapping function.
 Example: `from_map(n, f) = [f(0), f(1), f(2), ..., f(n-1)]`.
 
 #### `get_capacity : Array a -> I64`
-Returns the capacity of an array.
+Gets the capacity of an array.
 
 #### `get_first : Array a -> Option a`
 Get the first element of an array. Returns none if the array is empty.
@@ -1401,7 +1406,7 @@ Get the first element of an array. Returns none if the array is empty.
 Get the last element of an array. Returns none if the array is empty.
 
 #### `get_size : Array a -> I64`
-Returns the length of an array.
+Gets the length of an array.
 
 #### `get_sub : I64 -> I64 -> Array a -> Array a`
 `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`, 
@@ -1412,10 +1417,11 @@ Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is
 Returns if the array is empty or not.
 
 #### `mod : I64 -> (a -> a) -> Array a -> Array a`
-Modifies an array value by acting on an element at an index.
+Updates an array by applying a function to the element at the specified index.
+
 This function clones the given array if it is shared.
-What is special about this function is that if you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. 
-So `arr.mod(i, f)` is NOT equivalent to `let v = arr.@(i); arr.set(i, f(v))`.
+
+If you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. 
 
 #### `pop_back : Array a -> Array a`
 Pop an element at the back of an array.
@@ -1428,7 +1434,8 @@ Push an element to the back of an array.
 Reserves the memory region for an array.
 
 #### `set : I64 -> a -> Array a -> Array a`
-Updates a value of an element at an index of an array.
+Updates an array by setting a value as the element at the specified index.
+
 This function clones the given array if it is shared.
 
 #### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
@@ -2021,7 +2028,9 @@ Compose two functions. Composition operators `<<` and `>>` is translated to use 
 
 ### `fix : ((a -> b) -> a -> b) -> a -> b`
 
-`fix` enables you to make a recursive function locally. The idiom is: `fix $ |loop, var| -> (expression calls loop)`.
+`fix` enables you to make a recursive function locally. 
+
+The idiom is `fix $ |loop, arg| -> {loop_body}`. In `{loop_body}`, you can call `loop` to make a recursion.
 
 ```
 module Main;
@@ -2038,24 +2047,22 @@ main = (
 `loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
 
 ```
-type LoopResult s r = unbox union { s: continue, r: break };
+type LoopResult s r = unbox union { continue : s, break : r };
 ```
 
-`loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`. It first calls `body` on `s0`. If `body` returns `break r`, then the loop ends and returns `r` as the result. If `body` returns `continue s`, then the loop calls again `body` on `s`.
+`loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`. 
+It first calls `body` on `s0`. 
+If `body` returns `break(r)`, then the loop ends and returns `r` as the result. 
+If `body` returns `continue(s)`, then the loop calls again `body` on `s`.
 
 ```
 module Main;
     
 main : IO ();
 main = (
-    let sum = (
-        loop((0, 0), |(i, sum)|
-            if i == 100 {
-                break $ sum 
-            } else {
-                continue $ (i+1, sum+i)
-            }
-        )
+    let sum = loop((0, 0), |(i, sum)|
+        if i == 100 { break $ sum };
+        continue $ (i + 1, sum + i)
     );
     println $ sum.to_string
 ); // evaluates to 0 + 1 + ... + 99 
@@ -2084,13 +2091,13 @@ main = (
 
 ### `mark_threaded : a -> a`
 
-Traverses all objects reachable from the given object, and changes them into multi-threaded mode so that the reference counting on them will be done atomically.
+Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
 
 ### `unsafe_is_unique : a -> (Bool, a)`
 
-This function checks if a value is uniquely refernced by a name, and returns the result paired with the given value itself. If `a` is unboxed, the 0th component of the returned value is always `true`.
+This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
 
-NOTE: Using the return value of this function to branch and change the return value of your function may break the referential transparency of the function. If you want to abort when a value is shared, consider using `Debug::assert_unique` instead.
+NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to abort when a value is shared, consider using `Debug::assert_unique` instead.
 
 Example: 
 
@@ -2127,17 +2134,18 @@ main = (
 
 #### `_unsafe_get_boxed_data_ptr : a -> Ptr`
 
-Get a pointer to the data of a boxed value. 
+Returns a pointer to the data of a boxed value.
+
 The difference from `unsafe_get_retained_ptr_of_boxed_value` is that this function returns a pointer to region where the payload of a boxed value is stored;
-on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to the boxed value itself (we do not assure, but in fact, it is the pointer where the reference counter is stored).
+on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to the boxed value itself (i.e., the control block of the value).
 
 Note that if the call `v._unsafe_get_boxed_data_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
-To avoid this problem, we recommend you to use `unsafe_borrow_boxed_data_ptr` instead.
+To avoid issues caused by this, use `unsafe_borrow_boxed_data_ptr` instead.
 
 #### `unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`
 
-Borrow a pointer to the data of a boxed value.
-For detail, see the document of `_unsafe_get_boxed_data_ptr`.
+Borrows a pointer to the data of a boxed value.
+For more details, see the document of `_unsafe_get_boxed_data_ptr`.
 
 #### `unsafe_clear_errno : () -> ()`
 
@@ -2149,23 +2157,28 @@ Get errno which is set by C functions.
 
 #### `unsafe_get_release_function_of_boxed_value : a -> Ptr`
 
-Get a function pointer (of type `void (*)(void*)`) to release a boxed value.
-This function is intended to be used with `_unsafe_get_retained_ptr_of_boxed_value`.
+Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
+This function is used to release a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
 
 #### `unsafe_get_retain_function_of_boxed_value : a -> Ptr`
 
-Get a function pointer (of type `void (*)(void*)`) to retain a boxed value.
-This function is intended to be used with `_unsafe_get_retained_ptr_of_boxed_value`.
+Returns a pointer to the function of type `void (*)(void*)` which retains a boxed value of type `a`.
+This function is used to retain a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
 
 #### `unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`
 
-Get a boxed value from a retained pointer.
+Creates a boxed value from a retained pointer obtained by `unsafe_get_retained_ptr_of_boxed_value`.
 
 #### `unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`
 
-Get a retained pointer to a boxed value.
-This function is intended to be used to share ownership of Fix's boxed objects with C program.
-To release / retain the object in C program, call it on the function pointer obtained by `unsafe_get_release_function_of_boxed_value` and `unsafe_get_retain_function_of_boxed_value`.
+Returns a retained pointer to a boxed value.
+This function is used to share ownership of Fix's boxed values with foreign languages.
+
+To get back the boxed value from the retained pointer, use `unsafe_get_boxed_value_from_retained_ptr`.
+To release / retain the value in a foreign language, call the function pointer obtained by `unsafe_get_release_function_of_boxed_value` or `unsafe_get_retain_function_of_boxed_value` on the pointer.
+
+Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
+If you want to get a pointer to the data of the boxed value, use `unsafe_borrow_boxed_data_ptr`.
 
 #### `type Destructor`
 

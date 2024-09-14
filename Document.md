@@ -459,8 +459,8 @@ For each union type, some basic methods are automatically defined. For example, 
 - `break : b -> LoopResult s b`: converts an value of type `b` into a `LoopResult` value.
 - `is_continue : LoopResult s b -> Bool`: checks if the `LoopResult` value was created by `continue`.
 - `is_break : LoopResult s b -> Bool`: checks if the `LoopResult` value was created by `break`.
-- `as_continue : LoopResult s b -> s`: extracts a value of type `s` from a `LoopResult` value if it is created by `continue`. If not, this function panics (i.e., prints an error message and stops the execution of the program).
-- `as_break : LoopResult s b -> s`: extracts a value of type `b` from a `LoopResult` value if it is created by `break`. If not, this function panics (i.e., prints an error message and stops the execution of the program).
+- `as_continue : LoopResult s b -> s`: extracts a value of type `s` from a `LoopResult` value if it is created by `continue`. If not, this function aborts (i.e., prints an error message and stops the execution of the program).
+- `as_break : LoopResult s b -> s`: extracts a value of type `b` from a `LoopResult` value if it is created by `break`. If not, this function aborts (i.e., prints an error message and stops the execution of the program).
 
 Another example of union is `Option` which is used to represent a value "which may not contain a value". It can be defined as follows: 
 
@@ -739,7 +739,7 @@ Check if a union value is created as the specified variant.
 
 ### `as_v : U -> V`
 
-Converts a union value into a variant value if it is created as the variant. If not so, this function panics.
+Converts a union value into a variant value if it is created as the variant. If not so, this function aborts.
 
 ### `mod_v : (V -> V) -> U -> U`
 
