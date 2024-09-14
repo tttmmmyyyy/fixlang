@@ -187,6 +187,7 @@ impl SymbolExpr {
         }
     }
 
+    #[allow(dead_code)]
     pub fn source(&self) -> Option<Span> {
         match self {
             SymbolExpr::Simple(e) => e.expr.source.clone(),
