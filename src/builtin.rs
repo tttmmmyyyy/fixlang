@@ -2383,15 +2383,7 @@ pub fn struct_get(
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
-    let field = definition.get_field_by_name(field_name);
-    if field.is_none() {
-        error_exit(&format!(
-            "No field `{}` found in the struct `{}`.",
-            &field_name,
-            struct_name.to_string(),
-        ));
-    }
-    let (field_idx, field) = field.unwrap();
+    let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     let str_ty = definition.ty();
     const VAR_NAME: &str = "str_obj";
@@ -2467,15 +2459,7 @@ pub fn struct_punch(
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
-    let field = definition.get_field_by_name(field_name);
-    if field.is_none() {
-        error_exit(&format!(
-            "No field `{}` found in the struct `{}`.",
-            &field_name,
-            struct_name.to_string(),
-        ));
-    }
-    let (field_idx, field) = field.unwrap();
+    let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     let str_ty = definition.ty();
     let punched_ty = str_ty.to_punched_struct(field_idx as usize);
@@ -2556,15 +2540,7 @@ pub fn struct_plug_in(
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
-    let field = definition.get_field_by_name(field_name);
-    if field.is_none() {
-        error_exit(&format!(
-            "No field `{}` found in the struct `{}`.",
-            &field_name,
-            struct_name.to_string(),
-        ));
-    }
-    let (field_idx, field) = field.unwrap();
+    let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     let str_ty = definition.ty();
     let punched_ty = str_ty.to_punched_struct(field_idx as usize);
@@ -2688,15 +2664,7 @@ pub fn struct_mod(
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
-    let field = definition.get_field_by_name(field_name);
-    if field.is_none() {
-        error_exit(&format!(
-            "Error: no field `{}` found in the struct `{}`.",
-            &field_name,
-            struct_name.to_string(),
-        ));
-    }
-    let (field_idx, field) = field.unwrap();
+    let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     let field_count = definition.fields().len();
     let str_ty = definition.ty();
@@ -2734,15 +2702,7 @@ pub fn struct_act(
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index and the `Field` instance of `field_name` in the given struct.
-    let field = definition.get_field_by_name(field_name);
-    if field.is_none() {
-        error_exit(&format!(
-            "No field `{}` found in the struct `{}`.",
-            &field_name,
-            struct_name.to_string(),
-        ));
-    }
-    let (_field_idx, field) = field.unwrap();
+    let (_field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     // Create type scheme of this function.
     let str_ty = definition.ty();
@@ -3034,7 +2994,7 @@ impl InlineLLVMStructSetBody {
 
 // `set` built-in function for a given struct.
 pub fn struct_set(
-    struct_name: &FullName,
+    _struct_name: &FullName,
     definition: &TypeDefn,
     field_name: &str,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -3042,15 +3002,7 @@ pub fn struct_set(
     const STRUCT_NAME: &str = "str";
 
     // Find the index of `field_name` in the given struct.
-    let field = definition.get_field_by_name(field_name);
-    if field.is_none() {
-        error_exit(&format!(
-            "No field `{}` found in the struct `{}`.",
-            &field_name,
-            struct_name.to_string(),
-        ));
-    }
-    let (field_idx, field) = field.unwrap();
+    let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
     let field_count = definition.fields().len() as u32;
 
     let str_ty = definition.ty();
@@ -3157,27 +3109,16 @@ pub fn union_new_body(
     )
 }
 
-// `new_{field}` built-in function for a given union.
+// `{field}` built-in function for a given union.
 pub fn union_new(
     union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
-    let mut field_idx = 0;
-    for field in union.fields() {
-        if *field_name == field.name {
-            break;
-        }
-        field_idx += 1;
-    }
-    if field_idx == union.fields().len() {
-        error_exit(&format!(
-            "Unknown field `{}` for union `{}`",
-            field_name,
-            union_name.to_string()
-        ));
-    }
+    let (field_idx, _) = union.get_field_by_name(field_name).unwrap();
+    let field_idx = field_idx as usize;
+
     let expr = expr_abs(
         vec![var_local(field_name)],
         union_new_body(union_name, union, field_name, field_idx),
@@ -3199,20 +3140,9 @@ pub fn union_as(
     union: &TypeDefn,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
-    let mut field_idx = 0;
-    for field in union.fields() {
-        if *field_name == field.name {
-            break;
-        }
-        field_idx += 1;
-    }
-    if field_idx == union.fields().len() {
-        error_exit(&format!(
-            "Unknown field `{}` for union `{}`",
-            field_name,
-            union_name.to_string()
-        ));
-    }
+    let (field_idx, _) = union.get_field_by_name(field_name).unwrap();
+    let field_idx = field_idx as usize;
+
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
         vec![var_local(&union_arg_name)],
@@ -3300,20 +3230,9 @@ pub fn union_is(
     union: &TypeDefn,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
-    let mut field_idx = 0;
-    for field in union.fields() {
-        if *field_name == field.name {
-            break;
-        }
-        field_idx += 1;
-    }
-    if field_idx == union.fields().len() {
-        error_exit(&format!(
-            "Unknown field `{}` for union `{}`",
-            field_name,
-            union_name.to_string()
-        ));
-    }
+    let (field_idx, _) = union.get_field_by_name(field_name).unwrap();
+    let field_idx = field_idx as usize;
+
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
         vec![var_local(&union_arg_name)],
@@ -3521,22 +3440,14 @@ impl InlineLLVMUnionModBody {
 }
 
 pub fn union_mod_function(
-    union_name: &FullName,
+    _union_name: &FullName,
     field_name: &Name,
     union: &TypeDefn,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const UNION_NAME: &str = "union_value";
     const MODIFIER_NAME: &str = "modifier";
 
-    let field_idx = if let Some((field_idx, _)) = union.get_field_by_name(&field_name) {
-        field_idx
-    } else {
-        error_exit(&format!(
-            "Unknown field `{}` for union `{}`",
-            field_name,
-            union_name.to_string()
-        ));
-    };
+    let (field_idx, _) = union.get_field_by_name(&field_name).unwrap();
 
     let union_ty = union.ty();
     let field_ty = union.fields()[field_idx as usize].ty.clone();
