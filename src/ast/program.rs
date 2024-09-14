@@ -1440,7 +1440,7 @@ impl Program {
                             struct_get(&struct_name, decl, &field.name),
                             None,
                             Some(format!(
-                                "Retrieves the field `{}` from a value of `{}`",
+                                "Retrieves the field `{}` from a value of `{}`.",
                                 &field.name, struct_name.name
                             )),
                         ));

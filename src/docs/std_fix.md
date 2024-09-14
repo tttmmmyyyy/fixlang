@@ -2,6 +2,7 @@
 
 The idiom is `fix $ |loop, arg| -> {loop_body}`. In `{loop_body}`, you can call `loop` to make a recursion.
 
+Example:
 ```
 module Main;
 

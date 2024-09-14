@@ -2055,6 +2055,7 @@ It first calls `body` on `s0`.
 If `body` returns `break(r)`, then the loop ends and returns `r` as the result. 
 If `body` returns `continue(s)`, then the loop calls again `body` on `s`.
 
+Example:
 ```
 module Main;
     
