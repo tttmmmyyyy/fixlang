@@ -129,7 +129,7 @@ pub fn error_exit(msg: &str) -> ! {
         let msg = any_to_string(info.payload());
         eprintln!("{}", msg);
     }));
-    panic!("The following error(s) occurred: \n\n{}", msg);
+    panic!("The following error(s) has occurred: \n\n{}", msg);
 }
 
 pub fn any_to_string(any: &dyn std::any::Any) -> String {
