@@ -52,6 +52,9 @@ fn build_object_files<'c>(
     // Calculate list of type constructors.
     program.calculate_type_env()?;
 
+    // Validate name confliction between types, traits and global values.
+    program.validate_capital_name_confliction()?;
+
     // Infer namespaces of traits and types that appear in declarations and associated type implementations.
     program.resolve_namespace_in_type_signs()?;
 

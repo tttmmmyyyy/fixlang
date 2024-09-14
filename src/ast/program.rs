@@ -1,6 +1,6 @@
+use crate::ast::export_statement::{ExportStatement, ExportedFunctionType};
+use crate::error::Errors;
 use build_time::build_time_utc;
-use error::{error_exit, Errors};
-use export_statement::{ExportStatement, ExportedFunctionType};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc, vec};
 
@@ -254,31 +254,22 @@ impl<'a> NameResolutionContext {
         import_statements: Vec<ImportStatement>,
     ) -> Self {
         let mut candidates: HashMap<FullName, NameResolutionType> = HashMap::new();
-        fn insert_or_err(
+        fn check_insert(
             candidates: &mut HashMap<FullName, NameResolutionType>,
             name: FullName,
             nrt: NameResolutionType,
         ) {
-            if candidates.contains_key(&name) && candidates[&name] != nrt {
-                // If there is confliction between type names, trait names and associated type names, raise an error.
-                // This restriction is necessary for namespace resolution and avoiding ambiguous import statement.
-                error_exit(&format!(
-                    "There are two entities named as `{}`: one is a {} and one is a {}.",
-                    name.to_string(),
-                    candidates[&name].to_string(),
-                    nrt.to_string()
-                ))
-            }
+            assert!(!candidates.contains_key(&name) || candidates[&name] == nrt); // This is assured by `validate_capital_name_confliction`.
             candidates.insert(name, nrt);
         }
         for name in tycon_names_with_aliases {
-            insert_or_err(&mut candidates, name.clone(), NameResolutionType::TyCon);
+            check_insert(&mut candidates, name.clone(), NameResolutionType::TyCon);
         }
         for name in trait_names_with_aliases {
-            insert_or_err(&mut candidates, name.clone(), NameResolutionType::Trait);
+            check_insert(&mut candidates, name.clone(), NameResolutionType::Trait);
         }
         for (name, _arity) in &assoc_ty_to_arity {
-            insert_or_err(&mut candidates, name.clone(), NameResolutionType::AssocTy);
+            check_insert(&mut candidates, name.clone(), NameResolutionType::AssocTy);
         }
         NameResolutionContext {
             candidates,
@@ -1422,6 +1413,47 @@ impl Program {
 
     pub fn validate_trait_env(&mut self) -> Result<(), Errors> {
         self.trait_env.validate(self.kind_env())
+    }
+
+    // Validate name confliction between types, traits and global values.
+    pub fn validate_capital_name_confliction(&self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
+        let types = self.tycon_names_with_aliases();
+        let traits = self.trait_names_with_aliases();
+        let assc_tys = self.assoc_ty_to_arity();
+
+        // Check if there is a name confliction between types and traits.
+        for name in types.iter() {
+            if traits.contains(name) {
+                errors.append(Errors::from_msg(format!(
+                    "Name confliction: `{}` is both a type and a trait.",
+                    name.to_string()
+                )));
+            }
+        }
+
+        // Check if there is a name confliction between types and traits.
+        for name in types.iter() {
+            if assc_tys.contains_key(name) {
+                errors.append(Errors::from_msg(format!(
+                    "Name confliction: `{}` is both a type and an associated type.",
+                    name.to_string()
+                )));
+            }
+        }
+
+        // Check if there is a name confliction between traits and associated types.
+        for name in traits.iter() {
+            if assc_tys.contains_key(name) {
+                errors.append(Errors::from_msg(format!(
+                    "Name confliction: `{}` is both a trait and an associated type.",
+                    name.to_string()
+                )));
+            }
+        }
+
+        errors.to_result()
     }
 
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {

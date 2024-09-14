@@ -6213,7 +6213,7 @@ pub fn test_type_and_trait_name_collision() {
     test_source_fail(
         &source,
         Configuration::develop_compiler(),
-        "There are two entities named as `Main::Piyo`: one is a type and one is a trait.",
+        "Name confliction: `Main::Piyo` is both a type and a trait.",
     );
 }
 
