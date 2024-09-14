@@ -1,5 +1,6 @@
 use crate::ast::program::Program;
 use crate::constants::INSTANCIATED_NAME_SEPARATOR;
+use crate::FullName;
 use crate::{
     constants::LSP_LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
@@ -242,6 +243,26 @@ pub fn launch_language_server() {
                     continue;
                 }
                 handle_completion(id.unwrap(), &params.unwrap(), program, log_file.clone());
+            } else if method == "completionItem/resolve" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().prgoram;
+                let id = parse_id(&message, method, log_file.clone());
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<CompletionItem> =
+                    parase_params(message.params.unwrap(), log_file.clone());
+                if params.is_none() {
+                    continue;
+                }
+                handle_completion_resolve_document(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    program,
+                    log_file.clone(),
+                );
             }
         }
     }
@@ -367,7 +388,7 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<F
                     ":".to_string(),
                 ]),
                 all_commit_characters: None,
-                resolve_provider: None,
+                resolve_provider: Some(true),
                 work_done_progress_options: WorkDoneProgressOptions::default(),
                 completion_item: None,
             }),
@@ -471,41 +492,24 @@ fn handle_completion(
     _log_file: Arc<Mutex<File>>,
 ) {
     let mut items = vec![];
-    for (name, gv) in &program.global_values {
-        let label = name.name.clone();
+    for (full_name, gv) in &program.global_values {
+        let name = full_name.name.clone();
         // Skip compiler-defined values.
-        if label.starts_with(INSTANCIATED_NAME_SEPARATOR) {
+        if name.starts_with(INSTANCIATED_NAME_SEPARATOR) {
             continue;
         }
-        let in_namespace = " in ".to_string() + &name.namespace.to_string();
+        let in_namespace = " in ".to_string() + &full_name.namespace.to_string();
         let scheme = gv.scm.to_string();
 
-        // Get the documentation.
-        let docs = gv
-            .def_src
-            .as_ref()
-            .map(|src| src.documentation().ok())
-            .flatten();
-        // If the documentation is empty string, treat it as None.
-        let docs = match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        };
-        let docs = docs.map(|doc_str| {
-            Documentation::MarkupContent(MarkupContent {
-                kind: lsp_types::MarkupKind::Markdown,
-                value: doc_str,
-            })
-        });
         items.push(CompletionItem {
-            label,
+            label: name,
             label_details: Some(CompletionItemLabelDetails {
                 detail: Some(in_namespace),
                 description: None,
             }),
             kind: Some(CompletionItemKind::FUNCTION),
             detail: Some(scheme),
-            documentation: docs,
+            documentation: None,
             deprecated: None,
             preselect: None,
             sort_text: None,
@@ -517,11 +521,73 @@ fn handle_completion(
             additional_text_edits: None,
             command: None,
             commit_characters: None,
-            data: None,
+            data: Some(serde_json::to_value(full_name.to_string()).unwrap()), // Full name of the global value.
             tags: None,
         });
     }
     send_response(id, Ok::<_, ()>(items));
+}
+
+// Handle "textDocument/completion" method.
+// Add documentation to the completion item.
+fn handle_completion_resolve_document(
+    id: u32,
+    params: &CompletionItem,
+    program: &Program,
+    log_file: Arc<Mutex<File>>,
+) {
+    // Extract the full name of the global value for which completion is requested from the params.
+    if params.data.is_none() {
+        let msg = "Failed to get the data from the params.".to_string();
+        write_log(log_file.clone(), msg.as_str());
+        send_response(id, Err::<CompletionItem, String>(msg));
+        return;
+    }
+    let full_name_str = &params.data.as_ref().unwrap().as_str().unwrap();
+    let full_name = FullName::parse(full_name_str);
+    if full_name.is_none() {
+        let msg = format!("Failed to parse the full name `{}`.", full_name_str);
+        write_log(log_file.clone(), msg.as_str());
+        send_response(id, Err::<CompletionItem, String>(msg));
+        return;
+    }
+    let full_name = full_name.unwrap();
+
+    // Find the global value requested for completion.
+    let gv = program.global_values.get(&full_name);
+    if gv.is_none() {
+        let msg = format!("No value named `{}` is found.", full_name_str);
+        write_log(log_file.clone(), msg.as_str());
+        send_response(id, Err::<CompletionItem, String>(msg));
+        return;
+    }
+    let gv = gv.unwrap();
+
+    // Get the documentation.
+    let docs = gv
+        .def_src
+        .as_ref()
+        .map(|src| src.documentation().ok())
+        .flatten();
+
+    // If the documentation is empty, treat it as None.
+    let docs = match docs {
+        Some(docs) if docs.is_empty() => None,
+        _ => docs,
+    };
+
+    // Set the documentation into the given completion item.
+    let docs = docs.map(|doc_str| {
+        Documentation::MarkupContent(MarkupContent {
+            kind: lsp_types::MarkupKind::Markdown,
+            value: doc_str,
+        })
+    });
+    let mut item = params.clone();
+    item.documentation = docs;
+
+    // Send the completion item.
+    send_response(id, Ok::<_, ()>(item));
 }
 
 // The entry point of the diagnostics thread.

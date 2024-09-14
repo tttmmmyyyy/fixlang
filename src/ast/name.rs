@@ -152,21 +152,21 @@ impl FullName {
         }
     }
 
-    // pub fn parse(str: &str) -> Option<Self> {
-    //     let mut names = str
-    //         .split(NAMESPACE_SEPARATOR)
-    //         .map(|s| s.to_owned())
-    //         .collect::<Vec<_>>();
-    //     if names.is_empty() {
-    //         return None;
-    //     }
-    //     let name = names.pop().unwrap();
-    //     if names.len() > 0 {
-    //         Some(FullName::new(&NameSpace { names }, &name))
-    //     } else {
-    //         Some(FullName::local(&name))
-    //     }
-    // }
+    pub fn parse(str: &str) -> Option<Self> {
+        let mut names = str
+            .split(NAMESPACE_SEPARATOR)
+            .map(|s| s.to_owned())
+            .collect::<Vec<_>>();
+        if names.is_empty() {
+            return None;
+        }
+        let name = names.pop().unwrap();
+        if names.len() > 0 {
+            Some(FullName::new(&NameSpace { names }, &name))
+        } else {
+            Some(FullName::local(&name))
+        }
+    }
 
     pub fn is_suffix(&self, other: &FullName) -> bool {
         self.name == other.name && self.namespace.is_suffix_of(&other.namespace)
