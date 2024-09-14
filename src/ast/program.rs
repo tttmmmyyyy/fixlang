@@ -84,11 +84,15 @@ pub struct GlobalValueDefn {
     pub src: Option<Span>,
 }
 
+// The global value, which is either a value or trait method.
 pub struct GlobalValue {
     // Type of this symbol.
-    // For example, in case `trait a: Show { show: a -> String }`, the type of method `show` is `[a : Show] a -> String`.
+    // For example, in case `trait a : Show { show : a -> String; }`, the type of method `show` is `[a : Show] a -> String`.
     pub scm: Arc<Scheme>,
+    // The expression or implementation of this value.
     pub expr: SymbolExpr,
+    // Source code where this value is defined.
+    // For trait methods, this is the source code where the trait method is defined.
     pub def_src: Option<Span>,
 }
 
@@ -544,10 +548,6 @@ impl Program {
         }
         res
     }
-
-    // pub fn assoc_ty_names(&self) -> HashSet<FullName> {
-    //     self.trait_env.assoc_ty_names()
-    // }
 
     pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
         self.trait_env.assoc_ty_to_arity()
