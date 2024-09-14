@@ -3993,7 +3993,7 @@ pub fn test_trait_alias_circular_aliasing() {
     test_source_fail(
         &source,
         Configuration::develop_compiler(),
-        "Circular aliasing detected in trait alias `Main::MyTraitA`.",
+        "Circular aliasing detected in trait alias `Main::MyTraitB`.",
     );
 }
 
