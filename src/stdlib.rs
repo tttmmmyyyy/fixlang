@@ -31,24 +31,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // `LoopResult` type.
     fix_module.type_defns.push(loop_result_defn());
 
-    // Traits
-    errors.eat_err(fix_module.trait_env.add_trait(eq_trait()));
-    errors.eat_err(fix_module.trait_env.add_trait(add_trait()));
-    errors.eat_err(fix_module.trait_env.add_trait(subtract_trait()));
-    errors.eat_err(fix_module.trait_env.add_trait(negate_trait()));
-    errors.eat_err(fix_module.trait_env.add_trait(not_trait()));
-    errors.eat_err(fix_module.trait_env.add_trait(multiply_trait()));
-    errors.eat_err(fix_module.trait_env.add_trait(divide_trait()));
-    errors.eat_err(fix_module.trait_env.add_trait(remainder_trait()));
-    errors.eat_err(fix_module.trait_env.add_trait(less_than_trait()));
-    errors.eat_err(
-        fix_module
-            .trait_env
-            .add_trait(less_than_or_equal_to_trait()),
-    );
-
     // Trait instances
-
     let integral_types = &[
         make_i8_ty(),
         make_u8_ty(),

@@ -1683,6 +1683,76 @@ impl F64 : Zero {
 
 // Traits
 
+trait a : Neg {
+    // Negates a value.
+    // 
+    // An expression `-x` is translated to `neg(x)`.
+    neg : a -> a;
+}
+
+trait a : Not {
+    // Logical NOT.
+    // 
+    // An expression `!x` is translated to `not(x)`.
+    not : a -> a;
+}
+
+trait a : Eq {
+    // Equality comparison.
+    // 
+    // An expression `x == y` is translated to `eq(x, y)`.
+    eq : a -> a -> Bool;
+}
+
+trait a : LessThan {
+    // Less than comparison.
+    // 
+    // An expression `x < y` is translated to `less_than(x, y)`.
+    less_than : a -> a -> Bool;
+}
+
+trait a : LessThanOrEq {
+    // Less than or equal comparison.
+    // 
+    // An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
+    less_than_or_eq : a -> a -> Bool;
+}
+
+trait a : Add {
+    // Addition.
+    // 
+    // An expression `x + y` is translated to `add(x, y)`.
+    add : a -> a -> a;
+}
+
+trait a : Sub {
+    // Subtraction.
+    // 
+    // An expression `x - y` is translated to `sub(x, y)`.
+    sub : a -> a -> a;
+}
+
+trait a : Mul {
+    // Multiplication.
+    // 
+    // An expression `x * y` is translated to `mul(x, y)`.
+    mul : a -> a -> a;
+}
+
+trait a : Div {
+    // Division.
+    // 
+    // An expression `x / y` is translated to `div(x, y)`.
+    div : a -> a -> a;
+}
+
+trait a : Rem {
+    // Remainder.
+    // 
+    // An expression `x % y` is translated to `rem(x, y)`.
+    rem : a -> a -> a;
+}
+
 trait Additive = Add + Zero;
 
 trait a : FromBytes {

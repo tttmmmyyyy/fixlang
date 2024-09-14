@@ -4366,31 +4366,6 @@ pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-pub fn unary_operator_trait(trait_id: TraitId, method_name: Name) -> TraitInfo {
-    const TYVAR_NAME: &str = "a";
-    let kind = kind_star();
-    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
-    let tv_type = type_tyvar(TYVAR_NAME, &kind);
-    TraitInfo {
-        id: trait_id,
-        type_var: tv_tyvar,
-        methods: vec![MethodInfo {
-            name: method_name,
-            qual_ty: QualType {
-                preds: vec![],
-                kind_signs: vec![],
-                eqs: vec![],
-                ty: type_fun(tv_type.clone(), tv_type.clone()),
-            },
-            source: None,
-            document: None,
-        }],
-        assoc_types: HashMap::new(),
-        kind_signs: vec![],
-        source: None,
-    }
-}
-
 const UNARY_OPERATOR_RHS_NAME: &str = "rhs";
 
 pub fn unary_opeartor_instance(
@@ -4423,41 +4398,6 @@ pub fn unary_opeartor_instance(
         )]),
         assoc_types: HashMap::new(),
         define_module: STD_NAME.to_string(),
-        source: None,
-    }
-}
-
-pub fn binary_operator_trait(
-    trait_id: TraitId,
-    method_name: Name,
-    output_ty: Option<Arc<TypeNode>>,
-) -> TraitInfo {
-    const TYVAR_NAME: &str = "a";
-    let kind = kind_star();
-    let tv_tyvar = tyvar_from_name(TYVAR_NAME, &kind);
-    let tv_type = type_tyvar(TYVAR_NAME, &kind);
-    let output_ty = match output_ty {
-        Some(t) => t,
-        None => tv_type.clone(),
-    };
-    TraitInfo {
-        id: trait_id,
-        type_var: tv_tyvar,
-        methods: vec![
-            (MethodInfo {
-                name: method_name,
-                qual_ty: QualType {
-                    preds: vec![],
-                    kind_signs: vec![],
-                    eqs: vec![],
-                    ty: type_fun(tv_type.clone(), type_fun(tv_type.clone(), output_ty)),
-                },
-                source: None,
-                document: None,
-            }),
-        ],
-        assoc_types: HashMap::default(),
-        kind_signs: vec![],
         source: None,
     }
 }
@@ -4513,14 +4453,6 @@ pub fn eq_trait_id() -> TraitId {
     TraitId {
         name: FullName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
     }
-}
-
-pub fn eq_trait() -> TraitInfo {
-    binary_operator_trait(
-        eq_trait_id(),
-        EQ_TRAIT_EQ_NAME.to_string(),
-        Some(make_bool_ty()),
-    )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -4706,14 +4638,6 @@ pub fn less_than_trait_id() -> TraitId {
     }
 }
 
-pub fn less_than_trait() -> TraitInfo {
-    binary_operator_trait(
-        less_than_trait_id(),
-        LESS_THAN_TRAIT_LT_NAME.to_string(),
-        Some(make_bool_ty()),
-    )
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntLessThanBody {}
 
@@ -4842,14 +4766,6 @@ pub fn less_than_or_equal_to_trait_id() -> TraitId {
     TraitId {
         name: FullName::from_strs(&[STD_NAME], LESS_THAN_OR_EQUAL_TO_TRAIT_NAME),
     }
-}
-
-pub fn less_than_or_equal_to_trait() -> TraitInfo {
-    binary_operator_trait(
-        less_than_or_equal_to_trait_id(),
-        LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
-        Some(make_bool_ty()),
-    )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -4983,10 +4899,6 @@ pub fn add_trait_id() -> TraitId {
     }
 }
 
-pub fn add_trait() -> TraitInfo {
-    binary_operator_trait(add_trait_id(), ADD_TRAIT_ADD_NAME.to_string(), None)
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntAddBody {}
 
@@ -5090,14 +5002,6 @@ pub fn subtract_trait_id() -> TraitId {
     TraitId {
         name: FullName::from_strs(&[STD_NAME], SUBTRACT_TRAIT_NAME),
     }
-}
-
-pub fn subtract_trait() -> TraitInfo {
-    binary_operator_trait(
-        subtract_trait_id(),
-        SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
-        None,
-    )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -5205,14 +5109,6 @@ pub fn multiply_trait_id() -> TraitId {
     }
 }
 
-pub fn multiply_trait() -> TraitInfo {
-    binary_operator_trait(
-        multiply_trait_id(),
-        MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
-        None,
-    )
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntMulBody {}
 
@@ -5316,14 +5212,6 @@ pub fn divide_trait_id() -> TraitId {
     TraitId {
         name: FullName::from_strs(&[STD_NAME], DIVIDE_TRAIT_NAME),
     }
-}
-
-pub fn divide_trait() -> TraitInfo {
-    binary_operator_trait(
-        divide_trait_id(),
-        DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
-        None,
-    )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -5437,14 +5325,6 @@ pub fn remainder_trait_id() -> TraitId {
     }
 }
 
-pub fn remainder_trait() -> TraitInfo {
-    binary_operator_trait(
-        remainder_trait_id(),
-        REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
-        None,
-    )
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntRemBody {}
 
@@ -5479,7 +5359,7 @@ impl InlineLLVMIntRemBody {
                 &vec![],
                 None,
                 gc,
-                Some(&format!("{} lhs rhs", REMAINDER_TRAIT_REMAINDER_NAME)),
+                Some(&format!("{}(lhs, rhs)", REMAINDER_TRAIT_REMAINDER_NAME)),
             )
         } else {
             rvo.unwrap()
@@ -5506,10 +5386,6 @@ pub fn negate_trait_id() -> TraitId {
     TraitId {
         name: FullName::from_strs(&[STD_NAME], NEGATE_TRAIT_NAME),
     }
-}
-
-pub fn negate_trait() -> TraitInfo {
-    unary_operator_trait(negate_trait_id(), NEGATE_TRAIT_NEGATE_NAME.to_string())
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -5607,10 +5483,6 @@ pub fn not_trait_id() -> TraitId {
     TraitId {
         name: FullName::from_strs(&[STD_NAME], NOT_TRAIT_NAME),
     }
-}
-
-pub fn not_trait() -> TraitInfo {
-    unary_operator_trait(not_trait_id(), NOT_TRAIT_OP_NAME.to_string())
 }
 
 #[derive(Clone, Serialize, Deserialize)]
