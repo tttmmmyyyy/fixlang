@@ -3993,7 +3993,7 @@ pub fn test_trait_alias_circular_aliasing() {
     test_source_fail(
         &source,
         Configuration::develop_compiler(),
-        "Circular aliasing detected in trait alias `Main::MyTraitB`.",
+        "Circular aliasing detected in trait alias `Main::MyTrait",
     );
 }
 
@@ -5503,7 +5503,7 @@ pub fn test_orphan_rule_1() {
     test_source_fail(
         &source,
         Configuration::develop_compiler(),
-        "Implementing trait `Std::ToString` for type `Std::Array t0` in module `Main` is illegal; it is not allowed to implement an external trait for an external type.",
+        "Implementing trait `Std::ToString` for type `Std::Array a` in module `Main` is illegal; it is not allowed to implement an external trait for an external type.",
     );
 }
 
@@ -6606,7 +6606,11 @@ pub fn test_unsaturated_type_alias() {
         pure()
     );
     "##;
-    test_source_fail(&source, Configuration::develop_compiler(), "Cannot resolve type alias `Main::Hoge` in `Main::Hoge t0` because it is not fully applied.");
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler(),
+        "Cannot resolve type alias `Main::Hoge` in `Main::Hoge a` because it is not fully applied.",
+    );
 }
 
 #[test]
