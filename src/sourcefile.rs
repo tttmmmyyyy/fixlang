@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
@@ -11,46 +14,50 @@ pub struct SourceFile {
     pub file_path: PathBuf,
     #[serde(skip)]
     // Cached content of the file.
-    pub string: Arc<String>,
+    pub string: Arc<Mutex<Option<String>>>,
     // Hash of the file content.
     #[serde(skip)]
-    pub hash: Option<String>,
+    pub hash: Arc<Mutex<Option<String>>>,
 }
 
 impl SourceFile {
-    pub fn string(&self) -> &str {
-        self.string.as_ref().as_str()
+    pub fn string(&self) -> Result<String, Errors> {
+        if self.string.lock().unwrap().is_none() {
+            self.read_file()?;
+        }
+        Ok(self.string.lock().unwrap().as_ref().unwrap().clone())
     }
 
     pub fn from_file_path(file_path: PathBuf) -> Result<Self, Errors> {
-        match read_file(&file_path) {
+        let src_file = Self {
+            string: Arc::new(Mutex::new(None)),
+            hash: Arc::new(Mutex::new(None)),
+            file_path,
+        };
+        src_file.read_file()?;
+        src_file.hash()?;
+        Ok(src_file)
+    }
+
+    fn read_file(&self) -> Result<(), Errors> {
+        match read_file(&self.file_path) {
             Ok(source) => {
-                let mut src_file = Self {
-                    string: Arc::new(source),
-                    hash: None,
-                    file_path,
-                };
-                src_file.set_hash();
-                Ok(src_file)
+                let mut string = self.string.lock().unwrap();
+                *string = Some(source);
+                Ok(())
             }
             Err(e) => Err(Errors::from_msg(e)),
         }
     }
 
-    pub fn set_hash(&mut self) {
-        if self.hash.is_some() {
-            return;
+    pub fn hash(&self) -> Result<String, Errors> {
+        if self.hash.lock().unwrap().is_none() {
+            let hash = md5::compute(self.string()?);
+            let hash_str = format!("{:x}", hash);
+            let mut hash = self.hash.lock().unwrap();
+            *hash = Some(hash_str);
         }
-        self.hash = Option::Some(format!("{:x}", md5::compute(self.string())));
-    }
-
-    pub fn hash(&self) -> String {
-        match &self.hash {
-            Some(h) => h.clone(),
-            None => {
-                format!("{:x}", md5::compute(self.string()))
-            }
-        }
+        Ok(self.hash.lock().unwrap().as_ref().unwrap().clone())
     }
 
     pub fn get_file_dir(&self) -> String {
@@ -133,6 +140,10 @@ impl Span {
     // Get line and column number of start.
     pub fn start_line_col(&self) -> (usize, usize) {
         let source_string = self.input.string();
+        if let Err(_e) = source_string {
+            return (0, 0);
+        }
+        let source_string = source_string.ok().unwrap();
         let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
         span.start_pos().line_col()
     }
@@ -140,6 +151,10 @@ impl Span {
     // Get line and column number of end.
     pub fn end_line_col(&self) -> (usize, usize) {
         let source_string = self.input.string();
+        if let Err(_e) = source_string {
+            return (0, 0);
+        }
+        let source_string = source_string.ok().unwrap();
         let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
         span.end_pos().line_col()
     }
@@ -147,6 +162,10 @@ impl Span {
     // Show source codes around this span.
     pub fn to_string(&self) -> String {
         let source_string = self.input.string();
+        if let Err(_e) = source_string {
+            return "".to_string();
+        }
+        let source_string = source_string.ok().unwrap();
         let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
 
         let mut linenum_str_size = 0;
@@ -204,7 +223,7 @@ impl Span {
         }
 
         let mut lines_rev = vec![];
-        let source_string = self.input.string();
+        let source_string = self.input.string()?;
         let mut chars = source_string[0..self.start].chars().rev();
 
         // Get the string ahead of the definition.

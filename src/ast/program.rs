@@ -1858,7 +1858,7 @@ impl Program {
         dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
         let concatenated_source_hashes = dependent_module_names
             .iter()
-            .map(|mod_name| self.module_to_files.get(mod_name).unwrap().hash())
+            .map(|mod_name| exit_if_err(self.module_to_files.get(mod_name).unwrap().hash()))
             .collect::<Vec<_>>()
             .join("");
         format!("{:x}", md5::compute(concatenated_source_hashes))

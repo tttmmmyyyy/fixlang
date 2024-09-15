@@ -329,6 +329,18 @@ fn parse_id(message: &JSONRPCMessage, method: &str, log_file: Arc<Mutex<File>>) 
     message.id
 }
 
+#[allow(dead_code)]
+fn send_request<T: Serialize>(id: u32, method: String, params: Option<T>) {
+    let msg = JSONRPCMessage::new(
+        Some(id),
+        Some(method),
+        params.map(|params| serde_json::to_value(params).unwrap()),
+        None,
+        None,
+    );
+    send_message(&msg);
+}
+
 fn send_response<T: Serialize, E: Serialize>(id: u32, result: Result<T, E>) {
     let (res, err) = match result {
         Ok(res) => (Some(res), None),
@@ -661,9 +673,6 @@ fn handle_hover(
 
     // If no node is found, nothing to do.
     if node.is_none() {
-        let msg = format!("No node is found at the position: {:?}\n", pos);
-        write_log(log_file.clone(), msg.as_str());
-
         send_response(id, Ok::<_, ()>(None::<()>));
         return;
     }
@@ -671,12 +680,6 @@ fn handle_hover(
 
     // if the node is not a variable, nothing to do.
     if !node.is_var() {
-        let msg = format!(
-            "The node is not a variable: \n{:?}\n",
-            node.expr.to_string()
-        );
-        write_log(log_file.clone(), msg.as_str());
-
         send_response(id, Ok::<_, ()>(None::<()>));
         return;
     }

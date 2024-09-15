@@ -708,7 +708,8 @@ impl ExprNode {
             return None;
         }
         let span = self.source.as_ref().unwrap();
-        if span.input.hash() != file_hash {
+        let hash = span.input.hash();
+        if hash.is_err() || hash.ok().unwrap() != file_hash {
             return None;
         }
         self.find_node_at_pos(pos)

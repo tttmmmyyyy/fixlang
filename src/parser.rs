@@ -113,7 +113,7 @@ pub fn parse_and_save_to_temporary_file(
 pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Program, Errors> {
     let source = SourceFile::from_file_path(file_path)?;
     let source_cloned = source.clone();
-    let source_code = source.string();
+    let source_code = source.string()?;
     let file = match FixParser::parse(Rule::file, &source_code) {
         Ok(res) => res,
         Err(e) => {
@@ -2153,12 +2153,18 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
         msg += &suggestion.unwrap();
     }
 
+    let src_string = src.string();
+    if let Err(e) = src_string {
+        return e;
+    }
+    let src_string = src_string.ok().unwrap();
+
     // Create span (source location).
     let span = match e.location {
         pest::error::InputLocation::Pos(s) => Span {
             input: src.clone(),
             start: s,
-            end: min(s + 1, src.string().len()),
+            end: min(s + 1, src_string.len()),
         },
         pest::error::InputLocation::Span((s, e)) => Span {
             input: src.clone(),
