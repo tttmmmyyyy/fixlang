@@ -773,7 +773,7 @@ impl Program {
     // - Resolve type aliases in the expression.
     // - Perform typechecking.
     // The result will be written to `te`.
-    fn resolve_namespace_and_check_type(
+    fn resolve_namespace_and_check_type_sub(
         &self,
         te: &mut TypedExpr,
         required_scheme: &Arc<Scheme>,
@@ -925,7 +925,7 @@ impl Program {
                 // Perform type-checking.
                 let define_module = sym.generic_name.module();
                 let mut e = e.clone();
-                self.resolve_namespace_and_check_type(
+                self.resolve_namespace_and_check_type_sub(
                     &mut e,
                     &global_sym.scm,
                     &sym.generic_name,
@@ -959,7 +959,7 @@ impl Program {
                     // Perform type-checking.
                     let define_module = method.define_module.clone();
                     let mut e = method.expr.clone();
-                    self.resolve_namespace_and_check_type(
+                    self.resolve_namespace_and_check_type_sub(
                         &mut e,
                         &method.ty,
                         &sym.generic_name,
