@@ -18,6 +18,7 @@ use lsp_types::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::env::current_dir;
 use std::{
     collections::HashSet,
     fs::File,
@@ -653,10 +654,8 @@ fn handle_hover(
     uri_to_content: &HashMap<lsp_types::Uri, String>,
     log_file: Arc<Mutex<File>>,
 ) {
-    let uri = &params.text_document_position_params.text_document.uri;
-    let pos = params.text_document_position_params.position;
-
     // Get the file content.
+    let uri = &params.text_document_position_params.text_document.uri;
     if !uri_to_content.contains_key(uri) {
         let msg = format!("No stored content for the uri \"{:?}\".", uri);
         write_log(log_file.clone(), msg.as_str());
@@ -664,12 +663,37 @@ fn handle_hover(
         write_log(log_file.clone(), msg.as_str());
         return;
     }
+    let file_content = uri_to_content.get(uri).unwrap();
+
+    // Get the relative path of the file.
+    let path = PathBuf::from(uri.path().to_string());
+    let cur_dir = current_dir();
+    if let Err(e) = cur_dir {
+        let msg = format!("Failed to get the current directory: {:?}", e);
+        write_log(log_file.clone(), msg.as_str());
+        send_response(id, Err::<(), String>(msg));
+        return;
+    }
+    let cur_dir = cur_dir.unwrap();
+    let path_rel = path.strip_prefix(&cur_dir);
+    if let Err(_e) = path_rel {
+        let msg = format!(
+            "The path {} is not subdirectory of current directory {}",
+            path.display(),
+            cur_dir.display()
+        );
+        write_log(log_file.clone(), msg.as_str());
+        send_response(id, Err::<(), String>(msg));
+        return;
+    }
+    let path = path_rel.unwrap();
+
+    // Get the position of the cursor.
+    let pos = params.text_document_position_params.position;
 
     // Get the node at the position.
-    let file_content = uri_to_content.get(uri).unwrap();
     let pos = position_to_bytes(file_content, pos);
-    let file_hash = format!("{:x}", md5::compute(file_content.as_bytes()));
-    let node = program.find_node_at(&file_hash, pos);
+    let node = program.find_node_at(path, pos);
 
     // If no node is found, nothing to do.
     if node.is_none() {
@@ -688,6 +712,7 @@ fn handle_hover(
     let full_name = &node.get_var().name;
     let ty = &node.ty;
 
+    // Create a hover message.
     let mut docs = String::new();
     if full_name.is_local() {
         // In case the variable is local

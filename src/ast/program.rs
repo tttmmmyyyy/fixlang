@@ -166,8 +166,8 @@ impl GlobalValue {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
-        self.expr.find_node_at(file_hash, pos)
+    pub fn find_node_at(&self, path: &Path, pos: usize) -> Option<Arc<ExprNode>> {
+        self.expr.find_node_at(path, pos)
     }
 }
 
@@ -201,13 +201,10 @@ impl SymbolExpr {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
+    pub fn find_node_at(&self, file: &Path, pos: usize) -> Option<Arc<ExprNode>> {
         match self {
-            SymbolExpr::Simple(e) => e.find_node_at(file_hash, pos),
-            SymbolExpr::Method(ms) => ms
-                .iter()
-                .filter_map(|m| m.find_node_at(file_hash, pos))
-                .next(),
+            SymbolExpr::Simple(e) => e.find_node_at(file, pos),
+            SymbolExpr::Method(ms) => ms.iter().filter_map(|m| m.find_node_at(file, pos)).next(),
         }
     }
 }
@@ -232,8 +229,8 @@ impl TypedExpr {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
-        self.expr.find_node_at(file_hash, pos).map(|e| {
+    pub fn find_node_at(&self, file: &Path, pos: usize) -> Option<Arc<ExprNode>> {
+        self.expr.find_node_at(file, pos).map(|e| {
             if let Some(ty) = &e.ty {
                 e.set_inferred_type(self.substitution.substitute_type(&ty))
             } else {
@@ -267,8 +264,8 @@ impl MethodImpl {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
-        self.expr.find_node_at(file_hash, pos)
+    pub fn find_node_at(&self, file: &Path, pos: usize) -> Option<Arc<ExprNode>> {
+        self.expr.find_node_at(file, pos)
     }
 }
 
@@ -1930,9 +1927,9 @@ impl Program {
         errors.to_result()
     }
 
-    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
+    pub fn find_node_at(&self, file: &Path, pos: usize) -> Option<Arc<ExprNode>> {
         for (_, gv) in &self.global_values {
-            let node = gv.find_node_at(file_hash, pos);
+            let node = gv.find_node_at(file, pos);
             if node.is_some() {
                 return node;
             }

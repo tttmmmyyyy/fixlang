@@ -699,17 +699,12 @@ impl ExprNode {
     }
 
     // Find the minimum AST node which includes the specified source code position.
-    pub fn find_node_at(
-        self: &Arc<ExprNode>,
-        file_hash: &str,
-        pos: usize,
-    ) -> Option<Arc<ExprNode>> {
+    pub fn find_node_at(self: &Arc<ExprNode>, file: &Path, pos: usize) -> Option<Arc<ExprNode>> {
         if self.source.is_none() {
             return None;
         }
         let span = self.source.as_ref().unwrap();
-        let hash = span.input.hash();
-        if hash.is_err() || hash.ok().unwrap() != file_hash {
+        if span.input.file_path != file {
             return None;
         }
         self.find_node_at_pos(pos)
