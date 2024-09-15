@@ -1651,7 +1651,7 @@ impl Program {
                             union_as(&union_name, &field.name, decl),
                             None,
                             Some(format!(
-                                "Unwraps a union value of `{}` as the variant `{}`.\n\nIf the value is not the variant `{}`, this function aborts.",
+                                "Unwraps a union value of `{}` as the variant `{}`.\nIf the value is not the variant `{}`, this function aborts the program.",
                                 union_name.name, &field.name, &field.name,
                             )),
                         ));

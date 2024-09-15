@@ -3327,8 +3327,8 @@ pub fn test119() {
 }
 
 #[test]
-pub fn test120() {
-    // Test abort of type Array or function.
+pub fn test_undefined() {
+    // Test undefined of type Array or function.
     let source = r#"
         module Main; 
         import Debug;
@@ -3336,9 +3336,9 @@ pub fn test120() {
         main : IO ();
         main = (
             let x = 3;
-            let a = if true { Array::fill(1, |_| x) } else { abort() };
+            let a = if true { Array::fill(1, |_| x) } else { undefined() };
             eval assert_eq(|_|"case 1", (a.@(0))(1), x);
-            let a = if true { |_| x } else { abort() };
+            let a = if true { |_| x } else { undefined() };
             eval assert_eq(|_|"case 1", a(1), x);
             pure()
         );

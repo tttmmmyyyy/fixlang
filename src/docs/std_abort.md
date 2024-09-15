@@ -1,1 +1,0 @@
-Evaluating this value stops the execution of the program.

@@ -1,6 +1,6 @@
 This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
 
-NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to abort when a value is shared, consider using `Debug::assert_unique` instead.
+NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to assert that a value is unique, consider using `Debug::assert_unique` instead.
 
 Example: 
 

@@ -596,7 +596,7 @@
       - [`impl () : Eq`](#impl---eq)
       - [`impl () : ToString`](#impl---tostring)
   - [Functions](#functions)
-    - [`abort : Lazy a`](#abort--lazy-a)
+    - [`undefined : Lazy a`](#undefined--lazy-a)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
     - [`fix : ((a -> b) -> a -> b) -> a -> b`](#fix--a---b---a---b---a---b)
     - [`loop : s -> (s -> LoopResult s r) -> r`](#loop--s---s---loopresult-s-r---r)
@@ -1536,7 +1536,7 @@ Get the number of command line arguments.
 Get command line arguments.
 
 #### `input_line : IO String`
-Read a line from stdin. If some error occurr, this function aborts.
+Read a line from stdin. If some error occurr, this function aborts the program.
 If you want to handle errors, use `read_line(stdin)` instead.
 
 #### `is_eof : IOHandle -> IO Bool`
@@ -1872,7 +1872,7 @@ type Result e o = unbox union { ok : o, err: e };
 
 #### `unwrap : Result e o -> o`
 
-Returns the containing value if the value is ok, or otherwise aborts.
+Returns the containing value if the value is ok, or otherwise aborts the program.
 
 #### `impl [e : Eq, a : Eq] Result e a : Eq`
 
@@ -2018,9 +2018,14 @@ Literals:
 
 ## Functions
 
-### `abort : Lazy a`
+### `undefined : Lazy a`
 
-Evaluating this value stops the execution of the program.
+An undefined value.
+
+Since `undefined()` has generic type `a`, you can put it anywhere and it will be type-checked.
+This is useful as a placeholder value that you haven't implemented yet.
+
+Calling this value aborts the execution of the program (calls `abort` in libc).
 
 ### `compose : (a -> b) -> (b -> c) -> a -> c`
 
@@ -2098,7 +2103,7 @@ Traverses all values reachable from the given value, and changes the reference c
 
 This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
 
-NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to abort when a value is shared, consider using `Debug::assert_unique` instead.
+NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to assert that a value is unique, consider using `Debug::assert_unique` instead.
 
 Example: 
 
@@ -2532,15 +2537,15 @@ Prints a string to the specified stream and flushes the stream.
 
 ## `assert : Lazy String -> Bool -> ()`
 Asserts that a condition (boolean value) is true.
-If the assertion failed, prints a message to the stderr and aborts.
+If the assertion failed, prints a message to the stderr and aborts the program.
 
 ## `assert_eq : [a: Eq] Lazy String -> a -> a -> ()`
 Asserts that two values are equal.
-If the assertion failed, prints a message to the stderr and aborts.
+If the assertion failed, prints a message to the stderr and aborts the program.
 
 ## `assert_unique : Lazy String -> a -> a`
 Asserts that the given value is unique, and returns the given value.
-If the assertion failed, prints a message to the stderr and aborts.
+If the assertion failed, prints a message to the stderr and aborts the program.
 The main use of this function is to check whether a boxed value given as an argument is unique.
 
 ## `consumed_time_while : (a -> b) -> a -> (b, F64)`

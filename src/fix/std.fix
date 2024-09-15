@@ -470,7 +470,7 @@ namespace IO {
 
     // Exit the program with an error code.
     exit : I64 -> IO a;
-    exit = |code| IO { _data : |_| eval FFI_CALL[() exit(I32), code.to_I32]; abort() };
+    exit = |code| IO { _data : |_| eval FFI_CALL[() exit(I32), code.to_I32]; undefined() };
 
     // Exit the program with an error message and an error code.
     // The error message is written to the standard error output.
@@ -511,7 +511,7 @@ namespace IO {
         ))
     );
 
-    // Read a line from stdin. If some error occurr, this function aborts.
+    // Read a line from stdin. If some error occurr, this function aborts the program.
     // If you want to handle errors, use `read_line(stdin)` instead.
     input_line : IO String;
     input_line = (
@@ -520,7 +520,7 @@ namespace IO {
             pure $ res.as_ok
         } else {
             eval *(eprintln $ res.as_err.to_string);
-            pure $ abort()
+            pure $ undefined()
         }
     );
 
@@ -1304,11 +1304,11 @@ type Result e o = unbox union { ok : o, err: e };
 
 namespace Result {
 
-    // Returns the containing value if the value is ok, or otherwise aborts.
+    // Returns the containing value if the value is ok, or otherwise aborts the program.
     unwrap : Result e o -> o;
     unwrap = |res| (
         if res.is_err {
-            abort()
+            undefined()
         } else {
             res.as_ok
         }

@@ -23,6 +23,7 @@
 - Allow making empty structs.
 - Forbid underscores in type names, trait names, module names and namespaces.
 - Changed `CALL_C` to `FFI_CALL`.
+- Changed the name of `Std::abort` to `Std::undefined`.
 
 ### Fixed
 

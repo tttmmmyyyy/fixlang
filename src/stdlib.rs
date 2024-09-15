@@ -456,13 +456,11 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("./docs/std_array_fill.md").to_string()),
     ));
-
-    // Debug
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "abort"),
-        abort_function(),
+        FullName::from_strs(&[STD_NAME], "undefined"),
+        undefined_function(),
         None,
-        Some(include_str!("./docs/std_abort.md").to_string()),
+        Some(include_str!("./docs/std_undefined.md").to_string()),
     ));
 
     // Numeric constants

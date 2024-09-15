@@ -3640,9 +3640,9 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMAbortFunctionBody {}
+pub struct InlineLLVMUndefinedFunctionBody {}
 
-impl InlineLLVMAbortFunctionBody {
+impl InlineLLVMUndefinedFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3663,16 +3663,16 @@ impl InlineLLVMAbortFunctionBody {
     }
 }
 
-// `abort` built-in function
-pub fn abort_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+// `undefined` built-in function
+pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
     const UNIT_NAME: &str = "unit";
     let expr = expr_abs(
         vec![var_local(UNIT_NAME)],
         expr_llvm(
-            LLVMGenerator::AbortFunctionBody(InlineLLVMAbortFunctionBody {}),
+            LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody {}),
             vec![],
-            "abort".to_string(),
+            "undefined".to_string(),
             type_tyvar_star(A_NAME),
             None,
         ),

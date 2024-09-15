@@ -14,25 +14,25 @@ _debug_print_to_stream = |hdl, msg| (
 );
 
 // Asserts that a condition (boolean value) is true.
-// If the assertion failed, prints a message to the stderr and aborts.
+// If the assertion failed, prints a message to the stderr and aborts the program.
 assert : Lazy String -> Bool -> ();
 assert = |msg, b| (
     if !b {
         let u = debug_eprint("assertion failed!: ");
         let u = debug_eprintln(msg());
-        abort()
+        undefined()
     } else {
         ()
     }
 );
 
 // Asserts that two values are equal.
-// If the assertion failed, prints a message to the stderr and aborts.
+// If the assertion failed, prints a message to the stderr and aborts the program.
 assert_eq : [a: Eq] Lazy String -> a -> a -> ();
 assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
 // Asserts that the given value is unique, and returns the given value.
-// If the assertion failed, prints a message to the stderr and aborts.
+// If the assertion failed, prints a message to the stderr and aborts the program.
 // The main use of this function is to check whether a boxed value given as an argument is unique.
 assert_unique : Lazy String -> a -> a;
 assert_unique = |msg, x| (
