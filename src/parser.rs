@@ -1175,7 +1175,6 @@ impl UnaryOpInfo {
 
 // Unary opeartors
 fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
-    let span = Span::from_pair(&ctx.source, &pair);
     let pairs = pair.into_inner();
     let mut ops: Vec<UnaryOpInfo> = vec![];
     let mut spans: Vec<Span> = vec![];
