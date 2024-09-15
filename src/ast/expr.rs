@@ -862,13 +862,13 @@ impl Expr {
                 )
             }
             Expr::Let(p, b, v) => format!(
-                "let {}={} in {}",
+                "let {} = {} in {}",
                 p.pattern.to_string(),
                 b.expr.to_string(),
                 v.expr.to_string()
             ),
             Expr::If(c, t, e) => format!(
-                "if {} then {} else {}",
+                "if {} {{ {} }} else {{ {} }}",
                 c.expr.to_string(),
                 t.expr.to_string(),
                 e.expr.to_string()

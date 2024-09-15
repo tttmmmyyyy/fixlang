@@ -702,12 +702,12 @@ fn handle_hover(
         let mut scm_string = String::new();
         if let Some(gv) = program.global_values.get(full_name) {
             scm_string = gv.scm.to_string();
-            docs += &format!("\n- defined as `{}`", scm_string);
+            docs += &format!("\n- Defined as `{}`", scm_string);
         }
         if let Some(ty) = ty.as_ref() {
             let ty_string = ty.to_string_normalize();
             if scm_string != ty_string {
-                docs += &format!("\n- used as `{}`", ty_string);
+                docs += &format!("\n- Used as `{}`", ty_string);
             }
         }
         if let Some(gv) = program.global_values.get(full_name) {

@@ -137,6 +137,11 @@ impl Span {
         self.start_line_col().0
     }
 
+    #[allow(dead_code)]
+    pub fn range(&self) -> (usize, usize) {
+        (self.start, self.end)
+    }
+
     // Get line and column number of start.
     pub fn start_line_col(&self) -> (usize, usize) {
         let source_string = self.input.string();

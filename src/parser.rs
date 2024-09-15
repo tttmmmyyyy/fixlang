@@ -53,10 +53,9 @@ struct BindOperatorInfo {
 impl DoContext {
     // Pushes monadic value, and returns expression that represents the result of monadic action.
     fn push_monad(&mut self, monad: Arc<ExprNode>, operator_src: Span) -> Arc<ExprNode> {
-        let src = monad.source.clone();
-        let var_name = FullName::local(&format!("%monadic_arg{}", self.counter));
+        let var_name = FullName::local(&format!("#monadic_value{}", self.counter));
         let var_var = var_var(var_name.clone());
-        let var_expr = expr_var(var_name, src);
+        let var_expr = expr_var(var_name, None);
         self.counter += 1;
         self.monads.push(BindOperatorInfo {
             operator_src,
@@ -1208,7 +1207,6 @@ fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
                         expr.source.as_ref().map(|s0| s0.unite(&op_span)),
                     );
                 }
-                let expr = expr.set_source(Some(span));
                 return Ok(expr);
             }
         }
