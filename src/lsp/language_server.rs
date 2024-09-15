@@ -10,13 +10,14 @@ use crate::{
 };
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
-    CompletionParams, DiagnosticSeverity, Documentation, InitializeParams, InitializeResult,
-    InitializedParams, MarkupContent, PublishDiagnosticsParams, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri,
-    WorkDoneProgressOptions,
+    CompletionParams, DiagnosticSeverity, DidSaveTextDocumentParams, Documentation, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MarkupContent,
+    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::{
     collections::HashSet,
     fs::File,
@@ -97,6 +98,9 @@ pub fn launch_language_server() {
 
     // The last diagnostics result.
     let mut last_diag: Option<DiagnosticsResult> = None;
+
+    // Uri to hash of the file content.
+    let mut uri_to_hash: HashMap<Uri, String> = std::collections::HashMap::new();
 
     loop {
         // If new diagnostics are available, send store it to `last_diag`.
@@ -227,7 +231,17 @@ pub fn launch_language_server() {
                 write_log(log_file.clone(), "Exiting the language server.\n");
                 break;
             } else if method == "textDocument/didSave" {
-                handle_textdocument_did_save(diag_req_send.clone(), log_file.clone());
+                let params: Option<DidSaveTextDocumentParams> =
+                    parase_params(message.params.unwrap(), log_file.clone());
+                if params.is_none() {
+                    continue;
+                }
+                handle_textdocument_did_save(
+                    diag_req_send.clone(),
+                    &params.unwrap(),
+                    &mut uri_to_hash,
+                    log_file.clone(),
+                );
             } else if method == "textDocument/completion" {
                 if last_diag.is_none() {
                     continue;
@@ -261,6 +275,27 @@ pub fn launch_language_server() {
                     id.unwrap(),
                     &params.unwrap(),
                     program,
+                    log_file.clone(),
+                );
+            } else if method == "textDocument/hover" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().prgoram;
+                let id = parse_id(&message, method, log_file.clone());
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<HoverParams> =
+                    parase_params(message.params.unwrap(), log_file.clone());
+                if params.is_none() {
+                    continue;
+                }
+                handle_hover(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    program,
+                    &uri_to_hash,
                     log_file.clone(),
                 );
             }
@@ -374,12 +409,14 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<F
                     change: None,
                     will_save: None,
                     will_save_wait_until: None,
-                    save: Some(TextDocumentSyncSaveOptions::Supported(true)),
+                    save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+                        include_text: Some(true),
+                    })),
                 },
             )),
             notebook_document_sync: None,
             selection_range_provider: None,
-            hover_provider: None,
+            hover_provider: Some(HoverProviderCapability::Simple(true)),
             completion_provider: Some(CompletionOptions {
                 trigger_characters: Some(vec![
                     " ".to_string(),
@@ -475,11 +512,27 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>, _log_file: Ar
 }
 
 // Handle "textDocument/didSave" method.
-fn handle_textdocument_did_save(diag_send: Sender<DiagnosticsMessage>, log_file: Arc<Mutex<File>>) {
+fn handle_textdocument_did_save(
+    diag_send: Sender<DiagnosticsMessage>,
+    params: &DidSaveTextDocumentParams,
+    uri_to_hash: &mut HashMap<Uri, String>,
+    log_file: Arc<Mutex<File>>,
+) {
     // Send a message to the diagnostics thread.
     if let Err(e) = diag_send.send(DiagnosticsMessage::OnSaveFile) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
         msg.push_str(&format!("{:?}\n", e));
+        write_log(log_file.clone(), msg.as_str());
+    }
+
+    // Calulate the hash of the file content.
+    if let Some(text) = &params.text {
+        uri_to_hash.insert(
+            params.text_document.uri.clone(),
+            format!("{:x}", md5::compute(text.as_bytes())),
+        );
+    } else {
+        let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
         write_log(log_file.clone(), msg.as_str());
     }
 }
@@ -578,6 +631,24 @@ fn handle_completion_resolve_document(
 
     // Send the completion item.
     send_response(id, Ok::<_, ()>(item));
+}
+
+// Handle "textDocument/hover" method.
+fn handle_hover(
+    id: u32,
+    params: &HoverParams,
+    program: &Program,
+    uri_to_hash: &HashMap<Uri, String>,
+    log_file: Arc<Mutex<File>>,
+) {
+    let uri = &params.text_document_position_params.text_document.uri;
+    let pos = params.text_document_position_params.position;
+
+    // Get the file hash.
+    if !uri_to_hash.contains_key(uri) {
+        return;
+    }
+    let hash = uri_to_hash.get(uri).unwrap();
 }
 
 // The entry point of the diagnostics thread.

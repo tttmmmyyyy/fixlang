@@ -164,6 +164,17 @@ impl GlobalValue {
             _ => docs,
         }
     }
+
+    // Find the minimum expression node which includes the specified source code position.
+    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
+        match &self.expr {
+            SymbolExpr::Simple(e) => e.find_node_at(file_hash, pos),
+            SymbolExpr::Method(ms) => ms
+                .iter()
+                .filter_map(|m| m.find_node_at(file_hash, pos))
+                .next(),
+        }
+    }
 }
 
 // Expression of global symbol.
@@ -194,6 +205,17 @@ impl SymbolExpr {
             SymbolExpr::Method(ms) => ms.first().map(|m| m.expr.expr.source.clone()).flatten(),
         }
     }
+
+    // Find the minimum expression node which includes the specified source code position.
+    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
+        match self {
+            SymbolExpr::Simple(e) => e.find_node_at(file_hash, pos),
+            SymbolExpr::Method(ms) => ms
+                .iter()
+                .filter_map(|m| m.find_node_at(file_hash, pos))
+                .next(),
+        }
+    }
 }
 
 // Pair of expression and type resolver for it.
@@ -213,6 +235,11 @@ impl TypedExpr {
 
     pub fn calculate_free_vars(&mut self) {
         self.expr = calculate_free_vars(self.expr.clone());
+    }
+
+    // Find the minimum expression node which includes the specified source code position.
+    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
+        self.expr.find_node_at(file_hash, pos)
     }
 }
 
@@ -237,6 +264,11 @@ impl MethodImpl {
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())
+    }
+
+    // Find the minimum expression node which includes the specified source code position.
+    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
+        self.expr.find_node_at(file_hash, pos)
     }
 }
 
@@ -736,11 +768,12 @@ impl Program {
         errors.to_result()
     }
 
-    // - Resolve namespace of type and trats in expression,
-    // - resolve type aliases, and
-    // - perform typechecking.
+    // This function performs the following tasks:
+    // - Resolve namespace of type and traits in the expression.
+    // - Resolve type aliases in the expression.
+    // - Perform typechecking.
     // The result will be written to `te`.
-    fn resolve_and_check_type(
+    fn resolve_namespace_and_check_type(
         &self,
         te: &mut TypedExpr,
         required_scheme: &Arc<Scheme>,
@@ -892,7 +925,7 @@ impl Program {
                 // Perform type-checking.
                 let define_module = sym.generic_name.module();
                 let mut e = e.clone();
-                self.resolve_and_check_type(
+                self.resolve_namespace_and_check_type(
                     &mut e,
                     &global_sym.scm,
                     &sym.generic_name,
@@ -926,7 +959,7 @@ impl Program {
                     // Perform type-checking.
                     let define_module = method.define_module.clone();
                     let mut e = method.expr.clone();
-                    self.resolve_and_check_type(
+                    self.resolve_namespace_and_check_type(
                         &mut e,
                         &method.ty,
                         &sym.generic_name,

@@ -697,6 +697,97 @@ impl ExprNode {
             }
         }
     }
+
+    // Find the minimum AST node which includes the specified source code position.
+    pub fn find_node_at(
+        self: &Arc<ExprNode>,
+        file_hash: &str,
+        pos: usize,
+    ) -> Option<Arc<ExprNode>> {
+        if self.source.is_none() {
+            return None;
+        }
+        let span = self.source.as_ref().unwrap();
+        if span.input.hash() != file_hash {
+            return None;
+        }
+        self.find_node_at_pos(pos)
+    }
+
+    // Find the minimum AST node which includes the specified source code position.
+    fn find_node_at_pos(self: &Arc<ExprNode>, pos: usize) -> Option<Arc<ExprNode>> {
+        if self.source.is_none() {
+            return None;
+        }
+        let span = self.source.as_ref().unwrap();
+        if !span.includes_pos(pos) {
+            return None;
+        }
+        match &*self.expr {
+            Expr::Var(_) => Some(self.clone()),
+            Expr::LLVM(_) => Some(self.clone()),
+            Expr::App(func, args) => {
+                let node = func.find_node_at_pos(pos);
+                if node.is_some() {
+                    return node;
+                }
+                for arg in args {
+                    let node = arg.find_node_at_pos(pos);
+                    if node.is_some() {
+                        return node;
+                    }
+                }
+                None
+            }
+            Expr::Lam(_, body) => body.find_node_at_pos(pos),
+            Expr::Let(_, bound, val) => {
+                let node = bound.find_node_at_pos(pos);
+                if node.is_some() {
+                    return node;
+                }
+                val.find_node_at_pos(pos)
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                let node = cond.find_node_at_pos(pos);
+                if node.is_some() {
+                    return node;
+                }
+                let node = then_expr.find_node_at_pos(pos);
+                if node.is_some() {
+                    return node;
+                }
+                else_expr.find_node_at_pos(pos)
+            }
+            Expr::TyAnno(e, _) => e.find_node_at_pos(pos),
+            Expr::MakeStruct(_, fields) => {
+                for (_, field_expr) in fields {
+                    let node = field_expr.find_node_at_pos(pos);
+                    if node.is_some() {
+                        return node;
+                    }
+                }
+                None
+            }
+            Expr::ArrayLit(elems) => {
+                for elem in elems {
+                    let node = elem.find_node_at_pos(pos);
+                    if node.is_some() {
+                        return node;
+                    }
+                }
+                None
+            }
+            Expr::FFICall(_, _, _, args) => {
+                for (_, e) in args.iter().enumerate() {
+                    let node = e.find_node_at_pos(pos);
+                    if node.is_some() {
+                        return node;
+                    }
+                }
+                None
+            }
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

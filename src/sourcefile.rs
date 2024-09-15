@@ -245,4 +245,9 @@ impl Span {
         }
         Ok(ret)
     }
+
+    // Check if the position is included in the span.
+    pub fn includes_pos(&self, pos: usize) -> bool {
+        self.start <= pos && pos < self.end
+    }
 }
