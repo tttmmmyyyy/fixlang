@@ -167,13 +167,7 @@ impl GlobalValue {
 
     // Find the minimum expression node which includes the specified source code position.
     pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
-        match &self.expr {
-            SymbolExpr::Simple(e) => e.find_node_at(file_hash, pos),
-            SymbolExpr::Method(ms) => ms
-                .iter()
-                .filter_map(|m| m.find_node_at(file_hash, pos))
-                .next(),
-        }
+        self.expr.find_node_at(file_hash, pos)
     }
 }
 
@@ -239,7 +233,13 @@ impl TypedExpr {
 
     // Find the minimum expression node which includes the specified source code position.
     pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
-        self.expr.find_node_at(file_hash, pos)
+        self.expr.find_node_at(file_hash, pos).map(|e| {
+            if let Some(ty) = &e.ty {
+                e.set_inferred_type(self.substitution.substitute_type(&ty))
+            } else {
+                e
+            }
+        })
     }
 }
 
@@ -902,6 +902,19 @@ impl Program {
         Ok(())
     }
 
+    pub fn resolve_namespace_and_check_type_all(
+        &mut self,
+        tc: &TypeCheckContext,
+    ) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+        let method_impl_filter = |_method: &MethodImpl| Ok(true);
+        let names = self.global_values.keys().cloned().collect::<Vec<_>>();
+        for name in &names {
+            errors.eat_err(self.resolve_namespace_and_check_type(tc, name, method_impl_filter));
+        }
+        errors.to_result()
+    }
+
     // Perform namespace resolution and type-checking for the specified expression.
     // This function updates `TypedExpr` in `self.global_values` in-place.
     pub fn resolve_namespace_and_check_type(
@@ -958,8 +971,8 @@ impl Program {
         };
 
         // Then update `TypedExpr` in `self.global_values` mutably.
-        let global_sym = self.global_values.get_mut(&name).unwrap();
-        match &mut global_sym.expr {
+        let gv = self.global_values.get_mut(&name).unwrap();
+        match &mut gv.expr {
             SymbolExpr::Simple(e) => {
                 for (_, te) in tes {
                     *e = te;
@@ -1915,5 +1928,15 @@ impl Program {
             }
         }
         errors.to_result()
+    }
+
+    pub fn find_node_at(&self, file_hash: &str, pos: usize) -> Option<Arc<ExprNode>> {
+        for (_, gv) in &self.global_values {
+            let node = gv.find_node_at(file_hash, pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        None
     }
 }

@@ -98,17 +98,18 @@ fn build_object_files<'c>(
             .add_global(name.name.clone(), &name.namespace, &defn.scm)?;
     }
 
-    // Instantiate all exported values (including `Main::main`) and values called from them.
-    let main_expr = program.instantiate_main_function(&typechecker)?;
-    program.instantiate_exported_values(&typechecker)?;
-
-    // If it is for language server, we don't need to generate object files, so return here.
+    // When working as a language server, perform type checking of all values and return here.
     if config.language_server_mode {
+        program.resolve_namespace_and_check_type_all(&typechecker)?;
         return Ok(BuildObjFilesResult {
             obj_paths: vec![],
             program: Some(program),
         });
     }
+
+    // Instantiate all exported values (including `Main::main`) and values called from them.
+    let main_expr = program.instantiate_main_function(&typechecker)?;
+    program.instantiate_exported_values(&typechecker)?;
 
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {

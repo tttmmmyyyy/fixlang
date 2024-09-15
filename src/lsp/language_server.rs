@@ -13,7 +13,7 @@ use lsp_types::{
     CompletionParams, DiagnosticSeverity, DidSaveTextDocumentParams, Documentation, HoverParams,
     HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MarkupContent,
     PublishDiagnosticsParams, SaveOptions, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressOptions,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -99,8 +99,8 @@ pub fn launch_language_server() {
     // The last diagnostics result.
     let mut last_diag: Option<DiagnosticsResult> = None;
 
-    // Uri to hash of the file content.
-    let mut uri_to_hash: HashMap<Uri, String> = std::collections::HashMap::new();
+    // Uri to file content.
+    let mut uri_to_content: HashMap<lsp_types::Uri, String> = std::collections::HashMap::new();
 
     loop {
         // If new diagnostics are available, send store it to `last_diag`.
@@ -239,7 +239,7 @@ pub fn launch_language_server() {
                 handle_textdocument_did_save(
                     diag_req_send.clone(),
                     &params.unwrap(),
-                    &mut uri_to_hash,
+                    &mut uri_to_content,
                     log_file.clone(),
                 );
             } else if method == "textDocument/completion" {
@@ -295,7 +295,7 @@ pub fn launch_language_server() {
                     id.unwrap(),
                     &params.unwrap(),
                     program,
-                    &uri_to_hash,
+                    &uri_to_content,
                     log_file.clone(),
                 );
             }
@@ -515,7 +515,7 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>, _log_file: Ar
 fn handle_textdocument_did_save(
     diag_send: Sender<DiagnosticsMessage>,
     params: &DidSaveTextDocumentParams,
-    uri_to_hash: &mut HashMap<Uri, String>,
+    uri_to_content: &mut HashMap<lsp_types::Uri, String>,
     log_file: Arc<Mutex<File>>,
 ) {
     // Send a message to the diagnostics thread.
@@ -525,11 +525,11 @@ fn handle_textdocument_did_save(
         write_log(log_file.clone(), msg.as_str());
     }
 
-    // Calulate the hash of the file content.
+    // Store the content of the file into `uri_to_content`.
     if let Some(text) = &params.text {
-        uri_to_hash.insert(
+        uri_to_content.insert(
             params.text_document.uri.clone(),
-            format!("{:x}", md5::compute(text.as_bytes())),
+            text.clone(), // format!("{:x}", md5::compute(text.as_bytes())),
         );
     } else {
         let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
@@ -638,17 +638,109 @@ fn handle_hover(
     id: u32,
     params: &HoverParams,
     program: &Program,
-    uri_to_hash: &HashMap<Uri, String>,
+    uri_to_content: &HashMap<lsp_types::Uri, String>,
     log_file: Arc<Mutex<File>>,
 ) {
     let uri = &params.text_document_position_params.text_document.uri;
     let pos = params.text_document_position_params.position;
 
-    // Get the file hash.
-    if !uri_to_hash.contains_key(uri) {
+    // Get the file content.
+    if !uri_to_content.contains_key(uri) {
+        let msg = format!("No stored content for the uri \"{:?}\".", uri);
+        write_log(log_file.clone(), msg.as_str());
+        let msg = format!("{:?}", uri_to_content);
+        write_log(log_file.clone(), msg.as_str());
         return;
     }
-    let hash = uri_to_hash.get(uri).unwrap();
+
+    // Get the node at the position.
+    let file_content = uri_to_content.get(uri).unwrap();
+    let pos = position_to_bytes(file_content, pos);
+    let file_hash = format!("{:x}", md5::compute(file_content.as_bytes()));
+    let node = program.find_node_at(&file_hash, pos);
+
+    // If no node is found, nothing to do.
+    if node.is_none() {
+        let msg = format!("No node is found at the position: {:?}\n", pos);
+        write_log(log_file.clone(), msg.as_str());
+
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    }
+    let node = node.unwrap();
+
+    // if the node is not a variable, nothing to do.
+    if !node.is_var() {
+        let msg = format!(
+            "The node is not a variable: \n{:?}\n",
+            node.expr.to_string()
+        );
+        write_log(log_file.clone(), msg.as_str());
+
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    }
+
+    // Get informations of the variable which are needed to show in the hover.
+    let full_name = &node.get_var().name;
+    let ty = &node.ty;
+
+    let mut docs = String::new();
+    if full_name.is_local() {
+        // In case the variable is local
+        if let Some(ty) = ty.as_ref() {
+            docs += &format!("`{} : {}`", full_name.to_string(), ty.to_string_normalize());
+        } else {
+            docs += &format!("`{}`", full_name.to_string());
+        }
+    } else {
+        // In case the variable is global, show the documentation of the global value.
+        docs += &format!("`{}`", full_name.to_string());
+        let mut scm_string = String::new();
+        if let Some(gv) = program.global_values.get(full_name) {
+            scm_string = gv.scm.to_string();
+            docs += &format!("\n- defined as `{}`", scm_string);
+        }
+        if let Some(ty) = ty.as_ref() {
+            let ty_string = ty.to_string_normalize();
+            if scm_string != ty_string {
+                docs += &format!("\n- used as `{}`", ty_string);
+            }
+        }
+        if let Some(gv) = program.global_values.get(full_name) {
+            if let Some(document) = gv.get_document() {
+                docs += &format!("\n\n{}", document);
+            }
+        }
+    };
+    let content = MarkupContent {
+        kind: lsp_types::MarkupKind::Markdown,
+        value: docs,
+    };
+    let hover = lsp_types::Hover {
+        contents: lsp_types::HoverContents::Markup(content),
+        range: None,
+    };
+    send_response(id, Ok::<_, ()>(hover))
+}
+
+// Convert a `lsp_types::Position` into a bytes position in a string.
+fn position_to_bytes(string: &str, position: lsp_types::Position) -> usize {
+    let mut bytes = 0;
+    let mut line = 0;
+    let mut pos = 0;
+    for c in string.chars() {
+        bytes += c.len_utf8();
+        pos += 1;
+        if c == '\n' {
+            line += 1;
+            pos = 0;
+        }
+        if line == position.line && pos == position.character as usize {
+            break;
+        }
+    }
+    bytes
 }
 
 // The entry point of the diagnostics thread.
@@ -892,13 +984,13 @@ fn error_to_diagnostics(
     }
 }
 
-fn path_to_uri(path: &PathBuf) -> Result<Uri, String> {
+fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
     let path = path.to_str();
     if path.is_none() {
         return Err(format!("Failed to convert a path into string: {:?}", path));
     }
     let path = "file://".to_string() + path.unwrap();
-    let uri = Uri::from_str(&path);
+    let uri = lsp_types::Uri::from_str(&path);
     if uri.is_err() {
         return Err(format!("Failed to convert a path into Uri: {:?}", path));
     }
