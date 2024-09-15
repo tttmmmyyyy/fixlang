@@ -7069,6 +7069,17 @@ pub fn test_circular_type_definition() {
 }
 
 #[test]
+pub fn test_number_to_varname() {
+    assert_eq!(number_to_varname(0), "a");
+    assert_eq!(number_to_varname(1), "b");
+    assert_eq!(number_to_varname(25), "z");
+    assert_eq!(number_to_varname(26), "a1");
+    assert_eq!(number_to_varname(27), "b1");
+    assert_eq!(number_to_varname(51), "z1");
+    assert_eq!(number_to_varname(52), "a2");
+}
+
+#[test]
 pub fn test_export() {
     let source = r##"
         module Main;

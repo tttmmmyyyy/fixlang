@@ -1234,19 +1234,19 @@ impl TypeNode {
 
         // Create substitution that normalizes the names of type variables.
         let mut s = Substitution::default();
-        let mut next_tyvar_name = 0;
+        let mut next_tyvar_no = 0;
         let mut appeared: HashSet<Name> = HashSet::default();
         for fv in free_vars {
             if appeared.contains(&fv.name) {
                 continue;
             }
             appeared.insert(fv.name.clone());
-            let new_name = format!("t{}", next_tyvar_name);
+            let new_name = number_to_varname(next_tyvar_no);
             s.add_substitution(&Substitution::single(
                 &fv.name,
                 type_tyvar(&new_name, &fv.kind),
             ));
-            next_tyvar_name += 1;
+            next_tyvar_no += 1;
         }
 
         // Substitute and stringify all types.
@@ -1646,7 +1646,7 @@ impl Scheme {
         for tyvar in &self.gen_vars {
             let new_name = loop {
                 tyvar_num += 1;
-                let new_name = format!("t{}", tyvar_num);
+                let new_name = number_to_varname(tyvar_num as usize);
                 if free_vars.contains_key(&new_name) {
                     continue;
                 }

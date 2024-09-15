@@ -94,3 +94,17 @@ macro_rules! function_name {
     }};
 }
 pub(crate) use function_name;
+
+// Creates a variable name from a number.
+pub fn number_to_varname(n: usize) -> String {
+    let mut ret = "".to_string();
+    let mut n = n;
+    let c = (n % 26) as u8 + 'a' as u8;
+    ret.push(c as char);
+    n /= 26;
+    if n == 0 {
+        return ret;
+    }
+    ret += &n.to_string();
+    ret
+}
