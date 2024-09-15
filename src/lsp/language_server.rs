@@ -8,6 +8,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
+use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
     CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
@@ -20,6 +21,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::env::current_dir;
+use std::path::Path;
 use std::{
     collections::HashSet,
     fs::File,
@@ -101,8 +103,9 @@ pub fn launch_language_server() {
     // The last diagnostics result.
     let mut last_diag: Option<DiagnosticsResult> = None;
 
-    // Uri to file content.
-    let mut uri_to_content: HashMap<lsp_types::Uri, String> = std::collections::HashMap::new();
+    // Maps to get file contents from Uris.
+    let mut uri_to_latest_content: HashMap<lsp_types::Uri, String> =
+        std::collections::HashMap::new();
 
     loop {
         // If new diagnostics are available, send store it to `last_diag`.
@@ -240,7 +243,7 @@ pub fn launch_language_server() {
                 }
                 handle_textdocument_did_open(
                     &params.unwrap(),
-                    &mut uri_to_content,
+                    &mut uri_to_latest_content,
                     log_file.clone(),
                 );
             } else if method == "textDocument/didChange" {
@@ -251,7 +254,7 @@ pub fn launch_language_server() {
                 }
                 handle_textdocument_did_change(
                     &params.unwrap(),
-                    &mut uri_to_content,
+                    &mut uri_to_latest_content,
                     log_file.clone(),
                 );
             } else if method == "textDocument/didSave" {
@@ -263,7 +266,7 @@ pub fn launch_language_server() {
                 handle_textdocument_did_save(
                     diag_req_send.clone(),
                     &params.unwrap(),
-                    &mut uri_to_content,
+                    &mut uri_to_latest_content,
                     log_file.clone(),
                 );
             } else if method == "textDocument/completion" {
@@ -319,7 +322,7 @@ pub fn launch_language_server() {
                     id.unwrap(),
                     &params.unwrap(),
                     program,
-                    &uri_to_content,
+                    &uri_to_latest_content,
                     log_file.clone(),
                 );
             }
@@ -548,11 +551,11 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>, _log_file: Ar
 // Handle "textDocument/didOpen" method.
 fn handle_textdocument_did_open(
     params: &DidOpenTextDocumentParams,
-    uri_to_content: &mut HashMap<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
     _log_file: Arc<Mutex<File>>,
 ) {
-    // Store the content of the file into `uri_to_content`.
-    uri_to_content.insert(
+    // Store the content of the file into the maps.
+    uri_to_latest_content.insert(
         params.text_document.uri.clone(),
         params.text_document.text.clone(),
     );
@@ -561,12 +564,12 @@ fn handle_textdocument_did_open(
 // Handle "textDocument/didChange" method.
 fn handle_textdocument_did_change(
     params: &DidChangeTextDocumentParams,
-    uri_to_content: &mut HashMap<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
     _log_file: Arc<Mutex<File>>,
 ) {
     // Store the content of the file into `uri_to_content`.
     if let Some(change) = params.content_changes.last() {
-        uri_to_content.insert(params.text_document.uri.clone(), change.text.clone());
+        uri_to_latest_content.insert(params.text_document.uri.clone(), change.text.clone());
     }
 }
 
@@ -574,21 +577,21 @@ fn handle_textdocument_did_change(
 fn handle_textdocument_did_save(
     diag_send: Sender<DiagnosticsMessage>,
     params: &DidSaveTextDocumentParams,
-    uri_to_content: &mut HashMap<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
     log_file: Arc<Mutex<File>>,
 ) {
+    // Store the content of the file into maps.
+    if let Some(text) = &params.text {
+        uri_to_latest_content.insert(params.text_document.uri.clone(), text.clone());
+    } else {
+        let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
+        write_log(log_file.clone(), msg.as_str());
+    }
+
     // Send a message to the diagnostics thread.
     if let Err(e) = diag_send.send(DiagnosticsMessage::OnSaveFile) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
         msg.push_str(&format!("{:?}\n", e));
-        write_log(log_file.clone(), msg.as_str());
-    }
-
-    // Store the content of the file into `uri_to_content`.
-    if let Some(text) = &params.text {
-        uri_to_content.insert(params.text_document.uri.clone(), text.clone());
-    } else {
-        let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
         write_log(log_file.clone(), msg.as_str());
     }
 }
@@ -689,6 +692,76 @@ fn handle_completion_resolve_document(
     send_response(id, Ok::<_, ()>(item));
 }
 
+// Get the relative path of the file from the uri.
+fn get_relative_path_from_uri(uri: &lsp_types::Uri) -> Result<PathBuf, String> {
+    let path = PathBuf::from(uri.path().to_string());
+    let cur_dir = current_dir();
+    if let Err(e) = cur_dir {
+        let msg = format!("Failed to get the current directory: {:?}", e);
+        return Err(msg);
+    }
+    let cur_dir = cur_dir.unwrap();
+    let path_rel = path.strip_prefix(&cur_dir);
+    if let Err(_e) = path_rel {
+        let msg = format!(
+            "The path {} is not subdirectory of current directory {}",
+            path.display(),
+            cur_dir.display()
+        );
+        return Err(msg);
+    }
+    let path = path_rel.unwrap();
+    Ok(path.to_path_buf())
+}
+
+fn get_file_content_at_previous_diagnostics(
+    program: &Program,
+    path: &Path,
+) -> Result<String, String> {
+    for (_, src) in &program.module_to_files {
+        if src.file_path == path {
+            let content = src.string();
+            if let Err(_e) = content {
+                let msg = format!(
+                    "Failed to get the content of the file: {}",
+                    src.file_path.display()
+                );
+                return Err(msg);
+            }
+            return Ok(content.ok().unwrap());
+        }
+    }
+    let msg = format!("No saved content for the file: {}", path.display());
+    return Err(msg);
+}
+
+fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> Option<u32> {
+    let (_, diffs) = diff(content0, content1, "\n");
+    let mut line_cnt_0 = -1;
+    let mut line_cnt_1 = -1;
+    for diff in diffs {
+        match diff {
+            difference::Difference::Same(s) => {
+                let lines = s.split("\n").count();
+                for _ in 0..lines {
+                    line_cnt_0 += 1;
+                    line_cnt_1 += 1;
+                    if line_cnt_0 == line0 as i32 {
+                        return Some(line_cnt_1 as u32);
+                    }
+                }
+            }
+            difference::Difference::Add(s) => {
+                line_cnt_1 += s.split("\n").count() as i32;
+            }
+            difference::Difference::Rem(s) => {
+                line_cnt_0 += s.split("\n").count() as i32;
+            }
+        }
+    }
+    None
+}
+
 // Handle "textDocument/hover" method.
 fn handle_hover(
     id: u32,
@@ -706,37 +779,42 @@ fn handle_hover(
         write_log(log_file.clone(), msg.as_str());
         return;
     }
-    let file_content = uri_to_content.get(uri).unwrap();
+    let latest_content = uri_to_content.get(uri).unwrap();
 
     // Get the relative path of the file.
-    let path = PathBuf::from(uri.path().to_string());
-    let cur_dir = current_dir();
-    if let Err(e) = cur_dir {
-        let msg = format!("Failed to get the current directory: {:?}", e);
-        write_log(log_file.clone(), msg.as_str());
-        send_response(id, Err::<(), String>(msg));
+    let path = get_relative_path_from_uri(uri);
+    if let Err(e) = path {
+        write_log(log_file.clone(), &e);
+        send_response(id, Err::<(), String>(e));
         return;
     }
-    let cur_dir = cur_dir.unwrap();
-    let path_rel = path.strip_prefix(&cur_dir);
-    if let Err(_e) = path_rel {
-        let msg = format!(
-            "The path {} is not subdirectory of current directory {}",
-            path.display(),
-            cur_dir.display()
-        );
-        write_log(log_file.clone(), msg.as_str());
-        send_response(id, Err::<(), String>(msg));
-        return;
-    }
-    let path = path_rel.unwrap();
+    let path = path.ok().unwrap();
 
-    // Get the position of the cursor.
-    let pos = params.text_document_position_params.position;
+    // Get the file content at the time of the last successful diagnostics.
+    let saved_content = get_file_content_at_previous_diagnostics(program, &path);
+    if let Err(e) = saved_content {
+        write_log(log_file.clone(), &e);
+        send_response(id, Err::<(), String>(e));
+        return;
+    }
+    let saved_content = saved_content.ok().unwrap();
+
+    // Get the position of the cursor in `saved_content`.
+    let pos_in_latest = params.text_document_position_params.position;
+    let line_in_saved =
+        calculate_corresponding_line(latest_content, &saved_content, pos_in_latest.line);
+    if line_in_saved.is_none() {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    }
+    let pos_in_saved = lsp_types::Position {
+        line: line_in_saved.unwrap(),
+        character: pos_in_latest.character,
+    };
 
     // Get the node at the position.
-    let pos = position_to_bytes(file_content, pos);
-    let node = program.find_node_at(path, pos);
+    let pos = position_to_bytes(&saved_content, pos_in_saved);
+    let node = program.find_node_at(&path, pos);
 
     // If no node is found, nothing to do.
     if node.is_none() {

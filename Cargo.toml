@@ -25,6 +25,7 @@ rand = "0.8.5"
 num-bigint = "0.4.4"
 lsp-types = "0.97.0"
 toml = "0.8.19"
+difference = "0.4"
 
 [[bin]]
 name = "fix"
