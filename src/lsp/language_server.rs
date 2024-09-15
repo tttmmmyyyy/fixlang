@@ -10,9 +10,10 @@ use crate::{
 };
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
-    CompletionParams, DiagnosticSeverity, DidSaveTextDocumentParams, Documentation, HoverParams,
-    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MarkupContent,
-    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, TextDocumentSyncCapability,
+    CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+    DidSaveTextDocumentParams, Documentation, HoverParams, HoverProviderCapability,
+    InitializeParams, InitializeResult, InitializedParams, MarkupContent, PublishDiagnosticsParams,
+    SaveOptions, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions, WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -231,6 +232,28 @@ pub fn launch_language_server() {
             } else if method == "exit" {
                 write_log(log_file.clone(), "Exiting the language server.\n");
                 break;
+            } else if method == "textDocument/didOpen" {
+                let params: Option<DidOpenTextDocumentParams> =
+                    parase_params(message.params.unwrap(), log_file.clone());
+                if params.is_none() {
+                    continue;
+                }
+                handle_textdocument_did_open(
+                    &params.unwrap(),
+                    &mut uri_to_content,
+                    log_file.clone(),
+                );
+            } else if method == "textDocument/didChange" {
+                let params: Option<DidChangeTextDocumentParams> =
+                    parase_params(message.params.unwrap(), log_file.clone());
+                if params.is_none() {
+                    continue;
+                }
+                handle_textdocument_did_change(
+                    &params.unwrap(),
+                    &mut uri_to_content,
+                    log_file.clone(),
+                );
             } else if method == "textDocument/didSave" {
                 let params: Option<DidSaveTextDocumentParams> =
                     parase_params(message.params.unwrap(), log_file.clone());
@@ -411,15 +434,13 @@ fn write_log(file: Arc<Mutex<File>>, message: &str) {
 // Handle "initialize" method.
 fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<File>>) {
     // Return server capabilities.
-    // - DidSaveTextDocument
-    // - textDocument/completion
     let result = InitializeResult {
         capabilities: ServerCapabilities {
             position_encoding: None,
             text_document_sync: Some(TextDocumentSyncCapability::Options(
                 TextDocumentSyncOptions {
-                    open_close: None,
-                    change: None,
+                    open_close: Some(true),
+                    change: Some(TextDocumentSyncKind::FULL),
                     will_save: None,
                     will_save_wait_until: None,
                     save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
@@ -524,6 +545,31 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>, _log_file: Ar
     send_response(id, param);
 }
 
+// Handle "textDocument/didOpen" method.
+fn handle_textdocument_did_open(
+    params: &DidOpenTextDocumentParams,
+    uri_to_content: &mut HashMap<lsp_types::Uri, String>,
+    _log_file: Arc<Mutex<File>>,
+) {
+    // Store the content of the file into `uri_to_content`.
+    uri_to_content.insert(
+        params.text_document.uri.clone(),
+        params.text_document.text.clone(),
+    );
+}
+
+// Handle "textDocument/didChange" method.
+fn handle_textdocument_did_change(
+    params: &DidChangeTextDocumentParams,
+    uri_to_content: &mut HashMap<lsp_types::Uri, String>,
+    _log_file: Arc<Mutex<File>>,
+) {
+    // Store the content of the file into `uri_to_content`.
+    if let Some(change) = params.content_changes.last() {
+        uri_to_content.insert(params.text_document.uri.clone(), change.text.clone());
+    }
+}
+
 // Handle "textDocument/didSave" method.
 fn handle_textdocument_did_save(
     diag_send: Sender<DiagnosticsMessage>,
@@ -540,10 +586,7 @@ fn handle_textdocument_did_save(
 
     // Store the content of the file into `uri_to_content`.
     if let Some(text) = &params.text {
-        uri_to_content.insert(
-            params.text_document.uri.clone(),
-            text.clone(), // format!("{:x}", md5::compute(text.as_bytes())),
-        );
+        uri_to_content.insert(params.text_document.uri.clone(), text.clone());
     } else {
         let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
         write_log(log_file.clone(), msg.as_str());
@@ -654,7 +697,7 @@ fn handle_hover(
     uri_to_content: &HashMap<lsp_types::Uri, String>,
     log_file: Arc<Mutex<File>>,
 ) {
-    // Get the file content.
+    // Get the latest file content.
     let uri = &params.text_document_position_params.text_document.uri;
     if !uri_to_content.contains_key(uri) {
         let msg = format!("No stored content for the uri \"{:?}\".", uri);
