@@ -1,3 +1,4 @@
+use crate::ast::expr::ExprNode;
 use crate::ast::program::Program;
 use crate::constants::INSTANCIATED_NAME_SEPARATOR;
 use crate::FullName;
@@ -12,10 +13,11 @@ use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
     CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    DidSaveTextDocumentParams, Documentation, HoverParams, HoverProviderCapability,
-    InitializeParams, InitializeResult, InitializedParams, MarkupContent, PublishDiagnosticsParams,
-    SaveOptions, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, WorkDoneProgressOptions,
+    DidSaveTextDocumentParams, Documentation, GotoDefinitionParams, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MarkupContent,
+    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, TextDocumentPositionParams,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    TextDocumentSyncSaveOptions, WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -325,6 +327,27 @@ pub fn launch_language_server() {
                     &uri_to_latest_content,
                     log_file.clone(),
                 );
+            } else if method == "textDocument/definition" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().prgoram;
+                let id = parse_id(&message, method, log_file.clone());
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<GotoDefinitionParams> =
+                    parase_params(message.params.unwrap(), log_file.clone());
+                if params.is_none() {
+                    continue;
+                }
+                handle_goto_definition(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    program,
+                    &uri_to_latest_content,
+                    log_file.clone(),
+                );
             }
         }
     }
@@ -467,7 +490,7 @@ fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<F
                 completion_item: None,
             }),
             signature_help_provider: None,
-            definition_provider: None,
+            definition_provider: Some(lsp_types::OneOf::Left(true)),
             type_definition_provider: None,
             implementation_provider: None,
             references_provider: None,
@@ -762,22 +785,20 @@ fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> O
     None
 }
 
-// Handle "textDocument/hover" method.
-fn handle_hover(
-    id: u32,
-    params: &HoverParams,
+fn get_node_at(
+    text_position: &TextDocumentPositionParams,
     program: &Program,
     uri_to_content: &HashMap<lsp_types::Uri, String>,
     log_file: Arc<Mutex<File>>,
-) {
+) -> Option<Arc<ExprNode>> {
     // Get the latest file content.
-    let uri = &params.text_document_position_params.text_document.uri;
+    let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
         let msg = format!("No stored content for the uri \"{:?}\".", uri);
         write_log(log_file.clone(), msg.as_str());
         let msg = format!("{:?}", uri_to_content);
         write_log(log_file.clone(), msg.as_str());
-        return;
+        return None;
     }
     let latest_content = uri_to_content.get(uri).unwrap();
 
@@ -785,8 +806,7 @@ fn handle_hover(
     let path = get_relative_path_from_uri(uri);
     if let Err(e) = path {
         write_log(log_file.clone(), &e);
-        send_response(id, Err::<(), String>(e));
-        return;
+        return None;
     }
     let path = path.ok().unwrap();
 
@@ -794,18 +814,16 @@ fn handle_hover(
     let saved_content = get_file_content_at_previous_diagnostics(program, &path);
     if let Err(e) = saved_content {
         write_log(log_file.clone(), &e);
-        send_response(id, Err::<(), String>(e));
-        return;
+        return None;
     }
     let saved_content = saved_content.ok().unwrap();
 
     // Get the position of the cursor in `saved_content`.
-    let pos_in_latest = params.text_document_position_params.position;
+    let pos_in_latest = text_position.position;
     let line_in_saved =
         calculate_corresponding_line(latest_content, &saved_content, pos_in_latest.line);
     if line_in_saved.is_none() {
-        send_response(id, Ok::<_, ()>(None::<()>));
-        return;
+        return None;
     }
     let pos_in_saved = lsp_types::Position {
         line: line_in_saved.unwrap(),
@@ -814,9 +832,95 @@ fn handle_hover(
 
     // Get the node at the position.
     let pos = position_to_bytes(&saved_content, pos_in_saved);
-    let node = program.find_node_at(&path, pos);
+    program.find_node_at(&path, pos)
+}
 
-    // If no node is found, nothing to do.
+// Handle "textDocument/definition" method.
+fn handle_goto_definition(
+    id: u32,
+    params: &GotoDefinitionParams,
+    program: &Program,
+    uri_to_content: &HashMap<lsp_types::Uri, String>,
+    log_file: Arc<Mutex<File>>,
+) {
+    // Get the node at the cursor position.
+    let node = get_node_at(
+        &params.text_document_position_params,
+        program,
+        uri_to_content,
+        log_file.clone(),
+    );
+    if node.is_none() {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    }
+    let node = node.unwrap();
+
+    // if the node is not a variable, nothing to do.
+    if !node.is_var() {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    }
+
+    // If the variable is local, do nothing.
+    let full_name = &node.get_var().name;
+    if full_name.is_local() {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    }
+
+    // Find the definition of the global value.
+    let gv = program.global_values.get(full_name);
+    if gv.is_none() {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    }
+    let gv = gv.unwrap();
+    let def_src = &gv.def_src;
+    if def_src.is_none() {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    }
+    let def_src = def_src.as_ref().unwrap();
+
+    // Create response value.
+    // Get the current directory.
+    let cdir = std::env::current_dir();
+    if cdir.is_err() {
+        let mut msg = "Failed to get the current directory: \n".to_string();
+        msg.push_str(&format!("{:?}\n", cdir.err().unwrap()));
+        write_log(log_file.clone(), msg.as_str());
+        return;
+    }
+    let cdir = cdir.unwrap();
+    let uri = path_to_uri(&cdir.join(&def_src.input.file_path));
+    if let Err(e) = uri {
+        send_response(id, Err::<(), String>(e));
+        return;
+    }
+    let uri = uri.ok().unwrap();
+    let location = lsp_types::Location {
+        uri,
+        range: span_to_range(&def_src),
+    };
+    send_response(id, Ok::<_, ()>(location));
+}
+
+// Handle "textDocument/hover" method.
+fn handle_hover(
+    id: u32,
+    params: &HoverParams,
+    program: &Program,
+    uri_to_content: &HashMap<lsp_types::Uri, String>,
+    log_file: Arc<Mutex<File>>,
+) {
+    // Get the node at the cursor position.
+    let node = get_node_at(
+        &params.text_document_position_params,
+        program,
+        uri_to_content,
+        log_file,
+    );
     if node.is_none() {
         send_response(id, Ok::<_, ()>(None::<()>));
         return;
