@@ -18,6 +18,7 @@ main = (
 ```
 
 In case the type is not a specific `T`, but a generic parameter `a` that appears in the type signature of a function you are implementing, you cannot use the above technique, because writing `|_| undefined() : a` is not allowed in Fix's syntax.
-Even in such a case, you may have some value related to `a`. 
-For example, if you have a function `f : b -> a`, then you can use `|_| f(undefined())`. 
-Or if you have a function `f : a -> b`, then you can use `|_| let x = undefined(); let _ = f(x); x`.
+
+Even in such a case, you may have some value related to `a`. For example:
+- If you have a function `f : b -> a`, then you can use `|_| f(undefined())`. 
+- If you have a function `f : a -> b`, then you can use `|_| let x = undefined(); let _ = f(x); x`.
