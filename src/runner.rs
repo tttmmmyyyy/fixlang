@@ -3,6 +3,7 @@ use ast::export_statement::ExportStatement;
 use build_time::build_time_utc;
 use compile_unit::CompileUnit;
 use cpu_features::CpuFeatures;
+use error::any_to_string;
 use error::error_exit;
 use error::Errors;
 use inkwell::{
@@ -10,6 +11,7 @@ use inkwell::{
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
 use rand::Rng;
+use std::panic::panic_any;
 use std::{
     fs::{self, create_dir_all, remove_dir_all},
     panic::{catch_unwind, AssertUnwindSafe},
@@ -261,7 +263,9 @@ fn build_object_files<'c>(
     }
     // Wait for all threads to finish.
     for t in threads {
-        t.join().unwrap();
+        if let Err(e) = t.join() {
+            panic_any(e);
+        }
     }
 
     Ok(BuildObjFilesResult {
@@ -429,13 +433,11 @@ pub fn test_source(source: &str, mut config: Configuration) {
 
 #[allow(dead_code)]
 pub fn test_source_fail(source: &str, config: Configuration, contained_msg: &str) {
-    let msg = catch_unwind(AssertUnwindSafe(|| {
+    let any = catch_unwind(AssertUnwindSafe(|| {
         test_source(source, config);
     }))
-    .unwrap_err()
-    .downcast_ref::<String>()
-    .unwrap()
-    .clone();
+    .unwrap_err();
+    let msg = any_to_string(any.as_ref());
     assert!(msg.contains(contained_msg));
 }
 

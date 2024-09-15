@@ -138,7 +138,7 @@ pub fn any_to_string(any: &dyn std::any::Any) -> String {
     } else if let Some(s) = any.downcast_ref::<&str>() {
         s.to_string()
     } else {
-        format!("{:?}", any)
+        "(unknown error)".to_string()
     }
 }
 

@@ -3929,16 +3929,20 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
-        if !obj.is_box(gc.type_env()) {
+        let arg = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        gc.release(arg.clone());
+
+        // Get the target type.
+        let arg_ty = arg.ty.clone();
+        let target_ty = arg_ty.get_lambda_dst();
+        if !target_ty.is_box(gc.type_env()) {
             error_exit(
-                "Std::FFI::unsafe_get_release_function_of_boxed_value cannot be called on an unboxed value.",
+                &format!("[Std::FFI::unsafe_get_release_function_of_boxed_value] Trying to get release function of an unboxed type `{}`.", target_ty.to_string_normalize()),
             )
         }
-        gc.release(obj.clone());
 
         // Get function pointer to release function.
-        let release_function_name = format!("release#{}", obj.ty.to_string_normalize());
+        let release_function_name = format!("release#{}", arg.ty.to_string_normalize());
         let func = if let Some(func) = gc.module.get_function(&release_function_name) {
             func
         } else {
@@ -3962,7 +3966,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
                 .unwrap()
                 .into_pointer_value();
             // Create object.
-            let obj = Object::new(obj_ptr, obj.ty.clone());
+            let obj = Object::new(obj_ptr, target_ty.clone());
             // Release object.
             gc.release(obj);
             // Return.
@@ -3990,15 +3994,15 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 }
 
 pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const TYPE_NAME: &str = "a";
+    const TARGET_TY_NAME: &str = "a";
     const VAR_NAME: &str = "x";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let arg_type = type_tyapp(make_lazy_ty(), type_tyvar_star(TARGET_TY_NAME));
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
         &[],
         vec![],
         vec![],
-        type_fun(obj_type.clone(), ret_type.clone()),
+        type_fun(arg_type.clone(), ret_type.clone()),
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
@@ -4032,16 +4036,20 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
-        if !obj.is_box(gc.type_env()) {
+        let arg = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        gc.release(arg.clone());
+
+        // Get the target type.
+        let arg_ty = arg.ty.clone();
+        let target_ty = arg_ty.get_lambda_dst();
+        if !target_ty.is_box(gc.type_env()) {
             error_exit(
-                "Std::FFI::unsafe_get_retain_function_of_boxed_value cannot be called on an unboxed value.",
+                &format!("[Std::FFI::unsafe_get_retain_function_of_boxed_value] Trying to get retain function of an unboxed type `{}`.", target_ty.to_string_normalize()),
             )
         }
-        gc.release(obj.clone());
 
         // Get function pointer to retain function.
-        let retain_function_name = format!("retain#{}", obj.ty.to_string_normalize());
+        let retain_function_name = format!("retain#{}", arg.ty.to_string_normalize());
         let func = if let Some(func) = gc.module.get_function(&retain_function_name) {
             func
         } else {
@@ -4065,7 +4073,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
                 .unwrap()
                 .into_pointer_value();
             // Create object.
-            let obj = Object::new(obj_ptr, obj.ty.clone());
+            let obj = Object::new(obj_ptr, target_ty);
             // retain object.
             gc.retain(obj);
             // Return.
@@ -4093,15 +4101,15 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 }
 
 pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const TYPE_NAME: &str = "a";
+    const TARGET_TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
+    let arg_type = type_tyapp(make_lazy_ty(), type_tyvar_star(TARGET_TYPE_NAME));
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
         &[],
         vec![],
         vec![],
-        type_fun(obj_type.clone(), ret_type.clone()),
+        type_fun(arg_type.clone(), ret_type.clone()),
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],

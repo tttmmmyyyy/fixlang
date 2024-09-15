@@ -10,11 +10,6 @@ type Task a = unbox struct { dtor : Destructor TaskHandle };
 // A native handle of a task. This type is used only for implementation.
 type TaskHandle = Ptr;
 
-// Get a boxed none of type `a` from a value of type `() -> a`.
-_get_boxed_none_of_codomain_type : (() -> a) -> Boxed (Option a);
-_get_boxed_none_of_codomain_type = |_func| (
-    Boxed { value : Option::none() }
-);
 
 // Evaluate the boxed lazy pointer.
 _run_task_function : Boxed (() -> Ptr) -> Ptr;
@@ -31,7 +26,7 @@ get = |task| (
     let task_handle = task.@dtor.@_value;
     let task_result_ptr = FFI_CALL[Ptr fixruntime_thread_get_task_result(Ptr), task_handle];
     let _ = task; // Do not call destructor before ending working with `task_handle`.
-    unsafe_get_boxed_value_from_retained_ptr(task_result_ptr).Boxed::@value.as_some
+    unsafe_get_boxed_value_from_retained_ptr(task_result_ptr).Boxed::@value
 );
 
 // Make a task which performs a computation asynchronously.
@@ -69,7 +64,7 @@ get = |task| (
 // ```
 make : (() -> a) -> Task a;
 make = |func| (
-    let boxed_none = _get_boxed_none_of_codomain_type(func);
+    let lazy_boxed_a = |_| Boxed { value : func() }; // : Lazy (Boxed a)
     let func = mark_threaded(func);
 
     // Create task function to be run on a thread.
@@ -77,14 +72,14 @@ make = |func| (
         // Run the task function.
         let result = func();
         // Return the boxed and threaded value.
-        mark_threaded(Boxed { value : Option::some(result) }).unsafe_get_retained_ptr_of_boxed_value
+        mark_threaded(Boxed { value : result }).unsafe_get_retained_ptr_of_boxed_value
     );
     let boxed_task_func = Boxed { value : task_func };
     // Get the native handle of the task.
     let task_handle : TaskHandle = FFI_CALL[Ptr fixruntime_thread_create_task(Ptr, Ptr, Ptr), 
         boxed_task_func.unsafe_get_retained_ptr_of_boxed_value,
-        boxed_none.unsafe_get_release_function_of_boxed_value,
-        boxed_none.unsafe_get_retain_function_of_boxed_value
+        lazy_boxed_a.unsafe_get_release_function_of_boxed_value,
+        lazy_boxed_a.unsafe_get_retain_function_of_boxed_value
     ];
 
     // In the destructor, release the task handle.
@@ -208,10 +203,11 @@ namespace Var {
     make : a -> IO (Var a);
     make = |value| IO { _data : |_| (
         let value = mark_threaded(VarValue { value : value });
+        let lazy_value = |_| value;
         let handle = FFI_CALL[Ptr fixruntime_thread_var_create(Ptr, Ptr, Ptr), 
             value.unsafe_get_retained_ptr_of_boxed_value,
-            value.unsafe_get_release_function_of_boxed_value,
-            value.unsafe_get_retain_function_of_boxed_value
+            lazy_value.unsafe_get_release_function_of_boxed_value,
+            lazy_value.unsafe_get_retain_function_of_boxed_value
         ];
         let dtor = Destructor::make(handle, |handle| (
             FFI_CALL[() fixruntime_thread_var_destroy(Ptr), handle]

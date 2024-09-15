@@ -608,8 +608,8 @@
       - [`unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`](#unsafe_borrow_boxed_data_ptr--ptr---b---a---b)
       - [`unsafe_clear_errno : () -> ()`](#unsafe_clear_errno-----)
       - [`unsafe_get_errno : () -> CInt`](#unsafe_get_errno-----cint)
-      - [`unsafe_get_release_function_of_boxed_value : a -> Ptr`](#unsafe_get_release_function_of_boxed_value--a---ptr)
-      - [`unsafe_get_retain_function_of_boxed_value : a -> Ptr`](#unsafe_get_retain_function_of_boxed_value--a---ptr)
+      - [`unsafe_get_release_function_of_boxed_value : Lazy a -> Ptr`](#unsafe_get_release_function_of_boxed_value--lazy-a---ptr)
+      - [`unsafe_get_retain_function_of_boxed_value : Lazy a -> Ptr`](#unsafe_get_retain_function_of_boxed_value--lazy-a---ptr)
       - [`unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`](#unsafe_get_boxed_value_from_retained_ptr--ptr---a)
       - [`unsafe_get_retained_ptr_of_boxed_value : a -> Ptr`](#unsafe_get_retained_ptr_of_boxed_value--a---ptr)
       - [`type Destructor`](#type-destructor)
@@ -2161,15 +2161,38 @@ Set errno to zero.
 
 Get errno which is set by C functions.
 
-#### `unsafe_get_release_function_of_boxed_value : a -> Ptr`
+#### `unsafe_get_release_function_of_boxed_value : Lazy a -> Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
 This function is used to release a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
 
-#### `unsafe_get_retain_function_of_boxed_value : a -> Ptr`
+Note that this function is requires a value of type `Lazy a`, not of `a`.
+So you can get release function for a boxed type `T` even when you don't have a value of type `T` -- you can just use `|_| undefined() : T`:
+
+```
+module Main;
+
+type VoidType = box struct {};
+// No constructor for `VoidType` is provided.
+
+main: IO ();
+main = (
+    let release = (|_| undefined() : VoidType).unsafe_get_release_function_of_boxed_value; // Release function of `VoidType`.
+    pure()
+);
+```
+
+In case the type is not a specific `T`, but a generic parameter `a` that appears in the type signature of a function you are implementing, you cannot use the above technique, because writing `|_| undefined() : a` is not allowed in Fix's syntax.
+Even in such a case, you may have some value related to `a`. 
+For example, if you have a function `f : b -> a`, then you can use `|_| f(undefined())`. 
+Or if you have a function `f : a -> b`, then you can use `|_| let x = undefined(); let _ = f(x); x`.
+
+#### `unsafe_get_retain_function_of_boxed_value : Lazy a -> Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which retains a boxed value of type `a`.
 This function is used to retain a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
+
+For the reason that this function requires a value of type `Lazy a`, not of `a`, see the document for `unsafe_get_release_function_of_boxed_value`.
 
 #### `unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`
 

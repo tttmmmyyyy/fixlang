@@ -7204,3 +7204,78 @@ pub fn test_export() {
     // Remove the shared library.
     let _ = fs::remove_file(so_file_path);
 }
+
+#[test]
+pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_1() {
+    // Actual usage of `unsafe_get_release_function_of_boxed_value` is tested in asynctask.fix.
+    let source = r##"
+        module Main;
+
+        type VoidType = box struct {};
+        // No constructor for `VoidType` is provided.
+
+        main: IO ();
+        main = (
+            let release = (|_| undefined() : VoidType).unsafe_get_release_function_of_boxed_value;
+            let retain = (|_| undefined() : VoidType).unsafe_get_retain_function_of_boxed_value;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_2() {
+    // Actual usage of `unsafe_get_release_function_of_boxed_value` is tested in asynctask.fix.
+    let source = r##"
+        module Main;
+
+        get_release_func_of_codom : (a -> b) -> Ptr;
+        get_release_func_of_codom = |f| (
+            let lazy_b = |_| f(undefined());
+            lazy_b.unsafe_get_release_function_of_boxed_value
+        );
+
+        get_retain_func_of_dom : (a -> b) -> Ptr;
+        get_retain_func_of_dom = |f| (
+            let lazy_a = |_| let x = undefined(); let _ = f(x); x;
+            lazy_a.unsafe_get_release_function_of_boxed_value
+        );
+
+        main: IO ();
+        main = (
+            let release = get_release_func_of_codom(|_ : I64| [42]);
+            let retain = get_retain_func_of_dom(|_ : Array I64| 42);
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler());
+}
+
+#[test]
+pub fn test_unsafe_get_release_function_of_boxed_value_error() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let release = (|_| undefined() : I64).unsafe_get_release_function_of_boxed_value;
+            pure()
+        );
+    "##;
+    test_source_fail(&source, Configuration::develop_compiler(), "");
+}
+
+#[test]
+pub fn test_unsafe_get_retain_function_of_boxed_value_error() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let retain = (|_| undefined() : I64).unsafe_get_retain_function_of_boxed_value;
+            pure()
+        );
+    "##;
+    test_source_fail(&source, Configuration::develop_compiler(), "");
+}
