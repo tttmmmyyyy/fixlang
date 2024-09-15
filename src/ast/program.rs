@@ -772,7 +772,7 @@ impl Program {
     // - Resolve namespace of type and traits in the expression.
     // - Resolve type aliases in the expression.
     // - Perform typechecking.
-    // The result will be written to `te`.
+    // This function updates `te` in-place.
     fn resolve_namespace_and_check_type_sub(
         &self,
         te: &mut TypedExpr,
@@ -902,6 +902,78 @@ impl Program {
         Ok(())
     }
 
+    // Perform namespace resolution and type-checking for the specified expression.
+    // This function updates `TypedExpr` in `self.global_values` in-place.
+    pub fn resolve_namespace_and_check_type(
+        &mut self,
+        tc: &TypeCheckContext,
+        name: &FullName,
+        method_impl_filter: impl Fn(&MethodImpl) -> Result<bool, Errors>,
+    ) -> Result<(), Errors> {
+        // To avoid borrowing `self` mutably twice, do the task immutably first.
+        let gv = self.global_values.get(&name).unwrap();
+        let tes = match &gv.expr {
+            SymbolExpr::Simple(e) => {
+                // Perform type-checking.
+                let define_module = name.module();
+                let mut te = e.clone();
+                self.resolve_namespace_and_check_type_sub(
+                    &mut te,
+                    &gv.scm,
+                    &name,
+                    &define_module,
+                    tc,
+                )?;
+
+                // Calculate free vars.
+                te.calculate_free_vars();
+                vec![(0, te)]
+            }
+            SymbolExpr::Method(impls) => {
+                let mut tes = vec![];
+                for (i, method) in impls.iter().enumerate() {
+                    // Select method implementation.
+                    if !method_impl_filter(method)? {
+                        continue;
+                    }
+
+                    // Perform type-checking.
+                    let define_module = method.define_module.clone();
+                    let mut e = method.expr.clone();
+                    self.resolve_namespace_and_check_type_sub(
+                        &mut e,
+                        &method.ty,
+                        &name,
+                        &define_module,
+                        tc,
+                    )?;
+
+                    // Calculate free vars.
+                    e.calculate_free_vars();
+
+                    tes.push((i, e));
+                }
+                tes
+            }
+        };
+
+        // Then update `TypedExpr` in `self.global_values` mutably.
+        let global_sym = self.global_values.get_mut(&name).unwrap();
+        match &mut global_sym.expr {
+            SymbolExpr::Simple(e) => {
+                for (_, te) in tes {
+                    *e = te;
+                }
+            }
+            SymbolExpr::Method(impls) => {
+                for (i, te) in tes {
+                    impls[i].expr = te;
+                }
+            }
+        };
+        Ok(())
+    }
+
     // Instantiate symbol.
     fn instantiate_symbol(
         &mut self,
@@ -919,60 +991,42 @@ impl Program {
                 &[&sym.expr.as_ref().unwrap().source],
             ));
         }
+        // First, perform namespace resolution and type-checking.
+        let method_selector = |method: &MethodImpl| -> Result<bool, Errors> {
+            // Select method implementation whose type unifies with the required type `sym.ty`.
+            //
+            // NOTE: Since overlapping implementations and unrelated methods are forbidden,
+            // we only need to check the unifiability here,
+            // and we do not need to check whether predicates or equality constraints are satisfiable or not.
+            let mut tc0 = tc.clone();
+            Ok(UnifOrOtherErr::extract_others(tc0.unify(&method.ty.ty, &sym.ty))?.is_ok())
+        };
+        self.resolve_namespace_and_check_type(tc, &sym.generic_name, method_selector)?;
+
+        // Then perform instantiation.
         let global_sym = self.global_values.get(&sym.generic_name).unwrap();
         let expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
-                // Perform type-checking.
-                let define_module = sym.generic_name.module();
-                let mut e = e.clone();
-                self.resolve_namespace_and_check_type_sub(
-                    &mut e,
-                    &global_sym.scm,
-                    &sym.generic_name,
-                    &define_module,
-                    tc,
-                )?;
-                // Calculate free vars.
-                e.calculate_free_vars();
                 // Specialize e's type to the required type `sym.ty`.
                 let mut tc = tc.clone();
                 assert!(tc.substitution.is_empty());
-                tc.substitution = std::mem::replace(&mut e.substitution, Substitution::default());
+                tc.substitution = e.substitution.clone();
                 tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
-                tc.finish_inferred_types(e.expr)?
+                tc.finish_inferred_types(e.expr.clone())?
             }
             SymbolExpr::Method(impls) => {
                 let mut opt_e: Option<Arc<ExprNode>> = None;
                 for method in impls {
-                    // Check if the type of this implementation unify with the required type `sym.ty`.
-                    // NOTE: Since overlapping implementations and unrelated methods are forbidden,
-                    // we only need to check the unifiability here,
-                    // and we do not need to check whether predicates or equality constraints are satisfiable or not.
-                    {
-                        let mut tc0 = tc.clone();
-                        if UnifOrOtherErr::extract_others(tc0.unify(&method.ty.ty, &sym.ty))?
-                            .is_err()
-                        {
-                            continue;
-                        }
+                    // Select method implementation.
+                    if !method_selector(method)? {
+                        continue;
                     }
-                    // Perform type-checking.
-                    let define_module = method.define_module.clone();
-                    let mut e = method.expr.clone();
-                    self.resolve_namespace_and_check_type_sub(
-                        &mut e,
-                        &method.ty,
-                        &sym.generic_name,
-                        &define_module,
-                        tc,
-                    )?;
-                    // Calculate free vars.
-                    e.calculate_free_vars();
+                    let e = method.expr.clone();
+
                     // Specialize e's type to the required type `sym.ty`.
                     let mut tc = tc.clone();
                     assert!(tc.substitution.is_empty());
-                    tc.substitution =
-                        std::mem::replace(&mut e.substitution, Substitution::default());
+                    tc.substitution = e.substitution;
                     tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
                     opt_e = Some(tc.finish_inferred_types(e.expr)?);
                     break;
