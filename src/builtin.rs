@@ -4213,6 +4213,13 @@ impl InlineLLVMMarkThreadedFunctionBody {
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
+        // Check if the `threaded` compiler flag is true.
+        if !gc.config.threaded {
+            error_exit(
+                "The `threaded` compiler flag must be set to true to use `Std::mark_threaded`.",
+            );
+        }
+
         // Get argument
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
         gc.mark_threaded(obj.clone());
