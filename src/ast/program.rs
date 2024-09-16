@@ -1696,7 +1696,7 @@ impl Program {
         let mut errors = Errors::empty();
 
         // Merge `module_to_files`.
-        // Also, check if there is a module defined in two files.
+        // Also, check if there is a module defined in multiple files.
         for (mod_name, file) in &other.module_to_files {
             let file = file.clone();
             if self.module_to_files.contains_key(mod_name) {
@@ -1706,6 +1706,10 @@ impl Program {
                     continue;
                 }
                 let another_file = self.module_to_files.get(mod_name).unwrap();
+                if another_file.file_path == file.file_path {
+                    // If the module is defined in the same file, this is not a problem.
+                    continue;
+                }
                 let msg = format!(
                     "Module `{}` is defined in two files: \"{}\" and \"{}\".",
                     mod_name,

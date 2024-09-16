@@ -427,7 +427,9 @@ pub fn test_source(source: &str, mut config: Configuration) {
     const MAIN_RUN: &str = "main_run";
     let source_hash = format!("{:x}", md5::compute(source));
     save_temporary_source(source, MAIN_RUN, &source_hash);
-    config.source_files = vec![temporary_source_path(MAIN_RUN, &source_hash)];
+    config
+        .source_files
+        .push(temporary_source_path(MAIN_RUN, &source_hash));
     assert_eq!(run_file(config), 0);
 }
 
