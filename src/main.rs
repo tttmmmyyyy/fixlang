@@ -129,7 +129,7 @@ fn main() {
         .long("debug")
         .short('g')
         .takes_value(false)
-        .help("[Experimental] Generate debugging information. \n\
+        .help("Generate debugging information. \n\
               This option automatically turns on `-O none`. You can override this by explicitly specifying another optimization level.");
     let opt_level = Arg::new("opt-level")
         .long("opt-level")
