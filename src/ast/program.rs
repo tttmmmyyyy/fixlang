@@ -998,7 +998,7 @@ impl Program {
                     sym.generic_name.to_string(),
                     sym.ty.to_string_normalize()
                 ),
-                &[&sym.expr.as_ref().unwrap().source],
+                &[&sym.expr.as_ref().map(|expr| expr.source.clone()).flatten()],
             ));
         }
         // First, perform namespace resolution and type-checking.
