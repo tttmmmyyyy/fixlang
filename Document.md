@@ -1723,7 +1723,9 @@ Following fields are available in the "fixproj.toml" file:
 Running `fix language-server` starts a language server which supports Language Server Protocol (LSP). 
 Language client extension for VSCode is available in [here](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client).
 
-Each time you save a file, the language server will attempt to diagnose the Fix program based on [the project file](#project-file).
+The language server requires [the project file](#project-file) to recognize the Fix source files.
+
+Each time you save a file, the language server will attempt to diagnose the Fix program.
 The information obtained in the latest successful diagnostics is used to comletion, hover or go-to-definition, etc.
 So to update the information, you need to write correct Fix code and save the file. 
 [`Std::undefined`](./BuiltinLibraries.md#undefined--lazy-a) will be useful to do so.
