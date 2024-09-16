@@ -1713,10 +1713,47 @@ The following is the table of operators sorted by its precedence (operator of hi
 
 ## Project file
 
-When the "fixproj.toml" file is in the current directory, "fix build" and "fix run" will refelct the configuration in the file.
+"fix build" and "fix run" commands loads a file "fixproj.toml" in the current directory if it exists.
+If you specify source files or compiler options in the "fixproj.toml" file, you don't need to specify them in the command line argument every time you build the program.
 
-Following fields are available in the "fixproj.toml" file:
-- `files`: A list of Fix source files.
+The following is an example of "fixproj.toml" file. 
+Every fields is optional.
+
+```
+[build]
+// Fix source files to compile.
+// Merged with files specified in the command line argument.
+files = ["main.fix", "lib.fix"]
+
+// Static link libraries.
+// Merged with libraries specified in the command line argument.
+static_links = ["m"]
+
+// Dynamic link libraries.
+// Merged with libraries specified in the command line argument.
+dynamic_links = ["pthread"]
+
+// Library search paths.
+// Merged with paths specified in the command line argument.
+library_paths = ["./native_libs"]
+
+// Whether to generate debug information.
+// Overwritten by the command line argument.
+debug = true
+
+// Optimization level.
+// One of "none", "minimum", "separated", "default".
+// Overwritten by the command line argument.
+opt_level = "separated"
+
+// Output file name.
+// Overwritten by the command line argument.
+output = "myprogram.out"
+
+// Whether to use the thread-safe reference counting.
+// Overwritten by the command line argument.
+threaded = false
+```
 
 ## Language Server Protocol
 

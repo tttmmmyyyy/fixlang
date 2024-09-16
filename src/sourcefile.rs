@@ -14,10 +14,10 @@ pub struct SourceFile {
     pub file_path: PathBuf,
     #[serde(skip)]
     // Cached content of the file.
-    pub string: Arc<Mutex<Option<String>>>,
+    string: Arc<Mutex<Option<String>>>,
     // Hash of the file content.
     #[serde(skip)]
-    pub hash: Arc<Mutex<Option<String>>>,
+    hash: Arc<Mutex<Option<String>>>,
 }
 
 impl SourceFile {
@@ -28,15 +28,12 @@ impl SourceFile {
         Ok(self.string.lock().unwrap().as_ref().unwrap().clone())
     }
 
-    pub fn from_file_path(file_path: PathBuf) -> Result<Self, Errors> {
-        let src_file = Self {
+    pub fn from_file_path(file_path: PathBuf) -> Self {
+        Self {
             string: Arc::new(Mutex::new(None)),
             hash: Arc::new(Mutex::new(None)),
             file_path,
-        };
-        src_file.read_file()?;
-        src_file.hash()?;
-        Ok(src_file)
+        }
     }
 
     fn read_file(&self) -> Result<(), Errors> {

@@ -6,6 +6,8 @@ use crate::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
+    OPTIMIZATION_LEVEL_DEFAULT, OPTIMIZATION_LEVEL_MINIMUM, OPTIMIZATION_LEVEL_NONE,
+    OPTIMIZATION_LEVEL_SEPARATED,
 };
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
@@ -81,10 +83,10 @@ pub enum FixOptimizationLevel {
 impl std::fmt::Display for FixOptimizationLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FixOptimizationLevel::None => write!(f, "None"),
-            FixOptimizationLevel::Minimum => write!(f, "Minimum"),
-            FixOptimizationLevel::Separated => write!(f, "Separated"),
-            FixOptimizationLevel::Default => write!(f, "Default"),
+            FixOptimizationLevel::None => write!(f, "{}", OPTIMIZATION_LEVEL_NONE),
+            FixOptimizationLevel::Minimum => write!(f, "{}", OPTIMIZATION_LEVEL_MINIMUM),
+            FixOptimizationLevel::Separated => write!(f, "{}", OPTIMIZATION_LEVEL_SEPARATED),
+            FixOptimizationLevel::Default => write!(f, "{}", OPTIMIZATION_LEVEL_DEFAULT),
         }
     }
 }

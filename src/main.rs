@@ -34,7 +34,7 @@ mod runtime;
 mod cpu_features;
 mod error;
 mod lsp;
-mod project;
+mod project_file;
 mod sourcefile;
 mod stdlib;
 mod stopwatch;
@@ -77,7 +77,7 @@ use object::*;
 use parser::*;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
-use project::ProjectFile;
+use project_file::ProjectFile;
 use runner::*;
 use runtime::*;
 use sourcefile::*;
@@ -289,10 +289,16 @@ fn main() {
             // These lines should be after calling `set_debug_info`; otherwise, user cannot specify the optimization level while generating debug information.
             let opt_level = args.get_one::<String>("opt-level").unwrap();
             match opt_level.as_str() {
-                "none" => config.set_fix_opt_level(FixOptimizationLevel::None),
-                "minimum" => config.set_fix_opt_level(FixOptimizationLevel::Minimum),
-                "separated" => config.set_fix_opt_level(FixOptimizationLevel::Separated),
-                "default" => config.set_fix_opt_level(FixOptimizationLevel::Default),
+                OPTIMIZATION_LEVEL_NONE => config.set_fix_opt_level(FixOptimizationLevel::None),
+                OPTIMIZATION_LEVEL_MINIMUM => {
+                    config.set_fix_opt_level(FixOptimizationLevel::Minimum)
+                }
+                OPTIMIZATION_LEVEL_SEPARATED => {
+                    config.set_fix_opt_level(FixOptimizationLevel::Separated)
+                }
+                OPTIMIZATION_LEVEL_DEFAULT => {
+                    config.set_fix_opt_level(FixOptimizationLevel::Default)
+                }
                 _ => panic!("Unknown optimization level: {}", opt_level),
             }
         }
@@ -308,11 +314,19 @@ fn main() {
             .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
     }
 
+    // Create configuration from the command line arguments and the project file.
     fn create_config(args: &ArgMatches) -> Configuration {
         let mut config = Configuration::release();
-        set_config_from_args(&mut config, args);
+
+        // First, set up configuration from the project file.
         let proj_file = exit_if_err(ProjectFile::read_file(false));
-        ProjectFile::set_config_from_proj_file(&mut config, &proj_file);
+        exit_if_err(ProjectFile::set_config_from_proj_file(
+            &mut config,
+            &proj_file,
+        ));
+
+        // Secondly, set up configuration from the command line arguments, to overwrite the configuration described in the project file.
+        set_config_from_args(&mut config, args);
         config
     }
 

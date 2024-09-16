@@ -5,7 +5,7 @@ use crate::FullName;
 use crate::{
     constants::LSP_LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
-    project::ProjectFile,
+    project_file::ProjectFile,
     runner::build_file,
     Configuration, Span,
 };
@@ -1258,7 +1258,7 @@ fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<DiagnosticsResult, Err
 
     // Create the configuration.
     let mut config = Configuration::language_server()?;
-    ProjectFile::set_config_from_proj_file(&mut config, &project_file);
+    ProjectFile::set_config_from_proj_file(&mut config, &project_file)?;
 
     // Build the file and get the errors.
     let program = build_file(&mut config)?.program.unwrap();

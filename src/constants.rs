@@ -104,6 +104,12 @@ pub const COMPILER_TEST_WORKING_PATH: &str = ".fixlang/compiler_test";
 pub const LSP_LOG_FILE_PATH: &str = ".fixlang/lsp.log";
 pub const PROJECT_FILE_PATH: &str = "fixproj.toml";
 
+// Optimization levels
+pub const OPTIMIZATION_LEVEL_NONE: &str = "none";
+pub const OPTIMIZATION_LEVEL_MINIMUM: &str = "minimum";
+pub const OPTIMIZATION_LEVEL_SEPARATED: &str = "separated";
+pub const OPTIMIZATION_LEVEL_DEFAULT: &str = "default";
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TraverserWorkType(pub u32);
 impl TraverserWorkType {
