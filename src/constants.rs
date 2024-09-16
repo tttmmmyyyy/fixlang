@@ -104,8 +104,6 @@ pub const COMPILER_TEST_WORKING_PATH: &str = ".fixlang/compiler_test";
 pub const LSP_LOG_FILE_PATH: &str = ".fixlang/lsp.log";
 pub const PROJECT_FILE_PATH: &str = "fixproj.toml";
 
-pub const ASYNCTASK_NAME: &str = "AsyncTask";
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TraverserWorkType(pub u32);
 impl TraverserWorkType {
@@ -196,7 +194,7 @@ pub const STANDARD_LIBRARIES: &[(
         None,
     ),
     (
-        ASYNCTASK_NAME,
+        "AsyncTask",
         include_str!("./fix/asynctask.fix"),
         "asynctask",
         Some(Configuration::set_async_task),
