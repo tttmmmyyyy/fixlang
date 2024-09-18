@@ -754,7 +754,7 @@ fn get_file_content_at_previous_diagnostics(
             return Ok(content.ok().unwrap());
         }
     }
-    let msg = format!("No saved content for the file: {}", path.display());
+    let msg = format!("No saved content for the file: {}\n", path.display());
     return Err(msg);
 }
 
