@@ -16,6 +16,7 @@ use std::{
 #[derive(Deserialize, Default)]
 pub struct ProjectFile {
     pub build: ProjectFileBuild,
+    pub dependencies: Vec<ProjectFileDependency>,
 }
 
 #[derive(Deserialize, Default)]
@@ -29,6 +30,13 @@ pub struct ProjectFileBuild {
     opt_level: Option<String>,
     output: Option<String>,
     threaded: Option<bool>,
+}
+
+pub struct ProjectFileDependency {
+    pub name: String,
+    pub path: Option<String>,
+    pub git: Option<ProjectFileDependencyGit>,
+    pub version: String,
 }
 
 impl ProjectFile {
