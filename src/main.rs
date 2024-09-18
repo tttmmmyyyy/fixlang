@@ -43,6 +43,7 @@ mod tests;
 mod typecheck;
 mod uncurry_optimization;
 
+use crate::error::Errors;
 use ast::expr::*;
 use ast::import::*;
 use ast::inline_llvm::*;
@@ -214,12 +215,17 @@ fn main() {
         .subcommand(clean_subc)
         .subcommand(lsp_subc);
 
-    fn read_source_files_options(m: &ArgMatches) -> Vec<PathBuf> {
+    fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
         let files = m.get_many::<String>("source-files");
         if files.is_none() {
-            return vec![];
+            return Ok(vec![]);
         }
-        files.unwrap().map(|s| PathBuf::from(s)).collect()
+        let files = files.unwrap();
+        let mut abs_files = vec![];
+        for file in files {
+            abs_files.push(to_absolute_path(&PathBuf::from(file))?);
+        }
+        Ok(abs_files)
     }
 
     fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
@@ -252,11 +258,11 @@ fn main() {
             .collect::<Vec<_>>()
     }
 
-    fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) {
+    fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
         // Set `source_files`.
         config
             .source_files
-            .append(&mut read_source_files_options(args));
+            .append(&mut read_source_files_options(args)?);
 
         // Set `output_file_path`.
         config.out_file_path = read_output_file_option(args);
@@ -312,6 +318,8 @@ fn main() {
         config.max_cu_size = *args
             .get_one::<usize>("max-cu-size")
             .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
+
+        Ok(())
     }
 
     // Create configuration from the command line arguments and the project file.
@@ -326,7 +334,7 @@ fn main() {
         ));
 
         // Secondly, set up configuration from the command line arguments, to overwrite the configuration described in the project file.
-        set_config_from_args(&mut config, args);
+        exit_if_err(set_config_from_args(&mut config, args));
         config
     }
 

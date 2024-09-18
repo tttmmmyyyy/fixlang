@@ -4,6 +4,7 @@ use crate::{
         OPTIMIZATION_LEVEL_SEPARATED,
     },
     error::Errors,
+    misc::to_absolute_path,
     Configuration, FixOptimizationLevel, LinkType, SourceFile, Span, PROJECT_FILE_PATH,
 };
 use serde::Deserialize;
@@ -16,6 +17,9 @@ use std::{
 #[derive(Deserialize, Default)]
 pub struct ProjectFile {
     pub build: ProjectFileBuild,
+    #[serde(skip)]
+    // The path of this project file.
+    pub path: PathBuf,
 }
 
 #[derive(Deserialize, Default)]
@@ -95,12 +99,11 @@ impl ProjectFile {
         proj_file: &ProjectFile,
     ) -> Result<(), Errors> {
         // Append source files.
-        let mut files = proj_file
-            .build
-            .files
-            .iter()
-            .map(|f| PathBuf::from(f))
-            .collect();
+        let mut files = vec![];
+        for f in &proj_file.build.files {
+            let path = to_absolute_path(&PathBuf::from(f))?;
+            files.push(path);
+        }
         config.source_files.append(&mut files);
 
         // Append static libraries.
