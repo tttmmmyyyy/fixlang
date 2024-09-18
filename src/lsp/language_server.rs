@@ -22,7 +22,6 @@ use lsp_types::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::env::current_dir;
 use std::path::Path;
 use std::{
     collections::HashSet,
@@ -715,28 +714,6 @@ fn handle_completion_resolve_document(
     send_response(id, Ok::<_, ()>(item));
 }
 
-// Get the relative path of the file from the uri.
-fn get_relative_path_from_uri(uri: &lsp_types::Uri) -> Result<PathBuf, String> {
-    let path = PathBuf::from(uri.path().to_string());
-    let cur_dir = current_dir();
-    if let Err(e) = cur_dir {
-        let msg = format!("Failed to get the current directory: {:?}", e);
-        return Err(msg);
-    }
-    let cur_dir = cur_dir.unwrap();
-    let path_rel = path.strip_prefix(&cur_dir);
-    if let Err(_e) = path_rel {
-        let msg = format!(
-            "The path {} is not subdirectory of current directory {}",
-            path.display(),
-            cur_dir.display()
-        );
-        return Err(msg);
-    }
-    let path = path_rel.unwrap();
-    Ok(path.to_path_buf())
-}
-
 fn get_file_content_at_previous_diagnostics(
     program: &Program,
     path: &Path,
@@ -754,7 +731,7 @@ fn get_file_content_at_previous_diagnostics(
             return Ok(content.ok().unwrap());
         }
     }
-    let msg = format!("No saved content for the file: {}", path.display());
+    let msg = format!("No saved content for the file: {}\n", path.display());
     return Err(msg);
 }
 
@@ -802,13 +779,8 @@ fn get_node_at(
     }
     let latest_content = uri_to_content.get(uri).unwrap();
 
-    // Get the relative path of the file.
-    let path = get_relative_path_from_uri(uri);
-    if let Err(e) = path {
-        write_log(log_file.clone(), &e);
-        return None;
-    }
-    let path = path.ok().unwrap();
+    // Get the path of the file.
+    let path = PathBuf::from(uri.path().to_string());
 
     // Get the file content at the time of the last successful diagnostics.
     let saved_content = get_file_content_at_previous_diagnostics(program, &path);

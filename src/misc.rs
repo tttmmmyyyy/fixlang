@@ -1,4 +1,5 @@
 use super::*;
+use crate::error::Errors;
 use std::{fs, hash::Hash};
 
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
@@ -107,4 +108,23 @@ pub fn number_to_varname(n: usize) -> String {
     }
     ret += &n.to_string();
     ret
+}
+
+// Converts a path to an absolute path.
+pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        match std::env::current_dir() {
+            Err(e) => {
+                return Err(Errors::from_msg(format!(
+                    "Failed to get the current directory: {}",
+                    e
+                )));
+            }
+            Ok(cur_dir) => {
+                return Ok(cur_dir.join(path));
+            }
+        }
+    }
 }
