@@ -206,8 +206,14 @@ fn main() {
         .arg(verbose.clone())
         .arg(max_cu_size.clone());
 
-    // "fix install-deps" subcommand
-    let install_deps_subc = App::new("install-deps").about("Install dependencies.");
+    // "fix deps" subcommand
+    let deps = App::new("deps").about("Manage dependencies.");
+    let deps_install =
+        App::new("install").about("Install dependencies specified in the lock file.");
+    let deps_update = App::new("update").about(
+        "Update the lock file and install dependencies so that it satisfies the dependencies specified in the project file.",
+    );
+    let deps = deps.subcommand(deps_install).subcommand(deps_update);
 
     // "fix clean" subcommand
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
@@ -222,7 +228,7 @@ fn main() {
         .subcommand(build_subc)
         .subcommand(clean_subc)
         .subcommand(lsp_subc)
-        .subcommand(install_deps_subc);
+        .subcommand(deps);
 
     fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
         let files = m.get_many::<String>("source-files");
@@ -352,10 +358,17 @@ fn main() {
         Some(("build", args)) => {
             exit_if_err(build_file(&mut create_config(args)));
         }
-        Some(("install-deps", _)) => {
-            let proj_file = exit_if_err(ProjectFile::read_root_file(true));
-            exit_if_err(proj_file.update_lock_file().and_then(|lf| lf.install()));
-        }
+        Some(("deps", args)) => match args.subcommand() {
+            Some(("install", _args)) => {
+                let proj_file = exit_if_err(ProjectFile::read_root_file(true));
+                exit_if_err(proj_file.open_lock_file().and_then(|lf| lf.install()));
+            }
+            Some(("update", _args)) => {
+                let proj_file = exit_if_err(ProjectFile::read_root_file(true));
+                exit_if_err(proj_file.update_lock_file().and_then(|lf| lf.install()));
+            }
+            _ => eprintln!("Unknown command!"),
+        },
         Some(("language-server", _args)) => {
             launch_language_server();
         }
