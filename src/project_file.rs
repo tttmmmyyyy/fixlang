@@ -103,6 +103,7 @@ pub struct ProjectFile {
     // `build` section
     pub build: ProjectFileBuild,
     // `dependencies` section
+    #[serde(default)]
     pub dependencies: Vec<ProjectFileDependency>,
     // The hash value of the project file.
     #[serde(skip)]
@@ -344,7 +345,13 @@ impl ProjectFile {
     }
 
     // Open the lock file.
+    // If the project has no dependencies, return an empty lock file.
     pub fn open_lock_file(&self) -> Result<DependecyLockFile, Errors> {
+        // If there are no dependencies, the lock file is not necessary.
+        if self.dependencies.is_empty() {
+            return Ok(DependecyLockFile::default());
+        }
+
         // Try to open the valid dependency lock file.
         // If the project file hash is different from the one in the lock file, the lock file is invalid.
         let content = std::fs::read_to_string(LOCK_FILE_PATH).map_err(|e| {
