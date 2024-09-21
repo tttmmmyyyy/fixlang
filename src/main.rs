@@ -7,13 +7,16 @@ extern crate serial_test;
 extern crate build_time;
 extern crate chrono;
 extern crate difference;
+extern crate git2;
 extern crate lsp_types;
 extern crate num_bigint;
 extern crate rand;
 extern crate regex;
+extern crate semver;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_pickle;
+extern crate tempfile;
 extern crate toml;
 
 mod ast;
@@ -22,6 +25,8 @@ mod builtin;
 mod compile_unit;
 mod configuration;
 mod constants;
+mod dependency_lockfile;
+mod dependency_resolver;
 mod generator;
 mod graph;
 mod llvm_passes;
@@ -327,11 +332,10 @@ fn main() {
         let mut config = Configuration::release();
 
         // First, set up configuration from the project file.
-        let proj_file = exit_if_err(ProjectFile::read_file(false));
-        exit_if_err(ProjectFile::set_config_from_proj_file(
-            &mut config,
-            &proj_file,
-        ));
+        let proj_file_path = exit_if_err(to_absolute_path(Path::new(PROJECT_FILE_PATH)));
+        let proj_file = exit_if_err(ProjectFile::read_file(&proj_file_path, false));
+        exit_if_err(proj_file.set_config(&mut config, false));
+        exit_if_err(proj_file.install_dependencies(&mut config));
 
         // Secondly, set up configuration from the command line arguments, to overwrite the configuration described in the project file.
         exit_if_err(set_config_from_args(&mut config, args));

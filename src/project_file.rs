@@ -3,62 +3,127 @@ use crate::{
         OPTIMIZATION_LEVEL_DEFAULT, OPTIMIZATION_LEVEL_MINIMUM, OPTIMIZATION_LEVEL_NONE,
         OPTIMIZATION_LEVEL_SEPARATED,
     },
+    dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
     misc::to_absolute_path,
-    Configuration, FixOptimizationLevel, LinkType, SourceFile, Span, PROJECT_FILE_PATH,
+    Configuration, FixOptimizationLevel, LinkType, SourceFile, Span, LOCK_FILE_PATH,
+    PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
+use semver::{Version, VersionReq};
 use serde::Deserialize;
 use std::{
     fs::File,
     io::{ErrorKind, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
-#[derive(Deserialize, Default)]
-pub struct ProjectFile {
-    pub build: ProjectFileBuild,
-    pub dependencies: Vec<ProjectFileDependency>,
-    #[serde(skip)]
-    // The path of this project file.
-    pub path: PathBuf,
+// The name of a project.
+pub type ProjectName = String;
+
+// The `general` section of the project file.
+#[derive(Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectFileGeneral {
+    // The name of the project.
+    pub name: ProjectName,
+    // The version of the project.
+    // Use `version` method to get the value validated as semver.
+    pub version: String,
+    // The description of the project.
+    #[allow(unused)]
+    pub description: Option<String>,
+    // The authors of the project.
+    #[allow(unused)]
+    pub authors: Option<Vec<String>>,
+    // The license of the project.
+    #[allow(unused)]
+    pub license: Option<String>,
 }
 
-#[derive(Deserialize, Default)]
+impl ProjectFileGeneral {
+    // Get the version.
+    pub fn version(&self) -> Version {
+        Version::parse(&self.version).unwrap()
+    }
+}
+
+// The `build` section of the project file.
+#[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuild {
-    files: Vec<String>,
+    files: Vec<PathBuf>,
     static_links: Option<Vec<String>>,
     dynamic_links: Option<Vec<String>>,
-    library_paths: Option<Vec<String>>,
+    library_paths: Option<Vec<PathBuf>>,
+    threaded: Option<bool>,
     debug: Option<bool>,
     opt_level: Option<String>,
-    output: Option<String>,
-    threaded: Option<bool>,
+    output: Option<PathBuf>,
 }
 
+// The entry of `dependencies` section of the project file.
+#[derive(Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ProjectFileDependency {
-    pub name: String,
-    pub path: Option<String>,
+    // Name of the project.
+    pub name: ProjectName,
+    // Path to directory.
+    pub path: Option<PathBuf>,
+    // Git repository.
     pub git: Option<ProjectFileDependencyGit>,
-    pub version: String,
+    // Version requirement for the dependent project.
+    // If None, the latest version is used.
+    pub version: Option<String>,
+}
+
+impl ProjectFileDependency {
+    // Get the version requirement.
+    pub fn version(&self) -> VersionReq {
+        match &self.version {
+            Some(v) => VersionReq::parse(v).unwrap(),
+            None => VersionReq::STAR,
+        }
+    }
+}
+
+// The `git` field of the dependency.
+#[derive(Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectFileDependencyGit {
+    // The URL of the git repository.
+    pub url: String,
+}
+
+// The project file.
+#[derive(Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectFile {
+    // `general` section
+    pub general: ProjectFileGeneral,
+    // `build` section
+    pub build: ProjectFileBuild,
+    // `dependencies` section
+    pub dependencies: Vec<ProjectFileDependency>,
+    // The hash value of the project file.
+    #[serde(skip)]
+    pub hash: String,
+    // The path to the project file.
+    #[serde(skip)]
+    pub path: PathBuf,
 }
 
 impl ProjectFile {
     // Read the project file at `PROJECT_FILE_PATH` and return the `ProjectFile`.
     // - err_if_not_found: If true, raise error if the file does not exist. Otherwise, return the empty `ProjectFile` in that case.
-    pub fn read_file(err_if_not_found: bool) -> Result<Self, Errors> {
-        // Open a file exists at the path `PROJECT_FILE_PATH`.
-        let res = File::open(PROJECT_FILE_PATH);
+    pub fn read_file(path: &Path, err_if_not_found: bool) -> Result<Self, Errors> {
+        let res = File::open(path);
         if res.is_err() {
             let err = res.err().unwrap();
             match err.kind() {
                 ErrorKind::NotFound => {
                     // If the file does not exist, return the empty `ProjectFile`.
                     if err_if_not_found {
-                        return Err(Errors::from_msg(format!(
-                            "File \"{}\" not found.",
-                            PROJECT_FILE_PATH
-                        )));
+                        return Err(Errors::from_msg(format!("File \"{:?}\" not found.", path)));
                     } else {
                         return Ok(Self::default());
                     }
@@ -66,8 +131,8 @@ impl ProjectFile {
                 _ => {
                     // If the file exists but cannot be opened, raise error.
                     return Err(Errors::from_msg(format!(
-                        "Failed to open file \"{}\": {:?}",
-                        PROJECT_FILE_PATH, err
+                        "Failed to open file \"{:?}\": {:?}",
+                        path, err
                     )));
                 }
             }
@@ -84,11 +149,15 @@ impl ProjectFile {
         }
 
         // Parse the content as a toml file and return the `ProjectFile`.
-        match toml::from_str(&content) {
-            Ok(v) => Ok(v),
+        let mut proj_file: ProjectFile = match toml::from_str(&content) {
+            Ok(v) => v,
             Err(e) => {
                 let (start, end) = e.span().map(|r| (r.start, r.end)).unwrap_or((0, 0));
-                let span = ProjectFile::project_file_span(start, end);
+                let span = Span {
+                    start,
+                    end,
+                    input: SourceFile::from_file_path(path.to_path_buf()),
+                };
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "Failed to parse file \"{}\": {}",
@@ -98,24 +167,108 @@ impl ProjectFile {
                     &[&Some(span)],
                 ));
             }
+        };
+
+        // Set `hash` field.
+        let content_hash = format!("{:x}", md5::compute(content.as_bytes()));
+        proj_file.hash = content_hash;
+
+        // Set `path` field.
+        proj_file.path = to_absolute_path(path)?;
+
+        // Perform validation.
+        proj_file.validate()?;
+
+        Ok(proj_file)
+    }
+
+    fn valida_project_name(name: &ProjectName, span: &Span) -> Result<(), Errors> {
+        // The project name should be non-empty, and can only contain alphanumeric characters, hyphens.
+        if name.is_empty() {
+            return Err(Errors::from_msg_srcs(
+                "Project name should not be empty.".to_string(),
+                &[&Some(span.clone())],
+            ));
         }
+        if !name.chars().all(|c| c.is_alphanumeric() || c == '-') {
+            return Err(Errors::from_msg_srcs(
+                "Project name should only contain alphanumeric characters and hyphens.".to_string(),
+                &[&Some(span.clone())],
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn validate(&self) -> Result<(), Errors> {
+        // Validate the general section.
+
+        // Validate the project name.
+        Self::valida_project_name(&self.general.name, &self.project_file_span(0, 0))?;
+
+        // Validate the version.
+        Version::parse(&self.general.version).map_err(|e| {
+            Errors::from_msg_srcs(
+                format!("Failed to parse version: {}", e),
+                &[&Some(self.project_file_span(0, 0))],
+            )
+        })?;
+
+        // Validate the dependencies section.
+        let mut dep_names = vec![];
+        for dep in &self.dependencies {
+            // Cannot have duplicate dependencies.
+            if dep_names.contains(&dep.name) {
+                return Err(Errors::from_msg_srcs(
+                    format!("Duplicate dependency on \"{}\"", dep.name),
+                    &[&Some(self.project_file_span(0, 0))],
+                ));
+            }
+            dep_names.push(dep.name.clone());
+
+            // Validate the project name.
+            Self::valida_project_name(&dep.name, &self.project_file_span(0, 0))?;
+
+            // Either of `path` and `git` should be specified.
+            if (dep.path.is_none() && dep.git.is_none())
+                || (dep.path.is_some() && dep.git.is_some())
+            {
+                return Err(Errors::from_msg_srcs(
+                    "Either of `path` and `git` should be specified in a dependency.".to_string(),
+                    &[&Some(self.project_file_span(0, 0))],
+                ));
+            }
+
+            // Validate the version.
+            if let Some(version) = &dep.version {
+                VersionReq::parse(version).map_err(|e| {
+                    Errors::from_msg_srcs(
+                        format!("Failed to parse version: {}", e),
+                        &[&Some(self.project_file_span(0, 0))],
+                    )
+                })?;
+            }
+        }
+
+        Ok(())
     }
 
     // Update a configuration from a project file.
-    pub fn set_config_from_proj_file(
+    // - `dependent_proj`: If true, self is the project file of a dependent project. In this case, append the source files, libraries, library search paths, threaded mode to the configuration but ignore other fields such as debug mode, optimization level, output file, etc.
+    pub fn set_config(
+        self: &ProjectFile,
         config: &mut Configuration,
-        proj_file: &ProjectFile,
+        dependent_proj: bool,
     ) -> Result<(), Errors> {
         // Append source files.
         let mut files = vec![];
-        for f in &proj_file.build.files {
-            let path = to_absolute_path(&PathBuf::from(f))?;
+        for path in &self.build.files {
+            let path = self.join_to_project_dir(path);
             files.push(path);
         }
         config.source_files.append(&mut files);
 
         // Append static libraries.
-        if let Some(static_libs) = proj_file.build.static_links.as_ref() {
+        if let Some(static_libs) = self.build.static_links.as_ref() {
             config.linked_libraries.append(
                 &mut static_libs
                     .iter()
@@ -125,7 +278,7 @@ impl ProjectFile {
         }
 
         // Append dynamic libraries.
-        if let Some(dynamic_libs) = proj_file.build.dynamic_links.as_ref() {
+        if let Some(dynamic_libs) = self.build.dynamic_links.as_ref() {
             config.linked_libraries.append(
                 &mut dynamic_libs
                     .iter()
@@ -135,19 +288,31 @@ impl ProjectFile {
         }
 
         // Append library search paths.
-        if let Some(lib_paths) = proj_file.build.library_paths.as_ref() {
-            config
-                .library_search_paths
-                .append(&mut lib_paths.iter().map(|p| PathBuf::from(p)).collect());
+        if let Some(lib_paths) = self.build.library_paths.as_ref() {
+            config.library_search_paths.append(
+                &mut lib_paths
+                    .iter()
+                    .map(|p| self.join_to_project_dir(p))
+                    .collect(),
+            );
+        }
+
+        // Set is threaded.
+        if let Some(threaded) = self.build.threaded {
+            config.threaded = config.threaded || threaded;
+        }
+
+        if dependent_proj {
+            return Ok(());
         }
 
         // Set debug mode.
-        if let Some(debug) = proj_file.build.debug {
+        if let Some(debug) = self.build.debug {
             config.debug_info = debug;
         }
 
         // Set optimization level.
-        if let Some(opt_level) = proj_file.build.opt_level.as_ref() {
+        if let Some(opt_level) = self.build.opt_level.as_ref() {
             match opt_level.as_str() {
                 OPTIMIZATION_LEVEL_NONE => {
                     config.fix_opt_level = FixOptimizationLevel::None;
@@ -164,27 +329,108 @@ impl ProjectFile {
                 _ => {
                     return Err(Errors::from_msg_srcs(
                         format!("Unknown optimization level: \"{}\"", opt_level),
-                        &[&Some(ProjectFile::project_file_span(0, 0))],
+                        &[&Some(self.project_file_span(0, 0))],
                     ));
                 }
             }
         }
 
         // Set output file.
-        if let Some(output) = proj_file.build.output.as_ref() {
+        if let Some(output) = self.build.output.as_ref() {
             config.out_file_path = Some(PathBuf::from(output));
         }
 
-        // Set is threaded.
-        if let Some(threaded) = proj_file.build.threaded {
-            config.threaded = config.threaded || threaded;
+        Ok(())
+    }
+
+    // Open the lock file.
+    pub fn open_lock_file(&self) -> Result<DependecyLockFile, Errors> {
+        // Try to open the valid dependency lock file.
+        // If the project file hash is different from the one in the lock file, the lock file is invalid.
+        let content = std::fs::read_to_string(LOCK_FILE_PATH).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to read the lock file: {:?}. {}",
+                e, TRY_FIX_RESOLVE
+            ))
+        })?;
+        let lock_file = toml::from_str::<DependecyLockFile>(&content).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to parse the lock file: {:?}. {}",
+                e, TRY_FIX_RESOLVE
+            ))
+        })?;
+        if lock_file.proj_file_hash != self.hash {
+            return Err(Errors::from_msg(format!(
+                "The lock file is not up to date. {}",
+                TRY_FIX_RESOLVE
+            )));
         }
+        Ok(lock_file)
+    }
+
+    // Update the lock file.
+    pub fn update_lock_file(&self) -> Result<DependecyLockFile, Errors> {
+        Ok(match self.open_lock_file() {
+            Ok(lock_file) => lock_file,
+            Err(_) => {
+                let lock_file = DependecyLockFile::create(self)?;
+                let content = toml::to_string(&lock_file).map_err(|e| {
+                    Errors::from_msg(format!("Failed to serialize the lock file: {:?}", e))
+                })?;
+                std::fs::write(LOCK_FILE_PATH, content).map_err(|e| {
+                    Errors::from_msg(format!("Failed to write the lock file: {:?}", e))
+                })?;
+                lock_file
+            }
+        })
+    }
+
+    // Update configuration by adding source files, linking libraries, ... as required by dependencies.
+    pub fn install_dependencies(
+        self: &ProjectFile,
+        config: &mut Configuration,
+    ) -> Result<(), Errors> {
+        // Update the lock file if necessary.
+        let lock_file = self.update_lock_file()?;
+
+        // Install the dependencies.
+        lock_file.install()?;
+
+        // See the dependencies and update the configuration.
+        lock_file.set_config(config)?;
+
         Ok(())
     }
 
     // Create span for a range in the project file.
-    fn project_file_span(start: usize, end: usize) -> Span {
-        let input = SourceFile::from_file_path(PathBuf::from(PROJECT_FILE_PATH));
+    fn project_file_span(&self, start: usize, end: usize) -> Span {
+        let input = SourceFile::from_file_path(self.path.clone());
         Span { start, end, input }
+    }
+
+    // Convert a relative path to an absolute path by joining it with the directory of the project file.
+    fn join_to_project_dir(&self, path: &Path) -> PathBuf {
+        if path.is_absolute() {
+            return path.to_path_buf();
+        } else {
+            return self.path.parent().unwrap().join(path);
+        }
+    }
+
+    // Get the source of a dependent project.
+    pub fn get_dependency_source(&self, name: &ProjectName) -> ProjectSource {
+        for dep in &self.dependencies {
+            if &dep.name != name {
+                continue;
+            }
+            if let Some(path) = &dep.path {
+                return ProjectSource::Local(self.join_to_project_dir(path));
+            }
+            if let Some(git) = &dep.git {
+                return ProjectSource::Git(git.url.clone(), None);
+            }
+            panic!("No source specified for dependency `{}`.", name);
+        }
+        panic!("Project `{}` not found in dependencies.", name);
     }
 }

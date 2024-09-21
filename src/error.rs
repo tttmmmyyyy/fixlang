@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
 use crate::{misc, sourcefile::Span};
 
@@ -57,6 +57,13 @@ impl Errors {
         Errors {
             errs: vec![Error::from_msg_srcs(msg, srcs)],
         }
+    }
+
+    pub fn from_msg_err<E>(msg: &str, err: E) -> Errors
+    where
+        E: Display,
+    {
+        Errors::from_msg(format!("{}: {}", msg, err))
     }
 
     pub fn to_string(&self) -> String {
