@@ -235,12 +235,12 @@ impl ProjectFile {
             // Validate the project name.
             Self::valida_project_name(&dep.name, &self.project_file_span(0, 0))?;
 
-            // Either of `path` and `git` should be specified.
+            // Either of `path` or `git` should be specified.
             if (dep.path.is_none() && dep.git.is_none())
                 || (dep.path.is_some() && dep.git.is_some())
             {
                 return Err(Errors::from_msg_srcs(
-                    "Either of `path` and `git` should be specified in a dependency.".to_string(),
+                    "Either of `path` or `git` should be specified in a dependency.".to_string(),
                     &[&Some(self.project_file_span(0, 0))],
                 ));
             }
