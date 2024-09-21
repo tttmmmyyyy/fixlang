@@ -113,7 +113,7 @@ pub const OPTIMIZATION_LEVEL_SEPARATED: &str = "separated";
 pub const OPTIMIZATION_LEVEL_DEFAULT: &str = "default";
 
 // Messages
-pub const TRY_FIX_RESOLVE: &str = "Try `fix resolve` to update the lock file.";
+pub const TRY_FIX_RESOLVE: &str = "Try `fix install-deps` to update the lock file.";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TraverserWorkType(pub u32);

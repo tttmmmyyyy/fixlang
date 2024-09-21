@@ -1,6 +1,7 @@
 use crate::ast::expr::ExprNode;
 use crate::ast::program::Program;
 use crate::constants::INSTANCIATED_NAME_SEPARATOR;
+use crate::FullName;
 use crate::{
     constants::LSP_LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
@@ -8,7 +9,6 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, FullName, PROJECT_FILE_PATH};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
@@ -1226,8 +1226,7 @@ fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<DiagnosticsResult, Err
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
     // Read the project file.
-    let proj_file_path = to_absolute_path(&PathBuf::from(PROJECT_FILE_PATH))?;
-    let proj_file = ProjectFile::read_file(&proj_file_path, true)?;
+    let proj_file = ProjectFile::read_root_file(true)?;
 
     // Create the configuration.
     let mut config = Configuration::language_server()?;

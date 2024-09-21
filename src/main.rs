@@ -206,6 +206,9 @@ fn main() {
         .arg(verbose.clone())
         .arg(max_cu_size.clone());
 
+    // "fix install-deps" subcommand
+    let install_deps_subc = App::new("install-deps").about("Install dependencies.");
+
     // "fix clean" subcommand
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
 
@@ -218,7 +221,8 @@ fn main() {
         .subcommand(run_subc)
         .subcommand(build_subc)
         .subcommand(clean_subc)
-        .subcommand(lsp_subc);
+        .subcommand(lsp_subc)
+        .subcommand(install_deps_subc);
 
     fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
         let files = m.get_many::<String>("source-files");
@@ -332,8 +336,7 @@ fn main() {
         let mut config = Configuration::release();
 
         // First, set up configuration from the project file.
-        let proj_file_path = exit_if_err(to_absolute_path(Path::new(PROJECT_FILE_PATH)));
-        let proj_file = exit_if_err(ProjectFile::read_file(&proj_file_path, false));
+        let proj_file = exit_if_err(ProjectFile::read_root_file(false));
         exit_if_err(proj_file.set_config(&mut config, false));
         exit_if_err(proj_file.install_dependencies(&mut config));
 
@@ -348,6 +351,10 @@ fn main() {
         }
         Some(("build", args)) => {
             exit_if_err(build_file(&mut create_config(args)));
+        }
+        Some(("install-deps", _)) => {
+            let proj_file = exit_if_err(ProjectFile::read_root_file(true));
+            exit_if_err(proj_file.update_lock_file().and_then(|lf| lf.install()));
         }
         Some(("language-server", _args)) => {
             launch_language_server();

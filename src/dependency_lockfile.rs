@@ -110,11 +110,15 @@ impl DependecyLockFile {
             lock_file.dependencies.push(dep);
         }
 
+        println!("Dependency resolved successfully.");
         Ok(lock_file)
     }
 
     // Install the dependencies.
     pub fn install(&self) -> Result<(), Errors> {
+        if self.dependencies.len() > 0 {
+            println!("Installing dependencies...");
+        }
         for dep in &self.dependencies {
             if let Some(git_info) = &dep.git {
                 let target_rev = git2::Oid::from_str(&git_info.rev).unwrap();
@@ -172,7 +176,13 @@ impl DependecyLockFile {
 
                 // Load the project file and validate whether it satisfies the dependency.
                 dep.check_name_version_match_proj_file()?;
-                // This dependency is already installed and ok.
+
+                println!(
+                    "Dependent project \"{} {}\" installed successfully at \"{}\".",
+                    dep.name,
+                    dep.version,
+                    dep.path.display()
+                );
             } else {
                 // In case the source is a project directory,
                 // Check the path exists.
@@ -189,6 +199,9 @@ impl DependecyLockFile {
                 dep.check_name_version_match_proj_file()?;
                 // This dependency is already installed and ok.
             }
+        }
+        if self.dependencies.len() > 0 {
+            println!("Dependencies installed successfully.");
         }
         Ok(())
     }

@@ -114,6 +114,12 @@ pub struct ProjectFile {
 }
 
 impl ProjectFile {
+    // Read the project file at `PROJECT_FILE_PATH`.
+    pub fn read_root_file(err_if_not_found: bool) -> Result<ProjectFile, Errors> {
+        let proj_file_path = to_absolute_path(Path::new(PROJECT_FILE_PATH))?;
+        ProjectFile::read_file(&proj_file_path, err_if_not_found)
+    }
+
     // Read the project file at `PROJECT_FILE_PATH` and return the `ProjectFile`.
     // - err_if_not_found: If true, raise error if the file does not exist. Otherwise, return the empty `ProjectFile` in that case.
     pub fn read_file(path: &Path, err_if_not_found: bool) -> Result<Self, Errors> {
