@@ -1793,7 +1793,7 @@ version = "*" # The syntax for version requirement is the same as in Cargo. See:
 path = "/path/to/project"
 
 # The following is an example of a dependency to a project published in the GitHub.
-# In this case, "fix" searches the tags (whose name should be a semver, or semver with "v" prefix) of the repository to find the version that satisfies the requirement.
+# In this case, "fix" searches the tags (each name should be a semver, or semver with "v" prefix) of the repository to find the version that satisfies the requirement.
 # If the repository has no tags, "fix" will use the latest commit of the default branch.
 [[dependencies]]
 name = "certain-project"
