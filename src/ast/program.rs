@@ -1706,7 +1706,7 @@ impl Program {
                     continue;
                 }
                 let another_file = self.module_to_files.get(mod_name).unwrap();
-                if another_file.file_path == file.file_path {
+                if to_absolute_path(&another_file.file_path) == to_absolute_path(&file.file_path) {
                     // If the module is defined in the same file, this is not a problem.
                     continue;
                 }

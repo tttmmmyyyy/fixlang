@@ -5,7 +5,6 @@ use crate::{
     },
     dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
-    misc::to_absolute_path,
     Configuration, ExtraCommand, FixOptimizationLevel, LinkType, SourceFile, Span, LOCK_FILE_PATH,
     PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
@@ -118,7 +117,7 @@ pub struct ProjectFile {
 impl ProjectFile {
     // Read the project file at `PROJECT_FILE_PATH`.
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
-        let proj_file_path = to_absolute_path(Path::new(PROJECT_FILE_PATH))?;
+        let proj_file_path = Path::new(PROJECT_FILE_PATH);
         ProjectFile::read_file(&proj_file_path)
     }
 
@@ -168,7 +167,7 @@ impl ProjectFile {
         proj_file.hash = content_hash;
 
         // Set `path` field.
-        proj_file.path = to_absolute_path(path)?;
+        proj_file.path = path.to_path_buf();
 
         // Perform validation.
         proj_file.validate()?;

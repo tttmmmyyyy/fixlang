@@ -1,7 +1,6 @@
 use crate::ast::expr::ExprNode;
 use crate::ast::program::Program;
 use crate::constants::INSTANCIATED_NAME_SEPARATOR;
-use crate::FullName;
 use crate::{
     constants::LSP_LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
@@ -9,6 +8,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
+use crate::{to_absolute_path, FullName};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
@@ -719,7 +719,7 @@ fn get_file_content_at_previous_diagnostics(
     path: &Path,
 ) -> Result<String, String> {
     for (_, src) in &program.module_to_files {
-        if src.file_path == path {
+        if to_absolute_path(&src.file_path) == to_absolute_path(&path) {
             let content = src.string();
             if let Err(_e) = content {
                 let msg = format!(

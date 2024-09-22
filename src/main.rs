@@ -236,11 +236,11 @@ fn main() {
             return Ok(vec![]);
         }
         let files = files.unwrap();
-        let mut abs_files = vec![];
+        let mut pathbufs = vec![];
         for file in files {
-            abs_files.push(to_absolute_path(&PathBuf::from(file))?);
+            pathbufs.push(PathBuf::from(file));
         }
-        Ok(abs_files)
+        Ok(pathbufs)
     }
 
     fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {

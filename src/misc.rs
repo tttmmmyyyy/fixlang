@@ -1,5 +1,5 @@
 use super::*;
-use crate::error::Errors;
+use core::panic;
 use std::{fs, hash::Hash};
 
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
@@ -116,20 +116,15 @@ pub fn number_to_varname(n: usize) -> String {
 }
 
 // Converts a path to an absolute path.
-pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
+pub fn to_absolute_path(path: &Path) -> PathBuf {
     if path.is_absolute() {
-        Ok(path.to_path_buf())
+        path.to_path_buf()
     } else {
         match std::env::current_dir() {
             Err(e) => {
-                return Err(Errors::from_msg(format!(
-                    "Failed to get the current directory: {}",
-                    e
-                )));
+                panic!("Failed to get the current directory: {}", e);
             }
-            Ok(cur_dir) => {
-                return Ok(cur_dir.join(path));
-            }
+            Ok(cur_dir) => cur_dir.join(path),
         }
     }
 }
