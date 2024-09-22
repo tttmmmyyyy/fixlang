@@ -1792,7 +1792,7 @@ name = "another-project"
 version = "*" # The syntax for version requirement is the same as in Cargo. See: https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html
 path = "/path/to/project"
 
-# The following is an example of a dependency to a project published in the GitHub.
+# The following is an example of a dependency to a project in a remote git repository.
 # In this case, "fix" searches the tags (each name should be a semver, or semver with "v" prefix) of the repository to find the version that satisfies the requirement.
 # If the repository has no tags, "fix" will use the latest commit of the default branch.
 [[dependencies]]
