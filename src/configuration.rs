@@ -70,6 +70,39 @@ pub struct Configuration {
     pub c_type_sizes: CTypeSizes,
     // Is this configuration for language server?
     pub language_server_mode: bool,
+    // Extra build commands.
+    pub extra_commands: Vec<ExtraCommand>,
+}
+
+#[derive(Clone)]
+pub struct ExtraCommand {
+    pub work_dir: PathBuf,
+    pub command: Vec<String>,
+}
+
+impl ExtraCommand {
+    pub fn run(&self) -> Result<(), Errors> {
+        let mut com = Command::new(&self.command[0]);
+        for arg in &self.command[1..] {
+            com.arg(arg);
+        }
+        com.current_dir(&self.work_dir);
+        let status = com.status().map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to run command \"{}\": {:?}",
+                self.command.join(" "),
+                e
+            ))
+        })?;
+        if !status.success() {
+            return Err(Errors::from_msg(format!(
+                "Command \"{}\" failed with exit code {}.",
+                self.command.join(" "),
+                status.code().unwrap_or(-1)
+            )));
+        }
+        Ok(())
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -111,6 +144,7 @@ impl Configuration {
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
             language_server_mode: false,
+            extra_commands: vec![],
         })
     }
 }
@@ -319,6 +353,13 @@ impl Configuration {
         } else {
             Linkage::Internal
         }
+    }
+
+    pub fn run_extra_commands(&self) -> Result<(), Errors> {
+        for com in &self.extra_commands {
+            com.run()?;
+        }
+        Ok(())
     }
 }
 

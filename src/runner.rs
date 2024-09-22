@@ -588,8 +588,18 @@ pub struct BuildFileResult {
 pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors> {
     let exec_path = config.get_output_executable_file_path();
 
+    // Run extra commands.
+    if !config.language_server_mode {
+        config.run_extra_commands()?;
+    }
+
     // Create intermediate directory.
-    fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate .");
+    fs::create_dir_all(INTERMEDIATE_PATH).map_err(|e| {
+        Errors::from_msg(format!(
+            "Failed to create directory \"{}\": {:?}",
+            INTERMEDIATE_PATH, e
+        ))
+    })?;
 
     let program = load_source_files(config)?;
     let build_res = build_object_files(program, config.clone())?;

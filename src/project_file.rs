@@ -6,7 +6,7 @@ use crate::{
     dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
     misc::to_absolute_path,
-    Configuration, FixOptimizationLevel, LinkType, SourceFile, Span, LOCK_FILE_PATH,
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, SourceFile, Span, LOCK_FILE_PATH,
     PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
 use semver::{Version, VersionReq};
@@ -59,6 +59,8 @@ pub struct ProjectFileBuild {
     debug: Option<bool>,
     opt_level: Option<String>,
     output: Option<PathBuf>,
+    #[serde(default)]
+    preliminary_commands: Vec<Vec<String>>,
 }
 
 // The entry of `dependencies` section of the project file.
@@ -292,6 +294,14 @@ impl ProjectFile {
         // Set is threaded.
         if let Some(threaded) = self.build.threaded {
             config.threaded = config.threaded || threaded;
+        }
+
+        // Set extra commands.
+        for command in &self.build.preliminary_commands {
+            config.extra_commands.push(ExtraCommand {
+                work_dir: self.path.parent().unwrap().to_path_buf(),
+                command: command.clone(),
+            });
         }
 
         if dependent_proj {
