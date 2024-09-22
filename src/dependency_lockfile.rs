@@ -115,9 +115,6 @@ impl DependecyLockFile {
 
     // Install the dependencies.
     pub fn install(&self) -> Result<(), Errors> {
-        if self.dependencies.len() > 0 {
-            println!("Installing dependencies...");
-        }
         for dep in &self.dependencies {
             if let Some(git_info) = &dep.git {
                 let target_rev = git2::Oid::from_str(&git_info.rev).unwrap();
@@ -198,9 +195,6 @@ impl DependecyLockFile {
                 dep.check_name_version_match_proj_file()?;
                 // This dependency is already installed and ok.
             }
-        }
-        if self.dependencies.len() > 0 {
-            println!("Dependencies installed successfully.");
         }
         Ok(())
     }
