@@ -18,8 +18,13 @@ pub fn check_temporary_source(file_name: &str, hash: &str) -> bool {
 pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) {
     let path = temporary_source_path(file_name, hash);
     let parent = path.parent().unwrap();
-    fs::create_dir_all(parent)
-        .expect(format!("Failed to create directory \"{}\".", parent.display()).as_str());
+    fs::create_dir_all(parent).expect(
+        format!(
+            "Failed to create directory \"{}\".",
+            parent.to_string_lossy().to_string()
+        )
+        .as_str(),
+    );
     fs::write(path, source).expect(&format!("Failed to generate temporary file {}", file_name));
 }
 

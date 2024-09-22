@@ -723,15 +723,18 @@ fn get_file_content_at_previous_diagnostics(
             let content = src.string();
             if let Err(_e) = content {
                 let msg = format!(
-                    "Failed to get the content of the file: {}",
-                    src.file_path.display()
+                    "Failed to get the content of the file: \"{}\"",
+                    src.file_path.to_string_lossy().to_string()
                 );
                 return Err(msg);
             }
             return Ok(content.ok().unwrap());
         }
     }
-    let msg = format!("No saved content for the file: {}\n", path.display());
+    let msg = format!(
+        "No saved content for the file: \"{}\"\n",
+        path.to_string_lossy().to_string()
+    );
     return Err(msg);
 }
 
@@ -771,7 +774,7 @@ fn get_node_at(
     // Get the latest file content.
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
-        let msg = format!("No stored content for the uri \"{:?}\".", uri);
+        let msg = format!("No stored content for the uri \"{}\".", uri.to_string());
         write_log(log_file.clone(), msg.as_str());
         let msg = format!("{:?}", uri_to_content);
         write_log(log_file.clone(), msg.as_str());

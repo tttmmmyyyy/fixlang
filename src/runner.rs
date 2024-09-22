@@ -280,8 +280,8 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     match fs::create_dir_all(dir_path) {
         Err(e) => {
             error_exit(&format!(
-                "Failed to create directory {}: {}",
-                dir_path.display(),
+                "Failed to create directory \"{}\": {}",
+                dir_path.to_string_lossy().to_string(),
                 e
             ));
         }
@@ -294,8 +294,8 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
         .write_to_file(&module, inkwell::targets::FileType::Object, &tmp_file_path)
         .map_err(|e| {
             error_exit(&format!(
-                "Failed to write to file {}: {}",
-                obj_path.display(),
+                "Failed to write to file \"{}\": {}",
+                obj_path.to_string_lossy().to_string(),
                 e
             ))
         })
@@ -305,9 +305,9 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     match fs::rename(&tmp_file_path, obj_path) {
         Err(e) => {
             error_exit(&format!(
-                "Failed to rename {} to {}: {}",
-                tmp_file_path.display(),
-                obj_path.display(),
+                "Failed to rename \"{}\" to \"{}\": {}",
+                tmp_file_path.to_string_lossy().to_string(),
+                obj_path.to_string_lossy().to_string(),
                 e
             ));
         }
@@ -445,14 +445,25 @@ pub fn test_source_fail(source: &str, config: Configuration, contained_msg: &str
 
 // Return file content and last modified.
 pub fn read_file(path: &Path) -> Result<String, String> {
-    let display = path.display();
     let mut file = match File::open(&path) {
-        Err(why) => return Err(format!("Couldn't open {}: {}", display, why)),
+        Err(why) => {
+            return Err(format!(
+                "Couldn't open \"{}\": {}",
+                path.to_string_lossy().to_string(),
+                why
+            ))
+        }
         Ok(file) => file,
     };
     let mut s = String::new();
     match file.read_to_string(&mut s) {
-        Err(why) => return Err(format!("Couldn't read {}: {}", display, why)),
+        Err(why) => {
+            return Err(format!(
+                "Couldn't read \"{}\": {}",
+                path.to_string_lossy().to_string(),
+                why
+            ))
+        }
         Ok(_) => (),
     }
     Ok(s)
@@ -465,7 +476,11 @@ where
 {
     let res = PathBuf::new().join(rel_path);
     match create_dir_all(&res) {
-        Err(why) => panic!("Failed to create directory {}: {}", res.display(), why),
+        Err(why) => panic!(
+            "Failed to create directory \"{}\": {}",
+            res.to_string_lossy().to_string(),
+            why
+        ),
         Ok(_) => {}
     };
     res
@@ -632,8 +647,10 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
         let runtime_c_path =
             PathBuf::from(INTERMEDIATE_PATH).join(format!("fixruntime.{}.c", rand_num.to_string()));
         fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
-        fs::write(&runtime_c_path, include_str!("runtime.c"))
-            .expect(&format!("Failed to generate {}", runtime_c_path.display()));
+        fs::write(&runtime_c_path, include_str!("runtime.c")).expect(&format!(
+            "Failed to generate \"{}\"",
+            runtime_c_path.to_string_lossy().to_string()
+        ));
         // Create library object file.
         let mut com = Command::new("gcc");
         let mut com = com
@@ -658,9 +675,9 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
 
         // Rename the temporary file to the final file.
         fs::rename(&runtime_tmp_path, &runtime_obj_path).expect(&format!(
-            "Failed to rename {} to {}",
-            runtime_tmp_path.display(),
-            runtime_obj_path.display()
+            "Failed to rename \"{}\" to \"{}\"",
+            runtime_tmp_path.to_string_lossy().to_string(),
+            runtime_obj_path.to_string_lossy().to_string()
         ));
     }
 

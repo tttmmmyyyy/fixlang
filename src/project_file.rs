@@ -125,7 +125,7 @@ impl ProjectFile {
         let mut file = File::open(path).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to open file \"{}\". {:?}",
-                path.display(),
+                path.to_string_lossy().to_string(),
                 e
             ))
         })?;
@@ -135,7 +135,7 @@ impl ProjectFile {
         if let Err(e) = file.read_to_string(&mut content) {
             return Err(Errors::from_msg(format!(
                 "Failed to read file \"{}\": {:?}",
-                path.display(),
+                path.to_string_lossy().to_string(),
                 e
             )));
         }
@@ -153,7 +153,7 @@ impl ProjectFile {
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "Failed to parse file \"{}\": {}",
-                        PROJECT_FILE_PATH,
+                        path.to_string_lossy().to_string(),
                         e.message()
                     ),
                     &[&Some(span)],

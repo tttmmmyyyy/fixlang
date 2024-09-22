@@ -800,7 +800,7 @@ impl Program {
             let cache_file_name = cache_file_name(name, hash_of_dependent_codes, required_scheme);
             let cache_dir: PathBuf = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
-            let cache_file_display = cache_file.display();
+            let cache_file_str = cache_file.to_string_lossy().to_string();
             if !cache_file.exists() {
                 return None;
             }
@@ -815,8 +815,8 @@ impl Program {
                 Ok(_) => {}
                 Err(why) => {
                     eprintln!(
-                        "warning: Failed to read cache file {}: {}.",
-                        cache_file_display, why
+                        "warning: Failed to read cache file \"{}\": {}.",
+                        cache_file_str, why
                     );
                     return None;
                 }
@@ -825,8 +825,8 @@ impl Program {
                 Ok(res) => res,
                 Err(why) => {
                     eprintln!(
-                        "warning: Failed to parse content of cache file {}: {}.",
-                        cache_file_display, why
+                        "warning: Failed to parse content of cache file \"{}\": {}.",
+                        cache_file_str, why
                     );
                     return None;
                 }
@@ -843,12 +843,12 @@ impl Program {
             let cache_file_name = cache_file_name(name, hash_of_dependent_codes, required_scheme);
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
-            let cache_file_display = cache_file.display();
+            let cache_file_str = cache_file.to_string_lossy().to_string();
             let mut cache_file = match File::create(&cache_file) {
                 Err(_) => {
                     eprintln!(
-                        "warning: Failed to create cache file {}.",
-                        cache_file_display
+                        "warning: Failed to create cache file \"{}\".",
+                        cache_file_str
                     );
                     return;
                 }
@@ -859,8 +859,8 @@ impl Program {
                 Ok(_) => {}
                 Err(_) => {
                     eprintln!(
-                        "warning: Failed to write cache file {}.",
-                        cache_file_display
+                        "warning: Failed to write cache file \"{}\".",
+                        cache_file_str
                     );
                 }
             }

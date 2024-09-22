@@ -140,7 +140,7 @@ impl DependecyLockFile {
                     std::fs::remove_dir_all(&dep.path).map_err(|e| {
                         Errors::from_msg(format!(
                             "Failed to remove the directory \"{}\": {:?}",
-                            dep.path.display(),
+                            dep.path.to_string_lossy().to_string(),
                             e
                         ))
                     })?;
@@ -149,7 +149,7 @@ impl DependecyLockFile {
                 std::fs::create_dir_all(&dep.path).map_err(|e| {
                     Errors::from_msg(format!(
                         "Failed to create the directory \"{}\": {:?}",
-                        dep.path.display(),
+                        dep.path.to_string_lossy().to_string(),
                         e
                     ))
                 })?;
@@ -159,7 +159,7 @@ impl DependecyLockFile {
                     Errors::from_msg(format!(
                         "Failed to clone the repository \"{}\" to \"{}\": {:?}",
                         git_info.repo,
-                        dep.path.display(),
+                        dep.path.to_string_lossy().to_string(),
                         e
                     ))
                 })?;
@@ -180,7 +180,7 @@ impl DependecyLockFile {
                     "Dependent project \"{}\" v{} installed successfully at \"{}\".",
                     dep.name,
                     dep.version,
-                    dep.path.display()
+                    dep.path.to_string_lossy().to_string()
                 );
             } else {
                 // In case the source is a project directory,
@@ -189,7 +189,7 @@ impl DependecyLockFile {
                     return Err(Errors::from_msg(format!(
                         "Dependent project \"{}\" is not found at \"{}\" as required in \"{}\".",
                         dep.name,
-                        dep.path.display(),
+                        dep.path.to_string_lossy().to_string(),
                         LOCK_FILE_PATH,
                     )));
                 }
@@ -226,13 +226,13 @@ impl DependencyLockFileEntry {
         if proj_file.general.name != self.name {
             return Err(Errors::from_msg(format!(
                 "Dependent project \"{}\" installed at \"{}\" is not named \"{}\" as required in \"{}\".",
-                self.name, self.path.display(), self.name, LOCK_FILE_PATH,
+                self.name, self.path.to_string_lossy().to_string(), self.name, LOCK_FILE_PATH,
             )));
         }
         if proj_file.general.version() != Version::parse(&self.version).unwrap() {
             return Err(Errors::from_msg(format!(
                 "Dependent project \"{}\" installed at \"{}\" is not at version \"{}\" as required in \"{}\".",
-                self.name, self.path.display(), self.version, LOCK_FILE_PATH,
+                self.name, self.path.to_string_lossy().to_string(), self.version, LOCK_FILE_PATH,
             )));
         }
         Ok(())

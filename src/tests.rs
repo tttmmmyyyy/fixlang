@@ -5122,8 +5122,7 @@ pub fn test_files_in_directory(path: &Path) {
             }
             config.source_files.push(path.clone());
         }
-        let display = path.display();
-        println!("[{}]:", display);
+        println!("[{}]:", path.to_string_lossy().to_string());
         run_file(config);
         remove_file("test_process_text_file.txt").unwrap_or(());
     }

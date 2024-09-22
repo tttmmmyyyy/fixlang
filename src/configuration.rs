@@ -393,14 +393,16 @@ int main() {
         let parent = check_c_types_path.parent().unwrap();
         if let Err(e) = std::fs::create_dir_all(parent) {
             return Err(Errors::from_msg(format!(
-                "Failed to create directory \"{:?}\": {}",
-                parent, e
+                "Failed to create directory \"{}\": {}",
+                parent.to_string_lossy().to_string(),
+                e
             )));
         }
         if let Err(e) = std::fs::write(&check_c_types_path, c_source) {
             return Err(Errors::from_msg(format!(
-                "Failed to write file \"{:?}\": {}",
-                check_c_types_path, e
+                "Failed to write file \"{}\": {}",
+                check_c_types_path.to_string_lossy().to_string(),
+                e
             )));
         }
 
