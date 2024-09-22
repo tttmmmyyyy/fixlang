@@ -663,6 +663,10 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
             .arg(runtime_tmp_path.to_str().unwrap())
             .arg("-c")
             .arg(runtime_c_path.to_str().unwrap());
+        // In macos, add "-fuse-ld=lld" option to use lld linker.
+        if std::env::consts::OS == "macos" {
+            com = com.arg("-fuse-ld=lld");
+        }
         for m in &config.runtime_c_macro {
             com = com.arg(format!("-D{}", m));
         }
