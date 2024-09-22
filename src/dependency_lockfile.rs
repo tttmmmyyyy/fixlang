@@ -43,13 +43,12 @@ impl DependecyLockFile {
         let packages_retriever = create_package_retriever(prjs_info.clone());
         let versions_retriever = create_version_retriever(prjs_info.clone());
         let logger = create_stdout_logger();
-        let package = project_file_to_package(proj_file);
         println!(
             "Resolving dependency for project \"{}\"...",
             proj_file.general.name
         );
         let res = dependency_resolver::resolve_dependency(
-            &package,
+            proj_file,
             packages_retriever.as_ref(),
             versions_retriever.as_ref(),
             logger.as_ref(),
@@ -495,6 +494,8 @@ fn create_package_retriever(
     projs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &Version) -> Result<Package, Errors>> {
     Box::new(move |prj_name, ver| {
+        println!("Retrieving package \"{} {}\"...", prj_name, ver);
+
         let mut projs = projs.projects.as_ref().lock().unwrap();
 
         // Find the project.
