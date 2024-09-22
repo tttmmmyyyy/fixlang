@@ -102,10 +102,10 @@ fn try_use_package<'a, 'b, 'c>(
     // If all dependecies are resolved, use this version.
     if ok {
         logger(&format!(
-            "{}Accept version `{}` of package `{}`.",
+            "{}Accept \"{} = {}\".",
             " ".repeat(indent),
-            pkg_version,
             pkg_name,
+            pkg_version,
         ));
         return Ok(Some(fixed));
     }
@@ -138,18 +138,18 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     if let Some(package) = fixed.iter().find(|p| p.name == dependency.name) {
         if dependency.requirement.matches(&package.version) {
             logger(&format!(
-                "{}Already using version `{}` of package `{}`, which satisfies the requirement `{}`. OK.",
+                "{}Already using \"{} = {}\", which satisfies the requirement `{}`. OK.",
                 " ".repeat(indent),
-                package.version,
                 dependency.name,
+                package.version,
                 dependency.requirement
             ));
             return Ok(Some(fixed.to_vec()));
         } else {
             logger(&format!(
-                "{}Already using version `{}` of `{}`, which does not satisfy the requirement `{}`. Backtracking.",
+                "{}Already using \"{} = {}\", which does not satisfy the requirement `{}`. Backtracking.",
                 " ".repeat(indent),
-                package.version, dependency.name, dependency.requirement
+                dependency.name, package.version, dependency.requirement
             ));
             return Ok(None);
         }
@@ -160,10 +160,10 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     vers.sort();
     for version in vers.iter().rev() {
         logger(&format!(
-            "{}Trying version `{}` of package `{}`.",
+            "{}Trying \"{} = {}\".",
             " ".repeat(indent),
+            dependency.name,
             version,
-            dependency.name
         ));
         let indent = indent + 1;
 
