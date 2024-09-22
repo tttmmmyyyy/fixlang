@@ -8,6 +8,17 @@ pub type Name = String;
 pub struct NameSpace {
     pub names: Vec<String>, // Empty implies it is local.
 }
+impl PartialOrd for NameSpace {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.to_string().cmp(&other.to_string()))
+    }
+}
+
+impl Ord for NameSpace {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_string().cmp(&other.to_string())
+    }
+}
 
 impl NameSpace {
     pub fn local() -> Self {

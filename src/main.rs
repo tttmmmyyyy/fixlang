@@ -27,6 +27,7 @@ mod configuration;
 mod constants;
 mod dependency_lockfile;
 mod dependency_resolver;
+mod docgen;
 mod generator;
 mod graph;
 mod llvm_passes;
@@ -105,11 +106,7 @@ fn main() {
         .action(clap::ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
-        .help(
-            "Source files to be compiled and linked. \n\
-             Exactly one file of them must define `Main` module and `main : IO ()`. \n\
-             The option overrides the \"files\" specified in \"fixproj.toml\".",
-        );
+        .help("Source files to be compiled and linked.");
     let static_link_library = Arg::new("static-link-library")
         .long("static-link")
         .short('s')
@@ -221,6 +218,19 @@ fn main() {
     // "fix language-server" subcommand
     let lsp_subc = App::new("language-server").about("Launch language server for Fix.");
 
+    // "fix docs" subcommand
+    let docs_subc = App::new("docs")
+        .about("Generate documentation for a Fix module.")
+        .arg(
+            Arg::new("source-files")
+                .long("file")
+                .short('f')
+                .action(clap::ArgAction::Append)
+                .multiple_values(true)
+                .takes_value(true)
+                .help("Source files for which documents are generated. \nAs a special value, use \"std.fix\" to generate the document of `Std`."),
+        );
+
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -228,7 +238,8 @@ fn main() {
         .subcommand(build_subc)
         .subcommand(clean_subc)
         .subcommand(lsp_subc)
-        .subcommand(deps);
+        .subcommand(deps)
+        .subcommand(docs_subc);
 
     fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
         let files = m.get_many::<String>("source-files");
@@ -381,6 +392,10 @@ fn main() {
         }
         Some(("clean", _args)) => {
             clean_command();
+        }
+        Some(("docs", args)) => {
+            let files = exit_if_err(read_source_files_options(args));
+            exit_if_err(docgen::generate_docs_for_files(&files));
         }
         _ => eprintln!("Unknown command!"),
     }
