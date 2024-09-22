@@ -8,11 +8,12 @@ use crate::{
 pub fn generate_docs_for_files(files: &[PathBuf]) -> Result<(), Errors> {
     let config = Configuration::release();
     for file in files {
-        let program = if file == &PathBuf::from("std.fix") {
+        let mut program = if file == &PathBuf::from("std.fix") {
             make_std_mod(&config)
         } else {
             parse_file_path(file.clone(), &config)
         }?;
+        program.calculate_type_env()?;
         generate_doc(&program)?;
     }
     Ok(())
@@ -154,7 +155,7 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
         if let TypeDeclValue::Alias(_) = ty_def.value {
         } else {
             doc += &format!(
-                "[See related namespace](#{})\n\n",
+                "[See related values](#{})\n\n",
                 to_markdown_link(&format!("namespace `{}`", name.to_namespace().to_string()))
             );
         }
