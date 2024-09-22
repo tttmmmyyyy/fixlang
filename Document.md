@@ -67,7 +67,7 @@
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
 - [Compiler feature](#compiler-feature)
-  - [Project file](#project-file)
+  - [Fix projects](#fix-projects)
   - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
 
@@ -1711,49 +1711,98 @@ The following is the table of operators sorted by its precedence (operator of hi
 
 # Compiler feature
 
-## Project file
+## Fix projects
 
-"fix build" and "fix run" commands loads a file "fixproj.toml" in the current directory if it exists.
-If you specify source files or compiler options in the "fixproj.toml" file, you don't need to specify them in the command line argument every time you build the program.
+If you are working on a not so small Fix program, you may want to
+- compile many Fix source files,
+- compile C source files into a native library, and link it to the Fix program,
+- install other Fix projects as dependencies, 
+- specify the project name, version or author, etc.
+In such cases, it is useful to have a project file which contains information about your Fix project.
+
+The project file should have a name "fixproj.toml".
+"fix build" and "fix run" commands loads the project file in the current directory if it exists.
 
 The following is an example of "fixproj.toml" file. 
-Every fields is optional.
 
 ```
+[general]
+# Project name. This is a required field.
+name = "myproject"
+
+# Project version (in semver). This is a required field.
+version = "0.1.0"
+
+# Project authors.
+authors = ["Alice", "Bob"]
+
+# Project description.
+description = "This is a Fix project."
+
+# Project license.
+license = "MIT"
+
 [build]
-// Fix source files to compile.
-// Merged with files specified in the command line argument.
+# Fix source files to be compiled.
+# Merged with files specified in the command line argument.
 files = ["main.fix", "lib.fix"]
 
-// Static link libraries.
-// Merged with libraries specified in the command line argument.
-static_links = ["m"]
+# Static link libraries.
+# Merged with libraries specified in the command line argument.
+static_links = ["xyz"]
 
-// Dynamic link libraries.
-// Merged with libraries specified in the command line argument.
+# Dynamic link libraries.
+# Merged with libraries specified in the command line argument.
 dynamic_links = ["pthread"]
 
-// Library search paths.
-// Merged with paths specified in the command line argument.
-library_paths = ["./native_libs"]
+# Library search paths for "static_links" and "dynamic_links".
+# Merged with paths specified in the command line argument.
+library_paths = ["."] // The current directory.
 
-// Whether to generate debug information.
-// Overwritten by the command line argument.
+# Whether to generate debug information.
+# Overwritten by the command line argument.
 debug = true
 
-// Optimization level.
-// One of "none", "minimum", "separated", "default".
-// Overwritten by the command line argument.
+# Optimization level.
+# One of "none", "minimum", "separated", "default".
+# Overwritten by the command line argument.
 opt_level = "separated"
 
-// Output file name.
-// Overwritten by the command line argument.
+# Output file name.
+# Overwritten by the command line argument.
 output = "myprogram.out"
 
-// Whether to use the thread-safe reference counting.
-// Overwritten by the command line argument.
+# Whether to use the thread-safe reference counting.
+# Overwritten by the command line argument.
 threaded = false
+
+# Preliminary commands to be executed before the Fix program is compiled.
+# This is useful when you need to compile a C library before compiling the Fix program.
+preliminary_commands = [
+    ["make", "libxyz.a", "--quiet"] # Since this command runs always when you run "fix build", "--quiet" is useful.
+]
+
+# By "[[dependencies]]" array, you can specify a Fix project as a dependency.
+# The dependent project should have "fixproj.toml" file, which at least defines name and version of the project.
+# If a dependent project has more dependencies, fix command will consider them recursively.
+
+# The following is an example of a dependency to a project in the local file system.
+[[dependencies]]
+name = "another-project"
+version = "*"
+path = "/path/to/project"
+
+# The following is an example of a dependency to a project published in the GitHub.
+[[dependencies]]
+name = "certain-project"
+version = "1.2.0"
+git = { url = "https://github.com/tttmmmyyyy/certain-project.git" }
 ```
+
+Even if you specify source files in the project file, you can specify additional source files in the command line argument by "-f".
+For example, consider that you are making a library and having `Main::main` function which runs tests in "test.fix".
+In this case, you should not include "test.fix" in the "build.files" of the project file, because otherwise the test codes will be compiled into the application that uses your library.
+Instead, you can add "test.fix" by the command line argument "-f" when you run the test.
 
 ## Language Server Protocol
 
