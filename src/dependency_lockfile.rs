@@ -177,7 +177,7 @@ impl DependecyLockFile {
                 dep.check_name_version_match_proj_file()?;
 
                 println!(
-                    "Dependent project \"{} {}\" installed successfully at \"{}\".",
+                    "Dependent project \"{}\" v{} installed successfully at \"{}\".",
                     dep.name,
                     dep.version,
                     dep.path.display()
@@ -494,7 +494,7 @@ fn create_package_retriever(
     projs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &Version) -> Result<Package, Errors>> {
     Box::new(move |prj_name, ver| {
-        println!("Retrieving package \"{} {}\"...", prj_name, ver);
+        println!("Retrieving package \"{}\" v{}...", prj_name, ver);
 
         let mut projs = projs.projects.as_ref().lock().unwrap();
 
