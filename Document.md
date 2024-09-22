@@ -67,7 +67,7 @@
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
 - [Compiler feature](#compiler-feature)
-  - [Fix projects](#fix-projects)
+  - [Fix projects and dependencies](#fix-projects-and-dependencies)
   - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
 
@@ -1711,7 +1711,7 @@ The following is the table of operators sorted by its precedence (operator of hi
 
 # Compiler feature
 
-## Fix projects
+## Fix projects and dependencies
 
 If you are working on a not so small Fix program, you may want to
 - compile many Fix source files,
