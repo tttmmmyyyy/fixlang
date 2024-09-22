@@ -1226,7 +1226,7 @@ fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<DiagnosticsResult, Err
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
     // Read the project file.
-    let proj_file = ProjectFile::read_root_file(true)?;
+    let proj_file = ProjectFile::read_root_file()?;
 
     // Create the configuration.
     let mut config = Configuration::language_server()?;

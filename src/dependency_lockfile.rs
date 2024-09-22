@@ -218,7 +218,7 @@ pub struct DependencyLockFileEntry {
 impl DependencyLockFileEntry {
     pub fn project_file(&self) -> Result<ProjectFile, Errors> {
         let proj_file_path = self.path.join(PROJECT_FILE_PATH);
-        ProjectFile::read_file(&proj_file_path, true)
+        ProjectFile::read_file(&proj_file_path)
     }
 
     pub fn check_name_version_match_proj_file(&self) -> Result<(), Errors> {
@@ -291,7 +291,7 @@ impl ProjectInfo {
             ProjectSource::Local(proj_path) => {
                 // Read the project file.
                 let proj_file_path = proj_path.clone().join(PROJECT_FILE_PATH);
-                let proj_file = ProjectFile::read_file(&proj_file_path, false)?;
+                let proj_file = ProjectFile::read_file(&proj_file_path)?;
                 let ver = proj_file.general.version();
                 self.versions = Some(vec![VersionInfo {
                     version: ver,
@@ -336,7 +336,7 @@ impl ProjectInfo {
         // If the source is a project directory, open the project file and return it.
         match &self.source {
             ProjectSource::Local(proj_path) => {
-                let proj_file = ProjectFile::read_file(proj_path, false)?;
+                let proj_file = ProjectFile::read_file(proj_path)?;
                 self.proj_files.push(proj_file.clone());
                 return Ok(proj_file);
             }
@@ -353,8 +353,7 @@ impl ProjectInfo {
         checkout_opts.force();
         repo.checkout_tree(&commit.into_object(), Some(&mut checkout_opts))
             .map_err(|e| Errors::from_msg_err("Failed to checkout commit", e))?;
-        let proj_file =
-            ProjectFile::read_file(&repo.workdir().unwrap().join(PROJECT_FILE_PATH), true)?;
+        let proj_file = ProjectFile::read_file(&repo.workdir().unwrap().join(PROJECT_FILE_PATH))?;
         self.proj_files.push(proj_file.clone());
 
         Ok(proj_file)
@@ -404,7 +403,7 @@ fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Errors>
         Errors::from_msg("Repository does not have a working directory.".to_string())
     })?;
     let proj_file_path = work_dir.join(PROJECT_FILE_PATH);
-    let proj_file = ProjectFile::read_file(&proj_file_path, true)?;
+    let proj_file = ProjectFile::read_file(&proj_file_path)?;
     versions.push(VersionInfo {
         version: proj_file.general.version(),
         rev: head_oid,

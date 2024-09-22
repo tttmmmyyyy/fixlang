@@ -13,7 +13,7 @@ use semver::{Version, VersionReq};
 use serde::Deserialize;
 use std::{
     fs::File,
-    io::{ErrorKind, Read},
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -115,36 +115,15 @@ pub struct ProjectFile {
 
 impl ProjectFile {
     // Read the project file at `PROJECT_FILE_PATH`.
-    pub fn read_root_file(err_if_not_found: bool) -> Result<ProjectFile, Errors> {
+    pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = to_absolute_path(Path::new(PROJECT_FILE_PATH))?;
-        ProjectFile::read_file(&proj_file_path, err_if_not_found)
+        ProjectFile::read_file(&proj_file_path)
     }
 
     // Read the project file at `PROJECT_FILE_PATH` and return the `ProjectFile`.
-    // - err_if_not_found: If true, raise error if the file does not exist. Otherwise, return the empty `ProjectFile` in that case.
-    pub fn read_file(path: &Path, err_if_not_found: bool) -> Result<Self, Errors> {
-        let res = File::open(path);
-        if res.is_err() {
-            let err = res.err().unwrap();
-            match err.kind() {
-                ErrorKind::NotFound => {
-                    // If the file does not exist, return the empty `ProjectFile`.
-                    if err_if_not_found {
-                        return Err(Errors::from_msg(format!("File \"{:?}\" not found.", path)));
-                    } else {
-                        return Ok(Self::default());
-                    }
-                }
-                _ => {
-                    // If the file exists but cannot be opened, raise error.
-                    return Err(Errors::from_msg(format!(
-                        "Failed to open file \"{:?}\": {:?}",
-                        path, err
-                    )));
-                }
-            }
-        }
-        let mut file = res.unwrap();
+    pub fn read_file(path: &Path) -> Result<Self, Errors> {
+        let mut file = File::open(path)
+            .map_err(|e| Errors::from_msg(format!("Failed to open file. {:?}", e)))?;
 
         // Read the content of the file.
         let mut content = String::new();

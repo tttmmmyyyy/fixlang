@@ -341,10 +341,12 @@ fn main() {
     fn create_config(args: &ArgMatches) -> Configuration {
         let mut config = Configuration::release();
 
-        // First, set up configuration from the project file.
-        let proj_file = exit_if_err(ProjectFile::read_root_file(false));
-        exit_if_err(proj_file.set_config(&mut config, false));
-        exit_if_err(proj_file.install_dependencies(&mut config));
+        // First, set up configuration from the project file if it exists.
+        if Path::new(PROJECT_FILE_PATH).exists() {
+            let proj_file = exit_if_err(ProjectFile::read_root_file());
+            exit_if_err(proj_file.set_config(&mut config, false));
+            exit_if_err(proj_file.install_dependencies(&mut config));
+        }
 
         // Secondly, set up configuration from the command line arguments, to overwrite the configuration described in the project file.
         exit_if_err(set_config_from_args(&mut config, args));
@@ -360,11 +362,11 @@ fn main() {
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", _args)) => {
-                let proj_file = exit_if_err(ProjectFile::read_root_file(true));
+                let proj_file = exit_if_err(ProjectFile::read_root_file());
                 exit_if_err(proj_file.open_lock_file().and_then(|lf| lf.install()));
             }
             Some(("update", _args)) => {
-                let proj_file = exit_if_err(ProjectFile::read_root_file(true));
+                let proj_file = exit_if_err(ProjectFile::read_root_file());
                 exit_if_err(proj_file.update_lock_file().and_then(|lf| lf.install()));
             }
             _ => eprintln!("Unknown command!"),
