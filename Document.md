@@ -1784,15 +1784,17 @@ preliminary_commands = [
 
 # By "[[dependencies]]" array, you can specify a Fix project as a dependency.
 # The dependent project should have "fixproj.toml" file, which at least defines name and version of the project.
-# If a dependent project has more dependencies, fix command will consider them recursively.
+# If a dependent project has more dependencies, "fix" will consider them recursively.
 
 # The following is an example of a dependency to a project in the local file system.
 [[dependencies]]
 name = "another-project"
-version = "*"
+version = "*" # The syntax for version requirement is the same as in Cargo. See: https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html
 path = "/path/to/project"
 
 # The following is an example of a dependency to a project published in the GitHub.
+# In this case, "fix" searches the tags (whose name should be a semver, or semver with "v" prefix) of the repository to find the version that satisfies the requirement.
+# If the repository has no tags, "fix" will use the latest commit of the default branch.
 [[dependencies]]
 name = "certain-project"
 version = "1.2.0"
