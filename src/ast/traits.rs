@@ -140,6 +140,10 @@ pub struct AssocTypeKindInfo {
 #[derive(Clone)]
 pub struct MethodInfo {
     pub name: Name,
+    // The type of the method.
+    // Here, for example, in case "trait a : Show { show : a -> String }",
+    // the type of method "show" is "a -> String",
+    // and not "[a : Show] a -> String".
     pub qual_ty: QualType,
     pub source: Option<Span>,
     // Document of this method.
@@ -165,9 +169,6 @@ pub struct TraitInfo {
     // Type variable used in trait definition.
     pub type_var: Arc<TyVar>,
     // Methods of this trait.
-    // Here, for example, in case "trait a: Show { show: a -> String }",
-    // the type of method "show" is "a -> String",
-    // and not "a -> String for a : Show".
     pub methods: Vec<MethodInfo>,
     // Associated type synonyms.
     pub assoc_types: HashMap<Name, AssocTypeDefn>,
@@ -573,6 +574,22 @@ pub struct QualType {
 }
 
 impl QualType {
+    pub fn to_string(&self) -> String {
+        let mut s = String::default();
+        if self.preds.len() > 0 || self.kind_signs.len() > 0 {
+            s += "[";
+        }
+        let mut preds = vec![];
+        preds.extend(self.kind_signs.iter().map(|p| p.to_string()));
+        preds.extend(self.preds.iter().map(|p| p.to_string()));
+        s += &preds.join(", ");
+        if self.preds.len() > 0 || self.kind_signs.len() > 0 {
+            s += "] ";
+        }
+        s += &self.ty.to_string();
+        s
+    }
+
     // Resolve namespace.
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         for pred in &mut self.preds {

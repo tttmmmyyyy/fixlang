@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    error::Errors, kind_star, make_std_mod, parse_file_path, Configuration, FullName, Name,
-    NameSpace, Program, TyVar, TypeDeclValue,
+    error::Errors, kind_star, make_std_mod, parse_file_path, Configuration, FullName,
+    KindSignature, Name, NameSpace, Program, TyVar, TypeDeclValue,
 };
 
 pub fn generate_docs_for_files(files: &[PathBuf]) -> Result<(), Errors> {
@@ -28,8 +28,8 @@ fn generate_doc(program: &Program) -> Result<(), Errors> {
 
     let mut entries = vec![];
 
-    // The types and aliases.
     type_entries(program, &mut entries)?;
+    trait_entries(program, &mut entries)?;
 
     write_entries(entries, &mut doc, mod_name.clone());
 
@@ -173,6 +173,61 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
             doc,
         };
 
+        entries.push(entry);
+    }
+    Ok(())
+}
+
+fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
+    fn kind_constraints_with_space(kind_signs: &Vec<KindSignature>) -> String {
+        if kind_signs.is_empty() {
+            return String::new();
+        }
+        let mut consts = vec![];
+        for kind_sign in kind_signs.iter() {
+            if kind_sign.kind == kind_star() {
+                continue;
+            }
+            consts.push(kind_sign.to_string());
+        }
+        if consts.is_empty() {
+            return String::new();
+        }
+        format!("[{}] ", consts.join(", "))
+    }
+
+    for (id, info) in &program.trait_env.traits {
+        let name = id.name.clone();
+        let kind_consts = kind_constraints_with_space(&info.kind_signs);
+        let title = format!("`trait {}{}`", kind_consts, name.name);
+
+        let mut doc = String::new();
+        doc += &info
+            .source
+            .as_ref()
+            .map(|src| src.get_document())
+            .transpose()?
+            .unwrap_or_default();
+        for method in &info.methods {
+            doc += &format!(
+                "\n\n#### `{} : {}`\n\n{}",
+                method.name,
+                method.qual_ty.to_string(),
+                method
+                    .source
+                    .as_ref()
+                    .map(|src| src.get_document())
+                    .transpose()?
+                    .unwrap_or_default()
+            );
+        }
+
+        let entry = Entry {
+            namespace: id.name.namespace.clone(),
+            kind: EntryKind::Trait,
+            title,
+            doc,
+        };
         entries.push(entry);
     }
     Ok(())
