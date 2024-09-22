@@ -366,6 +366,11 @@ fn main() {
                 exit_if_err(proj_file.open_lock_file().and_then(|lf| lf.install()));
             }
             Some(("update", _args)) => {
+                // Remove lock file.
+                let lock_file_path = Path::new(LOCK_FILE_PATH);
+                if lock_file_path.exists() {
+                    std::fs::remove_file(lock_file_path).expect("Failed to remove the lock file.");
+                }
                 let proj_file = exit_if_err(ProjectFile::read_root_file());
                 exit_if_err(proj_file.update_lock_file().and_then(|lf| lf.install()));
             }
