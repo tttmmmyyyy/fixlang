@@ -122,15 +122,21 @@ impl ProjectFile {
 
     // Read the project file at `PROJECT_FILE_PATH` and return the `ProjectFile`.
     pub fn read_file(path: &Path) -> Result<Self, Errors> {
-        let mut file = File::open(path)
-            .map_err(|e| Errors::from_msg(format!("Failed to open file. {:?}", e)))?;
+        let mut file = File::open(path).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to open file \"{}\". {:?}",
+                path.display(),
+                e
+            ))
+        })?;
 
         // Read the content of the file.
         let mut content = String::new();
         if let Err(e) = file.read_to_string(&mut content) {
             return Err(Errors::from_msg(format!(
                 "Failed to read file \"{}\": {:?}",
-                PROJECT_FILE_PATH, e
+                path.display(),
+                e
             )));
         }
 

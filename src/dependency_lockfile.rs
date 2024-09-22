@@ -336,7 +336,7 @@ impl ProjectInfo {
         // If the source is a project directory, open the project file and return it.
         match &self.source {
             ProjectSource::Local(proj_path) => {
-                let proj_file = ProjectFile::read_file(proj_path)?;
+                let proj_file = ProjectFile::read_file(&proj_path.join(PROJECT_FILE_PATH))?;
                 self.proj_files.push(proj_file.clone());
                 return Ok(proj_file);
             }
@@ -493,8 +493,6 @@ fn create_package_retriever(
     projs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &Version) -> Result<Package, Errors>> {
     Box::new(move |prj_name, ver| {
-        println!("Retrieving package \"{}\" v{}...", prj_name, ver);
-
         let mut projs = projs.projects.as_ref().lock().unwrap();
 
         // Find the project.

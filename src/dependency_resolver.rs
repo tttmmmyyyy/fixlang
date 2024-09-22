@@ -125,7 +125,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     indent: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
     logger(&format!(
-        "{}Resolving version requirement: `{} = {}`.",
+        "{}Resolving version requirement: \"{} = {}\".",
         " ".repeat(indent),
         dependency.name,
         dependency.requirement
