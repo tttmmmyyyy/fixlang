@@ -85,13 +85,13 @@ impl PartialOrd for Entry {
 
 impl Ord for Entry {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if self.name < other.name {
-            return std::cmp::Ordering::Less;
-        } else if self.name > other.name {
-            return std::cmp::Ordering::Greater;
-        } else {
+        if self.kind != other.kind {
             return self.kind.cmp(&other.kind);
         }
+        if self.name.namespace != other.name.namespace {
+            return self.name.namespace.cmp(&other.name.namespace);
+        }
+        self.name.name.cmp(&other.name.name)
     }
 }
 

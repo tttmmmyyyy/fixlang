@@ -1,10 +1,109 @@
-# Table of contents
-- [Table of contents](#table-of-contents)
+# module `Std`
+
 - [module `Std`](#module-std)
   - [namespace `Std`](#namespace-std)
+    - [type `Array a = box { primitive }`](#type-array-a--box--primitive-)
+    - [type `Bool = unbox { primitive }`](#type-bool--unbox--primitive-)
+    - [type `Boxed a = box struct { ...fields... }`](#type-boxed-a--box-struct--fields-)
+      - [field `value : a`](#field-value--a)
+    - [type `ErrMsg = String`](#type-errmsg--string)
+    - [type `F32 = unbox { primitive }`](#type-f32--unbox--primitive-)
+    - [type `F64 = unbox { primitive }`](#type-f64--unbox--primitive-)
+    - [type `I16 = unbox { primitive }`](#type-i16--unbox--primitive-)
+    - [type `I32 = unbox { primitive }`](#type-i32--unbox--primitive-)
+    - [type `I64 = unbox { primitive }`](#type-i64--unbox--primitive-)
+    - [type `I8 = unbox { primitive }`](#type-i8--unbox--primitive-)
+    - [type `IO a = unbox struct { ...fields... }`](#type-io-a--unbox-struct--fields-)
+      - [field `_data : () -> a`](#field-_data-----a)
+    - [type `Iterator a = unbox struct { ...fields... }`](#type-iterator-a--unbox-struct--fields-)
+      - [field `next : () -> Option (a, Iterator a)`](#field-next-----option-a-iterator-a)
+    - [type `Lazy = () -> a`](#type-lazy-----a)
+    - [type `LoopResult s b = unbox union { ...variants... }`](#type-loopresult-s-b--unbox-union--variants-)
+      - [variant `continue : s`](#variant-continue--s)
+      - [variant `break : b`](#variant-break--b)
+    - [type `Option a = unbox union { ...variants... }`](#type-option-a--unbox-union--variants-)
+      - [variant `none : ()`](#variant-none--)
+      - [variant `some : a`](#variant-some--a)
+    - [type `Path = unbox struct { ...fields... }`](#type-path--unbox-struct--fields-)
+      - [field `_data : String`](#field-_data--string)
+    - [type `Ptr = unbox { primitive }`](#type-ptr--unbox--primitive-)
+    - [type `PunchedArray a = unbox struct { ...fields... }`](#type-punchedarray-a--unbox-struct--fields-)
+      - [field `_data : Destructor (Array a)`](#field-_data--destructor-array-a)
+      - [field `idx : I64`](#field-idx--i64)
+    - [type `Result e o = unbox union { ...variants... }`](#type-result-e-o--unbox-union--variants-)
+      - [variant `ok : o`](#variant-ok--o)
+      - [variant `err : e`](#variant-err--e)
+    - [type `String = unbox struct { ...fields... }`](#type-string--unbox-struct--fields-)
+      - [field `_data : Array U8`](#field-_data--array-u8)
+    - [type `U16 = unbox { primitive }`](#type-u16--unbox--primitive-)
+    - [type `U32 = unbox { primitive }`](#type-u32--unbox--primitive-)
+    - [type `U64 = unbox { primitive }`](#type-u64--unbox--primitive-)
+    - [type `U8 = unbox { primitive }`](#type-u8--unbox--primitive-)
+  - [namespace `Std::FFI`](#namespace-stdffi)
+    - [type `CChar = Std::I8`](#type-cchar--stdi8)
+    - [type `CDouble = Std::F64`](#type-cdouble--stdf64)
+    - [type `CFloat = Std::F32`](#type-cfloat--stdf32)
+    - [type `CInt = Std::I32`](#type-cint--stdi32)
+    - [type `CLong = Std::I64`](#type-clong--stdi64)
+    - [type `CLongLong = Std::I64`](#type-clonglong--stdi64)
+    - [type `CShort = Std::I16`](#type-cshort--stdi16)
+    - [type `CSizeT = Std::U64`](#type-csizet--stdu64)
+    - [type `CUnsignedChar = Std::U8`](#type-cunsignedchar--stdu8)
+    - [type `CUnsignedInt = Std::U32`](#type-cunsignedint--stdu32)
+    - [type `CUnsignedLong = Std::U64`](#type-cunsignedlong--stdu64)
+    - [type `CUnsignedLongLong = Std::U64`](#type-cunsignedlonglong--stdu64)
+    - [type `CUnsignedShort = Std::U16`](#type-cunsignedshort--stdu16)
+    - [type `Destructor a = box struct { ...fields... }`](#type-destructor-a--box-struct--fields-)
+      - [field `_value : a`](#field-_value--a)
+      - [field `dtor : a -> ()`](#field-dtor--a---)
+  - [namespace `Std::IO`](#namespace-stdio)
+    - [type `IOFail a = unbox struct { ...fields... }`](#type-iofail-a--unbox-struct--fields-)
+      - [field `_data : IO (Result ErrMsg a)`](#field-_data--io-result-errmsg-a)
+    - [type `IOHandle = unbox struct { ...fields... }`](#type-iohandle--unbox-struct--fields-)
+      - [field `_data : Destructor Ptr`](#field-_data--destructor-ptr)
+  - [namespace `Std`](#namespace-std-1)
     - [trait `a : Add`](#trait-a--add)
       - [method `add : a -> a -> a`](#method-add--a---a---a)
-    - [type `Array a = box { primitive }`](#type-array-a--box--primitive-)
+    - [trait `a : Div`](#trait-a--div)
+      - [method `div : a -> a -> a`](#method-div--a---a---a)
+    - [trait `a : Eq`](#trait-a--eq)
+      - [method `eq : a -> a -> Bool`](#method-eq--a---a---bool)
+    - [trait `a : FromBytes`](#trait-a--frombytes)
+      - [method `from_bytes : Array U8 -> Result ErrMsg a`](#method-from_bytes--array-u8---result-errmsg-a)
+    - [trait `a : FromString`](#trait-a--fromstring)
+      - [method `from_string : String -> Result ErrMsg a`](#method-from_string--string---result-errmsg-a)
+    - [trait `[f : *->*] f : Functor`](#trait-f----f--functor)
+      - [method `map : (a -> b) -> f a -> f b`](#method-map--a---b---f-a---f-b)
+    - [trait `a : LessThan`](#trait-a--lessthan)
+      - [method `less_than : a -> a -> Bool`](#method-less_than--a---a---bool)
+    - [trait `a : LessThanOrEq`](#trait-a--lessthanoreq)
+      - [method `less_than_or_eq : a -> a -> Bool`](#method-less_than_or_eq--a---a---bool)
+    - [trait `[m : *->*] m : Monad`](#trait-m----m--monad)
+      - [method `bind : (a -> m b) -> m a -> m b`](#method-bind--a---m-b---m-a---m-b)
+      - [method `pure : a -> m a`](#method-pure--a---m-a)
+    - [trait `a : Mul`](#trait-a--mul)
+      - [method `mul : a -> a -> a`](#method-mul--a---a---a)
+    - [trait `a : Neg`](#trait-a--neg)
+      - [method `neg : a -> a`](#method-neg--a---a)
+    - [trait `a : Not`](#trait-a--not)
+      - [method `not : a -> a`](#method-not--a---a)
+    - [trait `a : Rem`](#trait-a--rem)
+      - [method `rem : a -> a -> a`](#method-rem--a---a---a)
+    - [trait `a : Sub`](#trait-a--sub)
+      - [method `sub : a -> a -> a`](#method-sub--a---a---a)
+    - [trait `a : ToBytes`](#trait-a--tobytes)
+      - [method `to_bytes : a -> Array U8`](#method-to_bytes--a---array-u8)
+    - [trait `a : ToString`](#trait-a--tostring)
+      - [method `to_string : a -> String`](#method-to_string--a---string)
+    - [trait `a : Zero`](#trait-a--zero)
+      - [method `zero : a`](#method-zero--a)
+    - [value `compose : (a -> b) -> (b -> c) -> a -> c`](#value-compose--a---b---b---c---a---c)
+    - [value `fix : ((a -> b) -> a -> b) -> a -> b`](#value-fix--a---b---a---b---a---b)
+    - [value `loop : s -> (s -> Std::LoopResult s b) -> b`](#value-loop--s---s---stdloopresult-s-b---b)
+    - [value `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#value-loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
+    - [value `mark_threaded : a -> a`](#value-mark_threaded--a---a)
+    - [value `undefined : Std::Lazy a`](#value-undefined--stdlazy-a)
+    - [value `unsafe_is_unique : a -> (Std::Bool, a)`](#value-unsafe_is_unique--a---stdbool-a)
   - [namespace `Std::Array`](#namespace-stdarray)
     - [value `@ : Std::I64 -> Std::Array a -> a`](#value---stdi64---stdarray-a---a)
     - [value `_get_ptr : Std::Array a -> Std::Ptr`](#value-_get_ptr--stdarray-a---stdptr)
@@ -36,16 +135,6 @@
     - [value `sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#value-sort_by--a-a---bool---array-a---array-a)
     - [value `to_iter : Array a -> Iterator a`](#value-to_iter--array-a---iterator-a)
     - [value `truncate : I64 -> Array a -> Array a`](#value-truncate--i64---array-a---array-a)
-  - [namespace `Std`](#namespace-std-1)
-    - [type `Bool = unbox { primitive }`](#type-bool--unbox--primitive-)
-    - [type `Boxed a = box struct { ...fields... }`](#type-boxed-a--box-struct--fields-)
-      - [field `value : a`](#field-value--a)
-    - [trait `a : Div`](#trait-a--div)
-      - [method `div : a -> a -> a`](#method-div--a---a---a)
-    - [trait `a : Eq`](#trait-a--eq)
-      - [method `eq : a -> a -> Bool`](#method-eq--a---a---bool)
-    - [type `ErrMsg = String`](#type-errmsg--string)
-    - [type `F32 = unbox { primitive }`](#type-f32--unbox--primitive-)
   - [namespace `Std::F32`](#namespace-stdf32)
     - [value `abs : F32 -> F32`](#value-abs--f32---f32)
     - [value `infinity : Std::F32`](#value-infinity--stdf32)
@@ -76,8 +165,6 @@
     - [value `to_string_exp : F32 -> String`](#value-to_string_exp--f32---string)
     - [value `to_string_exp_precision : U8 -> F32 -> String`](#value-to_string_exp_precision--u8---f32---string)
     - [value `to_string_precision : U8 -> F32 -> String`](#value-to_string_precision--u8---f32---string)
-  - [namespace `Std`](#namespace-std-2)
-    - [type `F64 = unbox { primitive }`](#type-f64--unbox--primitive-)
   - [namespace `Std::F64`](#namespace-stdf64)
     - [value `abs : F64 -> F64`](#value-abs--f64---f64)
     - [value `infinity : Std::F64`](#value-infinity--stdf64)
@@ -108,26 +195,6 @@
     - [value `to_string_exp : F64 -> String`](#value-to_string_exp--f64---string)
     - [value `to_string_exp_precision : U8 -> F64 -> String`](#value-to_string_exp_precision--u8---f64---string)
     - [value `to_string_precision : U8 -> F64 -> String`](#value-to_string_precision--u8---f64---string)
-  - [namespace `Std::FFI`](#namespace-stdffi)
-    - [type `CChar = Std::I8`](#type-cchar--stdi8)
-    - [type `CDouble = Std::F64`](#type-cdouble--stdf64)
-    - [type `CFloat = Std::F32`](#type-cfloat--stdf32)
-    - [type `CInt = Std::I32`](#type-cint--stdi32)
-    - [type `CLong = Std::I64`](#type-clong--stdi64)
-    - [type `CLongLong = Std::I64`](#type-clonglong--stdi64)
-    - [type `CShort = Std::I16`](#type-cshort--stdi16)
-    - [type `CSizeT = Std::U64`](#type-csizet--stdu64)
-    - [type `CUnsignedChar = Std::U8`](#type-cunsignedchar--stdu8)
-    - [type `CUnsignedInt = Std::U32`](#type-cunsignedint--stdu32)
-    - [type `CUnsignedLong = Std::U64`](#type-cunsignedlong--stdu64)
-    - [type `CUnsignedLongLong = Std::U64`](#type-cunsignedlonglong--stdu64)
-    - [type `CUnsignedShort = Std::U16`](#type-cunsignedshort--stdu16)
-    - [type `Destructor a = box struct { ...fields... }`](#type-destructor-a--box-struct--fields-)
-      - [field `_value : a`](#field-_value--a)
-      - [field `dtor : a -> ()`](#field-dtor--a---)
-  - [namespace `Std::FFI::Destructor`](#namespace-stdffidestructor)
-    - [value `borrow : (a -> b) -> Destructor a -> b`](#value-borrow--a---b---destructor-a---b)
-    - [value `make : a -> (a -> ()) -> Destructor a`](#value-make--a---a------destructor-a)
   - [namespace `Std::FFI`](#namespace-stdffi-1)
     - [value `_unsafe_get_boxed_data_ptr : a -> Std::Ptr`](#value-_unsafe_get_boxed_data_ptr--a---stdptr)
     - [value `unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`](#value-unsafe_borrow_boxed_data_ptr--ptr---b---a---b)
@@ -137,17 +204,11 @@
     - [value `unsafe_get_release_function_of_boxed_value : Std::Lazy a -> Std::Ptr`](#value-unsafe_get_release_function_of_boxed_value--stdlazy-a---stdptr)
     - [value `unsafe_get_retain_function_of_boxed_value : Std::Lazy a -> Std::Ptr`](#value-unsafe_get_retain_function_of_boxed_value--stdlazy-a---stdptr)
     - [value `unsafe_get_retained_ptr_of_boxed_value : a -> Std::Ptr`](#value-unsafe_get_retained_ptr_of_boxed_value--a---stdptr)
-  - [namespace `Std`](#namespace-std-3)
-    - [trait `a : FromBytes`](#trait-a--frombytes)
-      - [method `from_bytes : Array U8 -> Result ErrMsg a`](#method-from_bytes--array-u8---result-errmsg-a)
-    - [trait `a : FromString`](#trait-a--fromstring)
-      - [method `from_string : String -> Result ErrMsg a`](#method-from_string--string---result-errmsg-a)
-    - [trait `[f : *->*] f : Functor`](#trait-f----f--functor)
-      - [method `map : (a -> b) -> f a -> f b`](#method-map--a---b---f-a---f-b)
+  - [namespace `Std::FFI::Destructor`](#namespace-stdffidestructor)
+    - [value `borrow : (a -> b) -> Destructor a -> b`](#value-borrow--a---b---destructor-a---b)
+    - [value `make : a -> (a -> ()) -> Destructor a`](#value-make--a---a------destructor-a)
   - [namespace `Std::Functor`](#namespace-stdfunctor)
     - [value `forget : [f : Functor] f a -> f ()`](#value-forget--f--functor-f-a---f-)
-  - [namespace `Std`](#namespace-std-4)
-    - [type `I16 = unbox { primitive }`](#type-i16--unbox--primitive-)
   - [namespace `Std::I16`](#namespace-stdi16)
     - [value `abs : I16 -> I16`](#value-abs--i16---i16)
     - [value `bit_and : Std::I16 -> Std::I16 -> Std::I16`](#value-bit_and--stdi16---stdi16---stdi16)
@@ -180,8 +241,6 @@
     - [value `to_U32 : Std::I16 -> Std::U32`](#value-to_u32--stdi16---stdu32)
     - [value `to_U64 : Std::I16 -> Std::U64`](#value-to_u64--stdi16---stdu64)
     - [value `to_U8 : Std::I16 -> Std::U8`](#value-to_u8--stdi16---stdu8)
-  - [namespace `Std`](#namespace-std-5)
-    - [type `I32 = unbox { primitive }`](#type-i32--unbox--primitive-)
   - [namespace `Std::I32`](#namespace-stdi32)
     - [value `abs : I32 -> I32`](#value-abs--i32---i32)
     - [value `bit_and : Std::I32 -> Std::I32 -> Std::I32`](#value-bit_and--stdi32---stdi32---stdi32)
@@ -214,8 +273,6 @@
     - [value `to_U32 : Std::I32 -> Std::U32`](#value-to_u32--stdi32---stdu32)
     - [value `to_U64 : Std::I32 -> Std::U64`](#value-to_u64--stdi32---stdu64)
     - [value `to_U8 : Std::I32 -> Std::U8`](#value-to_u8--stdi32---stdu8)
-  - [namespace `Std`](#namespace-std-6)
-    - [type `I64 = unbox { primitive }`](#type-i64--unbox--primitive-)
   - [namespace `Std::I64`](#namespace-stdi64)
     - [value `abs : I64 -> I64`](#value-abs--i64---i64)
     - [value `bit_and : Std::I64 -> Std::I64 -> Std::I64`](#value-bit_and--stdi64---stdi64---stdi64)
@@ -248,8 +305,6 @@
     - [value `to_U32 : Std::I64 -> Std::U32`](#value-to_u32--stdi64---stdu32)
     - [value `to_U64 : Std::I64 -> Std::U64`](#value-to_u64--stdi64---stdu64)
     - [value `to_U8 : Std::I64 -> Std::U8`](#value-to_u8--stdi64---stdu8)
-  - [namespace `Std`](#namespace-std-7)
-    - [type `I8 = unbox { primitive }`](#type-i8--unbox--primitive-)
   - [namespace `Std::I8`](#namespace-stdi8)
     - [value `abs : I8 -> I8`](#value-abs--i8---i8)
     - [value `bit_and : Std::I8 -> Std::I8 -> Std::I8`](#value-bit_and--stdi8---stdi8---stdi8)
@@ -282,26 +337,7 @@
     - [value `to_U32 : Std::I8 -> Std::U32`](#value-to_u32--stdi8---stdu32)
     - [value `to_U64 : Std::I8 -> Std::U64`](#value-to_u64--stdi8---stdu64)
     - [value `to_U8 : Std::I8 -> Std::U8`](#value-to_u8--stdi8---stdu8)
-  - [namespace `Std`](#namespace-std-8)
-    - [type `IO a = unbox struct { ...fields... }`](#type-io-a--unbox-struct--fields-)
-      - [field `_data : () -> a`](#field-_data-----a)
-  - [namespace `Std::IO`](#namespace-stdio)
-    - [type `IOFail a = unbox struct { ...fields... }`](#type-iofail-a--unbox-struct--fields-)
-      - [field `_data : IO (Result ErrMsg a)`](#field-_data--io-result-errmsg-a)
-  - [namespace `Std::IO::IOFail`](#namespace-stdioiofail)
-    - [value `from_result : Result ErrMsg a -> IOFail a`](#value-from_result--result-errmsg-a---iofail-a)
-    - [value `lift : IO a -> IOFail a`](#value-lift--io-a---iofail-a)
-    - [value `throw : ErrMsg -> IOFail a`](#value-throw--errmsg---iofail-a)
-    - [value `to_result : IOFail a -> IO (Result ErrMsg a)`](#value-to_result--iofail-a---io-result-errmsg-a)
-    - [value `try : (ErrMsg -> IO a) -> IOFail a -> IO a`](#value-try--errmsg---io-a---iofail-a---io-a)
   - [namespace `Std::IO`](#namespace-stdio-1)
-    - [type `IOHandle = unbox struct { ...fields... }`](#type-iohandle--unbox-struct--fields-)
-      - [field `_data : Destructor Ptr`](#field-_data--destructor-ptr)
-  - [namespace `Std::IO::IOHandle`](#namespace-stdioiohandle)
-    - [value `_file_ptr : IOHandle -> Ptr`](#value-_file_ptr--iohandle---ptr)
-    - [value `_unsafe_close : IOHandle -> ()`](#value-_unsafe_close--iohandle---)
-    - [value `from_file_ptr : Ptr -> IOHandle`](#value-from_file_ptr--ptr---iohandle)
-  - [namespace `Std::IO`](#namespace-stdio-2)
     - [value `_read_line_inner : Bool -> IOHandle -> IOFail String`](#value-_read_line_inner--bool---iohandle---iofail-string)
     - [value `_unsafe_perform : IO a -> a`](#value-_unsafe_perform--io-a---a)
     - [value `close_file : IOHandle -> IO ()`](#value-close_file--iohandle---io-)
@@ -334,9 +370,16 @@
     - [value `write_file_bytes : Path -> Array U8 -> IOFail ()`](#value-write_file_bytes--path---array-u8---iofail-)
     - [value `write_file_string : Path -> String -> IOFail ()`](#value-write_file_string--path---string---iofail-)
     - [value `write_string : IOHandle -> String -> IOFail ()`](#value-write_string--iohandle---string---iofail-)
-  - [namespace `Std`](#namespace-std-9)
-    - [type `Iterator a = unbox struct { ...fields... }`](#type-iterator-a--unbox-struct--fields-)
-      - [field `next : () -> Option (a, Iterator a)`](#field-next-----option-a-iterator-a)
+  - [namespace `Std::IO::IOFail`](#namespace-stdioiofail)
+    - [value `from_result : Result ErrMsg a -> IOFail a`](#value-from_result--result-errmsg-a---iofail-a)
+    - [value `lift : IO a -> IOFail a`](#value-lift--io-a---iofail-a)
+    - [value `throw : ErrMsg -> IOFail a`](#value-throw--errmsg---iofail-a)
+    - [value `to_result : IOFail a -> IO (Result ErrMsg a)`](#value-to_result--iofail-a---io-result-errmsg-a)
+    - [value `try : (ErrMsg -> IO a) -> IOFail a -> IO a`](#value-try--errmsg---io-a---iofail-a---io-a)
+  - [namespace `Std::IO::IOHandle`](#namespace-stdioiohandle)
+    - [value `_file_ptr : IOHandle -> Ptr`](#value-_file_ptr--iohandle---ptr)
+    - [value `_unsafe_close : IOHandle -> ()`](#value-_unsafe_close--iohandle---)
+    - [value `from_file_ptr : Ptr -> IOHandle`](#value-from_file_ptr--ptr---iohandle)
   - [namespace `Std::Iterator`](#namespace-stditerator)
     - [value `_flatten : Iterator (Iterator a) -> Iterator a`](#value-_flatten--iterator-iterator-a---iterator-a)
     - [value `_flatten_sub : Iterator a -> Iterator (Iterator a) -> Iterator a`](#value-_flatten_sub--iterator-a---iterator-iterator-a---iterator-a)
@@ -369,71 +412,29 @@
     - [value `take_while : (a -> Bool) -> Iterator a -> Iterator a`](#value-take_while--a---bool---iterator-a---iterator-a)
     - [value `to_array : Iterator a -> Array a`](#value-to_array--iterator-a---array-a)
     - [value `zip : Iterator b -> Iterator a -> Iterator (a, b)`](#value-zip--iterator-b---iterator-a---iterator-a-b)
-  - [namespace `Std`](#namespace-std-10)
-    - [type `Lazy = () -> a`](#type-lazy-----a)
-    - [trait `a : LessThan`](#trait-a--lessthan)
-      - [method `less_than : a -> a -> Bool`](#method-less_than--a---a---bool)
   - [namespace `Std::LessThan`](#namespace-stdlessthan)
     - [value `max : [a : LessThan] a -> a -> a`](#value-max--a--lessthan-a---a---a)
     - [value `min : [a : LessThan] a -> a -> a`](#value-min--a--lessthan-a---a---a)
-  - [namespace `Std`](#namespace-std-11)
-    - [trait `a : LessThanOrEq`](#trait-a--lessthanoreq)
-      - [method `less_than_or_eq : a -> a -> Bool`](#method-less_than_or_eq--a---a---bool)
-    - [type `LoopResult s b = unbox union { ...variants... }`](#type-loopresult-s-b--unbox-union--variants-)
-      - [variant `continue : s`](#variant-continue--s)
-      - [variant `break : b`](#variant-break--b)
   - [namespace `Std::LoopResult`](#namespace-stdloopresult)
     - [value `break_m : [m : Monad] r -> m (LoopResult s r)`](#value-break_m--m--monad-r---m-loopresult-s-r)
     - [value `continue_m : [m : Monad] s -> m (LoopResult s r)`](#value-continue_m--m--monad-s---m-loopresult-s-r)
-  - [namespace `Std`](#namespace-std-12)
-    - [trait `[m : *->*] m : Monad`](#trait-m----m--monad)
-      - [method `bind : (a -> m b) -> m a -> m b`](#method-bind--a---m-b---m-a---m-b)
-      - [method `pure : a -> m a`](#method-pure--a---m-a)
   - [namespace `Std::Monad`](#namespace-stdmonad)
     - [value `flatten : [m : Monad] m (m a) -> m a`](#value-flatten--m--monad-m-m-a---m-a)
     - [value `unless : [m : Monad] Bool -> m () -> m ()`](#value-unless--m--monad-bool---m----m-)
     - [value `when : [m : Monad] Bool -> m () -> m ()`](#value-when--m--monad-bool---m----m-)
-  - [namespace `Std`](#namespace-std-13)
-    - [trait `a : Mul`](#trait-a--mul)
-      - [method `mul : a -> a -> a`](#method-mul--a---a---a)
-    - [trait `a : Neg`](#trait-a--neg)
-      - [method `neg : a -> a`](#method-neg--a---a)
-    - [trait `a : Not`](#trait-a--not)
-      - [method `not : a -> a`](#method-not--a---a)
-    - [type `Option a = unbox union { ...variants... }`](#type-option-a--unbox-union--variants-)
-      - [variant `none : ()`](#variant-none--)
-      - [variant `some : a`](#variant-some--a)
   - [namespace `Std::Option`](#namespace-stdoption)
     - [value `as_some_or : a -> Option a -> a`](#value-as_some_or--a---option-a---a)
     - [value `map_or : b -> (a -> b) -> Option a -> b`](#value-map_or--b---a---b---option-a---b)
-  - [namespace `Std`](#namespace-std-14)
-    - [type `Path = unbox struct { ...fields... }`](#type-path--unbox-struct--fields-)
-      - [field `_data : String`](#field-_data--string)
   - [namespace `Std::Path`](#namespace-stdpath)
     - [value `parse : String -> Option Path`](#value-parse--string---option-path)
-  - [namespace `Std`](#namespace-std-15)
-    - [type `Ptr = unbox { primitive }`](#type-ptr--unbox--primitive-)
   - [namespace `Std::Ptr`](#namespace-stdptr)
     - [value `add_offset : I64 -> Ptr -> Ptr`](#value-add_offset--i64---ptr---ptr)
     - [value `subtract_ptr : Ptr -> Ptr -> I64`](#value-subtract_ptr--ptr---ptr---i64)
-  - [namespace `Std`](#namespace-std-16)
-    - [type `PunchedArray a = unbox struct { ...fields... }`](#type-punchedarray-a--unbox-struct--fields-)
-      - [field `_data : Destructor (Array a)`](#field-_data--destructor-array-a)
-      - [field `idx : I64`](#field-idx--i64)
   - [namespace `Std::PunchedArray`](#namespace-stdpunchedarray)
     - [value `plug_in : a -> PunchedArray a -> Array a`](#value-plug_in--a---punchedarray-a---array-a)
     - [value `unsafe_punch : I64 -> Array a -> (PunchedArray a, a)`](#value-unsafe_punch--i64---array-a---punchedarray-a-a)
-  - [namespace `Std`](#namespace-std-17)
-    - [trait `a : Rem`](#trait-a--rem)
-      - [method `rem : a -> a -> a`](#method-rem--a---a---a)
-    - [type `Result e o = unbox union { ...variants... }`](#type-result-e-o--unbox-union--variants-)
-      - [variant `ok : o`](#variant-ok--o)
-      - [variant `err : e`](#variant-err--e)
   - [namespace `Std::Result`](#namespace-stdresult)
     - [value `unwrap : Result e o -> o`](#value-unwrap--result-e-o---o)
-  - [namespace `Std`](#namespace-std-18)
-    - [type `String = unbox struct { ...fields... }`](#type-string--unbox-struct--fields-)
-      - [field `_data : Array U8`](#field-_data--array-u8)
   - [namespace `Std::String`](#namespace-stdstring)
     - [value `_get_c_str : String -> Ptr`](#value-_get_c_str--string---ptr)
     - [value `_unsafe_from_c_str : Array U8 -> String`](#value-_unsafe_from_c_str--array-u8---string)
@@ -458,14 +459,6 @@
     - [value `strip_last_newlines : String -> String`](#value-strip_last_newlines--string---string)
     - [value `strip_last_spaces : String -> String`](#value-strip_last_spaces--string---string)
     - [value `strip_spaces : String -> String`](#value-strip_spaces--string---string)
-  - [namespace `Std`](#namespace-std-19)
-    - [trait `a : Sub`](#trait-a--sub)
-      - [method `sub : a -> a -> a`](#method-sub--a---a---a)
-    - [trait `a : ToBytes`](#trait-a--tobytes)
-      - [method `to_bytes : a -> Array U8`](#method-to_bytes--a---array-u8)
-    - [trait `a : ToString`](#trait-a--tostring)
-      - [method `to_string : a -> String`](#method-to_string--a---string)
-    - [type `U16 = unbox { primitive }`](#type-u16--unbox--primitive-)
   - [namespace `Std::U16`](#namespace-stdu16)
     - [value `bit_and : Std::U16 -> Std::U16 -> Std::U16`](#value-bit_and--stdu16---stdu16---stdu16)
     - [value `bit_or : Std::U16 -> Std::U16 -> Std::U16`](#value-bit_or--stdu16---stdu16---stdu16)
@@ -497,8 +490,6 @@
     - [value `to_U32 : Std::U16 -> Std::U32`](#value-to_u32--stdu16---stdu32)
     - [value `to_U64 : Std::U16 -> Std::U64`](#value-to_u64--stdu16---stdu64)
     - [value `to_U8 : Std::U16 -> Std::U8`](#value-to_u8--stdu16---stdu8)
-  - [namespace `Std`](#namespace-std-20)
-    - [type `U32 = unbox { primitive }`](#type-u32--unbox--primitive-)
   - [namespace `Std::U32`](#namespace-stdu32)
     - [value `bit_and : Std::U32 -> Std::U32 -> Std::U32`](#value-bit_and--stdu32---stdu32---stdu32)
     - [value `bit_or : Std::U32 -> Std::U32 -> Std::U32`](#value-bit_or--stdu32---stdu32---stdu32)
@@ -530,8 +521,6 @@
     - [value `to_U32 : Std::U32 -> Std::U32`](#value-to_u32--stdu32---stdu32)
     - [value `to_U64 : Std::U32 -> Std::U64`](#value-to_u64--stdu32---stdu64)
     - [value `to_U8 : Std::U32 -> Std::U8`](#value-to_u8--stdu32---stdu8)
-  - [namespace `Std`](#namespace-std-21)
-    - [type `U64 = unbox { primitive }`](#type-u64--unbox--primitive-)
   - [namespace `Std::U64`](#namespace-stdu64)
     - [value `bit_and : Std::U64 -> Std::U64 -> Std::U64`](#value-bit_and--stdu64---stdu64---stdu64)
     - [value `bit_or : Std::U64 -> Std::U64 -> Std::U64`](#value-bit_or--stdu64---stdu64---stdu64)
@@ -563,8 +552,6 @@
     - [value `to_U32 : Std::U64 -> Std::U32`](#value-to_u32--stdu64---stdu32)
     - [value `to_U64 : Std::U64 -> Std::U64`](#value-to_u64--stdu64---stdu64)
     - [value `to_U8 : Std::U64 -> Std::U8`](#value-to_u8--stdu64---stdu8)
-  - [namespace `Std`](#namespace-std-22)
-    - [type `U8 = unbox { primitive }`](#type-u8--unbox--primitive-)
   - [namespace `Std::U8`](#namespace-stdu8)
     - [value `bit_and : Std::U8 -> Std::U8 -> Std::U8`](#value-bit_and--stdu8---stdu8---stdu8)
     - [value `bit_or : Std::U8 -> Std::U8 -> Std::U8`](#value-bit_or--stdu8---stdu8---stdu8)
@@ -596,19 +583,164 @@
     - [value `to_U32 : Std::U8 -> Std::U32`](#value-to_u32--stdu8---stdu32)
     - [value `to_U64 : Std::U8 -> Std::U64`](#value-to_u64--stdu8---stdu64)
     - [value `to_U8 : Std::U8 -> Std::U8`](#value-to_u8--stdu8---stdu8)
-  - [namespace `Std`](#namespace-std-23)
-    - [trait `a : Zero`](#trait-a--zero)
-      - [method `zero : a`](#method-zero--a)
-    - [value `compose : (a -> b) -> (b -> c) -> a -> c`](#value-compose--a---b---b---c---a---c)
-    - [value `fix : ((a -> b) -> a -> b) -> a -> b`](#value-fix--a---b---a---b---a---b)
-    - [value `loop : s -> (s -> Std::LoopResult s b) -> b`](#value-loop--s---s---stdloopresult-s-b---b)
-    - [value `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#value-loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
-    - [value `mark_threaded : a -> a`](#value-mark_threaded--a---a)
-    - [value `undefined : Std::Lazy a`](#value-undefined--stdlazy-a)
-    - [value `unsafe_is_unique : a -> (Std::Bool, a)`](#value-unsafe_is_unique--a---stdbool-a)
 
 
-# module `Std`
+## namespace `Std`
+
+### type `Array a = box { primitive }`
+
+### type `Bool = unbox { primitive }`
+
+### type `Boxed a = box struct { ...fields... }`
+
+Boxed wrapper for a type.
+
+```
+type Boxed a = box struct { value : a };
+```
+
+#### field `value : a`
+
+### type `ErrMsg = String`
+
+A type (alias) for error message.
+
+### type `F32 = unbox { primitive }`
+
+### type `F64 = unbox { primitive }`
+
+### type `I16 = unbox { primitive }`
+
+### type `I32 = unbox { primitive }`
+
+### type `I64 = unbox { primitive }`
+
+### type `I8 = unbox { primitive }`
+
+### type `IO a = unbox struct { ...fields... }`
+
+#### field `_data : () -> a`
+
+### type `Iterator a = unbox struct { ...fields... }`
+
+Iterator (a.k.a lazy list)
+
+#### field `next : () -> Option (a, Iterator a)`
+
+### type `Lazy = () -> a`
+
+The type of lazily generated values.
+This is a type alias defined as `type Lazy a = () -> a;`
+You can create a lazy value by `|_| (...an expression to generate the value...)`, and
+you can evaluate a lazy value `v` by `v()`.
+
+### type `LoopResult s b = unbox union { ...variants... }`
+
+#### variant `continue : s`
+
+#### variant `break : b`
+
+### type `Option a = unbox union { ...variants... }`
+
+#### variant `none : ()`
+
+#### variant `some : a`
+
+### type `Path = unbox struct { ...fields... }`
+
+The type for file path.
+TODO: give better implementation.
+
+#### field `_data : String`
+
+### type `Ptr = unbox { primitive }`
+
+### type `PunchedArray a = unbox struct { ...fields... }`
+
+The type of punched arrays.
+A punched array is an array from which a certain element has been removed.
+This is used in the implementation of `Array::act`.
+
+#### field `_data : Destructor (Array a)`
+
+#### field `idx : I64`
+
+### type `Result e o = unbox union { ...variants... }`
+
+A type of result value for a computation that may fail.
+
+#### variant `ok : o`
+
+#### variant `err : e`
+
+### type `String = unbox struct { ...fields... }`
+
+#### field `_data : Array U8`
+
+### type `U16 = unbox { primitive }`
+
+### type `U32 = unbox { primitive }`
+
+### type `U64 = unbox { primitive }`
+
+### type `U8 = unbox { primitive }`
+
+## namespace `Std::FFI`
+
+### type `CChar = Std::I8`
+
+### type `CDouble = Std::F64`
+
+### type `CFloat = Std::F32`
+
+### type `CInt = Std::I32`
+
+### type `CLong = Std::I64`
+
+### type `CLongLong = Std::I64`
+
+### type `CShort = Std::I16`
+
+### type `CSizeT = Std::U64`
+
+### type `CUnsignedChar = Std::U8`
+
+### type `CUnsignedInt = Std::U32`
+
+### type `CUnsignedLong = Std::U64`
+
+### type `CUnsignedLongLong = Std::U64`
+
+### type `CUnsignedShort = Std::U16`
+
+### type `Destructor a = box struct { ...fields... }`
+
+`Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
+When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
+This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
+
+NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
+NOTE2: If the contained value is captured by another Fix's object than `Destructor`, the contained value is still alive after the destructor function is called.
+
+#### field `_value : a`
+
+#### field `dtor : a -> ()`
+
+## namespace `Std::IO`
+
+### type `IOFail a = unbox struct { ...fields... }`
+
+The type for I/O actions which may fail.
+
+#### field `_data : IO (Result ErrMsg a)`
+
+### type `IOHandle = unbox struct { ...fields... }`
+
+A handle type for read / write operations on files, stdin, stdout, stderr.
+You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
+Also there are global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
+
+#### field `_data : Destructor Ptr`
 
 ## namespace `Std`
 
@@ -620,7 +752,226 @@ Addition.
 
 An expression `x + y` is translated to `add(x, y)`.
 
-### type `Array a = box { primitive }`
+### trait `a : Div`
+
+#### method `div : a -> a -> a`
+
+Division.
+
+An expression `x / y` is translated to `div(x, y)`.
+
+### trait `a : Eq`
+
+#### method `eq : a -> a -> Bool`
+
+Equality comparison.
+
+An expression `x == y` is translated to `eq(x, y)`.
+
+### trait `a : FromBytes`
+
+#### method `from_bytes : Array U8 -> Result ErrMsg a`
+
+### trait `a : FromString`
+
+#### method `from_string : String -> Result ErrMsg a`
+
+### trait `[f : *->*] f : Functor`
+
+#### method `map : (a -> b) -> f a -> f b`
+
+### trait `a : LessThan`
+
+#### method `less_than : a -> a -> Bool`
+
+Less than comparison.
+
+An expression `x < y` is translated to `less_than(x, y)`.
+
+### trait `a : LessThanOrEq`
+
+#### method `less_than_or_eq : a -> a -> Bool`
+
+Less than or equal comparison.
+
+An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
+
+### trait `[m : *->*] m : Monad`
+
+#### method `bind : (a -> m b) -> m a -> m b`
+
+#### method `pure : a -> m a`
+
+### trait `a : Mul`
+
+#### method `mul : a -> a -> a`
+
+Multiplication.
+
+An expression `x * y` is translated to `mul(x, y)`.
+
+### trait `a : Neg`
+
+#### method `neg : a -> a`
+
+Negates a value.
+
+An expression `-x` is translated to `neg(x)`.
+
+### trait `a : Not`
+
+#### method `not : a -> a`
+
+Logical NOT.
+
+An expression `!x` is translated to `not(x)`.
+
+### trait `a : Rem`
+
+#### method `rem : a -> a -> a`
+
+Remainder.
+
+An expression `x % y` is translated to `rem(x, y)`.
+
+### trait `a : Sub`
+
+#### method `sub : a -> a -> a`
+
+Subtraction.
+
+An expression `x - y` is translated to `sub(x, y)`.
+
+### trait `a : ToBytes`
+
+#### method `to_bytes : a -> Array U8`
+
+### trait `a : ToString`
+
+#### method `to_string : a -> String`
+
+### trait `a : Zero`
+
+#### method `zero : a`
+
+### value `compose : (a -> b) -> (b -> c) -> a -> c`
+
+Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`.
+
+### value `fix : ((a -> b) -> a -> b) -> a -> b`
+
+`fix` enables you to make a recursive function locally.
+
+The idiom is `fix $ |loop, arg| -> {loop_body}`. In `{loop_body}`, you can call `loop` to make a recursion.
+
+Example:
+```
+module Main;
+
+main : IO ();
+main = (
+    let fact = fix $ |loop, n| if n == 0 { 1 } else { n * loop (n-1) };
+    println $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
+);
+```
+
+### value `loop : s -> (s -> Std::LoopResult s b) -> b`
+
+`loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
+
+```
+type LoopResult s r = unbox union { continue : s, break : r };
+```
+
+`loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`. 
+It first calls `body` on `s0`. 
+If `body` returns `break(r)`, then the loop ends and returns `r` as the result. 
+If `body` returns `continue(s)`, then the loop calls again `body` on `s`.
+
+Example:
+```
+module Main;
+    
+main : IO ();
+main = (
+    let sum = loop((0, 0), |(i, sum)|
+        if i == 100 { break $ sum };
+        continue $ (i + 1, sum + i)
+    );
+    println $ sum.to_string
+); // evaluates to 0 + 1 + ... + 99 
+```
+
+### value `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
+
+Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
+
+It is convenient to use `continue_m` and `break_m` to create monadic loop body function.
+
+The following program prints "Hello World! (i)" for i = 0, 1, 2.
+
+```
+module Main;
+
+main : IO ();
+main = (
+    loop_m(0, |i| (
+        if i == 3 { break_m $ () };
+        eval *println("Hello World! (" + i.to_string + ")");
+        continue_m $ i + 1
+    ))
+);
+```
+
+### value `mark_threaded : a -> a`
+
+Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
+
+### value `undefined : Std::Lazy a`
+
+An undefined value.
+
+Since `undefined()` has generic type `a`, you can put it anywhere and it will be type-checked.
+This is useful as a placeholder value that you haven't implemented yet.
+
+Calling this value aborts the execution of the program (calls `abort` in libc).
+
+### value `unsafe_is_unique : a -> (Std::Bool, a)`
+
+This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
+
+NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to assert that a value is unique, consider using `Debug::assert_unique` instead.
+
+Example: 
+
+```
+module Main;
+
+import Debug;
+
+main : IO ();
+main = (
+    // For unboxed value, it returns true even if the value is used later.
+    let int_val = 42;
+    let (unique, _) = int_val.unsafe_is_unique;
+    let use = int_val + 1;
+    eval assert_eq(|_|"fail: int_val is shared", unique, true);
+
+    // For boxed value, it returns true if the value isn't used later.
+    let arr = Array::fill(10, 10);
+    let (unique, arr) = arr.unsafe_is_unique;
+    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+    eval assert_eq(|_|"fail: arr is shared", unique, true);
+
+    // Fox boxed value, it returns false if the value will be used later.
+    let arr = Array::fill(10, 10);
+    let (unique, _) = arr.unsafe_is_unique;
+    let use = arr.@(0);
+    eval assert_eq(|_|"fail: arr is unique", unique, false);
+
+    pure()
+);
+```
 
 ## namespace `Std::Array`
 
@@ -777,42 +1128,6 @@ Convert an array to an iterator.
 Truncate an array, keeping the given number of first elements.
 `truncante(len, arr)` does nothing if `len >= arr.get_size`.
 
-## namespace `Std`
-
-### type `Bool = unbox { primitive }`
-
-### type `Boxed a = box struct { ...fields... }`
-
-Boxed wrapper for a type.
-
-```
-type Boxed a = box struct { value : a };
-```
-
-#### field `value : a`
-
-### trait `a : Div`
-
-#### method `div : a -> a -> a`
-
-Division.
-
-An expression `x / y` is translated to `div(x, y)`.
-
-### trait `a : Eq`
-
-#### method `eq : a -> a -> Bool`
-
-Equality comparison.
-
-An expression `x == y` is translated to `eq(x, y)`.
-
-### type `ErrMsg = String`
-
-A type (alias) for error message.
-
-### type `F32 = unbox { primitive }`
-
 ## namespace `Std::F32`
 
 ### value `abs : F32 -> F32`
@@ -928,10 +1243,6 @@ Convert a floating number to a string of exponential form with specified precisi
 ### value `to_string_precision : U8 -> F32 -> String`
 
 Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
-
-## namespace `Std`
-
-### type `F64 = unbox { primitive }`
 
 ## namespace `Std::F64`
 
@@ -1051,60 +1362,6 @@ Convert a floating number to a string with specified precision (i.e., number of 
 
 ## namespace `Std::FFI`
 
-### type `CChar = Std::I8`
-
-### type `CDouble = Std::F64`
-
-### type `CFloat = Std::F32`
-
-### type `CInt = Std::I32`
-
-### type `CLong = Std::I64`
-
-### type `CLongLong = Std::I64`
-
-### type `CShort = Std::I16`
-
-### type `CSizeT = Std::U64`
-
-### type `CUnsignedChar = Std::U8`
-
-### type `CUnsignedInt = Std::U32`
-
-### type `CUnsignedLong = Std::U64`
-
-### type `CUnsignedLongLong = Std::U64`
-
-### type `CUnsignedShort = Std::U16`
-
-### type `Destructor a = box struct { ...fields... }`
-
-`Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
-When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
-This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
-
-NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
-NOTE2: If the contained value is captured by another Fix's object than `Destructor`, the contained value is still alive after the destructor function is called.
-
-#### field `_value : a`
-
-#### field `dtor : a -> ()`
-
-## namespace `Std::FFI::Destructor`
-
-### value `borrow : (a -> b) -> Destructor a -> b`
-
-Borrow the contained value.
-`borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
-It is guaranteed that the `dtor` is alive during the call of `worker`.
-In other words, the `worker` receives the contained value on which the destructor is not called yet.
-
-### value `make : a -> (a -> ()) -> Destructor a`
-
-Make a destructor value.
-
-## namespace `Std::FFI`
-
 ### value `_unsafe_get_boxed_data_ptr : a -> Std::Ptr`
 
 Returns a pointer to the data of a boxed value.
@@ -1175,27 +1432,22 @@ To release / retain the value in a foreign language, call the function pointer o
 Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
 If you want to get a pointer to the data of the boxed value, use `unsafe_borrow_boxed_data_ptr`.
 
-## namespace `Std`
+## namespace `Std::FFI::Destructor`
 
-### trait `a : FromBytes`
+### value `borrow : (a -> b) -> Destructor a -> b`
 
-#### method `from_bytes : Array U8 -> Result ErrMsg a`
+Borrow the contained value.
+`borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
+It is guaranteed that the `dtor` is alive during the call of `worker`.
+In other words, the `worker` receives the contained value on which the destructor is not called yet.
 
-### trait `a : FromString`
+### value `make : a -> (a -> ()) -> Destructor a`
 
-#### method `from_string : String -> Result ErrMsg a`
-
-### trait `[f : *->*] f : Functor`
-
-#### method `map : (a -> b) -> f a -> f b`
+Make a destructor value.
 
 ## namespace `Std::Functor`
 
 ### value `forget : [f : Functor] f a -> f ()`
-
-## namespace `Std`
-
-### type `I16 = unbox { primitive }`
 
 ## namespace `Std::I16`
 
@@ -1317,10 +1569,6 @@ Casts a value of `I16` into a value of `U64`.
 
 Casts a value of `I16` into a value of `U8`.
 
-## namespace `Std`
-
-### type `I32 = unbox { primitive }`
-
 ## namespace `Std::I32`
 
 ### value `abs : I32 -> I32`
@@ -1440,10 +1688,6 @@ Casts a value of `I32` into a value of `U64`.
 ### value `to_U8 : Std::I32 -> Std::U8`
 
 Casts a value of `I32` into a value of `U8`.
-
-## namespace `Std`
-
-### type `I64 = unbox { primitive }`
 
 ## namespace `Std::I64`
 
@@ -1565,10 +1809,6 @@ Casts a value of `I64` into a value of `U64`.
 
 Casts a value of `I64` into a value of `U8`.
 
-## namespace `Std`
-
-### type `I8 = unbox { primitive }`
-
 ## namespace `Std::I8`
 
 ### value `abs : I8 -> I8`
@@ -1688,70 +1928,6 @@ Casts a value of `I8` into a value of `U64`.
 ### value `to_U8 : Std::I8 -> Std::U8`
 
 Casts a value of `I8` into a value of `U8`.
-
-## namespace `Std`
-
-### type `IO a = unbox struct { ...fields... }`
-
-#### field `_data : () -> a`
-
-## namespace `Std::IO`
-
-### type `IOFail a = unbox struct { ...fields... }`
-
-The type for I/O actions which may fail.
-
-#### field `_data : IO (Result ErrMsg a)`
-
-## namespace `Std::IO::IOFail`
-
-### value `from_result : Result ErrMsg a -> IOFail a`
-
-Create an pure `IOFail` value from a `Result` value.
-
-### value `lift : IO a -> IOFail a`
-
-Lift an `IO` action to a successful `IOFail` action.
-
-### value `throw : ErrMsg -> IOFail a`
-
-Create an error `IOFail` action.
-
-### value `to_result : IOFail a -> IO (Result ErrMsg a)`
-
-Convert an `IOFail` to an `Result` value (wrapped by `IO`).
-
-### value `try : (ErrMsg -> IO a) -> IOFail a -> IO a`
-
-Convert an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
-
-## namespace `Std::IO`
-
-### type `IOHandle = unbox struct { ...fields... }`
-
-A handle type for read / write operations on files, stdin, stdout, stderr.
-You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
-Also there are global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
-
-#### field `_data : Destructor Ptr`
-
-## namespace `Std::IO::IOHandle`
-
-### value `_file_ptr : IOHandle -> Ptr`
-
-Get pointer to C's `FILE` value from an `IOHandle`.
-DO NOT call `fclose` on the pointer returned by this function.
-To close an `IOHandle`, use `IO::close_file`.
-
-### value `_unsafe_close : IOHandle -> ()`
-
-Close an `IOHandle`.
-This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
-
-### value `from_file_ptr : Ptr -> IOHandle`
-
-Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
-DO NOT create two `IOHandle`s from a single file pointer.
 
 ## namespace `Std::IO`
 
@@ -1895,13 +2071,45 @@ Write a string into a file.
 
 Write a string into an IOHandle.
 
-## namespace `Std`
+## namespace `Std::IO::IOFail`
 
-### type `Iterator a = unbox struct { ...fields... }`
+### value `from_result : Result ErrMsg a -> IOFail a`
 
-Iterator (a.k.a lazy list)
+Create an pure `IOFail` value from a `Result` value.
 
-#### field `next : () -> Option (a, Iterator a)`
+### value `lift : IO a -> IOFail a`
+
+Lift an `IO` action to a successful `IOFail` action.
+
+### value `throw : ErrMsg -> IOFail a`
+
+Create an error `IOFail` action.
+
+### value `to_result : IOFail a -> IO (Result ErrMsg a)`
+
+Convert an `IOFail` to an `Result` value (wrapped by `IO`).
+
+### value `try : (ErrMsg -> IO a) -> IOFail a -> IO a`
+
+Convert an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
+
+## namespace `Std::IO::IOHandle`
+
+### value `_file_ptr : IOHandle -> Ptr`
+
+Get pointer to C's `FILE` value from an `IOHandle`.
+DO NOT call `fclose` on the pointer returned by this function.
+To close an `IOHandle`, use `IO::close_file`.
+
+### value `_unsafe_close : IOHandle -> ()`
+
+Close an `IOHandle`.
+This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
+
+### value `from_file_ptr : Ptr -> IOHandle`
+
+Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
+DO NOT create two `IOHandle`s from a single file pointer.
 
 ## namespace `Std::Iterator`
 
@@ -2045,44 +2253,11 @@ Convert an iterator to an array.
 
 Zip two iterators.
 
-## namespace `Std`
-
-### type `Lazy = () -> a`
-
-The type of lazily generated values.
-This is a type alias defined as `type Lazy a = () -> a;`
-You can create a lazy value by `|_| (...an expression to generate the value...)`, and
-you can evaluate a lazy value `v` by `v()`.
-
-### trait `a : LessThan`
-
-#### method `less_than : a -> a -> Bool`
-
-Less than comparison.
-
-An expression `x < y` is translated to `less_than(x, y)`.
-
 ## namespace `Std::LessThan`
 
 ### value `max : [a : LessThan] a -> a -> a`
 
 ### value `min : [a : LessThan] a -> a -> a`
-
-## namespace `Std`
-
-### trait `a : LessThanOrEq`
-
-#### method `less_than_or_eq : a -> a -> Bool`
-
-Less than or equal comparison.
-
-An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
-
-### type `LoopResult s b = unbox union { ...variants... }`
-
-#### variant `continue : s`
-
-#### variant `break : b`
 
 ## namespace `Std::LoopResult`
 
@@ -2095,14 +2270,6 @@ This is used with `loop_m` function.
 
 Make a continue value wrapped in a monad.
 This is used with `loop_m` function.
-
-## namespace `Std`
-
-### trait `[m : *->*] m : Monad`
-
-#### method `bind : (a -> m b) -> m a -> m b`
-
-#### method `pure : a -> m a`
 
 ## namespace `Std::Monad`
 
@@ -2118,38 +2285,6 @@ Flatten a nested monadic action.
 
 `when(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is true.
 
-## namespace `Std`
-
-### trait `a : Mul`
-
-#### method `mul : a -> a -> a`
-
-Multiplication.
-
-An expression `x * y` is translated to `mul(x, y)`.
-
-### trait `a : Neg`
-
-#### method `neg : a -> a`
-
-Negates a value.
-
-An expression `-x` is translated to `neg(x)`.
-
-### trait `a : Not`
-
-#### method `not : a -> a`
-
-Logical NOT.
-
-An expression `!x` is translated to `not(x)`.
-
-### type `Option a = unbox union { ...variants... }`
-
-#### variant `none : ()`
-
-#### variant `some : a`
-
 ## namespace `Std::Option`
 
 ### value `as_some_or : a -> Option a -> a`
@@ -2160,24 +2295,11 @@ Unwrap an option value if it is `some`, or returns given default value if it is 
 
 Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
 
-## namespace `Std`
-
-### type `Path = unbox struct { ...fields... }`
-
-The type for file path.
-TODO: give better implementation.
-
-#### field `_data : String`
-
 ## namespace `Std::Path`
 
 ### value `parse : String -> Option Path`
 
 Parse a string.
-
-## namespace `Std`
-
-### type `Ptr = unbox { primitive }`
 
 ## namespace `Std::Ptr`
 
@@ -2189,18 +2311,6 @@ Add an offset to a pointer.
 
 Subtract two pointers.
 Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
-
-## namespace `Std`
-
-### type `PunchedArray a = unbox struct { ...fields... }`
-
-The type of punched arrays.
-A punched array is an array from which a certain element has been removed.
-This is used in the implementation of `Array::act`.
-
-#### field `_data : Destructor (Array a)`
-
-#### field `idx : I64`
 
 ## namespace `Std::PunchedArray`
 
@@ -2214,35 +2324,11 @@ Creates a punched array by moving out the element at the specified index.
 NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
 The uniqueness of the array is ensured in the `Array::act` function.
 
-## namespace `Std`
-
-### trait `a : Rem`
-
-#### method `rem : a -> a -> a`
-
-Remainder.
-
-An expression `x % y` is translated to `rem(x, y)`.
-
-### type `Result e o = unbox union { ...variants... }`
-
-A type of result value for a computation that may fail.
-
-#### variant `ok : o`
-
-#### variant `err : e`
-
 ## namespace `Std::Result`
 
 ### value `unwrap : Result e o -> o`
 
 Returns the containing value if the value is ok, or otherwise aborts the program.
-
-## namespace `Std`
-
-### type `String = unbox struct { ...fields... }`
-
-#### field `_data : Array U8`
 
 ## namespace `Std::String`
 
@@ -2346,26 +2432,6 @@ Removing trailing whitespace characters.
 ### value `strip_spaces : String -> String`
 
 Strip leading and trailing whitespace characters.
-
-## namespace `Std`
-
-### trait `a : Sub`
-
-#### method `sub : a -> a -> a`
-
-Subtraction.
-
-An expression `x - y` is translated to `sub(x, y)`.
-
-### trait `a : ToBytes`
-
-#### method `to_bytes : a -> Array U8`
-
-### trait `a : ToString`
-
-#### method `to_string : a -> String`
-
-### type `U16 = unbox { primitive }`
 
 ## namespace `Std::U16`
 
@@ -2485,10 +2551,6 @@ Casts a value of `U16` into a value of `U64`.
 
 Casts a value of `U16` into a value of `U8`.
 
-## namespace `Std`
-
-### type `U32 = unbox { primitive }`
-
 ## namespace `Std::U32`
 
 ### value `bit_and : Std::U32 -> Std::U32 -> Std::U32`
@@ -2606,10 +2668,6 @@ Casts a value of `U32` into a value of `U64`.
 ### value `to_U8 : Std::U32 -> Std::U8`
 
 Casts a value of `U32` into a value of `U8`.
-
-## namespace `Std`
-
-### type `U64 = unbox { primitive }`
 
 ## namespace `Std::U64`
 
@@ -2729,10 +2787,6 @@ Casts a value of `U64` into a value of `U64`.
 
 Casts a value of `U64` into a value of `U8`.
 
-## namespace `Std`
-
-### type `U8 = unbox { primitive }`
-
 ## namespace `Std::U8`
 
 ### value `bit_and : Std::U8 -> Std::U8 -> Std::U8`
@@ -2850,128 +2904,3 @@ Casts a value of `U8` into a value of `U64`.
 ### value `to_U8 : Std::U8 -> Std::U8`
 
 Casts a value of `U8` into a value of `U8`.
-
-## namespace `Std`
-
-### trait `a : Zero`
-
-#### method `zero : a`
-
-### value `compose : (a -> b) -> (b -> c) -> a -> c`
-
-Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`.
-
-### value `fix : ((a -> b) -> a -> b) -> a -> b`
-
-`fix` enables you to make a recursive function locally.
-
-The idiom is `fix $ |loop, arg| -> {loop_body}`. In `{loop_body}`, you can call `loop` to make a recursion.
-
-Example:
-```
-module Main;
-
-main : IO ();
-main = (
-    let fact = fix $ |loop, n| if n == 0 { 1 } else { n * loop (n-1) };
-    println $ fact(5).to_string // evaluates to 5 * 4 * 3 * 2 * 1 = 120
-);
-```
-
-### value `loop : s -> (s -> Std::LoopResult s b) -> b`
-
-`loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
-
-```
-type LoopResult s r = unbox union { continue : s, break : r };
-```
-
-`loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`. 
-It first calls `body` on `s0`. 
-If `body` returns `break(r)`, then the loop ends and returns `r` as the result. 
-If `body` returns `continue(s)`, then the loop calls again `body` on `s`.
-
-Example:
-```
-module Main;
-    
-main : IO ();
-main = (
-    let sum = loop((0, 0), |(i, sum)|
-        if i == 100 { break $ sum };
-        continue $ (i + 1, sum + i)
-    );
-    println $ sum.to_string
-); // evaluates to 0 + 1 + ... + 99 
-```
-
-### value `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
-
-Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
-
-It is convenient to use `continue_m` and `break_m` to create monadic loop body function.
-
-The following program prints "Hello World! (i)" for i = 0, 1, 2.
-
-```
-module Main;
-
-main : IO ();
-main = (
-    loop_m(0, |i| (
-        if i == 3 { break_m $ () };
-        eval *println("Hello World! (" + i.to_string + ")");
-        continue_m $ i + 1
-    ))
-);
-```
-
-### value `mark_threaded : a -> a`
-
-Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
-
-### value `undefined : Std::Lazy a`
-
-An undefined value.
-
-Since `undefined()` has generic type `a`, you can put it anywhere and it will be type-checked.
-This is useful as a placeholder value that you haven't implemented yet.
-
-Calling this value aborts the execution of the program (calls `abort` in libc).
-
-### value `unsafe_is_unique : a -> (Std::Bool, a)`
-
-This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
-
-NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to assert that a value is unique, consider using `Debug::assert_unique` instead.
-
-Example: 
-
-```
-module Main;
-
-import Debug;
-
-main : IO ();
-main = (
-    // For unboxed value, it returns true even if the value is used later.
-    let int_val = 42;
-    let (unique, _) = int_val.unsafe_is_unique;
-    let use = int_val + 1;
-    eval assert_eq(|_|"fail: int_val is shared", unique, true);
-
-    // For boxed value, it returns true if the value isn't used later.
-    let arr = Array::fill(10, 10);
-    let (unique, arr) = arr.unsafe_is_unique;
-    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
-    eval assert_eq(|_|"fail: arr is shared", unique, true);
-
-    // Fox boxed value, it returns false if the value will be used later.
-    let arr = Array::fill(10, 10);
-    let (unique, _) = arr.unsafe_is_unique;
-    let use = arr.@(0);
-    eval assert_eq(|_|"fail: arr is unique", unique, false);
-
-    pure()
-);
-```
