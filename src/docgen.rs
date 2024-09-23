@@ -55,7 +55,7 @@ fn write_entries(entries: &mut Vec<Entry>, doc: &mut String) {
     for entry in entries.iter() {
         if entry.name.namespace != last_ns {
             last_ns = entry.name.namespace.clone();
-            *doc += format!("\n\n## namespace `{}`", last_ns.to_string()).as_str();
+            *doc += format!("\n\n## `namespace {}`", last_ns.to_string()).as_str();
         }
         *doc += format!("\n\n### {}", entry.title).as_str();
         let doc_trim = entry.doc.trim();
@@ -73,7 +73,7 @@ fn write_entries(entries: &mut Vec<Entry>, doc: &mut String) {
 fn mod_name_section(program: &Program, doc: &mut String) -> String {
     assert!(program.module_to_files.len() == 1);
     let (mod_name, _src) = program.module_to_files.iter().next().unwrap();
-    *doc += format!("# module `{}`", mod_name).as_str();
+    *doc += format!("# `module {}`", mod_name).as_str();
     mod_name.clone()
 }
 
@@ -178,7 +178,7 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
             }
         };
         let title = format!(
-            "type `{}{}{} = {} {}`",
+            "`type {}{}{} = {} {}`",
             kind_constraints_with_post_space(&ty_info.tyvars),
             name.name,
             tyvars_with_pre_space(&ty_info.tyvars),
@@ -281,7 +281,7 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
         let name = id.name.clone();
         let kind_consts = kind_constraints_with_post_space(&info.kind_signs);
         let title = format!(
-            "trait `{}{} : {}`",
+            "`trait {}{} : {}`",
             kind_consts, info.type_var.name, name.name
         );
 
@@ -325,7 +325,7 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
 
 fn value_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
     for (name, gv) in &program.global_values {
-        let title = format!("value `{} : {}`", name.name, gv.scm.to_string());
+        let title = format!("`{} : {}`", name.name, gv.scm.to_string());
 
         let mut doc = String::new();
         doc += gv.get_document().unwrap_or_default().trim();
