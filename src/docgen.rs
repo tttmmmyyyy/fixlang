@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    error::Errors, kind_star, make_std_mod, parse_file_path, Configuration, FullName,
-    KindSignature, Name, NameSpace, Program, TyVar, TypeDeclValue,
+    error::Errors, kind_star, make_std_mod, parse_file_path, Configuration, FullName, Kind,
+    KindSignature, Name, NameSpace, Program, TyCon, TyConVariant, TyVar, TypeDeclValue,
 };
 
 pub fn generate_docs_for_files(files: &[PathBuf]) -> Result<(), Errors> {
@@ -106,7 +106,7 @@ fn to_markdown_link(header: &str) -> String {
 
 // Add types, type aliases and associated namespaces sections to the documentation.
 fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
-    fn kind_constraints_with_space(tyvars: &Vec<Arc<TyVar>>) -> String {
+    fn kind_constraints_with_post_space(tyvars: &Vec<Arc<TyVar>>) -> String {
         if tyvars.is_empty() {
             return String::new();
         }
@@ -122,45 +122,64 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
         }
         format!("[{}] ", consts.join(", "))
     }
+    fn kind_specification_with_pre_space(kind: &Arc<Kind>) -> String {
+        if kind == &kind_star() {
+            return String::new();
+        }
+        format!(" : {}", kind.to_string())
+    }
+    fn tyvars_with_pre_space(tyvars: &Vec<Arc<TyVar>>) -> String {
+        if tyvars.is_empty() {
+            return String::new();
+        }
+        format!(
+            " {}",
+            tyvars
+                .iter()
+                .map(|tyvar| tyvar.name.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    }
 
-    for ty_def in &program.type_defns {
-        let name = ty_def.name.clone();
-
-        let kind_consts = kind_constraints_with_space(&ty_def.tyvars);
-        let title = match &ty_def.value {
-            TypeDeclValue::Struct(s) => format!(
-                "`type {}{} = {} struct {{ ... }}`",
-                name.name,
-                kind_consts,
-                box_or_unbox(s.is_unbox)
-            ),
-            TypeDeclValue::Union(u) => format!(
-                "`type {}{} = {} union {{ ... }}`",
-                name.name,
-                kind_consts,
-                box_or_unbox(u.is_unbox)
-            ),
-            TypeDeclValue::Alias(a) => {
-                format!(
-                    "`type {}{} = {}`",
-                    name.name,
-                    kind_consts,
-                    a.value.to_string()
-                )
-            }
-        };
-
-        let mut doc = String::new();
-        // If the type is not an alias, add link to jump to the associated namespace.
-        if let TypeDeclValue::Alias(_) = ty_def.value {
-        } else {
-            doc += &format!(
-                "[See related values](#{})\n\n",
-                to_markdown_link(&format!("namespace `{}`", name.to_namespace().to_string()))
-            );
+    for (ty_name, ty_info) in program.type_env.tycons.iter() {
+        let name = ty_name.name.clone();
+        // Skip types contains with "#".
+        if name.name.contains("#") {
+            continue;
         }
 
-        doc += &ty_def
+        // Skip dynamic object type
+        if ty_info.variant == TyConVariant::DynamicObject {
+            continue;
+        }
+
+        let def_rhs: &str = match &ty_info.variant {
+            TyConVariant::Primitive => "{ primitive }",
+            TyConVariant::Array => "{ primitive }",
+            TyConVariant::Struct => "struct { ...fields... }",
+            TyConVariant::Union => "union { ...variants... }",
+            TyConVariant::DynamicObject => {
+                unreachable!()
+            }
+        };
+        let title = format!(
+            "`type {}{}{} = {} {}`",
+            kind_constraints_with_post_space(&ty_info.tyvars),
+            name.name,
+            tyvars_with_pre_space(&ty_info.tyvars),
+            box_or_unbox(ty_info.is_unbox),
+            def_rhs,
+            // kind_specification_with_pre_space(&ty_info.kind)
+        );
+
+        let mut doc = String::new();
+        doc += &format!(
+            "[See related values](#{})\n\n",
+            to_markdown_link(&format!("namespace `{}`", name.to_namespace().to_string()))
+        );
+
+        doc += &ty_info
             .source
             .as_ref()
             .map(|src| src.get_document())
