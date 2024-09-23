@@ -46,8 +46,8 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut String, mod_name: Name) {
     let mut last_ns = NameSpace::new(vec![]);
 
     for entry in entries {
-        if entry.namespace != last_ns {
-            last_ns = entry.namespace.clone();
+        if entry.name.namespace != last_ns {
+            last_ns = entry.name.namespace.clone();
             *doc += format!("\n\n## `namespace {}`", last_ns.to_string()).as_str();
         }
         *doc += format!("\n\n### {}", entry.title).as_str();
@@ -60,13 +60,13 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut String, mod_name: Name) {
 fn mod_name_section(program: &Program, doc: &mut String) -> String {
     assert!(program.module_to_files.len() == 1);
     let (mod_name, _src) = program.module_to_files.iter().next().unwrap();
-    *doc += format!("# `module {}`\n", mod_name).as_str();
+    *doc += format!("# `module {}`", mod_name).as_str();
     mod_name.clone()
 }
 
 #[derive(PartialEq, Eq)]
 struct Entry {
-    namespace: NameSpace,
+    name: FullName,
     kind: EntryKind,
     title: String,
     doc: String,
@@ -80,9 +80,9 @@ impl PartialOrd for Entry {
 
 impl Ord for Entry {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if self.namespace < other.namespace {
+        if self.name < other.name {
             return std::cmp::Ordering::Less;
-        } else if self.namespace > other.namespace {
+        } else if self.name > other.name {
             return std::cmp::Ordering::Greater;
         } else {
             return self.kind.cmp(&other.kind);
@@ -195,9 +195,18 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
                 doc += &format!("\n\n#### field `{} : {}`", field.name, field.ty.to_string(),);
             }
         }
+        if ty_info.variant == TyConVariant::Union {
+            for variant in ty_info.fields.iter() {
+                doc += &format!(
+                    "\n\n#### variant `{} : {}`",
+                    variant.name,
+                    variant.ty.to_string(),
+                );
+            }
+        }
 
         let entry = Entry {
-            namespace: name.namespace.clone(),
+            name: name.clone(),
             kind: EntryKind::Type,
             title,
             doc,
@@ -232,28 +241,34 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
         let title = format!("`trait {}{}`", kind_consts, name.name);
 
         let mut doc = String::new();
-        doc += &info
+        let docstring = &info
             .source
             .as_ref()
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
+        let docstring = docstring.trim();
+        doc += docstring;
         for method in &info.methods {
             doc += &format!(
-                "\n\n#### `{} : {}`\n\n{}",
+                "\n\n#### `{} : {}`",
                 method.name,
                 method.qual_ty.to_string(),
-                method
-                    .source
-                    .as_ref()
-                    .map(|src| src.get_document())
-                    .transpose()?
-                    .unwrap_or_default()
             );
+            let docstring = method
+                .source
+                .as_ref()
+                .map(|src| src.get_document())
+                .transpose()?
+                .unwrap_or_default();
+            let docstring = docstring.trim();
+            if !docstring.is_empty() {
+                doc += &format!("\n\n{}", docstring);
+            }
         }
 
         let entry = Entry {
-            namespace: id.name.namespace.clone(),
+            name: id.name.clone(),
             kind: EntryKind::Trait,
             title,
             doc,
