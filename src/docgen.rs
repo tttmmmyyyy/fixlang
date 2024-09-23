@@ -48,9 +48,9 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut String, mod_name: Name) {
     for entry in entries {
         if entry.namespace != last_ns {
             last_ns = entry.namespace.clone();
-            *doc += format!("\n## `namespace {}`\n", last_ns.to_string()).as_str();
+            *doc += format!("\n\n## `namespace {}`", last_ns.to_string()).as_str();
         }
-        *doc += format!("\n### {}\n\n", entry.title).as_str();
+        *doc += format!("\n\n### {}", entry.title).as_str();
         *doc += format!("{}", entry.doc).as_str();
     }
 }
@@ -175,16 +175,26 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
 
         let mut doc = String::new();
         doc += &format!(
-            "[See related values](#{})\n\n",
+            "\n\n[See related values](#{})",
             to_markdown_link(&format!("namespace `{}`", name.to_namespace().to_string()))
         );
 
-        doc += &ty_info
+        let docstring = &ty_info
             .source
             .as_ref()
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
+        let docstring = docstring.trim();
+        if !docstring.is_empty() {
+            doc += &format!("\n\n{}", docstring);
+        }
+
+        if ty_info.variant == TyConVariant::Struct {
+            for field in ty_info.fields.iter() {
+                doc += &format!("\n\n#### field `{} : {}`", field.name, field.ty.to_string(),);
+            }
+        }
 
         let entry = Entry {
             namespace: name.namespace.clone(),
