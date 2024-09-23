@@ -315,17 +315,10 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
 
 fn value_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
     for (name, gv) in &program.global_values {
-        let title = format!("value `{} : {}`", name.name, gv.scm.to_string());
+        let title = format!("value `{} : {}`", name.name, gv.scm.to_string_raw());
 
         let mut doc = String::new();
-        let docstring = &gv
-            .def_src
-            .as_ref()
-            .map(|src| src.get_document())
-            .transpose()?
-            .unwrap_or_default();
-        let docstring = docstring.trim();
-        doc += docstring;
+        doc += gv.get_document().unwrap_or_default().trim();
 
         let entry = Entry {
             name: name.clone(),

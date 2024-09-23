@@ -1638,26 +1638,7 @@ impl Scheme {
         Ok(())
     }
 
-    pub fn to_string(&self) -> String {
-        // Change names of generalized type variables to t0, t1, ...
-        let free_vars = self.free_vars();
-        let mut s = Substitution::default();
-        let mut tyvar_num = -1;
-        for tyvar in &self.gen_vars {
-            let new_name = loop {
-                tyvar_num += 1;
-                let new_name = number_to_varname(tyvar_num as usize);
-                if free_vars.contains_key(&new_name) {
-                    continue;
-                }
-                break new_name;
-            };
-            s.add_substitution(&Substitution::single(
-                &tyvar.name,
-                type_tyvar(&new_name, &tyvar.kind.clone()),
-            ))
-        }
-
+    fn to_string_substituted(&self, s: &Substitution) -> String {
         // Substitute type variables in predicates, equalities and the type to chosen names.
         let preds = self
             .predicates
@@ -1693,6 +1674,26 @@ impl Scheme {
             format!("[{}] ", constraint_strs.join(", "))
         };
         constraints_str + &ty.to_string()
+    }
+
+    pub fn to_string(&self) -> String {
+        // Change names of generalized type variables to a, b, ...
+        let mut s = Substitution::default();
+        let mut tyvar_num = -1;
+        for tyvar in &self.gen_vars {
+            tyvar_num += 1;
+            let new_name = number_to_varname(tyvar_num as usize);
+            s.add_substitution(&Substitution::single(
+                &tyvar.name,
+                type_tyvar(&new_name, &tyvar.kind.clone()),
+            ))
+        }
+        self.to_string_substituted(&s)
+    }
+
+    pub fn to_string_raw(&self) -> String {
+        let s = Substitution::default();
+        self.to_string_substituted(&s)
     }
 
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
