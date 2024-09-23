@@ -29,11 +29,17 @@ fn generate_doc(program: &Program) -> Result<(), Errors> {
 
     let mut entries = vec![];
 
+    doc += "\n\n# Types and aliases";
     type_entries(program, &mut entries)?;
-    trait_entries(program, &mut entries)?;
-    value_entries(program, &mut entries)?;
+    write_entries(&mut entries, &mut doc);
 
-    write_entries(entries, &mut doc);
+    doc += "\n\n# Traits and aliases";
+    trait_entries(program, &mut entries)?;
+    write_entries(&mut entries, &mut doc);
+
+    doc += "\n\n# Values";
+    value_entries(program, &mut entries)?;
+    write_entries(&mut entries, &mut doc);
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
@@ -42,11 +48,11 @@ fn generate_doc(program: &Program) -> Result<(), Errors> {
     Ok(())
 }
 
-fn write_entries(mut entries: Vec<Entry>, doc: &mut String) {
+fn write_entries(entries: &mut Vec<Entry>, doc: &mut String) {
     entries.sort();
     let mut last_ns = NameSpace::new(vec![]);
 
-    for entry in entries {
+    for entry in entries.iter() {
         if entry.name.namespace != last_ns {
             last_ns = entry.name.namespace.clone();
             *doc += format!("\n\n## namespace `{}`", last_ns.to_string()).as_str();
@@ -58,6 +64,8 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut String) {
             *doc += doc_trim;
         }
     }
+
+    entries.clear();
 }
 
 // Add the module name section to the documentation.

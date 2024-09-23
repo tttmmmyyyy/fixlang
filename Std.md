@@ -1,6 +1,7 @@
 # module `Std`
 
 - [module `Std`](#module-std)
+- [Types and aliases](#types-and-aliases)
   - [namespace `Std`](#namespace-std)
     - [type `Array a = box { primitive }`](#type-array-a--box--primitive-)
     - [type `Bool = unbox { primitive }`](#type-bool--unbox--primitive-)
@@ -61,6 +62,7 @@
       - [field `_data : IO (Result ErrMsg a)`](#field-_data--io-result-errmsg-a)
     - [type `IOHandle = unbox struct { ...fields... }`](#type-iohandle--unbox-struct--fields-)
       - [field `_data : Destructor Ptr`](#field-_data--destructor-ptr)
+- [Traits and aliases](#traits-and-aliases)
   - [namespace `Std`](#namespace-std-1)
     - [trait `a : Add`](#trait-a--add)
       - [method `add : a -> a -> a`](#method-add--a---a---a)
@@ -97,6 +99,8 @@
       - [method `to_string : a -> String`](#method-to_string--a---string)
     - [trait `a : Zero`](#trait-a--zero)
       - [method `zero : a`](#method-zero--a)
+- [Values](#values)
+  - [namespace `Std`](#namespace-std-2)
     - [value `compose : (a -> b) -> (b -> c) -> a -> c`](#value-compose--a---b---b---c---a---c)
     - [value `fix : ((a -> b) -> a -> b) -> a -> b`](#value-fix--a---b---a---b---a---b)
     - [value `loop : s -> (s -> Std::LoopResult s b) -> b`](#value-loop--s---s---stdloopresult-s-b---b)
@@ -585,6 +589,8 @@
     - [value `to_U8 : Std::U8 -> Std::U8`](#value-to_u8--stdu8---stdu8)
 
 
+# Types and aliases
+
 ## namespace `Std`
 
 ### type `Array a = box { primitive }`
@@ -742,6 +748,8 @@ Also there are global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHand
 
 #### field `_data : Destructor Ptr`
 
+# Traits and aliases
+
 ## namespace `Std`
 
 ### trait `a : Add`
@@ -853,6 +861,10 @@ An expression `x - y` is translated to `sub(x, y)`.
 ### trait `a : Zero`
 
 #### method `zero : a`
+
+# Values
+
+## namespace `Std`
 
 ### value `compose : (a -> b) -> (b -> c) -> a -> c`
 
