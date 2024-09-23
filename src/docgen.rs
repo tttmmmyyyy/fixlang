@@ -31,6 +31,7 @@ fn generate_doc(program: &Program) -> Result<(), Errors> {
 
     type_entries(program, &mut entries)?;
     trait_entries(program, &mut entries)?;
+    value_entries(program, &mut entries)?;
 
     write_entries(entries, &mut doc, mod_name.clone());
 
@@ -51,7 +52,11 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut String, mod_name: Name) {
             *doc += format!("\n\n## `namespace {}`", last_ns.to_string()).as_str();
         }
         *doc += format!("\n\n### {}", entry.title).as_str();
-        *doc += format!("{}", entry.doc).as_str();
+        let doc_trim = entry.doc.trim();
+        if !doc_trim.is_empty() {
+            *doc += "\n\n";
+            *doc += doc_trim;
+        }
     }
 }
 
@@ -174,10 +179,10 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
         );
 
         let mut doc = String::new();
-        doc += &format!(
-            "\n\n[See related values](#{})",
-            to_markdown_link(&format!("namespace `{}`", name.to_namespace().to_string()))
-        );
+        // doc += &format!(
+        //     "\n\n[See related values](#{})",
+        //     to_markdown_link(&format!("namespace `{}`", name.to_namespace().to_string()))
+        // );
 
         let docstring = &ty_info
             .source
@@ -251,7 +256,7 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
         doc += docstring;
         for method in &info.methods {
             doc += &format!(
-                "\n\n#### `{} : {}`",
+                "\n\n#### method `{} : {}`",
                 method.name,
                 method.qual_ty.to_string(),
             );
@@ -270,6 +275,31 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
         let entry = Entry {
             name: id.name.clone(),
             kind: EntryKind::Trait,
+            title,
+            doc,
+        };
+        entries.push(entry);
+    }
+    Ok(())
+}
+
+fn value_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
+    for (name, gv) in &program.global_values {
+        let title = format!("`{} : {}`", name.name, gv.scm.to_string());
+
+        let mut doc = String::new();
+        let docstring = &gv
+            .def_src
+            .as_ref()
+            .map(|src| src.get_document())
+            .transpose()?
+            .unwrap_or_default();
+        let docstring = docstring.trim();
+        doc += docstring;
+
+        let entry = Entry {
+            name: name.clone(),
+            kind: EntryKind::Value,
             title,
             doc,
         };
