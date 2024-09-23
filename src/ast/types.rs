@@ -1789,22 +1789,6 @@ impl Scheme {
         Scheme::new_arc(vec![], vec![], vec![], ty)
     }
 
-    // Get free type variables.
-    pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
-        let mut ret = HashMap::default();
-        for p in &self.predicates {
-            ret.extend(p.free_vars());
-        }
-        for e in &self.equalities {
-            ret.extend(e.free_vars());
-        }
-        ret.extend(self.ty.free_vars());
-        for var in &self.gen_vars {
-            ret.remove(&var.name);
-        }
-        ret
-    }
-
     pub fn resolve_namespace(&self, ctx: &NameResolutionContext) -> Result<Arc<Scheme>, Errors> {
         let mut res = self.clone();
         for p in &mut res.predicates {

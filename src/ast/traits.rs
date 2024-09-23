@@ -646,10 +646,6 @@ impl Predicate {
         self.ty.free_vars_to_vec(buf);
     }
 
-    pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
-        self.ty.free_vars()
-    }
-
     pub fn set_source(&mut self, source: Span) {
         self.source = Some(source);
     }
@@ -819,20 +815,8 @@ impl Equality {
         Ok(())
     }
 
-    // pub fn is_all_args_tyvar(&self) -> bool {
-    //     self.args.iter().all(|arg| arg.is_tyvar())
-    // }
-
     pub fn to_string(&self) -> String {
         format!("{} = {}", self.lhs().to_string(), self.value.to_string())
-    }
-
-    pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
-        let mut vars = self.value.free_vars();
-        for arg in &self.args {
-            vars.extend(arg.free_vars());
-        }
-        vars
     }
 
     pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
@@ -846,24 +830,6 @@ impl Equality {
     pub fn lhs(&self) -> Arc<TypeNode> {
         type_assocty(self.assoc_type.clone(), self.args.clone())
     }
-
-    // pub fn trait_id(&self) -> TraitId {
-    //     let mut names = self.assoc_type.name.namespace.names.clone();
-    //     let name = names.pop().unwrap();
-    //     let namespace = NameSpace::new(names);
-    //     TraitId::from_fullname(FullName::new(&namespace, &name))
-    // }
-
-    // Returns the predicate to reduce this equality.
-    // pub fn predicate(&self) -> Predicate {
-    //     // Get trait name from the name of the associated type.
-    //     let trait_name = self.assoc_type.namespace;
-    //     let trait_name = FullName::new(
-    //         &NameSpace::new(trait_name.names[0..trait_name.names.len() - 1].to_vec()),
-    //         trait_name.names.last().unwrap(),
-    //     );
-    //     Predicate::make(TraitId::from_fullname(trait_name), self.impl_type.clone())
-    // }
 
     pub fn generalize(&self) -> EqualityScheme {
         let mut tyvars = vec![];

@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use crate::{
     error::Errors, kind_star, make_std_mod, parse_file_path, Configuration, FullName, Kind,
-    KindSignature, Name, NameSpace, Program, TyCon, TyConVariant, TyVar, TypeDeclValue,
+    KindSignature, NameSpace, Program, TyConVariant, TyVar,
 };
 
 pub fn generate_docs_for_files(files: &[PathBuf]) -> Result<(), Errors> {
@@ -33,7 +33,7 @@ fn generate_doc(program: &Program) -> Result<(), Errors> {
     trait_entries(program, &mut entries)?;
     value_entries(program, &mut entries)?;
 
-    write_entries(entries, &mut doc, mod_name.clone());
+    write_entries(entries, &mut doc);
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
@@ -42,7 +42,7 @@ fn generate_doc(program: &Program) -> Result<(), Errors> {
     Ok(())
 }
 
-fn write_entries(mut entries: Vec<Entry>, doc: &mut String, mod_name: Name) {
+fn write_entries(mut entries: Vec<Entry>, doc: &mut String) {
     entries.sort();
     let mut last_ns = NameSpace::new(vec![]);
 
@@ -102,6 +102,7 @@ enum EntryKind {
     Value,
 }
 
+#[allow(dead_code)]
 fn to_markdown_link(header: &str) -> String {
     let mut link = header.to_lowercase();
     link = link.replace(" ", "-");
@@ -126,6 +127,7 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
         }
         format!("[{}] ", consts.join(", "))
     }
+    #[allow(dead_code)]
     fn kind_specification_with_pre_space(kind: &Arc<Kind>) -> String {
         if kind == &kind_star() {
             return String::new();
