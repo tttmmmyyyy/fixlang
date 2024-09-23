@@ -49,7 +49,7 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut String, mod_name: Name) {
     for entry in entries {
         if entry.name.namespace != last_ns {
             last_ns = entry.name.namespace.clone();
-            *doc += format!("\n\n## `namespace {}`", last_ns.to_string()).as_str();
+            *doc += format!("\n\n## namespace `{}`", last_ns.to_string()).as_str();
         }
         *doc += format!("\n\n### {}", entry.title).as_str();
         let doc_trim = entry.doc.trim();
@@ -65,7 +65,7 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut String, mod_name: Name) {
 fn mod_name_section(program: &Program, doc: &mut String) -> String {
     assert!(program.module_to_files.len() == 1);
     let (mod_name, _src) = program.module_to_files.iter().next().unwrap();
-    *doc += format!("# `module {}`", mod_name).as_str();
+    *doc += format!("# module `{}`", mod_name).as_str();
     mod_name.clone()
 }
 
@@ -109,7 +109,6 @@ fn to_markdown_link(header: &str) -> String {
     link
 }
 
-// Add types, type aliases and associated namespaces sections to the documentation.
 fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
     fn kind_constraints_with_post_space(tyvars: &Vec<Arc<TyVar>>) -> String {
         if tyvars.is_empty() {
@@ -169,7 +168,7 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
             }
         };
         let title = format!(
-            "`type {}{}{} = {} {}`",
+            "type `{}{}{} = {} {}`",
             kind_constraints_with_post_space(&ty_info.tyvars),
             name.name,
             tyvars_with_pre_space(&ty_info.tyvars),
@@ -219,11 +218,39 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
 
         entries.push(entry);
     }
+    for (ty_name, ty_info) in program.type_env.aliases.iter() {
+        let name = ty_name.name.clone();
+        let title = format!(
+            "type `{}{} = {}`",
+            kind_constraints_with_post_space(&ty_info.tyvars),
+            name.name,
+            ty_info.value.to_string(),
+            // kind_specification_with_pre_space(&ty_info.kind)
+        );
+
+        let mut doc = String::new();
+        let docstring = &ty_info
+            .source
+            .as_ref()
+            .map(|src| src.get_document())
+            .transpose()?
+            .unwrap_or_default();
+        let docstring = docstring.trim();
+        doc += docstring;
+
+        let entry = Entry {
+            name: name.clone(),
+            kind: EntryKind::Type,
+            title,
+            doc,
+        };
+        entries.push(entry);
+    }
     Ok(())
 }
 
 fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
-    fn kind_constraints_with_space(kind_signs: &Vec<KindSignature>) -> String {
+    fn kind_constraints_with_post_space(kind_signs: &Vec<KindSignature>) -> String {
         if kind_signs.is_empty() {
             return String::new();
         }
@@ -242,8 +269,11 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
 
     for (id, info) in &program.trait_env.traits {
         let name = id.name.clone();
-        let kind_consts = kind_constraints_with_space(&info.kind_signs);
-        let title = format!("`trait {}{}`", kind_consts, name.name);
+        let kind_consts = kind_constraints_with_post_space(&info.kind_signs);
+        let title = format!(
+            "trait `{}{} : {}`",
+            kind_consts, info.type_var.name, name.name
+        );
 
         let mut doc = String::new();
         let docstring = &info
@@ -285,7 +315,7 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
 
 fn value_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
     for (name, gv) in &program.global_values {
-        let title = format!("`{} : {}`", name.name, gv.scm.to_string());
+        let title = format!("value `{} : {}`", name.name, gv.scm.to_string());
 
         let mut doc = String::new();
         let docstring = &gv
