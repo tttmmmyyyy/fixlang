@@ -633,7 +633,7 @@ impl QualType {
     }
 }
 
-// Statement such as "String: Show" or "a: Eq".
+// Statement such as "String : Show" or "a : Eq".
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Predicate {
     pub trait_id: TraitId,

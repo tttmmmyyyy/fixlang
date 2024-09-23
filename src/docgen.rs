@@ -37,6 +37,10 @@ fn generate_doc(program: &Program) -> Result<(), Errors> {
     trait_entries(program, &mut entries)?;
     write_entries(&mut entries, &mut doc);
 
+    doc += "\n\n# Trait implementations";
+    trait_impl_entries(program, &mut entries)?;
+    write_entries(&mut entries, &mut doc);
+
     doc += "\n\n# Values";
     value_entries(program, &mut entries)?;
     write_entries(&mut entries, &mut doc);
@@ -80,7 +84,7 @@ fn mod_name_section(program: &Program, doc: &mut String) -> String {
 #[derive(PartialEq, Eq)]
 struct Entry {
     name: FullName,
-    kind: EntryKind,
+    sort_key: String, // Additional key for sorting used when `name` is same.
     title: String,
     doc: String,
 }
@@ -93,21 +97,14 @@ impl PartialOrd for Entry {
 
 impl Ord for Entry {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if self.kind != other.kind {
-            return self.kind.cmp(&other.kind);
-        }
         if self.name.namespace != other.name.namespace {
             return self.name.namespace.cmp(&other.name.namespace);
         }
-        self.name.name.cmp(&other.name.name)
+        if self.name != other.name {
+            return self.name.cmp(&other.name);
+        }
+        self.sort_key.cmp(&other.sort_key)
     }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-enum EntryKind {
-    Type,
-    Trait,
-    Value,
 }
 
 #[allow(dead_code)]
@@ -221,7 +218,7 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
 
         let entry = Entry {
             name: name.clone(),
-            kind: EntryKind::Type,
+            sort_key: "".to_string(),
             title,
             doc,
         };
@@ -231,7 +228,7 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
     for (ty_name, ty_info) in program.type_env.aliases.iter() {
         let name = ty_name.name.clone();
         let title = format!(
-            "type `{}{} = {}`",
+            "`type {}{} = {}`",
             kind_constraints_with_post_space(&ty_info.tyvars),
             name.name,
             ty_info.value.to_string(),
@@ -250,7 +247,7 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
 
         let entry = Entry {
             name: name.clone(),
-            kind: EntryKind::Type,
+            sort_key: "".to_string(),
             title,
             doc,
         };
@@ -314,11 +311,38 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
 
         let entry = Entry {
             name: id.name.clone(),
-            kind: EntryKind::Trait,
+            sort_key: "".to_string(),
             title,
             doc,
         };
         entries.push(entry);
+    }
+    Ok(())
+}
+
+fn trait_impl_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
+    for (_id, impls) in &program.trait_env.instances {
+        for impl_ in impls {
+            let title = format!("`impl {}`", impl_.qual_pred.to_string());
+
+            let mut doc = String::new();
+            let docstring = impl_
+                .source
+                .as_ref()
+                .map(|src| src.get_document())
+                .transpose()?
+                .unwrap_or_default();
+            let docstring = docstring.trim();
+            doc += docstring;
+
+            let entry = Entry {
+                name: FullName::from_strs(&[], ""),
+                sort_key: impl_.qual_pred.predicate.to_string(),
+                title,
+                doc,
+            };
+            entries.push(entry);
+        }
     }
     Ok(())
 }
@@ -332,7 +356,7 @@ fn value_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
 
         let entry = Entry {
             name: name.clone(),
-            kind: EntryKind::Value,
+            sort_key: "".to_string(),
             title,
             doc,
         };

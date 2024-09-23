@@ -5,6 +5,7 @@ import Debug;
 namespace Array {
 
     // A function like `get_sub`, but behaves as if the size of the array is the specified value, 
+    // 
     // and has a parameter to specify additional capacity of the returned `Array`.
     _get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
     _get_sub_size_asif = |len, additional_capacity, s, e, arr| (
@@ -22,7 +23,8 @@ namespace Array {
         ))
     );
 
-    // Sort elements in a range of a vector by "less than" comparator.
+    // Sorts elements in a range of a vector by "less than" comparator.
+    // 
     // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
     _sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
     _sort_range_using_buffer = |buffer, begin, end, less_than, vec| (
@@ -123,7 +125,7 @@ namespace Array {
         ))
     );
 
-    // Call a function with a pointer to the memory region where elements are stored.
+    // Calls a function with a pointer to the memory region where elements are stored.
     borrow_ptr : (Ptr -> b) -> Array a -> b;
     borrow_ptr = |f, arr| (
         let res = f(arr._get_ptr);
@@ -131,7 +133,7 @@ namespace Array {
         res
     );
 
-    // Find the first index at which the element satisfies a condition.
+    // Finds the first index at which the element satisfies a condition.
     find_by : (a -> Bool) -> Array a -> Option I64;
     find_by = |cond, arr| (
         let len = arr.get_size;
@@ -167,14 +169,14 @@ namespace Array {
         ))
     );
 
-    // Get the first element of an array. Returns none if the array is empty.
+    // Gets the first element of an array. Returns none if the array is empty.
     get_first : Array a -> Option a;
     get_first = |arr| (
         if arr.is_empty { Option::none() };
         Option::some $ arr.@(0)
     );
 
-    // Get the last element of an array. Returns none if the array is empty.
+    // Gets the last element of an array. Returns none if the array is empty.
     get_last : Array a -> Option a;
     get_last = |arr| (
         let len = arr.get_size;
@@ -183,6 +185,7 @@ namespace Array {
     );
 
     // `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`, 
+    // 
     // More precisely, let `N` denote the the size of the `arr`. 
     // Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
     get_sub : I64 -> I64 -> Array a -> Array a;
@@ -192,7 +195,7 @@ namespace Array {
     is_empty : Array a -> Bool;
     is_empty = |arr| ( arr.get_size == 0 );
 
-    // Pop an element at the back of an array.
+    // Pops an element at the back of an array.
     // If the array is empty, this function does nothing.
     pop_back : Array a -> Array a;
     pop_back = |arr| (
@@ -203,7 +206,7 @@ namespace Array {
         arr._unsafe_set_size(len-1)
     );
 
-    // Push an element to the back of an array.
+    // Pushes an element to the back of an array.
     push_back : a -> Array a -> Array a;
     push_back = |e, arr| (
         let len = arr.get_size;
@@ -217,6 +220,7 @@ namespace Array {
     );
 
     // Reserves the memory region for an array.
+    // 
     // TODO: change to more optimized implementation.
     reserve : I64 -> Array a -> Array a;
     reserve = |cap, arr| (
@@ -233,7 +237,7 @@ namespace Array {
         ))
     );
 
-    // Sort elements in a vector by "less than" comparator.
+    // Sorts elements in a vector by "less than" comparator.
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, vec| (
         let buffer = Array::empty(vec.get_size);
@@ -241,11 +245,12 @@ namespace Array {
         vec
     );
 
-    // Convert an array to an iterator.
+    // Converts an array to an iterator.
     to_iter : Array a -> Iterator a;
     to_iter = Iterator::from_array;
 
-    // Truncate an array, keeping the given number of first elements.
+    // Truncates an array, keeping the given number of first elements.
+    // 
     // `truncante(len, arr)` does nothing if `len >= arr.get_size`.
     truncate : I64 -> Array a -> Array a;
     truncate = |length, vec| (
@@ -257,7 +262,6 @@ namespace Array {
 }
 
 impl [a : Eq] Array a : Eq {
-    // Compare two vectors.
     eq = |lhs, rhs| (
         if lhs.get_size != rhs.get_size { false };
         let len = lhs.get_size;
@@ -269,6 +273,9 @@ impl [a : Eq] Array a : Eq {
     );
 }
 
+// `LessThan` implementation for `Array a`.
+// 
+// Compares two arrays by lexicographic order.
 impl [a : Eq, a : LessThan] Array a : LessThan {
     less_than = |lhs, rhs| (
         loop(0, |i| (
@@ -283,6 +290,9 @@ impl [a : Eq, a : LessThan] Array a : LessThan {
     );
 }
 
+// `LessThanOrEq` implementation for `Array a`.
+// 
+// Compares two arrays by lexicographic order.
 impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq {
     less_than_or_eq = |lhs, rhs| (
         loop(0, |i| (
@@ -359,6 +369,7 @@ type ErrMsg = String;
 
 namespace FFI {
     // Borrows a pointer to the data of a boxed value.
+    // 
     // For more details, see the document of `_unsafe_get_boxed_data_ptr`.
     unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b;
     unsafe_borrow_boxed_data_ptr = |act, val| (
@@ -368,19 +379,21 @@ namespace FFI {
         res
     );
 
-    // Get errno which is set by C functions.
+    // Gets errno which is set by C functions.
     unsafe_get_errno : () -> CInt;
     unsafe_get_errno = |_| FFI_CALL[CInt fixruntime_get_errno()];
 
-    // Set errno to zero.
+    // Sets errno to zero.
     unsafe_clear_errno : () -> ();
     unsafe_clear_errno = |_| FFI_CALL[() fixruntime_clear_errno()];
 
     // `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
     // When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
+    // 
     // This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
     // 
     // NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
+    // 
     // NOTE2: If the contained value is captured by another Fix's object than `Destructor`, the contained value is still alive after the destructor function is called.
     type Destructor a = box struct { _value : a, dtor : a -> () };    
 
@@ -405,7 +418,8 @@ namespace FFI {
 type IO a = unbox struct { _data : () -> a };
 
 namespace IO {
-    // Read characters from an IOHandle.
+    // Reads characters from an IOHandle.
+    // 
     // If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
     _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
@@ -443,18 +457,19 @@ namespace IO {
         ) }}
     );
 
-    // Perform the I/O action. This may violate purity of Fix.
+    // Performs the I/O action. This may violate purity of Fix.
     _unsafe_perform : IO a -> a;
     _unsafe_perform = |io| (io.@_data)();
 
-    // Close a file.
+    // Closes a file.
+    // 
     // Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
     close_file : IOHandle -> IO ();
     close_file = |handle| (
         IO { _data : |_| IOHandle::_unsafe_close(handle) }
     );
 
-    // Print a string to stderr.
+    // Prints a string to stderr.
     eprint : String -> IO ();
     eprint = |str| (
         IO { _data : |_| (
@@ -466,7 +481,7 @@ namespace IO {
         )}
     );
 
-    // Print a string followed by a newline to stderr.
+    // Prints a string followed by a newline to stderr.
     eprintln : String -> IO ();
     eprintln = |str| (
         eval *eprint(str);
@@ -474,16 +489,17 @@ namespace IO {
         pure()
     );
 
-    // Exit the program with an error code.
+    // Exits the program with an error code.
     exit : I64 -> IO a;
     exit = |code| IO { _data : |_| eval FFI_CALL[() exit(I32), code.to_I32]; undefined() };
 
-    // Exit the program with an error message and an error code.
+    // Exits the program with an error message and an error code.
+    //  
     // The error message is written to the standard error output.
     exit_with_msg : I64 -> String -> IO a;
     exit_with_msg = |code, msg| eval *eprintln(msg); exit(code);
 
-    // Create an IO action from a function.
+    // Creates an IO action from a function.
     from_func : (() -> a) -> IO a;
     from_func = |func| IO { _data : func };
 
@@ -497,7 +513,7 @@ namespace IO {
         pure $ Option::some(String::_unsafe_from_c_str_ptr(arg_ptr))
     );
 
-    // Get the number of command line arguments.
+    // Gets the number of command line arguments.
     get_arg_count : IO I64;
     get_arg_count = (
         eval *pure();
@@ -505,7 +521,7 @@ namespace IO {
         pure $ argc
     );
 
-    // Get command line arguments.
+    // Gets command line arguments.
     get_args : IO (Array String);
     get_args = (
         let argc = *get_arg_count;
@@ -517,7 +533,7 @@ namespace IO {
         ))
     );
 
-    // Read a line from stdin. If some error occurr, this function aborts the program.
+    // Reads a line from stdin. If some error occurr, this function aborts the program.
     // If you want to handle errors, use `read_line(stdin)` instead.
     input_line : IO String;
     input_line = (
@@ -530,7 +546,7 @@ namespace IO {
         }
     );
 
-    // Check if an `IOHandle` reached to the EOF.
+    // Checks if an `IOHandle` reached to the EOF.
     is_eof : IOHandle -> IO Bool;
     is_eof = |handle| (
         eval *pure();
@@ -538,9 +554,11 @@ namespace IO {
     );
 
     // Loop on lines read from an `IOHandle`.
+    // 
     // `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
     // The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
     // When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
+    // 
     // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
     loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s;
     loop_lines = |handle, state, worker| (
@@ -562,6 +580,7 @@ namespace IO {
     );
 
     // Loop on lines read from an `IOHandle`.
+    // 
     // Similar to `loop_lines`, but the worker function can perform an IO action.
     loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s;
     loop_lines_io = |handle, state, worker| (
@@ -586,7 +605,7 @@ namespace IO {
         loop_lines_io(handle, next_state, worker)
     );
 
-    // Open a file. The second argument is a mode string for `fopen` C function. 
+    // Openes a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOFail IOHandle;
     open_file = |path, mode| (
         IOFail { _data  : IO { _data : |_|(
@@ -605,7 +624,7 @@ namespace IO {
         ) }}
     );
 
-    // Print a string to stdout.
+    // Prints a string to stdout.
     print : String -> IO ();
     print = |str| (
         IO { _data : |_| (
@@ -617,7 +636,7 @@ namespace IO {
         )}
     );
 
-    // Print a string followed by a newline to stdout.
+    // Prints a string followed by a newline to stdout.
     println : String -> IO ();
     println = |str| (
         eval *print(str);
@@ -625,20 +644,20 @@ namespace IO {
         pure()
     );
 
-    // Raad all characters from a file.
+    // Raads all characters from a file.
     read_file_string : Path -> IOFail String;
     read_file_string = |path| with_file(path, "r", read_string);
 
-    // Read all bytes from a file.
+    // Reads all bytes from a file.
     read_file_bytes : Path -> IOFail (Array U8);
     read_file_bytes = |path| with_file(path, "r", read_bytes);
 
-    // Read characters from a IOHandle upto newline or EOF.
+    // Reads characters from a IOHandle upto newline or EOF.
     // The returned string may include newline at its end.
     read_line : IOHandle -> IOFail String;
     read_line = _read_line_inner(true);
 
-    // Read all bytes from an IOHandle.
+    // Reads all bytes from an IOHandle.
     read_bytes : IOHandle -> IOFail (Array U8);
     read_bytes = |handle| (
         eval *pure();
@@ -656,7 +675,7 @@ namespace IO {
         pure $ iter.fold(res, |res, bytes| res.append(bytes))
     );
 
-    // Read at most n bytes from an IOHandle.
+    // Reads at most n bytes from an IOHandle.
     read_n_bytes : IOHandle -> I64 -> IOFail (Array U8);
     read_n_bytes = |handle, n| (
         eval *pure();
@@ -674,7 +693,7 @@ namespace IO {
         IOFail::from_result $ Result::ok(buf)
     );
 
-    // Read all characters from an IOHandle.
+    // Reads all characters from an IOHandle.
     read_string : IOHandle -> IOFail String;
     read_string = _read_line_inner(false);
 
@@ -699,7 +718,8 @@ namespace IO {
         IOHandle::from_file_ptr $ ptr
     );
 
-    // Perform a function with a file handle. The second argument is a mode string for `fopen` C function. 
+    // Performs a function with a file handle. The second argument is a mode string for `fopen` C function. 
+    // 
     // The file handle will be closed automatically.
     with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a;
     with_file = |path, mode, action| (
@@ -709,7 +729,7 @@ namespace IO {
         pure $ res
     );
 
-    // Write a byte array into an IOHandle.
+    // Writes a byte array into an IOHandle.
     write_bytes : IOHandle -> Array U8 -> IOFail ();
     write_bytes = |handle, array| (
         eval *pure();
@@ -722,15 +742,15 @@ namespace IO {
         IOFail::from_result $ res
     );
 
-    // Write a byte array into a file.
+    // Writes a byte array into a file.
     write_file_bytes : Path -> Array U8 -> IOFail ();
     write_file_bytes = |path, content| with_file(path, "w", |handle| write_bytes(handle, content));
 
-    // Write a string into a file.
+    // Writes a string into a file.
     write_file_string : Path -> String -> IOFail ();
     write_file_string = |path, content| with_file(path, "w", |handle| write_string(handle, content));
 
-    // Write a string into an IOHandle.
+    // Writes a string into an IOHandle.
     write_string : IOHandle -> String -> IOFail ();
     write_string = |handle, content| (
         eval *pure();
@@ -760,13 +780,16 @@ impl IO : Monad {
 
 namespace IO {
     // A handle type for read / write operations on files, stdin, stdout, stderr.
+    // 
     // You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`. 
-    // Also there are global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
+    // 
+    // There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
     type IOHandle = unbox struct { _data : Destructor Ptr };
 }
 
 namespace IO::IOHandle {
-    // Get pointer to C's `FILE` value from an `IOHandle`.
+    // Gets pointer to C's `FILE` value from an `IOHandle`.
+    // 
     // DO NOT call `fclose` on the pointer returned by this function.
     // To close an `IOHandle`, use `IO::close_file`.
     _file_ptr : IOHandle -> Ptr;
@@ -774,7 +797,8 @@ namespace IO::IOHandle {
         FFI_CALL[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]
     );
 
-    // Close an `IOHandle`. 
+    // Closes an `IOHandle`. 
+    // 
     // This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
     _unsafe_close : IOHandle -> ();
     _unsafe_close = |handle| (
@@ -782,8 +806,9 @@ namespace IO::IOHandle {
         ()
     );
 
-    // Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
-    // DO NOT create two `IOHandle`s from a single file pointer.
+    // Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
+    // 
+    // Creating two `IOHandle`s from a single file pointer is forbidden.
     from_file_ptr : Ptr -> IOHandle;
     from_file_ptr = |file_ptr| (
         let handle_ptr = FFI_CALL[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
@@ -798,23 +823,23 @@ namespace IO {
 }
 
 namespace IO::IOFail {
-    // Create an pure `IOFail` value from a `Result` value.
+    // Creates an pure `IOFail` value from a `Result` value.
     from_result : Result ErrMsg a -> IOFail a;
     from_result = |res| IOFail { _data : pure(res) };
 
-    // Lift an `IO` action to a successful `IOFail` action.
+    // Lifts an `IO` action to a successful `IOFail` action.
     lift : IO a -> IOFail a;
     lift = |io| IOFail { _data : io.map(pure) };
 
-    // Create an error `IOFail` action.
+    // Creates an error `IOFail` action.
     throw : ErrMsg -> IOFail a;
     throw = |e| from_result $ Result::err(e);
 
-    // Convert an `IOFail` to an `Result` value (wrapped by `IO`).
+    // Converts an `IOFail` to an `Result` value (wrapped by `IO`).
     to_result : IOFail a -> IO (Result ErrMsg a);
     to_result = @_data;
 
-    // Convert an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
+    // Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
     try : (ErrMsg -> IO a) -> IOFail a -> IO a;
     try = |catch, iof| (
         let res = *iof.to_result;
@@ -841,6 +866,7 @@ type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };
 namespace Iterator {
 
     // Flatten an iterator of iterators.
+    // 
     // You should use `Monad::flatten` instead of this function.
     // This function is used in the implementation of `Monad::bind` for `Iterator`.
     _flatten : Iterator (Iterator a) -> Iterator a;
@@ -859,11 +885,11 @@ namespace Iterator {
         Option::some $ (elem, _flatten_sub(iter, iters))
     };
 
-    // Get next value and next iterator.
+    // Gets next value and next iterator.
     advance : Iterator a -> Option (a, Iterator a);
     advance = |iter| (iter.@next)();
 
-    // Append an iterator to a iterator.
+    // Appends an iterator to a iterator.
     // Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
     append : Iterator a -> Iterator a -> Iterator a;
     append = |rhs, lhs| (
@@ -874,7 +900,7 @@ namespace Iterator {
         Iterator { next : next }
     );
 
-    // Evaluate all elements of iterator.
+    // Evaluates all elements of iterator.
     // TODO: add test
     bang : Iterator a -> Iterator a;
     bang = |iter| iter.to_array.to_iter;
@@ -889,14 +915,14 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Create an empty iterator.
+    // Creates an empty iterator.
     empty : Iterator a;
     empty = (
         let next = |_| (none());
         Iterator { next: next }
     );
 
-    // Filter elements by a condition function
+    // Filters elements by a condition function
     filter : (a -> Bool) -> Iterator a -> Iterator a;
     filter = |cond, iter| (
         let next = |_| (
@@ -912,7 +938,7 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Find the last element of an iterator.
+    // Finds the last element of an iterator.
     find_last : Iterator a -> Option a;
     find_last = |iter| (
         if iter.is_empty { none() };
@@ -951,7 +977,7 @@ namespace Iterator {
         ))
     );
 
-    // Create iterator from an array.
+    // Creates iterator from an array.
     from_array : Array a -> Iterator a;
     from_array = |arr| count_up(0).take(arr.get_size).map(|i| arr.@(i));
 
@@ -960,7 +986,7 @@ namespace Iterator {
     from_map : (I64 -> a) -> Iterator a;
     from_map = |f| count_up(0).map(f);
 
-    // Generate an iterator from a state transition function.
+    // Generates an iterator from a state transition function.
     // - if `f(s)` is none, `generate(s, f)` is empty.
     // - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
     generate : s -> (s -> Option (a, s)) -> Iterator a;
@@ -969,21 +995,22 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Get the first element of an iterator. If the iterator is empty, this function returns `none`.
+    // Gets the first element of an iterator. If the iterator is empty, this function returns `none`.
     // TODO: add test
     get_first : Iterator a -> Option a;
     get_first = |iter| iter.advance.map(@0);
 
-    // Count the number of elements of an iterator.
+    // Counts the number of elements of an iterator.
     get_size : Iterator a -> I64;
     get_size = fold(0, |acm, _| acm + 1);
 
-    // Remove the first element from an iterator. If the iterator is empty, this function returns `none`.
+    // Removes the first element from an iterator. If the iterator is empty, this function returns `none`.
     // TODO: add test
     get_tail : Iterator a -> Option (Iterator a);
     get_tail = |iter| iter.advance.map(@1);
 
     // Intersperse an elemnt between elements of an iterator.
+    // 
     // Example: 
     // ```
     // Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])
@@ -1029,12 +1056,13 @@ namespace Iterator {
         )
     );
 
-    // The cartesian product of two iterators.
+    // Generates the cartesian product of two iterators.
+    // 
     // Example: `[1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array == [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]`
     product : Iterator a -> Iterator b -> Iterator (b, a);
     product = |as, bs| as.map(|a| bs.map(|b| (b, a)))._flatten;
 
-    // Push an element to an iterator.
+    // Pushes an element to an iterator.
     push_front : a -> Iterator a -> Iterator a;
     push_front = |elem, iter| (
         let next = |_| (
@@ -1043,7 +1071,7 @@ namespace Iterator {
         Iterator { next: next }     
     );
 
-    // Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
+    // Creates a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
     range : I64 -> I64 -> Iterator I64;
     range = |a, b| (
         let next = |_| (
@@ -1056,7 +1084,7 @@ namespace Iterator {
         Iterator { next: next }
     );
 
-    // Reverse an iterator.
+    // Reverses an iterator.
     reverse : Iterator a -> Iterator a;
     reverse = |iter| (
         loop((Iterator::empty, iter), |(out_iter, in_iter)|(
@@ -1070,7 +1098,8 @@ namespace Iterator {
         ))
     );
 
-    // Generated all subsequences of an iterator.
+    // Generates all subsequences of an iterator.
+    // 
     // `[1,2,3].to_iter.subsequences` is `[[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]].to_iter.map(to_iter)`.
     subsequences : Iterator a -> Iterator (Iterator a);
     subsequences = |iter| (
@@ -1080,11 +1109,11 @@ namespace Iterator {
         subs.append(subs.map(push_front(head)))
     );
 
-    // Calculate the sum of elements of an iterator.
+    // Calculates the sum of elements of an iterator.
     sum : [a : Additive] Iterator a -> a;
     sum = fold(Zero::zero, Add::add);
 
-    // Take at most n elements from an iterator.
+    // Takes at most n elements from an iterator.
     take : I64 -> Iterator a -> Iterator a;
     take = |n, iter| (
         let next = |_| (
@@ -1163,8 +1192,8 @@ impl Iterator : Monad {
 }
 
 // The type of lazily generated values.
-// This is a type alias defined as `type Lazy a = () -> a;`
-// You can create a lazy value by `|_| (...an expression to generate the value...)`, and  
+//
+// You can create a lazy value by `|_| (...an expression to generate the value...)`, and 
 // you can evaluate a lazy value `v` by `v()`.
 type Lazy a = () -> a;
 
@@ -1173,11 +1202,13 @@ type Lazy a = () -> a;
 namespace LoopResult {
 
     // Make a break value wrapped in a monad.
+    // 
     // This is used with `loop_m` function.
     break_m : [m : Monad] r -> m (LoopResult s r);
     break_m = break >> pure;
 
     // Make a continue value wrapped in a monad.
+    // 
     // This is used with `loop_m` function.
     continue_m : [m : Monad] s -> m (LoopResult s r);
     continue_m = continue >> pure;
@@ -1226,6 +1257,7 @@ impl Option : Monad {
 }
 
 // The type for file path.
+// 
 // TODO: give better implementation.
 type Path = unbox struct { _data: String };
 
@@ -1242,6 +1274,7 @@ impl Path : ToString {
 }
 
 // The type of punched arrays. 
+// 
 // A punched array is an array from which a certain element has been removed.
 // This is used in the implementation of `Array::act`.
 type PunchedArray a = unbox struct { _data : Destructor (Array a), idx : I64 };
@@ -1274,6 +1307,7 @@ namespace PunchedArray {
     );
 
     // Creates a punched array by moving out the element at the specified index.
+    // 
     // NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
     // The uniqueness of the array is ensured in the `Array::act` function.
     unsafe_punch : I64 -> Array a -> (PunchedArray a, a);
@@ -1353,11 +1387,13 @@ type String = unbox struct { _data : Array U8 };
 namespace String {
 
     // Get the null-terminated C string.
+    // 
     // Note that in case the string is not used after call of this function, the returned pointer will be already released.
     _get_c_str : String -> Ptr;
     _get_c_str = |s| s.@_data._get_ptr;
 
     // Create a string from C string (i.e., null-terminated byte array).
+    // 
     // If the byte array doesn't include `\0`, this function causes undefined behavior.
     _unsafe_from_c_str : Array U8 -> String;
     _unsafe_from_c_str = |buf| (
@@ -1368,6 +1404,7 @@ namespace String {
     );
 
     // Create a `String` from a pointer to null-terminated C string.
+    // 
     // If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
     _unsafe_from_c_str_ptr : Ptr -> String;
     _unsafe_from_c_str_ptr = |ptr| (
@@ -1386,6 +1423,7 @@ namespace String {
     );
 
     // Concatenate two strings.
+    // 
     // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
     concat : String -> String -> String;
     concat = |rhs, lhs| (
@@ -1408,6 +1446,7 @@ namespace String {
     empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
 
     // `str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
+    // 
     // Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
     // `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
     find : String -> I64 -> String -> Option I64;
@@ -1423,18 +1462,18 @@ namespace String {
         Option::some(pos)
     );
 
-    // Get the byte array of a string, containing null-terminator.
+    // Gets the byte array of a string, containing null-terminator.
     get_bytes : String -> Array U8;
     get_bytes = @_data;
 
-    // Get the first byte of a string. Returns none if the string is empty.
+    // Gets the first byte of a string. Returns none if the string is empty.
     get_first_byte : String -> Option U8;
     get_first_byte = |s| (
         if s.is_empty { Option::none() };
         Option::some $ s.@_data.@(0)
     );
 
-    // Get the last byte of a string. Returns none if the string is empty.
+    // Gets the last byte of a string. Returns none if the string is empty.
     get_last_byte : String -> Option U8;
     get_last_byte = |s| (
         let len = s.get_size;
@@ -1442,7 +1481,7 @@ namespace String {
         Option::some $ s.@_data.@(len - 1)
     );
 
-    // Get the length of a string.
+    // Gets the length of a string.
     get_size : String -> I64;
     get_size = |s| s.@_data.get_size - 1; // exclude null terminator
 
@@ -1457,7 +1496,7 @@ namespace String {
     is_empty : String -> Bool;
     is_empty = |s| s.get_size == 0;
 
-    // Join strings by a separator.
+    // Joins strings by a separator.
     join : String -> Iterator String -> String;
     join = |sep, strs| (
         strs.intersperse(sep).concat_iter
@@ -1501,7 +1540,7 @@ namespace String {
         if n == 0 { str } else { str.get_sub(n, 0) }
     );
 
-    // Removing leading whitespace characters.
+    // Removes leading whitespace characters.
     strip_first_spaces : String -> String;
     strip_first_spaces = strip_first_bytes(|c| FFI_CALL[I32 isspace(I32), c.to_I32] > 0_I32);
 
@@ -1522,22 +1561,21 @@ namespace String {
     strip_last_newlines : String -> String;
     strip_last_newlines = strip_last_bytes(|c| c == '\n' || c == '\r');
 
-    // Removing trailing whitespace characters.
+    // Removes trailing whitespace characters.
     strip_last_spaces : String -> String;
     strip_last_spaces = strip_last_bytes(|c| FFI_CALL[I32 isspace(I32), c.to_I32] > 0_I32);
 
-    // Strip leading and trailing whitespace characters.
+    // Strips leading and trailing whitespace characters.
     strip_spaces : String -> String;
     strip_spaces = |s| s.strip_last_spaces.strip_first_spaces;
 }
 
+// Concatenates two strings.
 impl String : Add {
-    // Concatenate two strings.
     add = |lhs, rhs| lhs.concat(rhs);
 }
 
 impl String : Eq {
-    // Compare two strings.
     eq = |lhs, rhs| (lhs.@_data == rhs.@_data);
 }
 
@@ -1553,14 +1591,13 @@ impl String : ToString {
     to_string = |s| s;
 }
 
-// Unit
 impl () : Eq {
     eq = |_, _| true;
 }
 
 // Functions
 
-// Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
+// Composes two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
 compose : (a -> b) -> (b -> c) -> a -> c;
 compose = |f, g, a| g(f(a));
 
@@ -1689,73 +1726,63 @@ impl F64 : Zero {
 
 // Traits
 
+// Trait for prefix operator `-`.
 trait a : Neg {
-    // Negates a value.
-    // 
-    // An expression `-x` is translated to `neg(x)`.
+    // Negates a value. An expression `-x` is translated to `neg(x)`.
     neg : a -> a;
 }
 
+// Trait for prefix operator `!`.
 trait a : Not {
-    // Logical NOT.
-    // 
-    // An expression `!x` is translated to `not(x)`.
+    // Logical NOT of a value. An expression `!x` is translated to `not(x)`.
     not : a -> a;
 }
 
+// Trait for infix operator `==`.
 trait a : Eq {
-    // Equality comparison.
-    // 
-    // An expression `x == y` is translated to `eq(x, y)`.
+    // Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
     eq : a -> a -> Bool;
 }
 
+// Trait for infix operator `<`.
 trait a : LessThan {
-    // Less than comparison.
-    // 
-    // An expression `x < y` is translated to `less_than(x, y)`.
+    // Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
     less_than : a -> a -> Bool;
 }
 
+// Trait for infix operator `<=`.
 trait a : LessThanOrEq {
-    // Less than or equal comparison.
-    // 
-    // An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
+    // Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
     less_than_or_eq : a -> a -> Bool;
 }
 
+// Trait for infix operator `+`.
 trait a : Add {
-    // Addition.
-    // 
-    // An expression `x + y` is translated to `add(x, y)`.
+    // Adds two values. An expression `x + y` is translated to `add(x, y)`.
     add : a -> a -> a;
 }
 
+// Trait for infix operator `-`.
 trait a : Sub {
-    // Subtraction.
-    // 
-    // An expression `x - y` is translated to `sub(x, y)`.
+    // Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
     sub : a -> a -> a;
 }
 
+// Trait for infix operator `*`.
 trait a : Mul {
-    // Multiplication.
-    // 
-    // An expression `x * y` is translated to `mul(x, y)`.
+    // Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
     mul : a -> a -> a;
 }
 
+// Trait for infix operator `/`.
 trait a : Div {
-    // Division.
-    // 
-    // An expression `x / y` is translated to `div(x, y)`.
+    // Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
     div : a -> a -> a;
 }
 
+// Trait for infix operator `%`.
 trait a : Rem {
-    // Remainder.
-    // 
-    // An expression `x % y` is translated to `rem(x, y)`.
+    // Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
     rem : a -> a -> a;
 }
 
@@ -1792,7 +1819,7 @@ trait [m : *->*] m : Monad {
 }
 
 namespace Monad {
-    // Flatten a nested monadic action.
+    // Flattens a nested monadic action.
     flatten : [m : Monad] m (m a) -> m a;
     flatten = Monad::bind(|x|x);
 
@@ -1849,19 +1876,17 @@ namespace F64 {
     abs = |f| if f < 0.0 { -f } else { f };
 }
 
-// `Ptr` basic operations.
 namespace Ptr {
-    // Add an offset to a pointer.
+    // Adds an offset to a pointer.
     add_offset : I64 -> Ptr -> Ptr;
     add_offset = |off, ptr| FFI_CALL[Ptr fixruntime_ptr_add_offset(Ptr, I64), ptr, off];
 
-    // Subtract two pointers.
+    // Subtracts two pointers.
+    // 
     // Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
     subtract_ptr : Ptr -> Ptr -> I64;
     subtract_ptr = |rhs, lhs| FFI_CALL[I64 fixruntime_subtract_ptr(Ptr, Ptr), lhs, rhs];
 }
-
-// ToString, FromString implementations for fundamental types
 
 impl Ptr : ToString {
     to_string = |v| (
@@ -2135,7 +2160,7 @@ impl F32 : ToString {
     );
 }
 namespace F32 {
-    // Convert a floating number to a string of exponential form.
+    // Converts a floating number to a string of exponential form.
     to_string_exp : F32 -> String;
     to_string_exp = |v| (
         let data = Array::empty(50);
@@ -2143,7 +2168,7 @@ namespace F32 {
         String::_unsafe_from_c_str(data)
     );
 
-    // Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
+    // Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
@@ -2151,7 +2176,7 @@ namespace F32 {
         String::_unsafe_from_c_str(data)
     );
 
-    // Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
+    // Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
@@ -2197,7 +2222,7 @@ impl F64 : ToString {
     );
 }
 namespace F64 {
-    // Convert a floating number to a string of exponential form.
+    // Converts a floating number to a string of exponential form.
     to_string_exp : F64 -> String;
     to_string_exp = |v| (
         let data = Array::empty(500);
@@ -2205,7 +2230,7 @@ namespace F64 {
         String::_unsafe_from_c_str(data)
     );
 
-    // Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
+    // Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
@@ -2213,7 +2238,7 @@ namespace F64 {
         String::_unsafe_from_c_str(data)
     );
 
-    // Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
+    // Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
@@ -2234,7 +2259,7 @@ impl F64 : FromString {
     );
 }
 
-// ToString implementations for fundamental types
+// Returns "()".
 impl () : ToString {
     to_string = |_| "()";
 }

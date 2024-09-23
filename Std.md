@@ -7,7 +7,7 @@
     - [`type Bool = unbox { primitive }`](#type-bool--unbox--primitive-)
     - [`type Boxed a = box struct { ...fields... }`](#type-boxed-a--box-struct--fields-)
       - [field `value : a`](#field-value--a)
-    - [type `ErrMsg = String`](#type-errmsg--string)
+    - [`type ErrMsg = String`](#type-errmsg--string)
     - [`type F32 = unbox { primitive }`](#type-f32--unbox--primitive-)
     - [`type F64 = unbox { primitive }`](#type-f64--unbox--primitive-)
     - [`type I16 = unbox { primitive }`](#type-i16--unbox--primitive-)
@@ -18,7 +18,7 @@
       - [field `_data : () -> a`](#field-_data-----a)
     - [`type Iterator a = unbox struct { ...fields... }`](#type-iterator-a--unbox-struct--fields-)
       - [field `next : () -> Option (a, Iterator a)`](#field-next-----option-a-iterator-a)
-    - [type `Lazy = () -> a`](#type-lazy-----a)
+    - [`type Lazy = () -> a`](#type-lazy-----a)
     - [`type LoopResult s b = unbox union { ...variants... }`](#type-loopresult-s-b--unbox-union--variants-)
       - [variant `continue : s`](#variant-continue--s)
       - [variant `break : b`](#variant-break--b)
@@ -41,19 +41,19 @@
     - [`type U64 = unbox { primitive }`](#type-u64--unbox--primitive-)
     - [`type U8 = unbox { primitive }`](#type-u8--unbox--primitive-)
   - [`namespace Std::FFI`](#namespace-stdffi)
-    - [type `CChar = Std::I8`](#type-cchar--stdi8)
-    - [type `CDouble = Std::F64`](#type-cdouble--stdf64)
-    - [type `CFloat = Std::F32`](#type-cfloat--stdf32)
-    - [type `CInt = Std::I32`](#type-cint--stdi32)
-    - [type `CLong = Std::I64`](#type-clong--stdi64)
-    - [type `CLongLong = Std::I64`](#type-clonglong--stdi64)
-    - [type `CShort = Std::I16`](#type-cshort--stdi16)
-    - [type `CSizeT = Std::U64`](#type-csizet--stdu64)
-    - [type `CUnsignedChar = Std::U8`](#type-cunsignedchar--stdu8)
-    - [type `CUnsignedInt = Std::U32`](#type-cunsignedint--stdu32)
-    - [type `CUnsignedLong = Std::U64`](#type-cunsignedlong--stdu64)
-    - [type `CUnsignedLongLong = Std::U64`](#type-cunsignedlonglong--stdu64)
-    - [type `CUnsignedShort = Std::U16`](#type-cunsignedshort--stdu16)
+    - [`type CChar = Std::I8`](#type-cchar--stdi8)
+    - [`type CDouble = Std::F64`](#type-cdouble--stdf64)
+    - [`type CFloat = Std::F32`](#type-cfloat--stdf32)
+    - [`type CInt = Std::I32`](#type-cint--stdi32)
+    - [`type CLong = Std::I64`](#type-clong--stdi64)
+    - [`type CLongLong = Std::I64`](#type-clonglong--stdi64)
+    - [`type CShort = Std::I16`](#type-cshort--stdi16)
+    - [`type CSizeT = Std::U64`](#type-csizet--stdu64)
+    - [`type CUnsignedChar = Std::U8`](#type-cunsignedchar--stdu8)
+    - [`type CUnsignedInt = Std::U32`](#type-cunsignedint--stdu32)
+    - [`type CUnsignedLong = Std::U64`](#type-cunsignedlong--stdu64)
+    - [`type CUnsignedLongLong = Std::U64`](#type-cunsignedlonglong--stdu64)
+    - [`type CUnsignedShort = Std::U16`](#type-cunsignedshort--stdu16)
     - [`type Destructor a = box struct { ...fields... }`](#type-destructor-a--box-struct--fields-)
       - [field `_value : a`](#field-_value--a)
       - [field `dtor : a -> ()`](#field-dtor--a---)
@@ -99,6 +99,180 @@
       - [method `to_string : a -> String`](#method-to_string--a---string)
     - [`trait a : Zero`](#trait-a--zero)
       - [method `zero : a`](#method-zero--a)
+- [Trait implementations](#trait-implementations)
+    - [`impl () : Eq`](#impl---eq)
+    - [`impl () : ToString`](#impl---tostring)
+    - [`impl Array : Functor`](#impl-array--functor)
+    - [`impl Array : Monad`](#impl-array--monad)
+    - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
+    - [`impl [a : Eq, a : LessThan] Array a : LessThan`](#impl-a--eq-a--lessthan-array-a--lessthan)
+    - [`impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq`](#impl-a--eq-a--lessthanoreq-array-a--lessthanoreq)
+    - [`impl [a : ToString] Array a : ToString`](#impl-a--tostring-array-a--tostring)
+    - [`impl Bool : ToString`](#impl-bool--tostring)
+    - [`impl F32 : FromBytes`](#impl-f32--frombytes)
+    - [`impl F32 : FromString`](#impl-f32--fromstring)
+    - [`impl F32 : ToBytes`](#impl-f32--tobytes)
+    - [`impl F32 : ToString`](#impl-f32--tostring)
+    - [`impl F32 : Zero`](#impl-f32--zero)
+    - [`impl F64 : FromBytes`](#impl-f64--frombytes)
+    - [`impl F64 : FromString`](#impl-f64--fromstring)
+    - [`impl F64 : ToBytes`](#impl-f64--tobytes)
+    - [`impl F64 : ToString`](#impl-f64--tostring)
+    - [`impl F64 : Zero`](#impl-f64--zero)
+    - [`impl I16 : FromBytes`](#impl-i16--frombytes)
+    - [`impl I16 : FromString`](#impl-i16--fromstring)
+    - [`impl I16 : ToBytes`](#impl-i16--tobytes)
+    - [`impl I16 : ToString`](#impl-i16--tostring)
+    - [`impl I16 : Zero`](#impl-i16--zero)
+    - [`impl I32 : FromBytes`](#impl-i32--frombytes)
+    - [`impl I32 : FromString`](#impl-i32--fromstring)
+    - [`impl I32 : ToBytes`](#impl-i32--tobytes)
+    - [`impl I32 : ToString`](#impl-i32--tostring)
+    - [`impl I32 : Zero`](#impl-i32--zero)
+    - [`impl I64 : FromBytes`](#impl-i64--frombytes)
+    - [`impl I64 : FromString`](#impl-i64--fromstring)
+    - [`impl I64 : ToBytes`](#impl-i64--tobytes)
+    - [`impl I64 : ToString`](#impl-i64--tostring)
+    - [`impl I64 : Zero`](#impl-i64--zero)
+    - [`impl I8 : FromBytes`](#impl-i8--frombytes)
+    - [`impl I8 : FromString`](#impl-i8--fromstring)
+    - [`impl I8 : ToBytes`](#impl-i8--tobytes)
+    - [`impl I8 : ToString`](#impl-i8--tostring)
+    - [`impl I8 : Zero`](#impl-i8--zero)
+    - [`impl IO : Functor`](#impl-io--functor)
+    - [`impl IO : Monad`](#impl-io--monad)
+    - [`impl IOFail : Functor`](#impl-iofail--functor)
+    - [`impl IOFail : Monad`](#impl-iofail--monad)
+    - [`impl Iterator : Functor`](#impl-iterator--functor)
+    - [`impl Iterator : Monad`](#impl-iterator--monad)
+    - [`impl Iterator a : Add`](#impl-iterator-a--add)
+    - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
+    - [`impl Option : Functor`](#impl-option--functor)
+    - [`impl Option : Monad`](#impl-option--monad)
+    - [`impl [a : Eq] Option a : Eq`](#impl-a--eq-option-a--eq)
+    - [`impl [a : ToString] Option a : ToString`](#impl-a--tostring-option-a--tostring)
+    - [`impl Path : ToString`](#impl-path--tostring)
+    - [`impl Ptr : ToString`](#impl-ptr--tostring)
+    - [`impl Result e : Functor`](#impl-result-e--functor)
+    - [`impl Result e : Monad`](#impl-result-e--monad)
+    - [`impl [e : Eq, a : Eq] Result e a : Eq`](#impl-e--eq-a--eq-result-e-a--eq)
+    - [`impl [e : ToString, a : ToString] Result e a : ToString`](#impl-e--tostring-a--tostring-result-e-a--tostring)
+    - [`impl Std::Bool : Std::Eq`](#impl-stdbool--stdeq)
+    - [`impl Std::Bool : Std::Not`](#impl-stdbool--stdnot)
+    - [`impl Std::F32 : Std::Add`](#impl-stdf32--stdadd)
+    - [`impl Std::F32 : Std::Div`](#impl-stdf32--stddiv)
+    - [`impl Std::F32 : Std::Eq`](#impl-stdf32--stdeq)
+    - [`impl Std::F32 : Std::LessThan`](#impl-stdf32--stdlessthan)
+    - [`impl Std::F32 : Std::LessThanOrEq`](#impl-stdf32--stdlessthanoreq)
+    - [`impl Std::F32 : Std::Mul`](#impl-stdf32--stdmul)
+    - [`impl Std::F32 : Std::Neg`](#impl-stdf32--stdneg)
+    - [`impl Std::F32 : Std::Sub`](#impl-stdf32--stdsub)
+    - [`impl Std::F64 : Std::Add`](#impl-stdf64--stdadd)
+    - [`impl Std::F64 : Std::Div`](#impl-stdf64--stddiv)
+    - [`impl Std::F64 : Std::Eq`](#impl-stdf64--stdeq)
+    - [`impl Std::F64 : Std::LessThan`](#impl-stdf64--stdlessthan)
+    - [`impl Std::F64 : Std::LessThanOrEq`](#impl-stdf64--stdlessthanoreq)
+    - [`impl Std::F64 : Std::Mul`](#impl-stdf64--stdmul)
+    - [`impl Std::F64 : Std::Neg`](#impl-stdf64--stdneg)
+    - [`impl Std::F64 : Std::Sub`](#impl-stdf64--stdsub)
+    - [`impl Std::I16 : Std::Add`](#impl-stdi16--stdadd)
+    - [`impl Std::I16 : Std::Div`](#impl-stdi16--stddiv)
+    - [`impl Std::I16 : Std::Eq`](#impl-stdi16--stdeq)
+    - [`impl Std::I16 : Std::LessThan`](#impl-stdi16--stdlessthan)
+    - [`impl Std::I16 : Std::LessThanOrEq`](#impl-stdi16--stdlessthanoreq)
+    - [`impl Std::I16 : Std::Mul`](#impl-stdi16--stdmul)
+    - [`impl Std::I16 : Std::Neg`](#impl-stdi16--stdneg)
+    - [`impl Std::I16 : Std::Rem`](#impl-stdi16--stdrem)
+    - [`impl Std::I16 : Std::Sub`](#impl-stdi16--stdsub)
+    - [`impl Std::I32 : Std::Add`](#impl-stdi32--stdadd)
+    - [`impl Std::I32 : Std::Div`](#impl-stdi32--stddiv)
+    - [`impl Std::I32 : Std::Eq`](#impl-stdi32--stdeq)
+    - [`impl Std::I32 : Std::LessThan`](#impl-stdi32--stdlessthan)
+    - [`impl Std::I32 : Std::LessThanOrEq`](#impl-stdi32--stdlessthanoreq)
+    - [`impl Std::I32 : Std::Mul`](#impl-stdi32--stdmul)
+    - [`impl Std::I32 : Std::Neg`](#impl-stdi32--stdneg)
+    - [`impl Std::I32 : Std::Rem`](#impl-stdi32--stdrem)
+    - [`impl Std::I32 : Std::Sub`](#impl-stdi32--stdsub)
+    - [`impl Std::I64 : Std::Add`](#impl-stdi64--stdadd)
+    - [`impl Std::I64 : Std::Div`](#impl-stdi64--stddiv)
+    - [`impl Std::I64 : Std::Eq`](#impl-stdi64--stdeq)
+    - [`impl Std::I64 : Std::LessThan`](#impl-stdi64--stdlessthan)
+    - [`impl Std::I64 : Std::LessThanOrEq`](#impl-stdi64--stdlessthanoreq)
+    - [`impl Std::I64 : Std::Mul`](#impl-stdi64--stdmul)
+    - [`impl Std::I64 : Std::Neg`](#impl-stdi64--stdneg)
+    - [`impl Std::I64 : Std::Rem`](#impl-stdi64--stdrem)
+    - [`impl Std::I64 : Std::Sub`](#impl-stdi64--stdsub)
+    - [`impl Std::I8 : Std::Add`](#impl-stdi8--stdadd)
+    - [`impl Std::I8 : Std::Div`](#impl-stdi8--stddiv)
+    - [`impl Std::I8 : Std::Eq`](#impl-stdi8--stdeq)
+    - [`impl Std::I8 : Std::LessThan`](#impl-stdi8--stdlessthan)
+    - [`impl Std::I8 : Std::LessThanOrEq`](#impl-stdi8--stdlessthanoreq)
+    - [`impl Std::I8 : Std::Mul`](#impl-stdi8--stdmul)
+    - [`impl Std::I8 : Std::Neg`](#impl-stdi8--stdneg)
+    - [`impl Std::I8 : Std::Rem`](#impl-stdi8--stdrem)
+    - [`impl Std::I8 : Std::Sub`](#impl-stdi8--stdsub)
+    - [`impl Std::Ptr : Std::Eq`](#impl-stdptr--stdeq)
+    - [`impl Std::U16 : Std::Add`](#impl-stdu16--stdadd)
+    - [`impl Std::U16 : Std::Div`](#impl-stdu16--stddiv)
+    - [`impl Std::U16 : Std::Eq`](#impl-stdu16--stdeq)
+    - [`impl Std::U16 : Std::LessThan`](#impl-stdu16--stdlessthan)
+    - [`impl Std::U16 : Std::LessThanOrEq`](#impl-stdu16--stdlessthanoreq)
+    - [`impl Std::U16 : Std::Mul`](#impl-stdu16--stdmul)
+    - [`impl Std::U16 : Std::Neg`](#impl-stdu16--stdneg)
+    - [`impl Std::U16 : Std::Rem`](#impl-stdu16--stdrem)
+    - [`impl Std::U16 : Std::Sub`](#impl-stdu16--stdsub)
+    - [`impl Std::U32 : Std::Add`](#impl-stdu32--stdadd)
+    - [`impl Std::U32 : Std::Div`](#impl-stdu32--stddiv)
+    - [`impl Std::U32 : Std::Eq`](#impl-stdu32--stdeq)
+    - [`impl Std::U32 : Std::LessThan`](#impl-stdu32--stdlessthan)
+    - [`impl Std::U32 : Std::LessThanOrEq`](#impl-stdu32--stdlessthanoreq)
+    - [`impl Std::U32 : Std::Mul`](#impl-stdu32--stdmul)
+    - [`impl Std::U32 : Std::Neg`](#impl-stdu32--stdneg)
+    - [`impl Std::U32 : Std::Rem`](#impl-stdu32--stdrem)
+    - [`impl Std::U32 : Std::Sub`](#impl-stdu32--stdsub)
+    - [`impl Std::U64 : Std::Add`](#impl-stdu64--stdadd)
+    - [`impl Std::U64 : Std::Div`](#impl-stdu64--stddiv)
+    - [`impl Std::U64 : Std::Eq`](#impl-stdu64--stdeq)
+    - [`impl Std::U64 : Std::LessThan`](#impl-stdu64--stdlessthan)
+    - [`impl Std::U64 : Std::LessThanOrEq`](#impl-stdu64--stdlessthanoreq)
+    - [`impl Std::U64 : Std::Mul`](#impl-stdu64--stdmul)
+    - [`impl Std::U64 : Std::Neg`](#impl-stdu64--stdneg)
+    - [`impl Std::U64 : Std::Rem`](#impl-stdu64--stdrem)
+    - [`impl Std::U64 : Std::Sub`](#impl-stdu64--stdsub)
+    - [`impl Std::U8 : Std::Add`](#impl-stdu8--stdadd)
+    - [`impl Std::U8 : Std::Div`](#impl-stdu8--stddiv)
+    - [`impl Std::U8 : Std::Eq`](#impl-stdu8--stdeq)
+    - [`impl Std::U8 : Std::LessThan`](#impl-stdu8--stdlessthan)
+    - [`impl Std::U8 : Std::LessThanOrEq`](#impl-stdu8--stdlessthanoreq)
+    - [`impl Std::U8 : Std::Mul`](#impl-stdu8--stdmul)
+    - [`impl Std::U8 : Std::Neg`](#impl-stdu8--stdneg)
+    - [`impl Std::U8 : Std::Rem`](#impl-stdu8--stdrem)
+    - [`impl Std::U8 : Std::Sub`](#impl-stdu8--stdsub)
+    - [`impl String : Add`](#impl-string--add)
+    - [`impl String : Eq`](#impl-string--eq)
+    - [`impl String : LessThan`](#impl-string--lessthan)
+    - [`impl String : LessThanOrEq`](#impl-string--lessthanoreq)
+    - [`impl String : ToString`](#impl-string--tostring)
+    - [`impl U16 : FromBytes`](#impl-u16--frombytes)
+    - [`impl U16 : FromString`](#impl-u16--fromstring)
+    - [`impl U16 : ToBytes`](#impl-u16--tobytes)
+    - [`impl U16 : ToString`](#impl-u16--tostring)
+    - [`impl U16 : Zero`](#impl-u16--zero)
+    - [`impl U32 : FromBytes`](#impl-u32--frombytes)
+    - [`impl U32 : FromString`](#impl-u32--fromstring)
+    - [`impl U32 : ToBytes`](#impl-u32--tobytes)
+    - [`impl U32 : ToString`](#impl-u32--tostring)
+    - [`impl U32 : Zero`](#impl-u32--zero)
+    - [`impl U64 : FromBytes`](#impl-u64--frombytes)
+    - [`impl U64 : FromString`](#impl-u64--fromstring)
+    - [`impl U64 : ToBytes`](#impl-u64--tobytes)
+    - [`impl U64 : ToString`](#impl-u64--tostring)
+    - [`impl U64 : Zero`](#impl-u64--zero)
+    - [`impl U8 : FromBytes`](#impl-u8--frombytes)
+    - [`impl U8 : FromString`](#impl-u8--fromstring)
+    - [`impl U8 : ToBytes`](#impl-u8--tobytes)
+    - [`impl U8 : ToString`](#impl-u8--tostring)
+    - [`impl U8 : Zero`](#impl-u8--zero)
 - [Values](#values)
   - [`namespace Std`](#namespace-std-2)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
@@ -607,7 +781,7 @@ type Boxed a = box struct { value : a };
 
 #### field `value : a`
 
-### type `ErrMsg = String`
+### `type ErrMsg = String`
 
 A type (alias) for error message.
 
@@ -633,10 +807,10 @@ Iterator (a.k.a lazy list)
 
 #### field `next : () -> Option (a, Iterator a)`
 
-### type `Lazy = () -> a`
+### `type Lazy = () -> a`
 
 The type of lazily generated values.
-This is a type alias defined as `type Lazy a = () -> a;`
+
 You can create a lazy value by `|_| (...an expression to generate the value...)`, and
 you can evaluate a lazy value `v` by `v()`.
 
@@ -655,6 +829,7 @@ you can evaluate a lazy value `v` by `v()`.
 ### `type Path = unbox struct { ...fields... }`
 
 The type for file path.
+
 TODO: give better implementation.
 
 #### field `_data : String`
@@ -664,6 +839,7 @@ TODO: give better implementation.
 ### `type PunchedArray a = unbox struct { ...fields... }`
 
 The type of punched arrays.
+
 A punched array is an array from which a certain element has been removed.
 This is used in the implementation of `Array::act`.
 
@@ -693,39 +869,41 @@ A type of result value for a computation that may fail.
 
 ## `namespace Std::FFI`
 
-### type `CChar = Std::I8`
+### `type CChar = Std::I8`
 
-### type `CDouble = Std::F64`
+### `type CDouble = Std::F64`
 
-### type `CFloat = Std::F32`
+### `type CFloat = Std::F32`
 
-### type `CInt = Std::I32`
+### `type CInt = Std::I32`
 
-### type `CLong = Std::I64`
+### `type CLong = Std::I64`
 
-### type `CLongLong = Std::I64`
+### `type CLongLong = Std::I64`
 
-### type `CShort = Std::I16`
+### `type CShort = Std::I16`
 
-### type `CSizeT = Std::U64`
+### `type CSizeT = Std::U64`
 
-### type `CUnsignedChar = Std::U8`
+### `type CUnsignedChar = Std::U8`
 
-### type `CUnsignedInt = Std::U32`
+### `type CUnsignedInt = Std::U32`
 
-### type `CUnsignedLong = Std::U64`
+### `type CUnsignedLong = Std::U64`
 
-### type `CUnsignedLongLong = Std::U64`
+### `type CUnsignedLongLong = Std::U64`
 
-### type `CUnsignedShort = Std::U16`
+### `type CUnsignedShort = Std::U16`
 
 ### `type Destructor a = box struct { ...fields... }`
 
 `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
 When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
+
 This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
 
 NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
+
 NOTE2: If the contained value is captured by another Fix's object than `Destructor`, the contained value is still alive after the destructor function is called.
 
 #### field `_value : a`
@@ -743,8 +921,10 @@ The type for I/O actions which may fail.
 ### `type IOHandle = unbox struct { ...fields... }`
 
 A handle type for read / write operations on files, stdin, stdout, stderr.
+
 You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
-Also there are global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
+
+There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
 
 #### field `_data : Destructor Ptr`
 
@@ -754,27 +934,27 @@ Also there are global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHand
 
 ### `trait a : Add`
 
+Trait for infix operator `+`.
+
 #### method `add : a -> a -> a`
 
-Addition.
-
-An expression `x + y` is translated to `add(x, y)`.
+Adds two values. An expression `x + y` is translated to `add(x, y)`.
 
 ### `trait a : Div`
 
+Trait for infix operator `/`.
+
 #### method `div : a -> a -> a`
 
-Division.
-
-An expression `x / y` is translated to `div(x, y)`.
+Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
 
 ### `trait a : Eq`
 
+Trait for infix operator `==`.
+
 #### method `eq : a -> a -> Bool`
 
-Equality comparison.
-
-An expression `x == y` is translated to `eq(x, y)`.
+Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
 
 ### `trait a : FromBytes`
 
@@ -790,19 +970,19 @@ An expression `x == y` is translated to `eq(x, y)`.
 
 ### `trait a : LessThan`
 
+Trait for infix operator `<`.
+
 #### method `less_than : a -> a -> Bool`
 
-Less than comparison.
-
-An expression `x < y` is translated to `less_than(x, y)`.
+Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
 ### `trait a : LessThanOrEq`
 
+Trait for infix operator `<=`.
+
 #### method `less_than_or_eq : a -> a -> Bool`
 
-Less than or equal comparison.
-
-An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
+Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
 ### `trait [m : *->*] m : Monad`
 
@@ -812,43 +992,43 @@ An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
 ### `trait a : Mul`
 
+Trait for infix operator `*`.
+
 #### method `mul : a -> a -> a`
 
-Multiplication.
-
-An expression `x * y` is translated to `mul(x, y)`.
+Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
 
 ### `trait a : Neg`
 
+Trait for prefix operator `-`.
+
 #### method `neg : a -> a`
 
-Negates a value.
-
-An expression `-x` is translated to `neg(x)`.
+Negates a value. An expression `-x` is translated to `neg(x)`.
 
 ### `trait a : Not`
 
+Trait for prefix operator `!`.
+
 #### method `not : a -> a`
 
-Logical NOT.
-
-An expression `!x` is translated to `not(x)`.
+Logical NOT of a value. An expression `!x` is translated to `not(x)`.
 
 ### `trait a : Rem`
 
+Trait for infix operator `%`.
+
 #### method `rem : a -> a -> a`
 
-Remainder.
-
-An expression `x % y` is translated to `rem(x, y)`.
+Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
 
 ### `trait a : Sub`
 
+Trait for infix operator `-`.
+
 #### method `sub : a -> a -> a`
 
-Subtraction.
-
-An expression `x - y` is translated to `sub(x, y)`.
+Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
 
 ### `trait a : ToBytes`
 
@@ -862,13 +1042,373 @@ An expression `x - y` is translated to `sub(x, y)`.
 
 #### method `zero : a`
 
+# Trait implementations
+
+### `impl () : Eq`
+
+### `impl () : ToString`
+
+Returns "()".
+
+### `impl Array : Functor`
+
+### `impl Array : Monad`
+
+### `impl [a : Eq] Array a : Eq`
+
+### `impl [a : Eq, a : LessThan] Array a : LessThan`
+
+`LessThan` implementation for `Array a`.
+
+Compares two arrays by lexicographic order.
+
+### `impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq`
+
+`LessThanOrEq` implementation for `Array a`.
+
+Compares two arrays by lexicographic order.
+
+### `impl [a : ToString] Array a : ToString`
+
+### `impl Bool : ToString`
+
+### `impl F32 : FromBytes`
+
+### `impl F32 : FromString`
+
+### `impl F32 : ToBytes`
+
+### `impl F32 : ToString`
+
+### `impl F32 : Zero`
+
+### `impl F64 : FromBytes`
+
+### `impl F64 : FromString`
+
+### `impl F64 : ToBytes`
+
+### `impl F64 : ToString`
+
+### `impl F64 : Zero`
+
+### `impl I16 : FromBytes`
+
+### `impl I16 : FromString`
+
+### `impl I16 : ToBytes`
+
+### `impl I16 : ToString`
+
+### `impl I16 : Zero`
+
+### `impl I32 : FromBytes`
+
+### `impl I32 : FromString`
+
+### `impl I32 : ToBytes`
+
+### `impl I32 : ToString`
+
+### `impl I32 : Zero`
+
+### `impl I64 : FromBytes`
+
+### `impl I64 : FromString`
+
+### `impl I64 : ToBytes`
+
+### `impl I64 : ToString`
+
+### `impl I64 : Zero`
+
+### `impl I8 : FromBytes`
+
+### `impl I8 : FromString`
+
+### `impl I8 : ToBytes`
+
+### `impl I8 : ToString`
+
+### `impl I8 : Zero`
+
+### `impl IO : Functor`
+
+### `impl IO : Monad`
+
+### `impl IOFail : Functor`
+
+### `impl IOFail : Monad`
+
+### `impl Iterator : Functor`
+
+### `impl Iterator : Monad`
+
+### `impl Iterator a : Add`
+
+### `impl [a : Eq] Iterator a : Eq`
+
+### `impl Option : Functor`
+
+### `impl Option : Monad`
+
+### `impl [a : Eq] Option a : Eq`
+
+### `impl [a : ToString] Option a : ToString`
+
+### `impl Path : ToString`
+
+### `impl Ptr : ToString`
+
+### `impl Result e : Functor`
+
+### `impl Result e : Monad`
+
+### `impl [e : Eq, a : Eq] Result e a : Eq`
+
+### `impl [e : ToString, a : ToString] Result e a : ToString`
+
+### `impl Std::Bool : Std::Eq`
+
+### `impl Std::Bool : Std::Not`
+
+### `impl Std::F32 : Std::Add`
+
+### `impl Std::F32 : Std::Div`
+
+### `impl Std::F32 : Std::Eq`
+
+### `impl Std::F32 : Std::LessThan`
+
+### `impl Std::F32 : Std::LessThanOrEq`
+
+### `impl Std::F32 : Std::Mul`
+
+### `impl Std::F32 : Std::Neg`
+
+### `impl Std::F32 : Std::Sub`
+
+### `impl Std::F64 : Std::Add`
+
+### `impl Std::F64 : Std::Div`
+
+### `impl Std::F64 : Std::Eq`
+
+### `impl Std::F64 : Std::LessThan`
+
+### `impl Std::F64 : Std::LessThanOrEq`
+
+### `impl Std::F64 : Std::Mul`
+
+### `impl Std::F64 : Std::Neg`
+
+### `impl Std::F64 : Std::Sub`
+
+### `impl Std::I16 : Std::Add`
+
+### `impl Std::I16 : Std::Div`
+
+### `impl Std::I16 : Std::Eq`
+
+### `impl Std::I16 : Std::LessThan`
+
+### `impl Std::I16 : Std::LessThanOrEq`
+
+### `impl Std::I16 : Std::Mul`
+
+### `impl Std::I16 : Std::Neg`
+
+### `impl Std::I16 : Std::Rem`
+
+### `impl Std::I16 : Std::Sub`
+
+### `impl Std::I32 : Std::Add`
+
+### `impl Std::I32 : Std::Div`
+
+### `impl Std::I32 : Std::Eq`
+
+### `impl Std::I32 : Std::LessThan`
+
+### `impl Std::I32 : Std::LessThanOrEq`
+
+### `impl Std::I32 : Std::Mul`
+
+### `impl Std::I32 : Std::Neg`
+
+### `impl Std::I32 : Std::Rem`
+
+### `impl Std::I32 : Std::Sub`
+
+### `impl Std::I64 : Std::Add`
+
+### `impl Std::I64 : Std::Div`
+
+### `impl Std::I64 : Std::Eq`
+
+### `impl Std::I64 : Std::LessThan`
+
+### `impl Std::I64 : Std::LessThanOrEq`
+
+### `impl Std::I64 : Std::Mul`
+
+### `impl Std::I64 : Std::Neg`
+
+### `impl Std::I64 : Std::Rem`
+
+### `impl Std::I64 : Std::Sub`
+
+### `impl Std::I8 : Std::Add`
+
+### `impl Std::I8 : Std::Div`
+
+### `impl Std::I8 : Std::Eq`
+
+### `impl Std::I8 : Std::LessThan`
+
+### `impl Std::I8 : Std::LessThanOrEq`
+
+### `impl Std::I8 : Std::Mul`
+
+### `impl Std::I8 : Std::Neg`
+
+### `impl Std::I8 : Std::Rem`
+
+### `impl Std::I8 : Std::Sub`
+
+### `impl Std::Ptr : Std::Eq`
+
+### `impl Std::U16 : Std::Add`
+
+### `impl Std::U16 : Std::Div`
+
+### `impl Std::U16 : Std::Eq`
+
+### `impl Std::U16 : Std::LessThan`
+
+### `impl Std::U16 : Std::LessThanOrEq`
+
+### `impl Std::U16 : Std::Mul`
+
+### `impl Std::U16 : Std::Neg`
+
+### `impl Std::U16 : Std::Rem`
+
+### `impl Std::U16 : Std::Sub`
+
+### `impl Std::U32 : Std::Add`
+
+### `impl Std::U32 : Std::Div`
+
+### `impl Std::U32 : Std::Eq`
+
+### `impl Std::U32 : Std::LessThan`
+
+### `impl Std::U32 : Std::LessThanOrEq`
+
+### `impl Std::U32 : Std::Mul`
+
+### `impl Std::U32 : Std::Neg`
+
+### `impl Std::U32 : Std::Rem`
+
+### `impl Std::U32 : Std::Sub`
+
+### `impl Std::U64 : Std::Add`
+
+### `impl Std::U64 : Std::Div`
+
+### `impl Std::U64 : Std::Eq`
+
+### `impl Std::U64 : Std::LessThan`
+
+### `impl Std::U64 : Std::LessThanOrEq`
+
+### `impl Std::U64 : Std::Mul`
+
+### `impl Std::U64 : Std::Neg`
+
+### `impl Std::U64 : Std::Rem`
+
+### `impl Std::U64 : Std::Sub`
+
+### `impl Std::U8 : Std::Add`
+
+### `impl Std::U8 : Std::Div`
+
+### `impl Std::U8 : Std::Eq`
+
+### `impl Std::U8 : Std::LessThan`
+
+### `impl Std::U8 : Std::LessThanOrEq`
+
+### `impl Std::U8 : Std::Mul`
+
+### `impl Std::U8 : Std::Neg`
+
+### `impl Std::U8 : Std::Rem`
+
+### `impl Std::U8 : Std::Sub`
+
+### `impl String : Add`
+
+Concatenates two strings.
+
+### `impl String : Eq`
+
+### `impl String : LessThan`
+
+### `impl String : LessThanOrEq`
+
+### `impl String : ToString`
+
+### `impl U16 : FromBytes`
+
+### `impl U16 : FromString`
+
+### `impl U16 : ToBytes`
+
+### `impl U16 : ToString`
+
+### `impl U16 : Zero`
+
+### `impl U32 : FromBytes`
+
+### `impl U32 : FromString`
+
+### `impl U32 : ToBytes`
+
+### `impl U32 : ToString`
+
+### `impl U32 : Zero`
+
+### `impl U64 : FromBytes`
+
+### `impl U64 : FromString`
+
+### `impl U64 : ToBytes`
+
+### `impl U64 : ToString`
+
+### `impl U64 : Zero`
+
+### `impl U8 : FromBytes`
+
+### `impl U8 : FromString`
+
+### `impl U8 : ToBytes`
+
+### `impl U8 : ToString`
+
+### `impl U8 : Zero`
+
 # Values
 
 ## `namespace Std`
 
 ### `compose : (a -> b) -> (b -> c) -> a -> c`
 
-Compose two functions. Composition operators `<<` and `>>` is translated to use of `compose`.
+Composes two functions. Composition operators `<<` and `>>` is translated to use of `compose`.
 
 ### `fix : ((a -> b) -> a -> b) -> a -> b`
 
@@ -1001,11 +1541,13 @@ Try using `borrow_ptr` instead.
 ### `_get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a`
 
 A function like `get_sub`, but behaves as if the size of the array is the specified value,
+
 and has a parameter to specify additional capacity of the returned `Array`.
 
 ### `_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
 
-Sort elements in a range of a vector by "less than" comparator.
+Sorts elements in a range of a vector by "less than" comparator.
+
 This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
 ### `_unsafe_get : Std::I64 -> Std::Array a -> a`
@@ -1042,7 +1584,7 @@ Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` 
 
 ### `borrow_ptr : (Ptr -> b) -> Array a -> b`
 
-Call a function with a pointer to the memory region where elements are stored.
+Calls a function with a pointer to the memory region where elements are stored.
 
 ### `empty : Std::I64 -> Std::Array a`
 
@@ -1058,7 +1600,7 @@ Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
 ### `find_by : (a -> Bool) -> Array a -> Option I64`
 
-Find the first index at which the element satisfies a condition.
+Finds the first index at which the element satisfies a condition.
 
 ### `force_unique : Std::Array a -> Std::Array a`
 
@@ -1079,11 +1621,11 @@ Gets the capacity of an array.
 
 ### `get_first : Array a -> Option a`
 
-Get the first element of an array. Returns none if the array is empty.
+Gets the first element of an array. Returns none if the array is empty.
 
 ### `get_last : Array a -> Option a`
 
-Get the last element of an array. Returns none if the array is empty.
+Gets the last element of an array. Returns none if the array is empty.
 
 ### `get_size : Std::Array a -> Std::I64`
 
@@ -1092,6 +1634,7 @@ Gets the length of an array.
 ### `get_sub : I64 -> I64 -> Array a -> Array a`
 
 `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`,
+
 More precisely, let `N` denote the the size of the `arr`.
 Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
 
@@ -1109,16 +1652,17 @@ If you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is 
 
 ### `pop_back : Array a -> Array a`
 
-Pop an element at the back of an array.
+Pops an element at the back of an array.
 If the array is empty, this function does nothing.
 
 ### `push_back : a -> Array a -> Array a`
 
-Push an element to the back of an array.
+Pushes an element to the back of an array.
 
 ### `reserve : I64 -> Array a -> Array a`
 
 Reserves the memory region for an array.
+
 TODO: change to more optimized implementation.
 
 ### `set : Std::I64 -> a -> Std::Array a -> Std::Array a`
@@ -1129,15 +1673,16 @@ This function clones the given array if it is shared.
 
 ### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
 
-Sort elements in a vector by "less than" comparator.
+Sorts elements in a vector by "less than" comparator.
 
 ### `to_iter : Array a -> Iterator a`
 
-Convert an array to an iterator.
+Converts an array to an iterator.
 
 ### `truncate : I64 -> Array a -> Array a`
 
-Truncate an array, keeping the given number of first elements.
+Truncates an array, keeping the given number of first elements.
+
 `truncante(len, arr)` does nothing if `len >= arr.get_size`.
 
 ## `namespace Std::F32`
@@ -1246,15 +1791,15 @@ Casts a value of `F32` into a value of `U8`.
 
 ### `to_string_exp : F32 -> String`
 
-Convert a floating number to a string of exponential form.
+Converts a floating number to a string of exponential form.
 
 ### `to_string_exp_precision : U8 -> F32 -> String`
 
-Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
+Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
 
 ### `to_string_precision : U8 -> F32 -> String`
 
-Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
+Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
 ## `namespace Std::F64`
 
@@ -1362,15 +1907,15 @@ Casts a value of `F64` into a value of `U8`.
 
 ### `to_string_exp : F64 -> String`
 
-Convert a floating number to a string of exponential form.
+Converts a floating number to a string of exponential form.
 
 ### `to_string_exp_precision : U8 -> F64 -> String`
 
-Convert a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
+Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
 
 ### `to_string_precision : U8 -> F64 -> String`
 
-Convert a floating number to a string with specified precision (i.e., number of digits after the decimal point).
+Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
 ## `namespace Std::FFI`
 
@@ -1387,11 +1932,12 @@ To avoid issues caused by this, use `unsafe_borrow_boxed_data_ptr` instead.
 ### `unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
+
 For more details, see the document of `_unsafe_get_boxed_data_ptr`.
 
 ### `unsafe_clear_errno : () -> ()`
 
-Set errno to zero.
+Sets errno to zero.
 
 ### `unsafe_get_boxed_value_from_retained_ptr : Std::Ptr -> a`
 
@@ -1399,7 +1945,7 @@ Creates a boxed value from a retained pointer obtained by `unsafe_get_retained_p
 
 ### `unsafe_get_errno : () -> CInt`
 
-Get errno which is set by C functions.
+Gets errno which is set by C functions.
 
 ### `unsafe_get_release_function_of_boxed_value : Std::Lazy a -> Std::Ptr`
 
@@ -1945,38 +2491,41 @@ Casts a value of `I8` into a value of `U8`.
 
 ### `_read_line_inner : Bool -> IOHandle -> IOFail String`
 
-Read characters from an IOHandle.
+Reads characters from an IOHandle.
+
 If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
 
 ### `_unsafe_perform : IO a -> a`
 
-Perform the I/O action. This may violate purity of Fix.
+Performs the I/O action. This may violate purity of Fix.
 
 ### `close_file : IOHandle -> IO ()`
 
-Close a file.
+Closes a file.
+
 Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
 
 ### `eprint : String -> IO ()`
 
-Print a string to stderr.
+Prints a string to stderr.
 
 ### `eprintln : String -> IO ()`
 
-Print a string followed by a newline to stderr.
+Prints a string followed by a newline to stderr.
 
 ### `exit : I64 -> IO a`
 
-Exit the program with an error code.
+Exits the program with an error code.
 
 ### `exit_with_msg : I64 -> String -> IO a`
 
-Exit the program with an error message and an error code.
+Exits the program with an error message and an error code.
+
 The error message is written to the standard error output.
 
 ### `from_func : (() -> a) -> IO a`
 
-Create an IO action from a function.
+Creates an IO action from a function.
 
 ### `get_arg : I64 -> IO (Option String)`
 
@@ -1985,70 +2534,73 @@ If n is greater than or equal to the number of command line arguments, this func
 
 ### `get_arg_count : IO I64`
 
-Get the number of command line arguments.
+Gets the number of command line arguments.
 
 ### `get_args : IO (Array String)`
 
-Get command line arguments.
+Gets command line arguments.
 
 ### `input_line : IO String`
 
-Read a line from stdin. If some error occurr, this function aborts the program.
+Reads a line from stdin. If some error occurr, this function aborts the program.
 If you want to handle errors, use `read_line(stdin)` instead.
 
 ### `is_eof : IOHandle -> IO Bool`
 
-Check if an `IOHandle` reached to the EOF.
+Checks if an `IOHandle` reached to the EOF.
 
 ### `loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s`
 
 Loop on lines read from an `IOHandle`.
+
 `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
 The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
 When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
+
 Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
 ### `loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s`
 
 Loop on lines read from an `IOHandle`.
+
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
 ### `open_file : Path -> String -> IOFail IOHandle`
 
-Open a file. The second argument is a mode string for `fopen` C function.
+Openes a file. The second argument is a mode string for `fopen` C function.
 
 ### `print : String -> IO ()`
 
-Print a string to stdout.
+Prints a string to stdout.
 
 ### `println : String -> IO ()`
 
-Print a string followed by a newline to stdout.
+Prints a string followed by a newline to stdout.
 
 ### `read_bytes : IOHandle -> IOFail (Array U8)`
 
-Read all bytes from an IOHandle.
+Reads all bytes from an IOHandle.
 
 ### `read_file_bytes : Path -> IOFail (Array U8)`
 
-Read all bytes from a file.
+Reads all bytes from a file.
 
 ### `read_file_string : Path -> IOFail String`
 
-Raad all characters from a file.
+Raads all characters from a file.
 
 ### `read_line : IOHandle -> IOFail String`
 
-Read characters from a IOHandle upto newline or EOF.
+Reads characters from a IOHandle upto newline or EOF.
 The returned string may include newline at its end.
 
 ### `read_n_bytes : IOHandle -> I64 -> IOFail (Array U8)`
 
-Read at most n bytes from an IOHandle.
+Reads at most n bytes from an IOHandle.
 
 ### `read_string : IOHandle -> IOFail String`
 
-Read all characters from an IOHandle.
+Reads all characters from an IOHandle.
 
 ### `stderr : IOHandle`
 
@@ -2064,70 +2616,75 @@ The handle for standard output.
 
 ### `with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a`
 
-Perform a function with a file handle. The second argument is a mode string for `fopen` C function.
+Performs a function with a file handle. The second argument is a mode string for `fopen` C function.
+
 The file handle will be closed automatically.
 
 ### `write_bytes : IOHandle -> Array U8 -> IOFail ()`
 
-Write a byte array into an IOHandle.
+Writes a byte array into an IOHandle.
 
 ### `write_file_bytes : Path -> Array U8 -> IOFail ()`
 
-Write a byte array into a file.
+Writes a byte array into a file.
 
 ### `write_file_string : Path -> String -> IOFail ()`
 
-Write a string into a file.
+Writes a string into a file.
 
 ### `write_string : IOHandle -> String -> IOFail ()`
 
-Write a string into an IOHandle.
+Writes a string into an IOHandle.
 
 ## `namespace Std::IO::IOFail`
 
 ### `from_result : Result ErrMsg a -> IOFail a`
 
-Create an pure `IOFail` value from a `Result` value.
+Creates an pure `IOFail` value from a `Result` value.
 
 ### `lift : IO a -> IOFail a`
 
-Lift an `IO` action to a successful `IOFail` action.
+Lifts an `IO` action to a successful `IOFail` action.
 
 ### `throw : ErrMsg -> IOFail a`
 
-Create an error `IOFail` action.
+Creates an error `IOFail` action.
 
 ### `to_result : IOFail a -> IO (Result ErrMsg a)`
 
-Convert an `IOFail` to an `Result` value (wrapped by `IO`).
+Converts an `IOFail` to an `Result` value (wrapped by `IO`).
 
 ### `try : (ErrMsg -> IO a) -> IOFail a -> IO a`
 
-Convert an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
+Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
 
 ## `namespace Std::IO::IOHandle`
 
 ### `_file_ptr : IOHandle -> Ptr`
 
-Get pointer to C's `FILE` value from an `IOHandle`.
+Gets pointer to C's `FILE` value from an `IOHandle`.
+
 DO NOT call `fclose` on the pointer returned by this function.
 To close an `IOHandle`, use `IO::close_file`.
 
 ### `_unsafe_close : IOHandle -> ()`
 
-Close an `IOHandle`.
+Closes an `IOHandle`.
+
 This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
 
 ### `from_file_ptr : Ptr -> IOHandle`
 
-Create an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
-DO NOT create two `IOHandle`s from a single file pointer.
+Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
+
+Creating two `IOHandle`s from a single file pointer is forbidden.
 
 ## `namespace Std::Iterator`
 
 ### `_flatten : Iterator (Iterator a) -> Iterator a`
 
 Flatten an iterator of iterators.
+
 You should use `Monad::flatten` instead of this function.
 This function is used in the implementation of `Monad::bind` for `Iterator`.
 
@@ -2135,16 +2692,16 @@ This function is used in the implementation of `Monad::bind` for `Iterator`.
 
 ### `advance : Iterator a -> Option (a, Iterator a)`
 
-Get next value and next iterator.
+Gets next value and next iterator.
 
 ### `append : Iterator a -> Iterator a -> Iterator a`
 
-Append an iterator to a iterator.
+Appends an iterator to a iterator.
 Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 
 ### `bang : Iterator a -> Iterator a`
 
-Evaluate all elements of iterator.
+Evaluates all elements of iterator.
 TODO: add test
 
 ### `count_up : I64 -> Iterator I64`
@@ -2154,15 +2711,15 @@ count_up(n) = [n, n+1, n+2, ...]
 
 ### `empty : Iterator a`
 
-Create an empty iterator.
+Creates an empty iterator.
 
 ### `filter : (a -> Bool) -> Iterator a -> Iterator a`
 
-Filter elements by a condition function
+Filters elements by a condition function
 
 ### `find_last : Iterator a -> Option a`
 
-Find the last element of an iterator.
+Finds the last element of an iterator.
 
 ### `fold : b -> (b -> a -> b) -> Iterator a -> b`
 
@@ -2175,7 +2732,7 @@ Folds iterator from left to right by monadic action.
 
 ### `from_array : Array a -> Iterator a`
 
-Create iterator from an array.
+Creates iterator from an array.
 
 ### `from_map : (I64 -> a) -> Iterator a`
 
@@ -2184,27 +2741,28 @@ from_map(f) = [f(0), f(1), f(2), ...]
 
 ### `generate : s -> (s -> Option (a, s)) -> Iterator a`
 
-Generate an iterator from a state transition function.
+Generates an iterator from a state transition function.
 - if `f(s)` is none, `generate(s, f)` is empty.
 - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
 
 ### `get_first : Iterator a -> Option a`
 
-Get the first element of an iterator. If the iterator is empty, this function returns `none`.
+Gets the first element of an iterator. If the iterator is empty, this function returns `none`.
 TODO: add test
 
 ### `get_size : Iterator a -> I64`
 
-Count the number of elements of an iterator.
+Counts the number of elements of an iterator.
 
 ### `get_tail : Iterator a -> Option (Iterator a)`
 
-Remove the first element from an iterator. If the iterator is empty, this function returns `none`.
+Removes the first element from an iterator. If the iterator is empty, this function returns `none`.
 TODO: add test
 
 ### `intersperse : a -> Iterator a -> Iterator a`
 
 Intersperse an elemnt between elements of an iterator.
+
 Example:
 ```
 Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])
@@ -2224,33 +2782,35 @@ Loop by monadic action along an iterator. At each iteration step, you can choose
 
 ### `product : Iterator a -> Iterator b -> Iterator (b, a)`
 
-The cartesian product of two iterators.
+Generates the cartesian product of two iterators.
+
 Example: `[1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array == [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]`
 
 ### `push_front : a -> Iterator a -> Iterator a`
 
-Push an element to an iterator.
+Pushes an element to an iterator.
 
 ### `range : I64 -> I64 -> Iterator I64`
 
-Create a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
+Creates a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
 
 ### `reverse : Iterator a -> Iterator a`
 
-Reverse an iterator.
+Reverses an iterator.
 
 ### `subsequences : Iterator a -> Iterator (Iterator a)`
 
-Generated all subsequences of an iterator.
+Generates all subsequences of an iterator.
+
 `[1,2,3].to_iter.subsequences` is `[[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]].to_iter.map(to_iter)`.
 
 ### `sum : [a : Additive] Iterator a -> a`
 
-Calculate the sum of elements of an iterator.
+Calculates the sum of elements of an iterator.
 
 ### `take : I64 -> Iterator a -> Iterator a`
 
-Take at most n elements from an iterator.
+Takes at most n elements from an iterator.
 
 ### `take_while : (a -> Bool) -> Iterator a -> Iterator a`
 
@@ -2276,18 +2836,20 @@ Zip two iterators.
 ### `break_m : [m : Monad] r -> m (LoopResult s r)`
 
 Make a break value wrapped in a monad.
+
 This is used with `loop_m` function.
 
 ### `continue_m : [m : Monad] s -> m (LoopResult s r)`
 
 Make a continue value wrapped in a monad.
+
 This is used with `loop_m` function.
 
 ## `namespace Std::Monad`
 
 ### `flatten : [m : Monad] m (m a) -> m a`
 
-Flatten a nested monadic action.
+Flattens a nested monadic action.
 
 ### `unless : [m : Monad] Bool -> m () -> m ()`
 
@@ -2317,11 +2879,12 @@ Parse a string.
 
 ### `add_offset : I64 -> Ptr -> Ptr`
 
-Add an offset to a pointer.
+Adds an offset to a pointer.
 
 ### `subtract_ptr : Ptr -> Ptr -> I64`
 
-Subtract two pointers.
+Subtracts two pointers.
+
 Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
 
 ## `namespace Std::PunchedArray`
@@ -2333,6 +2896,7 @@ Plug in an element to a punched array to get back an array.
 ### `unsafe_punch : I64 -> Array a -> (PunchedArray a, a)`
 
 Creates a punched array by moving out the element at the specified index.
+
 NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
 The uniqueness of the array is ensured in the `Array::act` function.
 
@@ -2347,16 +2911,19 @@ Returns the containing value if the value is ok, or otherwise aborts the program
 ### `_get_c_str : String -> Ptr`
 
 Get the null-terminated C string.
+
 Note that in case the string is not used after call of this function, the returned pointer will be already released.
 
 ### `_unsafe_from_c_str : Array U8 -> String`
 
 Create a string from C string (i.e., null-terminated byte array).
+
 If the byte array doesn't include `\0`, this function causes undefined behavior.
 
 ### `_unsafe_from_c_str_ptr : Ptr -> String`
 
 Create a `String` from a pointer to null-terminated C string.
+
 If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
 
 ### `borrow_c_str : (Ptr -> a) -> String -> a`
@@ -2366,6 +2933,7 @@ Call a function with a null-terminated C string.
 ### `concat : String -> String -> String`
 
 Concatenate two strings.
+
 Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
 
 ### `concat_iter : Iterator String -> String`
@@ -2379,24 +2947,25 @@ Create an empty string, which is reserved for a length.
 ### `find : String -> I64 -> String -> Option I64`
 
 `str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
+
 Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
 `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
 
 ### `get_bytes : String -> Array U8`
 
-Get the byte array of a string, containing null-terminator.
+Gets the byte array of a string, containing null-terminator.
 
 ### `get_first_byte : String -> Option U8`
 
-Get the first byte of a string. Returns none if the string is empty.
+Gets the first byte of a string. Returns none if the string is empty.
 
 ### `get_last_byte : String -> Option U8`
 
-Get the last byte of a string. Returns none if the string is empty.
+Gets the last byte of a string. Returns none if the string is empty.
 
 ### `get_size : String -> I64`
 
-Get the length of a string.
+Gets the length of a string.
 
 ### `get_sub : I64 -> I64 -> String -> String`
 
@@ -2408,7 +2977,7 @@ Returns if the string is empty or not.
 
 ### `join : String -> Iterator String -> String`
 
-Join strings by a separator.
+Joins strings by a separator.
 
 ### `pop_back_byte : String -> String`
 
@@ -2427,7 +2996,7 @@ Removes the first byte of a string while it satisifies the specified condition.
 
 ### `strip_first_spaces : String -> String`
 
-Removing leading whitespace characters.
+Removes leading whitespace characters.
 
 ### `strip_last_bytes : (U8 -> Bool) -> String -> String`
 
@@ -2439,11 +3008,11 @@ Removes newlines and carriage returns at the end of the string.
 
 ### `strip_last_spaces : String -> String`
 
-Removing trailing whitespace characters.
+Removes trailing whitespace characters.
 
 ### `strip_spaces : String -> String`
 
-Strip leading and trailing whitespace characters.
+Strips leading and trailing whitespace characters.
 
 ## `namespace Std::U16`
 
