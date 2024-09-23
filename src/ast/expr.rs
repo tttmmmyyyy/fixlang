@@ -704,7 +704,7 @@ impl ExprNode {
             return None;
         }
         let span = self.source.as_ref().unwrap();
-        if span.input.file_path != file {
+        if to_absolute_path(&span.input.file_path) != to_absolute_path(file) {
             return None;
         }
         self.find_node_at_pos(pos)
