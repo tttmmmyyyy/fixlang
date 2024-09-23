@@ -13,8 +13,7 @@ _debug_print_to_stream = |hdl, msg| (
     ))
 );
 
-// Asserts that a condition (boolean value) is true.
-// If the assertion failed, prints a message to the stderr and aborts the program.
+// Asserts that a condition (boolean value) is true. If the assertion failed, prints a message to the stderr and aborts the program.
 assert : Lazy String -> Bool -> ();
 assert = |msg, b| (
     if !b {
@@ -33,6 +32,7 @@ assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
 // Asserts that the given value is unique, and returns the given value.
 // If the assertion failed, prints a message to the stderr and aborts the program.
+// 
 // The main use of this function is to check whether a boxed value given as an argument is unique.
 assert_unique : Lazy String -> a -> a;
 assert_unique = |msg, x| (
@@ -42,6 +42,8 @@ assert_unique = |msg, x| (
 );
 
 // Get clocks (cpu time) elapsed while executing a function.
+// 
+// NOTE: This function is not pure and should only be used for temporary debugging purposes or for benchmarking.
 consumed_time_while : (a -> b) -> a -> (b, F64);
 consumed_time_while = |f, x| (
     let s = FFI_CALL[I64 fixruntime_clock()];
@@ -64,21 +66,31 @@ consumed_time_while_io = |io| (
 );
 
 // Get clocks (cpu time) elapsed while evaluating a lazy value.
+// 
+// NOTE: This function is not pure and should only be used for temporary debugging purposes or for benchmarking.
 consumed_time_while_lazy : Lazy a -> (a, F64);
 consumed_time_while_lazy = |l| consumed_time_while(l, ());
 
 // Prints a string to stderr and flushes.
+// 
+// NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
 debug_eprint : String -> ();
 debug_eprint = |msg| _debug_print_to_stream(stderr, msg);
 
 // Prints a string followed by a newline to stderr and flushes.
+//
+// NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
 debug_eprintln : String -> ();
 debug_eprintln = |msg| debug_eprint(msg + "\n");
 
 // Prints a string to stdout and flushes.
+// 
+// NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
 debug_print : String -> ();
 debug_print = |msg| _debug_print_to_stream(stdout, msg);
 
 // Prints a string followed by a newline to stdout and flushes.
+//
+// NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
 debug_println : String -> ();
 debug_println = |msg| debug_print(msg + "\n");
