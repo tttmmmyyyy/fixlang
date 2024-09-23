@@ -1242,7 +1242,7 @@ impl TypeNode {
             }
             appeared.insert(fv.name.clone());
             let new_name = number_to_varname(next_tyvar_no);
-            s.add_substitution(&Substitution::single(
+            s.merge_substitution(&Substitution::single(
                 &fv.name,
                 type_tyvar(&new_name, &fv.kind),
             ));
