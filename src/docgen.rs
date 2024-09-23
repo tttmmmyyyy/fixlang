@@ -315,7 +315,7 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
 
 fn value_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
     for (name, gv) in &program.global_values {
-        let title = format!("value `{} : {}`", name.name, gv.scm.to_string_raw());
+        let title = format!("value `{} : {}`", name.name, gv.scm.to_string());
 
         let mut doc = String::new();
         doc += gv.get_document().unwrap_or_default().trim();

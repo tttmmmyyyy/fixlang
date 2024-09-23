@@ -146,7 +146,7 @@ impl Substitution {
 
     // Merge substitution.
     // Returns true when merge succeeds.
-    fn merge_substitution(&mut self, other: &Self) -> bool {
+    pub fn merge_substitution(&mut self, other: &Self) -> bool {
         for (var, ty) in &other.data {
             if self.data.contains_key(var) {
                 if self.data[var] != *ty {
@@ -579,7 +579,7 @@ impl TypeCheckContext {
                         if let Err(e) = var_ty {
                             let msg = format!("- `{}` of type `{}` does not match since the constraint {} cannot be deduced.", 
                                 fullname.to_string(), 
-                                self.substitution.substitute_scheme(scm).to_string(), 
+                                self.substitution.substitute_scheme(scm).to_string_normalize(), 
                                 e.to_constraint_string()
                             );
                             overload_res.push(Err(msg))
@@ -587,7 +587,7 @@ impl TypeCheckContext {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the expected type since the constraint {} cannot be deduced.",
                                 fullname.to_string(),
-                                self.substitution.substitute_scheme(scm).to_string(),
+                                self.substitution.substitute_scheme(scm).to_string_normalize(),
                                 e.to_constraint_string()
                             );
                             overload_res.push(Err(msg))
@@ -595,7 +595,7 @@ impl TypeCheckContext {
                             let msg = format!(
                                 "- `{}` of type `{}` does not match the expected type since the constraint `{}` cannot be deduced.",
                                 fullname.to_string(),
-                                self.substitution.substitute_scheme(scm).to_string(),
+                                self.substitution.substitute_scheme(scm).to_string_normalize(),
                                 e.to_constraint_string()
                             );
                             overload_res.push(Err(msg))

@@ -1676,22 +1676,22 @@ impl Scheme {
         constraints_str + &ty.to_string()
     }
 
-    pub fn to_string(&self) -> String {
+    pub fn to_string_normalize(&self) -> String {
         // Change names of generalized type variables to a, b, ...
         let mut s = Substitution::default();
         let mut tyvar_num = -1;
         for tyvar in &self.gen_vars {
             tyvar_num += 1;
             let new_name = number_to_varname(tyvar_num as usize);
-            s.add_substitution(&Substitution::single(
+            s.merge_substitution(&Substitution::single(
                 &tyvar.name,
                 type_tyvar(&new_name, &tyvar.kind.clone()),
-            ))
+            ));
         }
         self.to_string_substituted(&s)
     }
 
-    pub fn to_string_raw(&self) -> String {
+    pub fn to_string(&self) -> String {
         let s = Substitution::default();
         self.to_string_substituted(&s)
     }

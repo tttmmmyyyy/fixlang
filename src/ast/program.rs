@@ -787,7 +787,7 @@ impl Program {
                 "{}_{}_{}_{}",
                 name.to_string(),
                 hash_of_dependent_codes,
-                scheme.to_string(),
+                scheme.to_string_normalize(),
                 build_time_utc!()
             );
             format!("{:x}", md5::compute(data))
@@ -1115,7 +1115,7 @@ impl Program {
         let gv: &GlobalValue = gv.unwrap();
         let (required_ty, eft) = if let Some(required_ty) = required_ty {
             // If the type of the value is specified, check if it matches the required type.
-            if gv.scm.to_string() != required_ty.to_string() {
+            if gv.scm.to_string_normalize() != required_ty.to_string() {
                 let gv_src = gv.scm.ty.get_source();
                 return Err(Errors::from_msg_srcs(
                     format!(

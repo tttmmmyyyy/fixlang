@@ -190,7 +190,7 @@ impl ExportedFunctionType {
         src: &Option<Span>,
     ) -> Result<ExportedFunctionType, Errors> {
         // The scheme should have no constraints.
-        if scm.to_string() != scm.ty.to_string() {
+        if scm.to_string_normalize() != scm.ty.to_string() {
             return Err(Errors::from_msg_srcs(
                 err_msg_prefix + "the type of an exported value should not have any constraints.",
                 &[src],

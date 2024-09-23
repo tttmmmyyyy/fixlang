@@ -633,7 +633,7 @@ fn handle_completion(
             continue;
         }
         let in_namespace = " in ".to_string() + &full_name.namespace.to_string();
-        let scheme = gv.scm.to_string();
+        let scheme = gv.scm.to_string_normalize();
 
         items.push(CompletionItem {
             label: name,
@@ -926,7 +926,7 @@ fn handle_hover(
         docs += &format!("`{}`", full_name.to_string());
         let mut scm_string = String::new();
         if let Some(gv) = program.global_values.get(full_name) {
-            scm_string = gv.scm.to_string();
+            scm_string = gv.scm.to_string_normalize();
             docs += &format!("\n- Defined as `{}`", scm_string);
         }
         if let Some(ty) = ty.as_ref() {
