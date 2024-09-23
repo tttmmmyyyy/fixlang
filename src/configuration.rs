@@ -68,8 +68,8 @@ pub struct Configuration {
     pub valgrind_tool: ValgrindTool,
     // Sizes of C types.
     pub c_type_sizes: CTypeSizes,
-    // Is this configuration for language server?
-    pub language_server_mode: bool,
+    // Is this configuration for diagnostics?
+    pub diagnostics: bool,
     // Extra build commands.
     pub extra_commands: Vec<ExtraCommand>,
 }
@@ -143,7 +143,7 @@ impl Configuration {
             valgrind_tool: ValgrindTool::None,
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
-            language_server_mode: false,
+            diagnostics: false,
             extra_commands: vec![],
         })
     }
@@ -151,13 +151,13 @@ impl Configuration {
 
 impl Configuration {
     // Configuration for release build.
-    pub fn release() -> Configuration {
+    pub fn release_mode() -> Configuration {
         exit_if_err(Self::new())
     }
 
     // Usual configuration for compiler development
     #[allow(dead_code)]
-    pub fn develop_compiler() -> Configuration {
+    pub fn develop_compiler_mode() -> Configuration {
         #[allow(unused_mut)]
         let mut config = exit_if_err(Self::new());
         config.set_valgrind(ValgrindTool::MemCheck);
@@ -168,10 +168,10 @@ impl Configuration {
         config
     }
 
-    // Create configuration for language server.
-    pub fn language_server() -> Result<Configuration, Errors> {
+    // Create configuration for diagnostics.
+    pub fn diagnostics_mode() -> Result<Configuration, Errors> {
         let mut config = Self::new()?;
-        config.language_server_mode = true;
+        config.diagnostics = true;
         Ok(config)
     }
 

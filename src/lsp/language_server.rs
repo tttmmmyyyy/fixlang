@@ -993,8 +993,8 @@ fn diagnostics_thread(
                 // Stop the diagnostics thread.
                 break;
             }
-            DiagnosticsMessage::OnSaveFile => run_diagnostics(log_file.clone()),
-            DiagnosticsMessage::Start => run_diagnostics(log_file.clone()),
+            DiagnosticsMessage::OnSaveFile => run_diagnostics(),
+            DiagnosticsMessage::Start => run_diagnostics(),
         };
 
         // Send the result to the main thread and language clinent.
@@ -1225,14 +1225,14 @@ fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
     Ok(uri.unwrap())
 }
 
-fn run_diagnostics(_log_file: Arc<Mutex<File>>) -> Result<DiagnosticsResult, Errors> {
+pub fn run_diagnostics() -> Result<DiagnosticsResult, Errors> {
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
     // Read the project file.
     let proj_file = ProjectFile::read_root_file()?;
 
     // Create the configuration.
-    let mut config = Configuration::language_server()?;
+    let mut config = Configuration::diagnostics_mode()?;
 
     // Set up the configuration by the project file and the lock file.
     proj_file.set_config(&mut config, false)?;

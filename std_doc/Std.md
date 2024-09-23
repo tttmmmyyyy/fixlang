@@ -7,7 +7,7 @@
     - [`type Bool = unbox { primitive }`](#type-bool--unbox--primitive-)
     - [`type Boxed a = box struct { ...fields... }`](#type-boxed-a--box-struct--fields-)
       - [field `value : a`](#field-value--a)
-    - [`type ErrMsg = String`](#type-errmsg--string)
+    - [`type ErrMsg = Std::String`](#type-errmsg--stdstring)
     - [`type F32 = unbox { primitive }`](#type-f32--unbox--primitive-)
     - [`type F64 = unbox { primitive }`](#type-f64--unbox--primitive-)
     - [`type I16 = unbox { primitive }`](#type-i16--unbox--primitive-)
@@ -17,7 +17,7 @@
     - [`type IO a = unbox struct { ...fields... }`](#type-io-a--unbox-struct--fields-)
       - [field `_data : () -> a`](#field-_data-----a)
     - [`type Iterator a = unbox struct { ...fields... }`](#type-iterator-a--unbox-struct--fields-)
-      - [field `next : () -> Option (a, Iterator a)`](#field-next-----option-a-iterator-a)
+      - [field `next : () -> Std::Option (a, Std::Iterator a)`](#field-next-----stdoption-a-stditerator-a)
     - [`type Lazy = () -> a`](#type-lazy-----a)
     - [`type LoopResult s b = unbox union { ...variants... }`](#type-loopresult-s-b--unbox-union--variants-)
       - [variant `continue : s`](#variant-continue--s)
@@ -26,16 +26,24 @@
       - [variant `none : ()`](#variant-none--)
       - [variant `some : a`](#variant-some--a)
     - [`type Path = unbox struct { ...fields... }`](#type-path--unbox-struct--fields-)
-      - [field `_data : String`](#field-_data--string)
+      - [field `_data : Std::String`](#field-_data--stdstring)
     - [`type Ptr = unbox { primitive }`](#type-ptr--unbox--primitive-)
     - [`type PunchedArray a = unbox struct { ...fields... }`](#type-punchedarray-a--unbox-struct--fields-)
-      - [field `_data : Destructor (Array a)`](#field-_data--destructor-array-a)
-      - [field `idx : I64`](#field-idx--i64)
+      - [field `_data : Std::FFI::Destructor (Std::Array a)`](#field-_data--stdffidestructor-stdarray-a)
+      - [field `idx : Std::I64`](#field-idx--stdi64)
     - [`type Result e o = unbox union { ...variants... }`](#type-result-e-o--unbox-union--variants-)
       - [variant `ok : o`](#variant-ok--o)
       - [variant `err : e`](#variant-err--e)
     - [`type String = unbox struct { ...fields... }`](#type-string--unbox-struct--fields-)
-      - [field `_data : Array U8`](#field-_data--array-u8)
+      - [field `_data : Std::Array Std::U8`](#field-_data--stdarray-stdu8)
+    - [`type Tuple0 = unbox struct { ...fields... }`](#type-tuple0--unbox-struct--fields-)
+    - [`type Tuple2 t0 t1 = unbox struct { ...fields... }`](#type-tuple2-t0-t1--unbox-struct--fields-)
+      - [field `0 : t0`](#field-0--t0)
+      - [field `1 : t1`](#field-1--t1)
+    - [`type Tuple3 t0 t1 t2 = unbox struct { ...fields... }`](#type-tuple3-t0-t1-t2--unbox-struct--fields-)
+      - [field `0 : t0`](#field-0--t0-1)
+      - [field `1 : t1`](#field-1--t1-1)
+      - [field `2 : t2`](#field-2--t2)
     - [`type U16 = unbox { primitive }`](#type-u16--unbox--primitive-)
     - [`type U32 = unbox { primitive }`](#type-u32--unbox--primitive-)
     - [`type U64 = unbox { primitive }`](#type-u64--unbox--primitive-)
@@ -59,9 +67,9 @@
       - [field `dtor : a -> ()`](#field-dtor--a---)
   - [`namespace Std::IO`](#namespace-stdio)
     - [`type IOFail a = unbox struct { ...fields... }`](#type-iofail-a--unbox-struct--fields-)
-      - [field `_data : IO (Result ErrMsg a)`](#field-_data--io-result-errmsg-a)
+      - [field `_data : Std::IO (Std::Result Std::String a)`](#field-_data--stdio-stdresult-stdstring-a)
     - [`type IOHandle = unbox struct { ...fields... }`](#type-iohandle--unbox-struct--fields-)
-      - [field `_data : Destructor Ptr`](#field-_data--destructor-ptr)
+      - [field `_data : Std::FFI::Destructor Std::Ptr`](#field-_data--stdffidestructor-stdptr)
 - [Traits and aliases](#traits-and-aliases)
   - [`namespace Std`](#namespace-std-1)
     - [`trait a : Add`](#trait-a--add)
@@ -69,17 +77,17 @@
     - [`trait a : Div`](#trait-a--div)
       - [method `div : a -> a -> a`](#method-div--a---a---a)
     - [`trait a : Eq`](#trait-a--eq)
-      - [method `eq : a -> a -> Bool`](#method-eq--a---a---bool)
+      - [method `eq : a -> a -> Std::Bool`](#method-eq--a---a---stdbool)
     - [`trait a : FromBytes`](#trait-a--frombytes)
-      - [method `from_bytes : Array U8 -> Result ErrMsg a`](#method-from_bytes--array-u8---result-errmsg-a)
+      - [method `from_bytes : Std::Array Std::U8 -> Std::Result Std::String a`](#method-from_bytes--stdarray-stdu8---stdresult-stdstring-a)
     - [`trait a : FromString`](#trait-a--fromstring)
-      - [method `from_string : String -> Result ErrMsg a`](#method-from_string--string---result-errmsg-a)
+      - [method `from_string : Std::String -> Std::Result Std::String a`](#method-from_string--stdstring---stdresult-stdstring-a)
     - [`trait [f : *->*] f : Functor`](#trait-f----f--functor)
       - [method `map : (a -> b) -> f a -> f b`](#method-map--a---b---f-a---f-b)
     - [`trait a : LessThan`](#trait-a--lessthan)
-      - [method `less_than : a -> a -> Bool`](#method-less_than--a---a---bool)
+      - [method `less_than : a -> a -> Std::Bool`](#method-less_than--a---a---stdbool)
     - [`trait a : LessThanOrEq`](#trait-a--lessthanoreq)
-      - [method `less_than_or_eq : a -> a -> Bool`](#method-less_than_or_eq--a---a---bool)
+      - [method `less_than_or_eq : a -> a -> Std::Bool`](#method-less_than_or_eq--a---a---stdbool)
     - [`trait [m : *->*] m : Monad`](#trait-m----m--monad)
       - [method `bind : (a -> m b) -> m a -> m b`](#method-bind--a---m-b---m-a---m-b)
       - [method `pure : a -> m a`](#method-pure--a---m-a)
@@ -94,227 +102,248 @@
     - [`trait a : Sub`](#trait-a--sub)
       - [method `sub : a -> a -> a`](#method-sub--a---a---a)
     - [`trait a : ToBytes`](#trait-a--tobytes)
-      - [method `to_bytes : a -> Array U8`](#method-to_bytes--a---array-u8)
+      - [method `to_bytes : a -> Std::Array Std::U8`](#method-to_bytes--a---stdarray-stdu8)
     - [`trait a : ToString`](#trait-a--tostring)
-      - [method `to_string : a -> String`](#method-to_string--a---string)
+      - [method `to_string : a -> Std::String`](#method-to_string--a---stdstring)
     - [`trait a : Zero`](#trait-a--zero)
       - [method `zero : a`](#method-zero--a)
 - [Trait implementations](#trait-implementations)
-    - [`impl () : Eq`](#impl---eq)
-    - [`impl () : ToString`](#impl---tostring)
-    - [`impl Array : Functor`](#impl-array--functor)
-    - [`impl Array : Monad`](#impl-array--monad)
-    - [`impl [a : Eq] Array a : Eq`](#impl-a--eq-array-a--eq)
-    - [`impl [a : Eq, a : LessThan] Array a : LessThan`](#impl-a--eq-a--lessthan-array-a--lessthan)
-    - [`impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq`](#impl-a--eq-a--lessthanoreq-array-a--lessthanoreq)
-    - [`impl [a : ToString] Array a : ToString`](#impl-a--tostring-array-a--tostring)
-    - [`impl Bool : ToString`](#impl-bool--tostring)
-    - [`impl F32 : FromBytes`](#impl-f32--frombytes)
-    - [`impl F32 : FromString`](#impl-f32--fromstring)
-    - [`impl F32 : ToBytes`](#impl-f32--tobytes)
-    - [`impl F32 : ToString`](#impl-f32--tostring)
-    - [`impl F32 : Zero`](#impl-f32--zero)
-    - [`impl F64 : FromBytes`](#impl-f64--frombytes)
-    - [`impl F64 : FromString`](#impl-f64--fromstring)
-    - [`impl F64 : ToBytes`](#impl-f64--tobytes)
-    - [`impl F64 : ToString`](#impl-f64--tostring)
-    - [`impl F64 : Zero`](#impl-f64--zero)
-    - [`impl I16 : FromBytes`](#impl-i16--frombytes)
-    - [`impl I16 : FromString`](#impl-i16--fromstring)
-    - [`impl I16 : ToBytes`](#impl-i16--tobytes)
-    - [`impl I16 : ToString`](#impl-i16--tostring)
-    - [`impl I16 : Zero`](#impl-i16--zero)
-    - [`impl I32 : FromBytes`](#impl-i32--frombytes)
-    - [`impl I32 : FromString`](#impl-i32--fromstring)
-    - [`impl I32 : ToBytes`](#impl-i32--tobytes)
-    - [`impl I32 : ToString`](#impl-i32--tostring)
-    - [`impl I32 : Zero`](#impl-i32--zero)
-    - [`impl I64 : FromBytes`](#impl-i64--frombytes)
-    - [`impl I64 : FromString`](#impl-i64--fromstring)
-    - [`impl I64 : ToBytes`](#impl-i64--tobytes)
-    - [`impl I64 : ToString`](#impl-i64--tostring)
-    - [`impl I64 : Zero`](#impl-i64--zero)
-    - [`impl I8 : FromBytes`](#impl-i8--frombytes)
-    - [`impl I8 : FromString`](#impl-i8--fromstring)
-    - [`impl I8 : ToBytes`](#impl-i8--tobytes)
-    - [`impl I8 : ToString`](#impl-i8--tostring)
-    - [`impl I8 : Zero`](#impl-i8--zero)
-    - [`impl IO : Functor`](#impl-io--functor)
-    - [`impl IO : Monad`](#impl-io--monad)
-    - [`impl IOFail : Functor`](#impl-iofail--functor)
-    - [`impl IOFail : Monad`](#impl-iofail--monad)
-    - [`impl Iterator : Functor`](#impl-iterator--functor)
-    - [`impl Iterator : Monad`](#impl-iterator--monad)
-    - [`impl Iterator a : Add`](#impl-iterator-a--add)
-    - [`impl [a : Eq] Iterator a : Eq`](#impl-a--eq-iterator-a--eq)
-    - [`impl Option : Functor`](#impl-option--functor)
-    - [`impl Option : Monad`](#impl-option--monad)
-    - [`impl [a : Eq] Option a : Eq`](#impl-a--eq-option-a--eq)
-    - [`impl [a : ToString] Option a : ToString`](#impl-a--tostring-option-a--tostring)
-    - [`impl Path : ToString`](#impl-path--tostring)
-    - [`impl Ptr : ToString`](#impl-ptr--tostring)
-    - [`impl Result e : Functor`](#impl-result-e--functor)
-    - [`impl Result e : Monad`](#impl-result-e--monad)
-    - [`impl [e : Eq, a : Eq] Result e a : Eq`](#impl-e--eq-a--eq-result-e-a--eq)
-    - [`impl [e : ToString, a : ToString] Result e a : ToString`](#impl-e--tostring-a--tostring-result-e-a--tostring)
+    - [`impl () : Std::Eq`](#impl---stdeq)
+    - [`impl () : Std::ToString`](#impl---stdtostring)
+    - [`impl (t0, *) : Std::Functor`](#impl-t0---stdfunctor)
+    - [`impl [t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`](#impl-t0--stdeq-t1--stdeq-t0-t1--stdeq)
+    - [`impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan] (t0, t1) : Std::LessThan`](#impl-t0--stdeq-t0--stdlessthan-t1--stdeq-t1--stdlessthan-t0-t1--stdlessthan)
+    - [`impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq] (t0, t1) : Std::LessThanOrEq`](#impl-t0--stdeq-t0--stdlessthanoreq-t1--stdeq-t1--stdlessthanoreq-t0-t1--stdlessthanoreq)
+    - [`impl [t0 : Std::ToString, t1 : Std::ToString] (t0, t1) : Std::ToString`](#impl-t0--stdtostring-t1--stdtostring-t0-t1--stdtostring)
+    - [`impl (t0, t1, *) : Std::Functor`](#impl-t0-t1---stdfunctor)
+    - [`impl [t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq] (t0, t1, t2) : Std::Eq`](#impl-t0--stdeq-t1--stdeq-t2--stdeq-t0-t1-t2--stdeq)
+    - [`impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan] (t0, t1, t2) : Std::LessThan`](#impl-t0--stdeq-t0--stdlessthan-t1--stdeq-t1--stdlessthan-t2--stdeq-t2--stdlessthan-t0-t1-t2--stdlessthan)
+    - [`impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq] (t0, t1, t2) : Std::LessThanOrEq`](#impl-t0--stdeq-t0--stdlessthanoreq-t1--stdeq-t1--stdlessthanoreq-t2--stdeq-t2--stdlessthanoreq-t0-t1-t2--stdlessthanoreq)
+    - [`impl [t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`](#impl-t0--stdtostring-t1--stdtostring-t2--stdtostring-t0-t1-t2--stdtostring)
+    - [`impl Std::Array : Std::Functor`](#impl-stdarray--stdfunctor)
+    - [`impl Std::Array : Std::Monad`](#impl-stdarray--stdmonad)
+    - [`impl [a : Std::Eq] Std::Array a : Std::Eq`](#impl-a--stdeq-stdarray-a--stdeq)
+    - [`impl [a : Std::Eq, a : Std::LessThan] Std::Array a : Std::LessThan`](#impl-a--stdeq-a--stdlessthan-stdarray-a--stdlessthan)
+    - [`impl [a : Std::Eq, a : Std::LessThanOrEq] Std::Array a : Std::LessThanOrEq`](#impl-a--stdeq-a--stdlessthanoreq-stdarray-a--stdlessthanoreq)
+    - [`impl [a : Std::ToString] Std::Array a : Std::ToString`](#impl-a--stdtostring-stdarray-a--stdtostring)
     - [`impl Std::Bool : Std::Eq`](#impl-stdbool--stdeq)
     - [`impl Std::Bool : Std::Not`](#impl-stdbool--stdnot)
+    - [`impl Std::Bool : Std::ToString`](#impl-stdbool--stdtostring)
     - [`impl Std::F32 : Std::Add`](#impl-stdf32--stdadd)
     - [`impl Std::F32 : Std::Div`](#impl-stdf32--stddiv)
     - [`impl Std::F32 : Std::Eq`](#impl-stdf32--stdeq)
+    - [`impl Std::F32 : Std::FromBytes`](#impl-stdf32--stdfrombytes)
+    - [`impl Std::F32 : Std::FromString`](#impl-stdf32--stdfromstring)
     - [`impl Std::F32 : Std::LessThan`](#impl-stdf32--stdlessthan)
     - [`impl Std::F32 : Std::LessThanOrEq`](#impl-stdf32--stdlessthanoreq)
     - [`impl Std::F32 : Std::Mul`](#impl-stdf32--stdmul)
     - [`impl Std::F32 : Std::Neg`](#impl-stdf32--stdneg)
     - [`impl Std::F32 : Std::Sub`](#impl-stdf32--stdsub)
+    - [`impl Std::F32 : Std::ToBytes`](#impl-stdf32--stdtobytes)
+    - [`impl Std::F32 : Std::ToString`](#impl-stdf32--stdtostring)
+    - [`impl Std::F32 : Std::Zero`](#impl-stdf32--stdzero)
     - [`impl Std::F64 : Std::Add`](#impl-stdf64--stdadd)
     - [`impl Std::F64 : Std::Div`](#impl-stdf64--stddiv)
     - [`impl Std::F64 : Std::Eq`](#impl-stdf64--stdeq)
+    - [`impl Std::F64 : Std::FromBytes`](#impl-stdf64--stdfrombytes)
+    - [`impl Std::F64 : Std::FromString`](#impl-stdf64--stdfromstring)
     - [`impl Std::F64 : Std::LessThan`](#impl-stdf64--stdlessthan)
     - [`impl Std::F64 : Std::LessThanOrEq`](#impl-stdf64--stdlessthanoreq)
     - [`impl Std::F64 : Std::Mul`](#impl-stdf64--stdmul)
     - [`impl Std::F64 : Std::Neg`](#impl-stdf64--stdneg)
     - [`impl Std::F64 : Std::Sub`](#impl-stdf64--stdsub)
+    - [`impl Std::F64 : Std::ToBytes`](#impl-stdf64--stdtobytes)
+    - [`impl Std::F64 : Std::ToString`](#impl-stdf64--stdtostring)
+    - [`impl Std::F64 : Std::Zero`](#impl-stdf64--stdzero)
     - [`impl Std::I16 : Std::Add`](#impl-stdi16--stdadd)
     - [`impl Std::I16 : Std::Div`](#impl-stdi16--stddiv)
     - [`impl Std::I16 : Std::Eq`](#impl-stdi16--stdeq)
+    - [`impl Std::I16 : Std::FromBytes`](#impl-stdi16--stdfrombytes)
+    - [`impl Std::I16 : Std::FromString`](#impl-stdi16--stdfromstring)
     - [`impl Std::I16 : Std::LessThan`](#impl-stdi16--stdlessthan)
     - [`impl Std::I16 : Std::LessThanOrEq`](#impl-stdi16--stdlessthanoreq)
     - [`impl Std::I16 : Std::Mul`](#impl-stdi16--stdmul)
     - [`impl Std::I16 : Std::Neg`](#impl-stdi16--stdneg)
     - [`impl Std::I16 : Std::Rem`](#impl-stdi16--stdrem)
     - [`impl Std::I16 : Std::Sub`](#impl-stdi16--stdsub)
+    - [`impl Std::I16 : Std::ToBytes`](#impl-stdi16--stdtobytes)
+    - [`impl Std::I16 : Std::ToString`](#impl-stdi16--stdtostring)
+    - [`impl Std::I16 : Std::Zero`](#impl-stdi16--stdzero)
     - [`impl Std::I32 : Std::Add`](#impl-stdi32--stdadd)
     - [`impl Std::I32 : Std::Div`](#impl-stdi32--stddiv)
     - [`impl Std::I32 : Std::Eq`](#impl-stdi32--stdeq)
+    - [`impl Std::I32 : Std::FromBytes`](#impl-stdi32--stdfrombytes)
+    - [`impl Std::I32 : Std::FromString`](#impl-stdi32--stdfromstring)
     - [`impl Std::I32 : Std::LessThan`](#impl-stdi32--stdlessthan)
     - [`impl Std::I32 : Std::LessThanOrEq`](#impl-stdi32--stdlessthanoreq)
     - [`impl Std::I32 : Std::Mul`](#impl-stdi32--stdmul)
     - [`impl Std::I32 : Std::Neg`](#impl-stdi32--stdneg)
     - [`impl Std::I32 : Std::Rem`](#impl-stdi32--stdrem)
     - [`impl Std::I32 : Std::Sub`](#impl-stdi32--stdsub)
+    - [`impl Std::I32 : Std::ToBytes`](#impl-stdi32--stdtobytes)
+    - [`impl Std::I32 : Std::ToString`](#impl-stdi32--stdtostring)
+    - [`impl Std::I32 : Std::Zero`](#impl-stdi32--stdzero)
     - [`impl Std::I64 : Std::Add`](#impl-stdi64--stdadd)
     - [`impl Std::I64 : Std::Div`](#impl-stdi64--stddiv)
     - [`impl Std::I64 : Std::Eq`](#impl-stdi64--stdeq)
+    - [`impl Std::I64 : Std::FromBytes`](#impl-stdi64--stdfrombytes)
+    - [`impl Std::I64 : Std::FromString`](#impl-stdi64--stdfromstring)
     - [`impl Std::I64 : Std::LessThan`](#impl-stdi64--stdlessthan)
     - [`impl Std::I64 : Std::LessThanOrEq`](#impl-stdi64--stdlessthanoreq)
     - [`impl Std::I64 : Std::Mul`](#impl-stdi64--stdmul)
     - [`impl Std::I64 : Std::Neg`](#impl-stdi64--stdneg)
     - [`impl Std::I64 : Std::Rem`](#impl-stdi64--stdrem)
     - [`impl Std::I64 : Std::Sub`](#impl-stdi64--stdsub)
+    - [`impl Std::I64 : Std::ToBytes`](#impl-stdi64--stdtobytes)
+    - [`impl Std::I64 : Std::ToString`](#impl-stdi64--stdtostring)
+    - [`impl Std::I64 : Std::Zero`](#impl-stdi64--stdzero)
     - [`impl Std::I8 : Std::Add`](#impl-stdi8--stdadd)
     - [`impl Std::I8 : Std::Div`](#impl-stdi8--stddiv)
     - [`impl Std::I8 : Std::Eq`](#impl-stdi8--stdeq)
+    - [`impl Std::I8 : Std::FromBytes`](#impl-stdi8--stdfrombytes)
+    - [`impl Std::I8 : Std::FromString`](#impl-stdi8--stdfromstring)
     - [`impl Std::I8 : Std::LessThan`](#impl-stdi8--stdlessthan)
     - [`impl Std::I8 : Std::LessThanOrEq`](#impl-stdi8--stdlessthanoreq)
     - [`impl Std::I8 : Std::Mul`](#impl-stdi8--stdmul)
     - [`impl Std::I8 : Std::Neg`](#impl-stdi8--stdneg)
     - [`impl Std::I8 : Std::Rem`](#impl-stdi8--stdrem)
     - [`impl Std::I8 : Std::Sub`](#impl-stdi8--stdsub)
+    - [`impl Std::I8 : Std::ToBytes`](#impl-stdi8--stdtobytes)
+    - [`impl Std::I8 : Std::ToString`](#impl-stdi8--stdtostring)
+    - [`impl Std::I8 : Std::Zero`](#impl-stdi8--stdzero)
+    - [`impl Std::IO : Std::Functor`](#impl-stdio--stdfunctor)
+    - [`impl Std::IO : Std::Monad`](#impl-stdio--stdmonad)
+    - [`impl Std::IO::IOFail : Std::Functor`](#impl-stdioiofail--stdfunctor)
+    - [`impl Std::IO::IOFail : Std::Monad`](#impl-stdioiofail--stdmonad)
+    - [`impl Std::Iterator : Std::Functor`](#impl-stditerator--stdfunctor)
+    - [`impl Std::Iterator : Std::Monad`](#impl-stditerator--stdmonad)
+    - [`impl Std::Iterator a : Std::Add`](#impl-stditerator-a--stdadd)
+    - [`impl [a : Std::Eq] Std::Iterator a : Std::Eq`](#impl-a--stdeq-stditerator-a--stdeq)
+    - [`impl Std::Option : Std::Functor`](#impl-stdoption--stdfunctor)
+    - [`impl Std::Option : Std::Monad`](#impl-stdoption--stdmonad)
+    - [`impl [a : Std::Eq] Std::Option a : Std::Eq`](#impl-a--stdeq-stdoption-a--stdeq)
+    - [`impl [a : Std::ToString] Std::Option a : Std::ToString`](#impl-a--stdtostring-stdoption-a--stdtostring)
+    - [`impl Std::Path : Std::ToString`](#impl-stdpath--stdtostring)
     - [`impl Std::Ptr : Std::Eq`](#impl-stdptr--stdeq)
+    - [`impl Std::Ptr : Std::ToString`](#impl-stdptr--stdtostring)
+    - [`impl Std::Result e : Std::Functor`](#impl-stdresult-e--stdfunctor)
+    - [`impl Std::Result e : Std::Monad`](#impl-stdresult-e--stdmonad)
+    - [`impl [e : Std::Eq, a : Std::Eq] Std::Result e a : Std::Eq`](#impl-e--stdeq-a--stdeq-stdresult-e-a--stdeq)
+    - [`impl [e : Std::ToString, a : Std::ToString] Std::Result e a : Std::ToString`](#impl-e--stdtostring-a--stdtostring-stdresult-e-a--stdtostring)
+    - [`impl Std::String : Std::Add`](#impl-stdstring--stdadd)
+    - [`impl Std::String : Std::Eq`](#impl-stdstring--stdeq)
+    - [`impl Std::String : Std::LessThan`](#impl-stdstring--stdlessthan)
+    - [`impl Std::String : Std::LessThanOrEq`](#impl-stdstring--stdlessthanoreq)
+    - [`impl Std::String : Std::ToString`](#impl-stdstring--stdtostring)
     - [`impl Std::U16 : Std::Add`](#impl-stdu16--stdadd)
     - [`impl Std::U16 : Std::Div`](#impl-stdu16--stddiv)
     - [`impl Std::U16 : Std::Eq`](#impl-stdu16--stdeq)
+    - [`impl Std::U16 : Std::FromBytes`](#impl-stdu16--stdfrombytes)
+    - [`impl Std::U16 : Std::FromString`](#impl-stdu16--stdfromstring)
     - [`impl Std::U16 : Std::LessThan`](#impl-stdu16--stdlessthan)
     - [`impl Std::U16 : Std::LessThanOrEq`](#impl-stdu16--stdlessthanoreq)
     - [`impl Std::U16 : Std::Mul`](#impl-stdu16--stdmul)
     - [`impl Std::U16 : Std::Neg`](#impl-stdu16--stdneg)
     - [`impl Std::U16 : Std::Rem`](#impl-stdu16--stdrem)
     - [`impl Std::U16 : Std::Sub`](#impl-stdu16--stdsub)
+    - [`impl Std::U16 : Std::ToBytes`](#impl-stdu16--stdtobytes)
+    - [`impl Std::U16 : Std::ToString`](#impl-stdu16--stdtostring)
+    - [`impl Std::U16 : Std::Zero`](#impl-stdu16--stdzero)
     - [`impl Std::U32 : Std::Add`](#impl-stdu32--stdadd)
     - [`impl Std::U32 : Std::Div`](#impl-stdu32--stddiv)
     - [`impl Std::U32 : Std::Eq`](#impl-stdu32--stdeq)
+    - [`impl Std::U32 : Std::FromBytes`](#impl-stdu32--stdfrombytes)
+    - [`impl Std::U32 : Std::FromString`](#impl-stdu32--stdfromstring)
     - [`impl Std::U32 : Std::LessThan`](#impl-stdu32--stdlessthan)
     - [`impl Std::U32 : Std::LessThanOrEq`](#impl-stdu32--stdlessthanoreq)
     - [`impl Std::U32 : Std::Mul`](#impl-stdu32--stdmul)
     - [`impl Std::U32 : Std::Neg`](#impl-stdu32--stdneg)
     - [`impl Std::U32 : Std::Rem`](#impl-stdu32--stdrem)
     - [`impl Std::U32 : Std::Sub`](#impl-stdu32--stdsub)
+    - [`impl Std::U32 : Std::ToBytes`](#impl-stdu32--stdtobytes)
+    - [`impl Std::U32 : Std::ToString`](#impl-stdu32--stdtostring)
+    - [`impl Std::U32 : Std::Zero`](#impl-stdu32--stdzero)
     - [`impl Std::U64 : Std::Add`](#impl-stdu64--stdadd)
     - [`impl Std::U64 : Std::Div`](#impl-stdu64--stddiv)
     - [`impl Std::U64 : Std::Eq`](#impl-stdu64--stdeq)
+    - [`impl Std::U64 : Std::FromBytes`](#impl-stdu64--stdfrombytes)
+    - [`impl Std::U64 : Std::FromString`](#impl-stdu64--stdfromstring)
     - [`impl Std::U64 : Std::LessThan`](#impl-stdu64--stdlessthan)
     - [`impl Std::U64 : Std::LessThanOrEq`](#impl-stdu64--stdlessthanoreq)
     - [`impl Std::U64 : Std::Mul`](#impl-stdu64--stdmul)
     - [`impl Std::U64 : Std::Neg`](#impl-stdu64--stdneg)
     - [`impl Std::U64 : Std::Rem`](#impl-stdu64--stdrem)
     - [`impl Std::U64 : Std::Sub`](#impl-stdu64--stdsub)
+    - [`impl Std::U64 : Std::ToBytes`](#impl-stdu64--stdtobytes)
+    - [`impl Std::U64 : Std::ToString`](#impl-stdu64--stdtostring)
+    - [`impl Std::U64 : Std::Zero`](#impl-stdu64--stdzero)
     - [`impl Std::U8 : Std::Add`](#impl-stdu8--stdadd)
     - [`impl Std::U8 : Std::Div`](#impl-stdu8--stddiv)
     - [`impl Std::U8 : Std::Eq`](#impl-stdu8--stdeq)
+    - [`impl Std::U8 : Std::FromBytes`](#impl-stdu8--stdfrombytes)
+    - [`impl Std::U8 : Std::FromString`](#impl-stdu8--stdfromstring)
     - [`impl Std::U8 : Std::LessThan`](#impl-stdu8--stdlessthan)
     - [`impl Std::U8 : Std::LessThanOrEq`](#impl-stdu8--stdlessthanoreq)
     - [`impl Std::U8 : Std::Mul`](#impl-stdu8--stdmul)
     - [`impl Std::U8 : Std::Neg`](#impl-stdu8--stdneg)
     - [`impl Std::U8 : Std::Rem`](#impl-stdu8--stdrem)
     - [`impl Std::U8 : Std::Sub`](#impl-stdu8--stdsub)
-    - [`impl String : Add`](#impl-string--add)
-    - [`impl String : Eq`](#impl-string--eq)
-    - [`impl String : LessThan`](#impl-string--lessthan)
-    - [`impl String : LessThanOrEq`](#impl-string--lessthanoreq)
-    - [`impl String : ToString`](#impl-string--tostring)
-    - [`impl U16 : FromBytes`](#impl-u16--frombytes)
-    - [`impl U16 : FromString`](#impl-u16--fromstring)
-    - [`impl U16 : ToBytes`](#impl-u16--tobytes)
-    - [`impl U16 : ToString`](#impl-u16--tostring)
-    - [`impl U16 : Zero`](#impl-u16--zero)
-    - [`impl U32 : FromBytes`](#impl-u32--frombytes)
-    - [`impl U32 : FromString`](#impl-u32--fromstring)
-    - [`impl U32 : ToBytes`](#impl-u32--tobytes)
-    - [`impl U32 : ToString`](#impl-u32--tostring)
-    - [`impl U32 : Zero`](#impl-u32--zero)
-    - [`impl U64 : FromBytes`](#impl-u64--frombytes)
-    - [`impl U64 : FromString`](#impl-u64--fromstring)
-    - [`impl U64 : ToBytes`](#impl-u64--tobytes)
-    - [`impl U64 : ToString`](#impl-u64--tostring)
-    - [`impl U64 : Zero`](#impl-u64--zero)
-    - [`impl U8 : FromBytes`](#impl-u8--frombytes)
-    - [`impl U8 : FromString`](#impl-u8--fromstring)
-    - [`impl U8 : ToBytes`](#impl-u8--tobytes)
-    - [`impl U8 : ToString`](#impl-u8--tostring)
-    - [`impl U8 : Zero`](#impl-u8--zero)
+    - [`impl Std::U8 : Std::ToBytes`](#impl-stdu8--stdtobytes)
+    - [`impl Std::U8 : Std::ToString`](#impl-stdu8--stdtostring)
+    - [`impl Std::U8 : Std::Zero`](#impl-stdu8--stdzero)
 - [Values](#values)
   - [`namespace Std`](#namespace-std-2)
     - [`compose : (a -> b) -> (b -> c) -> a -> c`](#compose--a---b---b---c---a---c)
     - [`fix : ((a -> b) -> a -> b) -> a -> b`](#fix--a---b---a---b---a---b)
     - [`loop : s -> (s -> Std::LoopResult s b) -> b`](#loop--s---s---stdloopresult-s-b---b)
-    - [`loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`](#loop_m--m--monad-s---s---m-loopresult-s-r---m-r)
+    - [`loop_m : [m : Std::Monad] s -> (s -> m (Std::LoopResult s r)) -> m r`](#loop_m--m--stdmonad-s---s---m-stdloopresult-s-r---m-r)
     - [`mark_threaded : a -> a`](#mark_threaded--a---a)
-    - [`undefined : Std::Lazy a`](#undefined--stdlazy-a)
+    - [`undefined : () -> a`](#undefined-----a)
     - [`unsafe_is_unique : a -> (Std::Bool, a)`](#unsafe_is_unique--a---stdbool-a)
+  - [`namespace Std::Add`](#namespace-stdadd)
+    - [`add : [a : Std::Add] a -> a -> a`](#add--a--stdadd-a---a---a)
   - [`namespace Std::Array`](#namespace-stdarray)
     - [`@ : Std::I64 -> Std::Array a -> a`](#--stdi64---stdarray-a---a)
     - [`_get_ptr : Std::Array a -> Std::Ptr`](#_get_ptr--stdarray-a---stdptr)
-    - [`_get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a`](#_get_sub_size_asif--i64---i64---i64---i64---array-a---array-a)
-    - [`_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`](#_sort_range_using_buffer--array-a---i64---i64---a-a---bool---array-a---array-a-array-a)
+    - [`_get_sub_size_asif : Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`](#_get_sub_size_asif--stdi64---stdi64---stdi64---stdi64---stdarray-a---stdarray-a)
+    - [`_sort_range_using_buffer : Std::Array a -> Std::I64 -> Std::I64 -> ((a, a) -> Std::Bool) -> Std::Array a -> (Std::Array a, Std::Array a)`](#_sort_range_using_buffer--stdarray-a---stdi64---stdi64---a-a---stdbool---stdarray-a---stdarray-a-stdarray-a)
     - [`_unsafe_get : Std::I64 -> Std::Array a -> a`](#_unsafe_get--stdi64---stdarray-a---a)
     - [`_unsafe_set : Std::I64 -> a -> Std::Array a -> Std::Array a`](#_unsafe_set--stdi64---a---stdarray-a---stdarray-a)
     - [`_unsafe_set_size : Std::I64 -> Std::Array a -> Std::Array a`](#_unsafe_set_size--stdi64---stdarray-a---stdarray-a)
-    - [`act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`](#act--f--functor-i64---a---f-a---array-a---f-array-a)
-    - [`append : Array a -> Array a -> Array a`](#append--array-a---array-a---array-a)
-    - [`borrow_ptr : (Ptr -> b) -> Array a -> b`](#borrow_ptr--ptr---b---array-a---b)
+    - [`act : [f : Std::Functor] Std::I64 -> (a -> f a) -> Std::Array a -> f (Std::Array a)`](#act--f--stdfunctor-stdi64---a---f-a---stdarray-a---f-stdarray-a)
+    - [`append : Std::Array a -> Std::Array a -> Std::Array a`](#append--stdarray-a---stdarray-a---stdarray-a)
+    - [`borrow_ptr : (Std::Ptr -> b) -> Std::Array a -> b`](#borrow_ptr--stdptr---b---stdarray-a---b)
     - [`empty : Std::I64 -> Std::Array a`](#empty--stdi64---stdarray-a)
     - [`fill : Std::I64 -> a -> Std::Array a`](#fill--stdi64---a---stdarray-a)
-    - [`find_by : (a -> Bool) -> Array a -> Option I64`](#find_by--a---bool---array-a---option-i64)
+    - [`find_by : (a -> Std::Bool) -> Std::Array a -> Std::Option Std::I64`](#find_by--a---stdbool---stdarray-a---stdoption-stdi64)
     - [`force_unique : Std::Array a -> Std::Array a`](#force_unique--stdarray-a---stdarray-a)
-    - [`from_iter : Iterator a -> Array a`](#from_iter--iterator-a---array-a)
-    - [`from_map : I64 -> (I64 -> a) -> Array a`](#from_map--i64---i64---a---array-a)
+    - [`from_iter : Std::Iterator a -> Std::Array a`](#from_iter--stditerator-a---stdarray-a)
+    - [`from_map : Std::I64 -> (Std::I64 -> a) -> Std::Array a`](#from_map--stdi64---stdi64---a---stdarray-a)
     - [`get_capacity : Std::Array a -> Std::I64`](#get_capacity--stdarray-a---stdi64)
-    - [`get_first : Array a -> Option a`](#get_first--array-a---option-a)
-    - [`get_last : Array a -> Option a`](#get_last--array-a---option-a)
+    - [`get_first : Std::Array a -> Std::Option a`](#get_first--stdarray-a---stdoption-a)
+    - [`get_last : Std::Array a -> Std::Option a`](#get_last--stdarray-a---stdoption-a)
     - [`get_size : Std::Array a -> Std::I64`](#get_size--stdarray-a---stdi64)
-    - [`get_sub : I64 -> I64 -> Array a -> Array a`](#get_sub--i64---i64---array-a---array-a)
-    - [`is_empty : Array a -> Bool`](#is_empty--array-a---bool)
+    - [`get_sub : Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`](#get_sub--stdi64---stdi64---stdarray-a---stdarray-a)
+    - [`is_empty : Std::Array a -> Std::Bool`](#is_empty--stdarray-a---stdbool)
     - [`mod : Std::I64 -> (a -> a) -> Std::Array a -> Std::Array a`](#mod--stdi64---a---a---stdarray-a---stdarray-a)
-    - [`pop_back : Array a -> Array a`](#pop_back--array-a---array-a)
-    - [`push_back : a -> Array a -> Array a`](#push_back--a---array-a---array-a)
-    - [`reserve : I64 -> Array a -> Array a`](#reserve--i64---array-a---array-a)
+    - [`pop_back : Std::Array a -> Std::Array a`](#pop_back--stdarray-a---stdarray-a)
+    - [`push_back : a -> Std::Array a -> Std::Array a`](#push_back--a---stdarray-a---stdarray-a)
+    - [`reserve : Std::I64 -> Std::Array a -> Std::Array a`](#reserve--stdi64---stdarray-a---stdarray-a)
     - [`set : Std::I64 -> a -> Std::Array a -> Std::Array a`](#set--stdi64---a---stdarray-a---stdarray-a)
-    - [`sort_by : ((a, a) -> Bool) -> Array a -> Array a`](#sort_by--a-a---bool---array-a---array-a)
-    - [`to_iter : Array a -> Iterator a`](#to_iter--array-a---iterator-a)
-    - [`truncate : I64 -> Array a -> Array a`](#truncate--i64---array-a---array-a)
+    - [`sort_by : ((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`](#sort_by--a-a---stdbool---stdarray-a---stdarray-a)
+    - [`to_iter : Std::Array a -> Std::Iterator a`](#to_iter--stdarray-a---stditerator-a)
+    - [`truncate : Std::I64 -> Std::Array a -> Std::Array a`](#truncate--stdi64---stdarray-a---stdarray-a)
+  - [`namespace Std::Boxed`](#namespace-stdboxed)
+    - [`@value : Std::Boxed a -> a`](#value--stdboxed-a---a)
+    - [`act_value : [f : Std::Functor] (a -> f a) -> Std::Boxed a -> f (Std::Boxed a)`](#act_value--f--stdfunctor-a---f-a---stdboxed-a---f-stdboxed-a)
+    - [`mod_value : (a -> a) -> Std::Boxed a -> Std::Boxed a`](#mod_value--a---a---stdboxed-a---stdboxed-a)
+    - [`set_value : a -> Std::Boxed a -> Std::Boxed a`](#set_value--a---stdboxed-a---stdboxed-a)
+  - [`namespace Std::Div`](#namespace-stddiv)
+    - [`div : [a : Std::Div] a -> a -> a`](#div--a--stddiv-a---a---a)
+  - [`namespace Std::Eq`](#namespace-stdeq)
+    - [`eq : [a : Std::Eq] a -> a -> Std::Bool`](#eq--a--stdeq-a---a---stdbool)
   - [`namespace Std::F32`](#namespace-stdf32)
-    - [`abs : F32 -> F32`](#abs--f32---f32)
+    - [`abs : Std::F32 -> Std::F32`](#abs--stdf32---stdf32)
     - [`infinity : Std::F32`](#infinity--stdf32)
     - [`quiet_nan : Std::F32`](#quiet_nan--stdf32)
     - [`to_CChar : Std::F32 -> Std::I8`](#to_cchar--stdf32---stdi8)
@@ -340,11 +369,11 @@
     - [`to_U32 : Std::F32 -> Std::U32`](#to_u32--stdf32---stdu32)
     - [`to_U64 : Std::F32 -> Std::U64`](#to_u64--stdf32---stdu64)
     - [`to_U8 : Std::F32 -> Std::U8`](#to_u8--stdf32---stdu8)
-    - [`to_string_exp : F32 -> String`](#to_string_exp--f32---string)
-    - [`to_string_exp_precision : U8 -> F32 -> String`](#to_string_exp_precision--u8---f32---string)
-    - [`to_string_precision : U8 -> F32 -> String`](#to_string_precision--u8---f32---string)
+    - [`to_string_exp : Std::F32 -> Std::String`](#to_string_exp--stdf32---stdstring)
+    - [`to_string_exp_precision : Std::U8 -> Std::F32 -> Std::String`](#to_string_exp_precision--stdu8---stdf32---stdstring)
+    - [`to_string_precision : Std::U8 -> Std::F32 -> Std::String`](#to_string_precision--stdu8---stdf32---stdstring)
   - [`namespace Std::F64`](#namespace-stdf64)
-    - [`abs : F64 -> F64`](#abs--f64---f64)
+    - [`abs : Std::F64 -> Std::F64`](#abs--stdf64---stdf64)
     - [`infinity : Std::F64`](#infinity--stdf64)
     - [`quiet_nan : Std::F64`](#quiet_nan--stdf64)
     - [`to_CChar : Std::F64 -> Std::I8`](#to_cchar--stdf64---stdi8)
@@ -370,30 +399,43 @@
     - [`to_U32 : Std::F64 -> Std::U32`](#to_u32--stdf64---stdu32)
     - [`to_U64 : Std::F64 -> Std::U64`](#to_u64--stdf64---stdu64)
     - [`to_U8 : Std::F64 -> Std::U8`](#to_u8--stdf64---stdu8)
-    - [`to_string_exp : F64 -> String`](#to_string_exp--f64---string)
-    - [`to_string_exp_precision : U8 -> F64 -> String`](#to_string_exp_precision--u8---f64---string)
-    - [`to_string_precision : U8 -> F64 -> String`](#to_string_precision--u8---f64---string)
+    - [`to_string_exp : Std::F64 -> Std::String`](#to_string_exp--stdf64---stdstring)
+    - [`to_string_exp_precision : Std::U8 -> Std::F64 -> Std::String`](#to_string_exp_precision--stdu8---stdf64---stdstring)
+    - [`to_string_precision : Std::U8 -> Std::F64 -> Std::String`](#to_string_precision--stdu8---stdf64---stdstring)
   - [`namespace Std::FFI`](#namespace-stdffi-1)
     - [`_unsafe_get_boxed_data_ptr : a -> Std::Ptr`](#_unsafe_get_boxed_data_ptr--a---stdptr)
-    - [`unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`](#unsafe_borrow_boxed_data_ptr--ptr---b---a---b)
+    - [`unsafe_borrow_boxed_data_ptr : (Std::Ptr -> b) -> a -> b`](#unsafe_borrow_boxed_data_ptr--stdptr---b---a---b)
     - [`unsafe_clear_errno : () -> ()`](#unsafe_clear_errno-----)
     - [`unsafe_get_boxed_value_from_retained_ptr : Std::Ptr -> a`](#unsafe_get_boxed_value_from_retained_ptr--stdptr---a)
-    - [`unsafe_get_errno : () -> CInt`](#unsafe_get_errno-----cint)
-    - [`unsafe_get_release_function_of_boxed_value : Std::Lazy a -> Std::Ptr`](#unsafe_get_release_function_of_boxed_value--stdlazy-a---stdptr)
-    - [`unsafe_get_retain_function_of_boxed_value : Std::Lazy a -> Std::Ptr`](#unsafe_get_retain_function_of_boxed_value--stdlazy-a---stdptr)
+    - [`unsafe_get_errno : () -> Std::I32`](#unsafe_get_errno-----stdi32)
+    - [`unsafe_get_release_function_of_boxed_value : (() -> a) -> Std::Ptr`](#unsafe_get_release_function_of_boxed_value-----a---stdptr)
+    - [`unsafe_get_retain_function_of_boxed_value : (() -> a) -> Std::Ptr`](#unsafe_get_retain_function_of_boxed_value-----a---stdptr)
     - [`unsafe_get_retained_ptr_of_boxed_value : a -> Std::Ptr`](#unsafe_get_retained_ptr_of_boxed_value--a---stdptr)
   - [`namespace Std::FFI::Destructor`](#namespace-stdffidestructor)
-    - [`borrow : (a -> b) -> Destructor a -> b`](#borrow--a---b---destructor-a---b)
-    - [`make : a -> (a -> ()) -> Destructor a`](#make--a---a------destructor-a)
+    - [`@_value : Std::FFI::Destructor a -> a`](#_value--stdffidestructor-a---a)
+    - [`@dtor : Std::FFI::Destructor a -> a -> ()`](#dtor--stdffidestructor-a---a---)
+    - [`act__value : [f : Std::Functor] (a -> f a) -> Std::FFI::Destructor a -> f (Std::FFI::Destructor a)`](#act__value--f--stdfunctor-a---f-a---stdffidestructor-a---f-stdffidestructor-a)
+    - [`act_dtor : [f : Std::Functor] ((a -> ()) -> f (a -> ())) -> Std::FFI::Destructor a -> f (Std::FFI::Destructor a)`](#act_dtor--f--stdfunctor-a------f-a------stdffidestructor-a---f-stdffidestructor-a)
+    - [`borrow : (a -> b) -> Std::FFI::Destructor a -> b`](#borrow--a---b---stdffidestructor-a---b)
+    - [`make : a -> (a -> ()) -> Std::FFI::Destructor a`](#make--a---a------stdffidestructor-a)
+    - [`mod__value : (a -> a) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`](#mod__value--a---a---stdffidestructor-a---stdffidestructor-a)
+    - [`mod_dtor : ((a -> ()) -> a -> ()) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`](#mod_dtor--a------a------stdffidestructor-a---stdffidestructor-a)
+    - [`set__value : a -> Std::FFI::Destructor a -> Std::FFI::Destructor a`](#set__value--a---stdffidestructor-a---stdffidestructor-a)
+    - [`set_dtor : (a -> ()) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`](#set_dtor--a------stdffidestructor-a---stdffidestructor-a)
+  - [`namespace Std::FromBytes`](#namespace-stdfrombytes)
+    - [`from_bytes : [a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::String a`](#from_bytes--a--stdfrombytes-stdarray-stdu8---stdresult-stdstring-a)
+  - [`namespace Std::FromString`](#namespace-stdfromstring)
+    - [`from_string : [a : Std::FromString] Std::String -> Std::Result Std::String a`](#from_string--a--stdfromstring-stdstring---stdresult-stdstring-a)
   - [`namespace Std::Functor`](#namespace-stdfunctor)
-    - [`forget : [f : Functor] f a -> f ()`](#forget--f--functor-f-a---f-)
+    - [`forget : [f : Std::Functor] f a -> f ()`](#forget--f--stdfunctor-f-a---f-)
+    - [`map : [f : Std::Functor] (a -> b) -> f a -> f b`](#map--f--stdfunctor-a---b---f-a---f-b)
   - [`namespace Std::I16`](#namespace-stdi16)
-    - [`abs : I16 -> I16`](#abs--i16---i16)
+    - [`abs : Std::I16 -> Std::I16`](#abs--stdi16---stdi16)
     - [`bit_and : Std::I16 -> Std::I16 -> Std::I16`](#bit_and--stdi16---stdi16---stdi16)
     - [`bit_or : Std::I16 -> Std::I16 -> Std::I16`](#bit_or--stdi16---stdi16---stdi16)
     - [`bit_xor : Std::I16 -> Std::I16 -> Std::I16`](#bit_xor--stdi16---stdi16---stdi16)
-    - [`maximum : I16`](#maximum--i16)
-    - [`minimum : I16`](#minimum--i16)
+    - [`maximum : Std::I16`](#maximum--stdi16)
+    - [`minimum : Std::I16`](#minimum--stdi16)
     - [`shift_left : Std::I16 -> Std::I16 -> Std::I16`](#shift_left--stdi16---stdi16---stdi16)
     - [`shift_right : Std::I16 -> Std::I16 -> Std::I16`](#shift_right--stdi16---stdi16---stdi16)
     - [`to_CChar : Std::I16 -> Std::I8`](#to_cchar--stdi16---stdi8)
@@ -420,12 +462,12 @@
     - [`to_U64 : Std::I16 -> Std::U64`](#to_u64--stdi16---stdu64)
     - [`to_U8 : Std::I16 -> Std::U8`](#to_u8--stdi16---stdu8)
   - [`namespace Std::I32`](#namespace-stdi32)
-    - [`abs : I32 -> I32`](#abs--i32---i32)
+    - [`abs : Std::I32 -> Std::I32`](#abs--stdi32---stdi32)
     - [`bit_and : Std::I32 -> Std::I32 -> Std::I32`](#bit_and--stdi32---stdi32---stdi32)
     - [`bit_or : Std::I32 -> Std::I32 -> Std::I32`](#bit_or--stdi32---stdi32---stdi32)
     - [`bit_xor : Std::I32 -> Std::I32 -> Std::I32`](#bit_xor--stdi32---stdi32---stdi32)
-    - [`maximum : I32`](#maximum--i32)
-    - [`minimum : I32`](#minimum--i32)
+    - [`maximum : Std::I32`](#maximum--stdi32)
+    - [`minimum : Std::I32`](#minimum--stdi32)
     - [`shift_left : Std::I32 -> Std::I32 -> Std::I32`](#shift_left--stdi32---stdi32---stdi32)
     - [`shift_right : Std::I32 -> Std::I32 -> Std::I32`](#shift_right--stdi32---stdi32---stdi32)
     - [`to_CChar : Std::I32 -> Std::I8`](#to_cchar--stdi32---stdi8)
@@ -452,12 +494,12 @@
     - [`to_U64 : Std::I32 -> Std::U64`](#to_u64--stdi32---stdu64)
     - [`to_U8 : Std::I32 -> Std::U8`](#to_u8--stdi32---stdu8)
   - [`namespace Std::I64`](#namespace-stdi64)
-    - [`abs : I64 -> I64`](#abs--i64---i64)
+    - [`abs : Std::I64 -> Std::I64`](#abs--stdi64---stdi64)
     - [`bit_and : Std::I64 -> Std::I64 -> Std::I64`](#bit_and--stdi64---stdi64---stdi64)
     - [`bit_or : Std::I64 -> Std::I64 -> Std::I64`](#bit_or--stdi64---stdi64---stdi64)
     - [`bit_xor : Std::I64 -> Std::I64 -> Std::I64`](#bit_xor--stdi64---stdi64---stdi64)
-    - [`maximum : I64`](#maximum--i64)
-    - [`minimum : I64`](#minimum--i64)
+    - [`maximum : Std::I64`](#maximum--stdi64)
+    - [`minimum : Std::I64`](#minimum--stdi64)
     - [`shift_left : Std::I64 -> Std::I64 -> Std::I64`](#shift_left--stdi64---stdi64---stdi64)
     - [`shift_right : Std::I64 -> Std::I64 -> Std::I64`](#shift_right--stdi64---stdi64---stdi64)
     - [`to_CChar : Std::I64 -> Std::I8`](#to_cchar--stdi64---stdi8)
@@ -484,12 +526,12 @@
     - [`to_U64 : Std::I64 -> Std::U64`](#to_u64--stdi64---stdu64)
     - [`to_U8 : Std::I64 -> Std::U8`](#to_u8--stdi64---stdu8)
   - [`namespace Std::I8`](#namespace-stdi8)
-    - [`abs : I8 -> I8`](#abs--i8---i8)
+    - [`abs : Std::I8 -> Std::I8`](#abs--stdi8---stdi8)
     - [`bit_and : Std::I8 -> Std::I8 -> Std::I8`](#bit_and--stdi8---stdi8---stdi8)
     - [`bit_or : Std::I8 -> Std::I8 -> Std::I8`](#bit_or--stdi8---stdi8---stdi8)
     - [`bit_xor : Std::I8 -> Std::I8 -> Std::I8`](#bit_xor--stdi8---stdi8---stdi8)
-    - [`maximum : I8`](#maximum--i8)
-    - [`minimum : I8`](#minimum--i8)
+    - [`maximum : Std::I8`](#maximum--stdi8)
+    - [`minimum : Std::I8`](#minimum--stdi8)
     - [`shift_left : Std::I8 -> Std::I8 -> Std::I8`](#shift_left--stdi8---stdi8---stdi8)
     - [`shift_right : Std::I8 -> Std::I8 -> Std::I8`](#shift_right--stdi8---stdi8---stdi8)
     - [`to_CChar : Std::I8 -> Std::I8`](#to_cchar--stdi8---stdi8)
@@ -516,133 +558,230 @@
     - [`to_U64 : Std::I8 -> Std::U64`](#to_u64--stdi8---stdu64)
     - [`to_U8 : Std::I8 -> Std::U8`](#to_u8--stdi8---stdu8)
   - [`namespace Std::IO`](#namespace-stdio-1)
-    - [`_read_line_inner : Bool -> IOHandle -> IOFail String`](#_read_line_inner--bool---iohandle---iofail-string)
-    - [`_unsafe_perform : IO a -> a`](#_unsafe_perform--io-a---a)
-    - [`close_file : IOHandle -> IO ()`](#close_file--iohandle---io-)
-    - [`eprint : String -> IO ()`](#eprint--string---io-)
-    - [`eprintln : String -> IO ()`](#eprintln--string---io-)
-    - [`exit : I64 -> IO a`](#exit--i64---io-a)
-    - [`exit_with_msg : I64 -> String -> IO a`](#exit_with_msg--i64---string---io-a)
-    - [`from_func : (() -> a) -> IO a`](#from_func-----a---io-a)
-    - [`get_arg : I64 -> IO (Option String)`](#get_arg--i64---io-option-string)
-    - [`get_arg_count : IO I64`](#get_arg_count--io-i64)
-    - [`get_args : IO (Array String)`](#get_args--io-array-string)
-    - [`input_line : IO String`](#input_line--io-string)
-    - [`is_eof : IOHandle -> IO Bool`](#is_eof--iohandle---io-bool)
-    - [`loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s`](#loop_lines--iohandle---s---s---string---loopresult-s-s---iofail-s)
-    - [`loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s`](#loop_lines_io--iohandle---s---s---string---iofail-loopresult-s-s---iofail-s)
-    - [`open_file : Path -> String -> IOFail IOHandle`](#open_file--path---string---iofail-iohandle)
-    - [`print : String -> IO ()`](#print--string---io-)
-    - [`println : String -> IO ()`](#println--string---io-)
-    - [`read_bytes : IOHandle -> IOFail (Array U8)`](#read_bytes--iohandle---iofail-array-u8)
-    - [`read_file_bytes : Path -> IOFail (Array U8)`](#read_file_bytes--path---iofail-array-u8)
-    - [`read_file_string : Path -> IOFail String`](#read_file_string--path---iofail-string)
-    - [`read_line : IOHandle -> IOFail String`](#read_line--iohandle---iofail-string)
-    - [`read_n_bytes : IOHandle -> I64 -> IOFail (Array U8)`](#read_n_bytes--iohandle---i64---iofail-array-u8)
-    - [`read_string : IOHandle -> IOFail String`](#read_string--iohandle---iofail-string)
-    - [`stderr : IOHandle`](#stderr--iohandle)
-    - [`stdin : IOHandle`](#stdin--iohandle)
-    - [`stdout : IOHandle`](#stdout--iohandle)
-    - [`with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a`](#with_file--path---string---iohandle---iofail-a---iofail-a)
-    - [`write_bytes : IOHandle -> Array U8 -> IOFail ()`](#write_bytes--iohandle---array-u8---iofail-)
-    - [`write_file_bytes : Path -> Array U8 -> IOFail ()`](#write_file_bytes--path---array-u8---iofail-)
-    - [`write_file_string : Path -> String -> IOFail ()`](#write_file_string--path---string---iofail-)
-    - [`write_string : IOHandle -> String -> IOFail ()`](#write_string--iohandle---string---iofail-)
+    - [`@_data : Std::IO a -> () -> a`](#_data--stdio-a------a)
+    - [`_read_line_inner : Std::Bool -> Std::IO::IOHandle -> Std::IO::IOFail Std::String`](#_read_line_inner--stdbool---stdioiohandle---stdioiofail-stdstring)
+    - [`_unsafe_perform : Std::IO a -> a`](#_unsafe_perform--stdio-a---a)
+    - [`act__data : [f : Std::Functor] ((() -> a) -> f (() -> a)) -> Std::IO a -> f (Std::IO a)`](#act__data--f--stdfunctor----a---f----a---stdio-a---f-stdio-a)
+    - [`close_file : Std::IO::IOHandle -> Std::IO ()`](#close_file--stdioiohandle---stdio-)
+    - [`eprint : Std::String -> Std::IO ()`](#eprint--stdstring---stdio-)
+    - [`eprintln : Std::String -> Std::IO ()`](#eprintln--stdstring---stdio-)
+    - [`exit : Std::I64 -> Std::IO a`](#exit--stdi64---stdio-a)
+    - [`exit_with_msg : Std::I64 -> Std::String -> Std::IO a`](#exit_with_msg--stdi64---stdstring---stdio-a)
+    - [`from_func : (() -> a) -> Std::IO a`](#from_func-----a---stdio-a)
+    - [`get_arg : Std::I64 -> Std::IO (Std::Option Std::String)`](#get_arg--stdi64---stdio-stdoption-stdstring)
+    - [`get_arg_count : Std::IO Std::I64`](#get_arg_count--stdio-stdi64)
+    - [`get_args : Std::IO (Std::Array Std::String)`](#get_args--stdio-stdarray-stdstring)
+    - [`input_line : Std::IO Std::String`](#input_line--stdio-stdstring)
+    - [`is_eof : Std::IO::IOHandle -> Std::IO Std::Bool`](#is_eof--stdioiohandle---stdio-stdbool)
+    - [`loop_lines : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::LoopResult s s) -> Std::IO::IOFail s`](#loop_lines--stdioiohandle---s---s---stdstring---stdloopresult-s-s---stdioiofail-s)
+    - [`loop_lines_io : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::IO::IOFail (Std::LoopResult s s)) -> Std::IO::IOFail s`](#loop_lines_io--stdioiohandle---s---s---stdstring---stdioiofail-stdloopresult-s-s---stdioiofail-s)
+    - [`mod__data : ((() -> a) -> () -> a) -> Std::IO a -> Std::IO a`](#mod__data-----a------a---stdio-a---stdio-a)
+    - [`open_file : Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`](#open_file--stdpath---stdstring---stdioiofail-stdioiohandle)
+    - [`print : Std::String -> Std::IO ()`](#print--stdstring---stdio-)
+    - [`println : Std::String -> Std::IO ()`](#println--stdstring---stdio-)
+    - [`read_bytes : Std::IO::IOHandle -> Std::IO::IOFail (Std::Array Std::U8)`](#read_bytes--stdioiohandle---stdioiofail-stdarray-stdu8)
+    - [`read_file_bytes : Std::Path -> Std::IO::IOFail (Std::Array Std::U8)`](#read_file_bytes--stdpath---stdioiofail-stdarray-stdu8)
+    - [`read_file_string : Std::Path -> Std::IO::IOFail Std::String`](#read_file_string--stdpath---stdioiofail-stdstring)
+    - [`read_line : Std::IO::IOHandle -> Std::IO::IOFail Std::String`](#read_line--stdioiohandle---stdioiofail-stdstring)
+    - [`read_n_bytes : Std::IO::IOHandle -> Std::I64 -> Std::IO::IOFail (Std::Array Std::U8)`](#read_n_bytes--stdioiohandle---stdi64---stdioiofail-stdarray-stdu8)
+    - [`read_string : Std::IO::IOHandle -> Std::IO::IOFail Std::String`](#read_string--stdioiohandle---stdioiofail-stdstring)
+    - [`set__data : (() -> a) -> Std::IO a -> Std::IO a`](#set__data-----a---stdio-a---stdio-a)
+    - [`stderr : Std::IO::IOHandle`](#stderr--stdioiohandle)
+    - [`stdin : Std::IO::IOHandle`](#stdin--stdioiohandle)
+    - [`stdout : Std::IO::IOHandle`](#stdout--stdioiohandle)
+    - [`with_file : Std::Path -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`](#with_file--stdpath---stdstring---stdioiohandle---stdioiofail-a---stdioiofail-a)
+    - [`write_bytes : Std::IO::IOHandle -> Std::Array Std::U8 -> Std::IO::IOFail ()`](#write_bytes--stdioiohandle---stdarray-stdu8---stdioiofail-)
+    - [`write_file_bytes : Std::Path -> Std::Array Std::U8 -> Std::IO::IOFail ()`](#write_file_bytes--stdpath---stdarray-stdu8---stdioiofail-)
+    - [`write_file_string : Std::Path -> Std::String -> Std::IO::IOFail ()`](#write_file_string--stdpath---stdstring---stdioiofail-)
+    - [`write_string : Std::IO::IOHandle -> Std::String -> Std::IO::IOFail ()`](#write_string--stdioiohandle---stdstring---stdioiofail-)
   - [`namespace Std::IO::IOFail`](#namespace-stdioiofail)
-    - [`from_result : Result ErrMsg a -> IOFail a`](#from_result--result-errmsg-a---iofail-a)
-    - [`lift : IO a -> IOFail a`](#lift--io-a---iofail-a)
-    - [`throw : ErrMsg -> IOFail a`](#throw--errmsg---iofail-a)
-    - [`to_result : IOFail a -> IO (Result ErrMsg a)`](#to_result--iofail-a---io-result-errmsg-a)
-    - [`try : (ErrMsg -> IO a) -> IOFail a -> IO a`](#try--errmsg---io-a---iofail-a---io-a)
+    - [`@_data : Std::IO::IOFail a -> Std::IO (Std::Result Std::String a)`](#_data--stdioiofail-a---stdio-stdresult-stdstring-a)
+    - [`act__data : [f : Std::Functor] (Std::IO (Std::Result Std::String a) -> f (Std::IO (Std::Result Std::String a))) -> Std::IO::IOFail a -> f (Std::IO::IOFail a)`](#act__data--f--stdfunctor-stdio-stdresult-stdstring-a---f-stdio-stdresult-stdstring-a---stdioiofail-a---f-stdioiofail-a)
+    - [`from_result : Std::Result Std::String a -> Std::IO::IOFail a`](#from_result--stdresult-stdstring-a---stdioiofail-a)
+    - [`lift : Std::IO a -> Std::IO::IOFail a`](#lift--stdio-a---stdioiofail-a)
+    - [`mod__data : (Std::IO (Std::Result Std::String a) -> Std::IO (Std::Result Std::String a)) -> Std::IO::IOFail a -> Std::IO::IOFail a`](#mod__data--stdio-stdresult-stdstring-a---stdio-stdresult-stdstring-a---stdioiofail-a---stdioiofail-a)
+    - [`set__data : Std::IO (Std::Result Std::String a) -> Std::IO::IOFail a -> Std::IO::IOFail a`](#set__data--stdio-stdresult-stdstring-a---stdioiofail-a---stdioiofail-a)
+    - [`throw : Std::String -> Std::IO::IOFail a`](#throw--stdstring---stdioiofail-a)
+    - [`to_result : Std::IO::IOFail a -> Std::IO (Std::Result Std::String a)`](#to_result--stdioiofail-a---stdio-stdresult-stdstring-a)
+    - [`try : (Std::String -> Std::IO a) -> Std::IO::IOFail a -> Std::IO a`](#try--stdstring---stdio-a---stdioiofail-a---stdio-a)
   - [`namespace Std::IO::IOHandle`](#namespace-stdioiohandle)
-    - [`_file_ptr : IOHandle -> Ptr`](#_file_ptr--iohandle---ptr)
-    - [`_unsafe_close : IOHandle -> ()`](#_unsafe_close--iohandle---)
-    - [`from_file_ptr : Ptr -> IOHandle`](#from_file_ptr--ptr---iohandle)
+    - [`@_data : Std::IO::IOHandle -> Std::FFI::Destructor Std::Ptr`](#_data--stdioiohandle---stdffidestructor-stdptr)
+    - [`_file_ptr : Std::IO::IOHandle -> Std::Ptr`](#_file_ptr--stdioiohandle---stdptr)
+    - [`_unsafe_close : Std::IO::IOHandle -> ()`](#_unsafe_close--stdioiohandle---)
+    - [`act__data : [f : Std::Functor] (Std::FFI::Destructor Std::Ptr -> f (Std::FFI::Destructor Std::Ptr)) -> Std::IO::IOHandle -> f Std::IO::IOHandle`](#act__data--f--stdfunctor-stdffidestructor-stdptr---f-stdffidestructor-stdptr---stdioiohandle---f-stdioiohandle)
+    - [`from_file_ptr : Std::Ptr -> Std::IO::IOHandle`](#from_file_ptr--stdptr---stdioiohandle)
+    - [`mod__data : (Std::FFI::Destructor Std::Ptr -> Std::FFI::Destructor Std::Ptr) -> Std::IO::IOHandle -> Std::IO::IOHandle`](#mod__data--stdffidestructor-stdptr---stdffidestructor-stdptr---stdioiohandle---stdioiohandle)
+    - [`set__data : Std::FFI::Destructor Std::Ptr -> Std::IO::IOHandle -> Std::IO::IOHandle`](#set__data--stdffidestructor-stdptr---stdioiohandle---stdioiohandle)
   - [`namespace Std::Iterator`](#namespace-stditerator)
-    - [`_flatten : Iterator (Iterator a) -> Iterator a`](#_flatten--iterator-iterator-a---iterator-a)
-    - [`_flatten_sub : Iterator a -> Iterator (Iterator a) -> Iterator a`](#_flatten_sub--iterator-a---iterator-iterator-a---iterator-a)
-    - [`advance : Iterator a -> Option (a, Iterator a)`](#advance--iterator-a---option-a-iterator-a)
-    - [`append : Iterator a -> Iterator a -> Iterator a`](#append--iterator-a---iterator-a---iterator-a)
-    - [`bang : Iterator a -> Iterator a`](#bang--iterator-a---iterator-a)
-    - [`count_up : I64 -> Iterator I64`](#count_up--i64---iterator-i64)
-    - [`empty : Iterator a`](#empty--iterator-a)
-    - [`filter : (a -> Bool) -> Iterator a -> Iterator a`](#filter--a---bool---iterator-a---iterator-a)
-    - [`find_last : Iterator a -> Option a`](#find_last--iterator-a---option-a)
-    - [`fold : b -> (b -> a -> b) -> Iterator a -> b`](#fold--b---b---a---b---iterator-a---b)
-    - [`fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`](#fold_m--m--monad-b---b---a---m-b---iterator-a---m-b)
-    - [`from_array : Array a -> Iterator a`](#from_array--array-a---iterator-a)
-    - [`from_map : (I64 -> a) -> Iterator a`](#from_map--i64---a---iterator-a)
-    - [`generate : s -> (s -> Option (a, s)) -> Iterator a`](#generate--s---s---option-a-s---iterator-a)
-    - [`get_first : Iterator a -> Option a`](#get_first--iterator-a---option-a)
-    - [`get_size : Iterator a -> I64`](#get_size--iterator-a---i64)
-    - [`get_tail : Iterator a -> Option (Iterator a)`](#get_tail--iterator-a---option-iterator-a)
-    - [`intersperse : a -> Iterator a -> Iterator a`](#intersperse--a---iterator-a---iterator-a)
-    - [`is_empty : Iterator a -> Bool`](#is_empty--iterator-a---bool)
-    - [`loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`](#loop_iter--b---b---a---loopresult-b-b---iterator-a---b)
-    - [`loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`](#loop_iter_m--m--monad-b---b---a---m-loopresult-b-b---iterator-a---m-b)
-    - [`product : Iterator a -> Iterator b -> Iterator (b, a)`](#product--iterator-a---iterator-b---iterator-b-a)
-    - [`push_front : a -> Iterator a -> Iterator a`](#push_front--a---iterator-a---iterator-a)
-    - [`range : I64 -> I64 -> Iterator I64`](#range--i64---i64---iterator-i64)
-    - [`reverse : Iterator a -> Iterator a`](#reverse--iterator-a---iterator-a)
-    - [`subsequences : Iterator a -> Iterator (Iterator a)`](#subsequences--iterator-a---iterator-iterator-a)
-    - [`sum : [a : Additive] Iterator a -> a`](#sum--a--additive-iterator-a---a)
-    - [`take : I64 -> Iterator a -> Iterator a`](#take--i64---iterator-a---iterator-a)
-    - [`take_while : (a -> Bool) -> Iterator a -> Iterator a`](#take_while--a---bool---iterator-a---iterator-a)
-    - [`to_array : Iterator a -> Array a`](#to_array--iterator-a---array-a)
-    - [`zip : Iterator b -> Iterator a -> Iterator (a, b)`](#zip--iterator-b---iterator-a---iterator-a-b)
+    - [`@next : Std::Iterator a -> () -> Std::Option (a, Std::Iterator a)`](#next--stditerator-a------stdoption-a-stditerator-a)
+    - [`_flatten : Std::Iterator (Std::Iterator a) -> Std::Iterator a`](#_flatten--stditerator-stditerator-a---stditerator-a)
+    - [`_flatten_sub : Std::Iterator a -> Std::Iterator (Std::Iterator a) -> Std::Iterator a`](#_flatten_sub--stditerator-a---stditerator-stditerator-a---stditerator-a)
+    - [`act_next : [f : Std::Functor] ((() -> Std::Option (a, Std::Iterator a)) -> f (() -> Std::Option (a, Std::Iterator a))) -> Std::Iterator a -> f (Std::Iterator a)`](#act_next--f--stdfunctor----stdoption-a-stditerator-a---f----stdoption-a-stditerator-a---stditerator-a---f-stditerator-a)
+    - [`advance : Std::Iterator a -> Std::Option (a, Std::Iterator a)`](#advance--stditerator-a---stdoption-a-stditerator-a)
+    - [`append : Std::Iterator a -> Std::Iterator a -> Std::Iterator a`](#append--stditerator-a---stditerator-a---stditerator-a)
+    - [`bang : Std::Iterator a -> Std::Iterator a`](#bang--stditerator-a---stditerator-a)
+    - [`count_up : Std::I64 -> Std::Iterator Std::I64`](#count_up--stdi64---stditerator-stdi64)
+    - [`empty : Std::Iterator a`](#empty--stditerator-a)
+    - [`filter : (a -> Std::Bool) -> Std::Iterator a -> Std::Iterator a`](#filter--a---stdbool---stditerator-a---stditerator-a)
+    - [`find_last : Std::Iterator a -> Std::Option a`](#find_last--stditerator-a---stdoption-a)
+    - [`fold : b -> (b -> a -> b) -> Std::Iterator a -> b`](#fold--b---b---a---b---stditerator-a---b)
+    - [`fold_m : [m : Std::Monad] b -> (b -> a -> m b) -> Std::Iterator a -> m b`](#fold_m--m--stdmonad-b---b---a---m-b---stditerator-a---m-b)
+    - [`from_array : Std::Array a -> Std::Iterator a`](#from_array--stdarray-a---stditerator-a)
+    - [`from_map : (Std::I64 -> a) -> Std::Iterator a`](#from_map--stdi64---a---stditerator-a)
+    - [`generate : s -> (s -> Std::Option (a, s)) -> Std::Iterator a`](#generate--s---s---stdoption-a-s---stditerator-a)
+    - [`get_first : Std::Iterator a -> Std::Option a`](#get_first--stditerator-a---stdoption-a)
+    - [`get_size : Std::Iterator a -> Std::I64`](#get_size--stditerator-a---stdi64)
+    - [`get_tail : Std::Iterator a -> Std::Option (Std::Iterator a)`](#get_tail--stditerator-a---stdoption-stditerator-a)
+    - [`intersperse : a -> Std::Iterator a -> Std::Iterator a`](#intersperse--a---stditerator-a---stditerator-a)
+    - [`is_empty : Std::Iterator a -> Std::Bool`](#is_empty--stditerator-a---stdbool)
+    - [`loop_iter : b -> (b -> a -> Std::LoopResult b b) -> Std::Iterator a -> b`](#loop_iter--b---b---a---stdloopresult-b-b---stditerator-a---b)
+    - [`loop_iter_m : [m : Std::Monad] b -> (b -> a -> m (Std::LoopResult b b)) -> Std::Iterator a -> m b`](#loop_iter_m--m--stdmonad-b---b---a---m-stdloopresult-b-b---stditerator-a---m-b)
+    - [`mod_next : ((() -> Std::Option (a, Std::Iterator a)) -> () -> Std::Option (a, Std::Iterator a)) -> Std::Iterator a -> Std::Iterator a`](#mod_next-----stdoption-a-stditerator-a------stdoption-a-stditerator-a---stditerator-a---stditerator-a)
+    - [`product : Std::Iterator a -> Std::Iterator b -> Std::Iterator (b, a)`](#product--stditerator-a---stditerator-b---stditerator-b-a)
+    - [`push_front : a -> Std::Iterator a -> Std::Iterator a`](#push_front--a---stditerator-a---stditerator-a)
+    - [`range : Std::I64 -> Std::I64 -> Std::Iterator Std::I64`](#range--stdi64---stdi64---stditerator-stdi64)
+    - [`reverse : Std::Iterator a -> Std::Iterator a`](#reverse--stditerator-a---stditerator-a)
+    - [`set_next : (() -> Std::Option (a, Std::Iterator a)) -> Std::Iterator a -> Std::Iterator a`](#set_next-----stdoption-a-stditerator-a---stditerator-a---stditerator-a)
+    - [`subsequences : Std::Iterator a -> Std::Iterator (Std::Iterator a)`](#subsequences--stditerator-a---stditerator-stditerator-a)
+    - [`sum : [a : Std::Additive] Std::Iterator a -> a`](#sum--a--stdadditive-stditerator-a---a)
+    - [`take : Std::I64 -> Std::Iterator a -> Std::Iterator a`](#take--stdi64---stditerator-a---stditerator-a)
+    - [`take_while : (a -> Std::Bool) -> Std::Iterator a -> Std::Iterator a`](#take_while--a---stdbool---stditerator-a---stditerator-a)
+    - [`to_array : Std::Iterator a -> Std::Array a`](#to_array--stditerator-a---stdarray-a)
+    - [`zip : Std::Iterator b -> Std::Iterator a -> Std::Iterator (a, b)`](#zip--stditerator-b---stditerator-a---stditerator-a-b)
   - [`namespace Std::LessThan`](#namespace-stdlessthan)
-    - [`max : [a : LessThan] a -> a -> a`](#max--a--lessthan-a---a---a)
-    - [`min : [a : LessThan] a -> a -> a`](#min--a--lessthan-a---a---a)
+    - [`less_than : [a : Std::LessThan] a -> a -> Std::Bool`](#less_than--a--stdlessthan-a---a---stdbool)
+    - [`max : [a : Std::LessThan] a -> a -> a`](#max--a--stdlessthan-a---a---a)
+    - [`min : [a : Std::LessThan] a -> a -> a`](#min--a--stdlessthan-a---a---a)
+  - [`namespace Std::LessThanOrEq`](#namespace-stdlessthanoreq)
+    - [`less_than_or_eq : [a : Std::LessThanOrEq] a -> a -> Std::Bool`](#less_than_or_eq--a--stdlessthanoreq-a---a---stdbool)
   - [`namespace Std::LoopResult`](#namespace-stdloopresult)
-    - [`break_m : [m : Monad] r -> m (LoopResult s r)`](#break_m--m--monad-r---m-loopresult-s-r)
-    - [`continue_m : [m : Monad] s -> m (LoopResult s r)`](#continue_m--m--monad-s---m-loopresult-s-r)
+    - [`as_break : Std::LoopResult s b -> b`](#as_break--stdloopresult-s-b---b)
+    - [`as_continue : Std::LoopResult s b -> s`](#as_continue--stdloopresult-s-b---s)
+    - [`break : b -> Std::LoopResult s b`](#break--b---stdloopresult-s-b)
+    - [`break_m : [m : Std::Monad] r -> m (Std::LoopResult s r)`](#break_m--m--stdmonad-r---m-stdloopresult-s-r)
+    - [`continue : s -> Std::LoopResult s b`](#continue--s---stdloopresult-s-b)
+    - [`continue_m : [m : Std::Monad] s -> m (Std::LoopResult s r)`](#continue_m--m--stdmonad-s---m-stdloopresult-s-r)
+    - [`is_break : Std::LoopResult s b -> Std::Bool`](#is_break--stdloopresult-s-b---stdbool)
+    - [`is_continue : Std::LoopResult s b -> Std::Bool`](#is_continue--stdloopresult-s-b---stdbool)
+    - [`mod_break : (b -> b) -> Std::LoopResult s b -> Std::LoopResult s b`](#mod_break--b---b---stdloopresult-s-b---stdloopresult-s-b)
+    - [`mod_continue : (s -> s) -> Std::LoopResult s b -> Std::LoopResult s b`](#mod_continue--s---s---stdloopresult-s-b---stdloopresult-s-b)
   - [`namespace Std::Monad`](#namespace-stdmonad)
-    - [`flatten : [m : Monad] m (m a) -> m a`](#flatten--m--monad-m-m-a---m-a)
-    - [`unless : [m : Monad] Bool -> m () -> m ()`](#unless--m--monad-bool---m----m-)
-    - [`when : [m : Monad] Bool -> m () -> m ()`](#when--m--monad-bool---m----m-)
+    - [`bind : [m : Std::Monad] (a -> m b) -> m a -> m b`](#bind--m--stdmonad-a---m-b---m-a---m-b)
+    - [`flatten : [m : Std::Monad] m (m a) -> m a`](#flatten--m--stdmonad-m-m-a---m-a)
+    - [`pure : [m : Std::Monad] a -> m a`](#pure--m--stdmonad-a---m-a)
+    - [`unless : [m : Std::Monad] Std::Bool -> m () -> m ()`](#unless--m--stdmonad-stdbool---m----m-)
+    - [`when : [m : Std::Monad] Std::Bool -> m () -> m ()`](#when--m--stdmonad-stdbool---m----m-)
+  - [`namespace Std::Mul`](#namespace-stdmul)
+    - [`mul : [a : Std::Mul] a -> a -> a`](#mul--a--stdmul-a---a---a)
+  - [`namespace Std::Neg`](#namespace-stdneg)
+    - [`neg : [a : Std::Neg] a -> a`](#neg--a--stdneg-a---a)
+  - [`namespace Std::Not`](#namespace-stdnot)
+    - [`not : [a : Std::Not] a -> a`](#not--a--stdnot-a---a)
   - [`namespace Std::Option`](#namespace-stdoption)
-    - [`as_some_or : a -> Option a -> a`](#as_some_or--a---option-a---a)
-    - [`map_or : b -> (a -> b) -> Option a -> b`](#map_or--b---a---b---option-a---b)
+    - [`as_none : Std::Option a -> ()`](#as_none--stdoption-a---)
+    - [`as_some : Std::Option a -> a`](#as_some--stdoption-a---a)
+    - [`as_some_or : a -> Std::Option a -> a`](#as_some_or--a---stdoption-a---a)
+    - [`is_none : Std::Option a -> Std::Bool`](#is_none--stdoption-a---stdbool)
+    - [`is_some : Std::Option a -> Std::Bool`](#is_some--stdoption-a---stdbool)
+    - [`map_or : b -> (a -> b) -> Std::Option a -> b`](#map_or--b---a---b---stdoption-a---b)
+    - [`mod_none : (() -> ()) -> Std::Option a -> Std::Option a`](#mod_none--------stdoption-a---stdoption-a)
+    - [`mod_some : (a -> a) -> Std::Option a -> Std::Option a`](#mod_some--a---a---stdoption-a---stdoption-a)
+    - [`none : () -> Std::Option a`](#none-----stdoption-a)
+    - [`some : a -> Std::Option a`](#some--a---stdoption-a)
   - [`namespace Std::Path`](#namespace-stdpath)
-    - [`parse : String -> Option Path`](#parse--string---option-path)
+    - [`@_data : Std::Path -> Std::String`](#_data--stdpath---stdstring)
+    - [`act__data : [f : Std::Functor] (Std::String -> f Std::String) -> Std::Path -> f Std::Path`](#act__data--f--stdfunctor-stdstring---f-stdstring---stdpath---f-stdpath)
+    - [`mod__data : (Std::String -> Std::String) -> Std::Path -> Std::Path`](#mod__data--stdstring---stdstring---stdpath---stdpath)
+    - [`parse : Std::String -> Std::Option Std::Path`](#parse--stdstring---stdoption-stdpath)
+    - [`set__data : Std::String -> Std::Path -> Std::Path`](#set__data--stdstring---stdpath---stdpath)
   - [`namespace Std::Ptr`](#namespace-stdptr)
-    - [`add_offset : I64 -> Ptr -> Ptr`](#add_offset--i64---ptr---ptr)
-    - [`subtract_ptr : Ptr -> Ptr -> I64`](#subtract_ptr--ptr---ptr---i64)
+    - [`add_offset : Std::I64 -> Std::Ptr -> Std::Ptr`](#add_offset--stdi64---stdptr---stdptr)
+    - [`subtract_ptr : Std::Ptr -> Std::Ptr -> Std::I64`](#subtract_ptr--stdptr---stdptr---stdi64)
   - [`namespace Std::PunchedArray`](#namespace-stdpunchedarray)
-    - [`plug_in : a -> PunchedArray a -> Array a`](#plug_in--a---punchedarray-a---array-a)
-    - [`unsafe_punch : I64 -> Array a -> (PunchedArray a, a)`](#unsafe_punch--i64---array-a---punchedarray-a-a)
+    - [`@_data : Std::PunchedArray a -> Std::FFI::Destructor (Std::Array a)`](#_data--stdpunchedarray-a---stdffidestructor-stdarray-a)
+    - [`@idx : Std::PunchedArray a -> Std::I64`](#idx--stdpunchedarray-a---stdi64)
+    - [`act__data : [f : Std::Functor] (Std::FFI::Destructor (Std::Array a) -> f (Std::FFI::Destructor (Std::Array a))) -> Std::PunchedArray a -> f (Std::PunchedArray a)`](#act__data--f--stdfunctor-stdffidestructor-stdarray-a---f-stdffidestructor-stdarray-a---stdpunchedarray-a---f-stdpunchedarray-a)
+    - [`act_idx : [f : Std::Functor] (Std::I64 -> f Std::I64) -> Std::PunchedArray a -> f (Std::PunchedArray a)`](#act_idx--f--stdfunctor-stdi64---f-stdi64---stdpunchedarray-a---f-stdpunchedarray-a)
+    - [`mod__data : (Std::FFI::Destructor (Std::Array a) -> Std::FFI::Destructor (Std::Array a)) -> Std::PunchedArray a -> Std::PunchedArray a`](#mod__data--stdffidestructor-stdarray-a---stdffidestructor-stdarray-a---stdpunchedarray-a---stdpunchedarray-a)
+    - [`mod_idx : (Std::I64 -> Std::I64) -> Std::PunchedArray a -> Std::PunchedArray a`](#mod_idx--stdi64---stdi64---stdpunchedarray-a---stdpunchedarray-a)
+    - [`plug_in : a -> Std::PunchedArray a -> Std::Array a`](#plug_in--a---stdpunchedarray-a---stdarray-a)
+    - [`set__data : Std::FFI::Destructor (Std::Array a) -> Std::PunchedArray a -> Std::PunchedArray a`](#set__data--stdffidestructor-stdarray-a---stdpunchedarray-a---stdpunchedarray-a)
+    - [`set_idx : Std::I64 -> Std::PunchedArray a -> Std::PunchedArray a`](#set_idx--stdi64---stdpunchedarray-a---stdpunchedarray-a)
+    - [`unsafe_punch : Std::I64 -> Std::Array a -> (Std::PunchedArray a, a)`](#unsafe_punch--stdi64---stdarray-a---stdpunchedarray-a-a)
+  - [`namespace Std::Rem`](#namespace-stdrem)
+    - [`rem : [a : Std::Rem] a -> a -> a`](#rem--a--stdrem-a---a---a)
   - [`namespace Std::Result`](#namespace-stdresult)
-    - [`unwrap : Result e o -> o`](#unwrap--result-e-o---o)
+    - [`as_err : Std::Result e o -> e`](#as_err--stdresult-e-o---e)
+    - [`as_ok : Std::Result e o -> o`](#as_ok--stdresult-e-o---o)
+    - [`err : e -> Std::Result e o`](#err--e---stdresult-e-o)
+    - [`is_err : Std::Result e o -> Std::Bool`](#is_err--stdresult-e-o---stdbool)
+    - [`is_ok : Std::Result e o -> Std::Bool`](#is_ok--stdresult-e-o---stdbool)
+    - [`mod_err : (e -> e) -> Std::Result e o -> Std::Result e o`](#mod_err--e---e---stdresult-e-o---stdresult-e-o)
+    - [`mod_ok : (o -> o) -> Std::Result e o -> Std::Result e o`](#mod_ok--o---o---stdresult-e-o---stdresult-e-o)
+    - [`ok : o -> Std::Result e o`](#ok--o---stdresult-e-o)
+    - [`unwrap : Std::Result e o -> o`](#unwrap--stdresult-e-o---o)
   - [`namespace Std::String`](#namespace-stdstring)
-    - [`_get_c_str : String -> Ptr`](#_get_c_str--string---ptr)
-    - [`_unsafe_from_c_str : Array U8 -> String`](#_unsafe_from_c_str--array-u8---string)
-    - [`_unsafe_from_c_str_ptr : Ptr -> String`](#_unsafe_from_c_str_ptr--ptr---string)
-    - [`borrow_c_str : (Ptr -> a) -> String -> a`](#borrow_c_str--ptr---a---string---a)
-    - [`concat : String -> String -> String`](#concat--string---string---string)
-    - [`concat_iter : Iterator String -> String`](#concat_iter--iterator-string---string)
-    - [`empty : I64 -> String`](#empty--i64---string)
-    - [`find : String -> I64 -> String -> Option I64`](#find--string---i64---string---option-i64)
-    - [`get_bytes : String -> Array U8`](#get_bytes--string---array-u8)
-    - [`get_first_byte : String -> Option U8`](#get_first_byte--string---option-u8)
-    - [`get_last_byte : String -> Option U8`](#get_last_byte--string---option-u8)
-    - [`get_size : String -> I64`](#get_size--string---i64)
-    - [`get_sub : I64 -> I64 -> String -> String`](#get_sub--i64---i64---string---string)
-    - [`is_empty : String -> Bool`](#is_empty--string---bool)
-    - [`join : String -> Iterator String -> String`](#join--string---iterator-string---string)
-    - [`pop_back_byte : String -> String`](#pop_back_byte--string---string)
-    - [`split : String -> String -> Iterator String`](#split--string---string---iterator-string)
-    - [`strip_first_bytes : (U8 -> Bool) -> String -> String`](#strip_first_bytes--u8---bool---string---string)
-    - [`strip_first_spaces : String -> String`](#strip_first_spaces--string---string)
-    - [`strip_last_bytes : (U8 -> Bool) -> String -> String`](#strip_last_bytes--u8---bool---string---string)
-    - [`strip_last_newlines : String -> String`](#strip_last_newlines--string---string)
-    - [`strip_last_spaces : String -> String`](#strip_last_spaces--string---string)
-    - [`strip_spaces : String -> String`](#strip_spaces--string---string)
+    - [`@_data : Std::String -> Std::Array Std::U8`](#_data--stdstring---stdarray-stdu8)
+    - [`_get_c_str : Std::String -> Std::Ptr`](#_get_c_str--stdstring---stdptr)
+    - [`_unsafe_from_c_str : Std::Array Std::U8 -> Std::String`](#_unsafe_from_c_str--stdarray-stdu8---stdstring)
+    - [`_unsafe_from_c_str_ptr : Std::Ptr -> Std::String`](#_unsafe_from_c_str_ptr--stdptr---stdstring)
+    - [`act__data : [f : Std::Functor] (Std::Array Std::U8 -> f (Std::Array Std::U8)) -> Std::String -> f Std::String`](#act__data--f--stdfunctor-stdarray-stdu8---f-stdarray-stdu8---stdstring---f-stdstring)
+    - [`borrow_c_str : (Std::Ptr -> a) -> Std::String -> a`](#borrow_c_str--stdptr---a---stdstring---a)
+    - [`concat : Std::String -> Std::String -> Std::String`](#concat--stdstring---stdstring---stdstring)
+    - [`concat_iter : Std::Iterator Std::String -> Std::String`](#concat_iter--stditerator-stdstring---stdstring)
+    - [`empty : Std::I64 -> Std::String`](#empty--stdi64---stdstring)
+    - [`find : Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`](#find--stdstring---stdi64---stdstring---stdoption-stdi64)
+    - [`get_bytes : Std::String -> Std::Array Std::U8`](#get_bytes--stdstring---stdarray-stdu8)
+    - [`get_first_byte : Std::String -> Std::Option Std::U8`](#get_first_byte--stdstring---stdoption-stdu8)
+    - [`get_last_byte : Std::String -> Std::Option Std::U8`](#get_last_byte--stdstring---stdoption-stdu8)
+    - [`get_size : Std::String -> Std::I64`](#get_size--stdstring---stdi64)
+    - [`get_sub : Std::I64 -> Std::I64 -> Std::String -> Std::String`](#get_sub--stdi64---stdi64---stdstring---stdstring)
+    - [`is_empty : Std::String -> Std::Bool`](#is_empty--stdstring---stdbool)
+    - [`join : Std::String -> Std::Iterator Std::String -> Std::String`](#join--stdstring---stditerator-stdstring---stdstring)
+    - [`mod__data : (Std::Array Std::U8 -> Std::Array Std::U8) -> Std::String -> Std::String`](#mod__data--stdarray-stdu8---stdarray-stdu8---stdstring---stdstring)
+    - [`pop_back_byte : Std::String -> Std::String`](#pop_back_byte--stdstring---stdstring)
+    - [`set__data : Std::Array Std::U8 -> Std::String -> Std::String`](#set__data--stdarray-stdu8---stdstring---stdstring)
+    - [`split : Std::String -> Std::String -> Std::Iterator Std::String`](#split--stdstring---stdstring---stditerator-stdstring)
+    - [`strip_first_bytes : (Std::U8 -> Std::Bool) -> Std::String -> Std::String`](#strip_first_bytes--stdu8---stdbool---stdstring---stdstring)
+    - [`strip_first_spaces : Std::String -> Std::String`](#strip_first_spaces--stdstring---stdstring)
+    - [`strip_last_bytes : (Std::U8 -> Std::Bool) -> Std::String -> Std::String`](#strip_last_bytes--stdu8---stdbool---stdstring---stdstring)
+    - [`strip_last_newlines : Std::String -> Std::String`](#strip_last_newlines--stdstring---stdstring)
+    - [`strip_last_spaces : Std::String -> Std::String`](#strip_last_spaces--stdstring---stdstring)
+    - [`strip_spaces : Std::String -> Std::String`](#strip_spaces--stdstring---stdstring)
+  - [`namespace Std::Sub`](#namespace-stdsub)
+    - [`sub : [a : Std::Sub] a -> a -> a`](#sub--a--stdsub-a---a---a)
+  - [`namespace Std::ToBytes`](#namespace-stdtobytes)
+    - [`to_bytes : [a : Std::ToBytes] a -> Std::Array Std::U8`](#to_bytes--a--stdtobytes-a---stdarray-stdu8)
+  - [`namespace Std::ToString`](#namespace-stdtostring)
+    - [`to_string : [a : Std::ToString] a -> Std::String`](#to_string--a--stdtostring-a---stdstring)
+  - [`namespace Std::Tuple2`](#namespace-stdtuple2)
+    - [`@0 : (t0, t1) -> t0`](#0--t0-t1---t0)
+    - [`@1 : (t0, t1) -> t1`](#1--t0-t1---t1)
+    - [`act_0 : [f : Std::Functor] (t0 -> f t0) -> (t0, t1) -> f (t0, t1)`](#act_0--f--stdfunctor-t0---f-t0---t0-t1---f-t0-t1)
+    - [`act_1 : [f : Std::Functor] (t1 -> f t1) -> (t0, t1) -> f (t0, t1)`](#act_1--f--stdfunctor-t1---f-t1---t0-t1---f-t0-t1)
+    - [`mod_0 : (t0 -> t0) -> (t0, t1) -> (t0, t1)`](#mod_0--t0---t0---t0-t1---t0-t1)
+    - [`mod_1 : (t1 -> t1) -> (t0, t1) -> (t0, t1)`](#mod_1--t1---t1---t0-t1---t0-t1)
+    - [`set_0 : t0 -> (t0, t1) -> (t0, t1)`](#set_0--t0---t0-t1---t0-t1)
+    - [`set_1 : t1 -> (t0, t1) -> (t0, t1)`](#set_1--t1---t0-t1---t0-t1)
+  - [`namespace Std::Tuple3`](#namespace-stdtuple3)
+    - [`@0 : (t0, t1, t2) -> t0`](#0--t0-t1-t2---t0)
+    - [`@1 : (t0, t1, t2) -> t1`](#1--t0-t1-t2---t1)
+    - [`@2 : (t0, t1, t2) -> t2`](#2--t0-t1-t2---t2)
+    - [`act_0 : [f : Std::Functor] (t0 -> f t0) -> (t0, t1, t2) -> f (t0, t1, t2)`](#act_0--f--stdfunctor-t0---f-t0---t0-t1-t2---f-t0-t1-t2)
+    - [`act_1 : [f : Std::Functor] (t1 -> f t1) -> (t0, t1, t2) -> f (t0, t1, t2)`](#act_1--f--stdfunctor-t1---f-t1---t0-t1-t2---f-t0-t1-t2)
+    - [`act_2 : [f : Std::Functor] (t2 -> f t2) -> (t0, t1, t2) -> f (t0, t1, t2)`](#act_2--f--stdfunctor-t2---f-t2---t0-t1-t2---f-t0-t1-t2)
+    - [`mod_0 : (t0 -> t0) -> (t0, t1, t2) -> (t0, t1, t2)`](#mod_0--t0---t0---t0-t1-t2---t0-t1-t2)
+    - [`mod_1 : (t1 -> t1) -> (t0, t1, t2) -> (t0, t1, t2)`](#mod_1--t1---t1---t0-t1-t2---t0-t1-t2)
+    - [`mod_2 : (t2 -> t2) -> (t0, t1, t2) -> (t0, t1, t2)`](#mod_2--t2---t2---t0-t1-t2---t0-t1-t2)
+    - [`set_0 : t0 -> (t0, t1, t2) -> (t0, t1, t2)`](#set_0--t0---t0-t1-t2---t0-t1-t2)
+    - [`set_1 : t1 -> (t0, t1, t2) -> (t0, t1, t2)`](#set_1--t1---t0-t1-t2---t0-t1-t2)
+    - [`set_2 : t2 -> (t0, t1, t2) -> (t0, t1, t2)`](#set_2--t2---t0-t1-t2---t0-t1-t2)
   - [`namespace Std::U16`](#namespace-stdu16)
     - [`bit_and : Std::U16 -> Std::U16 -> Std::U16`](#bit_and--stdu16---stdu16---stdu16)
     - [`bit_or : Std::U16 -> Std::U16 -> Std::U16`](#bit_or--stdu16---stdu16---stdu16)
     - [`bit_xor : Std::U16 -> Std::U16 -> Std::U16`](#bit_xor--stdu16---stdu16---stdu16)
-    - [`maximum : U16`](#maximum--u16)
-    - [`minimum : U16`](#minimum--u16)
+    - [`maximum : Std::U16`](#maximum--stdu16)
+    - [`minimum : Std::U16`](#minimum--stdu16)
     - [`shift_left : Std::U16 -> Std::U16 -> Std::U16`](#shift_left--stdu16---stdu16---stdu16)
     - [`shift_right : Std::U16 -> Std::U16 -> Std::U16`](#shift_right--stdu16---stdu16---stdu16)
     - [`to_CChar : Std::U16 -> Std::I8`](#to_cchar--stdu16---stdi8)
@@ -672,8 +811,8 @@
     - [`bit_and : Std::U32 -> Std::U32 -> Std::U32`](#bit_and--stdu32---stdu32---stdu32)
     - [`bit_or : Std::U32 -> Std::U32 -> Std::U32`](#bit_or--stdu32---stdu32---stdu32)
     - [`bit_xor : Std::U32 -> Std::U32 -> Std::U32`](#bit_xor--stdu32---stdu32---stdu32)
-    - [`maximum : U32`](#maximum--u32)
-    - [`minimum : U32`](#minimum--u32)
+    - [`maximum : Std::U32`](#maximum--stdu32)
+    - [`minimum : Std::U32`](#minimum--stdu32)
     - [`shift_left : Std::U32 -> Std::U32 -> Std::U32`](#shift_left--stdu32---stdu32---stdu32)
     - [`shift_right : Std::U32 -> Std::U32 -> Std::U32`](#shift_right--stdu32---stdu32---stdu32)
     - [`to_CChar : Std::U32 -> Std::I8`](#to_cchar--stdu32---stdi8)
@@ -703,8 +842,8 @@
     - [`bit_and : Std::U64 -> Std::U64 -> Std::U64`](#bit_and--stdu64---stdu64---stdu64)
     - [`bit_or : Std::U64 -> Std::U64 -> Std::U64`](#bit_or--stdu64---stdu64---stdu64)
     - [`bit_xor : Std::U64 -> Std::U64 -> Std::U64`](#bit_xor--stdu64---stdu64---stdu64)
-    - [`maximum : U64`](#maximum--u64)
-    - [`minimum : U64`](#minimum--u64)
+    - [`maximum : Std::U64`](#maximum--stdu64)
+    - [`minimum : Std::U64`](#minimum--stdu64)
     - [`shift_left : Std::U64 -> Std::U64 -> Std::U64`](#shift_left--stdu64---stdu64---stdu64)
     - [`shift_right : Std::U64 -> Std::U64 -> Std::U64`](#shift_right--stdu64---stdu64---stdu64)
     - [`to_CChar : Std::U64 -> Std::I8`](#to_cchar--stdu64---stdi8)
@@ -734,8 +873,8 @@
     - [`bit_and : Std::U8 -> Std::U8 -> Std::U8`](#bit_and--stdu8---stdu8---stdu8)
     - [`bit_or : Std::U8 -> Std::U8 -> Std::U8`](#bit_or--stdu8---stdu8---stdu8)
     - [`bit_xor : Std::U8 -> Std::U8 -> Std::U8`](#bit_xor--stdu8---stdu8---stdu8)
-    - [`maximum : U8`](#maximum--u8)
-    - [`minimum : U8`](#minimum--u8)
+    - [`maximum : Std::U8`](#maximum--stdu8)
+    - [`minimum : Std::U8`](#minimum--stdu8)
     - [`shift_left : Std::U8 -> Std::U8 -> Std::U8`](#shift_left--stdu8---stdu8---stdu8)
     - [`shift_right : Std::U8 -> Std::U8 -> Std::U8`](#shift_right--stdu8---stdu8---stdu8)
     - [`to_CChar : Std::U8 -> Std::I8`](#to_cchar--stdu8---stdi8)
@@ -761,7 +900,8 @@
     - [`to_U32 : Std::U8 -> Std::U32`](#to_u32--stdu8---stdu32)
     - [`to_U64 : Std::U8 -> Std::U64`](#to_u64--stdu8---stdu64)
     - [`to_U8 : Std::U8 -> Std::U8`](#to_u8--stdu8---stdu8)
-
+  - [`namespace Std::Zero`](#namespace-stdzero)
+    - [`zero : [a : Std::Zero] a`](#zero--a--stdzero-a)
 
 # Types and aliases
 
@@ -781,7 +921,7 @@ type Boxed a = box struct { value : a };
 
 #### field `value : a`
 
-### `type ErrMsg = String`
+### `type ErrMsg = Std::String`
 
 A type (alias) for error message.
 
@@ -805,7 +945,7 @@ A type (alias) for error message.
 
 Iterator (a.k.a lazy list)
 
-#### field `next : () -> Option (a, Iterator a)`
+#### field `next : () -> Std::Option (a, Std::Iterator a)`
 
 ### `type Lazy = () -> a`
 
@@ -832,7 +972,7 @@ The type for file path.
 
 TODO: give better implementation.
 
-#### field `_data : String`
+#### field `_data : Std::String`
 
 ### `type Ptr = unbox { primitive }`
 
@@ -843,9 +983,9 @@ The type of punched arrays.
 A punched array is an array from which a certain element has been removed.
 This is used in the implementation of `Array::act`.
 
-#### field `_data : Destructor (Array a)`
+#### field `_data : Std::FFI::Destructor (Std::Array a)`
 
-#### field `idx : I64`
+#### field `idx : Std::I64`
 
 ### `type Result e o = unbox union { ...variants... }`
 
@@ -857,7 +997,23 @@ A type of result value for a computation that may fail.
 
 ### `type String = unbox struct { ...fields... }`
 
-#### field `_data : Array U8`
+#### field `_data : Std::Array Std::U8`
+
+### `type Tuple0 = unbox struct { ...fields... }`
+
+### `type Tuple2 t0 t1 = unbox struct { ...fields... }`
+
+#### field `0 : t0`
+
+#### field `1 : t1`
+
+### `type Tuple3 t0 t1 t2 = unbox struct { ...fields... }`
+
+#### field `0 : t0`
+
+#### field `1 : t1`
+
+#### field `2 : t2`
 
 ### `type U16 = unbox { primitive }`
 
@@ -916,7 +1072,7 @@ NOTE2: If the contained value is captured by another Fix's object than `Destruct
 
 The type for I/O actions which may fail.
 
-#### field `_data : IO (Result ErrMsg a)`
+#### field `_data : Std::IO (Std::Result Std::String a)`
 
 ### `type IOHandle = unbox struct { ...fields... }`
 
@@ -926,7 +1082,7 @@ You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_f
 
 There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
 
-#### field `_data : Destructor Ptr`
+#### field `_data : Std::FFI::Destructor Std::Ptr`
 
 # Traits and aliases
 
@@ -952,17 +1108,17 @@ Divides a value by another value. An expression `x / y` is translated to `div(x,
 
 Trait for infix operator `==`.
 
-#### method `eq : a -> a -> Bool`
+#### method `eq : a -> a -> Std::Bool`
 
 Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
 
 ### `trait a : FromBytes`
 
-#### method `from_bytes : Array U8 -> Result ErrMsg a`
+#### method `from_bytes : Std::Array Std::U8 -> Std::Result Std::String a`
 
 ### `trait a : FromString`
 
-#### method `from_string : String -> Result ErrMsg a`
+#### method `from_string : Std::String -> Std::Result Std::String a`
 
 ### `trait [f : *->*] f : Functor`
 
@@ -972,7 +1128,7 @@ Checks equality of two values. An expression `x == y` is translated to `eq(x, y)
 
 Trait for infix operator `<`.
 
-#### method `less_than : a -> a -> Bool`
+#### method `less_than : a -> a -> Std::Bool`
 
 Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
@@ -980,7 +1136,7 @@ Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
 Trait for infix operator `<=`.
 
-#### method `less_than_or_eq : a -> a -> Bool`
+#### method `less_than_or_eq : a -> a -> Std::Bool`
 
 Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
@@ -1032,11 +1188,11 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 ### `trait a : ToBytes`
 
-#### method `to_bytes : a -> Array U8`
+#### method `to_bytes : a -> Std::Array Std::U8`
 
 ### `trait a : ToString`
 
-#### method `to_string : a -> String`
+#### method `to_string : a -> Std::String`
 
 ### `trait a : Zero`
 
@@ -1044,139 +1200,67 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 # Trait implementations
 
-### `impl () : Eq`
+### `impl () : Std::Eq`
 
-### `impl () : ToString`
+### `impl () : Std::ToString`
 
 Returns "()".
 
-### `impl Array : Functor`
+### `impl (t0, *) : Std::Functor`
 
-### `impl Array : Monad`
+### `impl [t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`
 
-### `impl [a : Eq] Array a : Eq`
+### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan] (t0, t1) : Std::LessThan`
 
-### `impl [a : Eq, a : LessThan] Array a : LessThan`
+### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq] (t0, t1) : Std::LessThanOrEq`
+
+### `impl [t0 : Std::ToString, t1 : Std::ToString] (t0, t1) : Std::ToString`
+
+### `impl (t0, t1, *) : Std::Functor`
+
+### `impl [t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq] (t0, t1, t2) : Std::Eq`
+
+### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan] (t0, t1, t2) : Std::LessThan`
+
+### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq] (t0, t1, t2) : Std::LessThanOrEq`
+
+### `impl [t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`
+
+### `impl Std::Array : Std::Functor`
+
+### `impl Std::Array : Std::Monad`
+
+### `impl [a : Std::Eq] Std::Array a : Std::Eq`
+
+### `impl [a : Std::Eq, a : Std::LessThan] Std::Array a : Std::LessThan`
 
 `LessThan` implementation for `Array a`.
 
 Compares two arrays by lexicographic order.
 
-### `impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq`
+### `impl [a : Std::Eq, a : Std::LessThanOrEq] Std::Array a : Std::LessThanOrEq`
 
 `LessThanOrEq` implementation for `Array a`.
 
 Compares two arrays by lexicographic order.
 
-### `impl [a : ToString] Array a : ToString`
-
-### `impl Bool : ToString`
-
-### `impl F32 : FromBytes`
-
-### `impl F32 : FromString`
-
-### `impl F32 : ToBytes`
-
-### `impl F32 : ToString`
-
-### `impl F32 : Zero`
-
-### `impl F64 : FromBytes`
-
-### `impl F64 : FromString`
-
-### `impl F64 : ToBytes`
-
-### `impl F64 : ToString`
-
-### `impl F64 : Zero`
-
-### `impl I16 : FromBytes`
-
-### `impl I16 : FromString`
-
-### `impl I16 : ToBytes`
-
-### `impl I16 : ToString`
-
-### `impl I16 : Zero`
-
-### `impl I32 : FromBytes`
-
-### `impl I32 : FromString`
-
-### `impl I32 : ToBytes`
-
-### `impl I32 : ToString`
-
-### `impl I32 : Zero`
-
-### `impl I64 : FromBytes`
-
-### `impl I64 : FromString`
-
-### `impl I64 : ToBytes`
-
-### `impl I64 : ToString`
-
-### `impl I64 : Zero`
-
-### `impl I8 : FromBytes`
-
-### `impl I8 : FromString`
-
-### `impl I8 : ToBytes`
-
-### `impl I8 : ToString`
-
-### `impl I8 : Zero`
-
-### `impl IO : Functor`
-
-### `impl IO : Monad`
-
-### `impl IOFail : Functor`
-
-### `impl IOFail : Monad`
-
-### `impl Iterator : Functor`
-
-### `impl Iterator : Monad`
-
-### `impl Iterator a : Add`
-
-### `impl [a : Eq] Iterator a : Eq`
-
-### `impl Option : Functor`
-
-### `impl Option : Monad`
-
-### `impl [a : Eq] Option a : Eq`
-
-### `impl [a : ToString] Option a : ToString`
-
-### `impl Path : ToString`
-
-### `impl Ptr : ToString`
-
-### `impl Result e : Functor`
-
-### `impl Result e : Monad`
-
-### `impl [e : Eq, a : Eq] Result e a : Eq`
-
-### `impl [e : ToString, a : ToString] Result e a : ToString`
+### `impl [a : Std::ToString] Std::Array a : Std::ToString`
 
 ### `impl Std::Bool : Std::Eq`
 
 ### `impl Std::Bool : Std::Not`
+
+### `impl Std::Bool : Std::ToString`
 
 ### `impl Std::F32 : Std::Add`
 
 ### `impl Std::F32 : Std::Div`
 
 ### `impl Std::F32 : Std::Eq`
+
+### `impl Std::F32 : Std::FromBytes`
+
+### `impl Std::F32 : Std::FromString`
 
 ### `impl Std::F32 : Std::LessThan`
 
@@ -1188,11 +1272,21 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::F32 : Std::Sub`
 
+### `impl Std::F32 : Std::ToBytes`
+
+### `impl Std::F32 : Std::ToString`
+
+### `impl Std::F32 : Std::Zero`
+
 ### `impl Std::F64 : Std::Add`
 
 ### `impl Std::F64 : Std::Div`
 
 ### `impl Std::F64 : Std::Eq`
+
+### `impl Std::F64 : Std::FromBytes`
+
+### `impl Std::F64 : Std::FromString`
 
 ### `impl Std::F64 : Std::LessThan`
 
@@ -1204,11 +1298,21 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::F64 : Std::Sub`
 
+### `impl Std::F64 : Std::ToBytes`
+
+### `impl Std::F64 : Std::ToString`
+
+### `impl Std::F64 : Std::Zero`
+
 ### `impl Std::I16 : Std::Add`
 
 ### `impl Std::I16 : Std::Div`
 
 ### `impl Std::I16 : Std::Eq`
+
+### `impl Std::I16 : Std::FromBytes`
+
+### `impl Std::I16 : Std::FromString`
 
 ### `impl Std::I16 : Std::LessThan`
 
@@ -1222,11 +1326,21 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::I16 : Std::Sub`
 
+### `impl Std::I16 : Std::ToBytes`
+
+### `impl Std::I16 : Std::ToString`
+
+### `impl Std::I16 : Std::Zero`
+
 ### `impl Std::I32 : Std::Add`
 
 ### `impl Std::I32 : Std::Div`
 
 ### `impl Std::I32 : Std::Eq`
+
+### `impl Std::I32 : Std::FromBytes`
+
+### `impl Std::I32 : Std::FromString`
 
 ### `impl Std::I32 : Std::LessThan`
 
@@ -1240,11 +1354,21 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::I32 : Std::Sub`
 
+### `impl Std::I32 : Std::ToBytes`
+
+### `impl Std::I32 : Std::ToString`
+
+### `impl Std::I32 : Std::Zero`
+
 ### `impl Std::I64 : Std::Add`
 
 ### `impl Std::I64 : Std::Div`
 
 ### `impl Std::I64 : Std::Eq`
+
+### `impl Std::I64 : Std::FromBytes`
+
+### `impl Std::I64 : Std::FromString`
 
 ### `impl Std::I64 : Std::LessThan`
 
@@ -1258,11 +1382,21 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::I64 : Std::Sub`
 
+### `impl Std::I64 : Std::ToBytes`
+
+### `impl Std::I64 : Std::ToString`
+
+### `impl Std::I64 : Std::Zero`
+
 ### `impl Std::I8 : Std::Add`
 
 ### `impl Std::I8 : Std::Div`
 
 ### `impl Std::I8 : Std::Eq`
+
+### `impl Std::I8 : Std::FromBytes`
+
+### `impl Std::I8 : Std::FromString`
 
 ### `impl Std::I8 : Std::LessThan`
 
@@ -1276,13 +1410,71 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::I8 : Std::Sub`
 
+### `impl Std::I8 : Std::ToBytes`
+
+### `impl Std::I8 : Std::ToString`
+
+### `impl Std::I8 : Std::Zero`
+
+### `impl Std::IO : Std::Functor`
+
+### `impl Std::IO : Std::Monad`
+
+### `impl Std::IO::IOFail : Std::Functor`
+
+### `impl Std::IO::IOFail : Std::Monad`
+
+### `impl Std::Iterator : Std::Functor`
+
+### `impl Std::Iterator : Std::Monad`
+
+### `impl Std::Iterator a : Std::Add`
+
+### `impl [a : Std::Eq] Std::Iterator a : Std::Eq`
+
+### `impl Std::Option : Std::Functor`
+
+### `impl Std::Option : Std::Monad`
+
+### `impl [a : Std::Eq] Std::Option a : Std::Eq`
+
+### `impl [a : Std::ToString] Std::Option a : Std::ToString`
+
+### `impl Std::Path : Std::ToString`
+
 ### `impl Std::Ptr : Std::Eq`
+
+### `impl Std::Ptr : Std::ToString`
+
+### `impl Std::Result e : Std::Functor`
+
+### `impl Std::Result e : Std::Monad`
+
+### `impl [e : Std::Eq, a : Std::Eq] Std::Result e a : Std::Eq`
+
+### `impl [e : Std::ToString, a : Std::ToString] Std::Result e a : Std::ToString`
+
+### `impl Std::String : Std::Add`
+
+Concatenates two strings.
+
+### `impl Std::String : Std::Eq`
+
+### `impl Std::String : Std::LessThan`
+
+### `impl Std::String : Std::LessThanOrEq`
+
+### `impl Std::String : Std::ToString`
 
 ### `impl Std::U16 : Std::Add`
 
 ### `impl Std::U16 : Std::Div`
 
 ### `impl Std::U16 : Std::Eq`
+
+### `impl Std::U16 : Std::FromBytes`
+
+### `impl Std::U16 : Std::FromString`
 
 ### `impl Std::U16 : Std::LessThan`
 
@@ -1296,11 +1488,21 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::U16 : Std::Sub`
 
+### `impl Std::U16 : Std::ToBytes`
+
+### `impl Std::U16 : Std::ToString`
+
+### `impl Std::U16 : Std::Zero`
+
 ### `impl Std::U32 : Std::Add`
 
 ### `impl Std::U32 : Std::Div`
 
 ### `impl Std::U32 : Std::Eq`
+
+### `impl Std::U32 : Std::FromBytes`
+
+### `impl Std::U32 : Std::FromString`
 
 ### `impl Std::U32 : Std::LessThan`
 
@@ -1314,11 +1516,21 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::U32 : Std::Sub`
 
+### `impl Std::U32 : Std::ToBytes`
+
+### `impl Std::U32 : Std::ToString`
+
+### `impl Std::U32 : Std::Zero`
+
 ### `impl Std::U64 : Std::Add`
 
 ### `impl Std::U64 : Std::Div`
 
 ### `impl Std::U64 : Std::Eq`
+
+### `impl Std::U64 : Std::FromBytes`
+
+### `impl Std::U64 : Std::FromString`
 
 ### `impl Std::U64 : Std::LessThan`
 
@@ -1332,11 +1544,21 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::U64 : Std::Sub`
 
+### `impl Std::U64 : Std::ToBytes`
+
+### `impl Std::U64 : Std::ToString`
+
+### `impl Std::U64 : Std::Zero`
+
 ### `impl Std::U8 : Std::Add`
 
 ### `impl Std::U8 : Std::Div`
 
 ### `impl Std::U8 : Std::Eq`
+
+### `impl Std::U8 : Std::FromBytes`
+
+### `impl Std::U8 : Std::FromString`
 
 ### `impl Std::U8 : Std::LessThan`
 
@@ -1350,57 +1572,11 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::U8 : Std::Sub`
 
-### `impl String : Add`
+### `impl Std::U8 : Std::ToBytes`
 
-Concatenates two strings.
+### `impl Std::U8 : Std::ToString`
 
-### `impl String : Eq`
-
-### `impl String : LessThan`
-
-### `impl String : LessThanOrEq`
-
-### `impl String : ToString`
-
-### `impl U16 : FromBytes`
-
-### `impl U16 : FromString`
-
-### `impl U16 : ToBytes`
-
-### `impl U16 : ToString`
-
-### `impl U16 : Zero`
-
-### `impl U32 : FromBytes`
-
-### `impl U32 : FromString`
-
-### `impl U32 : ToBytes`
-
-### `impl U32 : ToString`
-
-### `impl U32 : Zero`
-
-### `impl U64 : FromBytes`
-
-### `impl U64 : FromString`
-
-### `impl U64 : ToBytes`
-
-### `impl U64 : ToString`
-
-### `impl U64 : Zero`
-
-### `impl U8 : FromBytes`
-
-### `impl U8 : FromString`
-
-### `impl U8 : ToBytes`
-
-### `impl U8 : ToString`
-
-### `impl U8 : Zero`
+### `impl Std::U8 : Std::Zero`
 
 # Values
 
@@ -1454,7 +1630,7 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99 
 ```
 
-### `loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r`
+### `loop_m : [m : Std::Monad] s -> (s -> m (Std::LoopResult s r)) -> m r`
 
 Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
 
@@ -1479,7 +1655,7 @@ main = (
 
 Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
 
-### `undefined : Std::Lazy a`
+### `undefined : () -> a`
 
 An undefined value.
 
@@ -1525,6 +1701,12 @@ main = (
 );
 ```
 
+## `namespace Std::Add`
+
+### `add : [a : Std::Add] a -> a -> a`
+
+Adds two values. An expression `x + y` is translated to `add(x, y)`.
+
 ## `namespace Std::Array`
 
 ### `@ : Std::I64 -> Std::Array a -> a`
@@ -1538,13 +1720,13 @@ Get the pointer to the memory region where elements are stored.
 This function is dangerous because if the array is not used after call of this function, the array will be deallocated soon and the returned pointer will be dangling.
 Try using `borrow_ptr` instead.
 
-### `_get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a`
+### `_get_sub_size_asif : Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
 A function like `get_sub`, but behaves as if the size of the array is the specified value,
 
 and has a parameter to specify additional capacity of the returned `Array`.
 
-### `_sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a)`
+### `_sort_range_using_buffer : Std::Array a -> Std::I64 -> Std::I64 -> ((a, a) -> Std::Bool) -> Std::Array a -> (Std::Array a, Std::Array a)`
 
 Sorts elements in a range of a vector by "less than" comparator.
 
@@ -1562,7 +1744,7 @@ Sets a value into an array, without uniqueness checking, bounds checking and rel
 
 Updates the length of an array, without uniqueness checking or validation of the given length value.
 
-### `act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a)`
+### `act : [f : Std::Functor] Std::I64 -> (a -> f a) -> Std::Array a -> f (Std::Array a)`
 
 Modifies an array by a functorial action.
 
@@ -1576,13 +1758,13 @@ If you call `arr.act(idx, fun)` when both of `arr` and `arr.@(idx)` are unique, 
 If you call `act` on an array which is shared, this function clones the given array when inserting the result of your action into the array.
 This means that you don't need to pay cloning cost when your action failed, as expected.
 
-### `append : Array a -> Array a -> Array a`
+### `append : Std::Array a -> Std::Array a -> Std::Array a`
 
 Appends an array to an array.
 
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 
-### `borrow_ptr : (Ptr -> b) -> Array a -> b`
+### `borrow_ptr : (Std::Ptr -> b) -> Std::Array a -> b`
 
 Calls a function with a pointer to the memory region where elements are stored.
 
@@ -1598,7 +1780,7 @@ The capacity is set to the same value as the length.
 
 Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
-### `find_by : (a -> Bool) -> Array a -> Option I64`
+### `find_by : (a -> Std::Bool) -> Std::Array a -> Std::Option Std::I64`
 
 Finds the first index at which the element satisfies a condition.
 
@@ -1607,11 +1789,11 @@ Finds the first index at which the element satisfies a condition.
 Force the uniqueness of an array.
 If the given array is shared, this function returns the cloned array.
 
-### `from_iter : Iterator a -> Array a`
+### `from_iter : Std::Iterator a -> Std::Array a`
 
 Create an array from an iterator.
 
-### `from_map : I64 -> (I64 -> a) -> Array a`
+### `from_map : Std::I64 -> (Std::I64 -> a) -> Std::Array a`
 
 Creates an array by a mapping function.
 
@@ -1619,11 +1801,11 @@ Creates an array by a mapping function.
 
 Gets the capacity of an array.
 
-### `get_first : Array a -> Option a`
+### `get_first : Std::Array a -> Std::Option a`
 
 Gets the first element of an array. Returns none if the array is empty.
 
-### `get_last : Array a -> Option a`
+### `get_last : Std::Array a -> Std::Option a`
 
 Gets the last element of an array. Returns none if the array is empty.
 
@@ -1631,14 +1813,14 @@ Gets the last element of an array. Returns none if the array is empty.
 
 Gets the length of an array.
 
-### `get_sub : I64 -> I64 -> Array a -> Array a`
+### `get_sub : Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
 `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`,
 
 More precisely, let `N` denote the the size of the `arr`.
 Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
 
-### `is_empty : Array a -> Bool`
+### `is_empty : Std::Array a -> Std::Bool`
 
 Returns if the array is empty
 
@@ -1650,16 +1832,16 @@ This function clones the given array if it is shared.
 
 If you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique.
 
-### `pop_back : Array a -> Array a`
+### `pop_back : Std::Array a -> Std::Array a`
 
 Pops an element at the back of an array.
 If the array is empty, this function does nothing.
 
-### `push_back : a -> Array a -> Array a`
+### `push_back : a -> Std::Array a -> Std::Array a`
 
 Pushes an element to the back of an array.
 
-### `reserve : I64 -> Array a -> Array a`
+### `reserve : Std::I64 -> Std::Array a -> Std::Array a`
 
 Reserves the memory region for an array.
 
@@ -1671,23 +1853,53 @@ Updates an array by setting a value as the element at the specified index.
 
 This function clones the given array if it is shared.
 
-### `sort_by : ((a, a) -> Bool) -> Array a -> Array a`
+### `sort_by : ((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 
 Sorts elements in a vector by "less than" comparator.
 
-### `to_iter : Array a -> Iterator a`
+### `to_iter : Std::Array a -> Std::Iterator a`
 
 Converts an array to an iterator.
 
-### `truncate : I64 -> Array a -> Array a`
+### `truncate : Std::I64 -> Std::Array a -> Std::Array a`
 
 Truncates an array, keeping the given number of first elements.
 
 `truncante(len, arr)` does nothing if `len >= arr.get_size`.
 
+## `namespace Std::Boxed`
+
+### `@value : Std::Boxed a -> a`
+
+Retrieves the field `value` from a value of `Boxed`.
+
+### `act_value : [f : Std::Functor] (a -> f a) -> Std::Boxed a -> f (Std::Boxed a)`
+
+Updates a value of `Boxed` by applying a functorial action to field `value`.
+
+### `mod_value : (a -> a) -> Std::Boxed a -> Std::Boxed a`
+
+Updates a value of `Boxed` by applying a function to field `value`.
+
+### `set_value : a -> Std::Boxed a -> Std::Boxed a`
+
+Updates a value of `Boxed` by setting field `value` to a specified one.
+
+## `namespace Std::Div`
+
+### `div : [a : Std::Div] a -> a -> a`
+
+Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
+
+## `namespace Std::Eq`
+
+### `eq : [a : Std::Eq] a -> a -> Std::Bool`
+
+Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
+
 ## `namespace Std::F32`
 
-### `abs : F32 -> F32`
+### `abs : Std::F32 -> Std::F32`
 
 ### `infinity : Std::F32`
 
@@ -1789,21 +2001,21 @@ Casts a value of `F32` into a value of `U64`.
 
 Casts a value of `F32` into a value of `U8`.
 
-### `to_string_exp : F32 -> String`
+### `to_string_exp : Std::F32 -> Std::String`
 
 Converts a floating number to a string of exponential form.
 
-### `to_string_exp_precision : U8 -> F32 -> String`
+### `to_string_exp_precision : Std::U8 -> Std::F32 -> Std::String`
 
 Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
 
-### `to_string_precision : U8 -> F32 -> String`
+### `to_string_precision : Std::U8 -> Std::F32 -> Std::String`
 
 Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
 ## `namespace Std::F64`
 
-### `abs : F64 -> F64`
+### `abs : Std::F64 -> Std::F64`
 
 ### `infinity : Std::F64`
 
@@ -1905,15 +2117,15 @@ Casts a value of `F64` into a value of `U64`.
 
 Casts a value of `F64` into a value of `U8`.
 
-### `to_string_exp : F64 -> String`
+### `to_string_exp : Std::F64 -> Std::String`
 
 Converts a floating number to a string of exponential form.
 
-### `to_string_exp_precision : U8 -> F64 -> String`
+### `to_string_exp_precision : Std::U8 -> Std::F64 -> Std::String`
 
 Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
 
-### `to_string_precision : U8 -> F64 -> String`
+### `to_string_precision : Std::U8 -> Std::F64 -> Std::String`
 
 Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
@@ -1929,7 +2141,7 @@ on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to
 Note that if the call `v._unsafe_get_boxed_data_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
 To avoid issues caused by this, use `unsafe_borrow_boxed_data_ptr` instead.
 
-### `unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b`
+### `unsafe_borrow_boxed_data_ptr : (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
@@ -1943,11 +2155,11 @@ Sets errno to zero.
 
 Creates a boxed value from a retained pointer obtained by `unsafe_get_retained_ptr_of_boxed_value`.
 
-### `unsafe_get_errno : () -> CInt`
+### `unsafe_get_errno : () -> Std::I32`
 
 Gets errno which is set by C functions.
 
-### `unsafe_get_release_function_of_boxed_value : Std::Lazy a -> Std::Ptr`
+### `unsafe_get_release_function_of_boxed_value : (() -> a) -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
 This function is used to release a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
@@ -1972,7 +2184,7 @@ In case the type is not a specific `T`, but a generic parameter `a` that appears
 - If you have a function `f : b -> a`, then you can use `|_| f(undefined())` of type `Lazy a`. 
 - If you have a function `f : a -> b`, then you can use `|_| let x = undefined(); let _ = f(x); x` of type `Lazy a`.
 
-### `unsafe_get_retain_function_of_boxed_value : Std::Lazy a -> Std::Ptr`
+### `unsafe_get_retain_function_of_boxed_value : (() -> a) -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which retains a boxed value of type `a`.
 This function is used to retain a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
@@ -1992,24 +2204,66 @@ If you want to get a pointer to the data of the boxed value, use `unsafe_borrow_
 
 ## `namespace Std::FFI::Destructor`
 
-### `borrow : (a -> b) -> Destructor a -> b`
+### `@_value : Std::FFI::Destructor a -> a`
+
+Retrieves the field `_value` from a value of `Destructor`.
+
+### `@dtor : Std::FFI::Destructor a -> a -> ()`
+
+Retrieves the field `dtor` from a value of `Destructor`.
+
+### `act__value : [f : Std::Functor] (a -> f a) -> Std::FFI::Destructor a -> f (Std::FFI::Destructor a)`
+
+Updates a value of `Destructor` by applying a functorial action to field `_value`.
+
+### `act_dtor : [f : Std::Functor] ((a -> ()) -> f (a -> ())) -> Std::FFI::Destructor a -> f (Std::FFI::Destructor a)`
+
+Updates a value of `Destructor` by applying a functorial action to field `dtor`.
+
+### `borrow : (a -> b) -> Std::FFI::Destructor a -> b`
 
 Borrow the contained value.
 `borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
 It is guaranteed that the `dtor` is alive during the call of `worker`.
 In other words, the `worker` receives the contained value on which the destructor is not called yet.
 
-### `make : a -> (a -> ()) -> Destructor a`
+### `make : a -> (a -> ()) -> Std::FFI::Destructor a`
 
 Make a destructor value.
 
+### `mod__value : (a -> a) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
+
+Updates a value of `Destructor` by applying a function to field `_value`.
+
+### `mod_dtor : ((a -> ()) -> a -> ()) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
+
+Updates a value of `Destructor` by applying a function to field `dtor`.
+
+### `set__value : a -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
+
+Updates a value of `Destructor` by setting field `_value` to a specified one.
+
+### `set_dtor : (a -> ()) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
+
+Updates a value of `Destructor` by setting field `dtor` to a specified one.
+
+## `namespace Std::FromBytes`
+
+### `from_bytes : [a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::String a`
+
+## `namespace Std::FromString`
+
+### `from_string : [a : Std::FromString] Std::String -> Std::Result Std::String a`
+
 ## `namespace Std::Functor`
 
-### `forget : [f : Functor] f a -> f ()`
+### `forget : [f : Std::Functor] f a -> f ()`
+
+### `map : [f : Std::Functor] (a -> b) -> f a -> f b`
 
 ## `namespace Std::I16`
 
-### `abs : I16 -> I16`
+### `abs : Std::I16 -> Std::I16`
 
 ### `bit_and : Std::I16 -> Std::I16 -> Std::I16`
 
@@ -2023,9 +2277,9 @@ Calculates bitwise OR of two values.
 
 Calculates bitwise XOR of two values.
 
-### `maximum : I16`
+### `maximum : Std::I16`
 
-### `minimum : I16`
+### `minimum : Std::I16`
 
 ### `shift_left : Std::I16 -> Std::I16 -> Std::I16`
 
@@ -2129,7 +2383,7 @@ Casts a value of `I16` into a value of `U8`.
 
 ## `namespace Std::I32`
 
-### `abs : I32 -> I32`
+### `abs : Std::I32 -> Std::I32`
 
 ### `bit_and : Std::I32 -> Std::I32 -> Std::I32`
 
@@ -2143,9 +2397,9 @@ Calculates bitwise OR of two values.
 
 Calculates bitwise XOR of two values.
 
-### `maximum : I32`
+### `maximum : Std::I32`
 
-### `minimum : I32`
+### `minimum : Std::I32`
 
 ### `shift_left : Std::I32 -> Std::I32 -> Std::I32`
 
@@ -2249,7 +2503,7 @@ Casts a value of `I32` into a value of `U8`.
 
 ## `namespace Std::I64`
 
-### `abs : I64 -> I64`
+### `abs : Std::I64 -> Std::I64`
 
 ### `bit_and : Std::I64 -> Std::I64 -> Std::I64`
 
@@ -2263,9 +2517,9 @@ Calculates bitwise OR of two values.
 
 Calculates bitwise XOR of two values.
 
-### `maximum : I64`
+### `maximum : Std::I64`
 
-### `minimum : I64`
+### `minimum : Std::I64`
 
 ### `shift_left : Std::I64 -> Std::I64 -> Std::I64`
 
@@ -2369,7 +2623,7 @@ Casts a value of `I64` into a value of `U8`.
 
 ## `namespace Std::I8`
 
-### `abs : I8 -> I8`
+### `abs : Std::I8 -> Std::I8`
 
 ### `bit_and : Std::I8 -> Std::I8 -> Std::I8`
 
@@ -2383,9 +2637,9 @@ Calculates bitwise OR of two values.
 
 Calculates bitwise XOR of two values.
 
-### `maximum : I8`
+### `maximum : Std::I8`
 
-### `minimum : I8`
+### `minimum : Std::I8`
 
 ### `shift_left : Std::I8 -> Std::I8 -> Std::I8`
 
@@ -2489,67 +2743,75 @@ Casts a value of `I8` into a value of `U8`.
 
 ## `namespace Std::IO`
 
-### `_read_line_inner : Bool -> IOHandle -> IOFail String`
+### `@_data : Std::IO a -> () -> a`
+
+Retrieves the field `_data` from a value of `IO`.
+
+### `_read_line_inner : Std::Bool -> Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads characters from an IOHandle.
 
 If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
 
-### `_unsafe_perform : IO a -> a`
+### `_unsafe_perform : Std::IO a -> a`
 
 Performs the I/O action. This may violate purity of Fix.
 
-### `close_file : IOHandle -> IO ()`
+### `act__data : [f : Std::Functor] ((() -> a) -> f (() -> a)) -> Std::IO a -> f (Std::IO a)`
+
+Updates a value of `IO` by applying a functorial action to field `_data`.
+
+### `close_file : Std::IO::IOHandle -> Std::IO ()`
 
 Closes a file.
 
 Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
 
-### `eprint : String -> IO ()`
+### `eprint : Std::String -> Std::IO ()`
 
 Prints a string to stderr.
 
-### `eprintln : String -> IO ()`
+### `eprintln : Std::String -> Std::IO ()`
 
 Prints a string followed by a newline to stderr.
 
-### `exit : I64 -> IO a`
+### `exit : Std::I64 -> Std::IO a`
 
 Exits the program with an error code.
 
-### `exit_with_msg : I64 -> String -> IO a`
+### `exit_with_msg : Std::I64 -> Std::String -> Std::IO a`
 
 Exits the program with an error message and an error code.
 
 The error message is written to the standard error output.
 
-### `from_func : (() -> a) -> IO a`
+### `from_func : (() -> a) -> Std::IO a`
 
 Creates an IO action from a function.
 
-### `get_arg : I64 -> IO (Option String)`
+### `get_arg : Std::I64 -> Std::IO (Std::Option Std::String)`
 
 `get_arg(n)` returns the n-th (0-indexed) command line argument.
 If n is greater than or equal to the number of command line arguments, this function returns none.
 
-### `get_arg_count : IO I64`
+### `get_arg_count : Std::IO Std::I64`
 
 Gets the number of command line arguments.
 
-### `get_args : IO (Array String)`
+### `get_args : Std::IO (Std::Array Std::String)`
 
 Gets command line arguments.
 
-### `input_line : IO String`
+### `input_line : Std::IO Std::String`
 
 Reads a line from stdin. If some error occurr, this function aborts the program.
 If you want to handle errors, use `read_line(stdin)` instead.
 
-### `is_eof : IOHandle -> IO Bool`
+### `is_eof : Std::IO::IOHandle -> Std::IO Std::Bool`
 
 Checks if an `IOHandle` reached to the EOF.
 
-### `loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s`
+### `loop_lines : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::LoopResult s s) -> Std::IO::IOFail s`
 
 Loop on lines read from an `IOHandle`.
 
@@ -2559,207 +2821,255 @@ When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_
 
 Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
-### `loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s`
+### `loop_lines_io : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::IO::IOFail (Std::LoopResult s s)) -> Std::IO::IOFail s`
 
 Loop on lines read from an `IOHandle`.
 
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
-### `open_file : Path -> String -> IOFail IOHandle`
+### `mod__data : ((() -> a) -> () -> a) -> Std::IO a -> Std::IO a`
+
+Updates a value of `IO` by applying a function to field `_data`.
+
+### `open_file : Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
 
 Openes a file. The second argument is a mode string for `fopen` C function.
 
-### `print : String -> IO ()`
+### `print : Std::String -> Std::IO ()`
 
 Prints a string to stdout.
 
-### `println : String -> IO ()`
+### `println : Std::String -> Std::IO ()`
 
 Prints a string followed by a newline to stdout.
 
-### `read_bytes : IOHandle -> IOFail (Array U8)`
+### `read_bytes : Std::IO::IOHandle -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads all bytes from an IOHandle.
 
-### `read_file_bytes : Path -> IOFail (Array U8)`
+### `read_file_bytes : Std::Path -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads all bytes from a file.
 
-### `read_file_string : Path -> IOFail String`
+### `read_file_string : Std::Path -> Std::IO::IOFail Std::String`
 
 Raads all characters from a file.
 
-### `read_line : IOHandle -> IOFail String`
+### `read_line : Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads characters from a IOHandle upto newline or EOF.
 The returned string may include newline at its end.
 
-### `read_n_bytes : IOHandle -> I64 -> IOFail (Array U8)`
+### `read_n_bytes : Std::IO::IOHandle -> Std::I64 -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads at most n bytes from an IOHandle.
 
-### `read_string : IOHandle -> IOFail String`
+### `read_string : Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads all characters from an IOHandle.
 
-### `stderr : IOHandle`
+### `set__data : (() -> a) -> Std::IO a -> Std::IO a`
+
+Updates a value of `IO` by setting field `_data` to a specified one.
+
+### `stderr : Std::IO::IOHandle`
 
 The handle for standard error.
 
-### `stdin : IOHandle`
+### `stdin : Std::IO::IOHandle`
 
 The handle for standard input.
 
-### `stdout : IOHandle`
+### `stdout : Std::IO::IOHandle`
 
 The handle for standard output.
 
-### `with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a`
+### `with_file : Std::Path -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
 
 Performs a function with a file handle. The second argument is a mode string for `fopen` C function.
 
 The file handle will be closed automatically.
 
-### `write_bytes : IOHandle -> Array U8 -> IOFail ()`
+### `write_bytes : Std::IO::IOHandle -> Std::Array Std::U8 -> Std::IO::IOFail ()`
 
 Writes a byte array into an IOHandle.
 
-### `write_file_bytes : Path -> Array U8 -> IOFail ()`
+### `write_file_bytes : Std::Path -> Std::Array Std::U8 -> Std::IO::IOFail ()`
 
 Writes a byte array into a file.
 
-### `write_file_string : Path -> String -> IOFail ()`
+### `write_file_string : Std::Path -> Std::String -> Std::IO::IOFail ()`
 
 Writes a string into a file.
 
-### `write_string : IOHandle -> String -> IOFail ()`
+### `write_string : Std::IO::IOHandle -> Std::String -> Std::IO::IOFail ()`
 
 Writes a string into an IOHandle.
 
 ## `namespace Std::IO::IOFail`
 
-### `from_result : Result ErrMsg a -> IOFail a`
+### `@_data : Std::IO::IOFail a -> Std::IO (Std::Result Std::String a)`
+
+Retrieves the field `_data` from a value of `IOFail`.
+
+### `act__data : [f : Std::Functor] (Std::IO (Std::Result Std::String a) -> f (Std::IO (Std::Result Std::String a))) -> Std::IO::IOFail a -> f (Std::IO::IOFail a)`
+
+Updates a value of `IOFail` by applying a functorial action to field `_data`.
+
+### `from_result : Std::Result Std::String a -> Std::IO::IOFail a`
 
 Creates an pure `IOFail` value from a `Result` value.
 
-### `lift : IO a -> IOFail a`
+### `lift : Std::IO a -> Std::IO::IOFail a`
 
 Lifts an `IO` action to a successful `IOFail` action.
 
-### `throw : ErrMsg -> IOFail a`
+### `mod__data : (Std::IO (Std::Result Std::String a) -> Std::IO (Std::Result Std::String a)) -> Std::IO::IOFail a -> Std::IO::IOFail a`
+
+Updates a value of `IOFail` by applying a function to field `_data`.
+
+### `set__data : Std::IO (Std::Result Std::String a) -> Std::IO::IOFail a -> Std::IO::IOFail a`
+
+Updates a value of `IOFail` by setting field `_data` to a specified one.
+
+### `throw : Std::String -> Std::IO::IOFail a`
 
 Creates an error `IOFail` action.
 
-### `to_result : IOFail a -> IO (Result ErrMsg a)`
+### `to_result : Std::IO::IOFail a -> Std::IO (Std::Result Std::String a)`
 
 Converts an `IOFail` to an `Result` value (wrapped by `IO`).
 
-### `try : (ErrMsg -> IO a) -> IOFail a -> IO a`
+### `try : (Std::String -> Std::IO a) -> Std::IO::IOFail a -> Std::IO a`
 
 Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
 
 ## `namespace Std::IO::IOHandle`
 
-### `_file_ptr : IOHandle -> Ptr`
+### `@_data : Std::IO::IOHandle -> Std::FFI::Destructor Std::Ptr`
+
+Retrieves the field `_data` from a value of `IOHandle`.
+
+### `_file_ptr : Std::IO::IOHandle -> Std::Ptr`
 
 Gets pointer to C's `FILE` value from an `IOHandle`.
 
 DO NOT call `fclose` on the pointer returned by this function.
 To close an `IOHandle`, use `IO::close_file`.
 
-### `_unsafe_close : IOHandle -> ()`
+### `_unsafe_close : Std::IO::IOHandle -> ()`
 
 Closes an `IOHandle`.
 
 This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
 
-### `from_file_ptr : Ptr -> IOHandle`
+### `act__data : [f : Std::Functor] (Std::FFI::Destructor Std::Ptr -> f (Std::FFI::Destructor Std::Ptr)) -> Std::IO::IOHandle -> f Std::IO::IOHandle`
+
+Updates a value of `IOHandle` by applying a functorial action to field `_data`.
+
+### `from_file_ptr : Std::Ptr -> Std::IO::IOHandle`
 
 Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
 
 Creating two `IOHandle`s from a single file pointer is forbidden.
 
+### `mod__data : (Std::FFI::Destructor Std::Ptr -> Std::FFI::Destructor Std::Ptr) -> Std::IO::IOHandle -> Std::IO::IOHandle`
+
+Updates a value of `IOHandle` by applying a function to field `_data`.
+
+### `set__data : Std::FFI::Destructor Std::Ptr -> Std::IO::IOHandle -> Std::IO::IOHandle`
+
+Updates a value of `IOHandle` by setting field `_data` to a specified one.
+
 ## `namespace Std::Iterator`
 
-### `_flatten : Iterator (Iterator a) -> Iterator a`
+### `@next : Std::Iterator a -> () -> Std::Option (a, Std::Iterator a)`
+
+Retrieves the field `next` from a value of `Iterator`.
+
+### `_flatten : Std::Iterator (Std::Iterator a) -> Std::Iterator a`
 
 Flatten an iterator of iterators.
 
 You should use `Monad::flatten` instead of this function.
 This function is used in the implementation of `Monad::bind` for `Iterator`.
 
-### `_flatten_sub : Iterator a -> Iterator (Iterator a) -> Iterator a`
+### `_flatten_sub : Std::Iterator a -> Std::Iterator (Std::Iterator a) -> Std::Iterator a`
 
-### `advance : Iterator a -> Option (a, Iterator a)`
+### `act_next : [f : Std::Functor] ((() -> Std::Option (a, Std::Iterator a)) -> f (() -> Std::Option (a, Std::Iterator a))) -> Std::Iterator a -> f (Std::Iterator a)`
+
+Updates a value of `Iterator` by applying a functorial action to field `next`.
+
+### `advance : Std::Iterator a -> Std::Option (a, Std::Iterator a)`
 
 Gets next value and next iterator.
 
-### `append : Iterator a -> Iterator a -> Iterator a`
+### `append : Std::Iterator a -> Std::Iterator a -> Std::Iterator a`
 
 Appends an iterator to a iterator.
 Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 
-### `bang : Iterator a -> Iterator a`
+### `bang : Std::Iterator a -> Std::Iterator a`
 
 Evaluates all elements of iterator.
 TODO: add test
 
-### `count_up : I64 -> Iterator I64`
+### `count_up : Std::I64 -> Std::Iterator Std::I64`
 
 Creates an iterator that counts up from a number.
 count_up(n) = [n, n+1, n+2, ...]
 
-### `empty : Iterator a`
+### `empty : Std::Iterator a`
 
 Creates an empty iterator.
 
-### `filter : (a -> Bool) -> Iterator a -> Iterator a`
+### `filter : (a -> Std::Bool) -> Std::Iterator a -> Std::Iterator a`
 
 Filters elements by a condition function
 
-### `find_last : Iterator a -> Option a`
+### `find_last : Std::Iterator a -> Std::Option a`
 
 Finds the last element of an iterator.
 
-### `fold : b -> (b -> a -> b) -> Iterator a -> b`
+### `fold : b -> (b -> a -> b) -> Std::Iterator a -> b`
 
 Folds iterator from left to right.
 Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
 
-### `fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b`
+### `fold_m : [m : Std::Monad] b -> (b -> a -> m b) -> Std::Iterator a -> m b`
 
 Folds iterator from left to right by monadic action.
 
-### `from_array : Array a -> Iterator a`
+### `from_array : Std::Array a -> Std::Iterator a`
 
 Creates iterator from an array.
 
-### `from_map : (I64 -> a) -> Iterator a`
+### `from_map : (Std::I64 -> a) -> Std::Iterator a`
 
 Creates iterator from mapping function.
 from_map(f) = [f(0), f(1), f(2), ...]
 
-### `generate : s -> (s -> Option (a, s)) -> Iterator a`
+### `generate : s -> (s -> Std::Option (a, s)) -> Std::Iterator a`
 
 Generates an iterator from a state transition function.
 - if `f(s)` is none, `generate(s, f)` is empty.
 - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
 
-### `get_first : Iterator a -> Option a`
+### `get_first : Std::Iterator a -> Std::Option a`
 
 Gets the first element of an iterator. If the iterator is empty, this function returns `none`.
 TODO: add test
 
-### `get_size : Iterator a -> I64`
+### `get_size : Std::Iterator a -> Std::I64`
 
 Counts the number of elements of an iterator.
 
-### `get_tail : Iterator a -> Option (Iterator a)`
+### `get_tail : Std::Iterator a -> Std::Option (Std::Iterator a)`
 
 Removes the first element from an iterator. If the iterator is empty, this function returns `none`.
 TODO: add test
 
-### `intersperse : a -> Iterator a -> Iterator a`
+### `intersperse : a -> Std::Iterator a -> Std::Iterator a`
 
 Intersperse an elemnt between elements of an iterator.
 
@@ -2768,120 +3078,244 @@ Example:
 Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3])
 ```
 
-### `is_empty : Iterator a -> Bool`
+### `is_empty : Std::Iterator a -> Std::Bool`
 
 Check if the iterator is empty.
 
-### `loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b`
+### `loop_iter : b -> (b -> a -> Std::LoopResult b b) -> Std::Iterator a -> b`
 
 Loop along an iterator. At each iteration step, you can choose to continue or to break.
 
-### `loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b`
+### `loop_iter_m : [m : Std::Monad] b -> (b -> a -> m (Std::LoopResult b b)) -> Std::Iterator a -> m b`
 
 Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
 
-### `product : Iterator a -> Iterator b -> Iterator (b, a)`
+### `mod_next : ((() -> Std::Option (a, Std::Iterator a)) -> () -> Std::Option (a, Std::Iterator a)) -> Std::Iterator a -> Std::Iterator a`
+
+Updates a value of `Iterator` by applying a function to field `next`.
+
+### `product : Std::Iterator a -> Std::Iterator b -> Std::Iterator (b, a)`
 
 Generates the cartesian product of two iterators.
 
 Example: `[1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array == [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]`
 
-### `push_front : a -> Iterator a -> Iterator a`
+### `push_front : a -> Std::Iterator a -> Std::Iterator a`
 
 Pushes an element to an iterator.
 
-### `range : I64 -> I64 -> Iterator I64`
+### `range : Std::I64 -> Std::I64 -> Std::Iterator Std::I64`
 
 Creates a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
 
-### `reverse : Iterator a -> Iterator a`
+### `reverse : Std::Iterator a -> Std::Iterator a`
 
 Reverses an iterator.
 
-### `subsequences : Iterator a -> Iterator (Iterator a)`
+### `set_next : (() -> Std::Option (a, Std::Iterator a)) -> Std::Iterator a -> Std::Iterator a`
+
+Updates a value of `Iterator` by setting field `next` to a specified one.
+
+### `subsequences : Std::Iterator a -> Std::Iterator (Std::Iterator a)`
 
 Generates all subsequences of an iterator.
 
 `[1,2,3].to_iter.subsequences` is `[[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]].to_iter.map(to_iter)`.
 
-### `sum : [a : Additive] Iterator a -> a`
+### `sum : [a : Std::Additive] Std::Iterator a -> a`
 
 Calculates the sum of elements of an iterator.
 
-### `take : I64 -> Iterator a -> Iterator a`
+### `take : Std::I64 -> Std::Iterator a -> Std::Iterator a`
 
 Takes at most n elements from an iterator.
 
-### `take_while : (a -> Bool) -> Iterator a -> Iterator a`
+### `take_while : (a -> Std::Bool) -> Std::Iterator a -> Std::Iterator a`
 
 Take elements of an iterator while a condition is satisfied.
 TODO: add test
 
-### `to_array : Iterator a -> Array a`
+### `to_array : Std::Iterator a -> Std::Array a`
 
 Convert an iterator to an array.
 
-### `zip : Iterator b -> Iterator a -> Iterator (a, b)`
+### `zip : Std::Iterator b -> Std::Iterator a -> Std::Iterator (a, b)`
 
 Zip two iterators.
 
 ## `namespace Std::LessThan`
 
-### `max : [a : LessThan] a -> a -> a`
+### `less_than : [a : Std::LessThan] a -> a -> Std::Bool`
 
-### `min : [a : LessThan] a -> a -> a`
+Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
+
+### `max : [a : Std::LessThan] a -> a -> a`
+
+### `min : [a : Std::LessThan] a -> a -> a`
+
+## `namespace Std::LessThanOrEq`
+
+### `less_than_or_eq : [a : Std::LessThanOrEq] a -> a -> Std::Bool`
+
+Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
 ## `namespace Std::LoopResult`
 
-### `break_m : [m : Monad] r -> m (LoopResult s r)`
+### `as_break : Std::LoopResult s b -> b`
+
+Unwraps a union value of `LoopResult` as the variant `break`.
+If the value is not the variant `break`, this function aborts the program.
+
+### `as_continue : Std::LoopResult s b -> s`
+
+Unwraps a union value of `LoopResult` as the variant `continue`.
+If the value is not the variant `continue`, this function aborts the program.
+
+### `break : b -> Std::LoopResult s b`
+
+Constructs a value of union `LoopResult` taking the variant `break`.
+
+### `break_m : [m : Std::Monad] r -> m (Std::LoopResult s r)`
 
 Make a break value wrapped in a monad.
 
 This is used with `loop_m` function.
 
-### `continue_m : [m : Monad] s -> m (LoopResult s r)`
+### `continue : s -> Std::LoopResult s b`
+
+Constructs a value of union `LoopResult` taking the variant `continue`.
+
+### `continue_m : [m : Std::Monad] s -> m (Std::LoopResult s r)`
 
 Make a continue value wrapped in a monad.
 
 This is used with `loop_m` function.
 
+### `is_break : Std::LoopResult s b -> Std::Bool`
+
+Checks if a union value of `LoopResult` is the variant `break`.
+
+### `is_continue : Std::LoopResult s b -> Std::Bool`
+
+Checks if a union value of `LoopResult` is the variant `continue`.
+
+### `mod_break : (b -> b) -> Std::LoopResult s b -> Std::LoopResult s b`
+
+Updates a value of union `LoopResult` by applying a function if it is the variant `break`, or doing nothing otherwise.
+
+### `mod_continue : (s -> s) -> Std::LoopResult s b -> Std::LoopResult s b`
+
+Updates a value of union `LoopResult` by applying a function if it is the variant `continue`, or doing nothing otherwise.
+
 ## `namespace Std::Monad`
 
-### `flatten : [m : Monad] m (m a) -> m a`
+### `bind : [m : Std::Monad] (a -> m b) -> m a -> m b`
+
+### `flatten : [m : Std::Monad] m (m a) -> m a`
 
 Flattens a nested monadic action.
 
-### `unless : [m : Monad] Bool -> m () -> m ()`
+### `pure : [m : Std::Monad] a -> m a`
+
+### `unless : [m : Std::Monad] Std::Bool -> m () -> m ()`
 
 `unless(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is false.
 
-### `when : [m : Monad] Bool -> m () -> m ()`
+### `when : [m : Std::Monad] Std::Bool -> m () -> m ()`
 
 `when(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is true.
 
+## `namespace Std::Mul`
+
+### `mul : [a : Std::Mul] a -> a -> a`
+
+Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
+
+## `namespace Std::Neg`
+
+### `neg : [a : Std::Neg] a -> a`
+
+Negates a value. An expression `-x` is translated to `neg(x)`.
+
+## `namespace Std::Not`
+
+### `not : [a : Std::Not] a -> a`
+
+Logical NOT of a value. An expression `!x` is translated to `not(x)`.
+
 ## `namespace Std::Option`
 
-### `as_some_or : a -> Option a -> a`
+### `as_none : Std::Option a -> ()`
+
+Unwraps a union value of `Option` as the variant `none`.
+If the value is not the variant `none`, this function aborts the program.
+
+### `as_some : Std::Option a -> a`
+
+Unwraps a union value of `Option` as the variant `some`.
+If the value is not the variant `some`, this function aborts the program.
+
+### `as_some_or : a -> Std::Option a -> a`
 
 Unwrap an option value if it is `some`, or returns given default value if it is `none`.
 
-### `map_or : b -> (a -> b) -> Option a -> b`
+### `is_none : Std::Option a -> Std::Bool`
+
+Checks if a union value of `Option` is the variant `none`.
+
+### `is_some : Std::Option a -> Std::Bool`
+
+Checks if a union value of `Option` is the variant `some`.
+
+### `map_or : b -> (a -> b) -> Std::Option a -> b`
 
 Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
 
+### `mod_none : (() -> ()) -> Std::Option a -> Std::Option a`
+
+Updates a value of union `Option` by applying a function if it is the variant `none`, or doing nothing otherwise.
+
+### `mod_some : (a -> a) -> Std::Option a -> Std::Option a`
+
+Updates a value of union `Option` by applying a function if it is the variant `some`, or doing nothing otherwise.
+
+### `none : () -> Std::Option a`
+
+Constructs a value of union `Option` taking the variant `none`.
+
+### `some : a -> Std::Option a`
+
+Constructs a value of union `Option` taking the variant `some`.
+
 ## `namespace Std::Path`
 
-### `parse : String -> Option Path`
+### `@_data : Std::Path -> Std::String`
+
+Retrieves the field `_data` from a value of `Path`.
+
+### `act__data : [f : Std::Functor] (Std::String -> f Std::String) -> Std::Path -> f Std::Path`
+
+Updates a value of `Path` by applying a functorial action to field `_data`.
+
+### `mod__data : (Std::String -> Std::String) -> Std::Path -> Std::Path`
+
+Updates a value of `Path` by applying a function to field `_data`.
+
+### `parse : Std::String -> Std::Option Std::Path`
 
 Parse a string.
 
+### `set__data : Std::String -> Std::Path -> Std::Path`
+
+Updates a value of `Path` by setting field `_data` to a specified one.
+
 ## `namespace Std::Ptr`
 
-### `add_offset : I64 -> Ptr -> Ptr`
+### `add_offset : Std::I64 -> Std::Ptr -> Std::Ptr`
 
 Adds an offset to a pointer.
 
-### `subtract_ptr : Ptr -> Ptr -> I64`
+### `subtract_ptr : Std::Ptr -> Std::Ptr -> Std::I64`
 
 Subtracts two pointers.
 
@@ -2889,130 +3323,316 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 
 ## `namespace Std::PunchedArray`
 
-### `plug_in : a -> PunchedArray a -> Array a`
+### `@_data : Std::PunchedArray a -> Std::FFI::Destructor (Std::Array a)`
+
+Retrieves the field `_data` from a value of `PunchedArray`.
+
+### `@idx : Std::PunchedArray a -> Std::I64`
+
+Retrieves the field `idx` from a value of `PunchedArray`.
+
+### `act__data : [f : Std::Functor] (Std::FFI::Destructor (Std::Array a) -> f (Std::FFI::Destructor (Std::Array a))) -> Std::PunchedArray a -> f (Std::PunchedArray a)`
+
+Updates a value of `PunchedArray` by applying a functorial action to field `_data`.
+
+### `act_idx : [f : Std::Functor] (Std::I64 -> f Std::I64) -> Std::PunchedArray a -> f (Std::PunchedArray a)`
+
+Updates a value of `PunchedArray` by applying a functorial action to field `idx`.
+
+### `mod__data : (Std::FFI::Destructor (Std::Array a) -> Std::FFI::Destructor (Std::Array a)) -> Std::PunchedArray a -> Std::PunchedArray a`
+
+Updates a value of `PunchedArray` by applying a function to field `_data`.
+
+### `mod_idx : (Std::I64 -> Std::I64) -> Std::PunchedArray a -> Std::PunchedArray a`
+
+Updates a value of `PunchedArray` by applying a function to field `idx`.
+
+### `plug_in : a -> Std::PunchedArray a -> Std::Array a`
 
 Plug in an element to a punched array to get back an array.
 
-### `unsafe_punch : I64 -> Array a -> (PunchedArray a, a)`
+### `set__data : Std::FFI::Destructor (Std::Array a) -> Std::PunchedArray a -> Std::PunchedArray a`
+
+Updates a value of `PunchedArray` by setting field `_data` to a specified one.
+
+### `set_idx : Std::I64 -> Std::PunchedArray a -> Std::PunchedArray a`
+
+Updates a value of `PunchedArray` by setting field `idx` to a specified one.
+
+### `unsafe_punch : Std::I64 -> Std::Array a -> (Std::PunchedArray a, a)`
 
 Creates a punched array by moving out the element at the specified index.
 
 NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
 The uniqueness of the array is ensured in the `Array::act` function.
 
+## `namespace Std::Rem`
+
+### `rem : [a : Std::Rem] a -> a -> a`
+
+Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
+
 ## `namespace Std::Result`
 
-### `unwrap : Result e o -> o`
+### `as_err : Std::Result e o -> e`
+
+Unwraps a union value of `Result` as the variant `err`.
+If the value is not the variant `err`, this function aborts the program.
+
+### `as_ok : Std::Result e o -> o`
+
+Unwraps a union value of `Result` as the variant `ok`.
+If the value is not the variant `ok`, this function aborts the program.
+
+### `err : e -> Std::Result e o`
+
+Constructs a value of union `Result` taking the variant `err`.
+
+### `is_err : Std::Result e o -> Std::Bool`
+
+Checks if a union value of `Result` is the variant `err`.
+
+### `is_ok : Std::Result e o -> Std::Bool`
+
+Checks if a union value of `Result` is the variant `ok`.
+
+### `mod_err : (e -> e) -> Std::Result e o -> Std::Result e o`
+
+Updates a value of union `Result` by applying a function if it is the variant `err`, or doing nothing otherwise.
+
+### `mod_ok : (o -> o) -> Std::Result e o -> Std::Result e o`
+
+Updates a value of union `Result` by applying a function if it is the variant `ok`, or doing nothing otherwise.
+
+### `ok : o -> Std::Result e o`
+
+Constructs a value of union `Result` taking the variant `ok`.
+
+### `unwrap : Std::Result e o -> o`
 
 Returns the containing value if the value is ok, or otherwise aborts the program.
 
 ## `namespace Std::String`
 
-### `_get_c_str : String -> Ptr`
+### `@_data : Std::String -> Std::Array Std::U8`
+
+Retrieves the field `_data` from a value of `String`.
+
+### `_get_c_str : Std::String -> Std::Ptr`
 
 Get the null-terminated C string.
 
 Note that in case the string is not used after call of this function, the returned pointer will be already released.
 
-### `_unsafe_from_c_str : Array U8 -> String`
+### `_unsafe_from_c_str : Std::Array Std::U8 -> Std::String`
 
 Create a string from C string (i.e., null-terminated byte array).
 
 If the byte array doesn't include `\0`, this function causes undefined behavior.
 
-### `_unsafe_from_c_str_ptr : Ptr -> String`
+### `_unsafe_from_c_str_ptr : Std::Ptr -> Std::String`
 
 Create a `String` from a pointer to null-terminated C string.
 
 If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
 
-### `borrow_c_str : (Ptr -> a) -> String -> a`
+### `act__data : [f : Std::Functor] (Std::Array Std::U8 -> f (Std::Array Std::U8)) -> Std::String -> f Std::String`
+
+Updates a value of `String` by applying a functorial action to field `_data`.
+
+### `borrow_c_str : (Std::Ptr -> a) -> Std::String -> a`
 
 Call a function with a null-terminated C string.
 
-### `concat : String -> String -> String`
+### `concat : Std::String -> Std::String -> Std::String`
 
 Concatenate two strings.
 
 Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
 
-### `concat_iter : Iterator String -> String`
+### `concat_iter : Std::Iterator Std::String -> Std::String`
 
 Concatenate an iterator of strings.
 
-### `empty : I64 -> String`
+### `empty : Std::I64 -> Std::String`
 
 Create an empty string, which is reserved for a length.
 
-### `find : String -> I64 -> String -> Option I64`
+### `find : Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`
 
 `str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
 
 Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
 `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
 
-### `get_bytes : String -> Array U8`
+### `get_bytes : Std::String -> Std::Array Std::U8`
 
 Gets the byte array of a string, containing null-terminator.
 
-### `get_first_byte : String -> Option U8`
+### `get_first_byte : Std::String -> Std::Option Std::U8`
 
 Gets the first byte of a string. Returns none if the string is empty.
 
-### `get_last_byte : String -> Option U8`
+### `get_last_byte : Std::String -> Std::Option Std::U8`
 
 Gets the last byte of a string. Returns none if the string is empty.
 
-### `get_size : String -> I64`
+### `get_size : Std::String -> Std::I64`
 
 Gets the length of a string.
 
-### `get_sub : I64 -> I64 -> String -> String`
+### `get_sub : Std::I64 -> Std::I64 -> Std::String -> Std::String`
 
 `String` version of `Array::get_sub`.
 
-### `is_empty : String -> Bool`
+### `is_empty : Std::String -> Std::Bool`
 
 Returns if the string is empty or not.
 
-### `join : String -> Iterator String -> String`
+### `join : Std::String -> Std::Iterator Std::String -> Std::String`
 
 Joins strings by a separator.
 
-### `pop_back_byte : String -> String`
+### `mod__data : (Std::Array Std::U8 -> Std::Array Std::U8) -> Std::String -> Std::String`
+
+Updates a value of `String` by applying a function to field `_data`.
+
+### `pop_back_byte : Std::String -> Std::String`
 
 Removes the last byte.
 If the string is empty, this function does nothing.
 
-### `split : String -> String -> Iterator String`
+### `set__data : Std::Array Std::U8 -> Std::String -> Std::String`
+
+Updates a value of `String` by setting field `_data` to a specified one.
+
+### `split : Std::String -> Std::String -> Std::Iterator Std::String`
 
 `str.split(sep)` splits `str` by `sep` into an iterator.
 - If `sep` is empty, this function returns an infinite sequence of ""s.
 - If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
 
-### `strip_first_bytes : (U8 -> Bool) -> String -> String`
+### `strip_first_bytes : (Std::U8 -> Std::Bool) -> Std::String -> Std::String`
 
 Removes the first byte of a string while it satisifies the specified condition.
 
-### `strip_first_spaces : String -> String`
+### `strip_first_spaces : Std::String -> Std::String`
 
 Removes leading whitespace characters.
 
-### `strip_last_bytes : (U8 -> Bool) -> String -> String`
+### `strip_last_bytes : (Std::U8 -> Std::Bool) -> Std::String -> Std::String`
 
 Removes the last byte of a string while it satisifies the specified condition.
 
-### `strip_last_newlines : String -> String`
+### `strip_last_newlines : Std::String -> Std::String`
 
 Removes newlines and carriage returns at the end of the string.
 
-### `strip_last_spaces : String -> String`
+### `strip_last_spaces : Std::String -> Std::String`
 
 Removes trailing whitespace characters.
 
-### `strip_spaces : String -> String`
+### `strip_spaces : Std::String -> Std::String`
 
 Strips leading and trailing whitespace characters.
+
+## `namespace Std::Sub`
+
+### `sub : [a : Std::Sub] a -> a -> a`
+
+Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
+
+## `namespace Std::ToBytes`
+
+### `to_bytes : [a : Std::ToBytes] a -> Std::Array Std::U8`
+
+## `namespace Std::ToString`
+
+### `to_string : [a : Std::ToString] a -> Std::String`
+
+## `namespace Std::Tuple2`
+
+### `@0 : (t0, t1) -> t0`
+
+Retrieves the field `0` from a value of `Tuple2`.
+
+### `@1 : (t0, t1) -> t1`
+
+Retrieves the field `1` from a value of `Tuple2`.
+
+### `act_0 : [f : Std::Functor] (t0 -> f t0) -> (t0, t1) -> f (t0, t1)`
+
+Updates a value of `Tuple2` by applying a functorial action to field `0`.
+
+### `act_1 : [f : Std::Functor] (t1 -> f t1) -> (t0, t1) -> f (t0, t1)`
+
+Updates a value of `Tuple2` by applying a functorial action to field `1`.
+
+### `mod_0 : (t0 -> t0) -> (t0, t1) -> (t0, t1)`
+
+Updates a value of `Tuple2` by applying a function to field `0`.
+
+### `mod_1 : (t1 -> t1) -> (t0, t1) -> (t0, t1)`
+
+Updates a value of `Tuple2` by applying a function to field `1`.
+
+### `set_0 : t0 -> (t0, t1) -> (t0, t1)`
+
+Updates a value of `Tuple2` by setting field `0` to a specified one.
+
+### `set_1 : t1 -> (t0, t1) -> (t0, t1)`
+
+Updates a value of `Tuple2` by setting field `1` to a specified one.
+
+## `namespace Std::Tuple3`
+
+### `@0 : (t0, t1, t2) -> t0`
+
+Retrieves the field `0` from a value of `Tuple3`.
+
+### `@1 : (t0, t1, t2) -> t1`
+
+Retrieves the field `1` from a value of `Tuple3`.
+
+### `@2 : (t0, t1, t2) -> t2`
+
+Retrieves the field `2` from a value of `Tuple3`.
+
+### `act_0 : [f : Std::Functor] (t0 -> f t0) -> (t0, t1, t2) -> f (t0, t1, t2)`
+
+Updates a value of `Tuple3` by applying a functorial action to field `0`.
+
+### `act_1 : [f : Std::Functor] (t1 -> f t1) -> (t0, t1, t2) -> f (t0, t1, t2)`
+
+Updates a value of `Tuple3` by applying a functorial action to field `1`.
+
+### `act_2 : [f : Std::Functor] (t2 -> f t2) -> (t0, t1, t2) -> f (t0, t1, t2)`
+
+Updates a value of `Tuple3` by applying a functorial action to field `2`.
+
+### `mod_0 : (t0 -> t0) -> (t0, t1, t2) -> (t0, t1, t2)`
+
+Updates a value of `Tuple3` by applying a function to field `0`.
+
+### `mod_1 : (t1 -> t1) -> (t0, t1, t2) -> (t0, t1, t2)`
+
+Updates a value of `Tuple3` by applying a function to field `1`.
+
+### `mod_2 : (t2 -> t2) -> (t0, t1, t2) -> (t0, t1, t2)`
+
+Updates a value of `Tuple3` by applying a function to field `2`.
+
+### `set_0 : t0 -> (t0, t1, t2) -> (t0, t1, t2)`
+
+Updates a value of `Tuple3` by setting field `0` to a specified one.
+
+### `set_1 : t1 -> (t0, t1, t2) -> (t0, t1, t2)`
+
+Updates a value of `Tuple3` by setting field `1` to a specified one.
+
+### `set_2 : t2 -> (t0, t1, t2) -> (t0, t1, t2)`
+
+Updates a value of `Tuple3` by setting field `2` to a specified one.
 
 ## `namespace Std::U16`
 
@@ -3028,9 +3648,9 @@ Calculates bitwise OR of two values.
 
 Calculates bitwise XOR of two values.
 
-### `maximum : U16`
+### `maximum : Std::U16`
 
-### `minimum : U16`
+### `minimum : Std::U16`
 
 ### `shift_left : Std::U16 -> Std::U16 -> Std::U16`
 
@@ -3146,9 +3766,9 @@ Calculates bitwise OR of two values.
 
 Calculates bitwise XOR of two values.
 
-### `maximum : U32`
+### `maximum : Std::U32`
 
-### `minimum : U32`
+### `minimum : Std::U32`
 
 ### `shift_left : Std::U32 -> Std::U32 -> Std::U32`
 
@@ -3264,9 +3884,9 @@ Calculates bitwise OR of two values.
 
 Calculates bitwise XOR of two values.
 
-### `maximum : U64`
+### `maximum : Std::U64`
 
-### `minimum : U64`
+### `minimum : Std::U64`
 
 ### `shift_left : Std::U64 -> Std::U64 -> Std::U64`
 
@@ -3382,9 +4002,9 @@ Calculates bitwise OR of two values.
 
 Calculates bitwise XOR of two values.
 
-### `maximum : U8`
+### `maximum : Std::U8`
 
-### `minimum : U8`
+### `minimum : Std::U8`
 
 ### `shift_left : Std::U8 -> Std::U8 -> Std::U8`
 
@@ -3485,3 +4105,7 @@ Casts a value of `U8` into a value of `U64`.
 ### `to_U8 : Std::U8 -> Std::U8`
 
 Casts a value of `U8` into a value of `U8`.
+
+## `namespace Std::Zero`
+
+### `zero : [a : Std::Zero] a`

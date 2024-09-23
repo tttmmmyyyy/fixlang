@@ -101,7 +101,7 @@ fn build_object_files<'c>(
     }
 
     // When working as a language server, perform type checking of all values and return here.
-    if config.language_server_mode {
+    if config.diagnostics {
         program.resolve_namespace_and_check_type_all(&typechecker)?;
         return Ok(BuildObjFilesResult {
             obj_paths: vec![],
@@ -589,7 +589,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let exec_path = config.get_output_executable_file_path();
 
     // Run extra commands.
-    if !config.language_server_mode {
+    if !config.diagnostics {
         config.run_extra_commands()?;
     }
 
@@ -605,7 +605,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let build_res = build_object_files(program, config.clone())?;
 
     // If the program is for language server, we don't need to build binary file.
-    if config.language_server_mode {
+    if config.diagnostics {
         let program = build_res.program.unwrap();
         return Ok(BuildFileResult {
             program: Some(program),

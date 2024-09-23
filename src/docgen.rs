@@ -1,54 +1,55 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
-    error::Errors, kind_star, make_std_mod, parse_file_path, Configuration, FullName, Kind,
-    KindSignature, NameSpace, Program, TyConVariant, TyVar,
+    error::Errors, kind_star, lsp::language_server::run_diagnostics, FullName, Kind, KindSignature,
+    Name, NameSpace, Program, TyConVariant, TyVar,
 };
 
-pub fn generate_docs_for_files(files: &[PathBuf]) -> Result<(), Errors> {
-    let config = Configuration::release();
-    for file in files {
-        let mut program = if file == &PathBuf::from("std.fix") {
-            make_std_mod(&config)
-        } else {
-            parse_file_path(file.clone(), &config)
-        }?;
-        program.calculate_type_env()?;
-        generate_doc(&program)?;
+pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
+    println!("Running diagnostics for this fix project.");
+    let program = run_diagnostics()?.prgoram;
+    println!("Diagnostics completed.");
+    for mod_name in mod_names {
+        println!(
+            "Generating documentation for module `{}`",
+            mod_name.to_string()
+        );
+        generate_doc(&program, mod_name)?;
     }
     Ok(())
 }
 
 // Generate documentation for a Program consists of single module.
-fn generate_doc(program: &Program) -> Result<(), Errors> {
+fn generate_doc(program: &Program, mod_name: &Name) -> Result<(), Errors> {
     let mut doc = String::new();
 
     // The module name section.
-    assert!(program.module_to_files.len() == 1);
-    let mod_name = mod_name_section(program, &mut doc);
+    mod_name_section(&mut doc, mod_name);
 
     let mut entries = vec![];
 
     doc += "\n\n# Types and aliases";
-    type_entries(program, &mut entries)?;
+    type_entries(program, mod_name, &mut entries)?;
     write_entries(&mut entries, &mut doc);
 
     doc += "\n\n# Traits and aliases";
-    trait_entries(program, &mut entries)?;
+    trait_entries(program, mod_name, &mut entries)?;
     write_entries(&mut entries, &mut doc);
 
     doc += "\n\n# Trait implementations";
-    trait_impl_entries(program, &mut entries)?;
+    trait_impl_entries(program, mod_name, &mut entries)?;
     write_entries(&mut entries, &mut doc);
 
     doc += "\n\n# Values";
-    value_entries(program, &mut entries)?;
+    value_entries(program, mod_name, &mut entries)?;
     write_entries(&mut entries, &mut doc);
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
     std::fs::write(&doc_file, doc)
         .map_err(|e| Errors::from_msg(format!("Failed to write file \"{}\": {:?}", doc_file, e)))?;
+
+    println!("Saved documentation to \"{}\"", doc_file);
     Ok(())
 }
 
@@ -74,11 +75,8 @@ fn write_entries(entries: &mut Vec<Entry>, doc: &mut String) {
 
 // Add the module name section to the documentation.
 // Return the module name.
-fn mod_name_section(program: &Program, doc: &mut String) -> String {
-    assert!(program.module_to_files.len() == 1);
-    let (mod_name, _src) = program.module_to_files.iter().next().unwrap();
+fn mod_name_section(doc: &mut String, mod_name: &Name) {
     *doc += format!("# `module {}`", mod_name).as_str();
-    mod_name.clone()
 }
 
 #[derive(PartialEq, Eq)]
@@ -115,7 +113,21 @@ fn to_markdown_link(header: &str) -> String {
     link
 }
 
-fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
+fn is_entry_should_be_documented(name: &FullName, mod_name: &Name) -> bool {
+    if &name.module() != mod_name {
+        return false;
+    }
+    if name.to_string().contains("#") {
+        return false;
+    }
+    true
+}
+
+fn type_entries(
+    program: &Program,
+    mod_name: &Name,
+    entries: &mut Vec<Entry>,
+) -> Result<(), Errors> {
     fn kind_constraints_with_post_space(tyvars: &Vec<Arc<TyVar>>) -> String {
         if tyvars.is_empty() {
             return String::new();
@@ -155,8 +167,8 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
 
     for (ty_name, ty_info) in program.type_env.tycons.iter() {
         let name = ty_name.name.clone();
-        // Skip types contains with "#".
-        if name.name.contains("#") {
+
+        if !is_entry_should_be_documented(&name, mod_name) {
             continue;
         }
 
@@ -181,14 +193,9 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
             tyvars_with_pre_space(&ty_info.tyvars),
             box_or_unbox(ty_info.is_unbox),
             def_rhs,
-            // kind_specification_with_pre_space(&ty_info.kind)
         );
 
         let mut doc = String::new();
-        // doc += &format!(
-        //     "\n\n[See related values](#{})",
-        //     to_markdown_link(&format!("namespace `{}`", name.to_namespace().to_string()))
-        // );
 
         let docstring = &ty_info
             .source
@@ -227,12 +234,16 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
     }
     for (ty_name, ty_info) in program.type_env.aliases.iter() {
         let name = ty_name.name.clone();
+
+        if !is_entry_should_be_documented(&name, mod_name) {
+            continue;
+        }
+
         let title = format!(
             "`type {}{} = {}`",
             kind_constraints_with_post_space(&ty_info.tyvars),
             name.name,
             ty_info.value.to_string(),
-            // kind_specification_with_pre_space(&ty_info.kind)
         );
 
         let mut doc = String::new();
@@ -256,7 +267,11 @@ fn type_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Error
     Ok(())
 }
 
-fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
+fn trait_entries(
+    program: &Program,
+    mod_name: &Name,
+    entries: &mut Vec<Entry>,
+) -> Result<(), Errors> {
     fn kind_constraints_with_post_space(kind_signs: &Vec<KindSignature>) -> String {
         if kind_signs.is_empty() {
             return String::new();
@@ -276,6 +291,11 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
 
     for (id, info) in &program.trait_env.traits {
         let name = id.name.clone();
+
+        if !is_entry_should_be_documented(&name, mod_name) {
+            continue;
+        }
+
         let kind_consts = kind_constraints_with_post_space(&info.kind_signs);
         let title = format!(
             "`trait {}{} : {}`",
@@ -320,9 +340,17 @@ fn trait_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Erro
     Ok(())
 }
 
-fn trait_impl_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
+fn trait_impl_entries(
+    program: &Program,
+    mod_name: &Name,
+    entries: &mut Vec<Entry>,
+) -> Result<(), Errors> {
     for (_id, impls) in &program.trait_env.instances {
         for impl_ in impls {
+            if &impl_.define_module != mod_name {
+                continue;
+            }
+
             let title = format!("`impl {}`", impl_.qual_pred.to_string());
 
             let mut doc = String::new();
@@ -347,8 +375,16 @@ fn trait_impl_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(),
     Ok(())
 }
 
-fn value_entries(program: &Program, entries: &mut Vec<Entry>) -> Result<(), Errors> {
+fn value_entries(
+    program: &Program,
+    mod_name: &Name,
+    entries: &mut Vec<Entry>,
+) -> Result<(), Errors> {
     for (name, gv) in &program.global_values {
+        if !is_entry_should_be_documented(&name, mod_name) {
+            continue;
+        }
+
         let title = format!("`{} : {}`", name.name, gv.scm.to_string());
 
         let mut doc = String::new();

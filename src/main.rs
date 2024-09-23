@@ -220,15 +220,18 @@ fn main() {
 
     // "fix docs" subcommand
     let docs_subc = App::new("docs")
-        .about("Generate documentation for a Fix module.")
+        .about(
+            "Generate documentation for a Fix module.\n\
+            This command requires the project file to be present in the current directory, and the project should be in the state that it can be built successfully.",
+        )
         .arg(
-            Arg::new("source-files")
-                .long("file")
-                .short('f')
+            Arg::new("modules")
+                .long("mods")
+                .short('m')
                 .action(clap::ArgAction::Append)
                 .multiple_values(true)
                 .takes_value(true)
-                .help("Source files for which documents are generated. \nAs a special value, use \"std.fix\" to generate the document of `Std`."),
+                .help("Modules for which documents should be generated."),
         );
 
     let app = App::new("Fix-lang")
@@ -252,6 +255,19 @@ fn main() {
             pathbufs.push(PathBuf::from(file));
         }
         Ok(pathbufs)
+    }
+
+    fn read_modules_options(m: &ArgMatches) -> Result<Vec<Name>, Errors> {
+        let modules = m.get_many::<String>("modules");
+        if modules.is_none() {
+            return Ok(vec![]);
+        }
+        let modules = modules.unwrap();
+        let mut names = vec![];
+        for module in modules {
+            names.push(module.to_string());
+        }
+        Ok(names)
     }
 
     fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
@@ -350,7 +366,7 @@ fn main() {
 
     // Create configuration from the command line arguments and the project file.
     fn create_config(args: &ArgMatches) -> Configuration {
-        let mut config = Configuration::release();
+        let mut config = Configuration::release_mode();
 
         // First, set up configuration from the project file if it exists.
         if Path::new(PROJECT_FILE_PATH).exists() {
@@ -394,8 +410,8 @@ fn main() {
             clean_command();
         }
         Some(("docs", args)) => {
-            let files = exit_if_err(read_source_files_options(args));
-            exit_if_err(docgen::generate_docs_for_files(&files));
+            let modules = exit_if_err(read_modules_options(args));
+            exit_if_err(docgen::generate_docs_for_files(&modules));
         }
         _ => eprintln!("Unknown command!"),
     }
