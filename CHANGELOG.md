@@ -12,6 +12,7 @@
 - Add `FFI_EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `FFI_EXPORT`.
 - Add experimental support for language server protocol.
 - Add experimental support for project file ("fixproj.toml").
+- Add experimental support for document generation (`fix docs` command).
 
 ### Changed
 
