@@ -398,9 +398,11 @@ namespace FFI {
 
     namespace Destructor {
         // Borrow the contained value.
+        // 
         // `borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
-        // It is guaranteed that the `dtor` is alive during the call of `worker`. 
-        // In other words, the `worker` receives the contained value on which the destructor is not called yet.
+        // 
+        // It is guaranteed that the `dtor` is alive during the call of `worker`.
+        // In other words, the `worker` receives the contained value for which the destructor is not called yet.
         borrow : (a -> b) -> Destructor a -> b;
         borrow = |worker, dtor| (
             let res = worker(dtor.@_value);
