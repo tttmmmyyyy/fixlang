@@ -1801,7 +1801,7 @@ Even if you specify source files in the project file, you can specify additional
 
 For example, consider that you are making a library and having `Main::main` function which runs tests in "test.fix".
 In this case, you should not include "test.fix" in the "build.files" of the project file, because otherwise the test codes will be compiled into the application that uses your library.
-Instead, you can add "test.fix" by the command line argument "-f" when you run the test.
+Instead, you should add "test.fix" by the command line argument "-f" when you run the test.
 
 ## Language Server Protocol
 
