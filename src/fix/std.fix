@@ -1,4 +1,13 @@
 // Module `Std` provides basic types, traits and values.
+// 
+// This module is special in the sense that: 
+// - It is always imported implicitly. If you don't want to import some or all of entities in this module, you should write `import Std {...entities...}` explicitly.
+// - It contains built-in types or values which are defined or implemented directly by Fix compiler, not by Fix source code.
+// 
+// NOTE on tuples: 
+// The tuple types `Std::TupleN` are defined on demand, i.e., if the user uses N-tuple in the source code, 
+// the compiler generates definition `TupleN` and related functions / trait implementations.
+// The document for `Std` module describes about them up to N=3, but you can use larger tuples in the same way.
 module Std;
 
 namespace Array {

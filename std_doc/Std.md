@@ -917,6 +917,15 @@
 
 Module `Std` provides basic types, traits and values.
 
+This module is special in the sense that:
+- It is always imported implicitly. If you don't want to import some or all of entities in this module, you should write `import Std {...entities...}` explicitly.
+- It contains built-in types or values which are defined or implemented directly by Fix compiler, not by Fix source code.
+
+NOTE on tuples:
+The tuple types `Std::TupleN` are defined on demand, i.e., if the user uses N-tuple in the source code,
+the compiler generates definition `TupleN` and related functions / trait implementations.
+The document for `Std` module describes about them up to N=3, but you can use larger tuples in the same way.
+
 # Types and aliases
 
 ## `namespace Std`
@@ -2292,9 +2301,11 @@ Updates a value of `Destructor` by applying a functorial action to field `dtor`.
 ### `borrow : (a -> b) -> Std::FFI::Destructor a -> b`
 
 Borrow the contained value.
+
 `borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
+
 It is guaranteed that the `dtor` is alive during the call of `worker`.
-In other words, the `worker` receives the contained value on which the destructor is not called yet.
+In other words, the `worker` receives the contained value for which the destructor is not called yet.
 
 ### `make : a -> (a -> ()) -> Std::FFI::Destructor a`
 
