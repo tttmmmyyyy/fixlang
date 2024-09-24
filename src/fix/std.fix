@@ -1,5 +1,5 @@
+// Module `Std` provides basic types, traits and values.
 module Std;
-
 
 namespace Array {
 

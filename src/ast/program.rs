@@ -379,6 +379,15 @@ impl NameResolutionType {
     }
 }
 
+// Module information.
+#[derive(Clone)]
+pub struct ModuleInfo {
+    // Module name.
+    pub name: Name,
+    // Source code location where this module is defined.
+    pub source: Span,
+}
+
 // Program of fix a collection of modules.
 // A program can link another program which consists of a single module.
 pub struct Program {
@@ -408,13 +417,12 @@ pub struct Program {
     pub deferred_instantiation: Vec<InstantiatedSymbol>,
 
     /* Dependency information */
-    // A map from module name to source file.
-    pub module_to_files: HashMap<Name, SourceFile>,
+    pub modules: Vec<ModuleInfo>,
 }
 
 impl Program {
     // Create a program consists of single module.
-    pub fn single_module(module_name: Name, src: &SourceFile) -> Program {
+    pub fn single_module(mod_info: ModuleInfo) -> Program {
         let mut fix_mod = Program {
             mod_to_import_stmts: Default::default(),
             type_defns: Default::default(),
@@ -424,16 +432,16 @@ impl Program {
             trait_env: Default::default(),
             type_env: Default::default(),
             used_tuple_sizes: (0..=TUPLE_SIZE_BASE).filter(|i| *i != 1).collect(),
-            module_to_files: Default::default(),
+            modules: Default::default(),
             export_statements: vec![],
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
-            module_name.clone(),
+            mod_info.name.clone(),
         ));
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_std_import(
-            module_name.clone(),
+            mod_info.name.clone(),
         ));
-        fix_mod.module_to_files.insert(module_name, src.clone());
+        fix_mod.modules.push(mod_info);
         fix_mod
     }
 
@@ -1697,29 +1705,29 @@ impl Program {
 
         // Merge `module_to_files`.
         // Also, check if there is a module defined in multiple files.
-        for (mod_name, file) in &other.module_to_files {
-            let file = file.clone();
-            if self.module_to_files.contains_key(mod_name) {
+        for mod_info in &other.modules {
+            let file = mod_info.source.input.file_path.clone();
+            if let Some(other_mod) = self.modules.iter().find(|mi| mi.name == mod_info.name) {
                 // If the module is already defined,
                 if extend {
                     // If extending mode, this is not a problem.
                     continue;
                 }
-                let another_file = self.module_to_files.get(mod_name).unwrap();
-                if to_absolute_path(&another_file.file_path) == to_absolute_path(&file.file_path) {
+                let other_file = other_mod.source.input.file_path.clone();
+                if to_absolute_path(&other_file) == to_absolute_path(&file) {
                     // If the module is defined in the same file, this is not a problem.
                     continue;
                 }
                 let msg = format!(
                     "Module `{}` is defined in two files: \"{}\" and \"{}\".",
-                    mod_name,
-                    another_file.file_path.to_str().unwrap(),
-                    file.file_path.to_str().unwrap()
+                    mod_info.name,
+                    other_file.to_string_lossy().to_string(),
+                    file.to_string_lossy().to_string()
                 );
                 errors.append(Errors::from_msg(msg));
                 continue;
             }
-            self.module_to_files.insert(mod_name.clone(), file);
+            self.modules.push(mod_info.clone());
         }
 
         // Throw an error if necessary.
@@ -1859,7 +1867,17 @@ impl Program {
         dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
         let concatenated_source_hashes = dependent_module_names
             .iter()
-            .map(|mod_name| exit_if_err(self.module_to_files.get(mod_name).unwrap().hash()))
+            .map(|mod_name| {
+                exit_if_err(
+                    self.modules
+                        .iter()
+                        .find(|mi| mi.name == *mod_name)
+                        .unwrap()
+                        .source
+                        .input
+                        .hash(),
+                )
+            })
             .collect::<Vec<_>>()
             .join("");
         format!("{:x}", md5::compute(concatenated_source_hashes))

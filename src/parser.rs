@@ -145,9 +145,12 @@ fn parse_module(
     let mut ctx: ParseContext = ParseContext::from_source(src.clone(), config);
 
     let mut pairs = pair.into_inner();
-    ctx.module_name = parse_module_defn(pairs.next().unwrap());
-    ctx.namespace = NameSpace::new(vec![ctx.module_name.clone()]);
-    let mut fix_mod = Program::single_module(ctx.module_name.clone(), &src);
+    let mod_info = parse_module_defn(pairs.next().unwrap(), &mut ctx);
+
+    ctx.module_name = mod_info.name.clone();
+    ctx.namespace = NameSpace::new(vec![mod_info.name.clone()]);
+
+    let mut fix_mod = Program::single_module(mod_info);
 
     let mut type_defns: Vec<TypeDefn> = Vec::new();
     let mut global_value_decls: Vec<GlobalValueDecl> = vec![];
@@ -767,8 +770,14 @@ fn parse_kind_braced(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Kind> {
     parse_kind(pair, ctx)
 }
 
-fn parse_module_defn(pair: Pair<Rule>) -> Name {
-    pair.into_inner().next().unwrap().as_str().to_string()
+fn parse_module_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> ModuleInfo {
+    assert_eq!(pair.as_rule(), Rule::module_defn);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mod_name = pair.into_inner().next().unwrap().as_str().to_string();
+    ModuleInfo {
+        name: mod_name,
+        source: span,
+    }
 }
 
 fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn, Errors> {

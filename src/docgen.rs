@@ -24,7 +24,7 @@ fn generate_doc(program: &Program, mod_name: &Name) -> Result<(), Errors> {
     let mut doc = String::new();
 
     // The module name section.
-    mod_name_section(&mut doc, mod_name);
+    write_module_section(program, mod_name, &mut doc);
 
     let mut entries = vec![];
 
@@ -74,9 +74,16 @@ fn write_entries(entries: &mut Vec<Entry>, doc: &mut String) {
 }
 
 // Add the module name section to the documentation.
-// Return the module name.
-fn mod_name_section(doc: &mut String, mod_name: &Name) {
+fn write_module_section(program: &Program, mod_name: &Name, doc: &mut String) {
     *doc += format!("# `module {}`", mod_name).as_str();
+    if let Some(mod_info) = program.modules.iter().find(|mi| mi.name == *mod_name) {
+        let docstring = mod_info.source.get_document().ok().unwrap_or_default();
+        let docstring = docstring.trim();
+        if !docstring.is_empty() {
+            *doc += "\n\n";
+            *doc += docstring;
+        }
+    }
 }
 
 #[derive(PartialEq, Eq)]

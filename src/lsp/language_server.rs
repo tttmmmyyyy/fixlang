@@ -718,7 +718,8 @@ fn get_file_content_at_previous_diagnostics(
     program: &Program,
     path: &Path,
 ) -> Result<String, String> {
-    for (_, src) in &program.module_to_files {
+    for mi in &program.modules {
+        let src = &mi.source.input;
         if to_absolute_path(&src.file_path) == to_absolute_path(&path) {
             let content = src.string();
             if let Err(_e) = content {
