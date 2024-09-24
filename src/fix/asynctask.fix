@@ -35,8 +35,7 @@ get = |task| (
 // ```
 // module Main;
 // import AsyncTask;
-// import Debug;
-
+// 
 // main : IO ();
 // main = (
 //     let sum_range = |from, to| (

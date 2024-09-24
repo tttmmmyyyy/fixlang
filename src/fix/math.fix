@@ -2,7 +2,6 @@
 // Importing this module automatically links libm.so to the program.
 module Math;
 
-import Debug;
 
 // Calculate greatest common divisor of two non-negative integers. 
 _gcd_nonneg : I64 -> I64 -> I64;

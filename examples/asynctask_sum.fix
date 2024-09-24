@@ -1,6 +1,5 @@
 module Main;
 import AsyncTask;
-import Debug;
 
 main : IO ();
 main = (

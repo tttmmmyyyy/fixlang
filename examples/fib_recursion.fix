@@ -1,5 +1,4 @@
 module Main;
-import Debug;
 
 fib : I64 -> I64;
 fib = |n| (

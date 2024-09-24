@@ -6,7 +6,6 @@
 // - File Path handling
 module RegExp.StringEx;
 
-import Debug;
 import HashMap;
 import Character;
 

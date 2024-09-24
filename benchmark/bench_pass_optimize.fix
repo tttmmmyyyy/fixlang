@@ -1,6 +1,5 @@
 module Main;
 import Random;
-import Debug;
 
 // Calculate a Bool array whose element is true iff idx is prime.
 is_prime : I64 -> Array Bool;

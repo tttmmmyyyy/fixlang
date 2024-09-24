@@ -26,6 +26,7 @@
 - Changed `CALL_C` to `FFI_CALL`.
 - Changed the name of `Std::abort` to `Std::undefined`.
 - Changed the type of arguments of `Std::FFI::unsafe_get_retain_function_of_boxed_value` and `Std::FFI::unsafe_get_release_function_of_boxed_value`.
+- Remove `Debug` built-in module, which is moved into `Std::Debug` namespace.
 
 ### Fixed
 

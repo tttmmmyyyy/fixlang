@@ -4,7 +4,6 @@
 // - Create complex parsers with composition
 module RegExp.SimpleParser;
 
-import Debug;
 import Character;
 
 import RegExp.StringEx;

@@ -13,8 +13,7 @@ use crate::misc::function_name;
 pub fn test0() {
     let source = r#"    
             module Main;
-            import Debug;
-
+            
             main : IO ();
             main = (
                 eval assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 1e1_I64);
@@ -28,8 +27,7 @@ pub fn test0() {
 pub fn test1() {
     let source = r#"
             module Main; 
-            import Debug;
-            
+                        
             main : IO ();
             main = (
                 let u = assert_eq(|_|"", let x = 5 in -x, -5);
@@ -43,8 +41,7 @@ pub fn test1() {
 pub fn test2() {
     let source = r#"
             module Main; 
-            import Debug;
-
+            
             main : IO ();
             main = (
                 let u = assert_eq(|_|"", let x = 5 in 3, 3);
@@ -58,8 +55,7 @@ pub fn test2() {
 pub fn test3() {
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let u = assert_eq(|_|"", let n = -5 in let p = 5 in n, -5);
@@ -73,8 +69,7 @@ pub fn test3() {
 pub fn test4() {
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let u = assert_eq(|_|"", let n = -5 in let p = 5 in p, 5);
@@ -88,8 +83,7 @@ pub fn test4() {
 pub fn test5() {
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let u = assert_eq(|_|"", let x = -5 in let x = 5 in x, 5);
@@ -102,8 +96,7 @@ pub fn test5() {
 #[test]
 pub fn test6() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let u = assert_eq(|_|"", let x = let y = 3 in y in x, 3);
             pure()
@@ -115,7 +108,7 @@ pub fn test6() {
 #[test]
 pub fn test7() {
     let source = r#"
-        module Main; import Debug;
+        module Main;         
         main : IO ();
         main = (
             let u = assert_eq(|_|"", (|x| 5)(10), 5);
@@ -128,7 +121,7 @@ pub fn test7() {
 #[test]
 pub fn test8() {
     let source = r#"
-        module Main; import Debug; 
+        module Main;
 
         main : IO ();
         main = (
@@ -142,8 +135,7 @@ pub fn test8() {
 #[test]
 pub fn test9_5() {
     let source = r#"
-        module Main; import Debug;
-        
+        module Main;         
         main : IO ();
         main = (
             let x = 3;
@@ -158,8 +150,7 @@ pub fn test9_5() {
 #[test]
 pub fn test10() {
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let u = assert_eq(|_|"", let x = 5 in 2 + x, 7);
@@ -172,8 +163,7 @@ pub fn test10() {
 #[test]
 pub fn test11() {
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let x = 5 in 
@@ -188,8 +178,7 @@ pub fn test11() {
 #[test]
 pub fn test12() {
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let x = 5 in 
@@ -206,8 +195,7 @@ pub fn test12() {
 #[test]
 pub fn test13() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let f = add(5) in
             let u = assert_eq(|_|"", f(3), 5+3);
@@ -220,8 +208,7 @@ pub fn test13() {
 #[test]
 pub fn test13_5() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let f = add(5) in
             let u = assert_eq(|_|"", f(-3) + f(12), 5 - 3 + 5 + 12);
@@ -234,8 +221,7 @@ pub fn test13_5() {
 #[test]
 pub fn test14() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let x = 3 in 
             let y = 5 in
@@ -250,8 +236,7 @@ pub fn test14() {
 #[test]
 pub fn test15() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let f = |x| 3 + x in
             let u = assert_eq(|_|"", f(5), 3 + 5);
@@ -264,8 +249,7 @@ pub fn test15() {
 #[test]
 pub fn test15_5() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let x = 3;
             let f = |y| x;
@@ -279,8 +263,7 @@ pub fn test15_5() {
 #[test]
 pub fn test16() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let f = |x| x + 3 in
             let u = assert_eq(|_|"", f(5), 3 + 5);
@@ -293,8 +276,7 @@ pub fn test16() {
 #[test]
 pub fn test17() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let u = assert_eq(|_|"", if true { 3 } else { 5 }, 3);
             pure()
@@ -306,8 +288,7 @@ pub fn test17() {
 #[test]
 pub fn test18() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let u = assert_eq(|_|"", if false { 3 } else { 5 }, 5);
             pure()
@@ -319,8 +300,7 @@ pub fn test18() {
 #[test]
 pub fn test19() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let u = assert_eq(|_|"", if 3 == 3 { 1 } else { 0 }, 1);
             pure()
@@ -332,8 +312,7 @@ pub fn test19() {
 #[test]
 pub fn test20() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let u = assert_eq(|_|"", if 3 == 5 { 1 } else { 0 }, 0);
             pure()
@@ -345,8 +324,7 @@ pub fn test20() {
 #[test]
 pub fn test20_5() {
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let ans = (
                 if 2 == 0 {
@@ -367,8 +345,7 @@ pub fn test20_5() {
 #[test]
 pub fn test21() {
     let source = r#"
-            module Main; import Debug;
-
+            module Main; 
             main : IO ();
             main = (
                 let fact = fix $ |loop, n| if n == 0 { 1 } else { n * loop(n-1) };
@@ -385,8 +362,7 @@ pub fn test22() {
     let n: i64 = 1000000;
     let source = format!(
         r#"
-            module Main; import Debug;
-            main : IO ();
+            module Main;             main : IO ();
             main = (
                 let g = fix $ |loop, a, x|
                             if x == 0 {{ 
@@ -411,8 +387,7 @@ pub fn test22() {
 pub fn test22_5() {
     // Test recursion function defined by fix that is not tail-call.
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let fib = fix $ |f, n|
                         if n == 0 {
@@ -434,8 +409,7 @@ pub fn test22_5() {
 pub fn test22_7() {
     // Test global recursion function
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         fib : I64 -> I64;
         fib = |n| (
             if n == 0 {
@@ -460,8 +434,7 @@ pub fn test22_7() {
 pub fn test23() {
     // Test Array::fill of size 0.
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let arr = Array::fill(0, 42);
             pure()
@@ -474,8 +447,7 @@ pub fn test23() {
 pub fn test24() {
     // Test Array::fill of size > 0.
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let arr = Array::fill(100, 42);
             let u = assert_eq(|_|"", arr.get_size, 100);
@@ -489,8 +461,7 @@ pub fn test24() {
 pub fn test25() {
     // Test Array::get.
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let arr = Array::fill(100, 42);
             let elem = arr.@(50);
@@ -505,8 +476,7 @@ pub fn test25() {
 pub fn test26() {
     // Test Array::set (unique case).
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let arr = Array::fill(100, 42);
             let arr = arr.set(50, 21);
@@ -521,8 +491,7 @@ pub fn test26() {
 pub fn test27() {
     // Test Array::set (shared case).
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let arr0 = Array::fill(100, 42);
             let arr1 = arr0.set(50, 21);
@@ -537,8 +506,7 @@ pub fn test27() {
 pub fn test27_5() {
     // Test Array of boxed object.
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let arr = Array::from_map(100) $ |i| add(i);
             let arr = arr.set(99, |x| x - 100);
@@ -553,8 +521,7 @@ pub fn test27_5() {
 pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let arr = Array::fill(31, 0);
             let arr = arr.assert_unique(|_|"The array is not unique!").set(0, 0);
@@ -580,8 +547,7 @@ pub fn test28() {
 #[test]
 pub fn test29() {
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         id : a -> a;
         id = |x| x;
 
@@ -598,8 +564,7 @@ pub fn test29() {
 pub fn test30() {
     // Test dollar combinator
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let f = |x| x + 3;
             let g = |x| x == 8;
@@ -615,8 +580,7 @@ pub fn test30() {
 pub fn test31() {
     // Test . combinator
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let f = |x| x + 3;
             let g = |x| x == 8;
@@ -632,8 +596,7 @@ pub fn test31() {
 pub fn test32() {
     // Test . and $ combinator
     let source = r#"
-        module Main; import Debug;
-        main : IO ();
+        module Main;         main : IO ();
         main = (
             let f = |x| x + 10;
             let u = assert_eq(|_|"", 5.add $ 3.f, 18);
@@ -647,8 +610,7 @@ pub fn test32() {
 pub fn test33() {
     // Test struct declaration and new, mod.
     let source = r#"
-        module Main; import Debug;
-        type I64Bool = box struct {x: I64, y: Bool};
+        module Main;         type I64Bool = box struct {x: I64, y: Bool};
 
         main : IO ();
         main = (
@@ -665,8 +627,7 @@ pub fn test33() {
 pub fn test34_5() {
     // Test unboxed struct declaration and new, mod.
     let source = r#"
-        module Main; import Debug;
-        type I64Bool = unbox struct {x: I64, y: Bool};
+        module Main;         type I64Bool = unbox struct {x: I64, y: Bool};
 
         main : IO ();
         main = (
@@ -683,7 +644,7 @@ pub fn test34_5() {
 pub fn test34() {
     // Test namespace inference.
     let source = r#"
-        module Main; import Debug;        
+        module Main;
         
         type OtherStruct = box struct {y: I64, x: Bool};
         type I64Bool = box struct {x: I64, y: Bool};
@@ -703,8 +664,7 @@ pub fn test34() {
 pub fn test35() {
     // Test overloading resolution.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type A = box struct {x: I64, y: Bool};
         type B = box struct {x: Bool, y: I64};
             
@@ -724,8 +684,7 @@ pub fn test35() {
 pub fn test36() {
     // Test modifier composition.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type A = box struct {x: B};
         type B = box struct {x: I64};
             
@@ -745,8 +704,7 @@ pub fn test36() {
 pub fn test37_5() {
     // Test shared modField.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type A = box struct {x: B};
         type B = box struct {x: I64};
 
@@ -766,8 +724,7 @@ pub fn test37_5() {
 pub fn test38() {
     // Test type annotation.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type A = box struct {x: B};
         type B = box struct {x: I64};
 
@@ -788,8 +745,7 @@ pub fn test38() {
 pub fn test39() {
     // Test type annotation.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type A = box struct {x: B};
         type B = box struct {x: I64};
         
@@ -810,8 +766,7 @@ pub fn test39() {
 pub fn test40() {
     // Test type annotation at let-binding.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type A = box struct {x: B};
         type B = box struct {x: I64};
         
@@ -832,8 +787,7 @@ pub fn test40() {
 pub fn test41() {
     // Test type annotation at let-binding.
     let source = r#"
-        module Main; import Debug;
-        
+        module Main;         
         main : IO ();
         main = (
             let x: I64 -> I64 = |x| x;
@@ -849,8 +803,7 @@ pub fn test41() {
 pub fn test41_5() {
     // Test type annotation at lambda
     let source = r#"
-        module Main; import Debug;
-        
+        module Main;         
         main : IO ();
         main = (
             let x = |x: I64| x;
@@ -868,8 +821,7 @@ pub fn test42() {
     let n = 10000;
     let source = format!(
         r#"
-            module Main; import Debug;
-            
+            module Main;             
             loop : I64 -> I64;
             loop = |x| if x == 0 {{ 0 }} else {{ add(x) $ loop $ add(x, -1) }};
     
@@ -892,8 +844,7 @@ pub fn test43() {
     let n: i64 = 10000000;
     let source = format!(
         r#"
-            module Main; import Debug;
-            
+            module Main;             
             my_loop : I64 -> I64 -> I64;
             my_loop = |x, acc| if x == 0 {{ acc }} else {{ my_loop(x + -1, acc + x) }};
     
@@ -914,8 +865,7 @@ pub fn test43() {
 pub fn test44() {
     // Test basic use of traits.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         trait a : ToI64 {
             toI64 : a -> I64;
         }
@@ -958,8 +908,7 @@ pub fn test44() {
 pub fn test44_5() {
     // Test Array::from_map.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         sum : Array I64 -> I64;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
@@ -984,8 +933,7 @@ pub fn test44_5() {
 pub fn test45() {
     // Test HKT.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         trait [f:*->*] f : MyFunctor {
             my_map : (a -> b) -> f a -> f b;
         }
@@ -1021,8 +969,7 @@ pub fn test45() {
 pub fn test46() {
     // Test confliction of global name and local name.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         x : I64;
         x = 5;
 
@@ -1043,8 +990,7 @@ pub fn test46() {
 pub fn test47() {
     // Basic use of union.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type I64OrBool = union {int : I64, bool: Bool};
 
         main : IO ();
@@ -1065,8 +1011,7 @@ pub fn test47() {
 pub fn test47_2() {
     // Basic use of boxed union.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type I64OrBool = box union {int : I64, bool: Bool};
 
         main : IO ();
@@ -1087,8 +1032,7 @@ pub fn test47_2() {
 pub fn test47_5() {
     // Test union of closure object
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type Union = union {val: I64, func: I64 -> I64};
 
         main : IO ();
@@ -1108,8 +1052,7 @@ pub fn test47_5() {
 pub fn test47_6() {
     // Test union of boxed object
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let uni = Option::some([1,2,3]).mod_some(
@@ -1133,8 +1076,7 @@ pub fn test47_6() {
 pub fn test48() {
     // Parametrised struct.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type Vec a = box struct {data: Array a};
 
         main : IO ();
@@ -1155,8 +1097,7 @@ pub fn test48() {
 pub fn test49() {
     // Parametrised union.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         type Either a b = union {left: a, right: b};
 
         main : IO ();
@@ -1184,8 +1125,7 @@ pub fn test50() {
     let n = 100;
     let source = format!(
         r#"
-            module Main; import Debug;
-    
+            module Main;     
             main : IO ();
             main = (
                 let ans = (
@@ -1213,8 +1153,7 @@ pub fn test50() {
 pub fn test50_3() {
     // test loop_iter, loop_iter_m.
     let source = r#"
-        module Main; import Debug;
-        
+        module Main;         
         main : IO ();
         main = (
             let sum = Iterator::count_up(0).loop_iter(0, |sum, n| (
@@ -1241,8 +1180,7 @@ pub fn test50_3() {
 pub fn test51() {
     // test trait bounds.
     let source = r#"
-    module Main; import Debug;
-    
+    module Main;     
     search : [a: Eq] a -> Array a -> I64;
     search = |elem, arr| loop(0) $ |idx| (
         if idx == arr.get_size {
@@ -1273,8 +1211,7 @@ pub fn test51() {
 pub fn test52() {
     // Test loop with boxed state / break.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     type SieveState = box struct {i: I64, arr: Array Bool};
     
     // Calculate a Bool array whose element is true iff idx is prime.
@@ -1330,8 +1267,7 @@ pub fn test52() {
 pub fn test53() {
     // Test mutation of unique unboxed struct (e.g., tuple).
     let source = r#"
-    module Main; import Debug;
-    
+    module Main;     
     main : IO ();
     main = (
         let pair = (13, Array::fill(1, 0));
@@ -1351,8 +1287,7 @@ pub fn test53() {
 pub fn test54() {
     // Test mutation of shared unboxed struct (e.g., tuple).
     let source = r#"
-    module Main; import Debug;
-    
+    module Main;     
     main : IO ();
     main = (
         let pair0 = (13, Array::fill(1, 0));
@@ -1372,8 +1307,7 @@ pub fn test54() {
 pub fn test55() {
     // Test <= operator
     let source = r#"
-    module Main; import Debug;
-    
+    module Main;     
     main : IO ();
     main = (
         let ans = (
@@ -1396,8 +1330,7 @@ pub fn test55() {
 pub fn test56() {
     // Test && and || operator
     let source = r#"
-    module Main; import Debug;
-    
+    module Main;     
     main : IO ();
     main = (
         let ans = (
@@ -1418,8 +1351,7 @@ pub fn test56() {
 pub fn test57() {
     // Test ! operator
     let source = r#"
-    module Main; import Debug;
-    
+    module Main;     
     main : IO ();
     main = (
         let ans = (
@@ -1440,8 +1372,7 @@ pub fn test57() {
 pub fn test58() {
     // Test != operator
     let source = r#"
-    module Main; import Debug;
-    
+    module Main;     
     main : IO ();
     main = (
         let ans = (
@@ -1462,8 +1393,7 @@ pub fn test58() {
 pub fn test59() {
     // Test namespace definition
     let source = r#"
-    module Main; import Debug;
-    
+    module Main;     
     namespace A {
         x : I64;
         x = 3;
@@ -1494,8 +1424,7 @@ pub fn test59() {
 pub fn test60() {
     // Test unit.
     let source = r"
-    module Main; import Debug;
-    
+    module Main;     
     unit : ();
     unit = ();
 
@@ -1509,8 +1438,7 @@ pub fn test60() {
 pub fn test61() {
     // Test Hello world.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main_loop : I64 -> IO ();
     main_loop = |counter| (
         if counter == 0 {
@@ -1531,8 +1459,7 @@ pub fn test61() {
 pub fn test61_5() {
     // Test Hello world.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         loop_m(0, |i| (
@@ -1549,8 +1476,7 @@ pub fn test61_5() {
 pub fn test62() {
     // Test String length.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let len = "Hello World!".get_size;
@@ -1566,8 +1492,7 @@ pub fn test63() {
     // Test I64 ToString.
     // See also test98.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let min = -9223372036854775808;
@@ -1582,8 +1507,7 @@ pub fn test63() {
 pub fn test64() {
     // Test escape sequence.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         println $ "\u2764"
@@ -1596,8 +1520,7 @@ pub fn test64() {
 pub fn test65() {
     // Test tuple pattern matching.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let sum = loop((0, 0), |state| 
@@ -1619,8 +1542,7 @@ pub fn test65() {
 pub fn test66() {
     // Test unboxed struct pattern matching.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     type State = unbox struct {idx: I64, sum: I64};
 
     main : IO ();
@@ -1644,8 +1566,7 @@ pub fn test66() {
 pub fn test67() {
     // Test boxed struct pattern matching.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     type State = box struct {idx: I64, sum: I64};
 
     main : IO ();
@@ -1669,8 +1590,7 @@ pub fn test67() {
 pub fn test72() {
     // Test pattern matching on argment.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let sum = loop((0, 0), |(i, sum)|
@@ -1691,8 +1611,7 @@ pub fn test72() {
 pub fn test73() {
     // Test pattern matching on argment.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     type I64Bool = box struct {x: I64, y: Bool};
 
     main : IO ();
@@ -1710,8 +1629,7 @@ pub fn test73() {
 pub fn test74() {
     // Test setter function of struct / tuple.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     type UnboxStr = unbox struct {x: I64, y: Bool};
     type BoxStr = box struct {x: I64, y: Bool};
 
@@ -1748,8 +1666,7 @@ pub fn test74() {
 pub fn test75() {
     // Test iterator.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let iter = Iterator::from_map(|i| i*i );
@@ -1773,8 +1690,7 @@ pub fn test75() {
 pub fn test76() {
     // Test array modifier.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let array = Array::from_map(3, |_i| Array::from_map(3, |_j| 0));
@@ -1790,8 +1706,7 @@ pub fn test76() {
 pub fn test77() {
     // Test Iterator::zip / map / take / fold / subsequences.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let iter0 = Iterator::count_up(5);
@@ -1819,8 +1734,7 @@ pub fn test77() {
 pub fn test78() {
     // Test Iterator::filter
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let iter = Iterator::count_up(1).take(100);
@@ -1837,8 +1751,7 @@ pub fn test78() {
 pub fn test79() {
     // Test Iterator::push_front
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let ls = Iterator::empty;
@@ -1857,8 +1770,7 @@ pub fn test79() {
 pub fn test80() {
     // Test Iterator::last
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let iter = Iterator::empty.push_front(4).push_front(3).push_front(2).push_front(1);
@@ -1876,8 +1788,7 @@ pub fn test80() {
 pub fn test81() {
     // Test array literal.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let arr = [1,2,3,4];
@@ -1894,8 +1805,7 @@ pub fn test81() {
 pub fn test82() {
     // Test Array::append.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
 
@@ -1964,8 +1874,7 @@ pub fn test82() {
 pub fn test83() {
     // Test Array::push_back, pop_back
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         // Unboxed element
@@ -2019,8 +1928,7 @@ pub fn test83() {
 pub fn test84() {
     // Test Eq for Array
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let v1 = [1,2,3];
@@ -2049,8 +1957,7 @@ pub fn test84() {
 pub fn test85() {
     // Test concat string, compare string.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let s1 = "Hello";
@@ -2069,8 +1976,7 @@ pub fn test85() {
 pub fn test86() {
     // Test concat_iter
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let iter = Iterator::from_array(["Hello", " ", "World", "!"]);
@@ -2086,8 +1992,7 @@ pub fn test86() {
 pub fn test87() {
     // Test iterator comparison
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let lhs = Iterator::from_array([1,2,3]);
@@ -2113,8 +2018,7 @@ pub fn test87() {
 pub fn test88() {
     // Test iterator comparison
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let iter = Iterator::from_array([1,2,3]);
@@ -2140,8 +2044,7 @@ pub fn test88() {
 pub fn test89() {
     // Test Iterator::append
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let lhs = Iterator::from_array([1,2,3]);
@@ -2171,8 +2074,7 @@ pub fn test89() {
 pub fn test90() {
     // Test Array::sort_by.
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let vec = [5,3,1,7,4,6,9,8,2];
@@ -2197,8 +2099,7 @@ pub fn test90() {
 #[test]
 pub fn test92() {
     let source = r#"
-    module Main; import Debug;
-
+    module Main; 
     main : IO ();
     main = (
         let buf = [].reserve(5);
@@ -2236,8 +2137,7 @@ pub fn test93() {
 pub fn test_ffi_call() {
     // Test FFI
     let source = r#"
-            module Main; import Debug;
-    
+            module Main;     
             main : IO ();
             main = (
                 eval "Hello C function! Number = %d\n".borrow_c_str(|ptr|
@@ -2255,8 +2155,7 @@ pub fn test95() {
     // Test Std::unsafe_is_unique, Debug::assert_unique
     let source = r#"
             module Main; 
-            import Debug;
-    
+                
             main : IO ();
             main = (
                 // For unboxed value, it returns true even if the value is used later.
@@ -2295,8 +2194,7 @@ pub fn test95() {
 pub fn test96() {
     // Test U8 literal
     let source = r#"
-            module Main; import Debug;
-            
+            module Main;             
             main : IO ();
             main = (
                 eval assert_eq(|_|"", 255_U8, 255_U8);
@@ -2318,8 +2216,7 @@ pub fn test96() {
 pub fn test97() {
     // Test arithmetic operation of U8, I32
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"1", -(1_U8), 255_U8);
@@ -2348,8 +2245,7 @@ pub fn test97() {
 pub fn test98() {
     // Test to_string, from_string for integrals
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             // I8
@@ -2449,8 +2345,7 @@ pub fn test99() {
     }
     let source = format!(
         r#"
-            module Main; import Debug;
-    
+            module Main;     
             main : IO ();
             main = (
                 {}
@@ -2466,8 +2361,7 @@ pub fn test99() {
 pub fn test99_5() {
     // Test cast float to integral types.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"", -3.14_F32.to_I8, -3_I8);
@@ -2498,8 +2392,7 @@ pub fn test99_5() {
 pub fn test99_51() {
     // Test cast integral to float types.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"", -123_I8.to_F32, -123.0_F32);
@@ -2530,8 +2423,7 @@ pub fn test99_51() {
 pub fn test100() {
     // Test u8 literal
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"case 1", 'A', 65_U8);
@@ -2548,8 +2440,7 @@ pub fn test100() {
 pub fn test101() {
     // Test Array::is_empty, get_first, get_last.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let cap = 42;
@@ -2574,8 +2465,7 @@ pub fn test101() {
 pub fn test102() {
     // Test I64 : Eq, LessThan, LessThanEq
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"case 1", 0 == 0, true);
@@ -2602,8 +2492,7 @@ pub fn test102() {
 pub fn test103() {
     // Test Bool : Eq
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"case 1", false == false, true);
@@ -2621,8 +2510,7 @@ pub fn test103() {
 pub fn test104() {
     // Test Bool : ToString
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"case 1", true.to_string, "true");
@@ -2638,8 +2526,7 @@ pub fn test104() {
 pub fn test105() {
     // Test String::get_first_byte, get_last_byte, is_empty
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"case 1", "".is_empty, true);
@@ -2659,8 +2546,7 @@ pub fn test105() {
 pub fn test106() {
     // Test [a : Eq] Option a : Eq
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let lhs: Option I64 = Option::none();
@@ -2689,8 +2575,7 @@ pub fn test106() {
 pub fn test107() {
     // Test String::pop_back_byte, strip_last_bytes, strip_last_newlines.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"case 1", "".pop_back_byte, "");
@@ -2716,8 +2601,7 @@ pub fn test107() {
 pub fn test108() {
     // Test write_file_string!, read_file_string!, read_line.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let file_path = Path::parse("test_uAfQDPwJ7sS6.txt").as_some;
@@ -2747,8 +2631,7 @@ pub fn test108() {
 pub fn test_is_eof() {
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let file_path = Path::parse("test_bUeW9baGGZmE.txt").as_some;
@@ -2777,8 +2660,7 @@ pub fn test_is_eof() {
 pub fn test108_5() {
     // Test write_file_bytes, read_file_bytes.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let file_path = Path::parse("test_vgZNhmj4gPbF.dat").as_some;
@@ -2801,8 +2683,7 @@ pub fn test108_5() {
 pub fn test109() {
     // Test monad syntax.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         add_opt_int : Option I64 -> Option I64 -> Option I64;
         add_opt_int = |lhs, rhs| pure $ *lhs + *rhs;
 
@@ -2851,8 +2732,7 @@ pub fn test109() {
 pub fn test110a() {
     // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let x = -3.1415_F32;
@@ -2916,8 +2796,7 @@ pub fn test110a() {
 pub fn test110b() {
     // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let x = 3.1415;
@@ -2982,8 +2861,7 @@ pub fn test110b() {
 pub fn test111() {
     // Test function composition operators
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let f = |x| x + 2;
@@ -3005,8 +2883,7 @@ pub fn test111() {
 pub fn test112() {
     // Test Iterator::generate
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let iter = Iterator::generate(0, |_| Option::none());
@@ -3027,8 +2904,7 @@ pub fn test112() {
 pub fn test113() {
     // Test bit operations.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             // Shift
@@ -3061,8 +2937,7 @@ pub fn test113() {
 pub fn test114() {
     // Test Array::find_by
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let arr = [0,1,2,3];
@@ -3085,8 +2960,7 @@ pub fn test115() {
     let source = r#"
         module Main; 
 
-        import Debug;
-        import HashMap;
+                import HashMap;
 
         main : IO ();
         main = (
@@ -3133,8 +3007,7 @@ pub fn test115_5() {
     let source = r#"
         module Main; 
 
-        import Debug;
-        import HashSet;
+                import HashSet;
 
         main : IO ();
         main = (
@@ -3219,8 +3092,7 @@ pub fn test115_5() {
 pub fn test_destructor() {
     // Test Std::Destructor
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
 
@@ -3265,8 +3137,7 @@ pub fn test_destructor() {
 pub fn test117() {
     // Test String::from_c_str
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let str = String::_unsafe_from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
@@ -3282,8 +3153,7 @@ pub fn test117() {
 pub fn test118() {
     // Test fold_m
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval *count_up(0).take(10).fold_m(0, |s, i| (
@@ -3302,8 +3172,7 @@ pub fn test118() {
 pub fn test119() {
     // Test namespace and MakeStruct, Pattern.
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         namespace A {
             type S = box struct { data : () };
             type U = union { data : () };
@@ -3331,8 +3200,7 @@ pub fn test_undefined() {
     // Test undefined of type Array or function.
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let x = 3;
@@ -3352,8 +3220,7 @@ pub fn test121() {
     let source = r#"
         module Main; 
 
-        import Debug;
-        import Math;
+                import Math;
 
         main : IO ();
         main = (
@@ -3432,8 +3299,7 @@ pub fn test_punched_array() {
     let source = r#"
         module Main; 
 
-        import Debug;
-
+        
         type MyBoxed = box struct { x : I64 };
 
         main : IO ();
@@ -3531,8 +3397,7 @@ pub fn test_array_act_0() {
     let source = r#"
         module Main; 
 
-        import Debug;
-
+        
         main : IO ();
         main = (
             // If the array and the element is both unique, the action should receive an unique value.
@@ -3573,8 +3438,7 @@ pub fn test_array_act_1() {
     let source = r#"
         module Main; 
 
-        import Debug;
-
+        
         type MyBoxed = box struct { x : I64 };
 
         main : IO ();
@@ -3701,8 +3565,7 @@ pub fn test_array_act_2() {
     let source = r#"
         module Main; 
 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let act2: I64 -> Option I64 = |v| (
@@ -3755,8 +3618,7 @@ pub fn test124() {
     let source = r#"
         module Main; 
 
-        import Debug;
-
+        
         main : IO ();
         main = (
             // flatten
@@ -3806,8 +3668,7 @@ pub fn test125() {
     let source = r#"
         module Main; 
 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let arr = [(), ()];
@@ -3825,8 +3686,7 @@ pub fn test126() {
     let source = r#"
         module Main; 
 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let n = 100;
@@ -3845,8 +3705,7 @@ pub fn test_trait_alias() {
     // Basic example are Additive and Iterator::sum, which are tested in other tests.
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         // Higher kinded trait alias.
 
         trait [f : * -> *] f : MyFunctorZero {
@@ -3932,8 +3791,7 @@ pub fn test_trait_alias() {
 pub fn test_trait_alias_kind_mismatch() {
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         trait BadTrait = Functor + ToString;
 
         main : IO ();
@@ -3950,8 +3808,7 @@ pub fn test_trait_alias_kind_mismatch() {
 pub fn test_trait_alias_implement_trait_alias_directly() {
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         type Vector2 a = box struct { x : a, y : a };
         impl [a : Additive] Vector2 a : Zero {
             zero = Vector2 { x : Zero::zero, y : Zero::zero };
@@ -3979,8 +3836,7 @@ pub fn test_trait_alias_implement_trait_alias_directly() {
 pub fn test_trait_alias_circular_aliasing() {
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         // Error (circular aliasing)
         trait MyTraitA = MyTraitB + ToString;
         trait MyTraitB = MyTraitA + Eq;
@@ -4002,8 +3858,7 @@ pub fn test129() {
     // Test ToBytes/FromBytes
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         main : IO ();
         main = (
             // U8
@@ -4097,8 +3952,7 @@ pub fn test130() {
     // Test Time module
     let source = r#"
         module Main; 
-        import Debug;
-        import Time;
+                import Time;
 
         weeks : Array String;
         weeks = ["Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"];
@@ -4136,8 +3990,7 @@ pub fn test131() {
     // Test Character module
     let source = r#"
         module Main; 
-        import Debug;
-        import Character;
+                import Character;
 
         main : IO ();
         main = (
@@ -4241,8 +4094,7 @@ pub fn test_consumed_time() {
     // Test Debug module
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         main : IO ();
         main = (
             let (r, t) = consumed_time_while_lazy(|_| (
@@ -4268,8 +4120,7 @@ pub fn test_consumed_time() {
 #[test]
 pub fn test_signed_integral_abs() {
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             eval assert_eq(|_|"", -123_I8.abs, 123_I8);
@@ -4293,8 +4144,7 @@ pub fn test_signed_integral_abs() {
 #[test]
 pub fn test_float_to_string_precision() {
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let x = 3.14_F32;
@@ -4314,8 +4164,7 @@ pub fn test_float_to_string_precision() {
 #[test]
 pub fn test_float_to_string_exp() {
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let x = 123.45_F32;
@@ -4333,8 +4182,7 @@ pub fn test_float_to_string_exp() {
 #[test]
 pub fn test_float_to_string_exp_precision() {
     let source = r#"
-        module Main; import Debug;
-
+        module Main; 
         main : IO ();
         main = (
             let x = 123.45_F32;
@@ -4355,8 +4203,7 @@ pub fn test_float_to_string_exp_precision() {
 pub fn test_string_unsafe_from_c_str_ptr() {
     let source = r#"
         module Main;
-        import Debug;
-
+        
         main : IO ();
         main = (
             let src = "Hello World!";
@@ -4372,8 +4219,7 @@ pub fn test_string_unsafe_from_c_str_ptr() {
 pub fn test_subprocess_run_stream() {
     let source = r#"
     module Main;
-    import Debug;
-    import Subprocess;
+        import Subprocess;
     
     main : IO ();
     main = (
@@ -4403,8 +4249,7 @@ pub fn test_subprocess_run_stream() {
 pub fn test_loop_lines() {
     let source = r#"
     module Main;
-    import Debug;
-
+    
     sum_up_while : Path -> IOFail I64;
     sum_up_while = |file_path| (
         // Process lines of a file.
@@ -4447,8 +4292,7 @@ pub fn test_loop_lines() {
 pub fn test_array_get_sub() {
     let source = r#"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         // Unboxed case
@@ -4481,8 +4325,7 @@ pub fn test_array_get_sub() {
 pub fn test_string_get_sub() {
     let source = r#"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         let str = "Hello";
@@ -4503,8 +4346,7 @@ pub fn test_string_get_sub() {
 pub fn test_string_strip_first_spaces() {
     let source = r#"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"", "".strip_first_spaces, "");
@@ -4524,8 +4366,7 @@ pub fn test_string_strip_first_spaces() {
 pub fn test_loop_lines_io() {
     let source = r#"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         let content1 = "Hello\nWorld!";
@@ -4559,8 +4400,7 @@ pub fn test_loop_lines_io() {
 pub fn test_string_find() {
     let source = r#"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"1", "abcdef".find("ab", 0), Option::some(0));
@@ -4597,8 +4437,7 @@ pub fn test_string_find() {
 pub fn test_names_literal_prefix() {
     let source = r#"
     module Main;
-    import Debug;
-
+    
     true_global_val : I64;
     true_global_val = 42;
 
@@ -4626,8 +4465,7 @@ pub fn test_names_literal_prefix() {
 pub fn test_string_split() {
     let source = r#"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"1", "--ab---cde----".split("--").to_array, ["", "ab", "-cde", "", ""]);
@@ -4647,8 +4485,7 @@ pub fn test_string_split() {
 pub fn test_ptr_to_string() {
     let source = r#"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"", nullptr.add_offset(3134905646).to_string, "00000000badadd2e");
@@ -4662,8 +4499,7 @@ pub fn test_ptr_to_string() {
 pub fn test_async_task_fib() {
     let source = r#"
     module Main;
-    import Debug;
-    import AsyncTask;
+        import AsyncTask;
 
     fib_async : I64 -> I64;
     fib_async = |n| (
@@ -4695,8 +4531,7 @@ pub fn test_async_shared_array() {
     // This test shares array between multiple threads, try to mutate it from one thread while read it from multiple threads simultaneously.
     let source = r#"
     module Main;
-    import Debug;
-    import AsyncTask;
+        import AsyncTask;
 
     main : IO ();
     main = (
@@ -4758,8 +4593,7 @@ pub fn test_async_shared_array() {
 pub fn test_async_task_array_result() {
     let source = r#"
     module Main;
-    import Debug;
-    import AsyncTask;
+        import AsyncTask;
 
     main : IO ();
     main = (
@@ -4794,8 +4628,7 @@ pub fn test_async_task_io() {
 pub fn test_tarai() {
     let source = r#"
     module Main;
-    import Debug;
-
+    
     tarai : (I64, I64, I64) -> I64;
     tarai = |(x, y, z)| (
         if x <= y {
@@ -4888,8 +4721,7 @@ pub fn test_mvar_of_shared_object() {
     // This test is to check whether the refcnt of the array is not corrupted.
     let source = r##"
     module Main;
-    import Debug;
-    import AsyncTask;
+        import AsyncTask;
 
     main : IO ();
     main = (
@@ -4998,8 +4830,7 @@ pub fn test_random() {
 pub fn test_float_inf_nan() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"", F32::infinity.to_string, "inf");
@@ -5028,8 +4859,7 @@ pub fn test_float_inf_nan() {
 pub fn test_large_tuple() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         let x = (1,2,3,4,5,6,7,8,9,10);
@@ -5131,7 +4961,7 @@ pub fn test_files_in_directory(path: &Path) {
 #[test]
 pub fn test_comment_0() {
     // block comment
-    let source = r"/* head */ module Main; import Debug; 
+    let source = r"/* head */ module Main;
         main : IO ();
         main = (
             let x = 5 in 
@@ -5156,7 +4986,7 @@ pub fn test_comment_0() {
 pub fn test_comment_1() {
     // ilne comment
     let source = r"
-        module Main; import Debug; //// /* */
+        module Main; //// /* */
         main : IO ();
         main = (
             let x = 5 in
@@ -5174,8 +5004,7 @@ pub fn test_comment_1() {
 pub fn test_hex_oct_bin_lit() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"", 0x0, 0);
@@ -5217,8 +5046,7 @@ pub fn test_hex_oct_bin_lit() {
 pub fn test_regexp() {
     let source = r##"
     module Main;
-    import Debug;
-    import RegExp;
+        import RegExp;
     
     main : IO ();
     main = (
@@ -5244,8 +5072,7 @@ pub fn test_regexp() {
 pub fn test_array_to_string() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"", ([] : Array Bool).to_string, "[]");
@@ -5260,8 +5087,7 @@ pub fn test_array_to_string() {
 pub fn test_option_to_string() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"", (Option::none() : Option Bool).to_string, "none()");
@@ -5276,8 +5102,7 @@ pub fn test_option_to_string() {
 pub fn test_unit_tuple_to_string() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"", ().to_string, "()");
@@ -5293,8 +5118,7 @@ pub fn test_unit_tuple_to_string() {
 pub fn test_unit_tuple_eq() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert(|_|"", () == ());
@@ -5317,8 +5141,7 @@ pub fn test_unit_tuple_eq() {
 pub fn test_tuple_less_than_and_less_than_or_eq() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         eval assert_eq(|_|"", (1, 2) < (2, 1), true);
@@ -5343,8 +5166,7 @@ pub fn test_tuple_less_than_and_less_than_or_eq() {
 pub fn test_result_to_string() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         let res : Result String Bool = Result::ok(true);
@@ -5361,8 +5183,7 @@ pub fn test_result_to_string() {
 pub fn test_result_eq() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         let ok1 = Result::ok(true);
@@ -5396,8 +5217,7 @@ pub fn test_result_eq() {
 pub fn test_array_less_than_and_less_than_or_eq() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         let arr1 = [];
@@ -5429,8 +5249,7 @@ pub fn test_array_less_than_and_less_than_or_eq() {
 pub fn test_string_less_than_and_less_than_or_eq() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     main : IO ();
     main = (
         let s1 = "";
@@ -5462,8 +5281,7 @@ pub fn test_string_less_than_and_less_than_or_eq() {
 pub fn test_overlapping_trait_and_function() {
     let source = r##"
     module Main;
-    import Debug;
-    
+        
     trait a : Show {
         show : a -> String;
     }
@@ -5556,8 +5374,7 @@ pub fn test_orphan_rule_3() {
 pub fn test_implement_trait_on_arrow_1() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     trait a : MyToString {
         to_string : a -> String;
     }
@@ -5579,8 +5396,7 @@ pub fn test_implement_trait_on_arrow_1() {
 pub fn test_implement_trait_on_arrow_2() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     trait a : MyToString {
         to_string : a -> String;
     }
@@ -5602,8 +5418,7 @@ pub fn test_implement_trait_on_arrow_2() {
 pub fn test_overlapping_instances_1() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     trait a : MyToString {
         to_string : a -> String;
     }
@@ -5633,8 +5448,7 @@ pub fn test_overlapping_instances_1() {
 pub fn test_overlapping_instances_2() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     trait a : MyToString {
         to_string : a -> String;
     }
@@ -5664,8 +5478,7 @@ pub fn test_overlapping_instances_2() {
 pub fn test_overlapping_instances_3() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     trait a : MyToString {
         to_string : a -> String;
     }
@@ -5695,8 +5508,7 @@ pub fn test_overlapping_instances_3() {
 pub fn test_overlapping_instances_4() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     trait a : MyToString {
         to_string : a -> String;
     }
@@ -5856,8 +5668,7 @@ pub fn test_typedef_kind_mismatch() {
 pub fn test_typedef_struct_higher_kinded_type_variable() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     type [m : *->*] X m a = struct { data : m a };
 
     main : IO ();
@@ -5874,8 +5685,7 @@ pub fn test_typedef_struct_higher_kinded_type_variable() {
 pub fn test_state_t() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     type [m : *->*] StateT m s a = unbox struct {
         runner : s -> m (a, s)
     };
@@ -5951,8 +5761,7 @@ pub fn test_split_by_max_size() {
 pub fn test_duplicated_struct_name() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     type Hoge = unbox struct { data : I64 };
     type Hoge = unbox struct { data : I32 };
 
@@ -5972,8 +5781,7 @@ pub fn test_duplicated_struct_name() {
 pub fn test_ambiguous_struct_name() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     namespace A {
         type Hoge = unbox struct { data : I64 };
     }
@@ -5999,8 +5807,7 @@ pub fn test_ambiguous_struct_name() {
 pub fn test_duplicated_trait_name() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     trait a : Hoge {
         val : a;
     }
@@ -6024,8 +5831,7 @@ pub fn test_duplicated_trait_name() {
 pub fn test_ambiguous_trait_name() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     namespace A {
         trait a : Hoge {
             val : a;
@@ -6305,8 +6111,7 @@ pub fn test_import_unknown_namespace() {
 pub fn test_associated_type_collects() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     trait c : Collects {
         type Elem c;
         empty : Elem c;
@@ -6384,8 +6189,7 @@ pub fn test_associated_type_collects() {
 pub fn test_associated_type_type_level_arithmetic() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     type Zero = unbox struct { data : () };
     type Succ n = unbox struct { data : () };
 
@@ -6427,8 +6231,7 @@ pub fn test_associated_type_type_level_arithmetic() {
 pub fn test_extra_comma() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     type MyStruct0 a b = struct { fst : a, snd : b, };
     type MyStruct1 a b = struct { fst : a, snd : b ,};
     type MyStruct2 a b = struct { fst : a, snd : b , };
@@ -6474,8 +6277,7 @@ pub fn test_extra_comma() {
 pub fn test_textual_name_of_tuples() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     compare_tuple2 : Tuple2 I64 Bool -> (I64, Bool) -> Bool;
     compare_tuple2 = |x, y| x == y;
 
@@ -6500,8 +6302,7 @@ pub fn test_textual_name_of_tuples() {
 pub fn test_iterator_product() {
     let source = r##"
     module Main;
-    import Debug;
-
+    
     main : IO ();
     main = (
         eval assert_eq(|_|"", [1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);
@@ -6516,8 +6317,7 @@ pub fn test_type_alias() {
     // Test type alias.
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         // Test of higher kinded type alias is covered by Std::Lazy.
 
         type Name = String;
@@ -6564,8 +6364,7 @@ pub fn test_type_alias_higner_kinded_argument() {
     // Test type alias.
     let source = r#"
         module Main; 
-        import Debug;
-
+        
         type Swap a f = f a;
 
         main : Swap () IO;
@@ -6702,8 +6501,7 @@ pub fn test_call_unimplemented_trait_method_regression_issue_43() {
 pub fn test_c_type_aliases() {
     let source = r##"
         module Main;
-        import Debug;
-        
+                
         main: IO ();
         main = (
             let x : CChar = 42.to_CChar;
@@ -6755,8 +6553,7 @@ pub fn test_c_type_aliases() {
 pub fn test_borrow_boxed_data_ptr() {
     let source = r##"
         module Main;
-        import Debug;
-        
+                
         main: IO ();
         main = (
             let x : Boxed I32 = Boxed { value : 0_I32 };
@@ -6777,8 +6574,7 @@ pub fn test_borrow_boxed_data_ptr() {
 pub fn test_get_errno() {
     let source = r##"
         module Main;
-        import Debug;
-        
+                
         main: IO ();
         main = (
             let errno = "a_path_where_no_file_exists".borrow_c_str(|file|
@@ -6799,8 +6595,7 @@ pub fn test_get_errno() {
 pub fn test_monadic_bind_and_make_struct_ordering() {
     let source = r##"
         module Main;
-        import Debug;
-
+        
         type Pair a b = struct { x : a, y : b };
 
         impl [a : ToString, b : ToString] Pair a b : ToString {
@@ -6828,8 +6623,7 @@ pub fn test_monadic_bind_and_make_struct_ordering() {
 pub fn test_struct_act() {
     let source = r##"
         module Main;
-        import Debug;
-        
+                
         // Boxed struct with a boxed field.
         type BB = box struct { x : Array Bool, y : Array I64, z : I64 };
         impl BB : Eq {
@@ -6944,8 +6738,7 @@ pub fn test_struct_act() {
 pub fn test_tuple_functor() {
     let source = r##"
         module Main;
-        import Debug;
-        
+                
         main: IO ();
         main = (
             eval assert_eq(|_|"", (1,).map(|x| x + 1), (2,));
@@ -6960,8 +6753,7 @@ pub fn test_tuple_functor() {
 pub fn test_empty_struct() {
     let source = r##"
         module Main;
-        import Debug;
-
+        
         type Empty = struct {};
         impl Empty : ToString {
             to_string = |e| "Empty";
@@ -7042,8 +6834,7 @@ pub fn test_regression_issue_46() {
 pub fn test_read_file_after_close() {
     let source = r##"
         module Main;
-        import Debug;
-
+        
         main: IO ();
         main = do {
             let fh = *open_file(Path::parse("/dev/null").as_some, "r");
@@ -7090,8 +6881,7 @@ pub fn test_number_to_varname() {
 pub fn test_export() {
     let source = r##"
         module Main;
-        import Debug;
-
+        
         value : CInt;
         value = 42.to_CInt;
         FFI_EXPORT[value, c_value];

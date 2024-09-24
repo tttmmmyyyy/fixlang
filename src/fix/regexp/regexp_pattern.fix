@@ -2,7 +2,6 @@
 module RegExp.RegExpPattern;
 
 import Character;
-import Debug;
 
 import RegExp.SimpleParser;
 import RegExp.StringEx;

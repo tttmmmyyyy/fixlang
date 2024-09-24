@@ -6,7 +6,6 @@
 //
 module RegExp.RegExpNFA;
 
-import Debug;
 import Hash;
 import HashMap;
 

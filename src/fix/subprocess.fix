@@ -1,5 +1,4 @@
 module Subprocess;
-import Debug;
 
 // This type represents the exit status of a subprocess.
 // This type is the union of following variants:

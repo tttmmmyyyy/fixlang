@@ -7,7 +7,6 @@ Example:
 ```
 module Main;
 
-import Debug;
 
 main : IO ();
 main = (

@@ -1,5 +1,4 @@
 module Main;
-import Debug;
 
 // We define addition on type level numbers using associated types.
 

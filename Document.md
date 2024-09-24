@@ -996,7 +996,6 @@ Example:
 
 ```
 module Main;
-import Debug;
 
 main : IO ();
 main = (
@@ -1006,7 +1005,6 @@ main = (
     pure()
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/?src2=bW9kdWxlIE1haW47DQppbXBvcnQgRGVidWc7DQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgZXZhbCBhc3NlcnQofF98IjEgaXMgbm90IDIhIiwgMSA9PSAyKTsNCiAgICBldmFsICJDb250cmFkaWN0aW9uOiAiLmJvcnJvd19jX3N0cih8cHRyfCBDQUxMX0NbSTMyIHByaW50ZihQdHIsIC4uLiksIHB0cl0pOw0KICAgIGV2YWwgKnByaW50bG4oIjEgaXMgZXF1YWwgdG8gMiEiKTsNCiAgICBwdXJlKCkNCik7)
 
 For detail of `*` operator in front of `print` and `println`, see [Monads](#monads). 
 For FFI_CALL, see [Calling C functions from Fix](#calling-c-functions-from-fix).
@@ -1139,7 +1137,6 @@ An associated type is a type level function whose domain is (the set of members 
 
 ```
 module Main;
-import Debug;
 
 // A trait for collection-like types.
 trait c : Collects {
@@ -1189,7 +1186,6 @@ The following is an example of defining type level function of arity 2 using ass
 
 ```
 module Main;
-import Debug;
 
 // We define addition on type level numbers using associated types.
 

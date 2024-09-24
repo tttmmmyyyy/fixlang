@@ -2110,7 +2110,6 @@ Example:
 ```
 module Main;
 
-import Debug;
 
 main : IO ();
 main = (
@@ -2390,7 +2389,6 @@ Example:
 ```
 module Main;
 import AsyncTask;
-import Debug;
 
 main : IO ();
 main = (
