@@ -68,6 +68,7 @@
 - [Operators](#operators)
 - [Compiler feature](#compiler-feature)
   - [Fix projects and dependencies](#fix-projects-and-dependencies)
+  - [Generating documentation](#generating-documentation)
   - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
 
@@ -1802,6 +1803,36 @@ Even if you specify source files in the project file, you can specify additional
 For example, consider that you are making a library and having `Main::main` function which runs tests in "test.fix".
 In this case, you should not include "test.fix" in the "build.files" of the project file, because otherwise the test codes will be compiled into the application that uses your library.
 Instead, you should add "test.fix" by the command line argument "-f" when you run the test.
+
+## Generating documentation
+
+`fix docs -m {Module-names}` subcommand senerate documentations (markdown files) for specified Fix modules.
+This command requires the project file to be present in the current directory, and the project should be in the state that it can be built successfully.
+
+Consecutive line comments above declarations are recognized as documentations:
+
+```
+// This is a documentation comment for the module.
+module Main;
+
+// This is a documentation comment for a value.
+truth : I64;
+truth = 42;
+
+// This is a documentation comment for a type.
+type MyType = struct { x : I64 };
+
+// This is a documentation comment for a trait.
+trait a : MyTrait {
+    // This is a documentation comment for a trait method.
+    to_number : a -> I64;
+}
+
+// This is a documentation comment for a trait implementation.
+impl MyType : MyTrait  {
+    to_number = |mt| mt.@x;
+}
+```
 
 ## Language Server Protocol
 
