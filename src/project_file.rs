@@ -265,8 +265,9 @@ impl ProjectFile {
         dependent_proj: bool,
     ) -> Result<(), Errors> {
         // Should we consider `[build.test]` section?
-        let use_build_test =
-            config.subcommand == SubCommand::Test || config.subcommand == SubCommand::Diagnostics;
+        let use_build_test = !dependent_proj
+            && (config.subcommand == SubCommand::Test
+                || config.subcommand == SubCommand::Diagnostics);
 
         // Append source files.
         config.source_files.append(
