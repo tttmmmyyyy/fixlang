@@ -3,8 +3,8 @@ use crate::cpu_features::CpuFeatures;
 use crate::error::{exit_if_err, Errors};
 use crate::{error::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
-    C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
-    C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
+    to_absolute_path, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
+    C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
     OPTIMIZATION_LEVEL_DEFAULT, OPTIMIZATION_LEVEL_MINIMUM, OPTIMIZATION_LEVEL_NONE,
     OPTIMIZATION_LEVEL_SEPARATED,
@@ -95,7 +95,8 @@ impl ExtraCommand {
         for arg in &self.command[1..] {
             com.arg(arg);
         }
-        com.current_dir(&self.work_dir);
+        let work_dir = to_absolute_path(&self.work_dir);
+        com.current_dir(&work_dir);
         let status = com.status().map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to run command \"{}\": {:?}",
