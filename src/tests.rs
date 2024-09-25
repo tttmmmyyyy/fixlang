@@ -2961,140 +2961,6 @@ pub fn test114() {
 }
 
 #[test]
-pub fn test115() {
-    // Test HashMap
-    let source = r#"
-        module Main; 
-
-                import HashMap;
-
-        main : IO ();
-        main = (
-            let mp = HashMap::empty(0)
-                            .insert(0, 0)
-                            .insert(1, 1)
-                            .insert(2, 2)
-                            .erase(2).insert(2, 2)
-                            .insert(3, 3)
-                            .insert(4, 4).erase(4)
-                            .erase(5)
-                            // Do nothing for 6
-                            .insert(7, -1).insert(7, 7);
-        
-            eval assert_eq(|_|"case 0", mp.find(0), Option::some(0));
-            eval assert_eq(|_|"case 1", mp.find(1), Option::some(1));
-            eval assert_eq(|_|"case 2", mp.find(2), Option::some(2));
-            eval assert_eq(|_|"case 3", mp.find(3), Option::some(3));
-            eval assert_eq(|_|"case 4", mp.find(4), Option::none());
-            eval assert_eq(|_|"case 5", mp.find(5), Option::none());
-            eval assert_eq(|_|"case 6", mp.find(6), Option::none());
-            eval assert_eq(|_|"case 7", mp.find(7), Option::some(7));
-
-            eval assert_eq(|_|"case 0.5", mp.contains_key(0), true);
-            eval assert_eq(|_|"case 1.5", mp.contains_key(1), true);
-            eval assert_eq(|_|"case 2.5", mp.contains_key(2), true);
-            eval assert_eq(|_|"case 3.5", mp.contains_key(3), true);
-            eval assert_eq(|_|"case 4.5", mp.contains_key(4), false);
-            eval assert_eq(|_|"case 5.5", mp.contains_key(5), false);
-            eval assert_eq(|_|"case 6.5", mp.contains_key(6), false);
-            eval assert_eq(|_|"case 7.5", mp.contains_key(7), true);
-
-            eval assert_eq(|_|"case size", mp.get_size, 5);
-
-            pure()
-        );
-    "#;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
-pub fn test115_5() {
-    // Test HashSet
-    let source = r#"
-        module Main; 
-
-                import HashSet;
-
-        main : IO ();
-        main = (
-            let set = HashSet::empty(0)
-                            .reserve(3)
-                            .insert(0)
-                            .insert(1)
-                            .insert(2)
-                            .erase(2).insert(2)
-                            .insert(3)
-                            .insert(4).erase(4)
-                            .erase(5)
-                            // Do nothing for 6
-                            .insert(7).insert(7);
-    
-            eval assert_eq(|_|"case A-0", set.contains(0), true);
-            eval assert_eq(|_|"case A-1", set.contains(1), true);
-            eval assert_eq(|_|"case A-2", set.contains(2), true);
-            eval assert_eq(|_|"case A-3", set.contains(3), true);
-            eval assert_eq(|_|"case A-4", set.contains(4), false);
-            eval assert_eq(|_|"case A-5", set.contains(5), false);
-            eval assert_eq(|_|"case A-6", set.contains(6), false);
-            eval assert_eq(|_|"case A-7", set.contains(7), true);
-
-            eval assert_eq(|_|"case B", set.get_size, 5);
-            
-            let set = HashSet::from_iter([1, 1, 2, 3].to_iter);
-
-            eval assert_eq(|_|"case C-0", set.contains(0), false);
-            eval assert_eq(|_|"case c-1", set.contains(1), true);
-            eval assert_eq(|_|"case C-2", set.contains(2), true);
-            eval assert_eq(|_|"case C-3", set.contains(3), true);
-            eval assert_eq(|_|"case C-4", set.contains(4), false);
-
-            eval assert_eq(|_|"case D", set.get_size, 3);
-
-            let set: HashSet I64 = HashSet::from_iter([].to_iter);
-            eval assert_eq(|_|"case E", set.get_size, 0);
-
-            let set0 = HashSet::from_iter([1, 2, 3].to_iter);
-            let set1 = HashSet::from_iter([3, 4, 5].to_iter);
-            let set = set0.intersect(set1);
-            eval assert_eq(|_|"case F", set.to_iter, [3].to_iter);
-
-            let set0 = HashSet::from_iter([1, 2, 3].to_iter);
-            let set1 = HashSet::from_iter([4, 5, 6].to_iter);
-            let set = set0.intersect(set1);
-            eval assert_eq(|_|"case G", set.to_iter, [].to_iter);
-
-            let set0 = HashSet::from_iter([1, 2, 3].to_iter);
-            let set1 = HashSet::from_iter([].to_iter);
-            let set = set0.intersect(set1);
-            eval assert_eq(|_|"case H", set.to_iter, [].to_iter);
-
-            let set0: HashSet I64 = HashSet::from_iter([].to_iter);
-            let set1 = HashSet::from_iter([].to_iter);
-            let set = set0.intersect(set1);
-            eval assert_eq(|_|"case I", set.to_iter, [].to_iter);
-
-            let set0 = HashSet::from_iter([1, 2, 3].to_iter);
-            let set1 = HashSet::from_iter([3, 4, 5].to_iter);
-            let set = set0.merge(set1);
-            eval assert_eq(|_|"case J", set.to_iter.to_array.sort_by(|(lhs, rhs)| lhs < rhs), [1, 2, 3, 4, 5]);
-
-            let set0 = HashSet::from_iter([1, 2, 3].to_iter);
-            let set1 = HashSet::from_iter([].to_iter);
-            let set = set0.merge(set1);
-            eval assert_eq(|_|"case K", set.to_iter.to_array.sort_by(|(lhs, rhs)| lhs < rhs), [1, 2, 3]);
-
-            let set0: HashSet I64 = HashSet::from_iter([].to_iter);
-            let set1 = HashSet::from_iter([].to_iter);
-            let set = set0.merge(set1);
-            eval assert_eq(|_|"case L", set.to_iter, [].to_iter);
-
-            pure()
-        );
-    "#;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
 pub fn test_destructor() {
     // Test Std::Destructor
     let source = r#"
@@ -7082,6 +6948,8 @@ pub fn test_unsafe_get_retain_function_of_boxed_value_error() {
 #[test]
 pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang_gmp.git");
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-hashset.git");
 }
 
 pub fn test_external_project(url: &str) {

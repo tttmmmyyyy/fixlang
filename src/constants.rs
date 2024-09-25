@@ -149,21 +149,6 @@ pub const STANDARD_LIBRARIES: &[(
     Option<fn(&mut Configuration)>, /* config_modifier */
     Option<fn(&mut Program)>,       /* module_modifier */
 )] = &[
-    ("Hash", include_str!("./fix/hash.fix"), "hash", None, None),
-    (
-        "HashMap",
-        include_str!("./fix/hashmap.fix"),
-        "hashmap",
-        None,
-        None,
-    ),
-    (
-        "HashSet",
-        include_str!("./fix/hashset.fix"),
-        "hashset",
-        None,
-        None,
-    ),
     (
         "Math",
         include_str!("./fix/math.fix"),
