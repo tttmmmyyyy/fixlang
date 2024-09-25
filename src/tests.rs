@@ -7085,6 +7085,8 @@ pub fn test_external_projects() {
 }
 
 pub fn test_external_project(url: &str) {
+    println!("Testing external project: {}", url);
+
     // Run `cargo install --locked --path .`.
     let _ = Command::new("cargo")
         .arg("install")
