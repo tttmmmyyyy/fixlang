@@ -408,7 +408,7 @@ impl ProjectFile {
                 config.set_debug_info();
             }
         }
-        if config.subcommand == SubCommand::Test {
+        if use_build_test {
             if let Some(debug) = self.build.test.as_ref().and_then(|test| test.debug) {
                 if debug {
                     config.set_debug_info();
